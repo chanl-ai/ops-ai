@@ -1,4 +1,4 @@
-"""Service events start workflows (c-258): services never call each other to act. A service reports a named event with
+"""Service events start workflows: services never call each other to act. A service reports a named event with
 a key (`POST /v1/events`), and the tenant's handler for it runs, on the event's team, with the event's payload as its
 input. The handler is the tenant's no-team workflow under the id `seed/event_workflows.json` gives the event, at its
 live version; it is an ordinary workflow, edited and published through review.
@@ -44,7 +44,7 @@ def handler_ids(rt: Runtime) -> dict[str, str]:
     return handlers(event_workflows(rt))
 
 
-# Who publishes a shipped version, and the events a shipped change is recorded as (c-288).
+# Who publishes a shipped version, and the events a shipped change is recorded as.
 SEED = "seed"
 # Who published the seed's own versions: "seed", and "system" from 0a7ea469 (10-18), when these were platform-owned
 # system workflows. A tenant provisioned then still runs the seed's version and follows the seed like any other.
@@ -83,7 +83,7 @@ async def ensure_event_workflows(rt: Runtime) -> None:
 
 
 async def _follow_seed(rt: Runtime, store: DefinitionStore, d: WorkflowDefinition) -> None:
-    """A shipped event workflow changed in the seed file (c-288): a tenant still running the seed's own version gets
+    """A shipped event workflow changed in the seed file: a tenant still running the seed's own version gets
     the new one as a publish request its publishReview decides, live at once only where no review is needed; one whose
     live version a person published keeps it and is told an update exists. Either is recorded once per shipped digest
     as a service event."""
@@ -126,7 +126,7 @@ EVENT_OWNERS: dict[str, tuple[str, ...]] = {
     "tools": ("tool_access.", "tool_module.", "module_review.", "app_account."),
     "files": ("file.",),
     "documents": ("extraction.",),
-    # The task API (c-288) records a posted task as its own event, so the task runs as the api_task workflow.
+    # The task API records a posted task as its own event, so the task runs as the api_task workflow.
     "agents": ("task.",),
 }
 
@@ -135,7 +135,7 @@ REMINDER = "task.reminder"
 
 
 def reminders(db: AsyncEngine) -> Callable[[dict[str, Any], dict[str, Any]], Awaitable[None]]:
-    """The worker's `remind` (c-277): a review still waiting is reported as this service's task.reminder event, keyed
+    """The worker's `remind`: a review still waiting is reported as this service's task.reminder event, keyed
     by run, step, iteration and count, so a retried pass records it once. What follows is the handler the tenant runs
     for it; none is shipped, so it is recorded unhandled until a team adds one."""
     handler = handlers(EVENT_WORKFLOWS).get(REMINDER)
@@ -194,7 +194,7 @@ _beats: dict[int, background.Beat] = {}
 
 
 def event_beat(db: AsyncEngine) -> background.Beat:
-    """The event workflows' heartbeat in this process (c-516): one per database, as the API and worker both deliver."""
+    """The event workflows' heartbeat in this process: one per database, as the API and worker both deliver."""
     if id(db) not in _beats:
         _beats[id(db)] = background.Beat("event_workflows", heartbeats(db))
     return _beats[id(db)]
@@ -238,7 +238,7 @@ async def _deliver(
     events = ServiceEvents(db)
     jobs = BackgroundJobs(db)
     event = await events.record(name=name, key=key, team_id=team_id, source=source, actor=actor, payload=payload)
-    # A step parked on this event and key (c-525) resumes before any listener starts: the run it belongs to is waiting.
+    # A step parked on this event and key resumes before any listener starts: the run it belongs to is waiting.
     woken = await wake_parked(
         db, name=name, key=key, team_id=str(event["team_id"]), payload=cast(dict[str, Any], event["payload"])
     )

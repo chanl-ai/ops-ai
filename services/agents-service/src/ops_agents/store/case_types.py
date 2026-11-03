@@ -1,4 +1,4 @@
-"""Case types and their versions (c-291), per tenant, on the typed-record store (store/typed_records.py): the fields a
+"""Case types and their versions, per tenant, on the typed-record store (store/typed_records.py): the fields a
 case shows and their order. The general types are seeded from seed/case_types.json. A case pins the published version
 it was opened with (`cases.type_id`, `type_version`), so editing a type never changes a case already open."""
 

@@ -1,4 +1,4 @@
-"""Task assist (c-302): when a typed review step pauses in a team that turned taskAssist on, one prompt-only model
+"""Task assist: when a typed review step pauses in a team that turned taskAssist on, one prompt-only model
 call over what the task shows (its bound regions, never the run's state) writes the question in plain words, a
 summary, the doubtful fields and a suggested action with its reason. It is written once and kept by step id; it never
 decides, and a suggestion naming an action the type does not have is dropped when the task is read. A failed or slow
@@ -34,7 +34,7 @@ TIMEOUT_SECONDS = 20.0
 PENDING: dict[str, Any] = {"pending": True}
 FAILED: dict[str, Any] = {"failed": True}
 # Past this a pending assist is never filled (its call times out at TIMEOUT_SECONDS, and a worker killed mid-call fills
-# nothing), so it reads as failed and the console stops waiting for it (tick 32).
+# nothing), so it reads as failed and the console stops waiting for it.
 PENDING_LIMIT = timedelta(seconds=TIMEOUT_SECONDS * 3)
 
 

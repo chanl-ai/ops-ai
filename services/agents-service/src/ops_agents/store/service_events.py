@@ -1,4 +1,4 @@
-"""Service events (c-258): a named event a service emitted with a key, and the system workflow runs it started. One
+"""Service events: a named event a service emitted with a key, and the system workflow runs it started. One
 row per event and key, so a repeat finds the first and a retry adds an attempt; `unhandled` when no system workflow
 listens, kept so nothing a service reported is lost."""
 
@@ -19,7 +19,7 @@ from ops_store.team_scope import team_visible
 from .base import metadata
 from .tenancy import current_tenant, tenant_tx
 
-# started: listener runs began; resumed: no listener, but a step parked on it carried on (c-525); unhandled: neither.
+# started: listener runs began; resumed: no listener, but a step parked on it carried on; unhandled: neither.
 Status = Literal["started", "resumed", "unhandled"]
 EVENT_TRIGGER = "ops.trigger.event"
 

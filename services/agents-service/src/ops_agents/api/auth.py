@@ -1,7 +1,7 @@
 """Who is calling, for agents-service's routes. Resolution is ops_identity's shared FastAPI layer (installed in
 api/app.py), which also enters the request's isolation context (tenant, team, scope) from the verified caller; this
 module only adapts its principal. Every router depends on `principal`, which `scripts/check_standards.py` rule 5
-checks. Every role rule below is one call to `ops_access.can`, the check every service shares (c-148); the helpers keep
+checks. Every role rule below is one call to `ops_access.can`, the check every service shares; the helpers keep
 the routes' wording and the record's team and owner."""
 
 from __future__ import annotations
@@ -32,14 +32,14 @@ class Principal:
     # From the verified token or key, or "local" in dev; never from a header, body or path (I1).
     tenant_id: str
     sub: str = ""
-    # The teams the person belongs to; for the dev header caller, the one team its request names (c-507).
+    # The teams the person belongs to; for the dev header caller, the one team its request names.
     team_ids: tuple[str, ...] = ()
     # The person's role in team_id from their membership (e.g. admin); None for dev callers and keys.
     role: str | None = None
     # Team to role for every team the person belongs to, from the token; a review is decided by the role in the team
     # that reviews it, which need not be the team the request acts in. Empty for dev callers and keys.
     roles: dict[str, str] = field(default_factory=dict[str, str])
-    # An API key of one team, not a person: it may start live runs and cancel its own, never decide (c-122).
+    # An API key of one team, not a person: it may start live runs and cancel its own, never decide.
     is_key: bool = False
     # The verified caller as ops_identity resolved it, which `ops_access.can` decides on; None for a Principal built in
     # code, which `caller_of` rebuilds from the fields above.
@@ -53,8 +53,8 @@ async def principal(p: CurrentPrincipal) -> Principal:
 
 
 async def caller(p: CurrentCaller) -> Principal:
-    """A person, an API key, or a service token scoped to one team, for the routes the provisioning service calls
-    (c-180); every check on them goes through `can`, which reads a service's scopes."""
+    """A person, an API key, or a service token scoped to one team, for the routes the provisioning service calls; every
+    check on them goes through `can`, which reads a service's scopes."""
     return _principal(p)
 
 
@@ -215,13 +215,13 @@ def require_reviews_decide(approver_teams: list[str], team_id: str, what: str) -
 
 
 def workspace_step_up(me: Principal) -> bool:
-    """Whether the workspace asks every approver for a step-up (the `stepUp` policy, c-186, off by default). It adds
+    """Whether the workspace asks every approver for a step-up (the `stepUp` policy, off by default). It adds
     to an operation's own stepUp and never removes it."""
     return bool(policy(caller_of(me), "stepUp"))
 
 
 def require_not_own(me: Principal, requested_by: Iterable[str | None], *, team: str | None, what: str) -> None:
-    """Separation of duties on a decision, decided by `can` (c-186): whoever asked for, saved or started what `me`
+    """Separation of duties on a decision, decided by `can`: whoever asked for, saved or started what `me`
     decides does not decide it while the tenant's requesterMayDecide policy is off. Runs after the role check; `team` is
     a team the decision's role is held in, or None for one of the caller's reviewing teams. A workflow's own principal
     (`workflow:<id>`) asking is refused whatever the policy: no person holds that identity, so only a forged one could
@@ -259,32 +259,32 @@ def require_builder(
     """Who may change a definition (an agent, workflow, guardrail, skill, widget or deployment): `can(area, action)` in
     the team that owns it, which must be the team the request acts in (R6), and for a record no team owns (a shared
     one, such as a seeded event workflow) in the team the request acts in. The roles grid decides it either way; an API
-    key holds none of these cells (R4). `protection` is the record's (c-180): a `system` record is changed by the
+    key holds none of these cells (R4). `protection` is the record's: a `system` record is changed by the
     provisioning service only."""
     can(caller_of(me), area, _ACTIONS.get(action, "edit"), team=team_id or None, what=what, protection=protection)
 
 
 def require_runs_start(me: Principal, *, team_id: str | None, what: str) -> None:
     """workflows.run: a live run, by a builder or admin of the workflow's team (the acting team when none owns it), or
-    an API key of that team (c-122 Q1). A test run is `require_builder(..., action="test")`, which keys never pass."""
+    an API key of that team. A test run is `require_builder(..., action="test")`, which keys never pass."""
     can(caller_of(me), "workflows", "run", team=team_id or None, what=what)
 
 
 def require_team_account_use(me: Principal, *, team_id: str, what: str) -> None:
     """connections.run: a person who may use the team's own account of an app, as Run as the team account does in place
-    of their own (c-616 S12); admins hold it by default."""
+    of their own; admins hold it by default."""
     can(caller_of(me), "connections", "run", team=team_id, what=what)
 
 
 def started_by(me: Principal) -> str:
-    """What a run or thread records as who started it: `key:<id>` for an API key (c-246), so each key's traffic is
+    """What a run or thread records as who started it: `key:<id>` for an API key, so each key's traffic is
     counted and its runs are its own; a person's email otherwise."""
     key = me.identity.key_id if me.is_key and me.identity is not None else None
     return f"key:{key}" if key else me.email
 
 
 def approves_own_writes(me: Principal) -> bool:
-    """Whether `me` is their own approver in the team they act in (owner, 2026-11-01): reviews.decide there, while the
+    """Whether `me` is their own approver in the team they act in: reviews.decide there, while the
     requesterMayDecide policy lets an asker decide. An API key never is: a key acts for nobody who could approve."""
     if me.is_key:
         return False
@@ -292,7 +292,7 @@ def approves_own_writes(me: Principal) -> bool:
 
 
 def require_key_reaches(me: Principal, kind: Literal["agent", "workflow"], target_id: str) -> int | None:
-    """An API key scoped to one agent or workflow (c-246) starts that one only, whatever the request names; the target
+    """An API key scoped to one agent or workflow starts that one only, whatever the request names; the target
     comes from introspection, never the request. Returns the workflow version the key pins, None to run the live one
     (and for every caller that is not a scoped key)."""
     target = me.identity.key_target if me.is_key and me.identity is not None else None
@@ -309,7 +309,7 @@ def require_key_reaches(me: Principal, kind: Literal["agent", "workflow"], targe
 
 
 def key_scope(me: Principal) -> tuple[str, str] | None:
-    """The (kind, id) a scoped API key reaches (c-246): it starts and reads that one only. None for everyone else."""
+    """The (kind, id) a scoped API key reaches: it starts and reads that one only. None for everyone else."""
     target = me.identity.key_target if me.is_key and me.identity is not None else None
     return (str(target.get("kind")), str(target.get("id"))) if target else None
 
@@ -320,13 +320,13 @@ def graph_target(graph: str) -> tuple[Literal["agent", "workflow"], str]:
 
 
 def require_runs_cancel(me: Principal, *, team_id: str, started_by: str, what: str) -> None:
-    """cases.manage: whoever started the run (`own`), or an admin or reviewer of its team (c-122 Q2); a key cancels only
+    """cases.manage: whoever started the run (`own`), or an admin or reviewer of its team; a key cancels only
     runs started under its own identity."""
     can(caller_of(me), "cases", "manage", team=team_id, owner=started_by, what=what)
 
 
 def require_chat_use(me: Principal, *, team_id: str | None) -> None:
     """chat.run: every role of the agent's team chats with it, viewers included; a person acting in another team is
-    refused with the team named (c-122 Q4). An agent no team owns (`team_id` None) is open to every team."""
+    refused with the team named. An agent no team owns (`team_id` None) is open to every team."""
     if team_id:
         can(caller_of(me), "chat", "run", team=team_id, what="this agent")

@@ -503,7 +503,7 @@ async def _seed_for_review(
         "digest": d.digest(),
         "definition": d.model_dump(mode="json"),
         "graph": graph,
-        # Outside dev a seed's change waits for review; the policy decides whether it would need one (c-086).
+        # Outside dev a seed's change waits for review; the policy decides whether it would need one.
         "reviewRequired": True,
     }
     try:
@@ -586,7 +586,7 @@ def workflow_view(
         "id": row["id"],
         "name": row["name"],
         "description": row["description"],
-        # The owning team comes from the creator's token (c-171); the console names it from its teams list.
+        # The owning team comes from the creator's token; the console names it from its teams list.
         "teamId": row["team_id"],
         "trigger": row["trigger"],
         "agentSlugs": slugs,

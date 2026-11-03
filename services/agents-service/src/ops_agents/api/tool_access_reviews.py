@@ -1,5 +1,5 @@
-"""A workflow's request for a tool module's operations as it was reviewed before it ran as a system workflow (c-166,
-superseded by c-257's tool_access_request): only decided ones remain readable here. A request still pending is
+"""A workflow's request for a tool module's operations as it was reviewed before it ran as a system workflow (superseded
+by the tool_access_request workflow): only decided ones remain readable here. A request still pending is
 listed and decided as its run; `publish_reviews` lists none and refuses a decision on one."""
 
 from __future__ import annotations

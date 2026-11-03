@@ -66,7 +66,7 @@ export interface paths {
         put?: never;
         /**
          * Assign
-         * @description Assigns each open review to `assignee`, the caller when left out (c-074). Only someone who may decide a review
+         * @description Assigns each open review to `assignee`, the caller when left out. Only someone who may decide a review
          *     assigns it; assigning routes the review and changes nothing about who may decide it. A result per id.
          */
         post: operations["reviews_assign"];
@@ -102,7 +102,7 @@ export interface paths {
         };
         /**
          * Get Review By Run Key
-         * @description The review of the run a service event started in its handler (c-257), by its run key `<event>:<key>`: the step
+         * @description The review of the run a service event started in its handler, by its run key `<event>:<key>`: the step
          *     it waits on, else its latest decision. A service links to it before the run exists, so it names the key, not the
          *     step; a team that cannot see the run gets not found, as for the step itself.
          */
@@ -125,7 +125,7 @@ export interface paths {
         /**
          * Get Queue Place
          * @description Where the review sits in a Human Tasks view (open by default): position, total and the reviews either side;
-         *     `group=case` in the order the queue grouped by case lists them (c-460).
+         *     `group=case` in the order the queue grouped by case lists them.
          */
         get: operations["reviews_get_queue_place"];
         put?: never;
@@ -181,8 +181,8 @@ export interface paths {
         put?: never;
         /**
          * Run As Team Account
-         * @description Run as the team account: a run waiting for a person's own account of an app goes on with the app's team account
-         *     (c-616 S12), for a person who may use it (connections.run), on an app that has one.
+         * @description Run as the team account: a run waiting for a person's own account of an app goes on with the app's team account,
+         *     for a person who may use it (connections.run), on an app that has one.
          */
         post: operations["reviews_run_as_team_account"];
         delete?: never;
@@ -456,7 +456,7 @@ export interface paths {
         };
         /**
          * Agent Skill Options
-         * @description The agent page's skill picker (c-136): published, live skills the agent does not hold, searched and limited in
+         * @description The agent page's skill picker: published, live skills the agent does not hold, searched and limited in
          *     the query; one that needs a tool or knowledge base the agent lacks is offered disabled with the reason. `loading`
          *     keeps always-on or on-match skills, also in the query (the published version's mode is kept on the row).
          */
@@ -504,8 +504,8 @@ export interface paths {
          * Test Agent
          * @description One kernel turn on the newest version, draft or not, with no thread kept: the single-turn harness API scripts
          *     and use cases drive. A write tool stops at its gate, so the reply says where production would pause instead of
-         *     acting. The console tests on a real thread instead (POST /chat/threads with test: true, c-284 and c-285); this
-         *     route goes once the use cases that call it move there (follow-up to c-285).
+         *     acting. The console tests on a real thread instead (POST /chat/threads with test: true); this
+         *     route goes once the use cases that call it move there.
          */
         post: operations["agents_test_agent"];
         delete?: never;
@@ -807,7 +807,7 @@ export interface paths {
         };
         /**
          * Get Case
-         * @description The case assembled for its page (c-291): its timeline, oldest entry first, and who owns it, its clocks, what
+         * @description The case assembled for its page: its timeline, oldest entry first, and who owns it, its clocks, what
          *     it waits on and the actions drafted there, its fields in its case type's order, what it links to, its newest
          *     activity and what the caller may do.
          */
@@ -1012,7 +1012,7 @@ export interface paths {
         put?: never;
         /**
          * Retire Channel
-         * @description Retires a chat channel for good (c-130): the embed answers no page again and cannot be changed. An email channel
+         * @description Retires a chat channel for good: the embed answers no page again and cannot be changed. An email channel
          *     is removed on its mailbox's page, and an API channel is a key revoked in Settings.
          */
         post: operations["channels_retire_channel"];
@@ -1222,7 +1222,7 @@ export interface paths {
          * @description Stores the definition as the graph's next version and points new threads at it, with no review. A builder or
          *     admin of the team that owns the graph's registry workflow publishes (the acting team for a graph the registry does
          *     not hold). A registry workflow goes live through its review (POST /v1/workflows/{id}/publish-requests), so outside
-         *     the team's publish policy (c-086) this route refuses one with 409 `review_required`.
+         *     the team's publish policy this route refuses one with 409 `review_required`.
          */
         post: operations["graphs_publish_version"];
         delete?: never;
@@ -1262,7 +1262,7 @@ export interface paths {
         };
         /**
          * Guardrail Options
-         * @description The agent page's guardrail picker (c-136): live guardrails with a published version, by name, searched and
+         * @description The agent page's guardrail picker: live guardrails with a published version, by name, searched and
          *     limited in the query; `ids` labels pins already held, whatever their state.
          */
         get: operations["agents_guardrail_options"];
@@ -1529,10 +1529,10 @@ export interface paths {
         put?: never;
         /**
          * Open Publish Request
-         * @description A tool module review (c-163). Opened by tools-service for the person publishing: their credentials name who
+         * @description A tool module review. Opened by tools-service for the person publishing: their credentials name who
          *     asked and the team, and tools-service's token in `X-Service-Authorization` vouches for the version and changes. Or
          *     opened by tools-service alone with its token scoped to the module's team, naming in `requestedBy` the person who
-         *     asked (its seed, c-222); the review then says tools-service opened it on their behalf.
+         *     asked (its seed); the review then says tools-service opened it on their behalf.
          */
         post: operations["reviews_open_publish_request"];
         delete?: never;
@@ -1552,7 +1552,7 @@ export interface paths {
         put?: never;
         /**
          * Open Egress Host Request
-         * @description A host held for Security (c-616 S13), opened by tools-service for the person setting an app's address: their
+         * @description A host held for Security, opened by tools-service for the person setting an app's address: their
          *     credentials name who asked and the team, and tools-service's token in `X-Service-Authorization` vouches for the
          *     host. 201 with a new request; 200 with the one still waiting for the host, or with its latest refusal.
          */
@@ -1638,7 +1638,7 @@ export interface paths {
          * @description Writes the run and its start work row in one transaction and returns at once: a worker runs it. With no worker
          *     running the run stays queued. A live run is refused (409) unless it pins the live version: `not_live` before a
          *     version is approved or for another version, `workflow_paused` while the workflow is paused. An API key scoped to
-         *     one workflow (c-246) starts that one only, on the version it pins when it pins one.
+         *     one workflow starts that one only, on the version it pins when it pins one.
          */
         post: operations["workflows_start_engine_run"];
         delete?: never;
@@ -1658,7 +1658,7 @@ export interface paths {
         put?: never;
         /**
          * Run Set Aside Email
-         * @description Run again on an email the mailbox listener set aside (c-561): its run starts on the workflow's live version under
+         * @description Run again on an email the mailbox listener set aside: its run starts on the workflow's live version under
          *     the email's own run key, as the person, and the kept copy of the email is dropped. Who may start the workflow may
          *     run it; 404 when there is no such email in the team or it already ran, 503 when Files did not store an attachment
          *     (the email stays set aside).
@@ -1768,7 +1768,7 @@ export interface paths {
         put?: never;
         /**
          * Retry Engine Run
-         * @description Queues a Stuck run again from its last recorded step (c-561): recorded steps are not run again and a write
+         * @description Queues a Stuck run again from its last recorded step: recorded steps are not run again and a write
          *     with a record at the gateway is never sent again. Who may cancel the run may retry it; a run that is not Stuck is
          *     refused (409 run_not_stuck).
          */
@@ -2070,7 +2070,7 @@ export interface paths {
         /**
          * List Templates
          * @description The agents, skills and workflows the team's plugins bring, each with the copies the team holds of it; `source`
-         *     keeps one plugin's (a plugin update's review shows the version each copy came from, c-609).
+         *     keeps one plugin's (a plugin update's review shows the version each copy came from).
          */
         get: operations["templates_list_templates"];
         put?: never;
@@ -2192,7 +2192,7 @@ export interface paths {
         put?: never;
         /**
          * Route One
-         * @description Taking a case from the workflow to people is a decision on it: a reviewer or admin of its team (c-122).
+         * @description Taking a case from the workflow to people is a decision on it: a reviewer or admin of its team.
          */
         post: operations["threads_route_one"];
         delete?: never;
@@ -2286,7 +2286,7 @@ export interface paths {
         put?: never;
         /**
          * Route Version
-         * @description Every open case of a version, in the acting team: a reviewer or admin of that team (c-122).
+         * @description Every open case of a version, in the acting team: a reviewer or admin of that team.
          */
         post: operations["threads_route_version"];
         delete?: never;
@@ -2392,7 +2392,7 @@ export interface paths {
         };
         /**
          * Widget Options
-         * @description The agent page's widget picker (c-136): the seeded library's matches first, then the caller's teams' published,
+         * @description The agent page's widget picker: the seeded library's matches first, then the caller's teams' published,
          *     unretired widgets, searched and limited in the query. A widget whose buttons need a tool outside `granted` (the
          *     draft's tools) is offered disabled with the reason, as a pin of it is refused.
          */
@@ -2477,7 +2477,7 @@ export interface paths {
         /**
          * Workflow Refs
          * @description Workflows by id, name and owning team: every one for a service holding `workflows:view` that governs calls on
-         *     their behalf (c-168), the team's for a person with workflows.view (c-222). The registry is not yet partitioned by
+         *     their behalf, the team's for a person with workflows.view. The registry is not yet partitioned by
          *     tenant (identity-and-tenancy.md); the route still requires a tenant, so callers key what they keep by it.
          */
         get: operations["workflows_workflow_refs"];
@@ -2500,8 +2500,8 @@ export interface paths {
          * List Workflows
          * @description The team's workflows of both engines, a page at a time. `startable` keeps those a person starts by hand (Start
          *     run), `takesFiles` those whose start form takes a file (Files' "Start a workflow with this file"); each row's
-         *     `start` says how it starts (c-466). `engine=current` leaves out the earlier engine's workflows before the page,
-         *     the total and the status counts are taken, since the console no longer shows them (c-562).
+         *     `start` says how it starts. `engine=current` leaves out the earlier engine's workflows before the page,
+         *     the total and the status counts are taken, since the console no longer shows them.
          */
         get: operations["workflows_list_workflows"];
         put?: never;
@@ -2599,7 +2599,7 @@ export interface paths {
         put?: never;
         /**
          * Archive Definition
-         * @description Archives the workflow (c-274): it starts no run of any mode, a trigger no longer serves it, and it leaves the
+         * @description Archives the workflow: it starts no run of any mode, a trigger no longer serves it, and it leaves the
          *     lists; its versions and runs are kept. Who may delete the workflow may archive it.
          */
         post: operations["workflows_archive_definition"];
@@ -2702,7 +2702,7 @@ export interface paths {
         };
         /**
          * Definition Shapes
-         * @description What each step of a saved version outputs, by port, before it has run (c-353): fixed by its type, built from
+         * @description What each step of a saved version outputs, by port, before it has run: fixed by its type, built from
          *     its settings, or read from its document type or operation. A mapping picker reads it.
          */
         get: operations["workflows_definition_shapes"];
@@ -3914,7 +3914,7 @@ export interface components {
         };
         /**
          * CaseOrigin
-         * @description How the case's work began (c-500): email, request (a form or an API call), event, other, or person (opened by
+         * @description How the case's work began: email, request (a form or an API call), event, other, or person (opened by
          *     hand, with no run).
          */
         CaseOrigin: {
@@ -4430,7 +4430,7 @@ export interface components {
         };
         /**
          * ConnectWait
-         * @description What a run waiting for a person's own account of an app needs (c-616 S12): Connect my account, or Run as the
+         * @description What a run waiting for a person's own account of an app needs: Connect my account, or Run as the
          *     team account where the app has one.
          */
         ConnectWait: {
@@ -4739,7 +4739,7 @@ export interface components {
         };
         /**
          * DocumentRead
-         * @description A document read a review asks a person to check (c-169): the file, the floor, and each record's fields. Editable
+         * @description A document read a review asks a person to check: the file, the floor, and each record's fields. Editable
          *     when the step takes a correction (`inputs.edited`); `corrected` holds the values a decided review was approved
          *     with, None when no correction was sent.
          */
@@ -4804,7 +4804,7 @@ export interface components {
         };
         /**
          * EgressHostRef
-         * @description An app's address on a host nobody listed (c-616 S13): the host, the app, who set it and their team.
+         * @description An app's address on a host nobody listed: the host, the app, who set it and their team.
          */
         EgressHostRef: {
             /** App */
@@ -6242,7 +6242,7 @@ export interface components {
         };
         /**
          * Guardrail
-         * @description A guardrail an agent pins by version (c-063); kind blocked_topics today.
+         * @description A guardrail an agent pins by version; kind blocked_topics today.
          */
         Guardrail: {
             config: components["schemas"]["GuardrailConfig"];
@@ -6499,7 +6499,7 @@ export interface components {
         };
         /**
          * HeldTool
-         * @description A tool the tested agent holds (c-170), and whether calling it pauses for a review, at which gate, for whom.
+         * @description A tool the tested agent holds, and whether calling it pauses for a review, at which gate, for whom.
          */
         HeldTool: {
             /** Access */
@@ -6964,7 +6964,7 @@ export interface components {
         };
         /**
          * MemorySettings
-         * @description What the agent remembers about each person (c-124): on by default (owner, 2026-10-17), and which kinds: facts
+         * @description What the agent remembers about each person: on by default, and which kinds: facts
          *     (timezone, preferred account), preferences (how they like answers) and episodes (a line about each chat).
          */
         MemorySettings: {
@@ -6978,7 +6978,7 @@ export interface components {
         };
         /**
          * MemoryView
-         * @description One thing an agent remembers about the caller (c-124).
+         * @description One thing an agent remembers about the caller.
          */
         MemoryView: {
             /** Agentid */
@@ -7349,7 +7349,7 @@ export interface components {
         };
         /**
          * PublishDecisionFields
-         * @description What the team's publish policy said when the request was made (c-086); absent on requests made before it.
+         * @description What the team's publish policy said when the request was made; absent on requests made before it.
          */
         PublishDecisionFields: {
             /** Majorchange */
@@ -7483,7 +7483,7 @@ export interface components {
         };
         /**
          * ReadBox
-         * @description Where a value sits on a page, as fractions of the page from its top left (documents-service, c-252).
+         * @description Where a value sits on a page, as fractions of the page from its top left (documents-service).
          */
         ReadBox: {
             /** H */
@@ -7563,7 +7563,7 @@ export interface components {
         /**
          * ReplyPreview
          * @description The reply a review approves, as it will leave: to the sender, from the team's mailbox, with the cases the
-         *     document opened (c-169).
+         *     document opened.
          */
         ReplyPreview: {
             /** Body */
@@ -7681,7 +7681,7 @@ export interface components {
         };
         /**
          * ReviewOption
-         * @description One way to decide a step with options (c-057: a levy case's hold or flag): its call and the inputs the
+         * @description One way to decide a step with options (a levy case's hold or flag): its call and the inputs the
          *     reviewer may set on it. A form renders from `inputs`; decide validates against them.
          */
         ReviewOption: {
@@ -8702,7 +8702,7 @@ export interface components {
         };
         /**
          * StoryLine
-         * @description One thing a run did, as a sentence a person reads (c-500); the case feed is made of the same lines.
+         * @description One thing a run did, as a sentence a person reads; the case feed is made of the same lines.
          */
         StoryLine: {
             /** Actor */
@@ -9290,7 +9290,7 @@ export interface components {
         };
         /**
          * ToolModuleDiff
-         * @description What a tool module review approves since the published version (c-204), as tools-service sent it when the
+         * @description What a tool module review approves since the published version, as tools-service sent it when the
          *     review opened.
          */
         ToolModuleDiff: {
@@ -9307,7 +9307,7 @@ export interface components {
         };
         /**
          * ToolModuleDiffInput
-         * @description What tools-service computed the version changes since the published one (c-204).
+         * @description What tools-service computed the version changes since the published one.
          */
         ToolModuleDiffInput: {
             /** Added */
@@ -9403,7 +9403,7 @@ export interface components {
         };
         /**
          * TypedTask
-         * @description A review drawn from its task type (c-288): the type at the version the step pinned, its regions and actions
+         * @description A review drawn from its task type: the type at the version the step pinned, its regions and actions
          *     bound to the step's params, and what is missing or of the wrong kind.
          */
         TypedTask: {
@@ -9601,7 +9601,7 @@ export interface components {
         };
         /**
          * WidgetTemplateOut
-         * @description A published widget template version (c-082): its catalogue tree, its data schema and a sample to preview.
+         * @description A published widget template version: its catalogue tree, its data schema and a sample to preview.
          */
         WidgetTemplateOut: {
             /** Candelete */

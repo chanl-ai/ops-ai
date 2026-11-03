@@ -1,4 +1,4 @@
-"""Tool module security reviews as ordinary publish requests (c-163): opened by tools-service, decided in Human Tasks
+"""Tool module security reviews as ordinary publish requests: opened by tools-service, decided in Human Tasks
 under `publish_reviews.decide`, and applied back in tools-service.
 
 Opening needs two proofs on one call. The person's own credentials name who asked and the team, as on every route; a
@@ -48,7 +48,7 @@ def _body(input_body: dict[str, Any], *, team: str, saved_by: str) -> dict[str, 
         "moduleName": input_body["moduleName"],
         "moduleVersion": input_body["moduleVersion"],
         "changes": list(input_body.get("changes") or []),
-        # What the version changes since the published one, as tools-service sent it at open (c-204); kept as asked.
+        # What the version changes since the published one, as tools-service sent it at open; kept as asked.
         **({"diff": input_body["diff"]} if input_body.get("diff") else {}),
         "security": bool(input_body.get("security", True)),
         "teamId": team,
@@ -78,7 +78,7 @@ async def open_review(rt: Runtime, me: Principal, input_body: dict[str, Any]) ->
 
 
 async def open_for(rt: Runtime, svc: Caller, input_body: dict[str, Any]) -> dict[str, Any]:
-    """A review a service opens with its own token for a person not on the call: tools-service's seed (c-222). Only a
+    """A review a service opens with its own token for a person not on the call: tools-service's seed. Only a
     service holding `tools:publish`, which only tools-service's scope cap allows (Settings.service_scopes), and only a
     tool module of the team its token is scoped to; who asked is the body's `requestedBy`, and the review records that
     the service opened it on their behalf, never that the person did. They still count as the asker, so

@@ -1,4 +1,4 @@
-"""People's display names for lists that say who did something (c-201): startedBy on a run, actor on an Activity row.
+"""People's display names for lists that say who did something: startedBy on a run, actor on an Activity row.
 Runs and records keep a person's email; their name is platform-service's. Read through ServiceClient once a minute per
 tenant; an email whose name cannot be read is shown as the email."""
 

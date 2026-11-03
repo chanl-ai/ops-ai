@@ -1,4 +1,4 @@
-"""How a waiting workflow step is resumed (c-525): one deduped resume row per pause, written by a review decision, a
+"""How a waiting workflow step is resumed: one deduped resume row per pause, written by a review decision, a
 signed callback or a service event, whichever comes first; and the callback's token.
 
 A resume row is keyed `resume:{run}:{node}:{iteration}`, so a second resume of the same pause finds the first and
@@ -136,7 +136,7 @@ async def resumed(
 
 
 async def wake_parked(db: AsyncEngine, *, name: str, key: str, team_id: str, payload: dict[str, Any]) -> list[str]:
-    """Resumes every step of `team_id` parked on event `name` with correlation key `key` (c-525); the runs woken. A
+    """Resumes every step of `team_id` parked on event `name` with correlation key `key`; the runs woken. A
     wait row whose run has moved on is cleared instead."""
     if not key:
         return []

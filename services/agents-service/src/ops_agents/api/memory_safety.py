@@ -1,4 +1,4 @@
-"""Numbers a memory must never hold (c-563), found by fixed rules whatever the model says: card numbers by the Luhn
+"""Numbers a memory must never hold, found by fixed rules whatever the model says: card numbers by the Luhn
 check, IBANs by their mod-97 check digits, and United States, United Kingdom and Canadian national ids by their issuing
 rules (Canada's also by Luhn). Other countries' ids come with the memory policy's sensitive rules."""
 

@@ -1,4 +1,4 @@
-"""Specialist agents as tools (c-174): the team's default agent asks another agent by calling `agent__<id>`, and that
+"""Specialist agents as tools: the team's default agent asks another agent by calling `agent__<id>`, and that
 agent answers with its own turn: its knowledge, tools, guardrails and approvals, for the same person.
 
 Who may be asked is decided per turn: only the team's default agent is offered specialists, only those the turn's person

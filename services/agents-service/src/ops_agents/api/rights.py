@@ -1,4 +1,4 @@
-"""What the caller may do with one record, for a detail response (c-186): the console shows View only and hides
+"""What the caller may do with one record, for a detail response: the console shows View only and hides
 buttons from these flags instead of guessing from the caller's role. Each flag runs the check the record's own write
 route runs, so the page and the route never disagree."""
 

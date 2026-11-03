@@ -1,6 +1,6 @@
-"""What agents remember about each person (c-124): keyed by person and team, never by conversation, so a memory
+"""What agents remember about each person: keyed by person and team, never by conversation, so a memory
 follows the person into their next chat in that team and no one else's. An empty agent_id means every agent in the
-team (c-557); a set one keeps the memory to that agent. A replaced memory is kept as history with its status."""
+team; a set one keeps the memory to that agent. A replaced memory is kept as history with its status."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ agent_memories = sa.Table(
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, index=True),
     sa.Column("team_id", sa.String(64), nullable=False),
-    # Empty: every agent in the team; set: that agent only (rows saved before c-557 keep the agent they came from).
+    # Empty: every agent in the team; set: that agent only (older rows keep the agent they came from).
     sa.Column("agent_id", sa.String(64), nullable=False),
     # The person's id from their token (Principal.sub, else their email): the key every read is scoped by.
     sa.Column("person", sa.String(320), nullable=False),
@@ -114,7 +114,7 @@ memory_audit = sa.Table(
 )
 
 
-# The memories one answer used (c-557): ids only, so erasing a memory leaves nothing of its text here.
+# The memories one answer used: ids only, so erasing a memory leaves nothing of its text here.
 message_memory_use = sa.Table(
     "message_memory_use",
     metadata,

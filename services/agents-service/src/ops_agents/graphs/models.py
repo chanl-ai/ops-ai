@@ -26,7 +26,7 @@ class Grade(BaseModel):
 
 
 class PersonRecord(BaseModel):
-    """One person named by a levy or garnishment notice (c-057). Fields the notice does not state are empty."""
+    """One person named by a levy or garnishment notice. Fields the notice does not state are empty."""
 
     name: str
     address: str = ""

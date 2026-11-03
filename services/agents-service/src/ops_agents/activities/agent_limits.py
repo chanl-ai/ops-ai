@@ -46,7 +46,7 @@ class AgentLimits(WireModel):
     # Granted tools a caller may switch off; a caller never adds one.
     switchable_tool_ids: list[str] = Field(default_factory=list[str])
     callers_may_add_instructions: bool = False
-    # Pinned widgets a caller may switch off (c-082 widgets, narrowed by c-071); a caller never adds one, may switch
+    # Pinned widgets a caller may switch off; a caller never adds one, may switch
     # composing off and may lower the per-answer cap.
     switchable_widget_ids: list[str] = Field(default_factory=list[str])
     public_key_may: list[PublicKeyOverride] = Field(default_factory=lambda: list(PUBLIC_KEY_DEFAULT))
@@ -76,7 +76,7 @@ def limits_of(spec: dict[str, Any]) -> AgentLimits:
 
 
 def refuse(field: str, message: str) -> Unprocessable:
-    """422 naming the field, never a silent clamp (owner decision, 2026-10-16)."""
+    """422 naming the field, never a silent clamp."""
     return Unprocessable(f"limits.{field}: {message}", code="invalid_limits", details={"field": f"limits.{field}"})
 
 

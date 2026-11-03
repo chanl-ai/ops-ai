@@ -1,4 +1,4 @@
-"""The task type store with the acting team's seeded general types in place (c-288; per team, c-507): seeded on the
+"""The task type store with the acting team's seeded general types in place (per team): seeded on the
 team's first read in this process, so a team made after the migration has them before any workflow uses one. Both
 the API and the worker read types through it, so a worker that never served a request still finds the seeds."""
 

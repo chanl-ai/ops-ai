@@ -39,7 +39,7 @@ from .common import (
 
 
 def turn_environment(state: Mapping[str, Any]) -> str:
-    """Which connection environment a turn's tool calls use (c-330): a test chat's test, a live chat's production,
+    """Which connection environment a turn's tool calls use: a test chat's test, a live chat's production,
     unless the run it serves is a test run."""
     if state.get("test_agent") is not None:
         return TEST
@@ -49,9 +49,9 @@ def turn_environment(state: Mapping[str, Any]) -> str:
 class AgentState(TypedDict):
     # Absent on a published agent's own graph, which is built for one agent.
     agent_id: NotRequired[str]
-    # A deployment's pinned version (c-117); absent serves the live version.
+    # A deployment's pinned version; absent serves the live version.
     agent_version: NotRequired[int]
-    # A test thread's agent (c-284): the newest version, draft included, as the chat route built it for this message.
+    # A test thread's agent: the newest version, draft included, as the chat route built it for this message.
     # Kept on the run, so the resume after an approval serves the same definition, whatever is live by then.
     test_agent: NotRequired[dict[str, Any]]
     message: str
@@ -65,7 +65,7 @@ class AgentState(TypedDict):
     # the approval carries so the reviewer's requester check can refuse the asker.
     history: NotRequired[list[dict[str, str]]]
     requested_by: NotRequired[str]
-    # Set by a chat run (c-071): the settings the override resolver allowed for this turn, and the raw overrides it
+    # Set by a chat run: the settings the override resolver allowed for this turn, and the raw overrides it
     # resolved them from, kept on the run as they were sent.
     settings: NotRequired[dict[str, Any]]
     thread_overrides: NotRequired[dict[str, Any]]

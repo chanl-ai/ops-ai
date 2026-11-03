@@ -1,4 +1,4 @@
-"""A chat thread's settings and a chat message's attachments (c-071).
+"""A chat thread's settings and a chat message's attachments.
 
 Settings: what the thread's agent lets the banker change, the thread's overrides, and the settings every turn starts
 from. PATCH merges into the stored overrides: a field sent replaces that field, a field sent as null clears it, a field
@@ -107,7 +107,7 @@ async def patch_settings(rt: Rt, me: Me, thread_id: str, body: Annotated[dict[st
 @router.post("/threads/{thread_id}/budget")
 async def budget(rt: Rt, me: Me, thread_id: str, body: BudgetAnswer) -> JSONResponse:
     """Continue (the conversation's owner) or raise (an admin of its team) a spent conversation budget; the paused
-    turn then runs and the conversation comes back with its reply (c-103). 403 for anyone else, 409 when not paused."""
+    turn then runs and the conversation comes back with its reply. 403 for anyone else, 409 when not paused."""
     await answer_budget(rt, me, thread_id, body)
     row = await chat_row(rt, thread_id, None)
     assert row is not None

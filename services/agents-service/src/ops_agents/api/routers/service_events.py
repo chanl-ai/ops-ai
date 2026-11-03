@@ -1,4 +1,4 @@
-"""POST /v1/events (c-258): a service reports a named event, and the system workflows that listen to it run. Service
+"""POST /v1/events: a service reports a named event, and the system workflows that listen to it run. Service
 tokens with the `events:emit` scope only; the tenant, team and reporting service come from the token, never the body,
 and a service reports only the events the catalogue gives it."""
 
@@ -15,12 +15,11 @@ from ops_contracts.chat import WireModel
 from ops_engine.node_types import EVENT_NAME
 from ops_identity import CurrentService
 from ops_service_kit.errors import Forbidden, Unprocessable
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, Out
 
 from .. import service_events
 from ..deps import Runtime, runtime
 from ..envelope import ok
-from ..schemas import Out
 
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 
@@ -45,11 +44,11 @@ class EventOut(Out):
     id: str
     name: str
     key: str
-    # started: listener runs began; resumed: a step parked on it carried on (c-525); unhandled: neither.
+    # started: listener runs began; resumed: a step parked on it carried on; unhandled: neither.
     status: Literal["started", "resumed", "unhandled"]
     # One run per listening system workflow, the latest attempt of each.
     run_ids: list[str]
-    # The waiting runs it resumed: steps parked on this event and key (c-525).
+    # The waiting runs it resumed: steps parked on this event and key.
     woke: list[str] = Field(default_factory=list)
     attempts: int
 

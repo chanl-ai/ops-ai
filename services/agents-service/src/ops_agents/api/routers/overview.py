@@ -1,6 +1,6 @@
-"""`/v1/overview`: what waits on a person, counted on the server (c-129). Reviews come from the same list Human Tasks
+"""`/v1/overview`: what waits on a person, counted on the server. Reviews come from the same list Human Tasks
 reads (hitl_facade.all_reviews), so the two never disagree; cases from the cases store, in the team the request acts
-in. The Overview page, the sidebar's count and Chat's hints read the lists here already joined (c-552), so the console
+in. The Overview page, the sidebar's count and Chat's hints read the lists here already joined, so the console
 fetches nothing beside this one request."""
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from ops_engine.store import RunStore
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, Out
 
 from ...store.cases import CaseStore
 from ...store.engine import EngineTransactions
@@ -21,7 +21,6 @@ from .. import engine_reviews, hitl_facade
 from ..auth import Principal, principal, teams_of
 from ..deps import Runtime, runtime
 from ..envelope import ok
-from ..schemas import Out
 from ..tool_access import one_read_per_tool
 
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases

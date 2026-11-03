@@ -162,7 +162,7 @@ def _thread_view(row: dict[str, Any]) -> dict[str, Any]:
     responses={200: {"model": Envelope[ThreadCreated], "description": "An existing thread with that external key"}},
 )
 async def create_thread(rt: Rt, me: Me, body: ThreadInput) -> JSONResponse:
-    # A thread is made to run: the run-start rule, in the team it is made in (c-122).
+    # A thread is made to run: the run-start rule, in the team it is made in.
     require_runs_start(me, team_id=None, what=f"graph {body.graph}")
     key_pin = require_key_reaches(me, *graph_target(body.graph))
     if key_pin is not None and body.version not in (None, key_pin):
@@ -189,7 +189,7 @@ async def create_thread(rt: Rt, me: Me, body: ThreadInput) -> JSONResponse:
         if not versions:
             names = sorted({*rt.graphs, "dispute_email"})
             raise ValidationFailed(f"Unknown graph {body.graph}. Graphs: {', '.join(names)}.")
-        # A key's pin outranks the workflow's own pointer (c-246).
+        # A key's pin outranks the workflow's own pointer.
         wanted = key_pin or body.version or pinned
         chosen = next((v for v in versions if v["version"] == wanted), None) if wanted else versions[-1]
         if chosen is None:
@@ -241,7 +241,7 @@ async def create_thread(rt: Rt, me: Me, body: ThreadInput) -> JSONResponse:
 
 
 def _reachable(me: Principal, row: dict[str, Any]) -> bool:
-    """A scoped API key sees threads of its own target only (c-246)."""
+    """A scoped API key sees threads of its own target only."""
     scope = key_scope(me)
     return scope is None or graph_target(str(row["graph"])) == scope
 
@@ -261,7 +261,7 @@ async def list_threads(rt: Rt, me: Me, graph: str | None = None) -> JSONResponse
 
 async def _worded_failure(rt: Runtime, values: dict[str, Any]) -> dict[str, Any]:
     """A refused call's `tool_error` with `action`, the call in words (describe_call's label), so no page words a tool
-    itself (c-500)."""
+    itself."""
     raw = values.get("tool_error")
     failure = cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
     if not failure.get("tool"):
@@ -346,7 +346,7 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
             if budget_pause
             else None
         )
-        # Any other paused step is a decision: a reviewer or admin of the thread's team, never a key (c-122 Q3). Review
+        # Any other paused step is a decision: a reviewer or admin of the thread's team, never a key. Review
         # steps go to Reviews and a chat's budget to its budget route above, each with its own rule.
         if answered is None:
             require_reviews_decide(
@@ -497,7 +497,7 @@ async def publish_version(rt: Rt, me: Me, name: str, body: PublishInput) -> JSON
     """Stores the definition as the graph's next version and points new threads at it, with no review. A builder or
     admin of the team that owns the graph's registry workflow publishes (the acting team for a graph the registry does
     not hold). A registry workflow goes live through its review (POST /v1/workflows/{id}/publish-requests), so outside
-    the team's publish policy (c-086) this route refuses one with 409 `review_required`."""
+    the team's publish policy this route refuses one with 409 `review_required`."""
     held = await registry_held(rt, name)
     if held is None:
         require_builder(me, area="workflows", team_id=me.team_id, action="publish", what=f"graph {name}")
@@ -565,7 +565,7 @@ SERVER_META = frozenset(
 def owned(metadata: dict[str, Any] | None, me: Principal) -> dict[str, Any]:
     """The caller's metadata without the keys the server owns, plus the starter the server records."""
     kept = {k: v for k, v in (metadata or {}).items() if k not in SERVER_META}
-    # `startedBy` is `key:<id>` for a key (c-246), which the Channels list counts its traffic by.
+    # `startedBy` is `key:<id>` for a key, which the Channels list counts its traffic by.
     return kept | {"ownerEmail": me.email, "startedBy": started_by(me)}
 
 

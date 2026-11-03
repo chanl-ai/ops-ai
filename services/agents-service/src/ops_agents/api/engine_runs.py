@@ -148,7 +148,7 @@ class WorkflowStarts:
         return StartedRun(str(run["id"]), created)
 
     async def children(self, parent_run_id: str, key_prefix: str, *, outputs: bool = False) -> list[dict[str, Any]]:
-        """The children a step started (c-263), read on the parent index; their run keys carry the `child:` prefix
+        """The children a step started, read on the parent index; their run keys carry the `child:` prefix
         child_run_key gives them. A key hashed for being over 194 characters would not match; run id, step id and
         iteration stay far under that."""
         return await self.runs.children(parent_run_id, f"child:{key_prefix}", outputs=outputs)

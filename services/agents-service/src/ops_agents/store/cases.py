@@ -1,4 +1,4 @@
-"""Cases (c-128): a long-lived issue a team works over days or weeks, and its timeline. A case has a status, an
+"""Cases: a long-lived issue a team works over days or weeks, and its timeline. A case has a status, an
 assignee, a priority, an optional customer (the bank's id and name; ops-ai keeps no customer list), and two deadlines,
 response and resolution, both paused while the case waits on the customer. Producers (a workflow step, an agent, a
 person) open a case with a key of their own, so a retry finds the case it opened; runs, chats, decisions, notes and
@@ -60,7 +60,7 @@ cases = sa.Table(
     sa.Column("paused_since", sa.String(32)),
     # What the producer read or worked out about the issue, by name (an Open or Add to case step's fields).
     sa.Column("fields", sa.JSON),
-    # The case type and published version the case was opened with (c-291); None when none was named.
+    # The case type and published version the case was opened with; None when none was named.
     sa.Column("type_id", sa.String(64)),
     sa.Column("type_version", sa.Integer),
     sa.Column("created_by", sa.String(320), nullable=False),
@@ -221,7 +221,7 @@ class CaseStore:
                 )
             )
         if due_before:
-            # Due by then and still the team's to act on: not resolved, and not paused waiting on the customer (c-552).
+            # Due by then and still the team's to act on: not resolved, and not paused waiting on the customer.
             where.append(
                 sa.and_(
                     cases.c.paused_since.is_(None),
@@ -316,7 +316,7 @@ class CaseStore:
         return after
 
     async def counts(self, teams: list[str], *, now: datetime | None = None) -> dict[str, int]:
-        """What waits on the teams (c-129): cases a person has to act on (open or waiting on us) and cases past their
+        """What waits on the teams: cases a person has to act on (open or waiting on us) and cases past their
         resolution deadline (not paused, not resolved). One query."""
         at = _iso(now or datetime.now(UTC))
         needs = cases.c.status.in_(("open", "waiting_on_us"))
@@ -362,7 +362,7 @@ class CaseStore:
 
     async def summaries(self, case_ids: list[str], teams: list[str]) -> dict[str, dict[str, Any]]:
         """Each case's subject, customer name and fields by id, for the cases of `teams` only, in one query: a run's
-        page names the cases its child runs opened that its reader may open (c-477). A case of another team, or not
+        page names the cases its child runs opened that its reader may open. A case of another team, or not
         found, is left out."""
         if not case_ids or not teams:
             return {}
@@ -391,7 +391,7 @@ class CaseStore:
                     await _event(c, a, "link", ref=b, detail={"case": b}, by=by, at=at)
 
 
-# What counts as working the case for its first response (c-508): a person's note, decision, or change of one of these.
+# What counts as working the case for its first response: a person's note, decision, or change of one of these.
 _RESPONSE_FIELDS = frozenset({"status", "assignee", "priority"})
 # Who is not a person, as api/actors.py parses them: runs, agents, API keys, events and triggers.
 _AUTOMATED = ("run:", "agent:", "key:", "event:", "trigger:")

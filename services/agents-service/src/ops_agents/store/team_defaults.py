@@ -1,4 +1,4 @@
-"""The agent each team's new chats start on (c-174). Provisioning writes a team's first row; a team admin changes it.
+"""The agent each team's new chats start on. Provisioning writes a team's first row; a team admin changes it.
 No row means no default: nothing in the code names one."""
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ class TeamDefaults:
 
     async def on_agents(self, prefix: str) -> list[tuple[str, str, str]]:
         """Every (tenant, team, agent) whose default agent's id starts with `prefix`, read past row-level security:
-        the start-up catch-up of the teams' Ops Assistants (c-616) starts before it knows a tenant, then works each
+        the start-up catch-up of the teams' Ops Assistants starts before it knows a tenant, then works each
         under its own."""
         t = team_default_agents
         async with system_tx(self.engine, ASSISTANT_TEAMS) as c:

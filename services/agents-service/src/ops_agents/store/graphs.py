@@ -40,15 +40,15 @@ graph_threads = sa.Table(
     sa.Column("deployment_id", sa.String(64), index=True),
     # A follow-up case opened by a reply to a closed one points back at it.
     sa.Column("parent_thread_id", sa.String(64), index=True),
-    # A chat thread's overrides within its agent's limits, applied to every turn (c-071; activities/overrides.py).
+    # A chat thread's overrides within its agent's limits, applied to every turn (activities/overrides.py).
     sa.Column("overrides", sa.JSON),
     # Set from the request's or loop's tenant (store/tenancy.py), never from a body; PostgreSQL RLS reads it (0021).
     sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local", index=True),
     # Per tenant, so one tenant's key neither collides with nor reveals another's.
     sa.UniqueConstraint("tenant_id", "external_key", name="uq_graph_threads_tenant_external_key"),
-    # A team's thread list, newest first (c-280).
+    # A team's thread list, newest first.
     sa.Index("ix_graph_threads_team_updated", "tenant_id", "team_id", "updated_at"),
-    # Held to the caller's team by the database too (c-429, migration 0073): another team's thread is not found.
+    # Held to the caller's team by the database too (migration 0073): another team's thread is not found.
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -403,7 +403,7 @@ class GraphStore:
             )
 
     async def set_deployment(self, thread_id: str, deployment_id: str) -> None:
-        """Marks a thread as started on a deployment (an embed, c-130), so its usage is counted on the column."""
+        """Marks a thread as started on a deployment (an embed), so its usage is counted on the column."""
         async with tenant_tx(self.engine) as c:
             await c.execute(
                 graph_threads.update().where(graph_threads.c.id == thread_id).values(deployment_id=deployment_id)

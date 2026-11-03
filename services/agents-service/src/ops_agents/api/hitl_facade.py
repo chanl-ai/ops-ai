@@ -54,7 +54,7 @@ CASE_GRAPHS_EXCLUDED = {"agent_wrapper"}
 
 def is_chat_graph(graph: str) -> bool:
     """Agent graphs: the shared wrapper and the per-agent `agent:<id>` graphs a publish registers. Cases never shows
-    them; Reviews lists a chat's write approvals (c-048 T013), decided there or in the conversation."""
+    them; Reviews lists a chat's write approvals, decided there or in the conversation."""
     return graph in CASE_GRAPHS_EXCLUDED or graph.startswith("agent:")
 
 
@@ -614,7 +614,7 @@ async def _thread_reviews(
 
 
 async def with_assignee(rt: Runtime, review: dict[str, Any]) -> dict[str, Any]:
-    """One review with who it is assigned to now (c-074)."""
+    """One review with who it is assigned to now."""
     assigned = await ReviewAssignments(rt.db).current()
     return review | {"assignee": assigned.get(str(review["id"]), review.get("assignee"))}
 
@@ -625,7 +625,7 @@ def _elapsed_minutes(start: str, end: str) -> float:
 
 
 REVIEW_VIEWS: dict[str, Callable[[dict[str, Any]], bool]] = {
-    # Open and assigned to the caller; list_reviews puts the caller's names in (c-074).
+    # Open and assigned to the caller; list_reviews puts the caller's names in.
     "mine": lambda r: False,
     "open": lambda r: r["status"] in ("pending", "in_review"),
     # A review whose step set no SLA (slaMinutes None) is never overdue.
@@ -639,7 +639,7 @@ GROUPS = frozenset({"case"})
 
 
 def by_case(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Rows grouped by case (c-460): each case's rows together, the case whose soonest deadline is soonest first, then
+    """Rows grouped by case: each case's rows together, the case whose soonest deadline is soonest first, then
     the rows inside a case by their own deadline. A row on no case is its own group. Rows with no deadline (`dueAt`
     is set on workflow steps only) sort last, keeping the order they came in, so the list and the place agree."""
     first: dict[str, int] = {}
@@ -681,8 +681,7 @@ async def list_reviews(
     teams: list[str],
 ) -> dict[str, Any]:
     """`me` is every name the caller is recorded by (email, name); Assigned to me lists open reviews assigned to one.
-    `group="case"` orders the view by case and names each row's case from `teams`, the teams the caller reads in
-    (c-460)."""
+    `group="case"` orders the view by case and names each row's case from `teams`, the teams the caller reads in."""
     if view not in REVIEW_VIEWS:
         raise ValidationFailed(f"Unknown view {view}.")
 
@@ -785,7 +784,7 @@ async def decide(
 
     A step that offers `options` (a levy case: hold, flag) is decided by one of them: the decision is recorded as
     approved with the option beside it, `inputs` (validated against the option's declaration) complete its call, and
-    the token is minted for that call alone (c-057). `amount` is the console's shorthand for the one input so named."""
+    the token is minted for that call alone. `amount` is the console's shorthand for the one input so named."""
     if publish_reviews.is_request_id(thread_id):
         return await publish_reviews.decide(rt, approver, thread_id, decision=decision, reason=reason)
     if engine_reviews.is_engine_id(thread_id):
@@ -886,7 +885,7 @@ async def _check_thread_decider(
     rt: Runtime, approver: Principal, row: dict[str, Any], payload: dict[str, Any], calls: list[dict[str, Any]]
 ) -> None:
     """Who may decide a paused thread step: a reviewer or admin of the thread's team, whatever the writes it decides
-    (`calls`) are (c-509), and not who asked for it while requesterMayDecide is off."""
+    (`calls`) are, and not who asked for it while requesterMayDecide is off."""
     del calls
     team = str(row["team_id"])
     require_reviews_decide(review_teams(approver), team, "this review")
@@ -894,7 +893,7 @@ async def _check_thread_decider(
 
 
 async def can_decide(rt: Runtime, approver: Principal, review_id: str) -> bool:
-    """reviews/decide for the caller on a review waiting now, by the checks its decision route runs (c-123)."""
+    """reviews/decide for the caller on a review waiting now, by the checks its decision route runs."""
     try:
         if publish_reviews.is_request_id(review_id):
             req = await registry(rt).request(review_id)

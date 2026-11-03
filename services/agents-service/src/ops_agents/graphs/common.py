@@ -56,11 +56,11 @@ class GraphDeps:
     workflows: WorkflowRunner | None = None
     # The tools an agent may be granted (tools-service's registry); None reads the fixture catalogue (unit tests).
     tools: ToolDirectory | None = None
-    # Runs a specialist agent's turn when the team's default agent calls it as a tool (c-174); None offers none.
+    # Runs a specialist agent's turn when the team's default agent calls it as a tool; None offers none.
     agents: AgentRunner | None = None
-    # What the agent remembers about the turn's person (c-124): their profile and search_memory; None remembers nothing.
+    # What the agent remembers about the turn's person: their profile and search_memory; None remembers nothing.
     memory: MemoryRunner | None = None
-    # The Ops tools for the team's default agent (c-469); None offers none.
+    # The Ops tools for the team's default agent; None offers none.
     ops: OpsRunner | None = None
 
 
@@ -126,7 +126,7 @@ class WorkflowTools:
 
 AGENT_TOOL_PREFIX = "agent__"
 MEMORY_TOOL = "search_memory"
-# The Ops tools (c-469): the team default agent's reads of the person's cases, Human Tasks, runs and workflows.
+# The Ops tools: the team default agent's reads of the person's cases, Human Tasks, runs and workflows.
 OPS_SERVER = "ops"
 
 
@@ -157,7 +157,7 @@ class OpsTools:
 
 
 class MemoryRunner(Protocol):
-    """The API side of memory (c-124), so this layer does not import the API."""
+    """The API side of memory, so this layer does not import the API."""
 
     async def profile(self, agent_id: str) -> PromptFragment | None:
         """The turn's person's remembered facts and preferences as one fragment; None when there are none."""
@@ -186,7 +186,7 @@ class MemoryTools:
 
 
 class AgentRunner(Protocol):
-    """The API side of specialist agents as tools (c-174), so this layer does not import the API."""
+    """The API side of specialist agents as tools, so this layer does not import the API."""
 
     async def offers(self, agent_id: str) -> list[ToolGrant]:
         """`agent__<id>` grants for the specialists `agent_id` may ask on this turn: none unless it is its team's
@@ -243,7 +243,7 @@ async def ports_with_workflows(
 
 
 async def with_memory(deps: GraphDeps, settings: AgentSettings, agent_id: str) -> AgentSettings:
-    """The turn's settings with the person's remembered profile after the agent's own instructions (c-124)."""
+    """The turn's settings with the person's remembered profile after the agent's own instructions."""
     if deps.memory is None or (fragment := await deps.memory.profile(agent_id)) is None:
         return settings
     return replace(settings, instructions=[*settings.instructions, fragment])

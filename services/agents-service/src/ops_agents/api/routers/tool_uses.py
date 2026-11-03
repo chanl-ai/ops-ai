@@ -1,10 +1,9 @@
-"""Which of a team's agents and workflows use each tool (c-609), for a plugin update's review: a person with
+"""Which of a team's agents and workflows use each tool, for a plugin update's review: a person with
 agents.view in their team, or a service holding `agents:view` for the team its token names.
 
 An agent uses a tool its newest or published version grants (`toolIds`, operation names). A workflow uses it when it
 runs such an agent (the agent's "used in", `used_in_all`, v1 and v2 alike) or a published v1 workflow's tool step names
-it, or a v2 workflow's tool node does. Only the team's own agents and workflows are read: no team sees another's
-(c-507)."""
+it, or a v2 workflow's tool node does. Only the team's own agents and workflows are read: no team sees another's."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Human Task types and their versions (c-288), per tenant, on the typed-record store (store/typed_records.py).
+"""Human Task types and their versions, per tenant, on the typed-record store (store/typed_records.py).
 
 The general types are seeded from seed/task_types.json. A workflow in one team may use another team's type. A task
 keeps the screen it was opened with (`published`, read by id and version, is what a review step and the task API pin).

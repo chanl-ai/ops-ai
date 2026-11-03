@@ -1,4 +1,4 @@
-"""What the routes of every typed-record kind share (task types, c-288; case types, c-291): the views of a type and its
+"""What the routes of every typed-record kind share (task types and case types): the views of a type and its
 versions, the owning team of a new one, and the `can()` check on an existing one. A kind's router adds only how its
 record is checked."""
 
@@ -8,11 +8,11 @@ from typing import Any
 
 from ops_access import can
 from ops_service_kit.errors import Unprocessable
+from ops_service_kit.http import Out
 
 from ..store.tenancy import current_team
 from ..store.typed_records import SEED, VersionedRecords
 from .auth import Principal, caller_of
-from .schemas import Out
 
 
 class RecordTypeView(Out):

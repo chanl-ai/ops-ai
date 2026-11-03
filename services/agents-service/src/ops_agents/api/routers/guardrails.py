@@ -1,4 +1,4 @@
-"""/v1/guardrails: guardrails as versioned attachments an agent pins (c-063, api/guardrails.py)."""
+"""/v1/guardrails: guardrails as versioned attachments an agent pins (api/guardrails.py)."""
 
 from __future__ import annotations
 
@@ -89,7 +89,7 @@ async def guardrail_options(
     limit: Annotated[int, Query(ge=1, le=100)] = 25,
     ids: Annotated[list[str] | None, Query()] = None,
 ) -> JSONResponse:
-    """The agent page's guardrail picker (c-136): live guardrails with a published version, by name, searched and
+    """The agent page's guardrail picker: live guardrails with a published version, by name, searched and
     limited in the query; `ids` labels pins already held, whatever their state."""
     offset, window = options_window(None if ids else cursor, limit)
     rows = await guardrails(rt).pinnable(search, offset, window, ids)

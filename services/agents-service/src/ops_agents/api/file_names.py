@@ -1,4 +1,4 @@
-"""File display names for detail responses (c-434): a case or run that names a file by id says what the file is
+"""File display names for detail responses: a case or run that names a file by id says what the file is
 called, which only files-service knows. Read through FilesClient as the record's team, a capped number per response;
 a name that cannot be read is None and the console shows the id."""
 

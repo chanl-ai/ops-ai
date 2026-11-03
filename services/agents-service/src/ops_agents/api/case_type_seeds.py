@@ -1,4 +1,4 @@
-"""The case type store with the acting team's seeded case types in place (c-291; per team, c-507), seeded on the
+"""The case type store with the acting team's seeded case types in place (per team), seeded on the
 team's first read in this process as the task types are (task_type_seeds.py). Both the API and the worker's Open case
 step read types through it."""
 

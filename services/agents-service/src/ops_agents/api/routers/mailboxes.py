@@ -1,4 +1,4 @@
-"""`/v1/channels/mailboxes`: the team mailboxes connected on Channels > Email (c-199), which a workflow's Email
+"""`/v1/channels/mailboxes`: the team mailboxes connected on Channels > Email, which a workflow's Email
 received trigger watches.
 
 A mailbox belongs to the team the request acts in and to its tenant; another team's or tenant's mailbox answers 404.
@@ -20,7 +20,7 @@ from ops_contracts.chat import WireModel
 from ops_email import MailboxNotConfiguredError
 from ops_engine.store import DefinitionStore
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, Out
 from ops_service_kit.ids import new_id, now_iso
 
 from ...store.engine import EngineTransactions
@@ -32,13 +32,12 @@ from ..deps import Runtime, runtime
 from ..email_trigger import binding_of
 from ..envelope import ok
 from ..mailbox_gateway import GatewayMailSource, mailbox_client
-from ..schemas import Out
 
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 
 # Every route takes a person or API key (`Me`); the list also answers tools-service, which reads a mailbox's reply
-# sender by address when a send_reply names it (c-200), with `deployments:view`.
+# sender by address when a send_reply names it, with `deployments:view`.
 router = APIRouter(prefix="/v1/channels/mailboxes")
 Reader: TypeAlias = Annotated[Principal, Depends(caller_in("deployments"))]  # noqa: UP040
 
@@ -56,7 +55,7 @@ class MailboxIn(WireModel):
     # The name of a Secrets-page secret that holds the password (or app password); never the password itself.
     password_secret: str | None = Field(default=None, pattern=r"^[A-Z][A-Z0-9_]*$", max_length=120)
     folder: str = Field(default="inbox", min_length=1, max_length=200)
-    # Microsoft 365 (c-228): the app registration's Microsoft tenant and client id; its client secret is the
+    # Microsoft 365: the app registration's Microsoft tenant and client id; its client secret is the
     # Secrets-page secret `password_secret` names.
     graph_tenant_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9.-]+$", max_length=64)
     graph_client_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9-]+$", max_length=64)
@@ -81,7 +80,7 @@ class MailboxPatch(WireModel):
     username: str | None = Field(default=None, max_length=320)
     password_secret: str | None = Field(default=None, pattern=r"^[A-Z][A-Z0-9_]*$", max_length=120)
     folder: str | None = Field(default=None, min_length=1, max_length=200)
-    # Microsoft 365 (c-228): the app registration's Microsoft tenant and client id; its client secret is the
+    # Microsoft 365: the app registration's Microsoft tenant and client id; its client secret is the
     # Secrets-page secret `password_secret` names.
     graph_tenant_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9.-]+$", max_length=64)
     graph_client_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9-]+$", max_length=64)

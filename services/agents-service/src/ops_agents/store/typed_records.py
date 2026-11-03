@@ -1,8 +1,8 @@
-"""Typed records kept as versions (task types, c-288; case types, c-291), per team.
+"""Typed records kept as versions (task types and case types), per team.
 
-Every type belongs to one team, keyed (tenant, team, id) so each team holds its own `write_approval` (c-507): a seeded
+Every type belongs to one team, keyed (tenant, team, id) so each team holds its own `write_approval`: a seeded
 type is the team's copy of a seed file entry, made on its first read; a team's own type only that team reads, edits or
-publishes (c-407). Every call needs an acting team, since an id alone names one type per team. A save
+publishes. Every call needs an acting team, since an id alone names one type per team. A save
 edits the newest version while it is a draft, or opens the next one on top of a published version; a published version
 never changes, so whatever pinned it (a task, a case) keeps reading what it was made with.
 """

@@ -1,4 +1,4 @@
-"""Widget mint keys (c-131): the one credential a bank's server uses to mint widget sessions for one deployment.
+"""Widget mint keys: the one credential a bank's server uses to mint widget sessions for one deployment.
 
 A key reads `wk.<tenant>.<key id>.<secret>`: the tenant lets the mint route set row-level security before it reads the
 key, and only the secret's SHA-256 is stored. A key mints for its own deployment and nothing else, so a leak is

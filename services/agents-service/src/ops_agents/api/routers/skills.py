@@ -283,7 +283,7 @@ async def agent_skill_options(  # noqa: PLR0917 - FastAPI reads each query param
     # reordered twin makes the OpenAPI enum order depend on which module was imported first.
     loading: Literal["on_match", "always"] | None = None,
 ) -> JSONResponse:
-    """The agent page's skill picker (c-136): published, live skills the agent does not hold, searched and limited in
+    """The agent page's skill picker: published, live skills the agent does not hold, searched and limited in
     the query; one that needs a tool or knowledge base the agent lacks is offered disabled with the reason. `loading`
     keeps always-on or on-match skills, also in the query (the published version's mode is kept on the row)."""
     agents = agent_registry(rt)

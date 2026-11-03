@@ -1,4 +1,4 @@
-"""A case assembled for its page (c-291, the approved case page design section 5): who owns it, its clocks, what it
+"""A case assembled for its page (the approved case page design section 5): who owns it, its clocks, what it
 waits on and the actions drafted there, its fields in its case type's order, what it links to, its newest activity and
 what the caller may do. The console renders it and joins nothing. Every block reads in one query, or a capped number
 of review views, whatever the case holds; nothing in here knows a use case."""
@@ -25,8 +25,7 @@ from .case_type_seeds import seeded_case_types
 from .deps import Runtime
 from .engine_reviews import titles_by_run, view
 from .file_names import named
-from .routers.engine import files_in
-from .run_story import masked_story
+from .run_story import files_in, masked_story
 
 # Review views read the operations their calls name, so a case reads at most this many.
 REVIEWS_CAP = 10
@@ -108,7 +107,7 @@ def _end_of(value: Any) -> datetime | None:
 def timer(
     row: dict[str, Any], deadline: tuple[str, str] | None, resolution: dict[str, Any], now: datetime
 ) -> dict[str, Any]:
-    """The case's one timer (c-500): its type's deadline field when it holds a date, labelled as the field is; met once
+    """The case's one timer: its type's deadline field when it holds a date, labelled as the field is; met once
     the case is resolved or closed, breached past the date, never paused (a court date does not move while the bank
     waits on the customer). Otherwise the resolution clock."""
     due = _end_of(cast(dict[str, Any], row.get("fields") or {}).get(deadline[0])) if deadline else None
@@ -147,7 +146,7 @@ async def _reviews(rt: Runtime, case_id: str, runs: list[dict[str, Any]]) -> lis
 
 
 def _href(review: dict[str, Any]) -> str:
-    """The task's own page (c-291), its id encoded as the console's Open link encodes it."""
+    """The task's own page, its id encoded as the console's Open link encodes it."""
     return f"/reviews/{quote(str(review['id']), safe='')}"
 
 
@@ -190,8 +189,8 @@ async def failed_calls(rt: Runtime, runs: list[dict[str, Any]]) -> set[str]:
 
 
 def actions_of(reviews: list[dict[str, Any]], failed: set[str]) -> list[dict[str, Any]]:
-    """A Human Task that would call something is a drafted action, decided on its task page (interview Q2). An approved
-    action whose call the other side refused reads `refused`: the approval alone does not mean it was done (c-402)."""
+    """A Human Task that would call something is a drafted action, decided on its task page. An approved
+    action whose call the other side refused reads `refused`: the approval alone does not mean it was done."""
     return [
         {
             "id": r["id"],
@@ -224,7 +223,7 @@ def whats_left(
     due: str | None,
     may_edit: bool,
 ) -> dict[str, Any]:
-    """What is left on the case (c-500): each open Human Task, who it waits on (its assignee, else the team that
+    """What is left on the case: each open Human Task, who it waits on (its assignee, else the team that
     decides it) and by when (its own due time, else the case's), and each approved action the bank's system refused,
     which waits for a new decision. `resolvable` when nothing is left, no linked run is still working, the case is not
     resolved or closed, and the caller may change its status (cases.edit, the rule PATCH applies)."""

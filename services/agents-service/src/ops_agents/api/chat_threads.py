@@ -328,7 +328,7 @@ async def messages_of(
         by_thread[r.thread_id].append(r)
     for tid in thread_ids:
         out[tid] = await _thread_messages(rt, tid, by_thread[tid], audit=audit)
-    # A reply's memory event holds ids only (c-557); what was remembered is read from the memories as they are now.
+    # A reply's memory event holds ids only; what was remembered is read from the memories as they are now.
     await fill_remembered(rt, [m for messages in out.values() for m in messages], reader)
     return out
 
@@ -401,7 +401,7 @@ async def _thread_messages(rt: Runtime, thread_id: str, events: list[Any], *, au
 
 
 async def _with_usage(rt: Runtime, thread_id: str, runs: list[dict[str, Any]], messages: list[ChatMessage]) -> None:
-    """Each reply's model calls, tokens, cost and seconds (c-286), from one grouped read of the thread's model call
+    """Each reply's model calls, tokens, cost and seconds, from one grouped read of the thread's model call
     records and the run's own start and finish."""
     if rt.usage is None or not runs:
         return

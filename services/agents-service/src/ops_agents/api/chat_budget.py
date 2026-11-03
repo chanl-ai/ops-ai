@@ -1,4 +1,4 @@
-"""A chat conversation's budget (c-103): the caps it starts with, and Continue or Raise when they are spent.
+"""A chat conversation's budget: the caps it starts with, and Continue or Raise when they are spent.
 
 Every chat thread gets a thread budget (store/usage.py) from its agent's per-conversation caps when it starts, or on
 its next message when it began before caps existed. The thread meter (graphs/metering.py `guard`) pauses the turn on
@@ -82,7 +82,7 @@ def _caps(b: Budget) -> dict[str, Any]:
 
 def _may(me: Principal, action: str, team: str, *, owner: str | None = None) -> bool:
     """`can(chat, action)` in the thread's team, as a yes or no: `view` with the owner is the grid's own-thread cell,
-    `manage` is the admin's (c-149)."""
+    `manage` is the admin's."""
     try:
         can(caller_of(me), "chat", action, team=team, owner=owner, what="this conversation")
     except Forbidden:

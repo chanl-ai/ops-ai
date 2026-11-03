@@ -83,11 +83,11 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
         gateway: GatewayClient | None = None
         http: httpx.AsyncClient | None = None
         if settings.gateway_url:
-            # Longer than any step's deadline: the step's own deadline ends a call, not the client (c-561).
+            # Longer than any step's deadline: the step's own deadline ends a call, not the client.
             http = httpx.AsyncClient(base_url=settings.gateway_url, timeout=GATEWAY_TIMEOUT_S)
             stack.push_async_callback(http.aclose)
             gateway = GatewayClient(required_client(settings, http, "tools", timeout=GATEWAY_TIMEOUT_S))
-            # Each tool call acts for the run's starter, proven by a token platform-service signs (c-558).
+            # Each tool call acts for the run's starter, proven by a token platform-service signs.
             gateway.people = CallPeople.on(acting_for_tokens(settings, http), db)
         kb_http: httpx.AsyncClient | None = None
         if settings.kb_url:
@@ -111,8 +111,8 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             on_takeover=ToolsFence(gateway, GraphStore(db)) if gateway else None,
         )
         minter = ApprovalMinter(db, settings.review_key.get_secret_value(), settings.review_token_ttl_seconds)
-        # One kernel for agent steps and AI steps (c-298): an AI step's call is the agent port's prompt.
-        # A step approving a write its starter may approve is decided as theirs (c-616).
+        # One kernel for agent steps and AI steps: an AI step's call is the agent port's prompt.
+        # A step approving a write its starter may approve is decided as theirs.
         starters = StarterApprovals(db, gateway)
         ports = EnginePorts(
             tools=GatewayTools(gateway, minter), reviews=RunReviews(starters=starters), agents=agents, prompts=agents
@@ -123,24 +123,24 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             ports.knowledge = KbService(required_client(settings, kb_http, "kb"))
         # Start workflow steps: children in the parent run's team and mode, under the pass's tenant.
         ports.runs = WorkflowStarts(RunStore(EngineTransactions(db)), DefinitionStore(EngineTransactions(db)))
-        # Open case and Add to case steps: the run's team's cases (c-219).
+        # Open case and Add to case steps: the run's team's cases.
         ports.cases = RunCases(RunStore(EngineTransactions(db)), CaseStore(db))
-        # Review steps that name a task type pin its published version as they pause (c-288).
+        # Review steps that name a task type pin its published version as they pause.
         ports.task_types = StoredTaskTypes(db)
         if gateway is not None:
             ports.expressions = GatewayExpressions(gateway)
         if settings.documents_url:
-            # Extract from file asks documents-service's extraction API as the run's team (c-256).
-            # Purge steps remove what was read from a deleted file (c-250).
+            # Extract from file asks documents-service's extraction API as the run's team.
+            # Purge steps remove what was read from a deleted file.
             documents = DocumentsClient.from_settings(
                 settings, service="agents", scopes=["documents:view", "documents:run", "documents:delete"]
             )
             stack.push_async_callback(documents.aclose)
             ports.documents = DocumentsExtractions(documents, EngineTransactions(db))
-            # Extract from text reads a document type's fields from the same service (c-298).
+            # Extract from text reads a document type's fields from the same service.
             ports.document_types = ports.documents
         if settings.files_url:
-            # Save data on file steps record what was read on the file, as the run's team (c-250).
+            # Save data on file steps record what was read on the file, as the run's team.
             file_data = FilesClient.from_settings(settings, service="agents", scopes=["files:edit"])
             stack.push_async_callback(file_data.aclose)
             ports.file_data = RunFileData(file_data, EngineTransactions(db))
@@ -155,10 +155,10 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             )
             review_sla = PlatformReviewSla(service_client(settings, platform_http, "platform"))
             if agents is not None:
-                # Task assist (c-302) writes a typed task's help as its step pauses, where the team turned it on.
+                # Task assist writes a typed task's help as its step pauses, where the team turned it on.
                 policies = PlatformPolicies(service_client(settings, platform_http, "platform"))
                 ports.reviews = assisted_reviews(stack, db, agents, policies, StarterApprovals(db, gateway, policies))
-                # AI steps run only where the run's team allows them, masked unless it turned that off (c-298, c-321).
+                # AI steps run only where the run's team allows them, masked unless it turned that off.
                 agents.rules = RunTeamRules(db, policies)
         host = WorkerHost(
             tx=EngineTransactions(db),
@@ -182,14 +182,14 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
                 seconds=seconds,
             ),
         )
-        # The run reconciler (c-561) beside the worker: runs nothing is behind are marked Stuck within a minute or so.
+        # The run reconciler beside the worker: runs nothing is behind are marked Stuck within a minute or so.
         reconciling = asyncio.create_task(
             reconcile_forever(
                 EngineTransactions(db), stop, beats=heartbeats(db), every_s=settings.engine_reconcile_seconds
             )
         )
         stack.push_async_callback(lambda: asyncio.wait_for(reconciling, None))
-        # Batches (c-535): each tick starts up to 50 of every tenant's pending rows, each in its own tenant and team.
+        # Batches: each tick starts up to 50 of every tenant's pending rows, each in its own tenant and team.
         starting = asyncio.create_task(start_batches_forever(db, stop))
         stack.push_async_callback(lambda: asyncio.wait_for(starting, None))
         listener = email_listener(settings, db, owner, stack)
@@ -203,7 +203,7 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             agents=agents is not None,
             poll=settings.engine_poll_seconds,
         )
-        # The workflow worker is a listed background process (c-516): its heartbeat is written from this loop.
+        # The workflow worker is a listed background process: its heartbeat is written from this loop.
         await Worker(host, background.Beat("workflow_worker", heartbeats(db))).run_forever(
             stop, settings.engine_poll_seconds
         )
@@ -223,7 +223,7 @@ def enter_run(run: dict[str, Any]) -> None:
 
 
 async def keep_mail_listening(listener: EmailTriggers, stop: asyncio.Event, every_s: float) -> None:
-    """Restarts the mail listener after a crash, through the same runner as the other loops (c-516)."""
+    """Restarts the mail listener after a crash, through the same runner as the other loops."""
 
     async def once() -> int:
         await listener.run_forever(stop, every_s)

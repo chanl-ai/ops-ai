@@ -1,4 +1,4 @@
-"""Starting a run by hand (c-466): one adapter per kind of trigger turns the start form its trigger declares
+"""Starting a run by hand: one adapter per kind of trigger turns the start form its trigger declares
 (`ops_engine.starts`) into what the trigger's real source produces, and starts the run through that source's own entry.
 
 `email` builds the `InboundMessage` a mailbox would deliver, with each attachment's bytes read back from Files, and
@@ -136,7 +136,7 @@ def _blank(value: Any) -> bool:
 
 def filled(form: dict[str, Any], values: dict[str, Any]) -> dict[str, Any]:
     """The start form's values with its defaults, or 422 `invalid_input` naming each required field left empty, as the
-    console's start dialog says it (c-378). Every start of a form takes this path: by hand, the hosted form, and
+    console's start dialog says it. Every start of a form takes this path: by hand, the hosted form, and
     POST /v1/runs for a Request trigger. `details.path` is the schema property name."""
     schema = cast(dict[str, Any], form.get("schema") or {})
     out, missing = form_values(schema, values)

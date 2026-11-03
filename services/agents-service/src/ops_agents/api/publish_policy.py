@@ -1,4 +1,4 @@
-"""Whether a publish needs a second person's review (c-086). Every publish route in agents-service asks `decide` and
+"""Whether a publish needs a second person's review. Every publish route in agents-service asks `decide` and
 nothing else; tests/api/test_publish_policy_contract.py fails a route that decides for itself.
 
 An admin sets, per team and area, one of three modes:
@@ -44,7 +44,7 @@ MINOR_FIELDS: dict[Area, frozenset[str]] = {
     "guardrails": frozenset(),
     "skills": frozenset({"name", "description"}),
     "widgets": frozenset({"name", "description"}),
-    # tools-service decides a tool module's major and security changes itself and reads only the mode (c-139).
+    # tools-service decides a tool module's major and security changes itself and reads only the mode.
     "tools": frozenset(),
 }
 # Never minor, whatever an area's list says: approval rules, access and egress.
@@ -89,7 +89,7 @@ def is_major(area: Area, old: dict[str, Any] | None, new: dict[str, Any]) -> boo
 
 def _unplaced(doc: dict[str, Any]) -> dict[str, Any]:
     """A workflow with each node's canvas position dropped. Positions sit inside `nodes`, so a top-level diff would read
-    moving a step (Tidy up, c-486) as a change to the steps; moving steps alone is minor."""
+    moving a step (Tidy up) as a change to the steps; moving steps alone is minor."""
     nodes = doc.get("nodes")
     if not isinstance(nodes, list):
         return doc

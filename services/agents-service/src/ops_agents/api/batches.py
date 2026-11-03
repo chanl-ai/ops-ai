@@ -1,4 +1,4 @@
-"""Starting a batch's rows (c-535): the workflow worker's tick reads every tenant's pending rows, a few at a time, and
+"""Starting a batch's rows: the workflow worker's tick reads every tenant's pending rows, a few at a time, and
 starts each row's run inside its own tenant and team, with the row's run key so a race or a restart adopts the run
 that key already names. A batch whose row met the model budget stops: there is no engine spend cap, and the rows after
 it would meet the same refusal."""

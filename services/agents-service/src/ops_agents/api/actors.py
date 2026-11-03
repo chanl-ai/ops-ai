@@ -10,17 +10,17 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from ops_engine import default_registry
+from ops_service_kit.http import Out
 
 from ..store.actor_names import ActorNames
 from .deps import Runtime
 from .key_summaries import PlatformKeySummaries
 from .people_names import PlatformPeopleNames
-from .schemas import Out
 
 EMAIL_TRIGGER = "trigger:email:"
 # How each kind of start by hand reads, from the trigger types that declare one: {"email": "test email", ...}.
 START_VIA = {t.start.kind: t.start.via for t in default_registry().all() if t.start is not None} | {
-    # Starts that are no trigger's own (c-535): a members-only hosted form and a row of a batch.
+    # Starts that are no trigger's own: a members-only hosted form and a row of a batch.
     "hosted_form": "hosted form",
     "batch": "batch",
 }
@@ -28,8 +28,8 @@ CHILD_RUN = "run:"
 
 
 class AgentRef(Out):
-    # agent: the agent a person asked through; event: the service event that carried a person's request (c-258);
-    # start: the start form a person filled by hand, named as its trigger names it ("test email", "form"; c-466).
+    # agent: the agent a person asked through; event: the service event that carried a person's request;
+    # start: the start form a person filled by hand, named as its trigger names it ("test email", "form").
     kind: Literal["agent", "event", "start"]
     id: str
     name: str

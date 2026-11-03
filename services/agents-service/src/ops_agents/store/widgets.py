@@ -1,4 +1,4 @@
-"""Widget templates as versioned attachments (c-082, `docs/architecture/chat-widgets.md`): a builder lays one out
+"""Widget templates as versioned attachments (`docs/architecture/chat-widgets.md`): a builder lays one out
 from the catalogue, it publishes through a review decided by someone other than whoever saved it, and agents pin it by
 `{widgetId, version}`. Versions are immutable once published; a draft is edited in place until it is requested.
 Publish requests are the registry's (`registry_publish_requests`, kind `widget`).

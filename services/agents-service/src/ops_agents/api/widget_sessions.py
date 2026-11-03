@@ -1,4 +1,4 @@
-"""Widget sessions, origins and rate limits (c-117).
+"""Widget sessions, origins and rate limits.
 
 A page on another origin never holds a long-lived key. It gets a session that lasts 15 minutes, signed by
 agents-service with a key derived for this one purpose, and bound to the deployment, the page's origin and the person:

@@ -1,4 +1,4 @@
-"""Tool results as widget parts (c-055 spec, "Widget architecture"): a shape and its data, never a tool or component
+"""Tool results as widget parts ("Widget architecture"): a shape and its data, never a tool or component
 name; the console picks how to draw each shape.
 
     {type: "widget", id, shape: rows | series | record | metric, data, hint?}
@@ -9,7 +9,7 @@ Rules, in order:
 - An operation's declared shape (`x-ops-shape` on its response, `declared`) wins when the data fits that shape;
   when it does not, inference runs as if nothing were declared. A malformed part is never emitted.
 - An object whose only key holds a list (`{"transactions": [...]}`) is read as that list; the key becomes the title.
-- A value that is not flat is drawn as one cell (c-055 T024): a list of scalars joins with ", " (`accountIds`), a
+- A value that is not flat is drawn as one cell: a list of scalars joins with ", " (`accountIds`), a
   list of objects or a nested object becomes a count naming its key ("2 holds", "1 address"), so a customer with
   accounts or an account with holds still draws. Inference reads the flat columns only; a joined or counted cell is
   text, never a number or a date.

@@ -90,7 +90,7 @@ class WorkflowRegistry:
 
     async def refs_every_team(self) -> list[dict[str, Any]]:
         """Every team's workflows, for a service that governs calls on their behalf (tools-service checks a grant's
-        workflow and team here, c-168): what it reads decides access by the workflow's own team, not the caller's."""
+        workflow and team here): what it reads decides access by the workflow's own team, not the caller's."""
         q = sa.select(registry_workflows).where(
             registry_workflows.c.status != "deleted",
             any_team(registry_workflows, "a service checks a workflow's team for a tool grant"),

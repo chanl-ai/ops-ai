@@ -1,4 +1,4 @@
-"""Batches (c-535): one run of a workflow per row of a CSV or Excel file, started by the workflow worker a few rows a
+"""Batches: one run of a workflow per row of a CSV or Excel file, started by the workflow worker a few rows a
 tick and read back as counts and a table of every row's status and output.
 
 A batch is a record, not a workflow run: Start workflow can start only one fixed workflow, so no single built-in

@@ -1,8 +1,8 @@
-"""Whom each tool call acts for (c-558), sent to tools-service as a token platform-service signs, never as a field.
+"""Whom each tool call acts for, sent to tools-service as a token platform-service signs, never as a field.
 
 The person is the chat turn's (TURN_PERSON), or a run's starter: the email the run's first run records as
 `created_by`, so a child run acts for the person who started its parent, and a held write approved by someone else
-still acts for the starter (owner decision 2). A run a schedule, mailbox, webhook or API key started has no person,
+still acts for the starter. A run a schedule, mailbox, webhook or API key started has no person,
 and its calls carry no token.
 """
 

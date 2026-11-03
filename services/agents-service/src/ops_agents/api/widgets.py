@@ -1,4 +1,4 @@
-"""Widget templates (c-082, `docs/architecture/chat-widgets.md`): checking what a builder saves, the views the
+"""Widget templates (`docs/architecture/chat-widgets.md`): checking what a builder saves, the views the
 console reads, and the publish an approved review runs. The seeded library (seed/widgets.json, in the catalogue) is
 served beside the registry's widgets as published, platform-wide templates; the registry's are scoped to the team
 that made them.

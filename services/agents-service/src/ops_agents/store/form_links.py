@@ -1,4 +1,4 @@
-"""Hosted forms (c-535): a workflow's start form shared as a page of its own, by a signed link that expires or to the
+"""Hosted forms: a workflow's start form shared as a page of its own, by a signed link that expires or to the
 team's signed-in members. One row per form, in the team that shared it; the link's secret is kept only as its hash.
 
 A submission through the link enters the tenant and team its token names and reads the form by id there, so nothing
