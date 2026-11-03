@@ -42,7 +42,7 @@ def test_a_staged_home_path_or_login_is_refused(tmp_path: Path) -> None:
 
 def test_a_docs_only_commit_skips_the_console_but_still_refuses_a_private_path(tmp_path: Path) -> None:
     # Assembled, so this file passes the scan itself; no .md, so check-docs does not read it as an index entry.
-    private = "." + "codeloop/specs/566"
+    private = "." + "cursor/rules/566"
     done = gate(tmp_path, {"docs/README.md": at_head("docs/README.md") + f"\nSee `{private}`.\n"})
     out = done.stdout + done.stderr
     assert done.returncode != 0 and "check-public-paths: 1 private path" in out, out[-2000:]
