@@ -19,8 +19,15 @@ from ops_service_kit.http import Envelope, Out, ok
 
 from .auth.kinds import BY_ID, kind_of
 from .callers import caller_in
-from .connections.records import CONNECTED, account_state, deciding_environment, shown_status, state_reason
-from .connections.schemas import ConnectionDetail, ConnectionHealth
+from .connections.records import (
+    CONNECTED,
+    account_state,
+    deciding_environment,
+    shown_status,
+    state_reason,
+    team_test,
+)
+from .connections.schemas import AccountTest, ConnectionDetail, ConnectionHealth
 from .connections.service import ConnectionService, own_key
 from .defaults import ensure_defaults
 from .environments import connection_views
@@ -152,6 +159,9 @@ class AppAccount(Out):
     account: str | None = None
     # The caller's own default among their sign-ins to the app (c-608).
     pinned: bool = False
+    # The last test, run right after each sign-in: the caller's own on an account each person signs in to, else the
+    # team account's. A failed one warns on the row; the account stays connected.
+    test: AccountTest | None = None
 
 
 class AppPage(Out):
@@ -471,6 +481,7 @@ async def _accounts(
             if str(a["id"]) != default
         ]
     states = await systems.states(who.tenant_id, stored)
+    team_tokens = await systems.connections.store.team_tokens(who.tenant_id, [str(a["id"]) for a in stored])
     rows: list[dict[str, Any]] = [
         {
             "id": str(a["id"]),
@@ -478,6 +489,8 @@ async def _accounts(
             if str(a["id"]) == default
             else a.get("account_name") or a["name"],
             **_state(a, states[str(a["id"])]),
+            "perPerson": (a.get("sign_in") or "team") != "team",
+            "teamTest": team_test(a, (team_tokens.get(str(a["id"])) or {}).get(deciding_environment(a))),
         }
         for a in stored
     ]
@@ -488,16 +501,22 @@ async def _accounts(
             who.tenant_id, mine, [r["id"] for r in rows], "production"
         )
     }
-    return [
-        {
-            **r,
-            "default": r["id"] == default,
-            "mine": r["id"] in signed,
-            "account": (signed.get(r["id"]) or {}).get("account"),
-            "pinned": bool((signed.get(r["id"]) or {}).get("pinned")),
-        }
-        for r in rows
-    ]
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        per_person, team = r.pop("perPerson"), r.pop("teamTest")
+        own = signed.get(r["id"]) if per_person else None
+        out.append(
+            {
+                **r,
+                "default": r["id"] == default,
+                "mine": r["id"] in signed,
+                "account": (signed.get(r["id"]) or {}).get("account"),
+                "pinned": bool((signed.get(r["id"]) or {}).get("pinned")),
+                # On an account each person signs in to, the caller's own sign-in's test; else the team account's.
+                "test": own.get("test") if own is not None else team,
+            }
+        )
+    return out
 
 
 def _state(conn: dict[str, Any], state: tuple[str, str, str | None]) -> dict[str, Any]:

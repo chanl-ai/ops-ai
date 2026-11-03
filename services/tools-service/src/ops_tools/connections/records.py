@@ -87,6 +87,18 @@ def account_state(conn: dict[str, Any], team_token: dict[str, Any] | None, now: 
     return CONNECTED if health.get("status") == "ok" and health.get("account") != "own" else NOT_SIGNED_IN
 
 
+def team_test(conn: dict[str, Any], team_token: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The team account's last test in the deciding environment: kept on its token row after a sign-in, else (a key or
+    password, which has no token) the environment's last test made as the team."""
+    if team_token is not None and team_token.get("test"):
+        return cast(dict[str, Any], team_token["test"])
+    envs = cast(dict[str, dict[str, Any]], conn.get("environments") or {})
+    health = cast(dict[str, Any], (envs.get(deciding_environment(conn)) or {}).get("health") or {})
+    if health.get("account") != "team" or health.get("status") not in ("ok", "failed"):
+        return None
+    return {"status": health["status"], "message": health.get("message"), "at": health.get("at")}
+
+
 def state_reason(conn: dict[str, Any], team_token: dict[str, Any] | None, state: str) -> str | None:
     """Why the team account is refused or expired: the system's words, or the day its sign-in ended."""
     if state == REFUSED:

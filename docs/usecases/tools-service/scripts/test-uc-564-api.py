@@ -27,6 +27,7 @@ from usecase_harness import (
     service_headers,
     signed_in,
     tools,
+    until,
 )
 from usecase_harness import ROOT as REPO
 
@@ -178,6 +179,19 @@ with ExitStack() as stack:
         "5 the team signs in and the instance is read from Salesforce's token answer",
         done.status_code == 200 and mine.get("settings", {}).get("instance_url") == sf["api_base"],
         {"status": done.status_code, "text": done.text[:200], "settings": mine.get("settings")},
+    )
+
+    # 51. The team account reads connected at once, and its test runs on its own right after the sign-in.
+    def team_row() -> dict[str, Any]:
+        page = data(gw.get(f"/v1/apps/plugin:{PLUGIN}", headers=priya)) or {}
+        return next((a for a in page.get("accounts") or [] if a.get("id") == connection_id), {})
+
+    first_row = team_row()
+    team_test = until(lambda: (team_row().get("test") or {}).get("status"), timeout=20)
+    check(
+        "51 the team account is connected right after its sign-in, and its own test ran and passed",
+        first_row.get("state") == "connected" and team_test == "ok",
+        {"first": first_row, "later": team_row()},
     )
 
     # 6. Test connection runs the plugin's health check, Salesforce's limits call, and passes.

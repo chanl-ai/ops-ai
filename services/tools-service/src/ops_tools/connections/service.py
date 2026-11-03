@@ -11,6 +11,7 @@ Secret parts are written once, from the request that sets them, into the one sec
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import re
 import secrets as random
@@ -29,6 +30,7 @@ from ops_policy import CredentialStore
 from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import page_window, paged
 from ops_service_kit.ids import new_id
+from ops_service_kit.logging import get_logger
 
 from ..auth import AppSecret, Authenticator, AuthFailed, Prepared
 from ..auth.assertion import SigningError, key_matches, read_certificate
@@ -129,6 +131,9 @@ def _hash(state: str) -> str:
     return hashlib.sha256(state.encode()).hexdigest()
 
 
+log = get_logger("ops_tools.connections")
+
+
 class ConnectionService:
     def __init__(
         self,
@@ -169,6 +174,8 @@ class ConnectionService:
         self.on_token = on_token
         # A plugin connection on the platform's own OAuth app reads its secret from the account (c-565).
         self.app_secret = app_secret
+        # Tests that run after a sign-in, held so the event loop keeps them until they finish.
+        self._after_sign_in: set[asyncio.Task[None]] = set()
 
     # ── Who may ───────────────────────────────────────────────────────────
 
@@ -833,7 +840,20 @@ class ConnectionService:
         own = connected_event(conn, environment, token_for) if token_for != SHARED else None
         event = self._event(who, "signed_in", environment, detail)
         await self.store.note(who.tenant_id, connection_id, event, report=own)
+        if str({**settings, **extra}.get("testPath") or "").startswith("/"):
+            # The sign-in alone connects the account; its test follows without holding the answer, and its outcome
+            # is kept on the account's row.
+            account = "self" if token_for != SHARED else "team"
+            task = asyncio.create_task(self._test_after_sign_in(who, connection_id, environment, account))
+            self._after_sign_in.add(task)
+            task.add_done_callback(self._after_sign_in.discard)
         return await self.detail(who, connection_id)
+
+    async def _test_after_sign_in(self, who: Caller, connection_id: str, environment: str, account: str) -> None:
+        try:
+            await self.test(who, connection_id, environment, account)
+        except Exception as e:  # a test that cannot run leaves the account connected and untested
+            log.warning("test_after_sign_in_failed", connection=connection_id, error=type(e).__name__)
 
     async def use_platform_app(
         self,
@@ -917,6 +937,7 @@ class ConnectionService:
                     "scopes": r.get("scopes") or [],
                     "since": _iso(r.get("refreshed_at")),
                     "expiresAt": _iso(r.get("expires_at")),
+                    "test": r.get("test"),
                     "refused": r.get("refused_at") is not None,
                     "refusedAt": _iso(r.get("refused_at")),
                     "refusedReason": r.get("refused_reason"),
@@ -1108,6 +1129,11 @@ class ConnectionService:
         # connection's health and status, so a failing sandbox leaves a working production as it was.
         decides = environment == ("production" if "production" in conn["environments"] else "test")
         await self.store.set_health(who.tenant_id, connection_id, health, status if decides else None, decides=decides)
+        # Also on the tested account's own row, so one person's test never reads as the team's or another's.
+        outcome = {"status": health["status"], "message": health.get("message"), "at": health["at"]}
+        await self.store.set_token_test(
+            who.tenant_id, connection_id, environment, own_key(who) if own else SHARED, outcome
+        )
         detail = {k: health[k] for k in ("status", "account") if k in health} | (
             {"code": health["code"]} if "code" in health else {}
         )

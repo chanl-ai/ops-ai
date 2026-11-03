@@ -7,8 +7,11 @@ built names the task it waits on. No model call."""
 
 from __future__ import annotations
 
+from typing import Any
+
 from apps_walk import app_path, apps_stack, target
-from usecase_harness import check, data, finish
+from fake_multi_auth import API_HOST
+from usecase_harness import check, data, finish, until
 
 APP = "plugin:test.header-key"
 
@@ -95,5 +98,29 @@ with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
         person_app != "con_missing" and signed == 200 and answer.get("as") == "james.own",
         {"account": person_app, "sign-in": signed, "call": ran.text[:300]},
     )
+
+    # 30. Signing in is what connects an account; its test then runs on its own, and the outcome is kept on the row.
+    def own_row(role: str) -> dict[str, Any]:
+        page = data(w.kept(w.gw.get(app_path("plugin:test.person"), headers=w.who[role]))) or {}
+        return next((a for a in page.get("accounts") or [] if a.get("mine")), {})
+
+    james_test = until(lambda: (own_row("builder").get("test") or {}).get("status"), timeout=20)
+    check(
+        "30 a person's own sign-in is tested right after it, as that person, and the row keeps the outcome",
+        james_test == "ok" and bool((own_row("builder").get("test") or {}).get("at")),
+        own_row("builder"),
+    )
+
+    # 31. A sign-in whose test fails still connects; the row warns with the test's reason.
+    w.gw.post("/v1/egress/hosts/remove", json={"value": API_HOST}, headers=w.who["security"])
+    maya_signed = w.sign_in("approver", "plugin:test.person", person_app, "maya.own")
+    maya_test = until(lambda: (own_row("approver").get("test") or {}).get("status") == "failed", timeout=30)
+    maya = own_row("approver")
+    check(
+        "31 a sign-in whose test fails is still connected, and its row says the test failed and why",
+        maya_signed == 200 and bool(maya_test) and bool((maya.get("test") or {}).get("message")),
+        {"sign-in": maya_signed, "row": maya},
+    )
+    w.gw.post("/v1/egress/hosts", json={"value": API_HOST, "note": "apps"}, headers=w.who["security"])
 
 finish()

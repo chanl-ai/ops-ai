@@ -209,6 +209,41 @@
         "title": "AccountIn",
         "type": "object"
       },
+      "AccountTest": {
+        "additionalProperties": false,
+        "description": "An account's last test: it runs right after a sign-in, and a failure warns without disconnecting it.",
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "at"
+        ],
+        "title": "AccountTest",
+        "type": "object"
+      },
       "ActivityDay": {
         "additionalProperties": false,
         "properties": {
@@ -336,6 +371,16 @@
               }
             ],
             "title": "Statusdetail"
+          },
+          "test": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountTest"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -6444,6 +6489,16 @@
               }
             ],
             "title": "Since"
+          },
+          "test": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountTest"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [

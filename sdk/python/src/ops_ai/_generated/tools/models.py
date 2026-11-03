@@ -36,6 +36,12 @@ class AccountIn(TypedDict, closed=True):
     signIn: NotRequired[str | None]
 
 
+class AccountTest(TypedDict, closed=True):
+    at: str
+    message: NotRequired[str | None]
+    status: Literal["ok", "failed"]
+
+
 class ActivityDay(TypedDict, closed=True):
     count: int
     date: str
@@ -54,6 +60,7 @@ class AppAccount(TypedDict, closed=True):
     stateReason: NotRequired[str | None]
     status: str
     statusDetail: NotRequired[str | None]
+    test: NotRequired[AccountTest | None]
 
 
 class AppCredential(TypedDict, closed=True):
@@ -626,6 +633,7 @@ class MyConnection(TypedDict, closed=True):
     refusedReason: NotRequired[str | None]
     scopes: list[str]
     since: NotRequired[str | None]
+    test: NotRequired[AccountTest | None]
 
 
 class NewConnectionIn(TypedDict, closed=True):

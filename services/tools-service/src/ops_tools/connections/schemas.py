@@ -237,6 +237,14 @@ class ConnectionEvent(Out):
 Status = Literal["draft", "healthy", "needs_reconnect", "expiring", "revoked", "error"]
 
 
+class AccountTest(Out):
+    """An account's last test: it runs right after a sign-in, and a failure warns without disconnecting it."""
+
+    status: Literal["ok", "failed"]
+    message: str | None = None
+    at: str
+
+
 class MyConnection(Out):
     """One of the caller's own sign-ins (c-558), as Your connections lists it."""
 
@@ -255,6 +263,8 @@ class MyConnection(Out):
     # Where the system says how to find the key, from the connection's card details.
     docs_url: str | None = None
     # The system refused the person's key or sign-in (c-595): when, and what it said; a new one clears it.
+    # The person's own sign-in's last test.
+    test: AccountTest | None = None
     refused: bool = False
     refused_at: str | None = None
     refused_reason: str | None = None

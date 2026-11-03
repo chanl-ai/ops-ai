@@ -136,6 +136,8 @@ connection_tokens = sa.Table(
     sa.Column("refused_reason", sa.String(300)),
     # The person's default among their sign-ins to one app's accounts (c-608); none pinned means the newest live one.
     sa.Column("pinned", sa.Boolean, nullable=False, server_default=sa.false()),
+    # The account's last test, {status, message, at}: it runs right after a sign-in and never blocks it.
+    sa.Column("test", sa.JSON),
     sa.ForeignKeyConstraint(
         ["tenant_id", "connection_id"], ["connections.tenant_id", "connections.id"], ondelete="CASCADE"
     ),
@@ -721,7 +723,8 @@ class ConnectionStore:
     ) -> None:
         """A finished sign-in's token, whatever was held before; a refusal marked on the row before is cleared."""
         key = self._token_key(tenant_id, connection_id, environment, person)
-        values = {"refused_at": None, "refused_reason": None, **values}
+        # A new sign-in starts untested: the test that follows it writes its own outcome.
+        values = {"refused_at": None, "refused_reason": None, "test": None, **values}
         async with self._tx() as c:
             if (await c.execute(connection_tokens.update().where(*key).values(**values))).rowcount == 0:
                 await c.execute(
@@ -742,6 +745,14 @@ class ConnectionStore:
         q = connection_tokens.update().where(*self._token_key(tenant_id, connection_id, environment, person))
         async with self._tx() as c:
             return (await c.execute(q.values(refused_at=at, refused_reason=reason[:300]))).rowcount > 0
+
+    async def set_token_test(
+        self, tenant_id: str, connection_id: str, environment: str, person: str, test: Row
+    ) -> bool:
+        """The account's last test on its own row, the team's (SHARED) or a person's; False when it holds none."""
+        q = connection_tokens.update().where(*self._token_key(tenant_id, connection_id, environment, person))
+        async with self._tx() as c:
+            return (await c.execute(q.values(test=test))).rowcount > 0
 
     async def forget_person(self, tenant_id: str, team_id: str, person: str) -> list[Row]:
         """Deletes every sign-in of `person`'s own on `team_id`'s connections, in every environment (c-616 S14: they
@@ -769,7 +780,7 @@ class ConnectionStore:
             return []
         t = connection_tokens.c
         q = (
-            sa.select(t.connection_id, t.account, t.pinned, t.refreshed_at, t.refused_at)
+            sa.select(t.connection_id, t.account, t.pinned, t.refreshed_at, t.refused_at, t.test)
             .where(
                 t.tenant_id == tenant_id,
                 t.connection_id.in_(connection_ids),
@@ -850,6 +861,7 @@ class ConnectionStore:
                 t.expires_at,
                 t.refused_at,
                 t.refused_reason,
+                t.test,
             )
             .join(connections, sa.and_(k.tenant_id == t.tenant_id, k.id == t.connection_id))
             .where(
@@ -889,6 +901,7 @@ class ConnectionStore:
                 t.expires_at,
                 t.refused_at,
                 t.refused_reason,
+                t.test,
             )
             .join(connection_environments, sa.and_(e.tenant_id == k.tenant_id, e.connection_id == k.id))
             .outerjoin(connection_tokens, own)

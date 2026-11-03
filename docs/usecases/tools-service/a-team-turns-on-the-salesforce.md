@@ -7,7 +7,7 @@ Service: `tools-service` with platform-service, kb-service and agents-service. L
 
 | # | Story | Layer | Steps | Proved by |
 |---|---|---|---|---|
-| S1 | The platform admin turns Salesforce on, a team admin turns it on for the team and signs in once, and Test connection passes | api | 1-7 | 6 |
+| S1 | The platform admin turns Salesforce on, a team admin turns it on for the team and signs in once, and Test connection passes | api | 1-7, 51 | 6 |
 | S2 | An agent in chat finds a case and, once a person approves a card naming the field it changes, changes it in Salesforce | ui | 13-15 | 15 |
 | S3 | A knowledge base syncs the team's Salesforce articles, only changes are fetched again, and chat cites an article | ui | 16-19, 30 | 19 |
 | S4 | A team admin turns Salesforce off and its tools disappear; turned on again, everything is still there | api | 8-12 | 10 |
@@ -70,6 +70,7 @@ Service: `tools-service` with platform-service, kb-service and agents-service. L
 | 43 | Through the SDK on the Apps stack, James lists the header-key desk's tools and runs `header_key_get_record` Mock and Real (`ops.tools.list`, `ops.tools.run`) | The tool listed; Mock reaches nothing; Real reads rec-1042 |
 | 44 | James runs `ops tools list --app plugin:test.header-key`, then `ops tools run … --mock --input input.json` and `--real` | Each exits 0; Mock reaches nothing; Real reads rec-1042 |
 | 45 | With team_ops's publish policy at always, James makes an agent and asks to publish it (the request waits); he grants salesforce_query, saves and asks again; Maya approves; he chats "call salesforce_query …" | The request for the newest draft (201) replaces the one waiting; after Maya approves, the first chat turn calls salesforce_query and reads the case |
+| 51 | Priya reads the app's page right after the team's sign-in in step 5 | The team account reads connected at once; its `test` reads ok once the test that follows the sign-in has run |
 | 50 | James runs `salesforce_list_view` Real from its page | 200; the records shaped once by the tool's transform, no transform error, and the request sent shown |
 | 47 | Sam turns Salesforce on for team_security with `signIn: person` and no team account; a call acting for Sam runs before he signs in | 403 `CONNECTION_NOT_LINKED`, not `PLUGIN_DISABLED` |
 | 48 | Sam signs in with his own account | 200; the app's page lists the account as his |

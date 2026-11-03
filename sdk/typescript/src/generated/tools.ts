@@ -1276,6 +1276,21 @@ export interface components {
             /** Signin */
             signIn?: string | null;
         };
+        /**
+         * AccountTest
+         * @description An account's last test: it runs right after a sign-in, and a failure warns without disconnecting it.
+         */
+        AccountTest: {
+            /** At */
+            at: string;
+            /** Message */
+            message?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "failed";
+        };
         /** ActivityDay */
         ActivityDay: {
             /** Count */
@@ -1328,6 +1343,7 @@ export interface components {
             status: string;
             /** Statusdetail */
             statusDetail?: string | null;
+            test?: components["schemas"]["AccountTest"] | null;
         };
         /**
          * AppCredential
@@ -3430,6 +3446,7 @@ export interface components {
             scopes: string[];
             /** Since */
             since?: string | null;
+            test?: components["schemas"]["AccountTest"] | null;
         };
         /** NewConnectionIn */
         NewConnectionIn: {
