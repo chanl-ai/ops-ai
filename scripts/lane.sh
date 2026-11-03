@@ -39,7 +39,7 @@ case "${1:-}" in
       [ -f "$other/.lane" ] && grep -qx "number=$number" "$other/.lane" && die "lane number $number is taken by $other"
     done
     git -C "$main" fetch -q origin
-    [[ $base == origin/* ]] || base="origin/$base"
+    git -C "$main" rev-parse --verify -q "$base" >/dev/null || base="origin/$base"
     git -C "$main" worktree add -q -b "lane/$name" "$dir" "$base"
     printf 'name=%s\nnumber=%s\n' "$name" "$number" > "$dir/.lane"
     (cd "$dir" && bash scripts/link-private.sh >/dev/null)
@@ -51,14 +51,16 @@ case "${1:-}" in
     ;;
   list)
     printf '%-10s %-3s %-44s %-9s %s\n' LANE NO BRANCH STACK "LAST COMMIT"
+    code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3016/ || true)
     printf '%-10s %-3s %-44s %-9s %s\n' main 0 "$(git -C "$main" branch --show-current)" \
-      "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3016/ | sed 's/^200$/up/;s/^000$/down/')" \
+      "$([ "$code" = 200 ] && echo up || echo down)" \
       "$(git -C "$main" log -1 --format='%h %cr %s' | cut -c1-60)"
     for dir in "$main"-lane-*; do
       [ -f "$dir/.lane" ] || continue
       name=$(sed -n 's/^name=//p' "$dir/.lane"); number=$(sed -n 's/^number=//p' "$dir/.lane")
       branch=$(git -C "$dir" branch --show-current)
-      up=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$((3016 + number * 1000))/" | sed 's/^200$/up/;s/^000$/down/')
+      code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$((3016 + number * 1000))/" || true)
+      up=$([ "$code" = 200 ] && echo up || echo down)
       pr=$(gh pr view "$branch" --json number -q '"#\(.number)"' 2>/dev/null || true)
       printf '%-10s %-3s %-44s %-9s %s %s\n' "$name" "$number" "$branch" "$up" \
         "$(git -C "$dir" log -1 --format='%h %cr %s' | cut -c1-60)" "$pr"
@@ -70,7 +72,7 @@ case "${1:-}" in
     [ -f "$dir/.lane" ] || die "run this inside a lane (a folder made by lane.sh add)"
     clean_and_pushed "$dir"
     git -C "$dir" fetch -q origin
-    [[ $base == origin/* ]] || base="origin/$base"
+    git -C "$dir" rev-parse --verify -q "$base" >/dev/null || base="origin/$base"
     git -C "$dir" switch -q -c "$branch" "$base"
     (cd "$dir" && pnpm install --frozen-lockfile --silent && uv sync --all-packages --quiet)
     # The lane's own database follows its branch: migrate forward; a branch behind the last one's migrations reseeds.
