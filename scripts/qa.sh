@@ -6,9 +6,9 @@
 #                                        exit 0 GREEN, 1 RED (the runner's line is printed), 2 no verdict in time
 #   scripts/qa.sh status [sha]           print the latest verdict that covers sha, if any
 #
-# The runner (the planning repo scripts/ops-ai/qa-watch.sh) tests HEAD, only what changed since its last green plus a full
+# The runner tests HEAD, only what changed since its last green plus a full
 # run every two hours, and writes each verdict to $QA_DIR/verdicts/<sha>. A verdict on a later commit covers every
-# commit before it, so a builder whose commit landed under someone else's still gets an answer.
+# commit before it, so a person whose commit landed under someone else's still gets an answer.
 set -uo pipefail
 QA_DIR=${QA_DIR:-/tmp/ops-ai-qa}
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -32,7 +32,7 @@ case "$cmd" in
     v=$(covering "$sha"); [ -n "$v" ] && cat "$v" || echo "qa: no verdict covers $sha yet" ;;
   wait)
     minutes=${3:-60}
-    pgrep -f "scripts/ops-ai/qa-watch.sh" >/dev/null || { echo "qa: the QA runner is not running; start it with make -C the planning repo opsai-qa-up"; exit 2; }
+    pgrep -f "qa-watch.sh" >/dev/null || { echo "qa: the QA runner is not running; start it first"; exit 2; }
     mkdir -p "$QA_DIR/requests" && touch "$QA_DIR/requests/$sha"
     end=$(( $(date +%s) + minutes * 60 ))
     while [ "$(date +%s)" -lt "$end" ]; do

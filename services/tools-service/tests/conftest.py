@@ -28,6 +28,7 @@ from ops_service_kit.credentials import credential_store
 from ops_service_kit.flags import Flags
 from ops_service_kit.logging import quiet_request_logs
 from ops_service_kit.settings import Settings
+from ops_service_kit.testapps import released_apps
 from ops_service_kit.testdb import isolate_from_stack, refusal
 from ops_store import isolation
 from ops_tools.app import create_gateway_app
@@ -420,3 +421,8 @@ def gateway_call(bank: Bank, engine: AsyncEngine) -> Any:
         return await bank.api.client.post("/v1/calls", json=body, headers=service_headers(bank.api.tenant))
 
     return call
+
+
+@pytest.fixture(autouse=True)
+def _release_apps() -> Iterator[None]:
+    yield from released_apps()

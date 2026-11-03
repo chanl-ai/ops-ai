@@ -8,7 +8,7 @@ The grid below is generated from `packages/ops_access` and checked by `make pyth
 line of `access-exceptions-allowlist.txt`, every line's row against this register (a resolved row holds no lines; a
 line added on a row with no decision fails, and the lines already on one are printed for review), and every
 exception line added since the list began against a `Standards-exception:` trailer on its commit that says
-`approved by the orchestrator`.
+`approved by a maintainer`.
 
 ## How access is decided
 
@@ -341,7 +341,7 @@ exception stays (decided), is to go (to fix), or has no decision yet (no decisio
 
 ## Decided questions
 
-Questions already asked and answered. Cite the row id
+Questions already decided. Cite the row id
 when a question comes up again.
 
 | # | Question | Answer | Date |

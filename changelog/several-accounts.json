@@ -2,8 +2,5 @@
   "date": "2026-11-01",
   "title": "Several accounts of one app",
   "description": "A team connects a second org or account of the same app under its own name, and a tool or step names the one it uses. Each person picks their own default account, behind the several_accounts install flag.",
-  "tag": "improved",
-  "cards": [
-    "c-608"
-  ]
+  "tag": "improved"
 }

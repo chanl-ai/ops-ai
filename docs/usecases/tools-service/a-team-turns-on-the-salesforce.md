@@ -1,7 +1,7 @@
 # A team turns on the Salesforce plugin, and its agents work cases and cite its articles
 
 Status: current on main behind the `OPS_PLUGINS` switch, which every layer turns on for its own services. Id: `uc-564`.
-Service: `tools-service` with platform-service, kb-service and agents-service. Layers: api, sdk, cli, ui.
+Service: `tools-service` with platform-service, kb-service and agents-service. Layers: api, sdk, cli, ui. Guide: `docs/guide/plugins.md`.
 
 ## Stories
 

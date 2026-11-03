@@ -1,7 +1,6 @@
 /**
- * What's new and Coming next (c-510), ported from chanl-eval's What's New. Entries live one per file under the repo's
- * changelog/ and are read into the build (next.config.ts); the console never fetches them. The version, the update
- * banner and the remote fetch chanl-eval has are left out: the console deploys from this repo, so the date is the version.
+ * What's new and Coming next. Entries live one per file under the repo's changelog/ and are read into the build
+ * (next.config.ts); the console never fetches them, and the date is the version.
  */
 
 export interface ChangelogEntry {

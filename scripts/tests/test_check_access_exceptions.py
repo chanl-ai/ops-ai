@@ -116,7 +116,7 @@ def test_a_line_added_on_a_row_with_no_decision_fails_and_one_already_there_goes
     assert code == 1 and "E03 has no decision" in out, out
     there = {("a.py", "conflict", "seeded")}
     code, out = _run(c, tmp_path, allow, monkeypatch=monkeypatch, capsys=capsys, base=there)
-    assert code == 0 and "no decision, for the owner: E03" in out, out
+    assert code == 0 and "no decision, for a maintainer: E03" in out, out
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -148,8 +148,10 @@ def test_an_exception_line_added_without_the_trailer_fails_and_with_it_passes(
     assert [p.split("`")[1] for p in c.commit_problems()] == ["b.py refusal y 1 E02"]
     _git(tmp_path, "commit", "-q", "--amend", "-m", "an exception\n\nStandards-exception: E02, approved by me")
     assert [p.split("`")[1] for p in c.commit_problems()] == ["b.py refusal y 1 E02"], "the trailer names no approver"
-    _git(tmp_path, "commit", "-q", "--amend", "-m", "an exception\n\nStandards-exception: E02, approved by proto-orch")
+    _git(
+        tmp_path, "commit", "-q", "--amend", "-m", "an exception\n\nStandards-exception: E02, approved by a maintainer"
+    )
     assert c.commit_problems() == []
     allow.write_text(allow.read_text() + "c.py refusal z 1 E03\n")
-    _git(tmp_path, "commit", "-qam", "undecided\n\nStandards-exception: E03, approved by proto-orch")
+    _git(tmp_path, "commit", "-qam", "undecided\n\nStandards-exception: E03, approved by a maintainer")
     assert [p.split()[0] for p in c.commit_problems()] == ["row"], "a row with no decision fails even when approved"

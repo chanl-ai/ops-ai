@@ -11,7 +11,7 @@
 
 What is there today is listed in portable-baseline.txt, so only new code is a finding. The gate (verify-staged and
 make python-verify) runs `--strict`, and `--commits`: a commit that raises a baseline row carries a
-`Standards-exception:` trailer the orchestrator approved. ops_store.dialect holds each database's form.
+`Standards-exception:` trailer a maintainer approved. ops_store.dialect holds each database's form.
 
   uv run python scripts/check_portable_store.py            # findings, exit 0
   uv run python scripts/check_portable_store.py --strict   # exit 1 when there is a finding

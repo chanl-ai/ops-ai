@@ -1,9 +1,6 @@
 {
   "date": "2026-11-01",
-  "title": "Connect apps the way you would in a related product",
+  "title": "Connect apps from a catalog",
   "description": "Connections is a catalog of apps: connect one in a small window, connect your own account in one click, and see an app's tools, skills, sign-ins and runs on its page. Tools show their own names everywhere.",
-  "tag": "new",
-  "cards": [
-    "c-607"
-  ]
+  "tag": "new"
 }

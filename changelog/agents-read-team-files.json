@@ -2,8 +2,5 @@
   "date": "2026-11-01",
   "title": "Agents read your team's files and documents",
   "description": "An agent can read a file your team uploaded and pull a document's fields with one of your document types. Both show under Built in in Connections and keep to your team's files.",
-  "tag": "new",
-  "cards": [
-    "c-613"
-  ]
+  "tag": "new"
 }

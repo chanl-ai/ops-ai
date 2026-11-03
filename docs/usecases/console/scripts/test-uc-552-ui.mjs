@@ -29,7 +29,7 @@ const until = async (probe, ms = 180_000) => {
   return probe();
 };
 
-// UC552_STEPS=1,3,3b runs only those steps (setup always runs), so codeloop verify can prove one acceptance line at a time.
+// UC552_STEPS=1,3,3b runs only those steps (setup always runs), to prove one acceptance line at a time.
 const ONLY = process.env.UC552_STEPS?.split(',').map((x) => x.trim());
 
 async function step(name, body) {

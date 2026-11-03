@@ -2,8 +2,5 @@
   "date": "2026-10-30",
   "title": "Build plugins for outside systems",
   "description": "Developers build a plugin as one package with its sign-in, tools and knowledge sources, check it with ops plugin validate and test it against a fake with ops plugin test. Teams sign in with their own OAuth app or the platform's, as the team or as each person.",
-  "tag": "new",
-  "cards": [
-    "c-565"
-  ]
+  "tag": "new"
 }

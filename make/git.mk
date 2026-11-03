@@ -1,13 +1,13 @@
 # Git in commands a person can read: commit named files with the checks, and lanes (worktrees) for parallel work.
 # scripts/git-rules.py refuses only what loses work or skips review (stash, hard reset, clean, --no-verify, pushes to main).
 #
-#   make commit FILES='a.py b.md' MSG='fix(tools): fill query placeholders' CARD=c-586 [BODY='why; what ran']
+#   make commit FILES='a.py b.md' MSG='fix(tools): fill query placeholders' CHANGELOG=query-placeholders [BODY='why; what ran']
 #   make unstage FILES='a.py'          take files out of the shared index, keeping every line in the working tree
 #   make whats-mine FILES='a.py'       show what would be committed for these files, against HEAD
 #   make git-rules                     list the rules and check them
 
 #   make my-hunks FILE=docs/usecases/README.md > mine.patch     then delete the hunks that are not yours
-#   make commit-hunks PATCH=mine.patch MSG='docs(x): add uc-588 row' CARD=c-588
+#   make commit-hunks PATCH=mine.patch MSG='docs(x): add uc-588 row' CHANGELOG=plugin-sign-in
 
 .PHONY: commit unstage whats-mine git-rules my-hunks commit-hunks
 
@@ -15,16 +15,16 @@ my-hunks: ## Print FILE's changes against HEAD as a patch, to keep only your own
 	@[ -n "$(FILE)" ] || { echo "make my-hunks: name the file, e.g. FILE='docs/usecases/README.md'" >&2; exit 2; }
 	@git diff HEAD -- $(FILE)
 
-commit-hunks: ## Commit only the hunks in PATCH onto HEAD (for shared files), with MSG (and CARD, BODY)
+commit-hunks: ## Commit only the hunks in PATCH onto HEAD (for shared files), with MSG (and CHANGELOG, BODY)
 	@[ -n "$(PATCH)" ] || { echo "make commit-hunks: give the patch, e.g. PATCH=mine.patch"; exit 2; }
 	@[ -n "$(MSG)" ] || { echo "make commit-hunks: give a subject, e.g. MSG='docs(x): add a row'"; exit 2; }
 	@msg=$$(mktemp "$${TMPDIR:-/tmp}/commit-msg.XXXXXX"); \
 	  printf '%s\n' "$(MSG)" > "$$msg"; \
 	  if [ -n "$(BODY)" ]; then printf '\n%s\n' "$(BODY)" >> "$$msg"; fi; \
-	  if [ -n "$(CARD)" ]; then printf '\nCard: %s\n' "$(CARD)" >> "$$msg"; fi; \
+	  if [ -n "$(CHANGELOG)" ]; then printf '\nChangelog: %s\n' "$(CHANGELOG)" >> "$$msg"; fi; \
 	  bash scripts/commit-patch.sh "$$msg" "$(PATCH)"; rc=$$?; rm -f "$$msg"; exit $$rc
 
-commit: ## Commit only FILES, with MSG (and CARD, BODY), through both hooks, from HEAD plus those files
+commit: ## Commit only FILES, with MSG (and CHANGELOG, BODY), through both hooks, from HEAD plus those files
 	@[ -n "$(FILES)" ] || { echo "make commit: name your files, e.g. FILES='services/x/a.py'"; exit 2; }
 	@[ -n "$(MSG)" ] || { echo "make commit: give a subject, e.g. MSG='fix(tools): fill query placeholders'"; exit 2; }
 	@# The named Python files are linted and formatted as the gate will see them (named paths, so examples/ too), which
@@ -34,7 +34,7 @@ commit: ## Commit only FILES, with MSG (and CARD, BODY), through both hooks, fro
 	@msg=$$(mktemp "$${TMPDIR:-/tmp}/commit-msg.XXXXXX"); \
 	  printf '%s\n' "$(MSG)" > "$$msg"; \
 	  if [ -n "$(BODY)" ]; then printf '\n%s\n' "$(BODY)" >> "$$msg"; fi; \
-	  if [ -n "$(CARD)" ]; then printf '\nCard: %s\n' "$(CARD)" >> "$$msg"; fi; \
+	  if [ -n "$(CHANGELOG)" ]; then printf '\nChangelog: %s\n' "$(CHANGELOG)" >> "$$msg"; fi; \
 	  bash scripts/commit-paths.sh "$$msg" $(FILES); rc=$$?; rm -f "$$msg"; exit $$rc
 
 unstage: ## Take FILES out of the shared index; the working files keep every line
