@@ -41,6 +41,7 @@ from .auth import Authenticator, AuthFailed, Prepared
 from .auth.tokens import scope_list
 from .egress import EgressDenied, EgressPolicy, for_tenant
 from .mocks import MockAnswers
+from .plugins.host import plugin_id_of
 from .registry import Resolved
 from .secrets import SecretMissing, SecretResolver, scrub
 from .tools import ToolCaller, ToolRunner
@@ -524,7 +525,7 @@ class HttpExecutor(_Secrets):
             trial.raw = output
             # A plugin tool's transform reads the team's settings, which only the gateway holds, and its page has no
             # draft to try; so the gateway shapes its answer here, once, as for an agent's call.
-            if "plugin_settings" not in module:
+            if plugin_id_of(module) is None:
                 return ToolOutcome(True, output)
         if op.get("response_transform"):
             # A plugin's transform also reads the team's merged settings (c-564); every other module's sees none.
@@ -738,7 +739,7 @@ class Executor:
             )
         # A plugin's address is rendered from its manifest by the plugin host (instance plus API path); the connection
         # holds only the instance's origin, so only every other module takes its connection's address.
-        if resolved.executor in ("http", "mcp") and self.http.auth is not None and "plugin_settings" not in module:
+        if resolved.executor in ("http", "mcp") and self.http.auth is not None and plugin_id_of(module) is None:
             # A module's address is its connection's for the run's environment (c-616), the only home it has.
             module = await self.http.auth.addressed(module, environment)
         if self.mocks is not None and (
