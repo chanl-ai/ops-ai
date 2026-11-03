@@ -3,7 +3,7 @@
 // agents service on the scripted model. The agent page offers only controls the runtime acts on.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { AGENTS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const TEAM = { 'X-Team-Id': 'team_ops' };
@@ -71,8 +71,7 @@ await withUiStack(async (consoleUrl) => {
     const retried = await retryP;
     page.off('request', countPatch);
     check('a refused draft waits for a change or Retry instead of resending every second', resent === 1 && retried?.status() === 422, { resent, retried: retried?.status() });
-    // The refused save and its Retry, kept with the card's evidence; UC088_SHOTS points them anywhere else.
-    const shots = process.env.UC088_SHOTS ?? join(process.cwd(), '.codeloop', 'evidence', '088');
+    const shots = evidenceDir('uc-088');
     mkdirSync(shots, { recursive: true });
     await page.screenshot({ path: join(shots, 'agent-save-retry.png'), fullPage: false });
 

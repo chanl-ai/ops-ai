@@ -24,7 +24,7 @@ Why explains the selected reply. Versions and Used in hold what the right column
 | 5 | At 400 px, press Test | The panel comes into view with its composer editable, and the test is still there |
 | 6 | — | No page errors |
 
-Screenshots at 1280 and 400 px go to the card's evidence folder, or to `UC253_SHOTS` when set.
+Screenshots at 1280 and 400 px go to `.logs/usecases/uc-253/`, or under `OPS_EVIDENCE_DIR` when set.
 
 ## Acceptance layers
 
