@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any
@@ -26,6 +26,7 @@ from ops_identity import Auth, Principal
 from ops_identity.fastapi import current_caller, current_principal
 from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
+from ops_service_kit.testapps import released_apps
 from ops_service_kit.testdb import isolate_from_stack
 from ops_store import isolation
 
@@ -158,3 +159,8 @@ def make(engine: AsyncEngine, tenant: str) -> Make:
         return Service(client, app, extractor, types, fake, tenant)
 
     return build
+
+
+@pytest.fixture(autouse=True)
+def _release_apps() -> Iterator[None]:
+    yield from released_apps()

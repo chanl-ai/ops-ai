@@ -7,7 +7,7 @@ import html
 import os
 import re
 import secrets
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -33,6 +33,7 @@ from ops_policy import Ed25519Signer
 from ops_service_kit.contract import response_checker
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.settings import Settings
+from ops_service_kit.testapps import released_apps
 from ops_service_kit.testdb import isolate_from_stack, refusal
 from ops_signin.dns import TxtResolver
 from ops_signin.fake_idp import FakeDns, self_signed
@@ -451,3 +452,8 @@ async def signin(engine: AsyncEngine, database_url: str) -> AsyncIterator[SignIn
         yield SignInRig(pub, idp, mail, engine, tenant, security, ops, headers, public)
     stop_dns.set()
     await store.close()
+
+
+@pytest.fixture(autouse=True)
+def _release_apps() -> Iterator[None]:
+    yield from released_apps()

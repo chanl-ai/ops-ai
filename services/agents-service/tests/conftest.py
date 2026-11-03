@@ -36,6 +36,7 @@ from ops_agents.store.base import metadata
 from ops_agents.store.tenancy import LOCAL_TENANT, tenant_scope
 from ops_engine.store import metadata as engine_metadata
 from ops_service_kit.settings import Settings
+from ops_service_kit.testapps import released_apps
 from ops_service_kit.testdb import isolate_from_stack, refusal
 from tests.knowledge_fixture import FixtureKnowledge
 
@@ -272,6 +273,11 @@ class FakeGraphModels:
             re.DOTALL,
         )
         return [m.groupdict() for m in block.finditer(text)]
+
+
+@pytest.fixture(autouse=True)
+def _release_apps() -> Iterator[None]:
+    yield from released_apps()
 
 
 @pytest.fixture(autouse=True)

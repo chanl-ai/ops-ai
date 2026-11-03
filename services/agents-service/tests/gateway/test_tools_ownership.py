@@ -17,6 +17,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+from sqlalchemy.engine import make_url
 
 from ops_agents.activities.gateway import GatewayClient
 from ops_identity import ServiceClient, dev_service_signer
@@ -24,7 +25,9 @@ from ops_identity import ServiceClient, dev_service_signer
 from .conftest import Gateway
 
 SERVICES = Path(__file__).parents[3]
-ADMIN = "postgresql://ops:ops@localhost:5477/postgres"
+# The server the test database is on; a lane's is on its own port.
+_SERVER = make_url(os.environ.get("OPS_TEST_DATABASE_URL", "postgresql+asyncpg://ops:ops@localhost:5477/ops_test"))
+ADMIN = _SERVER.set(drivername="postgresql", database="postgres").render_as_string(hide_password=False)
 
 
 async def test_tool_access_is_internal_and_comes_from_the_gateway_registry(gateway: Gateway) -> None:
@@ -69,7 +72,7 @@ def _tools_head() -> str | None:
 
 
 def _upgrade(service: str, db: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPS_DATABASE_URL", f"postgresql+asyncpg://ops:ops@localhost:5477/{db}")
+    monkeypatch.setenv("OPS_DATABASE_URL", _SERVER.set(database=db).render_as_string(hide_password=False))
     command.upgrade(Config(str(SERVICES / service / "alembic.ini")), "head")
 
 

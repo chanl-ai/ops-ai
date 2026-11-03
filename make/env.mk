@@ -44,6 +44,13 @@ OPS_SHARED_ROOT_FILE ?= $(HOME)/.config/ops-ai/shared-root
 STACK_GOALS := up down restart migrate reset-db db-down db-reset sample-team demo demo-walk demo-model
 ifeq ($(OPS_STACK),shared)
   ifneq ($(filter $(STACK_GOALS),$(MAKECMDGOALS)),)
+    # A test, or a worktree that lost its .lane file, must never stop, migrate or reset the shared stack.
+    ifdef PYTEST_CURRENT_TEST
+      $(error refused: a test may not run $(filter $(STACK_GOALS),$(MAKECMDGOALS)) on the shared stack; add ISOLATED=1)
+    endif
+    ifeq ($(shell cd '$(ROOT)' && d=$$(git rev-parse --absolute-git-dir 2>/dev/null) && c=$$(cd "$$(git rev-parse --git-common-dir)" && pwd -P) && [ "$$d" != "$$c" ] && echo worktree),worktree)
+      $(error refused: $(ROOT) is a git worktree without a lane number, so it would act on the shared stack; add ISOLATED=1)
+    endif
     SHARED_ROOT := $(shell cat '$(OPS_SHARED_ROOT_FILE)' 2>/dev/null)
     ifeq ($(SHARED_ROOT),)
       ifneq ($(filter up,$(MAKECMDGOALS)),)
@@ -80,11 +87,13 @@ OPS_PLATFORM_PORT ?= $(call port,8710)
 OPS_PLATFORM_INTERNAL_PORT ?= $(call port,8711)
 OPS_OPA_PORT ?= $(call port,8181)
 OPS_PG_PORT ?= $(call port,5477)
-# The test mail servers in compose (c-192): GreenMail takes mail in (SMTP) and serves it (IMAP); Mailpit catches sent mail.
-OPS_GREENMAIL_SMTP_PORT ?= $(call port,3025)
-OPS_GREENMAIL_IMAP_PORT ?= $(call port,3143)
-OPS_MAILPIT_SMTP_PORT ?= $(call port,1025)
-OPS_MAILPIT_HTTP_PORT ?= $(call port,8025)
+# The test mail servers in compose: GreenMail takes mail in (SMTP) and serves it (IMAP); Mailpit catches sent mail.
+# Their bases differ by multiples of 1000, so they step by 100 per stack; by 1000, lane 5 took lane 3's and the main stack's.
+mail_port = $(shell echo $$(( $(1) + $(OPS_PORT_OFFSET) / 10 )))
+OPS_GREENMAIL_SMTP_PORT ?= $(call mail_port,3025)
+OPS_GREENMAIL_IMAP_PORT ?= $(call mail_port,3143)
+OPS_MAILPIT_SMTP_PORT ?= $(call mail_port,1025)
+OPS_MAILPIT_HTTP_PORT ?= $(call mail_port,8025)
 # A make run started inside another (a use case's runner, a recipe) inherits the outer stack's exported addresses, and
 # `?=` keeps them, so an ISOLATED=1 run from inside a shared one would act on the shared stack (c-099, tick 14). With
 # ISOLATED=1 every address that came from the environment is recomputed; one given on the make command line still wins.
@@ -107,10 +116,20 @@ $(call reset_inherited,OPS_PLATFORM_PORT,$(call port,8710))
 $(call reset_inherited,OPS_PLATFORM_INTERNAL_PORT,$(call port,8711))
 $(call reset_inherited,OPS_OPA_PORT,$(call port,8181))
 $(call reset_inherited,OPS_PG_PORT,$(call port,5477))
-$(call reset_inherited,OPS_GREENMAIL_SMTP_PORT,$(call port,3025))
-$(call reset_inherited,OPS_GREENMAIL_IMAP_PORT,$(call port,3143))
-$(call reset_inherited,OPS_MAILPIT_SMTP_PORT,$(call port,1025))
-$(call reset_inherited,OPS_MAILPIT_HTTP_PORT,$(call port,8025))
+$(call reset_inherited,OPS_GREENMAIL_SMTP_PORT,$(call mail_port,3025))
+$(call reset_inherited,OPS_GREENMAIL_IMAP_PORT,$(call mail_port,3143))
+$(call reset_inherited,OPS_MAILPIT_SMTP_PORT,$(call mail_port,1025))
+$(call reset_inherited,OPS_MAILPIT_HTTP_PORT,$(call mail_port,8025))
+# .env is copied from the main checkout and names the shared stack's models-service and fake model; an isolated stack's
+# targets (make demo-model) use its own, never the shared one's.
+ifeq ($(ISOLATED),1)
+  ifneq ($(filter file environment,$(origin OPS_MODELS_URL)),)
+    OPS_MODELS_URL := http://127.0.0.1:$(OPS_MODELS_PORT)
+  endif
+  ifneq ($(filter file environment,$(origin OPS_MODELS_FAKE_OPENAI_URL)),)
+    OPS_MODELS_FAKE_OPENAI_URL := http://127.0.0.1:$(OPS_FAKE_OPENAI_PORT)/v1
+  endif
+endif
 OPS_LOG_DIR := $(ROOT)/.logs$(if $(filter 1,$(ISOLATED)),/isolated)
 OPS_RUN_DIR := $(ROOT)/.run$(if $(filter 1,$(ISOLATED)),/isolated)
 
