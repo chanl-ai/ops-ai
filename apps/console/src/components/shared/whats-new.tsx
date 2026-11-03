@@ -17,7 +17,7 @@ const TAG: Record<ChangelogEntry['tag'], { label: string; variant: 'default' | '
   fix: { label: 'Fix', variant: 'outline' },
 };
 
-/** chanl-eval's What's new mark: a ring with an arc inside, turned a quarter. */
+/** The What's new mark: a ring with an arc inside, turned a quarter. */
 function WhatsNewMark() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-7" aria-hidden>
@@ -46,7 +46,7 @@ function EntryRow({ entry: e }: { entry: ChangelogEntry }) {
 }
 
 /**
- * What's new (c-510): chanl-eval's floating What's New button, bottom-right on every console page, its popover opening
+ * What's new: a floating button, bottom-right on every console page, its popover opening
  * upward with a Coming next tab for the roadmap and the build's version in its header. A dot marks an entry this
  * person has not opened, and a ring pulses now and then while it is closed; opening the popover clears the dot.
  */
@@ -57,7 +57,7 @@ export function WhatsNew() {
   const [showMinor, setShowMinor] = React.useState(false);
   const major = entries.filter(isMajor).slice(0, MAJOR_SHOWN);
   const minor = entries.filter((e) => !major.includes(e));
-  // chanl-eval's attention pulse: once after three seconds, then every eighteen, never while the popover is open.
+  // An attention pulse: once after three seconds, then every eighteen, never while the popover is open.
   React.useEffect(() => {
     if (open) return;
     const pulse = () => {

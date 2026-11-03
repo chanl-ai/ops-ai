@@ -1,7 +1,6 @@
 # A team connects apps from one catalog
 
-Status: draft. Id: `uc-607`. Service: `console`. Layers: api, sdk, cli, ui. Cards: an earlier change, an earlier change (story group A of
-the planning repo `docs/plans/ops-ai/apps.html`).
+Status: draft. Id: `uc-607`. Service: `console`. Layers: api, sdk, cli, ui.
 
 Connections was a grid of systems and one large dialog, so connecting an app took many fields and a person could not
 see whether they were signed in. Connections is now a catalog of apps: a plugin connects in a

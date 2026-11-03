@@ -1,5 +1,4 @@
-"""Knowledge read through a connection's tools (c-564; the planning repo docs/plans/ops-ai/
-plugin-contents-and-knowledge.html).
+"""Knowledge read through a connection's tools.
 
 A "tool" source names a plugin's knowledge source: its list tool and its get tool, called through tools-service's
 gateway like any agent's call. kb-service holds no token and loads no plugin code: tools-service signs each call with

@@ -8,8 +8,7 @@ The grid below is generated from `packages/ops_access` and checked by `make pyth
 line of `access-exceptions-allowlist.txt`, every line's row against this register (a resolved row holds no lines; a
 line added on a row with no decision fails, and the lines already on one are printed for the maintainers), and every
 exception line added since the list began against a `Standards-exception:` trailer on its commit that says
-`approved by the orchestrator`. The agent brief that compares new cards and diffs with this page
-is access check.
+`approved by a maintainer`.
 
 ## How access is decided
 
@@ -343,7 +342,7 @@ to the maintainers). Rows the script checks carry the same id in `access-excepti
 
 ## Decided questions
 
-Questions already put to the maintainers (or answered by the orchestrator for the maintainers) and answered. Cite the row id
+Questions already decided. Cite the row id
 when a question comes up again.
 
 | # | Question | Answer | Date | Source |

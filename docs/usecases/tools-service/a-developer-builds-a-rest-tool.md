@@ -1,7 +1,6 @@
 # A developer builds a REST tool and runs it for real
 
-Status: current. Id: `uc-611`. Service: `tools-service`. Layers: api, sdk, ui. Cards: an earlier change, an earlier change (story group F of
-the planning repo `docs/plans/ops-ai/apps.html`, steps 11-15).
+Status: current. Id: `uc-611`. Service: `tools-service`. Layers: api, sdk, ui.
 
 James, a developer in Operations, connects a payments system the way an API client does: he opens a REST tool,
 runs it in Mock before anything is set up, picks the connection that holds the system's key, and runs a form-encoded
