@@ -1,8 +1,9 @@
 """Runs a plugin's tools against its fake system, for the plugin's own tests and `ops plugin test`.
 
 It sends what tools-service sends for the same tool: the endpoint and path rendered with the settings and the
-arguments, a body template's `{{arg}}` as JSON, the remaining arguments as the query of a GET, the bearer token, and a
-transform rendered over `data` and `settings`. Every request is checked against the plugin's egress hosts first, as the
+arguments, each input left out as its default, a body template's `{{arg}}` as JSON, the remaining arguments as the
+query of a GET, the plugin's and the tool's headers, the bearer token, and a transform rendered over `data` and
+`settings`. Every request is checked against the plugin's egress hosts first, as the
 gateway does, so a test that passes here does not pass by reaching a host the plugin did not list. It is a developer's
 check of the plugin's contract; the gateway, its approvals and its call log are tools-service's."""
 
@@ -58,14 +59,14 @@ class Fake:
     token: str
 
 
-def _send(fake: Fake, allowed: list[str]) -> Any:
+def _send(fake: Fake, allowed: list[str], sent_headers: Mapping[str, str] | None = None) -> Any:
     def send(method: str, url: str, params: Mapping[str, Any] | None, body: Any) -> Response:
         host = urlsplit(url).hostname
         if host not in allowed:
             raise EgressDenied(f"{host} is not one of this plugin's hosts.")
-        r = fake.client.request(
-            method, url, params=dict(params or {}), json=body, headers={"Authorization": f"Bearer {fake.token}"}
-        )
+        # The plugin's and the tool's headers first, then the sign-in, which wins a name they share (paging.headers).
+        out = {**dict(sent_headers or {}), "Authorization": f"Bearer {fake.token}"}
+        r = fake.client.request(method, url, params=dict(params or {}), json=body, headers=out)
         if r.status_code == 401:
             raise NeedsReconnect("The system refused the sign-in.")
         if r.status_code == 429:
@@ -87,13 +88,13 @@ def call(plugin: Plugin, tool: str, args: Mapping[str, Any], settings: Mapping[s
     if t is None:
         raise KeyError(f"{plugin.manifest.id} has no tool {tool}")
     merged = settings_of(plugin, settings)
-    send = _send(fake, hosts(plugin, merged))
+    send = _send(fake, hosts(plugin, merged), paging.headers(plugin.manifest.headers, t, merged))
     if t.function is not None:
         return plugin.function(tool)(Context.of(merged, send), **dict(args))
     assert t.request is not None
     req = t.request
     endpoint = render(plugin.manifest.endpoint, merged).rstrip("/")
-    given = dict(args)
+    given = paging.with_defaults(t, args)
     # The cursor is the next page's state as tools-service keeps it, here unsealed: the test reads it back as given.
     cursor = given.pop("cursor", None) if req.paging is not None else None
     state: dict[str, Any] | None = json.loads(cursor) if cursor else None

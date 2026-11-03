@@ -72,11 +72,33 @@ def in_query(tool: Tool) -> set[str]:
     return {n for t in (req.query.values() if req else ()) for n in QUERY_VAR.findall(t)}
 
 
+SETTING = re.compile(r"\{([a-z_][a-z0-9_]*)\}")
+
+
+def with_defaults(tool: Tool, given: Mapping[str, Any]) -> dict[str, Any]:
+    """The call's inputs with each declared `default` in the place of an input it leaves out."""
+    filled = {n: f.default for n, f in tool.input.items() if f.default is not None and given.get(n) is None}
+    return {**dict(given), **filled}
+
+
+def headers(plugin_headers: Mapping[str, str], tool: Tool, settings: Mapping[str, Any]) -> dict[str, str]:
+    """A call's headers: the plugin's, then the tool's over them, `{setting}` rendered from the call's settings. A
+    header whose setting is unset is left out. The connection's sign-in is added after these and wins a shared name."""
+    out: dict[str, str] = {}
+    for name, template in {**plugin_headers, **tool.headers}.items():
+        if any(settings.get(n) in (None, "") for n in SETTING.findall(template)):
+            continue
+        out[name] = SETTING.sub(lambda m: str(settings[m.group(1)]), template)
+    return out
+
+
 def arguments(tool: Tool, given: Mapping[str, Any], state: Mapping[str, Any] | None) -> dict[str, Any]:
     """What a call sends besides its path: the checked inputs no query template takes, each query parameter rendered,
-    and the page's token or offset. InputRefused for a value its input does not allow."""
+    and the page's token or offset; an input left out takes its default. InputRefused for a value its input does not
+    allow."""
     req = tool.request
     assert req is not None
+    given = with_defaults(tool, given)
     values = {n: check(tool.input[n], v, n) for n, v in given.items() if n in tool.input}
     used = in_query(tool)
     sent: dict[str, Any] = {
