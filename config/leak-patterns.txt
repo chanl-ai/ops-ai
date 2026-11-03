@@ -1,0 +1,9 @@
+# <class> <Python regex>, read by scripts/leak_scan.py; a line counts once per class it matches.
+home-path       /Users/[A-Za-z]|/home/[a-z][a-z0-9_-]*/|~/Projects\b
+tracker-id      \bc-\d{2,4}\b
+task-id         \bc-\d{2,4} T\d{3}\b|\bT0\d\d\b
+dated-ruling    \(owner('s)?[^)]*20\d\d-|the owner's rule|the owner set
+scrub-phrase    an earlier change|the planning repo|the maintainers approved|a related product
+tool-name       codeloop|proto-(orch|worker)
+internal-path   docs/plans/
+slice-code      \b([Ss]lices?|[Ss]tory groups?)\b[^.\n]{0,40}\b[AWR]\d\b

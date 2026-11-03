@@ -1,0 +1,9 @@
+# Lines per class in the tree (scripts/leak_scan.py). A count may only fall.
+home-path 0
+tracker-id 3671
+task-id 176
+dated-ruling 107
+scrub-phrase 509
+tool-name 42
+internal-path 19
+slice-code 4
