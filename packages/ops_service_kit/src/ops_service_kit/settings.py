@@ -357,6 +357,8 @@ class Settings(BaseSettings):
                 "files:edit",
                 "knowledge:view",
                 "tools:view",
+                # connections:view: the Tools page's app state for the person it lists for, claimed only on that read.
+                "connections:view",
                 "deployments:run",
                 "settings:view",
                 "documents:view",

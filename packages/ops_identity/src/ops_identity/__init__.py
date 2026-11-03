@@ -6,6 +6,7 @@ from .acting_for import HEADER as ACTING_FOR_HEADER
 from .acting_for import ActingForPerson, ActingForTokens
 from .client import ServiceCallError, ServiceClient, ServiceUnreachable
 from .fastapi import (
+    ActingPerson,
     Auth,
     CurrentCaller,
     CurrentPrincipal,
@@ -27,6 +28,7 @@ __all__ = [
     "ACTING_FOR_HEADER",
     "ActingForPerson",
     "ActingForTokens",
+    "ActingPerson",
     "Auth",
     "CurrentCaller",
     "CurrentPrincipal",

@@ -9000,6 +9000,22 @@
             ],
             "title": "Pluginid"
           },
+          "signIn": {
+            "anyOf": [
+              {
+                "enum": [
+                  "team",
+                  "person",
+                  "person_or_team"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signin"
+          },
           "state": {
             "anyOf": [
               {
@@ -21450,7 +21466,7 @@
     },
     "/v1/systems": {
       "get": {
-        "description": "The team's apps for the Apps grid (c-580): its plugins and the apps a person added. `include=builtin` adds\nthe built-in apps, for the approval policy's app picker (owner, 2026-11-01).",
+        "description": "The team's apps for the Apps grid (c-580): its plugins and the apps a person added. `include=builtin` adds\nthe built-in apps, for the approval policy's app picker. A service asking for a person\n(X-Acting-For) reads each card's state as that person's.",
         "operationId": "connections_list_systems",
         "parameters": [
           {
@@ -21532,6 +21548,22 @@
                 }
               ],
               "title": "X-Dev-User"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-acting-for",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Acting-For"
             }
           }
         ],

@@ -799,7 +799,8 @@ export interface paths {
         /**
          * List Systems
          * @description The team's apps for the Apps grid (c-580): its plugins and the apps a person added. `include=builtin` adds
-         *     the built-in apps, for the approval policy's app picker (owner, 2026-11-01).
+         *     the built-in apps, for the approval policy's app picker. A service asking for a person
+         *     (X-Acting-For) reads each card's state as that person's.
          */
         get: operations["connections_list_systems"];
         put?: never;
@@ -4235,6 +4236,8 @@ export interface components {
             plugin?: components["schemas"]["SystemPlugin"] | null;
             /** Pluginid */
             pluginId?: string | null;
+            /** Signin */
+            signIn?: ("team" | "person" | "person_or_team") | null;
             /** State */
             state?: ("connected" | "not_signed_in" | "expired" | "refused" | "revoked") | null;
             /** Status */
@@ -10013,7 +10016,9 @@ export interface operations {
             query?: {
                 include?: "builtin" | null;
             };
-            header?: never;
+            header?: {
+                "x-acting-for"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };

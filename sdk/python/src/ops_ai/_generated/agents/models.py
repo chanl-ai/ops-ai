@@ -1915,17 +1915,9 @@ class ThreadView(TypedDict, closed=True):
     version: int | None
 
 
-class Tool(TypedDict, closed=True):
-    access: Literal["read", "write", "workflow"]
-    approval: str | None
-    description: str
+class ToolApp(TypedDict, closed=True):
     id: str
-    inputSchema: dict[str, Any]
-    moduleId: str | None
     name: str
-    requiresApproval: bool
-    server: str
-    title: NotRequired[str | None]
 
 
 class ToolCallView(TypedDict, closed=True):
@@ -1954,6 +1946,11 @@ class ToolModuleReviewRef(TypedDict, closed=True):
 class ToolUser(TypedDict, closed=True):
     id: str
     kind: Literal["agent", "workflow"]
+    name: str
+
+
+class ToolUserRef(TypedDict, closed=True):
+    id: str
     name: str
 
 
@@ -2827,11 +2824,6 @@ class EnvelopeListThreadView(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListTool(TypedDict, closed=True):
-    data: list[Tool]
-    success: Literal[True]
-
-
 class EnvelopeListVersion(TypedDict, closed=True):
     data: list[Version]
     success: Literal[True]
@@ -3209,6 +3201,11 @@ class ToolModuleReviewInput(TypedDict, closed=True):
     security: NotRequired[bool]
     subjectId: str
     teamId: NotRequired[str | None]
+
+
+class ToolUsedBy(TypedDict, closed=True):
+    agents: list[ToolUserRef]
+    workflows: list[ToolUserRef]
 
 
 class ValidationRun(TypedDict, closed=True):
@@ -3624,6 +3621,23 @@ class ThreadReview(TypedDict, closed=True):
     workflowVersion: NotRequired[int | None]
 
 
+class ToolRow(TypedDict, closed=True):
+    access: Literal["read", "write", "workflow"]
+    app: ToolApp | None
+    approval: str | None
+    description: str
+    id: str
+    inputSchema: dict[str, Any]
+    kind: Literal["app", "custom", "workflow", "agent"]
+    moduleId: str | None
+    name: str
+    requiresApproval: bool
+    server: str
+    status: Literal["ready", "needs_approval", "app_not_connected", "needs_your_sign_in"]
+    title: NotRequired[str | None]
+    usedBy: ToolUsedBy
+
+
 class WorkflowDetail(TypedDict, closed=True):
     agentSlugs: list[str]
     canDelete: NotRequired[bool | None]
@@ -3682,6 +3696,11 @@ class EnvelopeSkillDetail(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeToolRow(TypedDict, closed=True):
+    data: ToolRow
+    success: Literal[True]
+
+
 class EnvelopeUnionThreadReviewPublishReview(TypedDict, closed=True):
     data: ThreadReview | PublishReview
     success: Literal[True]
@@ -3708,8 +3727,19 @@ class RunStory(TypedDict, closed=True):
     reads: list[StoryRead]
 
 
+class ToolList(TypedDict, closed=True):
+    data: list[ToolRow]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
 class EnvelopeReviewList(TypedDict, closed=True):
     data: ReviewList
+    success: Literal[True]
+
+
+class EnvelopeToolList(TypedDict, closed=True):
+    data: ToolList
     success: Literal[True]
 
 

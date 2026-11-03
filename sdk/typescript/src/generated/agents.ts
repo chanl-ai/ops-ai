@@ -2324,8 +2324,8 @@ export interface paths {
         };
         /**
          * List Tools
-         * @description `access` (repeatable: read, write, workflow) keeps those kinds only, so a page asking for workflow tools does not
-         *     filter the whole directory itself.
+         * @description The Tools page: one row per tool with its app, kind, status and users, searched, filtered (`app`, `kind`,
+         *     `status`, each repeatable) and paged here. Facets count every row the search matches, before the filters.
          */
         get: operations["agents_list_tools"];
         put?: never;
@@ -2352,6 +2352,26 @@ export interface paths {
          *     out.
          */
         get: operations["agents_tool_options"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tools/{tool_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Tool
+         * @description One tool as its row on the Tools page reads; declared after /options so that path is not read as a tool.
+         */
+        get: operations["agents_get_tool"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5585,6 +5605,24 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ToolList] */
+        Envelope_ToolList_: {
+            data: components["schemas"]["ToolList"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ToolRow] */
+        Envelope_ToolRow_: {
+            data: components["schemas"]["ToolRow"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[Union[DryRun, BatchStarted]] */
         Envelope_Union_DryRun__BatchStarted__: {
             /** Data */
@@ -5873,16 +5911,6 @@ export interface components {
         Envelope_list_ThreadView__: {
             /** Data */
             data: components["schemas"]["ThreadView"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[Tool]] */
-        Envelope_list_Tool__: {
-            /** Data */
-            data: components["schemas"]["Tool"][];
             /**
              * Success
              * @constant
@@ -9236,37 +9264,12 @@ export interface components {
             /** Version */
             version: number | null;
         };
-        /**
-         * Tool
-         * @description A published tools-service operation an agent may be granted (`server` is its module's name), or a published
-         *     workflow (`workflow:<id>`, access `workflow`, server `Workflows`).
-         */
-        Tool: {
-            /**
-             * Access
-             * @enum {string}
-             */
-            access: "read" | "write" | "workflow";
-            /** Approval */
-            approval: string | null;
-            /** Description */
-            description: string;
+        /** ToolApp */
+        ToolApp: {
             /** Id */
             id: string;
-            /** Inputschema */
-            inputSchema: {
-                [key: string]: unknown;
-            };
-            /** Moduleid */
-            moduleId: string | null;
             /** Name */
             name: string;
-            /** Requiresapproval */
-            requiresApproval: boolean;
-            /** Server */
-            server: string;
-            /** Title */
-            title?: string | null;
         };
         /** ToolCallView */
         ToolCallView: {
@@ -9287,6 +9290,18 @@ export interface components {
              * @enum {string}
              */
             status: "ok" | "error" | "gated" | "running";
+        };
+        /** ToolList */
+        ToolList: {
+            /** Data */
+            data: components["schemas"]["ToolRow"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
         };
         /**
          * ToolModuleDiff
@@ -9361,6 +9376,57 @@ export interface components {
             /** Version */
             version: string;
         };
+        /**
+         * ToolRow
+         * @description One tool on the Tools page, joined here: the app it belongs to, what kind of tool it is, whether the person
+         *     asking can run it now, and the team's agents and workflows that use it.
+         */
+        ToolRow: {
+            /**
+             * Access
+             * @enum {string}
+             */
+            access: "read" | "write" | "workflow";
+            app: components["schemas"]["ToolApp"] | null;
+            /** Approval */
+            approval: string | null;
+            /** Description */
+            description: string;
+            /** Id */
+            id: string;
+            /** Inputschema */
+            inputSchema: {
+                [key: string]: unknown;
+            };
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "app" | "custom" | "workflow" | "agent";
+            /** Moduleid */
+            moduleId: string | null;
+            /** Name */
+            name: string;
+            /** Requiresapproval */
+            requiresApproval: boolean;
+            /** Server */
+            server: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ready" | "needs_approval" | "app_not_connected" | "needs_your_sign_in";
+            /** Title */
+            title?: string | null;
+            usedBy: components["schemas"]["ToolUsedBy"];
+        };
+        /** ToolUsedBy */
+        ToolUsedBy: {
+            /** Agents */
+            agents: components["schemas"]["ToolUserRef"][];
+            /** Workflows */
+            workflows: components["schemas"]["ToolUserRef"][];
+        };
         /** ToolUser */
         ToolUser: {
             /** Id */
@@ -9370,6 +9436,13 @@ export interface components {
              * @enum {string}
              */
             kind: "agent" | "workflow";
+            /** Name */
+            name: string;
+        };
+        /** ToolUserRef */
+        ToolUserRef: {
+            /** Id */
+            id: string;
             /** Name */
             name: string;
         };
@@ -24527,7 +24600,9 @@ export interface operations {
     agents_list_tools: {
         parameters: {
             query?: {
-                access?: string[] | null;
+                page?: number;
+                pageSize?: number;
+                search?: string;
             };
             header?: never;
             path?: never;
@@ -24541,7 +24616,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_Tool__"];
+                    "application/json": components["schemas"]["Envelope_ToolList_"];
                 };
             };
             /** @description Invalid request */
@@ -24648,6 +24723,109 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_OptionsPage_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_get_tool: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tool_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ToolRow_"];
                 };
             };
             /** @description Invalid request */

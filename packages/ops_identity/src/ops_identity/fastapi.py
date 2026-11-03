@@ -37,6 +37,7 @@ from ops_service_kit.http import mark_public
 from ops_service_kit.settings import Settings
 from ops_store import isolation
 
+from .acting_for import ActingForPerson
 from .http import http_introspect, http_jwks
 from .principal import Principal
 from .resolve import Identity, ServiceAuth, mint_service_token
@@ -209,3 +210,16 @@ CurrentPrincipal = Annotated[Principal, Depends(current_principal)]
 CurrentCaller = Annotated[Principal, Depends(current_caller)]
 CurrentService = Annotated[Principal, Depends(current_service)]
 CurrentTenantCaller = Annotated[Principal, Depends(current_tenant_caller)]
+
+
+async def acting_person(
+    request: Request, caller: CurrentCaller, x_acting_for: Annotated[str | None, Header()] = None
+) -> ActingForPerson | None:
+    """The person a service's read is made for, from the acting-for token platform-service signed, so an answer that
+    depends on who asks (their own sign-ins) is theirs; None when the request names nobody."""
+    if not x_acting_for:
+        return None
+    return await _auth(request).identity.acting_for(x_acting_for, caller)
+
+
+ActingPerson = Annotated[ActingForPerson | None, Depends(acting_person)]

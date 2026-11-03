@@ -181,6 +181,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "agents_get_tool": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/tools/{tool_id}",
+        "pathParams": ["tool_id"],
+        "query": [],
+        "stream": False,
+    },
     "agents_get_widget": {
         "body": None,
         "headers": [],
@@ -259,7 +268,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/tools",
         "pathParams": [],
-        "query": ["access"],
+        "query": ["page", "pageSize", "search"],
         "stream": False,
     },
     "agents_list_versions": {
@@ -2515,9 +2524,18 @@ class Operations:
         "List Tool Uses"
         return self._t.call(SERVICE, OPERATIONS["agents_list_tool_uses"], {}, {"tools": tools}, {}, None)  # type: ignore[no-any-return]
 
-    def agents_list_tools(self, *, access: list[str] | None = None) -> list[Tool]:
+    def agents_list_tools(
+        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
+    ) -> ToolList:
         "List Tools"
-        return self._t.call(SERVICE, OPERATIONS["agents_list_tools"], {}, {"access": access}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["agents_list_tools"],
+            {},
+            {"page": page, "pageSize": page_size, "search": search},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def agents_tool_options(
         self,
@@ -2536,6 +2554,10 @@ class Operations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    def agents_get_tool(self, tool_id: str) -> ToolRow:
+        "Get Tool"
+        return self._t.call(SERVICE, OPERATIONS["agents_get_tool"], {"tool_id": tool_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def agents_list_widgets(
         self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
@@ -3727,9 +3749,18 @@ class AsyncOperations:
         "List Tool Uses"
         return await self._t.call(SERVICE, OPERATIONS["agents_list_tool_uses"], {}, {"tools": tools}, {}, None)  # type: ignore[no-any-return]
 
-    async def agents_list_tools(self, *, access: list[str] | None = None) -> list[Tool]:
+    async def agents_list_tools(
+        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
+    ) -> ToolList:
         "List Tools"
-        return await self._t.call(SERVICE, OPERATIONS["agents_list_tools"], {}, {"access": access}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["agents_list_tools"],
+            {},
+            {"page": page, "pageSize": page_size, "search": search},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def agents_tool_options(
         self,
@@ -3748,6 +3779,10 @@ class AsyncOperations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    async def agents_get_tool(self, tool_id: str) -> ToolRow:
+        "Get Tool"
+        return await self._t.call(SERVICE, OPERATIONS["agents_get_tool"], {"tool_id": tool_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def agents_list_widgets(
         self, *, page: int | None = None, page_size: int | None = None, search: str | None = None

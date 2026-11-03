@@ -10,7 +10,7 @@ await withUiStack(
   async (consoleUrl) => {
     const J = { Authorization: `Bearer ${await tokenFor(JAMES)}`, 'X-Team-Id': 'team_ops' };
     const me = (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/me`, { headers: J })).json()).data;
-    const wfTools = (await (await fetch(`${agents}/v1/tools?access=workflow`, { headers: J })).json()).data;
+    const wfTools = (await (await fetch(`${agents}/v1/tools?kind=workflow&pageSize=200`, { headers: J })).json()).data.data;
     const browser = await chromium.launch();
     const errors = [];
     try {

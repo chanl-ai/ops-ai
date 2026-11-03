@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
 from ops_agent_kernel.types import Access, ToolGrant
-from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_identity import ACTING_FOR_HEADER, ActingForTokens, ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import ApiError
 
 from ..store.tenancy import current_team, current_tenant
@@ -143,3 +143,32 @@ class CatalogTools:
             )
             for t in self.catalog.tools
         ]
+
+
+class AppStates(Protocol):
+    async def cards(self, person: str | None, team: str | None) -> list[dict[str, Any]]:
+        """`team`'s apps as tools-service lists them, each card's state read for `person` (an email) when given."""
+        ...
+
+
+class ToolsApps:
+    """The team's apps from tools-service's `GET /v1/systems`, built-in ones included, for the Tools page: which app a
+    tool set belongs to and whether it is connected. Asked for the person who lists the tools (acting for them), so an
+    app each person signs in to reads as theirs. `tools` holds connections:view, claimed only on this read."""
+
+    def __init__(self, tools: ServiceClient, people: ActingForTokens | None) -> None:
+        self.tools = tools
+        self.people = people
+
+    async def cards(self, person: str | None, team: str | None) -> list[dict[str, Any]]:
+        team = team or current_team()
+        if not team:
+            return []
+        headers: dict[str, str] = {}
+        if person and self.people is not None:
+            headers[ACTING_FOR_HEADER] = await self.people.token(tenant_id=current_tenant(), email=person, team_id=team)
+        try:
+            rows = await self.tools.get("/v1/systems", params={"include": "builtin"}, headers=headers, team=team)
+        except (ServiceCallError, ServiceUnreachable) as e:
+            raise ToolsUnavailable("The tools service cannot be reached, so the tools' apps are unknown.") from e
+        return cast(list[dict[str, Any]], rows)

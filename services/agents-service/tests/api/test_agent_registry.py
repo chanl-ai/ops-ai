@@ -201,7 +201,8 @@ async def test_what_was_published_survives_a_restart(tmp_path: Path) -> None:
 
 
 async def test_tool_ids_come_from_the_catalogue_listing(client: AsyncClient) -> None:
-    tools = {t["id"]: t for t in (await client.get("/v1/tools")).json()["data"]}
+    listed = await client.get("/v1/tools", params={"pageSize": 200})
+    tools = {t["id"]: t for t in listed.json()["data"]["data"]}
     assert tools["place_wire_hold"]["access"] == "write" and tools["place_wire_hold"]["approval"]
     r = await client.patch(f"/v1/agents/{FRAUD}", json={"toolIds": ["tl_1"]})
     assert r.status_code == 400 and r.json()["error"]["code"] == "unknown_tool"

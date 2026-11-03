@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import Field
 
+from ops_identity import ActingPerson
 from ops_plugin_sdk import Plugin
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.http import Envelope, Out, ok
@@ -117,6 +118,8 @@ class SystemCard(Out):
     app_state_reason: str | None = None
     # Whose OAuth app the card's account signs in with; none for an app that signs in without one.
     credential: CardCredential | None = None
+    # Who signs in on the card's account: the team account, each person, or each person with the team's as backup.
+    sign_in: Literal["team", "person", "person_or_team"] | None = None
 
 
 # An app credential's status, from the last Test with my account (connections.service check_credential).
@@ -250,7 +253,9 @@ class Systems:
             out[str(c["id"])] = (state, shown_status(c, state, now), state_reason(c, token, state))
         return out
 
-    async def cards(self, who: Caller, *, listed: bool = False, builtins: bool = True) -> list[dict[str, Any]]:
+    async def cards(
+        self, who: Caller, *, listed: bool = False, builtins: bool = True, person: str | None = None
+    ) -> list[dict[str, Any]]:
         """Every app the team has; `listed`: only the Apps grid's (owner, 2026-11-01), the plugins and the apps a person
         added. A built-in app has its own menu, and a connection made to hold a custom tool's address (origin "tool")
         or a module with none is reached from its tool, so neither is listed; their pages still answer. `builtins` keeps
@@ -402,16 +407,18 @@ class Systems:
                     "mayManage": may,
                 }
             )
-        await self._app_states(who, cards, by_id)
+        await self._app_states(who, cards, by_id, person)
         return sorted(cards, key=lambda c: str(c["name"]).lower())
 
-    async def _app_states(self, who: Caller, cards: list[dict[str, Any]], by_id: dict[str, dict[str, Any]]) -> None:
-        """Each card's appState, appStateReason and credential, from the team account's token and the caller's own
-        sign-ins, read once for every card."""
+    async def _app_states(
+        self, who: Caller, cards: list[dict[str, Any]], by_id: dict[str, dict[str, Any]], person: str | None
+    ) -> None:
+        """Each card's appState, appStateReason and credential, from the team account's token and the own sign-ins of
+        the caller, or of `person` when a service asks for one (acting for them), read once for every card."""
         ids = [str(c["connectionId"]) for c in cards if c.get("connectionId")]
         store = self.connections.store
         team_tokens = await store.team_tokens(who.tenant_id, ids)
-        mine = own_key(who)
+        mine = person or own_key(who)
         own: dict[tuple[str, str], dict[str, Any]] = {}
         for env in ENVIRONMENTS:
             for t in await store.own_sign_ins(who.tenant_id, mine, ids, env):
@@ -423,6 +430,7 @@ class Systems:
             mine_row = own.get((str(conn["id"]), env)) if conn else None
             c["appState"], c["appStateReason"] = app_state(c, conn, token, mine_row)
             c["credential"] = card_credential(conn)
+            c["signIn"] = (conn.get("sign_in") or "team") if conn else None
 
 
 def app_state(
@@ -661,11 +669,15 @@ def systems_router(systems: Systems, directory: Directory) -> APIRouter:
 
     @r.get("/v1/systems", response_model=Envelope[list[SystemCard]])
     async def list_systems(  # pyright: ignore[reportUnusedFunction]
-        who: Annotated[Caller, Depends(caller)], include: Annotated[Literal["builtin"] | None, Query()] = None
+        who: Annotated[Caller, Depends(caller)],
+        acting: ActingPerson,
+        include: Annotated[Literal["builtin"] | None, Query()] = None,
     ) -> JSONResponse:
         """The team's apps for the Apps grid (c-580): its plugins and the apps a person added. `include=builtin` adds
-        the built-in apps, for the approval policy's app picker (owner, 2026-11-01)."""
-        cards = await systems.cards(who, listed=True, builtins=include == "builtin")
+        the built-in apps, for the approval policy's app picker. A service asking for a person
+        (X-Acting-For) reads each card's state as that person's."""
+        person = acting.sub if acting else None
+        cards = await systems.cards(who, listed=True, builtins=include == "builtin", person=person)
         return ok([SystemCard(**c).model_dump(by_alias=True) for c in cards])
 
     @r.get("/v1/app-credentials", response_model=Envelope[list[AppCredential]])

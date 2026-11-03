@@ -8,6 +8,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from ops_identity import dev_service_signer, mint_service_token
+from ops_identity.testing import TEST_TOKEN_TTL_S
+from ops_policy import mint
+
 from .test_app_accounts import (
     ID,
     World,
@@ -16,7 +20,7 @@ from .test_app_accounts import (
     signed,
     world,  # noqa: F401  # pyright: ignore[reportUnusedImport]
 )
-from .test_review_decisions import person
+from .test_review_decisions import PLATFORM, person
 
 APP = f"plugin:{ID}"
 JAMES = ("James Richardson", {"team_platform": "builder"})
@@ -75,3 +79,29 @@ async def test_an_apps_account_shows_its_saved_settings_per_environment(world: W
         "pluginSecrets": {},
     }, shown
     assert shown["test"]["pluginSettings"] == {"api_version": "1"}, shown
+
+
+def acting_for(tenant: str, sub: str) -> dict[str, str]:
+    """agents-service asking for a person: its own service token, and the acting-for token platform-service signs."""
+    service = mint_service_token(
+        dev_service_signer(), service="agents", audience="tools", tenant_id=tenant,
+        scopes=["tools:view", "connections:view"], team_id="team_platform",
+    )  # fmt: skip
+    claims = {
+        "sub": sub, "email": f"{sub}@bank.example", "name": sub, "tenant_id": tenant, "team_id": "team_platform",
+        "kind": "acting_for", "act": {"sub": "service:agents"}, "aud": "tools",
+    }  # fmt: skip
+    return {"Authorization": f"Bearer {service}", "X-Acting-For": mint(claims, PLATFORM, ttl_s=TEST_TOKEN_TTL_S)}
+
+
+async def test_a_service_asking_for_a_person_reads_that_persons_own_sign_in(world: World, tenant: str) -> None:  # noqa: F811
+    # The Tools page asks through agents-service: on an app each person signs in to, the state is the person's.
+    conn = await connected(world, tenant)
+    row = await world.store.get(tenant, conn)
+    assert row is not None
+    await world.store.change(tenant, conn, int(row["revision"]), {"sign_in": "person"}, actor="t", at=datetime.now(UTC))
+    await signed(world, tenant, conn, "https://acme.my.desk.test", person_id="usr_james")
+    james = await card(world, tenant, acting_for(tenant, "usr_james"))
+    maya = await card(world, tenant, acting_for(tenant, "usr_maya"))
+    assert (james["appState"], james["signIn"]) == ("connected", "person"), james
+    assert maya["appState"] == "needs_sign_in", maya

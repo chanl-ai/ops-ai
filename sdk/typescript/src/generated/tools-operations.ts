@@ -150,7 +150,9 @@ export const toolsOperations = {
   },
   "connections_list_systems": {
     "body": null,
-    "headers": [],
+    "headers": [
+      "x-acting-for"
+    ],
     "method": "GET",
     "path": "/v1/systems",
     "pathParams": [],

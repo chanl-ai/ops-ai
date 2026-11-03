@@ -62,9 +62,12 @@ async def world(
 ) -> AsyncIterator[World]:
     await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC), catalog=catalog_tools)
     settings = Settings()
+    services = ServiceAuth(
+        audience="tools", verifiers=service_verifiers(settings, "tools"), scopes=settings.service_scopes
+    )
+    # A service reaches the public routes too, as agents-service does asking for a person (acting for them).
     auth = Auth(
-        Identity(audience="tools", jwks=jwks, introspect=introspect, key_cache_s=0),
-        ServiceAuth(audience="tools", verifiers=service_verifiers(settings, "tools"), scopes=settings.service_scopes),
+        Identity(audience="tools", jwks=jwks, introspect=introspect, key_cache_s=0, services=services), services
     )
     app = build_app(engine, seed, tenant, auth=auth)
     vault = credentials()

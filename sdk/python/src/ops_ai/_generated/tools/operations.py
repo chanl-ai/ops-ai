@@ -138,7 +138,7 @@ OPERATIONS: dict[str, Operation] = {
     },
     "connections_list_systems": {
         "body": None,
-        "headers": [],
+        "headers": ["x-acting-for"],
         "method": "GET",
         "path": "/v1/systems",
         "pathParams": [],
@@ -1003,9 +1003,18 @@ class Operations:
         "Save Send Policy"
         return self._t.call(SERVICE, OPERATIONS["send_policy_save_send_policy"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def connections_list_systems(self, *, include: str | None = None) -> list[SystemCard]:
+    def connections_list_systems(
+        self, *, include: str | None = None, x_acting_for: str | None = None
+    ) -> list[SystemCard]:
         "List Systems"
-        return self._t.call(SERVICE, OPERATIONS["connections_list_systems"], {}, {"include": include}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["connections_list_systems"],
+            {},
+            {"include": include},
+            {"x-acting-for": x_acting_for},
+            None,
+        )  # type: ignore[no-any-return]
 
     def tool_modules_list_modules(
         self,
@@ -1517,9 +1526,18 @@ class AsyncOperations:
         "Save Send Policy"
         return await self._t.call(SERVICE, OPERATIONS["send_policy_save_send_policy"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    async def connections_list_systems(self, *, include: str | None = None) -> list[SystemCard]:
+    async def connections_list_systems(
+        self, *, include: str | None = None, x_acting_for: str | None = None
+    ) -> list[SystemCard]:
         "List Systems"
-        return await self._t.call(SERVICE, OPERATIONS["connections_list_systems"], {}, {"include": include}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["connections_list_systems"],
+            {},
+            {"include": include},
+            {"x-acting-for": x_acting_for},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def tool_modules_list_modules(
         self,

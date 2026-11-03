@@ -4,15 +4,16 @@ agents routes' grant check."""
 
 from __future__ import annotations
 
-from typing import Annotated, Any, TypeAlias
+from typing import Annotated, Any, TypeAlias, cast
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
-from ops_service_kit.http import Envelope, OptionsPage, options_page, options_window
+from ops_service_kit.errors import NotFound
+from ops_service_kit.http import Envelope, OptionsPage, options_page, options_window, page_window, paged
 
 from ...store.tenancy import current_team
-from ..auth import principal
+from ..auth import Principal, principal
 from ..child_runs import (
     EMAIL_SCHEMA,
     engine_input_schema,
@@ -23,7 +24,7 @@ from ..child_runs import (
 )
 from ..deps import Runtime, runtime
 from ..envelope import ok
-from ..schemas import Tool
+from ..schemas import ToolList, ToolRow
 
 router = APIRouter(prefix="/v1/tools", dependencies=[Depends(principal)])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
@@ -105,12 +106,101 @@ async def known_tools(rt: Runtime, *, fresh: bool = False) -> list[dict[str, Any
     return rows
 
 
-@router.get("", response_model=Envelope[list[Tool]])
-async def list_tools(rt: Rt, access: Annotated[list[str] | None, Query()] = None) -> JSONResponse:
-    """`access` (repeatable: read, write, workflow) keeps those kinds only, so a page asking for workflow tools does not
-    filter the whole directory itself."""
+# The row fields the page filters and counts by; each filter is repeatable.
+FACETS = ("app", "kind", "status")
+# An app's state that leaves its tools runnable: connected, or connected with a failed test (a warning).
+RUNNABLE = ("connected", "test_failed")
+
+
+def _kind_of(tool: dict[str, Any], card: dict[str, Any] | None) -> str:
+    if tool["access"] == "workflow":
+        return "workflow"
+    if str(tool["id"]).startswith("agent:"):
+        return "agent"
+    return "app" if card is not None and card.get("kind") in ("plugin", "builtin") else "custom"
+
+
+def _status_of(tool: dict[str, Any], card: dict[str, Any] | None) -> str:
+    if card is not None and card.get("appState") not in RUNNABLE:
+        each_person = card.get("appState") == "needs_sign_in" and card.get("signIn") == "person"
+        return "needs_your_sign_in" if each_person else "app_not_connected"
+    return "needs_approval" if tool.get("requiresApproval") else "ready"
+
+
+async def tool_rows(rt: Runtime, person: str | None, team: str | None) -> list[dict[str, Any]]:
+    """Every tool the team may grant, one row each, joined in one read of tools-service's apps (for `person`) and one
+    of this service's own grants and workflow steps."""
+    from .tool_uses import tool_uses  # noqa: PLC0415 - keep the catalog import cycle out of the module top
+
     tools = await known_tools(rt)
-    return ok([t for t in tools if t["access"] in access] if access else tools)
+    cards = await rt.app_states.cards(person, team) if rt.app_states is not None else []
+    by_module = {str(m): c for c in cards for m in cast(list[str], c.get("moduleIds") or [])}
+    uses = await tool_uses(rt, team or current_team(), [str(t["id"]) for t in tools])
+    rows: list[dict[str, Any]] = []
+    for t in tools:
+        module = t.get("moduleId")
+        card = by_module.get(str(module)) if module else None
+        app = {"id": card["id"], "name": card["name"]} if card else None
+        if app is None and module:
+            app = {"id": f"module:{module}", "name": t["server"]}
+        used = uses.get(str(t["id"])) or []
+        by = {k: [{"id": u["id"], "name": u["name"]} for u in used if u["kind"] == k] for k in ("agent", "workflow")}
+        rows.append(
+            {
+                **t,
+                "title": t.get("title") or t["name"],
+                "app": app,
+                "kind": _kind_of(t, card),
+                "status": _status_of(t, card),
+                "usedBy": {"agents": by["agent"], "workflows": by["workflow"]},
+            }
+        )
+    return rows
+
+
+def _person(p: Principal) -> str | None:
+    """The person a list is read for: their email, as the acting-for token names them; none for a key or service."""
+    return p.email if not p.is_key and "@" in p.email else None
+
+
+def _app(row: dict[str, Any]) -> dict[str, str]:
+    return cast(dict[str, str], row.get("app") or {})
+
+
+def _facet(row: dict[str, Any], column: str) -> str | None:
+    """The value a row is counted and filtered by: its app's id, or its kind or status."""
+    return _app(row).get("id") if column == "app" else str(row[column])
+
+
+@router.get("", response_model=Envelope[ToolList])
+async def list_tools(
+    rt: Rt,
+    request: Request,
+    p: Annotated[Principal, Depends(principal)],
+    *,
+    page_no: Annotated[int, Query(alias="page", ge=1)] = 1,
+    page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
+    search: Annotated[str, Query(max_length=200)] = "",
+) -> JSONResponse:
+    """The Tools page: one row per tool with its app, kind, status and users, searched, filtered (`app`, `kind`,
+    `status`, each repeatable) and paged here. Facets count every row the search matches, before the filters."""
+    rows = await tool_rows(rt, _person(p), p.team_id)
+    q = search.strip().lower()
+    if q:
+        rows = [
+            r for r in rows if q in f"{r['title']} {r['name']} {_app(r).get('name', '')} {r['description']}".lower()
+        ]
+    facets: dict[str, dict[str, int]] = {c: {} for c in FACETS}
+    for r in rows:
+        for c in FACETS:
+            if (value := _facet(r, c)) is not None:
+                facets[c][value] = facets[c].get(value, 0) + 1
+    for c in FACETS:
+        if wanted := request.query_params.getlist(c):
+            rows = [r for r in rows if _facet(r, c) in wanted]
+    rows.sort(key=lambda r: (_app(r).get("name") or "~", str(r["title"]).lower()))
+    page_no, start = page_window(len(rows), page_no, page_size)
+    return ok({**paged(rows[start : start + page_size], len(rows), page_no, page_size), "facets": facets})
 
 
 @router.get("/options", response_model=Envelope[OptionsPage])
@@ -149,3 +239,12 @@ async def tool_options(
         {"id": t["id"], "label": t.get("title") or t["name"], "hint": t["server"], "disabled": None} for t in page
     ]
     return ok(options_page(options, offset, limit))
+
+
+@router.get("/{tool_id}", response_model=Envelope[ToolRow])
+async def get_tool(rt: Rt, tool_id: str, p: Annotated[Principal, Depends(principal)]) -> JSONResponse:
+    """One tool as its row on the Tools page reads; declared after /options so that path is not read as a tool."""
+    row = next((r for r in await tool_rows(rt, _person(p), p.team_id) if r["id"] == tool_id), None)
+    if row is None:
+        raise NotFound(f"Tool {tool_id}")
+    return ok(row)

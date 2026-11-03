@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-03",
+  "title": "Every tool with its app and who uses it",
+  "description": "The tools list shows one row per tool with the app it comes from, whether you can run it now or must sign in first, and the agents and workflows that use it. It is searched, filtered and paged on the server, so a long list opens quickly.",
+  "tag": "improved"
+}

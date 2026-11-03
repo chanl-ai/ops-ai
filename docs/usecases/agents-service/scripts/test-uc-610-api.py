@@ -31,7 +31,11 @@ def calls(events: list[dict[str, Any]], name: str | None = None) -> list[dict[st
 
 def grant_bank(api: httpx.Client) -> list[str]:
     """Every bank operation but open_dispute on the agent, published (dev approves its own request)."""
-    tools = [t["id"] for t in data(api.get("/v1/tools", headers=OPS)) if not str(t["id"]).startswith("workflow:")]
+    tools = [
+        t["id"]
+        for t in data(api.get("/v1/tools", params={"pageSize": 200}, headers=OPS))["data"]
+        if not str(t["id"]).startswith("workflow:")
+    ]
     held = [t for t in tools if t != UNGRANTED]
     patched = data(api.patch(f"/v1/agents/{AGENT}", json={"toolIds": held}, headers=OPS))
     body = {"version": patched["version"], "note": "uc-610 many tools"}

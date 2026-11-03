@@ -236,7 +236,7 @@ await withUiStack(
         const remove = stale && (await grant.getByRole('button', { name: /Remove/ }).count()) > 0;
         // What agents-service holds, so a failure says which side kept offering the operation.
         const viewAgent = (await (await fetch(`${agents}/v1/agents/${AGENT}`, { headers: J })).json()).data;
-        const offered = ((await (await fetch(`${agents}/v1/tools`, { headers: J })).json()).data ?? []).filter((t) => t.id === 'get_account').map((t) => t.moduleId);
+        const offered = ((await (await fetch(`${agents}/v1/tools?pageSize=200`, { headers: J })).json()).data?.data ?? []).filter((t) => t.id === 'get_account').map((t) => t.moduleId);
         const opsNow = (await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })).json()).data;
         check('11 a hidden operation shows as no longer offered on the agent, with Remove', hid.status === 200 && pub.status === 200 && approved === 200 && stale && remove, { hide: hid.status, publish: pub.status, approved, stale, remove, toolIds: viewAgent?.toolIds, staleToolIds: viewAgent?.staleToolIds, offeredBy: offered, status: opsNow?.status, enabled: opsNow?.operations?.find((o) => o.name === 'get_account')?.enabled, pending: opsNow?.pendingChanges?.length });
       });

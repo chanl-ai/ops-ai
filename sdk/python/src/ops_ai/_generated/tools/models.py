@@ -1658,6 +1658,7 @@ class SystemCard(TypedDict, closed=True):
     name: str
     plugin: NotRequired[SystemPlugin | None]
     pluginId: NotRequired[str | None]
+    signIn: NotRequired[Literal["team", "person", "person_or_team"] | None]
     state: NotRequired[Literal["connected", "not_signed_in", "expired", "refused", "revoked"] | None]
     status: NotRequired[str | None]
     toolsCount: int
