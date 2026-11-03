@@ -192,6 +192,17 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "connections_set_app_credential_secret": {
+    "body": "json",
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/app-credentials/{credential_id}/secret",
+    "pathParams": [
+      "credential_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "connections_set_environment": {
     "body": "json",
     "headers": [],
@@ -373,17 +384,6 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
-  "plugins_delete_app_secret": {
-    "body": null,
-    "headers": [],
-    "method": "DELETE",
-    "path": "/v1/plugins/{plugin_id}/app-secret",
-    "pathParams": [
-      "plugin_id"
-    ],
-    "query": [],
-    "stream": false
-  },
   "plugins_knowledge_sources": {
     "body": null,
     "headers": [],
@@ -418,17 +418,6 @@ export const toolsOperations = {
     "headers": [],
     "method": "GET",
     "path": "/v1/plugins/{plugin_id}/team/update",
-    "pathParams": [
-      "plugin_id"
-    ],
-    "query": [],
-    "stream": false
-  },
-  "plugins_set_app_secret": {
-    "body": "json",
-    "headers": [],
-    "method": "PUT",
-    "path": "/v1/plugins/{plugin_id}/app-secret",
     "pathParams": [
       "plugin_id"
     ],

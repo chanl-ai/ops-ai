@@ -153,25 +153,23 @@ def apps_stack(tools_env: dict[str, str] | None = None, ops_ai_apps: dict[str, s
     with ExitStack() as stack:
         m = stack.enter_context(multi_auth())
         api, inner = stack.enter_context(platform())
-        gw = stack.enter_context(tools({**m["settings"], **AUTH, **PLUGINS, **(tools_env or {})}))
+        apps = ops_ai_apps or {}
+        # Ops AI's own app per plugin is the install's, from its config, as a deployment sets it.
+        clients = {p: {"id": c, "secret": m["clients"][c]} for p, c in apps.items()}
+        installed = {"OPS_PLUGIN_CLIENTS": json.dumps(clients)} if clients else {}
+        gw = stack.enter_context(tools({**m["settings"], **AUTH, **PLUGINS, **installed, **(tools_env or {})}))
         who = {role: as_role(api, role, TEAM_OF[role]) for role in ROLES}
         me = data(api.get("/v1/me", headers=who["admin"])) or {}
         tenant = str(me.get("tenantId") or (me.get("principal") or {}).get("tenantId") or "")
         walk = Walk(api=api, inner=inner, gw=gw, m=m, who=who, tenant=tenant)
         loaded = data(gw.get("/v1/plugins", headers=who["admin"])) or {}
         ids = [p["id"] for p in loaded.get("plugins", [])]
-        apps = ops_ai_apps or {}
-        policy = {i: {"enabled": True} | ({"client": {"id": apps[i]}} if i in apps else {}) for i in ids}
+        policy = {i: {"enabled": True} for i in ids}
         api.put("/v1/policies/plugins", json={"value": policy}, headers=who["security"])
         until(
             lambda: all(p["installOn"] for p in (data(gw.get("/v1/plugins", headers=who["admin"])) or {})["plugins"]),
             timeout=30,
         )
-        for plugin, client in apps.items():
-            body = {"clientSecret": m["clients"][client]}
-            # The policy reaches tools-service through a short cache; the plugin's app secret waits for it.
-            path = f"/v1/plugins/{plugin}/app-secret"
-            until(lambda p=path, b=body: gw.put(p, json=b, headers=who["security"]).status_code == 200)
         for h in m["hosts"]:
             gw.post("/v1/egress/hosts", json={"value": h, "note": "apps"}, headers=who["security"])
         gw.post("/v1/egress/ranges", json={"value": m["range"], "note": "apps"}, headers=who["security"])

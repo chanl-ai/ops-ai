@@ -57,7 +57,7 @@ Service: `tools-service` with platform-service, kb-service and agents-service. L
 | 21 | `ops plugin validate` on copies with an unknown sign-in kind, a write used as a knowledge tool, and a template that needs a missing tool | Each refused, naming the problem |
 | 22 | `ops plugin test ../ops-ai-plugins/plugins/salesforce` | Every tool and the knowledge listing pass against the plugin's fake |
 | 23 | tools-service starts with a broken plugin beside Salesforce, and a Python tool calls a host the plugin does not list | `/v1/plugins` lists the broken one as failed and Salesforce as loaded; the call fails `EGRESS_DENIED` |
-| 24 | Sam sets up the platform's OAuth app: its client id in the `plugins` policy, its secret with `PUT /v1/plugins/opsai.salesforce/app-secret`; James, a builder, tries the secret | 200 for Sam; 403 for James |
+| 24 | The install config holds Ops AI's OAuth app for Salesforce; Sam tries to set its secret through the API | No route sets it (404 or 405); the plugin view shows its client id and that the secret is set, never the secret |
 | 25 | Wanjiru turns Salesforce on for team_platform with no app of its own; a team_platform call runs before it signs in | The call is refused; Salesforce receives nothing, though team_ops is signed in |
 | 26 | Wanjiru signs the team in | The token exchange carries the platform's client id and secret; team_platform's calls run |
 | 27 | Priya signs team_ops in again | The exchange carries team_ops's own app |

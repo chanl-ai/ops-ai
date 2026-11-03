@@ -38,7 +38,6 @@ from ops_tools.registry import Resolved, ToolRegistry
 from ops_tools.secrets import SecretResolver
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.modules import ModuleStore
-from ops_tools.store.plugin_app_keys import PluginAppKeys
 from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.store.secrets import SecretStore
 
@@ -243,7 +242,7 @@ async def desk_rig(engine: AsyncEngine, seed: dict[str, Any], tenant: str) -> As
     assert all(item.ok for item in loaded), [item.error for item in loaded]
     policy = {item.plugin.manifest.id: {"enabled": True} for item in loaded if item.plugin}
     host = PluginHost(ModuleStore(engine), PluginBindings(engine), InstallSwitches(Policy(policy)), loaded, store)
-    app.include_router(plugins_router(host, connections, directory, PluginAppKeys(engine, vault)))
+    app.include_router(plugins_router(host, connections, directory))
     authenticator = Authenticator(
         store, SecretResolver(SecretStore(engine), vault), tokens, ConnectLinks(store, CONSOLE_URL)
     )

@@ -33,7 +33,6 @@ from ops_tools.registry import ToolRegistry
 from ops_tools.secrets import SecretResolver
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.modules import ModuleStore
-from ops_tools.store.plugin_app_keys import PluginAppKeys
 from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.store.secrets import SecretStore
 
@@ -249,7 +248,7 @@ async def routes(
     assert v1 is not None
     switches = InstallSwitches(Policy({ID: {"enabled": True}}))
     host = PluginHost(ModuleStore(engine), PluginBindings(engine), switches, loaded, store, versions=True)
-    app.include_router(plugins_router(host, connections, directory, PluginAppKeys(engine, vault)))
+    app.include_router(plugins_router(host, connections, directory))
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="http://tools",

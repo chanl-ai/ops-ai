@@ -19,11 +19,7 @@ APP = f"plugin:{ID}"
 
 
 async def on_ops_ais_app(w: World, tenant: str) -> str:
-    """Desk turned on with Ops AI's own app; its connection id."""
-    put = await w.client.put(
-        f"/v1/plugins/{ID}/app-secret", json={"clientSecret": "platform-secret"}, headers=person(tenant, *SAM)
-    )
-    assert put.status_code == 200, put.text
+    """Desk turned on with Ops AI's own app (the install's, test_plugin_credentials.INSTALL); its connection id."""
     on = await w.client.put(f"/v1/plugins/{ID}/team", json={"enabled": True}, headers=admin(tenant))
     assert on.status_code == 200, on.text
     return str(on.json()["data"]["connectionId"])
@@ -105,3 +101,24 @@ async def test_a_custom_app_that_signs_in_takes_the_teams_client(world: World, t
     shown = (await world.client.get(f"/v1/connections/{conn['id']}", headers=admin(tenant))).json()["data"]
     production = shown["environments"]["production"]
     assert production["settings"]["clientId"] == "bank-own-client" and SECRET not in str(shown), production
+
+
+async def test_replacing_the_secret_changes_the_teams_own_client_only(world: World, tenant: str) -> None:  # noqa: F811
+    """Replace on the Credentials page reaches the team's own client, keeps its client id, and never Ops AI's app."""
+    conn = await on_ops_ais_app(world, tenant)
+    made = (await world.client.post("/v1/app-credentials", json=body(), headers=admin(tenant))).json()["data"]
+    credential = made["credentialId"]
+    assert credential, made
+    builder = person(tenant, "James Richardson", {"team_platform": "builder"})
+    url = f"/v1/app-credentials/{credential}/secret"
+    assert (await world.client.put(url, json={"clientSecret": "x"}, headers=builder)).status_code == 403
+    replaced = await world.client.put(url, json={"clientSecret": "bank-rotated-secret-2"}, headers=admin(tenant))
+    assert replaced.status_code == 200 and "bank-rotated-secret-2" not in replaced.text, replaced.text
+    fresh = await world.store.get(tenant, conn)
+    assert fresh is not None
+    production = fresh["environments"]["production"]
+    assert production["settings"]["clientId"] == "bank-own-client" and production["credential_id"] == credential
+    missing = await world.client.put(
+        "/v1/app-credentials/cred_none/secret", json={"clientSecret": "x"}, headers=admin(tenant)
+    )
+    assert missing.status_code == 404, missing.text

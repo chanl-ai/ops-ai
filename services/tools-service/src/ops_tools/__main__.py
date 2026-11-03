@@ -70,7 +70,6 @@ from .store.egress import EgressStore
 from .store.event_relay import keep_relaying
 from .store.mocks import MockStore
 from .store.modules import ModuleStore
-from .store.plugin_app_keys import PluginAppKeys
 from .store.plugin_bindings import PluginBindings
 from .store.review_handoffs import ReviewHandoffs
 from .store.secrets import SecretStore
@@ -145,15 +144,12 @@ def main() -> None:
     credentials = credential_store(settings)
     secrets = SecretResolver(SecretStore(engine), credentials)
     # Connections sign calls in (c-330); their token requests go out through the same egress client as calls.
-    connection_store = ConnectionStore(engine)
+    # Ops AI's own OAuth client per plugin comes from the install config; the store hands it to an environment on it.
+    connection_store = ConnectionStore(engine, settings.plugin_clients)
     tokens = Tokens(connection_store, credentials, egress_client(policy, ca_file=ca), policy)
     # A call acting for someone who has not signed in hands back a link to the console page that asks them (c-558).
     links = ConnectLinks(connection_store, settings.console_url) if settings.console_url else None
-    # The platform's own OAuth app secrets for plugins (c-565), sealed at the account; only on an install with plugins.
-    app_keys = PluginAppKeys(engine, credentials, install=settings.plugin_clients) if settings.plugins else None
-    authenticator = Authenticator(
-        connection_store, secrets, tokens, links, app_secret=app_keys.value if app_keys else None
-    )
+    authenticator = Authenticator(connection_store, secrets, tokens, links)
     agents_url = settings.agents_url or f"http://127.0.0.1:{settings.port}"
 
     # The install's plugins (its plugins folder, OPS_PLUGINS_DIR), read once at start: a failed one is reported on
@@ -164,7 +160,6 @@ def main() -> None:
         PluginBindings(engine),
         InstallSwitches(
             client("platform", settings.platform_url, ["settings:view"]) if settings.platform_url else None,
-            clients=settings.plugin_clients,
         ),
         connection_store,
         # The lookup after a plugin's sign-in goes out through the egress client, as any call does (c-584).
@@ -226,7 +221,6 @@ def main() -> None:
         http=egress_client(policy, ca_file=ca),
         # A plugin's connection takes its instance from the token answer (c-564).
         on_token=plugins.on_token if plugins else None,
-        app_secret=app_keys.value if app_keys else None,
         plugin_settings=plugins.environment_settings if plugins else None,
     )
     app = create_gateway_app(
@@ -317,16 +311,15 @@ def main() -> None:
                         plugins,
                         connection_service,
                         directory,
-                        app_keys,
                         users=AgentsToolUsers(client("agents", agents_url, ["agents:view"])),
                     )
                 ]
-                if plugins and app_keys
+                if plugins
                 else []
             ),
             *([plugin_templates_router(plugins)] if plugins else []),
             connections_router(connection_service, directory),
-            systems_router(Systems(connection_service, store, plugins, app_keys, modules), directory),
+            systems_router(Systems(connection_service, store, plugins, modules), directory),
             platform_events_router(
                 {
                     **member_removed_handlers(connection_service.store, credentials),

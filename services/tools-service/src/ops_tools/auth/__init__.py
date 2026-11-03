@@ -39,7 +39,6 @@ from .tokens import AuthFailed, ClientProof, Tokens, scope_list
 NotLinkedReason = Literal["not_connected", "insufficient_scope", "needs_person", "no_person", "refused"]
 
 # The account's own OAuth app secret for a plugin (c-565): (tenant, plugin id) to the value, or None.
-AppSecret = Callable[[str, str], Awaitable[str | None]]
 
 if TYPE_CHECKING:
     from ..connections.connect_links import ConnectLinks
@@ -199,13 +198,10 @@ class Authenticator:
         secrets: SecretResolver | None,
         tokens: Tokens,
         links: ConnectLinks | None = None,
-        app_secret: AppSecret | None = None,
     ) -> None:
         self.connections = connections
         self.secrets = secrets
         self.tokens = tokens
-        # A plugin connection on the platform's own OAuth app reads its secret from the account, never a team.
-        self.app_secret = app_secret
         # Makes the link a call hands back when the person it acts for has not signed in (c-558).
         self.links = links
 
@@ -275,10 +271,9 @@ class Authenticator:
             )
         names: dict[str, str] = dict(setting["secrets"] or {})
         values = await self._secret_values(tenant_id, str(conn["team_id"]), names, tool=tool, actor=actor)
-        if (app := setting.get("platform_app")) and self.app_secret is not None:
-            found = await self.app_secret(tenant_id, str(app))
-            if found is not None:
-                values = {**values, "clientSecret": found}
+        # An environment on Ops AI's app signs in with the install's client secret, never one of a team's.
+        if (app := setting.get("platform_app")) and (installed := self.connections.install_client(str(app))):
+            values = {**values, "clientSecret": installed.secret.get_secret_value()}
         prepared = Prepared(str(connection_id), env, values=list(values.values()))
         kind = kind_of(str(conn["auth_kind"]))
         # Whose sign-in is chosen before the team's parts are checked: a person who gives their own key needs none of

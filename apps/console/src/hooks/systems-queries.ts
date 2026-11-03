@@ -132,8 +132,9 @@ export const useAppUsers = (pluginId: string | null) =>
 export type AppCredential = Data<'connections_list_app_credentials'>[number];
 export const useAppCredentials = () =>
   useTeamQuery({ queryKey: [...SYSTEMS, 'app-credentials'], queryFn: () => sdk((ops) => ops.raw.tools.connections_list_app_credentials()) });
-/** Replaces the client secret of the team's own app for a plugin (PUT /v1/plugins/{id}/app-secret); sealed on save. */
-export const useSetAppSecret = () => useSystemsMutation((a: Args<'plugins_set_app_secret'>) => sdk((ops) => ops.raw.tools.plugins_set_app_secret(a)));
+/** Replaces the client secret of the team's own app credential (PUT /v1/app-credentials/{id}/secret); sealed on save. */
+export const useSetCredentialSecret = () =>
+  useSystemsMutation((a: Args<'connections_set_app_credential_secret'>) => sdk((ops) => ops.raw.tools.connections_set_app_credential_secret(a)));
 export const useSetTeamPlugin = () => useSystemsMutation((a: Args<'plugins_set_team_plugin'>) => sdk((ops) => ops.raw.tools.plugins_set_team_plugin(a)));
 /** Another named account of an app the team has connected (c-608, several_accounts); answers the new account. */
 export const useAddAccount = () => useSystemsMutation((a: Args<'plugins_add_account'>) => sdk((ops) => ops.raw.tools.plugins_add_account(a)));

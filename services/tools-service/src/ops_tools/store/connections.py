@@ -12,7 +12,8 @@ reads the winner's token.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import uuid
+from collections.abc import Mapping, Sequence
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime
 from typing import Any, ClassVar, cast
@@ -22,6 +23,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_policy import context_of
+from ops_service_kit.settings import PluginClient
 from ops_store import Guarantee, isolation
 from ops_store.outbox import add as add_event
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
@@ -97,9 +99,13 @@ connection_environments = sa.Table(
     sa.Column("secrets", sa.JSON, nullable=False),
     # This environment's last Test connection (c-580), the same shape as connections.health.
     sa.Column("health", sa.JSON),
-    # The plugin whose platform app this environment signs in with (c-565), its secret the account's; null for the
-    # team's own app. A column, not a setting, so a save that rewrites the settings (Edit keys) keeps it (c-580).
+    # The plugin whose platform app this environment signs in with (c-565): the install's own OAuth client, from the
+    # install config (plugin_clients); null for the team's own app. A column, not a setting, so a save that rewrites
+    # the settings (Edit keys) keeps it (c-580).
     sa.Column("platform_app", sa.String(120)),
+    # The team's own OAuth client this environment signs in with (app_credentials); null for Ops AI's app or a kind
+    # with no client. The client id and secret live only on that row, never in settings or secrets here.
+    sa.Column("credential_id", sa.String(64)),
     # A plugin's settings this environment keeps its own (c-580): the sandbox's sign-in address, the instance its token
     # named. Kept here once, where the connection's addresses are; the team's binding names the connection.
     sa.Column("plugin_settings", sa.JSON),
@@ -108,6 +114,27 @@ connection_environments = sa.Table(
     sa.ForeignKeyConstraint(
         ["tenant_id", "connection_id"], ["connections.tenant_id", "connections.id"], ondelete="CASCADE"
     ),
+    info={**TENANT_SCOPED, **TEAM_OWNED},
+)
+
+# A team's own OAuth client of an app (the app credential): its client id and the name of the team secret holding its
+# client secret. The one place a team's client is kept; an environment points at it by credential_id, and the store
+# puts both into the environment it reads (settings.clientId, secrets.clientSecret) and takes them out on a write.
+app_credentials = sa.Table(
+    "app_credentials",
+    metadata,
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("id", sa.String(64), primary_key=True),
+    sa.Column("team_id", sa.String(64), nullable=False),
+    # The app the client was registered for: a plugin's id, or the connection a custom app signs in through.
+    sa.Column("app_id", sa.String(120), nullable=False),
+    sa.Column("client_id", sa.String(500), nullable=False),
+    # The tool_secrets name in the team holding the client secret; null for a public client.
+    sa.Column("secret_name", sa.String(200)),
+    sa.Column("created_by", sa.String(200), nullable=False),
+    sa.Column("created_at", _TS, nullable=False),
+    sa.Column("updated_by", sa.String(200), nullable=False),
+    sa.Column("updated_at", _TS, nullable=False),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -268,8 +295,11 @@ class ConnectionStore:
     # token is stored against the rotation it replaced (CAS).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.CAS})
 
-    def __init__(self, engine: AsyncEngine) -> None:
+    def __init__(self, engine: AsyncEngine, install_clients: Mapping[str, PluginClient] | None = None) -> None:
+        """`install_clients` is the install config's OAuth client per plugin (plugin_clients): Ops AI's app, whose
+        client id an environment on it reads."""
         self.engine = engine
+        self.install_clients = dict(install_clients or {})
 
     def _tx(self) -> AbstractAsyncContextManager[AsyncConnection]:
         """One transaction as ROLE carrying the caller's tenant and team; NoTenantError before any connection when the
@@ -293,10 +323,112 @@ class ConnectionStore:
             connection_environments.c.connection_id.in_(ids),
             team_visible(connection_environments),
         )
+        rows = [dict(r) for r in (await c.execute(q)).mappings()]
+        creds = await self._credentials(c, tenant_id, [str(r["credential_id"]) for r in rows if r.get("credential_id")])
         out: dict[str, dict[str, Row]] = {}
-        for r in (await c.execute(q)).mappings():
-            out.setdefault(str(r["connection_id"]), {})[str(r["environment"])] = dict(r)
+        for r in rows:
+            out.setdefault(str(r["connection_id"]), {})[str(r["environment"])] = self._with_client(r, creds)
         return out
+
+    async def _credentials(self, c: AsyncConnection, tenant_id: str, ids: list[str]) -> dict[str, Row]:
+        if not ids:
+            return {}
+        t = app_credentials
+        q = t.select().where(t.c.tenant_id == tenant_id, t.c.id.in_(ids), team_visible(t))
+        return {str(r["id"]): dict(r) for r in (await c.execute(q)).mappings()}
+
+    async def credential_environment(self, tenant_id: str, credential_id: str) -> tuple[Row, str] | None:
+        """The connection and environment signing in with the team's app credential; None when it is not the team's."""
+        t = connection_environments
+        q = sa.select(t.c.connection_id, t.c.environment).where(
+            t.c.tenant_id == tenant_id, t.c.credential_id == credential_id, team_visible(t)
+        )
+        async with self._tx() as c:
+            found = (await c.execute(q)).first()
+        conn = await self.get(tenant_id, str(found.connection_id)) if found else None
+        return (conn, str(found.environment)) if conn and found else None
+
+    def install_client(self, plugin_id: str) -> PluginClient | None:
+        """Ops AI's own OAuth client for a plugin, from the install config; None when the install set none."""
+        return self.install_clients.get(plugin_id)
+
+    async def _credential_ids(self, c: AsyncConnection, tenant_id: str, connection_id: str) -> list[str]:
+        t = connection_environments
+        q = sa.select(t.c.credential_id).where(
+            t.c.tenant_id == tenant_id,
+            t.c.connection_id == connection_id,
+            t.c.credential_id.is_not(None),
+            team_visible(t),
+        )
+        return [str(v) for v in (await c.execute(q)).scalars()]
+
+    def _with_client(self, env: Row, creds: dict[str, Row]) -> Row:
+        """The environment as its readers see it: the client id of the OAuth client it signs in with in its settings,
+        and the name of the client secret in its secrets, from the team's app credential or Ops AI's app."""
+        settings, secrets = dict(env.get("settings") or {}), dict(env.get("secrets") or {})
+        cred = creds.get(str(env.get("credential_id") or ""))
+        installed = self.install_clients.get(str(env.get("platform_app") or ""))
+        if cred is not None:
+            settings["clientId"] = cred["client_id"]
+            if cred.get("secret_name"):
+                secrets["clientSecret"] = cred["secret_name"]
+        elif installed is not None:
+            settings["clientId"] = installed.id
+        return {**env, "settings": settings, "secrets": secrets}
+
+    async def _put_client(
+        self,
+        c: AsyncConnection,
+        tenant_id: str,
+        connection_id: str,
+        env_name: str,
+        fields: Row,
+        *,
+        actor: str,
+        at: datetime,
+    ) -> Row:
+        """Takes the OAuth client out of an environment being written: on Ops AI's app it keeps none; otherwise the
+        client id and secret name go to the environment's app credential (made on the first one) and the environment
+        keeps only its credential_id."""
+        settings, secrets = dict(fields.get("settings") or {}), dict(fields.get("secrets") or {})
+        client_id, secret_name = settings.pop("clientId", None), secrets.pop("clientSecret", None)
+        fields = {**fields, "settings": settings, "secrets": secrets}
+        held = (
+            await c.execute(
+                sa.select(connection_environments.c.credential_id, connection_environments.c.platform_app).where(
+                    connection_environments.c.tenant_id == tenant_id,
+                    connection_environments.c.connection_id == connection_id,
+                    connection_environments.c.environment == env_name,
+                    team_visible(connection_environments),
+                )
+            )
+        ).first()
+        platform = fields.get("platform_app", held.platform_app if held else None)
+        if platform or not client_id:
+            return {**fields, "credential_id": None} if platform else fields
+        existing = str(held.credential_id) if held and held.credential_id else None
+        t = app_credentials
+        values = {"client_id": str(client_id), "secret_name": secret_name, "updated_by": actor, "updated_at": at}
+        if existing is not None:
+            await c.execute(t.update().where(t.c.tenant_id == tenant_id, t.c.id == existing).values(**values))
+            return {**fields, "credential_id": existing}
+        made = f"cred_{uuid.uuid4().hex[:12]}"
+        conn = (
+            await c.execute(
+                sa.select(connections.c.team_id, connections.c.plugin_id).where(
+                    connections.c.tenant_id == tenant_id, connections.c.id == connection_id, team_visible(connections)
+                )
+            )
+        ).first()
+        if conn is None:
+            raise StaleConnection(connection_id)
+        await c.execute(
+            t.insert().values(
+                tenant_id=tenant_id, id=made, team_id=conn.team_id, app_id=conn.plugin_id or connection_id,
+                created_by=actor, created_at=at, **values,
+            )
+        )  # fmt: skip
+        return {**fields, "credential_id": made}
 
     async def _used_by(self, c: AsyncConnection, tenant_id: str, ids: list[str]) -> dict[str, list[Row]]:
         """The modules pointing at each connection, joined here so a list never looks them up one by one."""
@@ -430,6 +562,7 @@ class ConnectionStore:
                     connection_environments.c.environment == env_name,
                 )
                 fields = {"settings": settings, "secrets": secrets, **(more[0] if more else {})}
+                fields = await self._put_client(c, tenant_id, connection_id, env_name, fields, actor=actor, at=at)
                 fields |= {"updated_by": actor, "updated_at": at}
                 if (await c.execute(connection_environments.update().where(*key).values(**fields))).rowcount == 0:
                     await c.execute(
@@ -447,6 +580,10 @@ class ConnectionStore:
                 for t in (connection_environments, connection_tokens, oauth_states):
                     of_it = sa.and_(t.c.tenant_id == tenant_id, t.c.connection_id == connection_id)
                     await c.execute(t.update().where(of_it).values(team_id=values["team_id"]))
+                if creds := await self._credential_ids(c, tenant_id, connection_id):
+                    a = app_credentials
+                    mine = sa.and_(a.c.tenant_id == tenant_id, a.c.id.in_(creds))
+                    await c.execute(a.update().where(mine).values(team_id=values["team_id"]))
             event = {"action": action, "environment": env_name, "actor": actor, "at": at, "detail": detail or {}}
             await self._audit(c, tenant_id, connection_id, event)
 
@@ -499,8 +636,13 @@ class ConnectionStore:
                 team_visible(oauth_states),
             )
             held = [dict(r) for q in (tokens_q, states_q) for r in (await c.execute(q)).mappings()]
+            creds = await self._credential_ids(c, tenant_id, connection_id)
             if (await c.execute(connections.delete().where(*mine))).rowcount == 0:
                 return None
+            # Its environments' app credentials go with it; the secret values are the caller's to forget (`held_of`).
+            if creds:
+                t = app_credentials
+                await c.execute(t.delete().where(t.c.tenant_id == tenant_id, t.c.id.in_(creds)))
             # The cascade takes the tokens and links; sign-in states name the connection with no key, so they go here.
             await c.execute(
                 oauth_states.delete().where(

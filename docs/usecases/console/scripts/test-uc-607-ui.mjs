@@ -169,20 +169,17 @@ try {
       const priya = as(await tokenFor('p.shah@harborpine.example'), 'team_ops');
       const maya = as(await tokenFor('m.okafor@harborpine.example'), 'team_ops');
 
-      const installed = await call(platform, 'PUT', '/v1/policies/plugins', sam, { value: { 'test.person': { enabled: true, client: { id: 'multi-app' } } } });
+      const installed = await call(platform, 'PUT', '/v1/policies/plugins', sam, { value: { 'test.person': { enabled: true } } });
       for (const host of fake.info.hosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-607' });
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: fake.info.range, note: 'uc-607' });
-      let secret = await call(tools, 'PUT', '/v1/plugins/test.person/app-secret', sam, { clientSecret: fake.info.clients['multi-app'] });
-      for (let i = 0; i < 20 && secret.status === 404; i++) await new Promise((r) => setTimeout(r, 1000)), (secret = await call(tools, 'PUT', '/v1/plugins/test.person/app-secret', sam, { clientSecret: fake.info.clients['multi-app'] }));
       let card = null;
       for (let i = 0; i < 40 && !card?.plugin?.platformApp; i++) {
         card = ((await call(tools, 'GET', '/v1/systems', priya)).data ?? []).find((c) => c.id === APP);
         if (!card?.plugin?.platformApp) await new Promise((r) => setTimeout(r, 500));
       }
       const agent = (await call(agents, 'POST', '/v1/agents', priya, { name: 'Ticket desk', role: 'Reads tickets from Person desk' })).data ?? {};
-      check('0 set-up: Person desk is on for the install with Ops AI’s own app, and the fake’s hosts are allowed', installed.status === 200 && secret.status === 200 && Boolean(card?.plugin?.platformApp) && Boolean(agent.id), {
+      check('0 set-up: Person desk is on for the install with Ops AI’s own app, and the fake’s hosts are allowed', installed.status === 200 && Boolean(card?.plugin?.platformApp) && Boolean(agent.id), {
         installed: installed.text,
-        secret: secret.text,
         card,
       });
 
@@ -772,7 +769,8 @@ try {
     {
       demo: true,
       fakeModelRules: RULES,
-      tools: { env: { ...fake.info.settings, OPS_PLUGINS: 'true', OPS_PLUGIN_PATHS: JSON.stringify(FOLDERS) } },
+      // Ops AI's own app for Person desk is the install's, from its config, as a deployment sets it.
+      tools: { env: { ...fake.info.settings, OPS_PLUGINS: 'true', OPS_PLUGIN_PATHS: JSON.stringify(FOLDERS), OPS_PLUGIN_CLIENTS: JSON.stringify({ 'test.person': { id: 'multi-app', secret: fake.info.clients['multi-app'] } }) } },
     },
   );
 } finally {

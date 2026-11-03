@@ -42,6 +42,8 @@ PLATFORM_CLIENT = "ops-ai-platform"
 PLATFORM_SECRET = "ops-ai-platform-app-secret"
 SALESFORCE = REPO.parent / "ops-ai-plugins/plugins/salesforce/src/ops_plugin_salesforce"
 PLUGINS = {"OPS_PLUGINS": "true", "OPS_PLUGIN_PATHS": json.dumps([str(SALESFORCE)])}
+# Ops AI's own OAuth app for Salesforce: the install's, from its config, as a deployment sets it.
+INSTALL_CLIENT = {"OPS_PLUGIN_CLIENTS": json.dumps({PLUGIN: {"id": PLATFORM_CLIENT, "secret": PLATFORM_SECRET}})}
 QUERY = "SELECT Id, CaseNumber, Status FROM Case WHERE CaseNumber = '00044818'"
 
 
@@ -95,10 +97,8 @@ def sign_in_team(gw: httpx.Client, sf: dict[str, Any], who: dict[str, str], conn
     )
 
 
-def install(api: httpx.Client, who: dict[str, str], on: bool, client: str | None = None) -> httpx.Response:
+def install(api: httpx.Client, who: dict[str, str], on: bool) -> httpx.Response:
     value: dict[str, Any] = {PLUGIN: {"enabled": on, "locked": {"api_version": "61.0"}}}
-    if client:
-        value[PLUGIN]["client"] = {"id": client}
     return api.put("/v1/policies/plugins", json={"value": value}, headers=who)
 
 
@@ -106,7 +106,7 @@ with ExitStack() as stack:
     sf = stack.enter_context(salesforce())
     api, INNER["api"] = stack.enter_context(platform())
     gw = stack.enter_context(
-        tools({**sf["settings"], **AUTH, **PLUGINS, "OPS_CONSOLE_URL": "https://console.acme.test"})
+        tools({**sf["settings"], **AUTH, **PLUGINS, **INSTALL_CLIENT, "OPS_CONSOLE_URL": "https://console.acme.test"})
     )
     # agents-service on the scripted model, for step 45's chat turn; its tools come from this tools-service.
     chat = stack.enter_context(agents(gateway_url=str(gw.base_url).rstrip("/"), env=AUTH))
@@ -365,15 +365,17 @@ with ExitStack() as stack:
         {"patch": patched.text[:200], "delete": deleted.text[:200]},
     )
 
-    # 24. The platform sets up its own OAuth app once: the client id in the install switch, the secret at the account.
-    # A team's builder cannot set it.
-    by_team = gw.put(f"/v1/plugins/{PLUGIN}/app-secret", json={"clientSecret": PLATFORM_SECRET}, headers=james)
-    policy = install(api, sam, True, client=PLATFORM_CLIENT)
-    secret = gw.put(f"/v1/plugins/{PLUGIN}/app-secret", json={"clientSecret": PLATFORM_SECRET}, headers=sam)
+    # 24. Ops AI's own OAuth app is the install's: teams see its client id, no route sets its secret, and no answer
+    # carries the secret.
+    by_admin = gw.put(f"/v1/plugins/{PLUGIN}/app-secret", json={"clientSecret": "other"}, headers=sam)
+    listed = gw.get("/v1/plugins", headers=priya)
+    view = next((p for p in (data(listed) or {}).get("plugins", []) if p["id"] == PLUGIN), {})
     check(
-        "24 the platform admin sets up the platform's own OAuth app; a team's builder cannot",
-        by_team.status_code == 403 and policy.status_code == 200 and secret.status_code == 200,
-        {"builder": by_team.status_code, "policy": policy.text[:200], "secret": secret.text[:200]},
+        "24 Ops AI's own OAuth app comes from the install config; no route sets its secret",
+        by_admin.status_code in (404, 405)
+        and view.get("platformApp") == {"clientId": PLATFORM_CLIENT, "secretSet": True}
+        and PLATFORM_SECRET not in listed.text,
+        {"set": by_admin.status_code, "view": view.get("platformApp")},
     )
 
     # 25. A second team turns Salesforce on with no app of its own. Until it signs in, its calls never run on another

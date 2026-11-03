@@ -128,6 +128,8 @@ class MultiAuth:
         self.token_requests: list[dict[str, Any]] = []
         self._issued: set[str] = set()
         self._expired: set[str] = set()
+        # While down, every API answers 503 and sign-in still works, as a system that is out after an account connects.
+        self.down = False
         # The sign-in address's query as each authorize request arrived, and the site the lookup names.
         self.authorize_requests: list[dict[str, str]] = []
         self.site = SITE
@@ -139,16 +141,16 @@ class MultiAuth:
         self._expired |= self._issued
 
     def app(self) -> Any:
-        from starlette.applications import Starlette  # noqa: PLC0415 - the agents-service environment has it
-        from starlette.routing import Route  # noqa: PLC0415
+        from starlette.applications import Starlette
+        from starlette.routing import Route
 
         return Starlette(routes=[Route("/{path:path}", self._handle, methods=["GET", "POST"])])
 
     def mtls_app(self) -> Any:
         """The certificate listener: the TLS handshake already refused anyone without a certificate the CA signed."""
-        from starlette.applications import Starlette  # noqa: PLC0415
-        from starlette.responses import JSONResponse  # noqa: PLC0415
-        from starlette.routing import Route  # noqa: PLC0415
+        from starlette.applications import Starlette
+        from starlette.responses import JSONResponse
+        from starlette.routing import Route
 
         async def cert(_request: Any) -> Any:
             self.calls.append({"method": "cert", "accepted": True, "as": "certificate"})
@@ -157,7 +159,7 @@ class MultiAuth:
         return Starlette(routes=[Route("/cert", cert, methods=["GET"]), Route("/cert/{rest:path}", cert)])
 
     async def _handle(self, request: Any) -> Any:
-        from starlette.responses import JSONResponse  # noqa: PLC0415
+        from starlette.responses import JSONResponse
 
         host = (request.headers.get("host") or "").split(":")[0]
         body = await request.body()
@@ -165,6 +167,8 @@ class MultiAuth:
         if path.startswith("/_control/"):
             if request.method == "POST" and path == "/_control/expire":
                 self.expire()
+            if request.method == "POST" and path == "/_control/down":
+                self.down = bool(json.loads(body or b"{}").get("down", True))
             if request.method == "POST" and path == "/_control/site":
                 self.site = str(json.loads(body or b"{}").get("id") or SITE)
             return JSONResponse(self.state())
@@ -185,6 +189,8 @@ class MultiAuth:
         }.get(method)
         if check is None:
             return JSONResponse({"error": "not_found", "message": path}, 404)
+        if self.down:
+            return JSONResponse({"error": "unavailable", "message": "The system is down."}, 503)
         accepted, given, who = check(request)
         self.calls.append({"method": method, "accepted": accepted, "credential": digest(given) if given else None})
         if not accepted:
@@ -210,7 +216,7 @@ class MultiAuth:
     def _fields(self, request: Any, path: str, body: bytes) -> Any:
         """A desk API in the formats real ones use: a chat method that takes only a form body, as Slack's do, a
         transfer that counts what reached it, and a search that shows the headers it was sent."""
-        from starlette.responses import JSONResponse  # noqa: PLC0415
+        from starlette.responses import JSONResponse
 
         shown = self.calls[-1]["headers"]
         # The path each call reached, so a use case can tell which version of a tool sent it.
@@ -231,7 +237,7 @@ class MultiAuth:
 
     def _sites(self, path: str) -> Any:
         """The sites an account can reach, as Atlassian's accessible-resources answers, and records on the one named."""
-        from starlette.responses import JSONResponse  # noqa: PLC0415
+        from starlette.responses import JSONResponse
 
         if path == "/sites/accessible":
             return JSONResponse([{"id": self.site, "name": "Harbor desk", "scopes": ["read"]}])
@@ -289,7 +295,7 @@ class MultiAuth:
         return True, token, str(claims.get("sub") or "client")
 
     async def _login(self, request: Any, body: bytes) -> Any:
-        from starlette.responses import JSONResponse, Response  # noqa: PLC0415
+        from starlette.responses import JSONResponse, Response
 
         path = request.url.path
         if path.endswith("/authorize") and request.method == "GET":
@@ -344,7 +350,7 @@ def multi_auth(token_expiry_s: int = 300) -> Generator[dict[str, Any]]:
     reach them, the hosts and range to list, the API and listener bases, the OAuth addresses, the credentials it
     accepts, the certificate listener's CA and a client certificate it accepts (as PEM text), `fake` (its state), and
     `sign_in(url, username)`, which plays a person's browser through the sign-in page and returns the code and state."""
-    import uvicorn  # noqa: PLC0415
+    import uvicorn
 
     with oauth_server(token_expiry_s) as upstream, tempfile.TemporaryDirectory() as tmp:
         folder = Path(tmp)

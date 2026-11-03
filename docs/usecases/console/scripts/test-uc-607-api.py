@@ -10,7 +10,6 @@ from __future__ import annotations
 from typing import Any
 
 from apps_walk import app_path, apps_stack, target
-from fake_multi_auth import API_HOST
 from usecase_harness import check, data, finish, until
 
 APP = "plugin:test.header-key"
@@ -111,8 +110,9 @@ with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
         own_row("builder"),
     )
 
-    # 31. A sign-in whose test fails still connects; the row warns with the test's reason.
-    w.gw.post("/v1/egress/hosts/remove", json={"value": API_HOST}, headers=w.who["security"])
+    # 31. A sign-in whose test fails still connects; the row warns with the test's reason. The system is down after the
+    # sign-in, so the test after it gets a 503.
+    w.m["fake"].down = True
     maya_signed = w.sign_in("approver", "plugin:test.person", person_app, "maya.own")
     maya_test = until(lambda: (own_row("approver").get("test") or {}).get("status") == "failed", timeout=30)
     maya = own_row("approver")
@@ -121,7 +121,7 @@ with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
         maya_signed == 200 and bool(maya_test) and bool((maya.get("test") or {}).get("message")),
         {"sign-in": maya_signed, "row": maya},
     )
-    w.gw.post("/v1/egress/hosts", json={"value": API_HOST, "note": "apps"}, headers=w.who["security"])
+    w.m["fake"].down = False
 
     # 32. The app's Settings read what is saved for each environment; the secret ones only say whether they are set.
     shown = data(w.kept(w.gw.get(f"/v1/connections/{person_app}", headers=w.who["admin"]))) or {}

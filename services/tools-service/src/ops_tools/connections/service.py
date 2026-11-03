@@ -32,7 +32,7 @@ from ops_service_kit.http import page_window, paged
 from ops_service_kit.ids import new_id
 from ops_service_kit.logging import get_logger
 
-from ..auth import AppSecret, Authenticator, AuthFailed, Prepared
+from ..auth import Authenticator, AuthFailed, Prepared
 from ..auth.assertion import SigningError, key_matches, read_certificate
 from ..auth.discovery import Discovery
 from ..auth.kinds import BY_ID, CERTIFICATE, Kind, kind_of, views
@@ -152,7 +152,6 @@ class ConnectionService:
         auth: Authenticator | None = None,
         http: httpx.AsyncClient | None = None,
         on_token: OnToken | None = None,
-        app_secret: AppSecret | None = None,
         plugin_settings: PluginSettings | None = None,
     ) -> None:
         """`console_url` is where a sign-in returns (`SIGN_IN_RETURN_PATH` on it); without it no sign-in starts.
@@ -174,8 +173,6 @@ class ConnectionService:
         self.http = http
         # A plugin's connection reads settings from the token answer (Salesforce's instance_url, c-564).
         self.on_token = on_token
-        # A plugin connection on the platform's own OAuth app reads its secret from the account (c-565).
-        self.app_secret = app_secret
         # A plugin's settings per environment as a person may read them (PluginHost.environment_settings); without it
         # an account's page shows none.
         self.plugin_settings = plugin_settings
@@ -877,10 +874,10 @@ class ConnectionService:
         *,
         plugin_settings: dict[str, Any] | None = None,
     ) -> None:
-        """Puts a plugin's connection on the platform's own OAuth app (c-565): the environment's settings, and its
-        `platform_app` naming the plugin, which sends a token exchange to the account's sealed secret, with no client
-        secret of the team's. Only a plugin's team switch calls this: the public settings route has no way to name the
-        account's app, so no team points a connection at it by hand."""
+        """Puts a plugin's connection on Ops AI's own OAuth app (c-565): the environment's settings, and its
+        `platform_app` naming the plugin, whose token exchange uses the install's client (plugin_clients), with no
+        client secret of the team's. Only a plugin's team switch calls this: the public settings route has no way to
+        name Ops AI's app, so no team points a connection at it by hand."""
         self._can(who, "manage")
         conn = await self._get(who, connection_id)
         status = "healthy" if conn["status"] in ("draft", "needs_reconnect", "error") else conn["status"]
@@ -903,8 +900,8 @@ class ConnectionService:
         settings = dict(env.get("settings") or {})
         held = await self._held(who, conn, env, ["clientSecret", "signingKey"], tool)
         secret = held.get("clientSecret")
-        if (app := env.get("platform_app")) and self.app_secret is not None:
-            secret = await self.app_secret(who.tenant_id, str(app))
+        if (app := env.get("platform_app")) and (installed := self.store.install_client(str(app))):
+            secret = installed.secret.get_secret_value()
         cert = settings.get("signingCertificate")
         return ClientProof(secret, held.get("signingKey"), str(cert) if cert else None)
 

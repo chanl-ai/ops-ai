@@ -231,15 +231,6 @@ POLICIES: tuple[Policy, ...] = (
 BY_KEY: dict[str, Policy] = {p.key: p for p in POLICIES}
 
 
-def _app_client(value: object) -> bool:
-    """A plugin's platform OAuth app as the policy holds it: exactly {"id": a client id}."""
-    if not isinstance(value, dict):
-        return False
-    v = cast(dict[Any, Any], value)
-    cid = v.get("id")
-    return set(v) == {"id"} and isinstance(cid, str) and 0 < len(cid) <= 500
-
-
 def check_value(key: str, value: Any) -> Any:
     """The value if the policy takes it; ValueError naming the key otherwise."""
     policy = BY_KEY.get(key)
@@ -277,19 +268,12 @@ def check_value(key: str, value: Any) -> Any:
                 break
             e = cast(dict[str, Any], entry)
             locked: object = e.get("locked") or {}
-            if set(e) - {"enabled", "locked", "client"} or not isinstance(locked, dict):
+            if set(e) - {"enabled", "locked"} or not isinstance(locked, dict):
                 break
             fixed = cast(dict[Any, Any], locked)
             if not all(isinstance(k, str) and isinstance(v, str | int | float | bool) for k, v in fixed.items()):
                 break
-            # The platform's own OAuth app for the plugin (c-565): its client id only; the secret is sealed in
-            # tools-service at the account and never travels in a policy.
-            client: object = e.get("client")
-            if client is not None and not _app_client(client):
-                break
             out[str(pid)] = {"enabled": e["enabled"], "locked": {str(k): v for k, v in fixed.items()}}
-            if client is not None:
-                out[str(pid)]["client"] = {"id": str(cast(dict[str, Any], client)["id"])}
         else:
             return out
     takes = {
@@ -300,9 +284,7 @@ def check_value(key: str, value: Any) -> Any:
         "names": "a list of up to 500 names, each 1 to 200 characters",
         "publish_modes": f"an object of area ({', '.join(PUBLISH_AREAS)}) to mode ({', '.join(PUBLISH_MODES)})",
         "choice": f"one of {', '.join(c[0] for c in policy.choices)}",
-        "plugins": (
-            'an object of plugin id to {"enabled": true or false, "locked": {setting: value}, "client": {"id": text}}'
-        ),
+        "plugins": ('an object of plugin id to {"enabled": true or false, "locked": {setting: value}}'),
     }
     raise ValueError(f"{key} takes {takes[policy.kind]}")
 

@@ -17,12 +17,11 @@ import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { type AppCredential, useAppCredentials, useSetAppSecret } from '@/hooks/systems-queries';
+import { type AppCredential, useAppCredentials, useSetCredentialSecret } from '@/hooks/systems-queries';
 import { shortDate } from '@/lib/format';
 
 const STATUS: Record<AppCredential['status'], string> = { working: 'Working', not_tested: 'Not tested', failing: 'Failing' };
 /** The plugin an app credential belongs to (its app is plugin:<id>); a custom app has none, and no secret to replace here. */
-const pluginOf = (c: AppCredential) => (c.app.startsWith('plugin:') ? c.app.slice('plugin:'.length) : null);
 
 const columns = (onEdit: (c: AppCredential) => void): ColumnDef<AppCredential>[] => [
   { accessorKey: 'name', header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />, cell: ({ row }) => <span className="font-medium">{row.original.name}</span> },
@@ -56,7 +55,7 @@ const columns = (onEdit: (c: AppCredential) => void): ColumnDef<AppCredential>[]
     header: () => null,
     // Only the team's own client has a secret to replace; Ops AI's app is the platform's.
     cell: ({ row }) =>
-      row.original.type === 'own' && pluginOf(row.original) ? (
+      row.original.type === 'own' && row.original.credentialId ? (
         <Button size="sm" variant="ghost" onClick={() => onEdit(row.original)} data-testid={`app-credential-edit-${row.original.id}`}>
           Edit
         </Button>
@@ -66,7 +65,8 @@ const columns = (onEdit: (c: AppCredential) => void): ColumnDef<AppCredential>[]
 
 /**
  * App credentials (U4): the OAuth clients the team's apps sign in with, Ops AI's own app or the team's, from
- * GET /v1/app-credentials. Edit replaces the team's client secret (PUT /v1/plugins/{id}/app-secret), sealed on save.
+ * GET /v1/app-credentials. Edit replaces the team's own client secret (PUT /v1/app-credentials/{id}/secret), sealed on
+ * save; Ops AI's app is the install's and has none to replace here.
  */
 export function AppCredentialsPanel() {
   const creds = useAppCredentials();
@@ -101,7 +101,7 @@ export function AppCredentialsPanel() {
 }
 
 function EditSecretDialog({ credential, onClose }: { credential: AppCredential | null; onClose: () => void }) {
-  const set = useSetAppSecret();
+  const set = useSetCredentialSecret();
   const [secret, setSecret] = React.useState('');
   React.useEffect(() => {
     setSecret('');
@@ -122,10 +122,9 @@ function EditSecretDialog({ credential, onClose }: { credential: AppCredential |
             isLoading={set.isPending}
             disabled={!secret.trim()}
             onClick={() =>
-              credential &&
-              pluginOf(credential) &&
+              credential?.credentialId &&
               set.mutate(
-                { path: { plugin_id: pluginOf(credential)! }, body: { clientSecret: secret.trim() } },
+                { path: { credential_id: credential.credentialId }, body: { clientSecret: secret.trim() } },
                 { onSuccess: () => (toast.success(`Saved the client secret of ${credential.name}`), onClose()), onError: (e) => toast.error('Couldn’t save the client secret', { description: e.message }) },
               )
             }

@@ -15,7 +15,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
 
-from ops_access import Access
 from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.versions import declarations, diff, digest, tools_of
 from ops_service_kit.errors import ApiError, Conflict, NotFound, ServiceUnavailable, ValidationFailed
@@ -30,7 +29,6 @@ from ..modules.directory import Directory
 from ..modules.routes import ERRORS
 from ..modules.service import Caller
 from ..modules.tool_users import ToolUsers
-from ..store.plugin_app_keys import PluginAppKeys
 from .host import PluginHost, fixed_fields, per_environment, readable, render, sign_in_fixed
 
 # A credential value: a key, a password or token, or a PEM certificate or private key, the longest of them.
@@ -90,15 +88,11 @@ class FeatureOff(ApiError):
 
 
 class PlatformApp(_Wire):
-    """The platform's own OAuth app for a plugin: its client id, and whether the account holds its secret. The secret
-    itself is never shown."""
+    """Ops AI's own OAuth app for a plugin, from the install config: its client id, and whether the install holds its
+    secret. The secret itself is never shown."""
 
     client_id: str | None
     secret_set: bool
-
-
-class AppSecretIn(_Wire):
-    client_secret: str = Field(min_length=1, max_length=2000)
 
 
 class PluginDisplay(_Wire):
@@ -224,14 +218,17 @@ def plugins_router(
     host: PluginHost,
     connections: ConnectionService,
     directory: Directory,
-    app_keys: PluginAppKeys,
     *,
     users: ToolUsers | None = None,
 ) -> APIRouter:
     """`users` answers who uses an app's tools (agents-service); without it that route answers 503, never "nobody"."""
     caller = caller_in(directory)
-    access = Access(security_team=connections.security_team)
     r = APIRouter(tags=["plugins"], responses=ERRORS)
+
+    def _ops_client_id(plugin_id: str) -> str | None:
+        """The client id of Ops AI's own app for the plugin, from the install config; None when the install set none."""
+        found = connections.store.install_client(plugin_id)
+        return found.id if found else None
 
     def _plugin(plugin_id: str) -> Plugin:
         plugin = host.plugins.get(plugin_id)
@@ -256,8 +253,8 @@ def plugins_router(
             tools=[m.operation(t) for t in _team_tools(plugin, b)],
             knowledge_sources=[s.name for s in m.knowledge_sources],
             platform_app=PlatformApp(
-                client_id=await host.switches.app_client_id(who.tenant_id, m.id),
-                secret_set=await app_keys.held(who.tenant_id, m.id),
+                client_id=_ops_client_id(m.id),
+                secret_set=_ops_client_id(m.id) is not None,
             ),
             display=PluginDisplay(**m.display.model_dump()),
             team_version=b.get("version") if host.versions else None,
@@ -301,13 +298,6 @@ def plugins_router(
             tools=[ToolChange.model_validate(t) for t in tools],
         ).model_dump(by_alias=True)
 
-    def _account_admin(who: Caller) -> str:
-        """settings.manage in the Security team: an account admin, never a team admin (c-565)."""
-        if who.principal is None:
-            raise ValidationFailed("Only an account admin sets the platform's app.", code="admin_only")
-        access.can(who.principal, "settings", "manage", what="the platform's plugin apps", code="admin_only")
-        return who.name
-
     @r.get("/v1/plugins", response_model=Envelope[PluginList])
     async def list_plugins(who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The installed plugins as this team sees them, and the ones that failed to load with why."""
@@ -317,27 +307,6 @@ def plugins_router(
                 failed=[FailedPlugin(name=i.name, error=i.error or "") for i in host.loaded if not i.ok],
             ).model_dump(by_alias=True)
         )
-
-    @r.put("/v1/plugins/{plugin_id}/app-secret", response_model=Envelope[PluginView])
-    async def set_app_secret(  # pyright: ignore[reportUnusedFunction]
-        plugin_id: str, body: AppSecretIn, who: Annotated[Caller, Depends(caller)]
-    ) -> JSONResponse:
-        """Seals the platform's own OAuth app secret for the plugin at the account (c-565). Its client id is in the
-        plugins policy; a team with no app of its own signs in with this one. The answer never carries the secret."""
-        by = _account_admin(who)
-        plugin = _plugin(plugin_id)
-        await app_keys.save(who.tenant_id, plugin.manifest.id, body.client_secret, by=by)
-        return ok(await _view(who, plugin))
-
-    @r.delete("/v1/plugins/{plugin_id}/app-secret", response_model=Envelope[PluginView])
-    async def delete_app_secret(  # pyright: ignore[reportUnusedFunction]
-        plugin_id: str, who: Annotated[Caller, Depends(caller)]
-    ) -> JSONResponse:
-        """Removes the platform's app secret: teams on the platform's app cannot sign in again until it is set."""
-        _account_admin(who)
-        plugin = _plugin(plugin_id)
-        await app_keys.delete(who.tenant_id, plugin.manifest.id)
-        return ok(await _view(who, plugin))
 
     @r.put("/v1/plugins/{plugin_id}/team", response_model=Envelope[PluginView])
     async def set_team_plugin(  # pyright: ignore[reportUnusedFunction]
@@ -507,10 +476,9 @@ def plugins_router(
             for f in kind.requires({**plain, **sign_in_fixed(plugin.manifest)}, each_person=each_person)
             if f.secret and f.name not in secret and not (kind.holds_token and f.name == "clientSecret")
         ]
-        if kind.holds_token and not body.client_id and not await host.switches.app_client_id(who.tenant_id, m.id):
+        if kind.holds_token and not body.client_id and _ops_client_id(m.id) is None:
             raise ValidationFailed(
-                f"Give the OAuth app's client id to turn {m.title} on, or ask an account admin to set up "
-                "the platform's app for it.",
+                f"Give the OAuth app's client id to turn {m.title} on; this install has no app of its own for it.",
                 code="client_missing",
             )
         if missing:
@@ -584,15 +552,17 @@ def plugins_router(
             keep_own = not body.client_id and not body.client_secret and bool(before.get("clientId"))
             keep_own = keep_own and not held.get("platform_app")
             if not body.client_id and not keep_own:
-                platform_id = await host.switches.app_client_id(who.tenant_id, m.id)
+                platform_id = _ops_client_id(m.id)
             client_id = body.client_id or (before.get("clientId") if keep_own else platform_id)
             if not client_id:
                 raise ValidationFailed(
-                    f"Give the OAuth app's client id to turn {m.title} on, or ask an account admin to set up "
-                    "the platform's app for it.",
+                    f"Give the OAuth app's client id to turn {m.title} on; this install has no app of its own for it.",
                     code="client_missing",
                 )
-            env |= {"clientId": client_id, "scopes": " ".join(s.id for s in c.scopes)}
+            # Ops AI's app is named by the environment (platform_app), never copied into it.
+            env |= ({} if platform_id is not None else {"clientId": client_id}) | {
+                "scopes": " ".join(s.id for s in c.scopes)
+            }
             for key, template in (
                 ("authorizeUrl", c.authorize_url),
                 ("tokenUrl", c.token_url),

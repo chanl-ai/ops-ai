@@ -68,6 +68,7 @@ class AppCredential(TypedDict, closed=True):
     app: str
     appName: str
     created: str
+    credentialId: NotRequired[str | None]
     id: str
     name: str
     permissions: list[str]
@@ -89,10 +90,6 @@ class AppCredentialIn(TypedDict, closed=True):
 class AppMe(TypedDict, closed=True):
     account: NotRequired[str | None]
     connected: bool
-
-
-class AppSecretIn(TypedDict, closed=True):
-    clientSecret: str
 
 
 class AppSkill(TypedDict, closed=True):
@@ -319,6 +316,10 @@ class CredentialCheckIn(TypedDict, closed=True):
     code: NotRequired[str | None]
     environment: NotRequired[Literal["test", "production"]]
     state: NotRequired[str | None]
+
+
+class CredentialSecretIn(TypedDict, closed=True):
+    clientSecret: str
 
 
 class DecisionIn(TypedDict, closed=True):

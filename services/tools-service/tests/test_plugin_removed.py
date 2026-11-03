@@ -25,7 +25,6 @@ from ops_tools.plugins.switches import InstallSwitches
 from ops_tools.secrets import SecretResolver
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.modules import ModuleStore
-from ops_tools.store.plugin_app_keys import PluginAppKeys
 from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.store.secrets import SecretStore
 from ops_tools.systems import Systems, systems_router
@@ -51,19 +50,18 @@ async def rig(
     )
     app = build_app(engine, seed, tenant, auth=auth)
     vault = credentials()
-    keys = PluginAppKeys(engine, vault)
     store = ConnectionStore(engine)
     directory = Directory.from_seed(seed, datetime.now(UTC))
     connections = ConnectionService(
         store, SecretResolver(SecretStore(engine), vault),
         vault, Tokens(store, vault, None, None), directory, egress=None,
-        console_url=CONSOLE_URL, app_secret=keys.value,
+        console_url=CONSOLE_URL,
     )  # fmt: skip
     host = PluginHost(
         ModuleStore(engine), PluginBindings(engine), InstallSwitches(Policy({})), [Loaded("desk", desk, None)], store
     )
-    app.include_router(plugins_router(host, connections, directory, keys))
-    app.include_router(systems_router(Systems(connections, ModuleStore(engine), host, keys), directory))
+    app.include_router(plugins_router(host, connections, directory))
+    app.include_router(systems_router(Systems(connections, ModuleStore(engine), host), directory))
     hooks = {"response": [response_checker(app)]}
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://tools", event_hooks=hooks

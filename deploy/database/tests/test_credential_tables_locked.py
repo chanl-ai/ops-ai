@@ -27,6 +27,7 @@ from ops_models.store import tables as models_tables
 from ops_store import isolation
 from ops_store.schema import isolation_kind
 from ops_tools.store.connections import (
+    app_credentials,
     connect_links,
     connection_audit,
     connection_environments,
@@ -34,7 +35,6 @@ from ops_tools.store.connections import (
     connections,
     oauth_states,
 )
-from ops_tools.store.plugin_app_keys import plugin_app_keys
 from ops_tools.store.secrets import secret_audit, tool_secrets
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -51,7 +51,7 @@ TOOLS = (
     oauth_states,
     connect_links,
     tool_secrets,
-    plugin_app_keys,
+    app_credentials,
     connections,
     connection_audit,
     secret_audit,

@@ -47,7 +47,6 @@ from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.egress import EgressStore
 from ops_tools.store.mocks import MockStore
 from ops_tools.store.modules import ModuleStore
-from ops_tools.store.plugin_app_keys import PluginAppKeys
 from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.store.secrets import SecretStore
 from ops_tools.store.send_policies import SendPolicies
@@ -99,7 +98,6 @@ def document() -> dict[str, Any]:
                 PluginHost(ModuleStore(engine), PluginBindings(engine), InstallSwitches(None)),
                 connection_service,
                 directory,
-                PluginAppKeys(engine, credentials),
             ),
             plugin_templates_router(PluginHost(ModuleStore(engine), PluginBindings(engine), InstallSwitches(None))),
             systems_router(Systems(connection_service, ModuleStore(engine)), directory),

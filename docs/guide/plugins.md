@@ -261,16 +261,15 @@ and the policy below only turns it off again. When the policy cannot be read and
 counts as off. The team's switch, its settings and its sign-in are the App's Connect window in the console (apps.md,
 Turn an App on); the calls below are the same steps for a script.
 
-The platform's own OAuth app, which every team uses unless it brings its own, can come from the install config instead
-of an admin's calls. Register the app once with the vendor and set its client in the deploy's secret store:
+Ops AI's own OAuth app for a plugin, which every team uses unless it brings its own, comes only from the install
+config. Register the app once with the vendor and set its client in the deploy's secret store:
 `OPS_PLUGIN_CLIENTS='{"opsai.salesforce": {"id": "<client id>", "secret": "<client secret>"}}'`. tools-service reads
-it at start and never writes the secret to the database. A client id in the policy and a secret saved by an account
-admin take its place; set both, since a saved id with the install's secret signs in with neither app.
+it at start and never writes the secret to the database; no route sets or shows it. A team's own client is kept once,
+in `app_credentials`, and the accounts that sign in with it point at that row.
 
 | Who | Call | What it does |
 |---|---|---|
 | Platform admin (`settings.manage`) | platform-service `PUT /v1/policies/plugins` with `{value: {"opsai.salesforce": {enabled: false, locked: {api_version: "61.0"}}}}` | `enabled: false` stops every team's calls within seconds; `locked` fixes any lockable setting |
-| Account admin (`settings.manage`) | the policy entry's `client: {id}`, then tools-service `PUT /v1/plugins/opsai.salesforce/app-secret` with `{clientSecret}` | Sets up the platform's own OAuth app once for every team, in place of the install config's; the secret is sealed at the account and no read returns it |
 | Team admin (`connections.manage`) | tools-service `PUT /v1/plugins/opsai.salesforce/team` with `{enabled, settings, signIn, kind, credentials, clientId, clientSecret}` | Turns it on for the team and makes the team's connection, whole, for its sign-in kind (below); off again keeps the connection and settings |
 | Security | nothing for the plugin's own hosts | The hosts in the manifest's `egress` (rendered with the team's settings) are reached by that plugin's sign-in, token, test and tool requests without listing; no other call reaches them unlisted. Private, loopback, link-local and metadata addresses stay refused |
 | Team admin | `POST /v1/connections/{id}/sign-in`, then `/sign-in/complete` | Signs the team in; `from_token` settings are read from the token answer here |

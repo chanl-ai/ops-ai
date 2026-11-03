@@ -43,7 +43,6 @@ from .plugins.host import PluginHost, fixed_fields, module_id_of, per_environmen
 from .plugins.templates import view_of
 from .store.connections import ConnectionStore
 from .store.modules import ModuleStore
-from .store.plugin_app_keys import PluginAppKeys
 from .store.team_defaults import TeamDefaults
 
 AccountState = Literal["connected", "not_signed_in", "expired", "refused", "revoked"]
@@ -136,6 +135,8 @@ class AppCredential(Out):
 
     # The account the credential is set on; the Credentials page opens it.
     id: str
+    # The team's own client's row (app_credentials), whose secret Replace changes; none on Ops AI's app.
+    credential_id: str | None = None
     name: str
     app: str
     app_name: str
@@ -157,6 +158,10 @@ class AppCredentialIn(In):
     # The permissions to ask for, among the app's own; left out, all of them. A plugin's required ones are always asked.
     scopes: list[Annotated[str, Field(min_length=1, max_length=200)]] | None = Field(default=None, max_length=100)
     environment: ConnectionEnvironment = "production"
+
+
+class CredentialSecretIn(In):
+    client_secret: str = Field(min_length=1, max_length=2000)
 
 
 class AppTool(Out):
@@ -236,13 +241,11 @@ class Systems:
         connections: ConnectionService,
         modules: ModuleStore,
         plugins: PluginHost | None = None,
-        app_keys: PluginAppKeys | None = None,
         calls: ModuleService | None = None,
     ) -> None:
         self.connections = connections
         self.modules = modules
         self.plugins = plugins
-        self.app_keys = app_keys
         # The call log, for an app's Usage tab; without it the page lists no runs.
         self.calls = calls
 
@@ -292,9 +295,7 @@ class Systems:
                 conn = by_id.get(str(b.get("connection_id") or ""))
                 if conn is not None:
                     taken.add(str(conn["id"]))
-                platform = bool(await self.plugins.switches.app_client_id(who.tenant_id, pid)) and (
-                    self.app_keys is not None and await self.app_keys.held(who.tenant_id, pid)
-                )
+                platform = self.connections.store.install_client(pid) is not None
                 locked = await self.plugins.switches.locked(who.tenant_id, pid)
                 own = per_environment(m)
                 settings = [
@@ -521,6 +522,7 @@ async def credential_row(
         "app": app,
         "appName": app_name,
         "type": "ops_ai" if held.get("platform_app") else "own",
+        "credentialId": held.get("credential_id"),
         "permissions": scopes,
         "accounts": len(tokens),
         "status": "working" if said == "ok" else "failing" if said == "failed" else "not_tested",
@@ -569,6 +571,34 @@ async def add_app_credential(systems: Systems, who: Caller, i: AppCredentialIn) 
     fresh = await store.get(who.tenant_id, str(conn["id"]))
     assert fresh is not None
     return await credential_row(store, fresh, str(card["id"]), str(card["name"]), plugin)
+
+
+async def replace_credential_secret(systems: Systems, who: Caller, credential_id: str, secret: str) -> dict[str, Any]:
+    """A new client secret for the team's own app credential, sealed through the credential port; the client id,
+    permissions and every account on it stay. Ops AI's app has no row here, so it is never changed this way."""
+    systems.connections.check(who, "manage", what="app credentials")
+    store = systems.connections.store
+    found = await store.credential_environment(who.tenant_id, credential_id)
+    if found is None:
+        raise NotFound(f"App credential {credential_id}")
+    conn, environment = found
+    held = cast(dict[str, dict[str, Any]], conn["environments"])[environment]
+    await systems.connections.set_environment(
+        who,
+        str(conn["id"]),
+        environment,
+        {
+            "revision": int(conn["revision"]),
+            "settings": dict(held.get("settings") or {}),
+            "secret_values": {"clientSecret": secret},
+        },
+    )
+    card = next((c for c in await systems.cards(who) if c.get("connectionId") == conn["id"]), None)
+    fresh = await store.get(who.tenant_id, str(conn["id"]))
+    assert fresh is not None
+    plugin = systems.plugins.plugins.get(str(card.get("pluginId"))) if card and systems.plugins else None
+    app, name = (str(card["id"]), str(card["name"])) if card else (str(conn["id"]), str(conn["name"]))
+    return await credential_row(store, fresh, app, name, plugin)
 
 
 async def app_credentials(systems: Systems, who: Caller) -> list[dict[str, Any]]:
@@ -727,6 +757,14 @@ def systems_router(systems: Systems, directory: Directory) -> APIRouter:
         """Adds the team's own OAuth app to one of its apps: client id, secret and permissions. Team admins only; the
         answer is the Credentials page's row, with no secret."""
         return ok(AppCredential(**await add_app_credential(systems, who, body)).model_dump(by_alias=True), 201)
+
+    @r.put("/v1/app-credentials/{credential_id}/secret", response_model=Envelope[AppCredential])
+    async def set_app_credential_secret(  # pyright: ignore[reportUnusedFunction]
+        credential_id: str, body: CredentialSecretIn, who: Annotated[Caller, Depends(caller)]
+    ) -> JSONResponse:
+        """Replaces the client secret of the team's own app credential. Team admins only; the answer has no secret."""
+        row = await replace_credential_secret(systems, who, credential_id, body.client_secret)
+        return ok(AppCredential(**row).model_dump(by_alias=True))
 
     @r.get("/v1/apps/{app_id}", response_model=Envelope[AppPage])
     async def get_app(app_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

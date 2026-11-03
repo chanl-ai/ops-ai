@@ -64,11 +64,7 @@ async def test_the_status_is_the_last_test_with_my_account(world: World, tenant:
 
 
 async def test_an_app_on_ops_ais_app_reads_so_and_no_secret_comes_back(world: World, tenant: str) -> None:  # noqa: F811
-    sealed = "platform-app-secret-7f3a"
-    put = await world.client.put(
-        f"/v1/plugins/{ID}/app-secret", json={"clientSecret": sealed}, headers=person(tenant, *SAM)
-    )
-    assert put.status_code == 200, put.text
+    sealed = "platform-app-secret-7f3a"  # the install's (test_plugin_credentials.INSTALL)
     on = await world.client.put(f"/v1/plugins/{ID}/team", json={"enabled": True}, headers=admin(tenant))
     assert on.status_code == 200, on.text
     r = await world.client.get("/v1/app-credentials", headers=admin(tenant))

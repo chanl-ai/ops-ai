@@ -26,7 +26,6 @@ from ops_tools.secrets import SecretResolver
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.egress import EgressStore
 from ops_tools.store.modules import ModuleStore
-from ops_tools.store.plugin_app_keys import PluginAppKeys
 from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.store.secrets import SecretStore
 from ops_tools.systems import Systems, systems_router
@@ -34,6 +33,7 @@ from ops_tools.systems import Systems, systems_router
 from .conftest import CONSOLE_URL, build_app, credentials, response_checker
 from .plugin_desk import plugin as desk
 from .plugin_kinds.kinds_header_key import plugin as header_key
+from .test_plugin_credentials import INSTALL
 from .test_plugins import ID, Policy
 from .test_review_decisions import introspect, jwks, person
 
@@ -50,29 +50,24 @@ async def client(
         Identity(audience="tools", jwks=jwks, introspect=introspect, key_cache_s=0),
         ServiceAuth(audience="tools", verifiers=service_verifiers(settings, "tools"), scopes=settings.service_scopes),
     )
-    app = build_app(engine, seed, tenant, auth=auth)
+    app = build_app(engine, seed, tenant, auth=auth, install_clients=INSTALL)
     vault = credentials()
-    keys = PluginAppKeys(engine, vault)
-    store = ConnectionStore(engine)
+    store = ConnectionStore(engine, INSTALL)
     directory = Directory.from_seed(seed, datetime.now(UTC))
     connections = ConnectionService(
         store, SecretResolver(SecretStore(engine), vault),
         vault, Tokens(store, vault, None, None), directory, egress=None,
-        console_url=CONSOLE_URL, app_secret=keys.value,
+        console_url=CONSOLE_URL,
     )  # fmt: skip
     host = PluginHost(
         ModuleStore(engine),
         PluginBindings(engine),
-        InstallSwitches(
-            Policy(
-                {ID: {"enabled": True, "client": {"id": "platform-client-id"}}, "test.header-key": {"enabled": True}}
-            )
-        ),
+        InstallSwitches(Policy({ID: {"enabled": True}, "test.header-key": {"enabled": True}})),
         [Loaded("desk", desk, None), Loaded("header_key", header_key, None)],
         connections.store,
     )
-    app.include_router(plugins_router(host, connections, directory, keys))
-    app.include_router(systems_router(Systems(connections, ModuleStore(engine), host, keys), directory))
+    app.include_router(plugins_router(host, connections, directory))
+    app.include_router(systems_router(Systems(connections, ModuleStore(engine), host), directory))
     hooks = {"response": [response_checker(app)]}
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://tools", event_hooks=hooks

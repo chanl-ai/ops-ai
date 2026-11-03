@@ -172,6 +172,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "connections_set_app_credential_secret": {
+        "body": "json",
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/app-credentials/{credential_id}/secret",
+        "pathParams": ["credential_id"],
+        "query": [],
+        "stream": False,
+    },
     "connections_set_environment": {
         "body": "json",
         "headers": [],
@@ -325,15 +334,6 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
-    "plugins_delete_app_secret": {
-        "body": None,
-        "headers": [],
-        "method": "DELETE",
-        "path": "/v1/plugins/{plugin_id}/app-secret",
-        "pathParams": ["plugin_id"],
-        "query": [],
-        "stream": False,
-    },
     "plugins_knowledge_sources": {
         "body": None,
         "headers": [],
@@ -366,15 +366,6 @@ OPERATIONS: dict[str, Operation] = {
         "headers": [],
         "method": "GET",
         "path": "/v1/plugins/{plugin_id}/team/update",
-        "pathParams": ["plugin_id"],
-        "query": [],
-        "stream": False,
-    },
-    "plugins_set_app_secret": {
-        "body": "json",
-        "headers": [],
-        "method": "PUT",
-        "path": "/v1/plugins/{plugin_id}/app-secret",
         "pathParams": ["plugin_id"],
         "query": [],
         "stream": False,
@@ -730,6 +721,12 @@ class Operations:
         "Create App Credential"
         return self._t.call(SERVICE, OPERATIONS["connections_create_app_credential"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def connections_set_app_credential_secret(self, credential_id: str, body: CredentialSecretIn) -> AppCredential:
+        "Set App Credential Secret"
+        return self._t.call(
+            SERVICE, OPERATIONS["connections_set_app_credential_secret"], {"credential_id": credential_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
     def connections_get_app(self, app_id: str) -> AppPage:
         "Get App"
         return self._t.call(SERVICE, OPERATIONS["connections_get_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -939,14 +936,6 @@ class Operations:
     def plugins_add_account(self, plugin_id: str, body: AccountIn) -> ConnectionDetail:
         "Add Account"
         return self._t.call(SERVICE, OPERATIONS["plugins_add_account"], {"plugin_id": plugin_id}, {}, {}, body)  # type: ignore[no-any-return]
-
-    def plugins_set_app_secret(self, plugin_id: str, body: AppSecretIn) -> PluginView:
-        "Set App Secret"
-        return self._t.call(SERVICE, OPERATIONS["plugins_set_app_secret"], {"plugin_id": plugin_id}, {}, {}, body)  # type: ignore[no-any-return]
-
-    def plugins_delete_app_secret(self, plugin_id: str) -> PluginView:
-        "Delete App Secret"
-        return self._t.call(SERVICE, OPERATIONS["plugins_delete_app_secret"], {"plugin_id": plugin_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def plugins_set_team_plugin(self, plugin_id: str, body: TeamPluginIn) -> PluginView:
         "Set Team Plugin"
@@ -1241,6 +1230,14 @@ class AsyncOperations:
         "Create App Credential"
         return await self._t.call(SERVICE, OPERATIONS["connections_create_app_credential"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    async def connections_set_app_credential_secret(
+        self, credential_id: str, body: CredentialSecretIn
+    ) -> AppCredential:
+        "Set App Credential Secret"
+        return await self._t.call(
+            SERVICE, OPERATIONS["connections_set_app_credential_secret"], {"credential_id": credential_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
     async def connections_get_app(self, app_id: str) -> AppPage:
         "Get App"
         return await self._t.call(SERVICE, OPERATIONS["connections_get_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -1452,16 +1449,6 @@ class AsyncOperations:
     async def plugins_add_account(self, plugin_id: str, body: AccountIn) -> ConnectionDetail:
         "Add Account"
         return await self._t.call(SERVICE, OPERATIONS["plugins_add_account"], {"plugin_id": plugin_id}, {}, {}, body)  # type: ignore[no-any-return]
-
-    async def plugins_set_app_secret(self, plugin_id: str, body: AppSecretIn) -> PluginView:
-        "Set App Secret"
-        return await self._t.call(SERVICE, OPERATIONS["plugins_set_app_secret"], {"plugin_id": plugin_id}, {}, {}, body)  # type: ignore[no-any-return]
-
-    async def plugins_delete_app_secret(self, plugin_id: str) -> PluginView:
-        "Delete App Secret"
-        return await self._t.call(
-            SERVICE, OPERATIONS["plugins_delete_app_secret"], {"plugin_id": plugin_id}, {}, {}, None
-        )  # type: ignore[no-any-return]
 
     async def plugins_set_team_plugin(self, plugin_id: str, body: TeamPluginIn) -> PluginView:
         "Set Team Plugin"

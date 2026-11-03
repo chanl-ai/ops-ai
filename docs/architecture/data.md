@@ -90,11 +90,10 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | platform-service | `ops_platform.store.teams` | `TeamAdminStore` | RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.workspace` | `WorkspaceStore` | RLS, TRANSACTION | none |
 | tools-service | `ops_tools.store.calls` | `CallLog` | CAS, TRANSACTION | `gateway_calls`, `gateway_fences` |
-| tools-service | `ops_tools.store.connections` | `ConnectionStore` | CAS, TRANSACTION | `connect_links`, `connection_audit`, `connection_environments`, `connection_tokens`, `connections`, `oauth_states` |
+| tools-service | `ops_tools.store.connections` | `ConnectionStore` | CAS, TRANSACTION | `app_credentials`, `connect_links`, `connection_audit`, `connection_environments`, `connection_tokens`, `connections`, `oauth_states` |
 | tools-service | `ops_tools.store.egress` | `EgressStore` | TRANSACTION | `egress_audit`, `egress_hosts`, `egress_ranges` |
 | tools-service | `ops_tools.store.mocks` | `MockStore` | TRANSACTION | none |
 | tools-service | `ops_tools.store.modules` | `ModuleStore` | CAS, TRANSACTION | `module_approvals`, `module_egress_hosts`, `module_operations`, `module_versions`, `operation_mocks`, `service_outbox`, `tool_modules` |
-| tools-service | `ops_tools.store.plugin_app_keys` | `PluginAppKeys` | CAS | `plugin_app_keys` |
 | tools-service | `ops_tools.store.plugin_bindings` | `PluginBindings` | CAS | `plugin_bindings` |
 | tools-service | `ops_tools.store.rate_windows` | `RateWindows` | CAS | `operation_rate_windows` |
 | tools-service | `ops_tools.store.secrets` | `SecretStore` | TRANSACTION | `secret_audit`, `tool_secrets` |

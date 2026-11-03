@@ -16,7 +16,6 @@ from ops_tools.plugins.host import PluginHost, module_id_of
 from ops_tools.plugins.switches import InstallSwitches
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.modules import ModuleStore
-from ops_tools.store.plugin_app_keys import PluginAppKeys
 from ops_tools.store.plugin_bindings import PluginBindings
 
 from .plugin_desk import plugin as desk
@@ -28,7 +27,7 @@ from .test_plugin_credentials import (  # noqa: F401  # pyright: ignore[reportUn
 )
 from .test_plugins import ID, Policy
 
-Rig = tuple[httpx.AsyncClient, ConnectionService, PluginAppKeys]
+Rig = tuple[httpx.AsyncClient, ConnectionService, ConnectionStore]
 
 
 async def test_a_second_turn_on_for_the_sandbox_sets_the_connections_test_environment(
@@ -77,7 +76,7 @@ async def test_a_sandbox_sign_in_leaves_productions_instance_and_hosts_apart(
     host = PluginHost(
         ModuleStore(engine),
         PluginBindings(engine),
-        InstallSwitches(Policy({ID: {"enabled": True, "client": {"id": "platform-client-id"}}})),
+        InstallSwitches(Policy({ID: {"enabled": True}})),
         [Loaded("desk", desk, None)],
         ConnectionStore(engine),
     )
