@@ -1109,7 +1109,7 @@ class ToolModule(TypedDict, closed=True):
 
 
 class ToolRunIn(TypedDict, closed=True):
-    environment: NotRequired[Literal["test", "production"]]
+    environment: NotRequired[Literal["test", "production"] | None]
     input: NotRequired[dict[str, Any]]
     mode: Literal["mock", "real"]
 

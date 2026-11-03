@@ -612,7 +612,8 @@ class ToolRunIn(In):
 
     mode: Literal["mock", "real"]
     input: dict[str, Any] = Field(default_factory=dict[str, Any])
-    environment: ConnectionEnvironment = "test"
+    # Left out, a Real run uses test when the app's account is set for it, else production when that is.
+    environment: ConnectionEnvironment | None = None
 
 
 class ToolRunResult(ModuleTestResult):

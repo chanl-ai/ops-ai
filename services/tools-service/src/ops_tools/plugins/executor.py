@@ -34,7 +34,7 @@ from ops_plugin_sdk.manifest import Tool
 
 from ..auth import AuthFailed, Prepared
 from ..egress import EgressDenied, for_tenant
-from ..executor import scrubbed_values
+from ..executor import Trial, scrubbed_values
 from ..graph_mailbox import CursorRefused, CursorSeal
 from ..secrets import scrub
 
@@ -73,7 +73,9 @@ class PluginExecutor:
         actor: str,
         environment: str | None,
         acting_for: ActingForPerson | None,
+        trial: Trial | None = None,
     ) -> ToolOutcome:
+        """`trial` is a tool page's Real run: a data tool's request as sent is kept on it for the page to show."""
         plugin = self.host.by_module(module)
         if plugin is None:
             return _failure("PLUGIN_DISABLED", f"{module['display_name']} is not installed on this service.")
@@ -81,7 +83,9 @@ class PluginExecutor:
         # The team's version of the tool (c-609), so a query or paged tool runs as the team's version declared it.
         tool = self.host.tool_for(module, plugin, name)
         if tool is not None and tool.request is not None:
-            return await self._data(tool, module, op, args, actor=actor, environment=environment, acting_for=acting_for)
+            return await self._data(
+                tool, module, op, args, actor=actor, environment=environment, acting_for=acting_for, trial=trial
+            )
         if tool is None or tool.function is None:
             return _failure("PLUGIN_FAILED", f"{op['name']} has no Python function in {plugin.manifest.id}.")
         try:
@@ -190,6 +194,7 @@ class PluginExecutor:
         actor: str,
         environment: str | None,
         acting_for: ActingForPerson | None,
+        trial: Trial | None = None,
     ) -> ToolOutcome:
         req = tool.request
         assert req is not None
@@ -233,7 +238,14 @@ class PluginExecutor:
             return shown
 
         out = await self.http.run(
-            target, call, sent, actor=actor, environment=environment, acting_for=acting_for, on_answer=on_answer
+            target,
+            call,
+            sent,
+            actor=actor,
+            environment=environment,
+            acting_for=acting_for,
+            on_answer=on_answer,
+            trial=trial,
         )
         if not out.ok or not found:
             return out

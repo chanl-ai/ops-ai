@@ -4662,12 +4662,8 @@ export interface components {
          *     call, with every check, in the environment picked.
          */
         ToolRunIn: {
-            /**
-             * Environment
-             * @default test
-             * @enum {string}
-             */
-            environment: "test" | "production";
+            /** Environment */
+            environment?: ("test" | "production") | null;
             /** Input */
             input?: {
                 [key: string]: unknown;

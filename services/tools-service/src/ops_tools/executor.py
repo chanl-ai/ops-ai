@@ -522,7 +522,10 @@ class HttpExecutor(_Secrets):
                 return _failure("ANSWER_UNREADABLE", f"The answer from {host} could not be read ({type(e).__name__}).")
         if trial is not None:
             trial.raw = output
-            return ToolOutcome(True, output)
+            # A plugin tool's transform reads the team's settings, which only the gateway holds, and its page has no
+            # draft to try; so the gateway shapes its answer here, once, as for an agent's call.
+            if "plugin_settings" not in module:
+                return ToolOutcome(True, output)
         if op.get("response_transform"):
             # A plugin's transform also reads the team's merged settings (c-564); every other module's sees none.
             shaped, failed = await transform.apply(op["response_transform"], output, module.get("plugin_settings"))
@@ -750,7 +753,7 @@ class Executor:
             if self.plugins is None:
                 return _failure("PLUGIN_DISABLED", "This gateway runs no plugins.")
             return await self.plugins.run(
-                module, op, args, actor=actor, environment=environment, acting_for=caller.acting_for
+                module, op, args, actor=actor, environment=environment, acting_for=caller.acting_for, trial=trial
             )
         return await self.http.run(
             module,

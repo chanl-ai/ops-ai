@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-02",
+  "title": "Running an app's tool from its page",
+  "description": "Real on a tool page runs in Production when the app is set up only for Production, instead of asking for Test. An app tool's answer shows shaped once, with no false transform error, and the Request sent tab shows the request that went out.",
+  "tag": "fix"
+}

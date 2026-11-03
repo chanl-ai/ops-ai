@@ -14,7 +14,7 @@ from uuid import uuid4
 
 import httpx
 from apps_layer import run_path
-from fake_salesforce import salesforce
+from fake_salesforce import LIST_VIEW_ID, salesforce
 from usecase_harness import (
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
@@ -251,8 +251,8 @@ with ExitStack() as stack:
     )
 
     # 42. A Real run goes through the gateway's checks with the team's account and reaches Salesforce.
-    # The team signed in for production (step 5), so the Real run names that environment.
-    real = gw.post(run, json={"mode": "real", "environment": "production", "input": {"q": QUERY}}, headers=james)
+    # It names no environment: the team signed in for production only (step 5), so the run uses production.
+    real = gw.post(run, json={"mode": "real", "input": {"q": QUERY}}, headers=james)
     records = ((data(real) or {}).get("output") or {}).get("records") or [{}]
     check(
         "42 a Real run reads the case with the team's account through the gateway, and the call is logged",
@@ -261,6 +261,23 @@ with ExitStack() as stack:
         and bool((data(real) or {}).get("callId"))
         and QUERY in sf["fake"].state()["queries"][sent_before:],
         ("target: waits on P1", real.text[:300]),
+    )
+
+    # 50. A paged tool with a transform runs Real from its page: the answer is shaped once, as an agent gets it, and the
+    # page shows the request that was sent.
+    view_run = run_path(module, "salesforce_list_view")
+    listed = gw.post(view_run, json={"mode": "real", "input": {"list_view": LIST_VIEW_ID}}, headers=james)
+    shown = data(listed) or {}
+    view_rows = (shown.get("output") or {}).get("records") if isinstance(shown.get("output"), dict) else None
+    sent = shown.get("request") or {}
+    check(
+        "50 a paged tool's Real run shapes its answer once and shows the request it sent",
+        listed.status_code == 200
+        and not shown.get("transformError")
+        and bool(view_rows)
+        and isinstance(view_rows[0].get("fields"), dict)
+        and LIST_VIEW_ID in str(sent.get("url") or ""),
+        {"status": listed.status_code, "answer": listed.text[:400]},
     )
 
     # 45 (S7). A grant saved while an older publish request waits is what goes live, and chat offers it at

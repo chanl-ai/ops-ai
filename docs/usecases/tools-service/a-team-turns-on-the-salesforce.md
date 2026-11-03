@@ -14,7 +14,7 @@ Service: `tools-service` with platform-service, kb-service and agents-service. L
 | S5 | A developer validates and tests the plugin, and a broken plugin installed beside it stops nothing else | cli | 20-23 | 22 |
 | S6 | A team with no OAuth app of its own signs in with the platform's, a team with its own keeps it, and neither team's account serves the other | api | 24-28 | 26 |
 | S7 | On an install with no plugin, none loads and no plugin tool can be granted | cli | 29 | 29 |
-| S8 | The app's page lists its tools, and a builder runs one Mock (nothing reaches Salesforce) and Real (the team's account, through the gateway) | api | 40-42 | 42 |
+| S8 | The app's page lists its tools, and a builder runs one Mock (nothing reaches Salesforce) and Real (the team's account, through the gateway) | api | 40-42, 50 | 42 |
 | S9 | An agent granted a new tool offers it in chat right after it is published (task S7) | api | 45 | 45 |
 | S10 | A builder lists an app's tools and runs one Mock and Real through the Python SDK | sdk | 43 | 43 |
 | S11 | A builder lists an app's tools and runs one Mock and Real with `ops tools` | cli | 44 | 44 |
@@ -66,10 +66,11 @@ Service: `tools-service` with platform-service, kb-service and agents-service. L
 | 30 | Priya opens the source page while its answer names a source type this console does not know | The page opens with its Sync now button and no page error |
 | 40 | Priya reads the app's page (`GET /v1/apps/plugin:opsai.salesforce`) | Its tools list salesforce_query with its title |
 | 41 | James runs `POST /v1/tool-modules/{module}/operations/salesforce_query/run` with mode `mock` | 200, `mocked` true; Salesforce received no query |
-| 42 | James runs it with mode `real` in production, where the team signed in | 200 with case 00044818 and a call id; Salesforce received the query |
+| 42 | James runs it with mode `real`, naming no environment; the team signed in for production only | 200 with case 00044818 and a call id; Salesforce received the query |
 | 43 | Through the SDK on the Apps stack, James lists the header-key desk's tools and runs `header_key_get_record` Mock and Real (`ops.tools.list`, `ops.tools.run`) | The tool listed; Mock reaches nothing; Real reads rec-1042 |
 | 44 | James runs `ops tools list --app plugin:test.header-key`, then `ops tools run … --mock --input input.json` and `--real` | Each exits 0; Mock reaches nothing; Real reads rec-1042 |
 | 45 | With team_ops's publish policy at always, James makes an agent and asks to publish it (the request waits); he grants salesforce_query, saves and asks again; Maya approves; he chats "call salesforce_query …" | The request for the newest draft (201) replaces the one waiting; after Maya approves, the first chat turn calls salesforce_query and reads the case |
+| 50 | James runs `salesforce_list_view` Real from its page | 200; the records shaped once by the tool's transform, no transform error, and the request sent shown |
 | 47 | Sam turns Salesforce on for team_security with `signIn: person` and no team account; a call acting for Sam runs before he signs in | 403 `CONNECTION_NOT_LINKED`, not `PLUGIN_DISABLED` |
 | 48 | Sam signs in with his own account | 200; the app's page lists the account as his |
 | 49 | The same call acting for Sam | 200 with case 00044818; Salesforce received the query at the address the plugin names, under the instance his sign-in gave |

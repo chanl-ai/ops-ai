@@ -10431,13 +10431,19 @@
         "description": "One run of one tool from its page (c-616): Mock answers from its mock and reaches nothing, Real is the gateway\ncall, with every check, in the environment picked.",
         "properties": {
           "environment": {
-            "default": "test",
-            "enum": [
-              "test",
-              "production"
+            "anyOf": [
+              {
+                "enum": [
+                  "test",
+                  "production"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Environment",
-            "type": "string"
+            "title": "Environment"
           },
           "input": {
             "additionalProperties": true,
