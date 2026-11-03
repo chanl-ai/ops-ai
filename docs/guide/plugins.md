@@ -20,8 +20,8 @@ The manifest file is `plugin.yaml`. The Salesforce example lives at `plugins/sal
 | Manifest | `src/ops_plugin_salesforce/plugin.yaml` | Id, version, connection, settings, tools, knowledge sources and templates, schema `ops-ai/plugin@2` |
 | Entry point | `pyproject.toml`, group `ops_ai.plugins` | How tools-service finds the installed plugin: `salesforce = "ops_plugin_salesforce:plugin"` |
 | Plugin object | `src/ops_plugin_salesforce/__init__.py` | `plugin = Plugin.beside(__file__)`, which reads the manifest next to it |
-| Python tools | `src/ops_plugin_salesforce/kb.py` | Functions marked `@tool(access=...)`, named from the manifest by `function: module:name` |
-| Templates | `src/ops_plugin_salesforce/templates/` | Agent definitions the manifest lists under `templates`; validated only, not installable yet |
+| Python tools | a module beside the manifest | Functions marked `@tool(access=...)`, named from the manifest by `function: module:name`. Salesforce has none; `services/tools-service/tests/plugin_desk/kb.py` in ops-ai is a small one |
+| Templates | `src/ops_plugin_salesforce/templates/` | Agents, skills, workflows and document types the manifest lists under `templates`; a team adds its own copy from the App's Resources tab |
 | Tests | `tests/test_tools.py` | Each tool against a fake of the system, through the SDK's runner |
 
 ## The manifest
@@ -41,23 +41,40 @@ The manifest file is `plugin.yaml`. The Salesforce example lives at `plugins/sal
 | `headers` | Headers on every request the plugin makes, a Python tool's too; a tool's own `headers` add to them |
 | `egress` | The hosts a tool may reach, usually a setting such as `{instance_url}` |
 | `endpoint` | The base address every request template is relative to |
-| `tools` | Each tool's `name`, `title`, `description`, `access` (`read` or `write`), `input`, `headers`, `amount_max`, then either `request` (method, path, `query`, `body` or `form`, `paging`) and an optional Jinja `transform`, or `function` |
+| `tools` | Each tool's `name`, `title`, `description`, `access` (`read` or `write`), `input`, `headers`, `amount_max`, `requires_approval`, `rate_limit_per_min` (calls a minute, 60 when left out), `knowledge` (`list_items` or `get_item` for a knowledge source's tools), then either `request` (method, path, `query`, `body` or `form`, `paging`) and an optional Jinja `transform`, or `function` |
 | `knowledge_sources` | A source's `list` and `get` tools and its `schedule` |
-| `templates` | Each template's kind, id, file, and the tools and bindings it needs |
+| `templates` | Each template's `kind` (`agent`, `skill`, `workflow` or `document_type`), `id`, `version`, `path` (its file, relative to the manifest), and `requires`: `tools` (names without the prefix; validate refuses one the plugin lacks) and `bind` (what a team fills in on its copy, such as `{model_alias: chat}` or `{knowledge_base: "Salesforce articles"}`) |
+| `display` | What the console's App card shows: `logo` (a URL or a `data:` URI), `category`, `description` (one line) and `docs_url` (where an admin reads how to register the system's app or get its key) |
 
-A write tool waits for a person's approval before it runs unless its manifest entry sets `requires_approval: false`.
-A tool's `title` (at most 60 characters, such as "Find cases") is what the tools picker, the agent page and the
-approval cards show in place of its operation name.
+A write waits for a person's approval only when the team's approval policies say so (apps.md, Approvals) or its
+manifest entry sets `requires_approval: true`; approvals are off by default. A tool's `title` (at most 60
+characters, such as "Find cases") is what the tools picker, the agent page and the approval cards show in place of
+its operation name.
+
+### Request templates
+
+| Part | How it is written | Example |
+|---|---|---|
+| `path` | `{input}` for a path segment, URL-encoded; give the input a `pattern` so a value cannot change the path | `"/repos/{owner}/{repo}/issues/{number}"` |
+| `query` | A map of parameter names to text; `{{input}}` is checked and written by its `enum` or `format` (below), and text with no `{{...}}` is sent as written | `{state: "{{state}}", per_page: "50"}` |
+| `body` | One string of JSON. Each `{{input}}` is written as JSON, quotes included, so it is never put inside quotes; validate refuses one in quotes, one naming no input, and a body that is not JSON once the inputs are written in | `'{"body": {{body}}}'` sends `{"body": "Seen again on \"Leeds\"."}`; `"{{fields}}"` sends a whole object input |
+| `form` | A map for a form-encoded body (Headers, forms and sign-in steps) | Slack's `chat.postMessage` |
+
 
 ## Paging and queries
 
-A listing tool says how it reaches its next page in `request.paging`, with one of three rules:
+A listing tool says how it reaches its next page in `request.paging`, with one of five rules:
 
 | Rule | Fields | Example |
 |---|---|---|
 | `link` | `next`: the answer field holding the next page's address | Salesforce's `nextRecordsUrl`, Graph's `@odata.nextLink` |
+| `link_header` | none: the next page's address is the answer's `Link` header, `rel="next"` | GitHub, GitLab |
 | `token` | `next`: the answer field holding a token; `param`: the parameter it is sent back as | Salesforce UI API's `nextPageToken`, sent as `pageToken` |
 | `offset` | `items`: the answer's list; `limit`: the page size; `offset_param` and `limit_param` when not `offset` and `limit` | Salesforce's `parameterizedSearch`, with `limit_param: overallLimit` |
+| `page` | `limit`: the page size; `param` (default `page`) and `limit_param` (default `limit`); `start`, the first page's number (default 1); `items` when the list is not the whole answer | An API that takes `page=2&per_page=50` |
+
+With `offset` and `page`, a page shorter than `limit` is the last. A list answer that pages is returned as
+`{records: [...], next_cursor}` while there is a next page, and as the list on the last one.
 
 An agent's call gets one page and a `next_cursor`, and asks again with the cursor alone for the next. tools-service
 seals the cursor to the tenant, the connection and the tool, so a caller cannot change it or use it on another tool. A
@@ -163,8 +180,41 @@ uv run ops plugin test ../ops-ai-plugins/plugins/salesforce
 `validate` prints `OK <id> <version>: N tools, N knowledge sources, N templates`, or each problem with its field. It
 refuses, among others, an unknown sign-in kind, a write used as a knowledge tool, a template that needs a tool the
 plugin lacks, and a Python tool whose `access` disagrees with its manifest entry. `test` runs the plugin's own pytest
-suite with the plugin's `src/` on the path, so a plugin in its own repository needs no install to be tested. A test calls a tool as tools-service would with `ops_plugin_sdk.testing.call(plugin, tool, args, settings,
-Fake(client, token))`, where `client` is an `httpx.Client` bound to a fake of the system.
+suite with the plugin's `src/` on the path, so a plugin in its own repository needs no install to be tested. A test
+calls a tool as tools-service would with `ops_plugin_sdk.testing.call(plugin, tool, args, settings,
+Fake(client, token))`, where `client` is an `httpx.Client` bound to a fake of the system, usually through
+`httpx.MockTransport(handler)` with a handler that answers like the system (`tests/test_tools.py` in Salesforce,
+`tests/fake_github.py` in GitHub).
+
+`testing.call` builds the request with the same kit functions tools-service uses: each input left out as its
+`default`, the plugin's and the tool's `headers` (a header naming an unset setting left out), then the bearer token,
+which wins a name they share. A paged tool answers one page and a `next_cursor` that is the page state as plain JSON,
+which a test passes back as `{"cursor": ...}`.
+
+## Try a plugin on a local stack
+
+A local stack calls a plugin's system the way it calls any outside system: over https on port 443, to a host on the
+workspace's egress list. To point it at a fake of the system instead, serve the fake over https on this machine's
+private address (not 127.0.0.1) with a certificate for the system's host names, then tell tools-service where those
+names are and to trust that certificate. GitHub's `tests/fake_github.py` does the serving and prints what to set.
+
+| Step | How |
+|---|---|
+| 1. Start the stack with sign-in and fakes | `make up AUTH=platform DEMO_MODEL=fake`; in a lane add `OPS_STACK_FAKES=1` (CONTRIBUTING, Lanes) |
+| 2. Install the plugin | `uv run ops plugin install <plugin folder>`, then `make restart SVC=tools` and `make restart SVC=kb`, each with `AUTH=platform` in a lane |
+| 3. Serve the fake | `uv run --directory services/tools-service python <plugin>/tests/fake_github.py --dir .run/fake-github`; it prints its address, certificate and host map |
+| 4. Point tools-service at it | Write `OPS_EGRESS_EXTRA_CA=<certificate>` and `OPS_EGRESS_RESOLVE='{"github.test":"<address>","api.github.test":"<address>"}'` to `.run/demo-addons.env` (`.run/isolated/demo-addons.env` in a lane), then `make restart SVC=tools`. The stack reads that file after `.env` on every restart, and the map is used in development only |
+| 5. Allow the hosts | As a Security admin, Settings › Security › Egress: Add host for each name, and Add range for `<address>/32` |
+| 6. Turn it on and connect | Turn a plugin on, below, then the App's Connect window (apps.md) with the fake's client id and secret, and the system's settings pointed at the fake's names |
+
+A person's browser opens the sign-in page at the fake's name too, which no DNS answers. In a browser test, route that
+host to the fake's address, as `scripts/demo-salesforce/walk.mjs` does with `context.route`; by hand, add the names to
+`/etc/hosts` with the fake's address and accept its certificate once.
+
+To have an agent call a plugin's tool in chat on the fake model, grant the tool to the agent and send
+`call <tool> {json}`, such as `call github_list_issues {"owner": "acme-logistics", "repo": "dispatch-api"}`: the fake
+calls that tool with that JSON object as its input, then replies with the gist of the result (models.md, The test model). No real
+model is needed.
 
 ## Install a plugin
 
@@ -192,8 +242,10 @@ tools-service and kb-service load every plugin when they start. A plugin that fa
 ## Turn a plugin on
 
 An install with no plugin loads nothing: the plugin routes answer 404 and kb-service refuses a plugin source
-(`tools_unavailable`). A plugin that loaded is still off until two people turn it on.
-There is no Plugins page yet; both switches are API calls.
+(`tools_unavailable`). A plugin that loaded is still off until two people turn it on. The platform admin's switch is
+an API call; until it is set, the Apps catalog reads "No apps yet" for the plugin. The team's switch, its settings
+and its sign-in are the App's Connect window in the console (apps.md, Turn an App on); the calls below are the same
+steps for a script.
 
 | Who | Call | What it does |
 |---|---|---|
@@ -289,11 +341,11 @@ limit to Stripe in test mode.
 
 | Gap | Today |
 |---|---|
-| Plugins page in the console | API switches only |
-| Installing a template as a team's own agent | Templates are validated, not installed |
+| The platform admin's switch in the console | `PUT /v1/policies/plugins` only; the team's switch and sign-in are the App's Connect window |
+| An end-to-end use case in a plugin's own repository | A plugin repository has `ops plugin test`; end-to-end proof is ops-ai's use cases below, or a walk through Try a plugin on a local stack |
 | Per-person access lists | Stored on the binding, not enforced |
 | Adding a plugin knowledge source from the console | kb-service API only; the source page syncs and shows it |
 | Plugins running out of process | Python tools run inside tools-service |
 | Inbound webhooks a plugin declares | Designed; not built yet |
 | One rate window per connection, Retry-After, and recorded fakes with standard cases | Planned |
-| A signed client assertion and the JWT grant, and knowledge items over 25 MB | Planned; a client certificate on the TLS handshake works today |
+| Knowledge items over 25 MB | Planned |

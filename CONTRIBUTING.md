@@ -73,6 +73,14 @@ database. Lanes share one `.git` and the dependency caches, so a new lane is rea
 Every `make` target run inside a lane (`make up`, `make api`, `make usecase-test`) acts on that lane's own stack. The
 main checkout keeps its stack on the usual ports (console :3016).
 
+A lane's stack starts with dev sign-in and without the worker, models-service, the fake model or the fake bank.
+`OPS_STACK_FAKES=1 make up AUTH=platform DEMO_MODEL=fake` starts all of them and signs in through platform-service,
+whose **Sign in as a demo person** list has every seeded person, the admins included; dev sign-in offers three. Give
+`make restart` the same `AUTH=platform`: a lane's restart falls back to dev sign-in, and the console's calls to that
+service then answer 401. When
+`make up` stops at `port is already allocated`, another lane holds that port: set the one it names, such as
+`OPS_MAILPIT_SMTP_PORT=16025 OPS_MAILPIT_HTTP_PORT=16026`, on the same command.
+
 ## Commit messages
 
 Conventional commits: `type(scope): subject`.

@@ -22,6 +22,7 @@ from ops_plugin_sdk import Manifest, Plugin
 from ops_plugin_sdk.loader import Loaded, discover
 from ops_plugin_sdk.manifest import AfterSignIn, InputField, Tool
 from ops_plugin_sdk.paging import at
+from ops_plugin_sdk.paging import headers as request_headers
 from ops_plugin_sdk.versions import declarations, digest, tools_of
 from ops_plugin_sdk.versions import headers_of as declared_headers
 from ops_service_kit.settings import Settings
@@ -108,13 +109,9 @@ def header_settings(headers: Mapping[str, str], tools: Iterable[Tool]) -> set[st
 
 def headers_of(headers: Mapping[str, str], tool: Tool, settings: Mapping[str, Any]) -> list[dict[str, str]]:
     """A call's headers as a module operation holds them (`{key, value}`): the plugin's, then the tool's over them,
-    rendered from the call's settings. A header whose setting is unset is left out."""
-    out: dict[str, str] = {}
-    for name, template in {**headers, **tool.headers}.items():
-        value = render(template, settings)
-        if value is not None:
-            out[name] = value
-    return [{"key": k, "value": v} for k, v in out.items()]
+    rendered from the call's settings. A header whose setting is unset is left out. The kit's own rule, so `ops plugin
+    test` sends the same headers."""
+    return [{"key": k, "value": v} for k, v in request_headers(headers, tool, settings).items()]
 
 
 CURSOR = {

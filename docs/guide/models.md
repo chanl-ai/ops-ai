@@ -72,3 +72,12 @@ The release package includes a stand-in model endpoint that speaks the same Open
 fixed rules: plain text, or a tool call when a rule matches the message. It calls no provider and costs nothing. Use
 it to try the platform before your model endpoint is ready, and for automated checks; it is not for production. The
 automated use cases of each release run on it, so no real model call is made in testing.
+
+| It answers | When |
+|---|---|
+| A rule's tool call or text | The person's message matches a rule's `when` pattern and the rule's tool is offered. A development stack reads its rules from `services/models-service/seed/demo-fake-openai/script.json`; each rule is `{when, tool, arguments}` or `{when, text}`, with `after` and `result` to chain a step after a tool's result |
+| A call of the tool named | No rule matches and the message says `call <tool>` for a tool the agent holds: `call <tool> {json}` calls it with that JSON object as its input, `call <tool>` alone with none. Arguments that are not one JSON object are answered as text saying so |
+| The gist of a tool's result | The last message is a tool's result and no rule follows it |
+| A sentence naming the agent and the message | Anything else |
+
+A new tool needs no rule to be tried: `call <tool> {json}` in a chat with an agent that holds it.

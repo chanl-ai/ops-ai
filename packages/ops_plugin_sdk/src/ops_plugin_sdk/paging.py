@@ -72,11 +72,33 @@ def in_query(tool: Tool) -> set[str]:
     return {n for t in (req.query.values() if req else ()) for n in QUERY_VAR.findall(t)}
 
 
+SETTING = re.compile(r"\{([a-z_][a-z0-9_]*)\}")
+
+
+def with_defaults(tool: Tool, given: Mapping[str, Any]) -> dict[str, Any]:
+    """The call's inputs with each declared `default` in the place of an input it leaves out."""
+    filled = {n: f.default for n, f in tool.input.items() if f.default is not None and given.get(n) is None}
+    return {**dict(given), **filled}
+
+
+def headers(plugin_headers: Mapping[str, str], tool: Tool, settings: Mapping[str, Any]) -> dict[str, str]:
+    """A call's headers: the plugin's, then the tool's over them, `{setting}` rendered from the call's settings. A
+    header whose setting is unset is left out. The connection's sign-in is added after these and wins a shared name."""
+    out: dict[str, str] = {}
+    for name, template in {**plugin_headers, **tool.headers}.items():
+        if any(settings.get(n) in (None, "") for n in SETTING.findall(template)):
+            continue
+        out[name] = SETTING.sub(lambda m: str(settings[m.group(1)]), template)
+    return out
+
+
 def arguments(tool: Tool, given: Mapping[str, Any], state: Mapping[str, Any] | None) -> dict[str, Any]:
     """What a call sends besides its path: the checked inputs no query template takes, each query parameter rendered,
-    and the page's token or offset. InputRefused for a value its input does not allow."""
+    and the page's token or offset; an input left out takes its default. InputRefused for a value its input does not
+    allow."""
     req = tool.request
     assert req is not None
+    given = with_defaults(tool, given)
     values = {n: check(tool.input[n], v, n) for n, v in given.items() if n in tool.input}
     used = in_query(tool)
     sent: dict[str, Any] = {
@@ -94,21 +116,48 @@ def arguments(tool: Tool, given: Mapping[str, Any], state: Mapping[str, Any] | N
     elif paging is not None and paging.rule == "offset":
         sent[paging.offset_param] = int((state or {}).get("offset") or 0)
         sent[paging.limit_param] = paging.limit
+    elif paging is not None and paging.rule == "page":
+        sent[paging.param or "page"] = int((state or {}).get("page") or paging.start)
+        sent[paging.limit_param] = paging.limit
     return sent
 
 
-def next_page(paging: Paging | None, answer: Any, offset: int) -> tuple[Any, dict[str, Any]]:
-    """The answer without the system's own page address, and the next page's state: {} on the last page."""
+FOLLOWS_LINK = ("link", "link_header")
+_LINK = re.compile(r"<([^>]*)>((?:\s*;\s*[^;,]+)*)")
+_REL = re.compile(r"""rel\s*=\s*"?([^";]+)"?""", re.IGNORECASE)
+
+
+def link_next(header: str) -> str | None:
+    """The `rel="next"` address of an RFC 8288 Link header, or None."""
+    for m in _LINK.finditer(header):
+        rel = _REL.search(m.group(2))
+        if rel and "next" in rel.group(1).lower().split():
+            return m.group(1).strip()
+    return None
+
+
+def next_page(
+    paging: Paging | None, answer: Any, sent: Mapping[str, Any], headers: Mapping[str, str] | None = None
+) -> tuple[Any, dict[str, Any]]:
+    """The answer without the system's own page address, and the next page's state: {} on the last page. `sent` is
+    what the page was asked with; `headers` the answer's, for a Link header."""
     if paging is None:
         return answer, {}
+    if paging.rule == "link_header":
+        found = {k.lower(): v for k, v in (headers or {}).items()}.get("link")
+        link = link_next(found) if found else None
+        return answer, {"link": link} if link else {}
     if paging.rule in ("link", "token") and paging.next:
         value = at(answer, paging.next)
-        found = {("link" if paging.rule == "link" else "token"): str(value)} if value else {}
-        return without(answer, paging.next), found
-    rows = at(answer, str(paging.items))
-    if isinstance(rows, list) and paging.limit and len(cast(list[Any], rows)) >= paging.limit:
-        return answer, {"offset": offset + paging.limit}
-    return answer, {}
+        found_state = {("link" if paging.rule == "link" else "token"): str(value)} if value else {}
+        return without(answer, paging.next), found_state
+    rows = at(answer, paging.items) if paging.items else answer
+    full = isinstance(rows, list) and bool(paging.limit) and len(cast(list[Any], rows)) >= (paging.limit or 0)
+    if not full or paging.limit is None:
+        return answer, {}
+    if paging.rule == "page":
+        return answer, {"page": int(sent.get(paging.param or "page", paging.start)) + 1}
+    return answer, {"offset": int(sent.get(paging.offset_param, 0)) + paging.limit}
 
 
 def with_next(output: Any, cursor: str) -> dict[str, Any]:

@@ -32,6 +32,7 @@ from .test_plugins import AllowAll, Policy
 KEY = b"k" * 32
 INSTANCE = "https://alpha.my.pager.test"
 LINK_2 = "/api/query/01gPAGE2"
+ISSUES_2 = f"{INSTANCE}/api/issues?state=open&page=2"
 
 
 def answer(request: httpx.Request) -> httpx.Response:
@@ -47,6 +48,18 @@ def answer(request: httpx.Request) -> httpx.Response:
         offset = int(query.get("offset", ["0"])[0])
         rows = [{"Id": f"s{i}"} for i in range(3)][offset : offset + 2]
         return httpx.Response(200, json={"searchRecords": rows})
+    if path == "/api/issues":
+        page = query.get("page", ["1"])[0]
+        if page == "1":
+            nxt = "https://evil.example/api/issues?page=2" if query.get("state") == ["all"] else ISSUES_2
+            links = f'<{nxt}>; rel="next", <{INSTANCE}/api/issues?page=9>; rel="last"'
+            return httpx.Response(200, json=[{"n": 1}], headers={"Link": links})
+        first = f'<{INSTANCE}/api/issues?page=1>; rel="first"'
+        return httpx.Response(200, json=[{"n": int(page)}], headers={"Link": first})
+    if path == "/api/pages":
+        page, size = int(query["page"][0]), int(query["per_page"][0])
+        rows = [{"p": i} for i in range(1, 4)][(page - 1) * size : page * size]
+        return httpx.Response(200, json=rows)
     return httpx.Response(404, json={"error": path})
 
 
@@ -91,7 +104,9 @@ def rig(engine: AsyncEngine, store: ModuleStore, tenant: str) -> Rig:
 
 
 def test_a_tool_that_pages_or_checks_its_inputs_runs_through_the_plugin_executor(rig: Rig) -> None:
-    assert {rig.ops[f"pager_{t}"]["executor"] for t in ("find_cases", "list_view", "search")} == {"plugin"}
+    assert {rig.ops[f"pager_{t}"]["executor"] for t in ("find_cases", "list_view", "search", "issues", "pages")} == {
+        "plugin"
+    }
     cursor = next(f for f in rig.ops["pager_find_cases"]["input"] if f["name"] == "cursor")
     assert cursor["required"] is False
 
@@ -181,6 +196,30 @@ async def test_an_offset_page_ends_on_a_short_page(rig: Rig) -> None:
     assert "next_cursor" not in second.output
 
 
+async def test_a_link_header_page_follows_rel_next_alone_and_only_to_the_plugins_hosts(rig: Rig) -> None:
+    """GitHub and GitLab name the next page in a Link header, not in the answer: without the rule a list stopped at
+    page one."""
+    first = await rig.call("issues", {})
+    assert first.ok and first.output["records"] == [{"n": 1}] and first.output["next_cursor"], first
+    assert rig.sent() == {"state": ["open"]}
+    second = await rig.call("issues", {"cursor": first.output["next_cursor"]})
+    assert second.ok and second.output == [{"n": 2}], second
+    assert str(rig.seen[-1].url) == ISSUES_2
+    elsewhere = await rig.call("issues", {"state": "all"})
+    out = await rig.call("issues", {"cursor": elsewhere.output["next_cursor"]})
+    assert not out.ok and out.output["error"]["code"] == "EGRESS_DENIED", out
+    assert len(rig.seen) == 3
+
+
+async def test_a_numbered_page_keeps_its_query_and_ends_on_a_short_page(rig: Rig) -> None:
+    first = await rig.call("pages", {"state": "all"})
+    assert first.ok and first.output["records"] == [{"p": 1}, {"p": 2}], first
+    assert rig.sent() == {"state": ["all"], "page": ["1"], "per_page": ["2"]}
+    second = await rig.call("pages", {"cursor": first.output["next_cursor"]})
+    assert second.ok and second.output == [{"p": 3}], second
+    assert rig.sent() == {"state": ["all"], "page": ["2"], "per_page": ["2"]}
+
+
 class Keys:
     async def lookup(self, _tenant: str, _team: str | None, names: list[str], **_: Any) -> dict[str, str]:
         return dict.fromkeys(names, "s3cr3t-value")
@@ -200,7 +239,7 @@ async def test_the_answer_hook_sees_the_answer_only_after_secrets_are_scrubbed()
         "timeout_ms": 5000,
     }
     seen: list[Any] = []
-    out = await http.run(module, op, {}, on_answer=lambda a: seen.append(a) or a)
+    out = await http.run(module, op, {}, on_answer=lambda a, _h: seen.append(a) or a)
     assert out.ok and seen and "s3cr3t-value" not in json.dumps(seen), seen
 
 
@@ -213,7 +252,7 @@ async def test_a_failing_answer_hook_fails_the_call_cleanly() -> None:
         "timeout_ms": 5000,
     }
 
-    def broken(_: Any) -> Any:
+    def broken(_: Any, _headers: Any) -> Any:
         raise KeyError("next")
 
     out = await http.run(module, {"name": "get", "method": "GET", "path": "/thing"}, {}, on_answer=broken)

@@ -7,7 +7,7 @@ that text (a cited answer, or the not-in-the-knowledge-base reply). A rule with 
 back: when the assistant's last call was that tool and the result matches `result`, the rule's `tool` call or `text`
 follows, so a turn can chain reads. Named groups in `when` (which sees the knowledge block ahead of the question) and
 `result` fill `{name}` in the text and the arguments: a rule fires only on its evidence and quotes it. With no rule
-matching, the scripted provider's `call <tool>` convention applies. Otherwise the reply is text
+matching, the scripted provider's `call <tool> {json}` convention applies. Otherwise the reply is text
 naming the agent from the system prompt (`You are <name>,`) and the gist of the last message, so a caller can tell
 which prompt and which turn produced it. Token counts are word counts, the same as the scripted provider's.
 """
@@ -242,7 +242,8 @@ async def answer(script: Script, model: str, body: dict[str, Any]) -> Completion
             return Completion(None, prompt_tokens, 1, [call])
     if offered and last.get("role") == "user":
         scripted = await ScriptedProvider().complete(model, body)
-        if scripted.tool_calls:
+        # A call, or its refusal of arguments that are not one JSON object ("call <tool>: ..."), is the answer.
+        if scripted.tool_calls or (scripted.text or "").startswith("call "):
             return scripted
     agent = _agent(messages)
     if last.get("role") == "tool":

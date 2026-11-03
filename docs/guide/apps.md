@@ -9,7 +9,7 @@ team can add as its own copies. An App signs in with an Account: the team's, or 
 
 ## The Apps menu
 
-Open **Apps** in the sidebar. Four tabs sit at the top of every page in the menu.
+Open **Data Hub › Apps** in the sidebar. Four tabs sit at the top of every page in the menu.
 
 | Tab | What it holds |
 |---|---|
@@ -32,6 +32,22 @@ Open **Apps** in the sidebar. Four tabs sit at the top of every page in the menu
 
 An App is **Connected** only once an Account has signed in or a test has passed; saving settings alone does not count.
 A team admin turns an App on.
+
+### The first time a team turns on a plugin's App
+
+An App a plugin brings ([plugins guide](plugins.md)) needs two things before its card offers Connect, and its first
+Connect window asks for more than the steps above.
+
+| Who | What | Where |
+|---|---|---|
+| Platform admin | Allows the plugin for the install; until then the catalog reads "No apps yet" | `PUT /v1/policies/plugins` on platform-service; there is no console page for it yet |
+| Security admin | Lists the App's hosts, so its sign-in and calls may leave | **Settings › Security › Egress**, Add host (and Add range for a host on a private network) |
+| Team admin | Presses **Connect** | The window shows the App's settings (such as its API address), whose account calls use (the team's, each person's, or each person's with the team's as backup), the OAuth app (Ops AI's, or your own with its client ID and secret and the return address to register), and the **Production** environment with its sign-in address. **Save and connect the team account** opens the App's sign-in page |
+
+The App's page is **Data Hub › Apps** then the App's name, at `/integrations/apps/plugin:<plugin id>`. Its
+**Settings** tab holds two environments: **Production**, which Connect signs in, and **Test**, which **Set up test**
+signs in the same way. Runs marked test, and **Real** on a Tool's page, use Test, so set it up before running a Tool
+there; until then Real answers `CONNECTION_NOT_SET`.
 
 ## Accounts: the team's and your own
 
@@ -69,8 +85,8 @@ team, and **New tool** makes one of your own:
    such as `/accounts/{id}`.
 2. Write the request on the Tool's page and press **Run** in **Mock**: it answers from the Tool's mock answers and sends
    nothing.
-3. Once the Tool is published, **Real** sends the request through the App's Account and shows exactly what was sent,
-   with every key hidden.
+3. Once the Tool is published, **Real** sends the request through the App's Account in the Test environment and shows
+   exactly what was sent, with every key hidden.
 
 A key typed into a Tool's own header is refused when you save: the App's Account signs every call. A viewer can open a
 Tool's page and run it, but not change it.
