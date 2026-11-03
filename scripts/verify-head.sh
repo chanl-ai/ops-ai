@@ -5,7 +5,7 @@
 # never share one.
 set -euo pipefail
 # One runner on this machine runs the full suite (it sets QA_RUNNER=1). Several
-# builders running it at once slowed every run and timed out database connects; ask the runner with scripts/qa.sh wait.
+# people running it at once slowed every run and timed out database connects; ask the runner with scripts/qa.sh wait.
 # QA_LOCAL=1 runs it here anyway, for a machine with no runner.
 if [ -z "${QA_RUNNER:-}${QA_LOCAL:-}" ]; then
   echo "verify-head: ask the QA runner instead: scripts/qa.sh wait (QA_LOCAL=1 runs it here)" >&2

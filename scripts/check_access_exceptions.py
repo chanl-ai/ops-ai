@@ -64,7 +64,7 @@ APPROVED_AFTER = {
     "2214769e": "Standards-exception: E23 appWritesNeedApproval defaults to no app listed; approved by a maintainer",
 }
 
-# The always-on baseline the owner set (roles-and-permissions.md, "How access is decided"): token identity, team and
+# The always-on baseline (roles-and-permissions.md, "How access is decided"): token identity, team and
 # tenant isolation, scoped service and API key tokens, the embed's configured origins, and secrets kept hidden. A 403
 # with one of these codes is that baseline, not an exception.
 BASELINE = {
@@ -358,10 +358,10 @@ def _row_problems(
 ) -> tuple[list[str], list[str]]:
     """Lines whose row is not in the register, is resolved, or is not the right word for the line's kind, and a line
     being added on a row with no decision; and the lines already there resting on a row with no decision, which go to
-    the owner but do not fail."""
+    a maintainer but do not fail."""
     rows = register()
     problems: list[str] = []
-    owner: list[str] = []
+    undecided: list[str] = []
     for (path, kind, key), (_, row) in allowed.items():
         if row == "open":
             if kind != "policy-default":
@@ -376,11 +376,11 @@ def _row_problems(
         elif "no decision" in rows[row].lower():
             if base is not None and (path, kind, key) not in base:
                 problems.append(
-                    f"row   {path}  {kind} {key}: {row} has no decision; the owner decides before a line is added"
+                    f"row   {path}  {kind} {key}: {row} has no decision; a maintainer decides before a line is added"
                 )
             else:
-                owner.append(f"{row} {path} {kind} {key}")
-    return problems, owner
+                undecided.append(f"{row} {path} {kind} {key}")
+    return problems, undecided
 
 
 def commit_problems() -> list[str]:
@@ -443,7 +443,7 @@ def main(argv: list[str]) -> int:
         return 0
     allowed = allowlist()
     counts = Counter((f.path, f.kind, f.key) for f in found)
-    problems, owner = _row_problems(allowed, committed())
+    problems, undecided = _row_problems(allowed, committed())
     for f in found:
         k = (f.path, f.kind, f.key)
         if f.kind == "conflict" and ("*", f.kind, f.key) in allowed:
@@ -461,12 +461,12 @@ def main(argv: list[str]) -> int:
         print(f"Access decided outside can() and not in the register ({REGISTER}):")
         print("\n".join(dict.fromkeys(problems)))
         print(
-            "Move the rule into a roles-grid cell or a policy read by can(). If the owner decided it stays, add a row "
-            "to the register and a line to access-exceptions-allowlist.txt with a Standards-exception: trailer."
+            "Move the rule into a roles-grid cell or a policy read by can(). If a maintainer decided it stays, add a "
+            "row to the register and a line to access-exceptions-allowlist.txt with a Standards-exception: trailer."
         )
         return 1
-    for line in owner:
-        print(f"no decision, for the owner: {line}")
+    for line in undecided:
+        print(f"no decision, for a maintainer: {line}")
     print(f"Access exceptions: {sum(counts.values())} findings, all in the register.")
     return 0
 

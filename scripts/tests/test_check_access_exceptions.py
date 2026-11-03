@@ -116,7 +116,7 @@ def test_a_line_added_on_a_row_with_no_decision_fails_and_one_already_there_goes
     assert code == 1 and "E03 has no decision" in out, out
     there = {("a.py", "conflict", "seeded")}
     code, out = _run(c, tmp_path, allow, monkeypatch=monkeypatch, capsys=capsys, base=there)
-    assert code == 0 and "no decision, for the owner: E03" in out, out
+    assert code == 0 and "no decision, for a maintainer: E03" in out, out
 
 
 def _git(repo: Path, *args: str) -> str:
