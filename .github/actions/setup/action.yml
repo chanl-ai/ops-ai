@@ -1,0 +1,57 @@
+# Cached toolchain for a CI job; PostgreSQL is the job's own service container on :5477, the port the suites expect.
+name: setup
+description: Install the workspace and start the test infrastructure
+inputs:
+  python:
+    description: uv sync the Python workspace
+    default: "true"
+  node:
+    description: pnpm install the Node workspace
+    default: "false"
+  browser:
+    description: Install Playwright's Chromium (the chat loader test and UI use cases)
+    default: "false"
+  infra:
+    description: Start OPA and the test mail servers, and raise PostgreSQL's connection limit
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - if: inputs.python == 'true'
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+        cache-dependency-glob: uv.lock
+    - if: inputs.python == 'true'
+      shell: bash
+      run: uv sync --frozen --all-packages --all-groups --quiet
+    - if: inputs.node == 'true'
+      uses: pnpm/action-setup@v4
+    - if: inputs.node == 'true'
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: pnpm
+    - if: inputs.node == 'true'
+      shell: bash
+      run: pnpm install --frozen-lockfile
+    - if: inputs.browser == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+    - if: inputs.browser == 'true'
+      shell: bash
+      run: pnpm --filter @ops-ai/usecase-runner exec playwright install --with-deps chromium
+    - if: inputs.infra == 'true'
+      shell: bash
+      run: |
+        # The full run needs more than the default 100 connections, and a service container takes no command line.
+        pg=$(docker ps -q --filter "publish=5477")
+        docker exec "$pg" psql -U ops -d ops_runtime -qc "ALTER SYSTEM SET max_connections = 300"
+        docker restart "$pg" >/dev/null
+        until docker exec "$pg" pg_isready -U ops -d ops_runtime -q; do sleep 1; done
+        docker compose -p ops-ci -f deploy/compose/compose.yaml up -d --wait opa greenmail mailpit
