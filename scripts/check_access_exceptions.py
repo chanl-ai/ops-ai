@@ -25,7 +25,7 @@ Each allowlist line is `path kind key count row`. A finding beyond its line's co
 count is above what the code holds now, so the list can only shrink: lower the count or delete the line when an
 exception goes. Each row must be a row of the register (a resolved row holds no lines), `open` for a policy default or
 `state` for a conflict. Every commit after the list began that adds a line with a register row must carry a
-`Standards-exception:` trailer, the owner's approval through the orchestrator (`--commits`).
+`Standards-exception:` trailer that says `approved by a maintainer` (`--commits`).
 
   python3 scripts/check_access_exceptions.py            # exit 1 on a new, stale or unregistered exception
   python3 scripts/check_access_exceptions.py --list     # every finding with its line, listed or not
@@ -52,19 +52,16 @@ REGISTER_PAGE = ROOT / "docs/architecture/roles-and-permissions.md"
 LIST_BEGAN = "67f10685"
 TRAILER = "Standards-exception:"
 # Who approves an exception line: the trailer names them, so a trailer anyone could write does not pass.
-APPROVER = "approved by proto-orch"
+APPROVER = "approved by a maintainer"
 # Commits whose added lines were approved after they landed, each with the approval and the fix-forward commit that
 # records it; an exact sha, never a pattern.
 APPROVED_AFTER = {
-    # E09 dev-caller moved from agents auth.py into ops_store.isolation (c-409); same decision, total unchanged.
+    # E09 dev-caller moved from agents auth.py into ops_store.isolation; same decision, total unchanged.
     "07770915": (
-        "Standards-exception: E09 dev-caller moved into ops_store.isolation in 07770915; approved by proto-orch"
+        "Standards-exception: E09 dev-caller moved into ops_store.isolation in 07770915; approved by a maintainer"
     ),
-    # E23 appWritesNeedApproval, off by default (owner, 2026-11-01, c-616); its commit's trailer named no approver.
-    "2214769e": (
-        "Standards-exception: E23 appWritesNeedApproval defaults to no app listed (owner, 2026-11-01); "
-        "approved by proto-orch"
-    ),
+    # E23 appWritesNeedApproval, off by default; its commit's trailer named no approver.
+    "2214769e": "Standards-exception: E23 appWritesNeedApproval defaults to no app listed; approved by a maintainer",
 }
 
 # The always-on baseline the owner set (roles-and-permissions.md, "How access is decided"): token identity, team and

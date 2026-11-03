@@ -158,8 +158,8 @@ for (const f of files) {
 // renders ChannelTypePageLayout, which renders ChannelsPageLayout, which renders PageLayout). A name never passes on its
 // own: the file that renders the layout has to be found. Named here instead are
 // only the full-height shells that are not record pages: the chat (ChatLayout, ChatWorkspace, the embedded chat and
-// its sample host) and the workflow editor. A new name on that list needs a Standards-exception trailer the
-// orchestrator approves (delivery rubric: checks are met, never widened).
+// its sample host) and the workflow editor. A new name on that list needs a Standards-exception trailer a
+// maintainer approves.
 // A page that only calls next/navigation `redirect()` and renders no JSX (a retired route) has nothing to lay out.
 const redirectOnly = (text) => /\bredirect\(/.test(text) && !/<\/|\/>/.test(text);
 // Sign-in pages under app/(auth) are laid out by app/(auth)/layout.tsx (centred card, no sidebar), not PageLayout.
@@ -198,7 +198,7 @@ for (const f of files.filter((x) => /^src\/app\/.*page\.tsx$/.test(x.rel) && !re
   if (!reachesLayout(f)) report(f, 0, 'page that never reaches PageLayout or RecordLayout (in the page or up to three components down)');
 }
 
-// 16. One component per job (16, not 15: services' check_standards owns rule 15, the database drivers) (docs/plans/ops-ai console reuse sweep, 2026-10-18): a table is the data table, a status is
+// 16. One component per job (16, not 15: services' check_standards owns rule 15, the database drivers): a table is the data table, a status is
 //     a badge from components/status-badges.tsx, and the chat composer and message renderers live in components/chat.
 //     The files that broke this when the rule came in are listed per rule in reuse-baseline.json. The list may only
 //     shrink: a file not listed fails, and a listed file that no longer breaks the rule fails until it is taken off

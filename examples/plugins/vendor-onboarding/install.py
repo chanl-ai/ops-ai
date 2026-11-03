@@ -3,7 +3,7 @@
     uv run python examples/plugins/vendor-onboarding/install.py install [--team NAME] [--origin URL]
     uv run python examples/plugins/vendor-onboarding/install.py run [--team NAME] [--decision approve|reject]
 
-This is the stand-in for the plugin system until it exists (docs/plans/ops-ai/plugins.html, proposed): it reads
+This is the stand-in for the plugin system until it exists (docs/guide/plugins.md): it reads
 plugin.yaml, installs each contribution with the routes scripts/sample_team.py uses, replaces `@kind/id` references
 with the ids the team got, and publishes each record through the review it needs. Each line says MADE, FOUND or FAIL,
 and a second run finds everything. `run` starts the workflow as a test run, prints each step's output, decides the

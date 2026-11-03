@@ -1,4 +1,4 @@
-# The plugin manifest, in the format docs/plans/ops-ai/plugins.html proposes (status: proposed, not built).
+# The plugin manifest, in a proposed format (not built).
 # Nothing in Ops AI reads this file yet: install.py reads it and installs each contribution through the public APIs.
 
 schema: ops-ai/plugin@1

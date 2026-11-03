@@ -2,9 +2,7 @@ import { IconAdjustmentsHorizontal, IconBell, IconBrain, IconChartBar, IconCpu, 
 
 
 /**
- * The settings tree the owner approved (card c-178; the design is the planning repo docs/plans/ops-ai/settings-design.html):
- * one home per scope. Pages move here one
- * at a time; an entry whose page has not moved yet points at its current route. Team pages live under /settings/team,
+ * The settings tree: one home per scope. Pages move here one at a time; an entry whose page has not moved yet points at its current route. Team pages live under /settings/team,
  * workspace pages under /settings/workspace, and Govern pages stay where Govern keeps them.
  */
 export type SettingsGroup = 'Workspace' | 'Team' | 'Govern';

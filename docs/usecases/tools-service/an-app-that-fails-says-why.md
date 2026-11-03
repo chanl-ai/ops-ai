@@ -1,7 +1,6 @@
 # An app that fails says why: an expired account, a run waiting for a person's account, an unknown host
 
-Status: draft. Id: `uc-617`. Service: `tools-service` with agents-service. Layers: api, ui. Card: an earlier change (story group J
-of the planning repo `docs/plans/ops-ai/apps.html`).
+Status: draft. Id: `uc-617`. Service: `tools-service` with agents-service. Layers: api, ui.
 
 When an app's account stopped working, a run failed with a generic error and nobody was told. Now the app shows
 Expired or Refused with Reconnect, an admin is told, and a run stops saying the app needs reconnecting. A run a person

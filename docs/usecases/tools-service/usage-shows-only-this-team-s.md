@@ -1,7 +1,6 @@
 # Usage shows only this team's tool calls and whom each ran as
 
-Status: draft. Id: `uc-616`. Service: `tools-service`. Layers: api, sdk, ui. Card: an earlier change (story group G of
-the planning repo `docs/plans/ops-ai/apps.html`).
+Status: draft. Id: `uc-616`. Service: `tools-service`. Layers: api, sdk, ui.
 
 Usage listed every team's tool calls, and its "By" column showed the calling service's id. A team now sees only its
 own calls, each saying whom it ran as (`runAs`): the person a run acted for, or the team account. The list is

@@ -1,7 +1,6 @@
 # uc-590 Plugin templates
 
 Status: current. Id: `uc-590`. Service: `agents-service`. Layers: api, sdk, cli, ui.
-Cards: an earlier change, an earlier change (story group E of the planning repo `docs/plans/ops-ai/apps.html`, steps 22-23 and 30-32).
 
 A plugin brings tools, and it can also bring the agents, skills, workflows and document types that use them. Until
 now a team that turned a plugin on got its tools and nothing else: the templates were checked when the plugin was

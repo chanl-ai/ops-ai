@@ -1,5 +1,4 @@
-"""plugin.yaml, `ops-ai/plugin@2`: what a plugin brings, as data (the planning repo
-docs/plans/ops-ai/plugin-contents-and-knowledge.html).
+"""plugin.yaml, `ops-ai/plugin@2`: what a plugin brings, as data.
 
 A plugin is a connection, settings, tools, knowledge sources over two of its tools, and templates. A tool is a request
 template run by tools-service's http executor, or a Python function where data cannot describe the request. Unknown

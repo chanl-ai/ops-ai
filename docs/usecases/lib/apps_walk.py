@@ -1,4 +1,4 @@
-"""The Apps use cases' shared stack and calls (the planning repo docs/plans/ops-ai/apps-2.html).
+"""The Apps use cases' shared stack and calls.
 
 One stack per script: platform-service with the dev seed's own roles, tools-service with plugins on and the nine test
 plugins of services/tools-service/tests/plugin_kinds, and the fake system of fake_multi_auth.py. Every test plugin is

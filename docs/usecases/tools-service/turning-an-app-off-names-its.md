@@ -1,7 +1,6 @@
 # Turning an app off names its users, a leaver loses their accounts, and Replace rotates a key
 
 Status: draft. Id: `uc-618`. Service: `tools-service` with platform-service and agents-service. Layers: api, ui.
-Card: an earlier change (story group K of the planning repo `docs/plans/ops-ai/apps.html`).
 
 Turning an app off named nothing, so a team found out from failing agents; a person who left a team kept their own
 accounts on its apps; and a team key could only be changed by turning the app on again. Now turning an app off first
