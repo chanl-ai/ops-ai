@@ -236,6 +236,20 @@ uv run ops plugin remove opsai.salesforce
 Compose mounts the checkout's `plugins/` read-only at `/plugins` in tools and kb (`OPS_PLUGINS_HOST_DIR` names another
 host folder), so `ops plugin install --into <that folder>` then a restart of both is the whole install.
 
+### Plugins in a built image
+
+The release image (`deploy/fly/Dockerfile`) ships the plugins `deploy/plugins.json` pins, in `/app/plugins`, which is
+its `OPS_PLUGINS_DIR`. Each pin names a GitHub repository, a full commit and the plugin's folder in it:
+
+```json
+{"source": "https://github.com/chanl-ai/ops-ai-plugins", "ref": "<40-character commit>", "path": "plugins/salesforce"}
+```
+
+The build fetches each commit, validates the plugin as `ops plugin install` does and stops on any problem. A branch or
+tag is refused, so an image built twice from the same commit holds the same plugins. To ship a newer plugin, change its
+`ref` and rebuild; mounting another folder at `OPS_PLUGINS_DIR` replaces the baked ones. To bake them into a folder
+yourself: `uv run python deploy/images/bake_plugins.py --into ./plugins`.
+
 tools-service and kb-service load every plugin when they start. A plugin that fails validation is listed under `failed` at
 `GET /v1/plugins` with its error, and every other plugin still loads.
 

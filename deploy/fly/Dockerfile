@@ -128,6 +128,10 @@ RUN [ -n "$OPS_RUNNER_WASM_URL" ] || unset OPS_RUNNER_WASM_URL; python -m ops_ru
 # listen address every container needs so the others reach it.
 FROM python-base AS service
 COPY deploy deploy
+# The plugins this image ships with, each at the commit deploy/plugins.json pins; a mounted OPS_PLUGINS_DIR replaces
+# them. A pin that does not fetch or validate stops the build.
+RUN python deploy/images/bake_plugins.py --into /app/plugins
+ENV OPS_PLUGINS_DIR=/app/plugins
 # The runner writes wasmtime's compiled-module cache beside its Python build, so the service user owns that folder.
 RUN useradd --system --uid 10001 --home-dir /app ops && mkdir -p /data && chown ops:ops /data \
  && chown -R ops:ops /app/.data/runner
