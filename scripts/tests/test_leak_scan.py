@@ -1,9 +1,8 @@
-"""scripts/leak_scan.py end to end on a throwaway repository with the real patterns, one test per way a leak gets in."""
+"""scripts/leak_scan.py end to end on a throwaway repository, one test per way a leak gets in."""
 
 from __future__ import annotations
 
 import importlib.util
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -29,7 +28,8 @@ def commit(root: Path, message: str) -> str:
 @pytest.fixture
 def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, str]:
     (tmp_path / "config").mkdir()
-    shutil.copy(REPO / leak_scan.PATTERNS, tmp_path / leak_scan.PATTERNS)
+    # Patterns written here, so a test never spells out a real word the scan hunts.
+    (tmp_path / leak_scan.PATTERNS).write_text("tracker-id \\bc-\\d{2,4}\\b\nprobe-word zzprobeword\n")
     (tmp_path / "app.py").write_text("# Retries twice (c-101).\n")
     (tmp_path / leak_scan.BASELINE).write_text("tracker-id 1\n")
     git(tmp_path, "init", "-q")
@@ -72,7 +72,7 @@ def test_a_commit_message_allows_no_match(repo: tuple[Path, str]) -> None:
 
 def test_the_pull_request_text_allows_no_match(repo: tuple[Path, str], monkeypatch: pytest.MonkeyPatch) -> None:
     _, base = repo
-    monkeypatch.setenv("PR_BODY", "Built under codeloop.")
+    monkeypatch.setenv("PR_BODY", "Built with zzprobeword.")
     assert leak_scan.main(["--base", base]) == 1
 
 

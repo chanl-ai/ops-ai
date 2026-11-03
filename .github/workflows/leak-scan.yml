@@ -1,4 +1,4 @@
-# Refuses a pull request that adds tracker ids, personal paths or internal tool names to the tree or its messages.
+# Refuses a pull request that adds tracker or task ids, home paths or card trailers to the tree or its messages.
 name: leak-scan
 
 on:

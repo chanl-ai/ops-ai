@@ -2,8 +2,5 @@
   "date": "2026-10-22",
   "title": "See what changed in What's new",
   "description": "What's new in the sidebar lists each change in plain words, and Coming next shows what is planned.",
-  "tag": "improved",
-  "cards": [
-    "c-510"
-  ]
+  "tag": "improved"
 }

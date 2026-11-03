@@ -2,8 +2,5 @@
   "date": "2026-11-01",
   "title": "Agents with many tools find the one they need",
   "description": "When an install turns on tool search, an agent with many tools searches for the one it needs instead of reading every tool's details on every step, then uses it with the same approvals, sign-in and audit as before.",
-  "tag": "improved",
-  "cards": [
-    "c-610"
-  ]
+  "tag": "improved"
 }

@@ -2,8 +2,5 @@
   "date": "2026-11-01",
   "title": "An app shows Connected only once it works",
   "description": "Turning an app on or saving its keys no longer marks it Connected. An app reads Connected after the team account signs in or Test connection passes, and shows when its sign-in has expired or was refused.",
-  "tag": "fix",
-  "cards": [
-    "c-616"
-  ]
+  "tag": "fix"
 }

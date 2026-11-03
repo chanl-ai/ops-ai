@@ -2,8 +2,5 @@
   "date": "2026-11-01",
   "title": "Tool call history shows only your team's calls",
   "description": "Tool call history and an app's usage list only the calls your team made, also on apps every team shares, and each call says whether it ran as a person's own account or the team account.",
-  "tag": "fix",
-  "cards": [
-    "c-616"
-  ]
+  "tag": "fix"
 }

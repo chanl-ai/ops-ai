@@ -2,8 +2,5 @@
   "date": "2026-11-01",
   "title": "Workflows you may approve don't stop to ask you",
   "description": "A workflow step that approves a write no longer waits when the person who started the run decides your team's reviews, so the run carries on as approved by them. A write that needs two people or a step-up still waits.",
-  "tag": "improved",
-  "cards": [
-    "c-616"
-  ]
+  "tag": "improved"
 }

@@ -34,13 +34,13 @@ export function problems(message) {
 }
 
 function selfTest() {
-  const ok = 'fix(agents): plan tests use their own ids\n\nShared ids let planner estimates drift on a reused database.\nChecked: both plan files 5/5 on a fresh and a reused database.\n\nCard: c-500\n';
+  const ok = 'fix(agents): plan tests use their own ids\n\nShared ids let planner estimates drift on a reused database.\nChecked: both plan files 5/5 on a fresh and a reused database.\n\nChangelog: plan-tests\n';
   const cases = [
     [ok, 0],
     ['fix(x): y\n\nI found the flake was the data, which turned out to be shared ids.\n', 3],
     ['fix(x): y\n\nl1\nl2\nl3\nl4\n', 1],
     ['fix(x): y\n\n' + 'a'.repeat(400) + '\n', 1],
-    ['feat(console): what is new moves to a button and shows the version\n\nCard: c-510\nFeature: c-510\n', 0],
+    ['feat(console): what is new moves to a button and shows the version\n\nChangelog: whats-new\n', 0],
     ['fix(x): y\n\nPreviously the walk read the sidebar too early.\n', 1],
   ];
   let failed = 0;
