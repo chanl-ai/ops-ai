@@ -89,7 +89,8 @@ def test_a_second_checkout_cannot_act_on_the_shared_stack(tmp_path: Path) -> Non
     record.write_text(f"{ROOT}\n")
     other = copy_checkout(tmp_path / "ops-ai-worktree")
     env = {"OPS_SHARED_ROOT_FILE": str(record)}
-    clean = {k: v for k, v in os.environ.items() if not k.startswith(("OPS_", "MAKE"))}
+    # Without pytest's marker, so the shared-root rule is what refuses, not the rule for tests.
+    clean = {k: v for k, v in os.environ.items() if not k.startswith(("OPS_", "MAKE", "PYTEST_CURRENT_TEST"))}
 
     def run(where: Path, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -105,3 +106,46 @@ def test_a_second_checkout_cannot_act_on_the_shared_stack(tmp_path: Path) -> Non
     assert "docker compose" not in refused.stdout and "migrate" not in refused.stdout, refused.stdout
     assert "the shared stack runs from" not in run(other, "up", "ISOLATED=1").stderr
     assert "the shared stack runs from" not in run(ROOT, "ports").stderr
+
+
+def stack_values(tmp_path: Path, *args: str, env: dict[str, str]) -> dict[str, str]:
+    """Every OPS_*_PORT and the models addresses as the root Makefile sets them for `args`."""
+    show = tmp_path / "show.mk"
+    show.write_text(
+        "show:\n\t@$(foreach v,$(sort $(filter OPS_%_PORT OPS_MODELS_URL OPS_MODELS_FAKE_OPENAI_URL,$(.VARIABLES))),"
+        'echo "$(v)=$($(v))";)\n'
+    )
+    clean = {k: v for k, v in os.environ.items() if not k.startswith(("OPS_", "MAKE"))}
+    out = subprocess.run(
+        ["make", "-s", "--no-print-directory", "-f", "Makefile", "-f", str(show), "show", *args],
+        cwd=ROOT,
+        env={**clean, **env},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return dict(line.split("=", 1) for line in out.stdout.splitlines())
+
+
+def test_no_two_lanes_share_a_port(tmp_path: Path) -> None:
+    taken: dict[str, str] = {}
+    for lane in range(6):
+        for name, port in stack_values(tmp_path, f"OPS_LANE={lane}", env={}).items():
+            if not name.endswith("_PORT") or name == "OPS_GATEWAY_PORT":  # the gateway is tools-service's own port
+                continue
+            assert port not in taken, f"lane {lane} {name} and {taken[port]} both take {port}"
+            taken[port] = f"lane {lane} {name}"
+
+
+def test_a_lane_reaches_its_own_models_service_whatever_the_copied_env_names(tmp_path: Path) -> None:
+    shared = {"OPS_MODELS_URL": "http://127.0.0.1:8730", "OPS_MODELS_FAKE_OPENAI_URL": "http://127.0.0.1:8746/v1"}
+    values = stack_values(tmp_path, "OPS_LANE=3", env=shared)
+    assert values["OPS_MODELS_URL"] == f"http://127.0.0.1:{values['OPS_MODELS_PORT']}" != shared["OPS_MODELS_URL"]
+    assert values["OPS_MODELS_FAKE_OPENAI_URL"] == f"http://127.0.0.1:{values['OPS_FAKE_OPENAI_PORT']}/v1"
+
+
+def test_a_test_cannot_stop_or_migrate_the_shared_stack() -> None:
+    for goal in ("db-down", "down", "migrate", "reset-db"):
+        out = dry_run(goal, "OPS_LANE=0", "CONFIRM=yes", env={"PYTEST_CURRENT_TEST": "probe"})
+        assert out.returncode != 0 and "refused" in out.stderr, (goal, out.stdout + out.stderr)
+        assert "compose" not in out.stdout, (goal, out.stdout)

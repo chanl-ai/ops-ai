@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -21,6 +21,7 @@ from ops_models.app import create_models_app
 from ops_models.seed import seed
 from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
+from ops_service_kit.testapps import released_apps
 from ops_service_kit.testdb import isolate_from_stack, refusal
 
 ROOT = Path(__file__).parents[1]
@@ -87,3 +88,8 @@ async def models(database_url: str) -> AsyncIterator[Models]:
     async with httpx.AsyncClient(transport=transport, base_url="http://models", event_hooks=hooks) as client:
         yield Models(client, engine, app)
     await engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _release_apps() -> Iterator[None]:
+    yield from released_apps()

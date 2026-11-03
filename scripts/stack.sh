@@ -35,8 +35,8 @@ elif [[ "${OPS_STACK_WORKER:-0}" == 1 ]]; then
 else
   UP_SERVICES=("${SERVICES[@]}")
 fi
-# The Python services do not reload code; the console does (next dev), so only these can run code older than HEAD.
-PY_SERVICES=(platform agents runner tools files documents kb models worker)
+# The Python services and fakes do not reload code; the console does (next dev), so only these can run code older than HEAD.
+PY_SERVICES=(platform agents runner tools files documents kb models worker fakeai fakebank)
 LOG_DIR=${OPS_LOG_DIR:-.logs}
 RUN_DIR=${OPS_RUN_DIR:-.run}
 AGENTS_PORT=${OPS_AGENTS_PORT:-8700}
@@ -140,10 +140,13 @@ egress_ca() {
   if [[ -n "${OPS_EGRESS_EXTRA_CA:-}" && -f "$OPS_EGRESS_EXTRA_CA" ]]; then
     cat "$bank" "$OPS_EGRESS_EXTRA_CA" >"$RUN_ABS/egress-ca.pem" 2>/dev/null
     echo "$RUN_ABS/egress-ca.pem"
-  else
+  elif [[ -f "$bank" ]]; then
     echo "$bank"
   fi
 }
+# A stack without its fake bank (an isolated one started without OPS_STACK_FAKES=1) has no certificate to trust, and
+# tools-service refuses to start on a CA file that does not exist.
+egress_ca_env() { local ca; ca=$(egress_ca); if [[ -n "$ca" ]]; then echo "OPS_EGRESS_CA_FILE=$ca"; fi; }
 dev_egress_resolve() {
   IP=$(private_address) GM_HOST=$GREENMAIL_HOST MP_HOST=$MAILPIT_HOST python3 -c 'import json,os,socket
 def host_ip(name, fallback):
@@ -174,7 +177,7 @@ cmd_of() {
     # The fake bank's certificate doubles as the CA tools-service trusts for api.bank.test.
     # A sign-in returns to the console (OPS_CONSOLE_URL); without it tools-service starts none.
     # Its own model key judges writes against a team's sending policy when the team has check before sending on (c-300).
-    tools) echo "$(auth_env)env $MAIL_OUT_ENV OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_tools_check OPS_EGRESS_CA_FILE=$(egress_ca) OPS_EGRESS_RESOLVE=$(GM=$GREENMAIL_IMAP MP=$MAILPIT_SMTP FB=$FAKE_BANK_PORT dev_egress_resolve) OPS_RUNNER_URL=http://127.0.0.1:$RUNNER_PORT uv run --directory services/tools-service python -m ops_tools" ;;
+    tools) echo "$(auth_env)env $MAIL_OUT_ENV OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_tools_check $(egress_ca_env) OPS_EGRESS_RESOLVE=$(GM=$GREENMAIL_IMAP MP=$MAILPIT_SMTP FB=$FAKE_BANK_PORT dev_egress_resolve) OPS_RUNNER_URL=http://127.0.0.1:$RUNNER_PORT uv run --directory services/tools-service python -m ops_tools" ;;
     # Code tools' functions (c-531): Python on WASM, calling back to tools-service. start fetches its Python build first.
     runner) echo "$(auth_env)env OPS_RUNNER_PORT=$RUNNER_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT uv run --directory services/runner-service python -m ops_runner" ;;
     # The worker also reads the workflows' mailboxes (Email received) and stores their attachments in files-service.
@@ -385,7 +388,7 @@ age_of() {
 }
 
 # The last commit that changed what a Python service runs: its own directory (code and migrations) or packages/.
-code_dirs() { case "$1" in platform) echo services/platform-service packages ;; agents | worker) echo services/agents-service packages ;; models) echo services/models-service packages ;; tools) echo services/tools-service packages ;; kb) echo services/kb-service packages ;; files) echo services/files-service packages ;; documents) echo services/documents-service packages ;; runner) echo services/runner-service packages ;; esac; }
+code_dirs() { case "$1" in platform) echo services/platform-service packages ;; agents | worker) echo services/agents-service packages ;; models) echo services/models-service packages ;; tools) echo services/tools-service packages ;; kb) echo services/kb-service packages ;; files) echo services/files-service packages ;; documents) echo services/documents-service packages ;; runner) echo services/runner-service packages ;; fakeai) echo services/models-service/scripts/fake_openai services/models-service/seed/demo-fake-openai ;; fakebank) echo services/tools-service/scripts/fake_bank ;; esac; }
 # shellcheck disable=SC2046 # code_dirs prints space-separated paths on purpose
 code_commit() { git log -1 --format="$2" -- $(code_dirs "$1"); }
 
@@ -399,6 +402,7 @@ stale() {
   age=$(age_of "$pid") || return 1
   started=$(($(date +%s) - age))
   ((started < $(code_commit "$1" %ct))) && return 0
+  case "$1" in fakeai | fakebank) return 1 ;; esac  # the fakes hold no tables
   [[ -f "$RUN_DIR/migrated-at" ]] && ((started < $(mtime_of "$RUN_DIR/migrated-at")))
 }
 

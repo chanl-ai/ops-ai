@@ -11,7 +11,8 @@ else
 	@# --no-recreate: every checkout, worktree and verify export shares this compose project, and its OPA mounts the
 	@# policy folder by path; recreating from another checkout re-mounts OPA there and drops the review key the running
 	@# tools-service loaded. A changed compose file therefore needs `docker compose ... up -d --force-recreate`.
-	$(COMPOSE) up -d --wait --no-recreate postgres opa greenmail mailpit
+	@# An isolated stack's project is its own, so a changed port recreates its containers there.
+	$(COMPOSE) up -d --wait $(if $(filter isolated,$(OPS_STACK)),,--no-recreate) postgres opa greenmail mailpit
 endif
 
 db-down: ## Stop compose (the shared stack keeps its data volume; ISOLATED=1 removes its own)

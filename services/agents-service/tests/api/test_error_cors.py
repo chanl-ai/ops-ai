@@ -7,8 +7,10 @@ import pytest
 from httpx import AsyncClient
 
 from ops_agents.api.routers import engine
+from ops_service_kit.settings import Settings
 
-CONSOLE = "http://localhost:3016"
+# The console origin the app allows, read as the client fixture's app reads it (a lane's console is on its own port).
+CONSOLE = Settings(database_url="sqlite+aiosqlite://").cors_origins[0]
 
 
 async def test_a_500_to_the_console_origin_carries_cors_headers(
