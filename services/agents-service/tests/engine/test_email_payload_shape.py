@@ -1,4 +1,4 @@
-"""The Email received trigger's payload against its declared shape (c-353), by failure mode: the trigger writes a key
+"""The Email received trigger's payload against its declared shape, by failure mode: the trigger writes a key
 `ops_engine.shapes.EMAIL` does not list, or drops one it requires, so a builder mapping the email's fields before a run
 is offered a field that never arrives."""
 

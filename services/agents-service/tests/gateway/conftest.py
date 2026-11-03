@@ -73,7 +73,7 @@ class Clock:
 
 @dataclass
 class Decisions:
-    """tools-service's modules, as the gateway's apply_tool_access reaches them (c-257): records each decision."""
+    """tools-service's modules, as the gateway's apply_tool_access reaches them: records each decision."""
 
     applied: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
 

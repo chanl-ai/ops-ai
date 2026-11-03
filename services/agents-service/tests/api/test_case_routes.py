@@ -1,4 +1,4 @@
-"""`/v1/cases` (c-128) through the routes with tokens minted as platform-service mints them, by failure mode: a
+"""`/v1/cases` through the routes with tokens minted as platform-service mints them, by failure mode: a
 producer's retry opens a second case; another team reads, changes or links this team's case; an agent or workflow
 closes a case; a member closes a case someone else opened; a field is cleared that the case cannot lack; a status
 change leaves no timeline entry; a service with no cases scope opens one."""
@@ -156,7 +156,7 @@ async def test_a_service_without_the_cases_scope_opens_nothing(c: AsyncClient) -
 
 
 async def test_tools_service_opens_a_case_with_the_scopes_it_is_given(c: AsyncClient) -> None:
-    """The open_case tool's call (c-219), with exactly what Settings.service_scopes gives tools-service."""
+    """The open_case tool's call, with exactly what Settings.service_scopes gives tools-service."""
     tools = service("tools", ["cases:view", "cases:create"])
     r = await c.post("/v1/cases", json={**DISPUTE, "producerKey": "tool:gth_1:s3"}, headers=tools)
     assert r.status_code == 201, r.text

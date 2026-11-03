@@ -1,4 +1,4 @@
-"""GET /v1/tools/options, the agent page's tools picker (c-135), by failure mode: an operation past the first hundred
+"""GET /v1/tools/options, the agent page's tools picker, by failure mode: an operation past the first hundred
 not findable; the cursor repeating or skipping one; stored grants not resolving to their names; the whole catalogue
 sent to the browser instead of one page; another team's workflow offered."""
 

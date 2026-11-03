@@ -1,4 +1,4 @@
-"""Hosted forms (c-535), by failure mode: a public form page that shows more than the form (the team, its id); a link
+"""Hosted forms, by failure mode: a public form page that shows more than the form (the team, its id); a link
 submission that starts a run in another team, on a draft, or named as `form:<id>` instead of the form's title; an
 expired or rotated link, or another form's token, that still starts a run; a members-only form that a person outside
 the team can send; a form shared from a trigger with no inputs; every person behind the embed app counted as one
@@ -163,7 +163,7 @@ async def test_a_submission_past_the_daily_cap_starts_nothing_and_activity_says_
 
 
 async def test_the_api_refuses_a_form_with_a_required_field_empty_and_fills_its_defaults(stack: Stack) -> None:  # noqa: F811
-    """c-378: the console refuses a start with a required field empty, so the hosted form and Start run by API refuse
+    """The console refuses a start with a required field empty, so the hosted form and Start run by API refuse
     it too, naming the field; a field the form gives a default takes it when left empty."""
     c, _ = stack
     props: dict[str, Any] = {

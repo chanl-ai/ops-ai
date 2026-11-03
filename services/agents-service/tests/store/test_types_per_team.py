@@ -1,4 +1,4 @@
-"""Migration 0074 (c-507) gives every task and case type one team, by failure mode: a team with work loses a type it
+"""Migration 0074 gives every task and case type one team, by failure mode: a team with work loses a type it
 read (its copy is missing, or lacks a version a task pinned); a type with no team survives, so another team's row is
 still read; a team's own type is touched; the downgrade cannot run back."""
 

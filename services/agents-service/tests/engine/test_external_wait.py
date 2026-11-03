@@ -1,4 +1,4 @@
-"""A step parked on outside work (c-525), on PostgreSQL with the real worker and the resume route, by failure mode: a
+"""A step parked on outside work, on PostgreSQL with the real worker and the resume route, by failure mode: a
 forged or misdirected token resumes a step; a second callback resumes it again; another team's event wakes a step; the
 time limit leaves a wait row that a late event or callback still wakes; two resumes at once both run."""
 

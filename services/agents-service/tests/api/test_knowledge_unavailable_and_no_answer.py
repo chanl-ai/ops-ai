@@ -1,4 +1,4 @@
-"""Knowledge refused and no-answer (c-056 T005 review, T014), by failure mode: a stack with no kb-service answering
+"""Knowledge refused and no-answer, by failure mode: a stack with no kb-service answering
 from somewhere else and looking healthy, a knowledge-free agent unusable without a kb-service, and every reply that
 found no passage drawn as the not-found note (a plain or tool answer included)."""
 

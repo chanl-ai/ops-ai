@@ -1,4 +1,4 @@
-"""mailboxes: team mailboxes connected on Channels > Email (c-199)
+"""mailboxes: team mailboxes connected on Channels > Email
 
 Revision ID: 0047_mailboxes
 Revises: 0046_widget_retired

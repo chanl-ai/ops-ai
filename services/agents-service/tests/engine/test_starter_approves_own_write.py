@@ -1,5 +1,5 @@
-"""A workflow step approving a write is decided as the starter's own when they may approve it (owner, 2026-11-01;
-c-616), on PostgreSQL with the real worker, by failure mode: a run started by an approver still waits for a person; a
+"""A workflow step approving a write is decided as the starter's own when they may approve it, on PostgreSQL with the
+real worker, by failure mode: a run started by an approver still waits for a person; a
 run started by someone who may not approve skips the person; and a write two people approve, or one that asks for a
 step-up, skips them."""
 

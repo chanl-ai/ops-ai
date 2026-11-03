@@ -1,4 +1,4 @@
-"""Human Tasks grouped by case (c-460), by failure mode: the queue ordered or grouped in the browser instead of by the
+"""Human Tasks grouped by case, by failure mode: the queue ordered or grouped in the browser instead of by the
 route; the next task after a decision skipping the rest of its case; a place that orders differently from the list it
 steps through, or builds every review to do it; and a case title shown to a person whose teams do not hold the case."""
 

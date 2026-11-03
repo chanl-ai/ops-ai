@@ -1,4 +1,4 @@
-"""The reviews list builds the full review only for the rows its page shows (c-451). The console's open count asks for
+"""The reviews list builds the full review only for the rows its page shows. The console's open count asks for
 one row and read every waiting task in full, about 2.6 s on staging; counts, facets and stats now come from rows that
 read no task, wording or reply. By failure mode: a page of one builds every review; a small page counts, facets or
 orders differently from a large one, or carries the row's build key onto the wire; a search misses a task whose

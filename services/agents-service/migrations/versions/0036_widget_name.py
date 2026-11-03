@@ -3,8 +3,8 @@
 Revision ID: 0036_widget_name
 Revises: 0035_widget_deployments
 
-The name lived only in each version's content JSON, so a page of widgets could be cut only after loading every row
-(c-107). Filled from each widget's newest version.
+The name lived only in each version's content JSON, so a page of widgets could be cut only after loading every row.
+Filled from each widget's newest version.
 """
 
 from __future__ import annotations

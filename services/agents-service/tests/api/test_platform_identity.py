@@ -95,7 +95,7 @@ async def test_another_tenants_thread_is_not_found_and_not_listed(client: AsyncC
 
 
 async def test_another_teams_thread_is_not_found_and_not_listed(client: AsyncClient) -> None:
-    """Another team's thread answers 404, as another tenant's does, so its id reveals nothing (c-429)."""
+    """Another team's thread answers 404, as another tenant's does, so its id reveals nothing."""
     tid = await new_thread(client, token("acme", ["team_a"]))
     team_b = token("acme", ["team_b"])
     assert tid not in [t["threadId"] for t in (await client.get("/v1/threads", headers=team_b)).json()["data"]]

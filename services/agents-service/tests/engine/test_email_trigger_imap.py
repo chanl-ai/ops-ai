@@ -1,4 +1,4 @@
-"""The Email received trigger on an IMAP mailbox (c-192), by failure mode: the first pass downloads the mailbox to skip
+"""The Email received trigger on an IMAP mailbox, by failure mode: the first pass downloads the mailbox to skip
 it; IDLE never wakes the listener, so mail waits for the next poll; a failing IDLE stops the mailbox being read. The
 mailbox is GreenMail (compose); tools-service is faked at its documented `/v1/mailboxes` API, answering from a real
 IMAP read of GreenMail, so the listener's gateway source, the cursor and the start path all run as on the stack."""
@@ -205,7 +205,7 @@ def append_again(to: str) -> None:
 
 
 async def test_a_message_reusing_another_ones_message_id_still_starts_its_run(imap: tuple[Env, FakeTools, str]) -> None:
-    # Keyed on the sender's Message-ID, a forged one hid a real notice behind an earlier message (QA tick 21).
+    # Keyed on the sender's Message-ID, a forged one hid a real notice behind an earlier message.
     env, _, address = imap
     await publish_on(env, address)
     await env.listener().poll_all()  # first pass: takes the cursor

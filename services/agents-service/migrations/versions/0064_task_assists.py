@@ -1,4 +1,4 @@
-"""task_assists: what task assist wrote for a typed task when its step paused (c-302)
+"""task_assists: what task assist wrote for a typed task when its step paused
 
 A reviewer read every region of a task to find what was asked and what was in doubt. With task assist on, one model
 call writes the question, a summary, the doubtful fields and a suggested action when the step pauses, kept here so a

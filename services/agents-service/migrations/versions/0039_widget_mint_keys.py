@@ -1,4 +1,4 @@
-"""widget_mint_keys: the per-deployment key a bank's server mints widget sessions with (c-131)
+"""widget_mint_keys: the per-deployment key a bank's server mints widget sessions with
 
 Revision ID: 0039_widget_mint_keys
 Revises: 0038_publish_policies

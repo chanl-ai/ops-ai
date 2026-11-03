@@ -1,4 +1,4 @@
-"""A hosted form's daily cap under concurrent submissions (c-535), on PostgreSQL: two submissions at the last place
+"""A hosted form's daily cap under concurrent submissions, on PostgreSQL: two submissions at the last place
 under the cap must not both pass. The email trigger's cap is safe only because one poller holds a lease; a form's
 submissions arrive at once, so the form's row is locked while the day's starts are counted and the new one recorded."""
 

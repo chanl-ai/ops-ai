@@ -1,4 +1,4 @@
-"""task_assists rows are filled after they are recorded (c-302, tick 30)
+"""task_assists rows are filled after they are recorded
 
 Revision ID: 0068_task_assists_fill
 Revises: 0067_publish_requests_tenant

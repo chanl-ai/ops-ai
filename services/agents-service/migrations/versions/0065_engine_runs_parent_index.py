@@ -1,4 +1,4 @@
-"""engine_runs: an index on (tenant_id, created_by), for the runs a run started (c-310)
+"""engine_runs: an index on (tenant_id, created_by), for the runs a run started
 
 A parent run settles when the last run it started ends (RunStore.settle_parents), and every child's status change
 looks up its unfinished siblings by `created_by = 'run:<parent>'`. Without an index that read scans the tenant's runs on

@@ -1,4 +1,4 @@
-"""Publish reviews as a setting (c-086), by failure mode: a non-admin turning reviews off, a stale save overwriting
+"""Publish reviews as a setting, by failure mode: a non-admin turning reviews off, a stale save overwriting
 another admin's, "never" leaving no record of who published, a security change slipping through as minor, a first
 publish skipping review, dev auto-approve overriding an explicit "always", and the graph versions route ignoring the
 policy."""
@@ -78,7 +78,7 @@ def _data(r: Any, status: int = 200) -> Any:
     return r.json()["data"]
 
 
-# The workspace's publishReview setting as platform-service would answer it (c-214): decide reads it live on every
+# The workspace's publishReview setting as platform-service would answer it: decide reads it live on every
 # publish, so a change here applies to the next request.
 class Platform:
     modes: ClassVar[dict[str, str]] = {}
@@ -323,7 +323,7 @@ async def test_a_process_with_no_signing_key_reads_no_policy_and_so_reviews() ->
             await reader.value("publishReview")
 
 
-# c-486: Tidy up moves steps. A position lives inside each node, so without the workflows rule a move reads as a change
+# Tidy up moves steps. A position lives inside each node, so without the workflows rule a move reads as a change
 # to `nodes` and opens a review; a real change made alongside a move must still read as major.
 def _moved(d: dict[str, Any], dy: float) -> dict[str, Any]:
     return d | {"nodes": [n | {"position": {"x": i * 336.0, "y": dy}} for i, n in enumerate(d["nodes"])]}

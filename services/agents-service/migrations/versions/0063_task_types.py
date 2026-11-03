@@ -1,4 +1,4 @@
-"""task_types, task_type_versions: what a Human Task screen asks and offers, as versioned records (c-288)
+"""task_types, task_type_versions: what a Human Task screen asks and offers, as versioned records
 
 A task screen was chosen by code for each kind of review, and a workflow's review step showed whatever text it was
 given. A type is now a record a review step or the task API names by id and version; tenant RLS as on service_events

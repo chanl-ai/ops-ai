@@ -1,4 +1,4 @@
-"""Where a team's copies came from (c-590), by failure mode: a team reads or writes another team's copies, so it could
+"""Where a team's copies came from, by failure mode: a team reads or writes another team's copies, so it could
 find another team's agent as its own copy; a second install of the same template version makes a second live copy;
 and a copy whose record was deleted still counts, so the template can never be installed again. On the PostgreSQL
 test database migrated to head, as ops_runtime_tenant."""

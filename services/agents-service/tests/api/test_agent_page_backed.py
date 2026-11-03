@@ -1,4 +1,4 @@
-"""The agent page shows what works (c-068 T002 to T004), by failure mode: the test panel promising a different
+"""The agent page shows what works, by failure mode: the test panel promising a different
 approval from the one a real run opens; recent runs missing a chat or listing another agent's; and a control the
 page offers that the runtime never reads."""
 

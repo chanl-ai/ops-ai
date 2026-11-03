@@ -1,4 +1,4 @@
-"""A seeded workflow definition that changes in the seed file (c-057 live walk), by failure mode: a running stack
+"""A seeded workflow definition that changes in the seed file, by failure mode: a running stack
 keeps starting new threads on the old version after a restart, a thread already under way is moved onto the new one,
 and a version a person published is replaced by the seed."""
 

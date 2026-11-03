@@ -1,4 +1,4 @@
-"""A reviewed write in a v2 workflow goes through the gateway as a v1 one does (c-061 T017): the review decision mints
+"""A reviewed write in a v2 workflow goes through the gateway as a v1 one does: the review decision mints
 the token bound to the write's exact call, the tool node sends that call with it, and the gateway runs it. By failure
 mode: a write sent with no decision behind it, a decision that mints no token or one for another input, and a
 reviewer's edit that does not reach the call."""
@@ -89,7 +89,7 @@ def definition(wid: str, *, reviewed: bool) -> dict[str, Any]:
 
 @pytest.fixture
 async def stack(engine: AsyncEngine, gateway: Gateway) -> AsyncIterator[tuple[httpx.AsyncClient, Worker]]:
-    # A workspace that switched requesterMayDecide off (c-186): the starter does not decide their own run.
+    # A workspace that switched requesterMayDecide off: the starter does not decide their own run.
     settings = Settings(
         database_url=str(engine.url),
         seed_dir=SEED,

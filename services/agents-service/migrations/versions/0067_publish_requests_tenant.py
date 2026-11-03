@@ -1,4 +1,4 @@
-"""registry_publish_requests per tenant, with tenant row-level security (c-333 phase A)
+"""registry_publish_requests per tenant, with tenant row-level security
 
 Revision ID: 0067_publish_requests_tenant
 Revises: 0066_engine_runs_list_indexes

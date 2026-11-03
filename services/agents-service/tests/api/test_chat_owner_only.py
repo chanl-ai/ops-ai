@@ -1,4 +1,4 @@
-"""Who reads another person's chat under the workspace's chatThreadsOwnerOnly policy (c-186), through the chat route:
+"""Who reads another person's chat under the workspace's chatThreadsOwnerOnly policy, through the chat route:
 on (the default), a role whose grid reads every chat still reads only its own; off, the grid decides. The role is a
 custom one holding chat.view at `all`, as admins will once the grid gives them that cell."""
 

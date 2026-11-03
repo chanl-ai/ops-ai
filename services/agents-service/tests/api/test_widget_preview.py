@@ -1,4 +1,4 @@
-"""The console's "Preview as a person" (c-158 follow-up): a signed-in editor of a deployment gets a widget session
+"""The console's "Preview as a person": a signed-in editor of a deployment gets a widget session
 bound to the console's origin, recorded on the deployment's key audit. One test per way the preview could open a
 door a page or a server does not have."""
 

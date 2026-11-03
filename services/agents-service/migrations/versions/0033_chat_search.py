@@ -1,4 +1,4 @@
-"""chat_search: chat threads' searchable text as plain columns (c-069, portability rule D5)
+"""chat_search: chat threads' searchable text as plain columns (portability rule D5)
 
 Revision ID: 0033_chat_search
 Revises: 0032_registry_widgets

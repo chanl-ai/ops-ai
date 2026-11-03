@@ -1,4 +1,4 @@
-"""Assigning Human Tasks (c-074), by failure mode: Assign to me doing nothing (every id skipped), an assigned review
+"""Assigning Human Tasks, by failure mode: Assign to me doing nothing (every id skipped), an assigned review
 missing from Assigned to me, a reassignment losing who had it before, someone who may not decide a review taking it,
 and a decided review being assigned."""
 

@@ -1,4 +1,4 @@
-"""The seeded workflows (c-535), by failure mode: a seed that no longer passes the engine's checks, which a dev stack
+"""The seeded workflows, by failure mode: a seed that no longer passes the engine's checks, which a dev stack
 finds only when it fails to start, and the /wf-builder skill copies as an example; and the two-source example the
 skill reuses missing its Join or its disagree way to a person."""
 

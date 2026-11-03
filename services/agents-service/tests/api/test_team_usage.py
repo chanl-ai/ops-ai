@@ -1,4 +1,4 @@
-"""What blocks a team's delete or its workspace's close, for platform-service (c-529), by failure mode: a run in
+"""What blocks a team's delete or its workspace's close, for platform-service, by failure mode: a run in
 progress or a live workflow missed, so a delete goes ahead with work still running; another team's runs or workflows
 counted or named; a service naming no team, or a team in the query, read; a token without `workflows:view` answered."""
 

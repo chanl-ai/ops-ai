@@ -1,6 +1,6 @@
-"""The levy workflows on the runner (c-210), by failure mode: a definition that no longer passes its checks; a debtor
+"""The levy workflows on the runner, by failure mode: a definition that no longer passes its checks; a debtor
 found by name alone reaching a review; a matched debtor's review offering a hold on the wrong account or amount; a
-debtor's case not naming the debtor, the court case and the matched customer (c-219); a levy notice read in Read one
+debtor's case not naming the debtor, the court case and the matched customer; a levy notice read in Read one
 levy document going to a person instead of a case per debtor (workflows-run-5).
 The definitions are the dev seed's (seed/engine_workflows.json). The bank answers as
 `services/tools-service/scripts/fake_bank` does."""
@@ -115,7 +115,7 @@ async def test_a_matched_debtor_waits_for_hold_or_flag_on_the_first_account_for_
 
 
 async def test_a_debtor_found_by_name_alone_waits_for_a_person_to_find_the_customer_or_close_it() -> None:
-    """c-477: a debtor who matches no customer gets a No customer matched case and a Human Task, not a silent end."""
+    """A debtor who matches no customer gets a No customer matched case and a Human Task, not a silent end."""
     record = {"name": "Marcus Bell", "address": "9 Other Road, Toronto", "ssn_last4": "0000", "amount": 10.0}
     interrupts, _, bank = await run(record | {"case_no": "X"})
     assert bank.calls == ["search_customers"]
@@ -200,7 +200,7 @@ class DoubtfulDocuments(Documents):
 
 
 async def test_a_doubtful_levy_notice_checked_by_a_person_still_starts_a_levy_case_per_debtor() -> None:
-    """c-313: read:review -> Check the read -> approve -> By kind legal_notice -> a case per debtor named."""
+    """Read:review -> Check the read -> approve -> By kind legal_notice -> a case per debtor named."""
     runs = Runs()
     ports = EnginePorts(tools=Bank(), reviews=Reviews(), documents=DoubtfulDocuments(), runs=runs)  # type: ignore[arg-type]
     one = levy("levy_read_one")
@@ -247,7 +247,7 @@ async def _notice(thread: str, given: dict[str, Any]) -> tuple[Any, dict[str, An
 
 
 async def test_a_notice_started_from_the_form_ends_with_its_cases_and_the_reply_skipped() -> None:
-    """c-446: started from the Start-run form with a file id and a From address only (staging wfrun_ae6001c606ce), the
+    """Started from the Start-run form with a file id and a From address only (staging wfrun_ae6001c606ce), the
     run opened the cases and then failed at the acknowledgement, which had no mailbox or subject to reply with."""
     paused, values, runs, mail, _, _ = await _notice("md1", {"fileId": "fil_1", "from": "registry@court.test"})
     assert not paused, "nothing waits at the acknowledgement"
@@ -258,7 +258,7 @@ async def test_a_notice_started_from_the_form_ends_with_its_cases_and_the_reply_
 
 
 async def test_a_form_notice_with_a_mailbox_and_no_subject_waits_for_the_reply_with_the_forms_subject() -> None:
-    """c-378: a form start with a mailbox and no subject failed at the acknowledgement, which had no subject to reply
+    """A form start with a mailbox and no subject failed at the acknowledgement, which had no subject to reply
     with. The start form gives the subject a default, and the reply check skips a run that still has none."""
     schema = cast(dict[str, Any], (trigger_node(SEED["mail_document"]) or {})["parameters"]["inputSchema"])
     sent = {"fileId": "fil_1", "from": "registry@court.test", "mailbox": "levies@harborpine.test"}

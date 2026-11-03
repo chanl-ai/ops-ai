@@ -4,7 +4,7 @@ Revision ID: 0034_skill_created_by
 Revises: 0033_chat_search
 
 Delete rights belong to the skill's creator or an admin of its team. Version 1's `saved_by` changes each time its
-unpublished draft is saved, so it named the last saver, and a person who saved first could then delete (c-115). The
+unpublished draft is saved, so it named the last saver, and a person who saved first could then delete. The
 column is filled from version 1's `saved_by` for skills that already exist: the last person to save version 1, which
 may not be its creator, and the best record kept.
 """

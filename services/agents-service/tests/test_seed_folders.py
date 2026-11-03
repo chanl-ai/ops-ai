@@ -1,4 +1,4 @@
-"""Services seed from their own seed/ folders, never test fixtures (c-067 T001), by failure mode: a dev service still
+"""Services seed from their own seed/ folders, never test fixtures, by failure mode: a dev service still
 reading tests/ (so a test change changes what the product shows), production starting with the demo seed, a named
 seed directory being dropped outside dev, and rule 3b missing a tests/ path in source code or flagging a name that
 is not one."""
@@ -65,7 +65,7 @@ def test_rule_3b_leaves_names_and_docstrings_alone() -> None:
 
 
 def test_rule_5_counts_a_route_a_person_or_any_service_of_the_tenant_calls_as_authenticated() -> None:
-    """Knowledge usage and workflow refs authenticate through current_tenant_caller (c-222); rule 5 read them as
+    """Knowledge usage and workflow refs authenticate through current_tenant_caller; rule 5 read them as
     open."""
     out: list[str] = []
     checked = check_standards.check_routes(out)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]

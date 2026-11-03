@@ -1,4 +1,4 @@
-"""Message keys from packages/ops_email stay as they were (c-187): every fixture message keys and threads exactly as
+"""Message keys from packages/ops_email stay as they were: every fixture message keys and threads exactly as
 `v1_keys.json` records, written by the v1 mailbox adapter before it was retired. A key that changes would make a
 redelivered message start a second run, since the Email received trigger dedupes runs by it."""
 

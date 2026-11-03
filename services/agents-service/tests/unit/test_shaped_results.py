@@ -1,4 +1,4 @@
-"""Shaped tool results on the chat (c-055 T004), by failure mode: a registry operation's result never shaped, its
+"""Shaped tool results on the chat, by failure mode: a registry operation's result never shaped, its
 declared shape ignored, a shaped part lost on reload, and a legacy view turned into a part."""
 
 from __future__ import annotations

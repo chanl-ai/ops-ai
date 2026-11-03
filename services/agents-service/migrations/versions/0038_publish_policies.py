@@ -1,4 +1,4 @@
-"""publish_policies and publish_policy_audit: which publishes need a second person's review (c-086)
+"""publish_policies and publish_policy_audit: which publishes need a second person's review
 
 Revision ID: 0038_publish_policies
 Revises: 0037_deployment_team

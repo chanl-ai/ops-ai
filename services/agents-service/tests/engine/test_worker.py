@@ -243,7 +243,7 @@ async def test_a_dead_workers_claim_lapses_and_another_worker_finishes_the_run(e
 
 
 class UncertainTools(CountingTools):
-    """Every write reaches the system, which times out: whether it acted is not known (c-561)."""
+    """Every write reaches the system, which times out: whether it acted is not known."""
 
     async def access(self, operation: str) -> Access:
         return "write"

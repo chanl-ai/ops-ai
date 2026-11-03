@@ -1,4 +1,4 @@
-"""engine_definitions: drop `system`; the workflows a service event starts are ordinary workflows (c-258)
+"""engine_definitions: drop `system`; the workflows a service event starts are ordinary workflows
 
 A system workflow was copied from code into the database on its tenant's first event and then refused to every person:
 nobody could edit, publish, pause or run it. The event workflows are now ordinary rows owned by no team, edited and

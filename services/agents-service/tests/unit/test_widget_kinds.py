@@ -1,4 +1,4 @@
-"""Generic widget kinds (c-176), by failure mode: data outside a kind's schema drawn; a kind carrying a link, script,
+"""Generic widget kinds, by failure mode: data outside a kind's schema drawn; a kind carrying a link, script,
 HTML or image source; an oversized kind; an unknown kind; a gallery sample the agent could not emit; the console's copy
 of the kind schemas drifting from the kernel's; a template that binds a kind not filling it."""
 

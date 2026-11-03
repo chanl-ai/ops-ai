@@ -1,4 +1,4 @@
-"""agent_memories and memory_audit: what an agent remembers about each person (c-124)
+"""agent_memories and memory_audit: what an agent remembers about each person
 
 Revision ID: 0048_agent_memories
 Revises: 0047_mailboxes

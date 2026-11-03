@@ -4,7 +4,7 @@ Revision ID: 0042_skill_published_loading
 Revises: 0041_engine_settings
 
 The mode lived only in each version's content JSON, so the agent page's picker filtered always-on skills after the
-page was read and returned short pages (c-136). Filled from each skill's published version.
+page was read and returned short pages. Filled from each skill's published version.
 """
 
 from __future__ import annotations

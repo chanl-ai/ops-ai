@@ -1,4 +1,4 @@
-"""A typed decision carries what the reviewer gave (c-329), on PostgreSQL with the real worker, by failure mode: a
+"""A typed decision carries what the reviewer gave, on PostgreSQL with the real worker, by failure mode: a
 Reject's assignee is dropped, so the workflow cannot send the document to that person; an input the action does not
 declare is taken silently; a correction is lost on the typed path."""
 

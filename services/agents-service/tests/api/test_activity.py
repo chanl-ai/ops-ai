@@ -1,4 +1,4 @@
-"""GET /v1/activity (c-201), by failure mode, through the app with platform tokens: a row from a team the caller is not
+"""GET /v1/activity, by failure mode, through the app with platform tokens: a row from a team the caller is not
 in leaks; another person's private chat shows; a facet count disagrees with the rows it counts; a skipped email looks
 like one that started a run."""
 
@@ -124,7 +124,7 @@ async def test_a_skipped_email_says_why_and_links_no_run(stack: Stack) -> None: 
 
 
 async def test_a_decision_on_a_workflows_human_task_is_listed_with_who_decided(stack: Stack) -> None:  # noqa: F811
-    # Decisions are read back from what the decide route writes; a reader of another shape listed none (shared, c-201).
+    # Decisions are read back from what the decide route writes; a reader of another shape listed none (shared).
     c, rt = stack
     run = await started_run(c, BUILDER, "ops_check")
     waiting = {"node": "review", "iteration": 1, "interruptId": "i1", "payload": {"node": "review", "iteration": 1}}
@@ -201,7 +201,7 @@ async def test_a_tool_call_in_a_private_chat_lists_for_its_owner_only(stack: Sta
         thread_id=thread, team_id="team_ops", run_id=None, type_="tool_end", node="agent", data=call
     )
     [row] = (await activity(c, VIEWER, kind="tool_call"))["data"]
-    # Worded as the run page words a call (c-508), never the tool's name.
+    # Worded as the run page words a call, never the tool's name.
     assert (row["title"], row["status"], row["ref"]) == (
         "List accounts: customer id CUS-1002",
         "done",
@@ -240,7 +240,7 @@ async def test_a_workflows_tool_step_lists_as_a_tool_call(stack: Stack) -> None:
 
 
 async def test_a_cases_activity_is_its_own_entries_and_what_its_linked_run_did(stack: Stack) -> None:  # noqa: F811
-    """c-341: filtered to a case, the list holds the case's entries and the rows about its linked run (the run and the
+    """Filtered to a case, the list holds the case's entries and the rows about its linked run (the run and the
     decision on its Human Task), and nothing about a run the case does not link."""
     c, rt = stack
     case = await opened(c, BUILDER, subject="Levy on Marcus Bell")

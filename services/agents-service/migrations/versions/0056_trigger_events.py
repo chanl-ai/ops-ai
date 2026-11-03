@@ -1,4 +1,4 @@
-"""trigger_events: what a workflow's trigger received and the run each started or why none (c-201)
+"""trigger_events: what a workflow's trigger received and the run each started or why none
 
 Revision ID: 0056_trigger_events
 Revises: 0055_drop_publish_policies

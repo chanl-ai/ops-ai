@@ -1,4 +1,4 @@
-"""widget_deployments.retired_at: an embed retired for good (c-130)
+"""widget_deployments.retired_at: an embed retired for good
 
 Revision ID: 0046_widget_retired
 Revises: 0045_poll_cursors

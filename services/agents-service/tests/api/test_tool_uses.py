@@ -1,4 +1,4 @@
-"""Which of a team's agents and workflows use each tool (c-609), by failure mode: an agent that grants a tool is not
+"""Which of a team's agents and workflows use each tool, by failure mode: an agent that grants a tool is not
 named, a workflow whose tool step calls it is not named (a v1 tool step, or a v2 workflow's tool node, draft or live),
 a tool nothing uses is said to be used, and another team's agents are named."""
 

@@ -1,4 +1,4 @@
-"""A run lists the runs its steps started (c-209's for each), by failure mode: a child shown without its status, the
+"""A run lists the runs its steps started (a For each step), by failure mode: a child shown without its status, the
 items out of order, and a child the tenant cannot see (another tenant's id in a step's output) listed anyway."""
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
-"""The owning team's name on agent, workflow and widget details (c-224), by failure mode: a member sees only its id;
+"""The owning team's name on agent, workflow and widget details, by failure mode: a member sees only its id;
 platform-service being down fails the detail instead of falling back to the id; a list of many records asks
-platform-service once per record. A person outside the team reads none of it (c-407)."""
+platform-service once per record. A person outside the team reads none of it."""
 
 from __future__ import annotations
 
@@ -85,7 +85,7 @@ async def test_a_member_sees_the_owning_teams_name_and_platform_is_read_once(c: 
     assert (seen["teamId"], seen["teamName"], seen["canEdit"]) == ("team_ops", "Operations", False), seen
     _data(await c.get(f"/v1/agents/{agent['id']}", headers=BUILDER))
     assert Platform.reads == 1, "names are cached for the tenant"
-    # A person outside the team does not read it at all (c-407).
+    # A person outside the team does not read it at all.
     assert (await c.get(f"/v1/agents/{agent['id']}", headers=OUTSIDER)).status_code == 404
 
 

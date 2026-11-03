@@ -1,5 +1,5 @@
 """The registry tables the migrations build are the ones the code writes: a column the model dropped but a migration
-left (registry `owner` after c-171) is NOT NULL with nothing writing it, so every create fails on PostgreSQL."""
+left (registry `owner`) is NOT NULL with nothing writing it, so every create fails on PostgreSQL."""
 
 from __future__ import annotations
 

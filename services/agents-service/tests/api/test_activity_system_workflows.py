@@ -1,4 +1,4 @@
-"""A shipped system workflow's change in Activity (c-317), by failure mode, through the real seed follow
+"""A shipped system workflow's change in Activity, by failure mode, through the real seed follow
 (api/service_events.py) and GET /v1/activity: an update to a shipped workflow never shows; an update decided in review
 still reads as waiting; a team that kept its own version is not told an update exists."""
 

@@ -1,4 +1,4 @@
-"""A seeded agent follows its seed file (c-067), by failure mode: a changed seed never reaching a database seeded
+"""A seeded agent follows its seed file, by failure mode: a changed seed never reaching a database seeded
 before it (the shared stack keeps knowledge bases the seed no longer names), and the seed overwriting an agent a
 person has since published."""
 

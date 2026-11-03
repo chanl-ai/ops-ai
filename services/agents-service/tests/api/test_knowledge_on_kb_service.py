@@ -1,4 +1,4 @@
-"""Chat knowledge on kb-service (c-056 T005), by failure mode: a reply citing kb-service's passage without its page and
+"""Chat knowledge on kb-service, by failure mode: a reply citing kb-service's passage without its page and
 section, a thread opened on a knowledge base the agent is not granted, a turn searching a knowledge base taken from the
 agent after the thread was opened (kb-service searches whatever ids it is sent), and kb-service being down failing the
 reply instead of answering without citations."""
@@ -151,7 +151,7 @@ async def test_kb_service_down_answers_without_citations(kb_app: tuple[AsyncClie
 async def test_the_test_panel_names_bases_as_kb_service_does_and_by_id_while_it_is_down(
     kb_app: tuple[AsyncClient, FakeKb, Any],
 ) -> None:
-    # c-170 review: the panel named bases from the agents seed ("Fraud & payments"), not as kb-service names them.
+    # The panel named bases from the agents seed ("Fraud & payments"), not as kb-service names them.
     client, kb, _ = kb_app
     question = {"message": "What is the daily wire limit for a personal account?"}
     r = await client.post("/v1/agents/ag_fraud/test", json=question)

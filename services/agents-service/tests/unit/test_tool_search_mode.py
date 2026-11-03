@@ -1,4 +1,4 @@
-"""An agent with many tools finds them by searching (c-610), by failure mode: every schema still sent above the
+"""An agent with many tools finds them by searching, by failure mode: every schema still sent above the
 threshold, a found tool that cannot be called, an approved write that cannot resume because its tool is hidden again,
 a search or a guessed name reaching a tool the agent is not granted, an agent at the threshold or with the install flag
 off changing behaviour, and the agents-service catalog dropping the deployment's setting."""

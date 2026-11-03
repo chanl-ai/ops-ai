@@ -1,4 +1,4 @@
-"""What people read when a step fails (c-446), on PostgreSQL with the real worker, read back through the run page's
+"""What people read when a step fails, on PostgreSQL with the real worker, read back through the run page's
 route, by failure mode: the run's error is a Python exception (`ValueError: reply's input mailbox, subject is empty when
 ack opens`, staging wfrun_ae6001c606ce), or the failed step is never marked failed and its detail is lost."""
 

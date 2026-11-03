@@ -1,4 +1,4 @@
-"""The Ops tools (c-469), by failure mode: a tool reads a record of a team the person is not in; the model passes a
+"""The Ops tools, by failure mode: a tool reads a record of a team the person is not in; the model passes a
 person, email or team to widen a read; the agent is offered a workflow the person may not start; an unattended turn
 uses the tools as nobody; an agent other than the team's default is offered them."""
 

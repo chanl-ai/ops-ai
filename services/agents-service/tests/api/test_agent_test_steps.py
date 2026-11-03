@@ -1,4 +1,4 @@
-"""What a test reply says it did (c-170), by failure mode: a citation that does not name its knowledge base and page; a
+"""What a test reply says it did, by failure mode: a citation that does not name its knowledge base and page; a
 gated call that reads as a success; a read-only tool listed as pausing, or a pausing write tool missing; a reply that
 searched nothing and called nothing saying nothing about it."""
 
@@ -48,7 +48,7 @@ async def test_the_tools_that_pause_are_named_and_read_only_ones_are_not(stack: 
 
 
 async def test_a_test_naming_someone_to_run_as_is_refused_not_ignored(stack: tuple[AsyncClient, Runtime]) -> None:  # noqa: F811
-    """tick 31 (c-285): Run as was removed, but the route still took a run-as id and ran as the caller anyway."""
+    """Run as was removed, but the route still took a run-as id and ran as the caller anyway."""
     client, _ = stack
     res = await client.post("/v1/agents/ag_advisor/test", json={"message": "Hello", "runAsId": "per_teller"})
     assert (res.status_code, res.json()["error"]["code"]) == (400, "validation_failed"), res.text

@@ -1,4 +1,4 @@
-"""Workflow runs and cases are held to the caller's team by the database (c-507)
+"""Workflow runs and cases are held to the caller's team by the database
 
 Revision ID: 0076_runs_and_cases_team
 Revises: 0075_definitions_have_a_team

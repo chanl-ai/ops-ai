@@ -1,4 +1,4 @@
-"""A run's tool calls carry its team (c-200): the worker's pass sets the run's team, so the service token a tool call
+"""A run's tool calls carry its team: the worker's pass sets the run's team, so the service token a tool call
 mints (`app.service_token_for`, `current_team()`) names it, as a person's request does. Failure mode: a worker pass
 acts for no team, so tools-service cannot tell which team's mailbox a reply may leave from."""
 

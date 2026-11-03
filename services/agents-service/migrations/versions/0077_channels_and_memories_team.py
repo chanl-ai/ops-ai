@@ -1,4 +1,4 @@
-"""Channels, mail, memories and chat search are held to the caller's team by the database (c-507)
+"""Channels, mail, memories and chat search are held to the caller's team by the database
 
 Revision ID: 0077_channels_and_memories_team
 Revises: 0076_runs_and_cases_team

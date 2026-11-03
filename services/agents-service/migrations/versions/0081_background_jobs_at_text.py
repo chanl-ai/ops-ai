@@ -1,4 +1,4 @@
-"""background_jobs.at holds an ISO time, like every other row Activity lists (c-516)
+"""background_jobs.at holds an ISO time, like every other row Activity lists
 
 Revision ID: 0081_background_jobs_at_text
 Revises: 0080_drop_runs_single_col_idx

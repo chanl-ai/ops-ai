@@ -1,4 +1,4 @@
-"""Each team's Ops Assistant is a team default agents-service provisions (c-616 PV1), by failure mode: a new team's
+"""Each team's Ops Assistant is a team default agents-service provisions, by failure mode: a new team's
 assistant cannot read its knowledge or files; an assistant made before a newer declaration keeps the old one after a
 restart; and one a person changed is overwritten."""
 

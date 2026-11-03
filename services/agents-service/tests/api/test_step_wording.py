@@ -1,4 +1,4 @@
-"""Steps worded once, by the API (c-508), by failure mode: an Activity row titled with a tool's name; Activity and the
+"""Steps worded once, by the API, by failure mode: an Activity row titled with a tool's name; Activity and the
 run page wording the same step differently; Activity reading the directory or the steps once per row; a tool the
 catalogue does not know shown by its name."""
 
@@ -140,7 +140,7 @@ async def test_a_task_list_reads_the_directory_once(
     dev_platform: AsyncClient,  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # James builds and does not decide reviews, so his write waits for an approver (owner, 2026-11-01).
+    # James builds and does not decide reviews, so his write waits for an approver.
     james = person("usr_james", ["team_ops"], role="builder")
     for _ in range(3):
         await drafted(dev_platform, james)
@@ -268,7 +268,7 @@ async def test_a_call_carrying_an_object_reads_without_it(stack: Stack) -> None:
 
 async def test_a_record_change_shows_each_field_it_writes(stack: Stack) -> None:  # noqa: F811
     """An approver of a record change saw nothing of what would change: the object of changed fields was dropped from
-    the card (c-565). Each field is a row, though never part of the sentence."""
+    the card. Each field is a row, though never part of the sentence."""
     _, rt = stack
     call = {"tool": "crm_update", "input": {"object": "Case", "fields": {"Status": "Escalated", "Priority": "High"}}}
     with tenant_scope(TENANT):
@@ -279,7 +279,7 @@ async def test_a_record_change_shows_each_field_it_writes(stack: Stack) -> None:
 
 
 def test_a_chat_approval_shows_an_object_as_rows_never_raw() -> None:
-    """The chat card showed `{'Status': 'Escalated'}` for a record change (c-565): each field is now its own row."""
+    """The chat card showed `{'Status': 'Escalated'}` for a record change: each field is now its own row."""
     builder = AssistantBuilder(load_catalog(SEED), ChatMessage(id="m1", role="assistant", content="", at="t"))
     held = {"tool": "crm_update", "input": {"object": "Case", "fields": {"Status": "Escalated"}}, "review_id": "r1"}
     events = builder.apply("waiting_review", {"id": "i1", "payload": held})

@@ -1,4 +1,4 @@
-"""Shape lookups never fail a save (c-353), by failure mode: documents-service refusing (403 team_required, a type
+"""Shape lookups never fail a save, by failure mode: documents-service refusing (403 team_required, a type
 another team owns) or tools-service out of reach turns a workflow save into a 500, where the shape should stay open;
 a lookup with no team asks documents-service anyway and is refused."""
 

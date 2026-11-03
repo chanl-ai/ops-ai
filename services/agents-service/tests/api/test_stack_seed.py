@@ -1,4 +1,4 @@
-"""The stack's seeded agents (seed/chat_agents.json, c-048 G1), by failure mode: the registry seeded from the fixture
+"""The stack's seeded agents (seed/chat_agents.json), by failure mode: the registry seeded from the fixture
 agents although the setting names the stack's file, and a seeded agent granted a tool tools-service's dev seed does
 not hold, which the agent would silently never get."""
 

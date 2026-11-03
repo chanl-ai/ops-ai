@@ -1,4 +1,4 @@
-"""ops_runtime_system reads team_default_agents: the start-up catch-up of each team's Ops Assistant (c-616)
+"""ops_runtime_system reads team_default_agents: the start-up catch-up of each team's Ops Assistant
 
 At start agents-service brings every team's Ops Assistant nobody changed to the declared one. It finds those teams by
 their default agent before it knows a tenant, as the run reconciler finds runs, so the BYPASSRLS role reads the table

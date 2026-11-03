@@ -1,4 +1,4 @@
-"""A test email runs as a mailbox email does (c-466), on PostgreSQL with the real worker, by failure mode: the test
+"""A test email runs as a mailbox email does, on PostgreSQL with the real worker, by failure mode: the test
 email's run input differs from a mailbox run's (a key missing or extra, attachments without their name, type or size,
 no body file); it does not reach the human task the mailbox run reaches; the run does not say who sent it and how; an
 attachment the team's Files does not hold is sent anyway. The mailbox run comes from the listener reading the fixture

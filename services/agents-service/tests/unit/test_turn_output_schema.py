@@ -1,4 +1,4 @@
-"""A turn given an output schema (c-062 T001), by failure mode: the answer returned as free text where a workflow step
+"""A turn given an output schema, by failure mode: the answer returned as free text where a workflow step
 needs structured output, output that does not match the schema passed on as if it did, and a schema that never
 reaches the model call (so a real model is never asked for it). Through a scripted model and the fake OpenAI."""
 

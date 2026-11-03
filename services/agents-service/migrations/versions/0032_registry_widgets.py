@@ -1,4 +1,4 @@
-"""widget templates as versioned attachments (c-082)
+"""widget templates as versioned attachments
 
 Revision ID: 0032_registry_widgets
 Revises: 0031_engine_definitions_stage

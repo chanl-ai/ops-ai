@@ -1,4 +1,4 @@
-"""mailboxes: revoke the system role's read (c-199)
+"""mailboxes: revoke the system role's read
 
 Revision ID: 0049_mailboxes_no_system_read
 Revises: 0048_agent_memories

@@ -131,7 +131,7 @@ async def test_a_graph_runs_record_and_models_service_name_the_same_alias_and_re
     assert rt.graph_store is not None
     rows = [r for r in await ModelCallLedger(rt.graph_store.engine).calls(thread["id"]) if r["kind"] == "model"]
     assert len(rows) == 1 and rows[0]["model_alias"] == "bank-standard"
-    # The graph turn's request; the memory extraction after the turn (c-124) runs outside the graph, with no thread.
+    # The graph turn's request; the memory extraction after the turn runs outside the graph, with no thread.
     sent = next(r for r in reversed(models.requests) if "x-thread-id" in r.headers)
     assert json.loads(sent.content)["model"] == "bank-standard"
     assert sent.headers["x-thread-id"] == thread["id"]

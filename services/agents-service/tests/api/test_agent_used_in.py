@@ -1,4 +1,4 @@
-"""An agent's "used in" comes from the workflows that run it (c-068 T001), by failure mode: a v1 workflow whose
+"""An agent's "used in" comes from the workflows that run it, by failure mode: a v1 workflow whose
 published version pins the agent missing or shown at the wrong version, a v2 workflow with an agent step missing, and
 a workflow that does not use the agent listed against it, and the agent's own one-step workflow missing, so the
 Settings tab says nothing reaches an agent that the Deployments tab says deploys through it (UX walk agents-2), or

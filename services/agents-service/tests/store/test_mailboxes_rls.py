@@ -1,4 +1,4 @@
-"""Mailbox records on PostgreSQL (c-199), by failure mode: one tenant reads another's mailbox; the role that bypasses
+"""Mailbox records on PostgreSQL, by failure mode: one tenant reads another's mailbox; the role that bypasses
 row-level security, kept for the sweeper and timer loops, can read mailboxes. Runs on the migrated test database."""
 
 from __future__ import annotations

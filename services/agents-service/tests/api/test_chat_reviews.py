@@ -1,4 +1,4 @@
-"""A chat's write approval in Reviews (c-048 T013, G24), by failure mode: a chat hold missing from the list so the
+"""A chat's write approval in Reviews, by failure mode: a chat hold missing from the list so the
 second approver needs a chat link, a row that cannot say where it came from, and a decision in Reviews that does not
 resume the conversation."""
 
@@ -26,7 +26,7 @@ WRITE = 'call request_document {"customerId": "C-1042", "document": "proof of ad
 @pytest.fixture
 async def client(graph_models: FakeGraphModels) -> AsyncIterator[AsyncClient]:
     """The four-eyes rule on (requesterMayDecide off): the dev asker passes every role rule, so with the rule open
-    their own write is decided as theirs and never waits in Reviews (c-616)."""
+    their own write is decided as theirs and never waits in Reviews."""
     settings = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED, dev_policies={"requesterMayDecide": False})
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     async with engine.begin() as c:

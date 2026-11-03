@@ -3,7 +3,7 @@
 Revision ID: 0037_deployment_team
 Revises: 0036_widget_name
 
-Creating, pausing and polling a deployment is a builder's step in the team that owns it (c-115); with no owner a builder
+Creating, pausing and polling a deployment is a builder's step in the team that owns it; with no owner a builder
 of any team could pause another team's mailbox. Existing rows get no team, which only an admin changes; the dev seed
 writes its team on the next start.
 """

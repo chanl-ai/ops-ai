@@ -1,4 +1,4 @@
-"""Installing a plugin's skill and workflow as a team's own copies (c-590), through the real routes, by failure mode:
+"""Installing a plugin's skill and workflow as a team's own copies, through the real routes, by failure mode:
 a copy skips the checks its create route makes, so a skill names a tool the team cannot call or a workflow that fails
 the engine's checks is saved; a copy lands live instead of as a draft; a workflow copy takes the template's id, so a
 second team's install collides with the first; and a copy is visible to, or changed by, another team.

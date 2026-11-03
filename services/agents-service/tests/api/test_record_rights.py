@@ -1,4 +1,4 @@
-"""The flags a detail response carries for what the caller may do with the record (c-186), by failure mode: a viewer
+"""The flags a detail response carries for what the caller may do with the record, by failure mode: a viewer
 offered edit, delete or publish the route would refuse, or an admin shown View only on a record they may change. The
 console reads these flags for its View only notice and buttons."""
 

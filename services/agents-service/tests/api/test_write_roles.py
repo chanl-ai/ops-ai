@@ -1,4 +1,4 @@
-"""Who may write agents, workflows, workflow definitions, guardrails, skills and widgets (c-115), by failure mode: a
+"""Who may write agents, workflows, workflow definitions, guardrails, skills and widgets, by failure mode: a
 viewer's token writes; a reviewer's token writes; a builder acting in another team changes this team's record; a builder
 who saved a skill draft deletes a skill another person created. Each walk sends every write the console sends, with
 the body it sends, as the refused person first and then as the owning team's builder, whose 2xx proves the body and the
@@ -80,7 +80,7 @@ SKILL: dict[str, Any] = {
 
 # One write: its method, what it does, its path and body from what the walk has made so far, the status the owning
 # builder gets, and what a builder of another team gets: 404, since a team's records are read inside the acting team
-# only (N, c-407), or nothing sent for a create, which acts in the caller's own team (-). T, 403 `team_forbidden` naming
+# only (N), or nothing sent for a create, which acts in the caller's own team (-). T, 403 `team_forbidden` naming
 # team_ops, is kept for a record read across teams; none is left.
 Step = tuple[str, str, Callable[[dict[str, Any]], tuple[str, Any]], int, str]
 T, N, OWN = "team_forbidden", "not_found", "-"
@@ -142,7 +142,7 @@ STEPS: list[Step] = [
     (
         "POST",
         "ask to publish an agent",
-        # The edits above rewrite the one draft (c-172), so it is still v1.
+        # The edits above rewrite the one draft, so it is still v1.
         lambda k: (f"/v1/agents/{k['agent']}/publish-requests", {"version": 1}),
         201,
         N,
@@ -395,7 +395,7 @@ async def test_channel_writes_need_a_builder_of_the_owning_team(
             if r.status_code != 403 or got != code:
                 problems.append(f"{method} {path} as {code}: {r.status_code} {r.text[:120]}")
     assert not problems, "\n".join(problems)
-    # Another team does not see the deployment (c-507): its id is taken, and a pause finds nothing.
+    # Another team does not see the deployment: its id is taken, and a pause finds nothing.
     taken = await c.post("/v1/deployments", json={**dep, "paused": True}, headers=OTHER_TEAM)
     assert taken.status_code == 409 and taken.json()["error"]["code"] == "deployment_id_taken", taken.text
     assert "team_" not in taken.text, "the owning team is not named"

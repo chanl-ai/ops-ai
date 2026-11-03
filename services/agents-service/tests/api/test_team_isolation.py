@@ -1,4 +1,4 @@
-"""A team is the data boundary (c-407): a person outside the team that owns an agent, skill, guardrail or widget does
+"""A team is the data boundary: a person outside the team that owns an agent, skill, guardrail or widget does
 not see it in a list, and reading it by id or through a sub-route answers 404, as a case or a run does. Inside the
 team the roles grid decides. Each failure mode drives the real routes with tokens minted as platform-service mints them:
 
@@ -170,7 +170,7 @@ async def test_a_reviewer_acting_in_another_team_publishes_the_agent_they_approv
 
 
 async def test_a_workflow_definition_is_listed_with_its_team_so_it_can_be_granted() -> None:
-    # A v2 workflow is granted tool access as a v1 one is (c-433): tools-service finds it and its team here.
+    # A v2 workflow is granted tool access as a v1 one is: tools-service finds it and its team here.
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     async with engine.begin() as conn:
         await conn.run_sync(metadata.create_all)
@@ -213,7 +213,7 @@ async def test_a_workflow_definition_is_listed_with_its_team_so_it_can_be_grante
 async def test_the_chat_agent_picker_offers_only_the_teams_agents(
     stack: tuple[AsyncClient, AsyncEngine],  # noqa: F811
 ) -> None:
-    # The live catalogue holds every team's agents; the picker read it whole, so another team's showed (c-407).
+    # The live catalogue holds every team's agents; the picker read it whole, so another team's showed.
     c, _ = stack
     mine = {a["id"] for a in _data(await c.get("/chat/agents", headers=BUILDER))}
     assert mine, "the owning team's live agents are offered"

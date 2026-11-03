@@ -1,4 +1,4 @@
-"""widget_deployments: an agent's chat served to pages on other origins, pinned to a published version (c-117)
+"""widget_deployments: an agent's chat served to pages on other origins, pinned to a published version
 
 Revision ID: 0035_widget_deployments
 Revises: 0034_skill_created_by

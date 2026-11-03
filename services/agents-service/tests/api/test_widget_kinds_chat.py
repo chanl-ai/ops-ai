@@ -1,4 +1,4 @@
-"""A generic widget kind through a real chat turn (c-176): the part the kernel fills must reach the stream and survive a
+"""A generic widget kind through a real chat turn: the part the kernel fills must reach the stream and survive a
 reload, or the turn breaks with a 500 when the chat contract does not know the part's `kind`."""
 
 from __future__ import annotations

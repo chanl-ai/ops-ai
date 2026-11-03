@@ -1,4 +1,4 @@
-"""Indexes that lead with the filters of the hot workflow and agent queries (c-280)
+"""Indexes that lead with the filters of the hot workflow and agent queries
 
 The worker's claim takes either queued work that is due or claimed work whose lease lapsed; only the first branch had
 an index, so every poll scanned the queue for lapsed leases. A service event's listeners and the mailbox listener read

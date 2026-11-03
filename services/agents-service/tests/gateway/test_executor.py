@@ -70,7 +70,7 @@ async def test_graph_node_supplies_its_thread_without_the_port_carrying_it(gatew
     g.add_edge(START, "send")
     g.add_edge("send", END)
     out = await g.compile().ainvoke({}, {"configurable": {"thread_id": gateway.thread}})
-    # The provider received the mail under the call's key, once (c-187): the reply left, it was not only logged.
+    # The provider received the mail under the call's key, once: the reply left, it was not only logged.
     [sent] = gateway.mail.sent.values()
     assert (sent.key, sent.to, sent.subject) == ("REV-1:reply", ("ana@example.com",), "Re: card dispute")
     assert out["sent"] == await gateway.mail.send(sent)

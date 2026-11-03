@@ -1,4 +1,4 @@
-"""The workspace's memory retention and clean-up (c-206, c-557), by failure mode: an expired memory survives, a kept
+"""The workspace's memory retention and clean-up, by failure mode: an expired memory survives, a kept
 one is deleted, the deletion is not audited, a policy that cannot be read deletes anything, a forgotten memory keeps
 its text past its grace or loses it within it, a suggestion nobody answered stays for ever, a conflict is settled
 without the person, or a pass leaves no record on the Background page."""

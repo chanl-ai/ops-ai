@@ -1,4 +1,4 @@
-"""Archiving a workflow (c-274), by failure mode: an archived workflow still starts runs (live, test or as a child), a
+"""Archiving a workflow, by failure mode: an archived workflow still starts runs (live, test or as a child), a
 trigger still serves it, it stays on the lists, someone who may not delete it archives it, or restoring loses what it
 was."""
 

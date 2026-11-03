@@ -1,6 +1,6 @@
-"""Tool module reviews as publish requests (c-163), by failure mode: a person or another service opening one, a body
-naming a team other than the person's, tools-service's own token naming who asked for another kind or without its scope
-(c-222), the requester or an approver
+"""Tool module reviews as publish requests, by failure mode: a person or another service opening one, a body
+naming a team other than the person's, tools-service's own token naming who asked for another kind or without its scope,
+the requester or an approver
 outside Security approving a security change, and an approval that never reaches tools-service."""
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ async def stack() -> AsyncIterator[tuple[AsyncClient, FakeTools]]:
         await c.run_sync(metadata.create_all)
         await c.run_sync(engine_metadata.create_all)
     settings = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED, registry_auto_approve=False)
-    # Service tokens resolve on the public routes as well as the service ones, as in a deployment (c-222).
+    # Service tokens resolve on the public routes as well as the service ones, as in a deployment.
     services = ServiceAuth(
         audience="agents", verifiers=service_verifiers(settings, "agents"), scopes=settings.service_scopes
     )
@@ -132,7 +132,7 @@ async def test_security_decides_a_security_change_and_the_decision_reaches_tools
 async def test_tools_service_alone_opens_a_tool_module_review_on_a_persons_behalf_and_nothing_else(
     stack: tuple[AsyncClient, FakeTools],
 ) -> None:
-    """Its seed's versions waiting for review (c-222): tools-service's own token scoped to the module's team, with
+    """Its seed's versions waiting for review: tools-service's own token scoped to the module's team, with
     tools:publish, opens a tool module review naming who asked, recorded as opened on their behalf. A person's token
     cannot name someone else, tools-service cannot open another kind, and no other service opens one."""
     c, _ = stack
@@ -171,7 +171,7 @@ async def test_tools_service_alone_opens_a_tool_module_review_on_a_persons_behal
 async def test_the_review_keeps_and_shows_what_tools_service_said_it_approves(
     stack: tuple[AsyncClient, FakeTools],
 ) -> None:
-    """c-204: the diff sent at open is stored with the review and returned as asked, so the reviewer sees the
+    """The diff sent at open is stored with the review and returned as asked, so the reviewer sees the
     operations, hosts and secrets of the version requested, even if the module is edited afterwards."""
     c, _ = stack
     diff = {

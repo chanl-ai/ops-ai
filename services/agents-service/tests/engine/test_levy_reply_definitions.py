@@ -1,4 +1,4 @@
-"""The email-to-reply levy workflows (c-532), scripts/sample-team/workflows/levy_reply_*.json, compiled and run on
+"""The email-to-reply levy workflows, scripts/sample-team/workflows/levy_reply_*.json, compiled and run on
 fakes, by failure mode: the thank-you waits for a person, or the people's runs start before it; a person with no
 account gets the hold path, or the no-account reply goes out without approval; exempt funds are sent to the hold
 review; the hold is placed or the hold reply sent before a person approves it, or with an amount other than the one
