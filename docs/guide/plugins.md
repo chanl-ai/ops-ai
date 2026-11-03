@@ -37,7 +37,7 @@ The manifest file is `plugin.yaml`. The Salesforce example lives at `plugins/sal
 | `connection.after_sign_in` | One lookup after sign-in that fills a setting (Salesforce's instance from UserInfo); see Headers, forms and sign-in steps |
 | `connection.client_auth`, `authorize_params` | How the OAuth client is sent on the token call, and extra parameters on the sign-in address |
 | `connection.health_check` | The path Test connection calls |
-| `settings` | Values a team sets. `default`, `lockable` (the platform admin can fix it for every team), and `from_token` or `after_sign_in` (only the sign-in sets it) |
+| `settings` | Values a team sets. `default`, `lockable` (the install can fix it for every team, `OPS_PLUGIN_LOCKED`), and `from_token` or `after_sign_in` (only the sign-in sets it) |
 | `headers` | Headers on every request the plugin makes, a Python tool's too; a tool's own `headers` add to them |
 | `egress` | The hosts a tool may reach, usually a setting such as `{instance_url}` |
 | `endpoint` | The base address every request template is relative to |
@@ -257,8 +257,7 @@ tools-service and kb-service load every plugin when they start. A plugin that fa
 
 An install with no plugin loads nothing: the plugin routes answer 404 and kb-service refuses a plugin source
 (`tools_unavailable`). A plugin that loaded is offered to every team: installing it is the platform admin's decision,
-and the policy below only turns it off again. When the policy cannot be read and has not been read before, every plugin
-counts as off. The team's switch, its settings and its sign-in are the App's Connect window in the console (apps.md,
+and taking it out of the plugins folder is how it is withdrawn. The team's switch, its settings and its sign-in are the App's Connect window in the console (apps.md,
 Turn an App on); the calls below are the same steps for a script.
 
 Ops AI's own OAuth app for a plugin, which every team uses unless it brings its own, comes only from the install
@@ -269,7 +268,7 @@ in `app_credentials`, and the accounts that sign in with it point at that row.
 
 | Who | Call | What it does |
 |---|---|---|
-| Platform admin (`settings.manage`) | platform-service `PUT /v1/policies/plugins` with `{value: {"opsai.salesforce": {enabled: false, locked: {api_version: "61.0"}}}}` | `enabled: false` stops every team's calls within seconds; `locked` fixes any lockable setting |
+| Platform admin | install config `OPS_PLUGIN_LOCKED='{"opsai.salesforce": {"api_version": "61.0"}}'`, then restart tools-service | Fixes a lockable setting for every team; taking the plugin out of the plugins folder stops every team's calls, which then read "no longer installed" |
 | Team admin (`connections.manage`) | tools-service `PUT /v1/plugins/opsai.salesforce/team` with `{enabled, settings, signIn, kind, credentials, clientId, clientSecret}` | Turns it on for the team and makes the team's connection, whole, for its sign-in kind (below); off again keeps the connection and settings |
 | Security | nothing for the plugin's own hosts | The hosts in the manifest's `egress` (rendered with the team's settings) are reached by that plugin's sign-in, token, test and tool requests without listing; no other call reaches them unlisted. Private, loopback, link-local and metadata addresses stay refused |
 | Team admin | `POST /v1/connections/{id}/sign-in`, then `/sign-in/complete` | Signs the team in; `from_token` settings are read from the token answer here |
@@ -360,7 +359,7 @@ limit to Stripe in test mode.
 
 | Gap | Today |
 |---|---|
-| The platform admin's switch in the console | `PUT /v1/policies/plugins` only; the team's switch and sign-in are the App's Connect window |
+| A console page for the install's plugins and locked settings | Install config only (`OPS_PLUGINS_DIR`, `OPS_PLUGIN_LOCKED`); the team's switch and sign-in are the App's Connect window |
 | An end-to-end use case in a plugin's own repository | A plugin repository has `ops plugin test`; end-to-end proof is ops-ai's use cases below, or a walk through Try a plugin on a local stack |
 | Per-person access lists | Stored on the binding, not enforced |
 | Adding a plugin knowledge source from the console | kb-service API only; the source page syncs and shows it |

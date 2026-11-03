@@ -25,7 +25,7 @@ one as the team's own copy through the checks a person's create goes through.
 
 | Needs | How |
 |---|---|
-| tools-service with plugins on and the test plugin loaded | `tools({"OPS_PLUGINS": "true", "OPS_PLUGIN_PATHS": [services/tools-service/tests/plugin_templates/templates_desk]})`; with no platform-service the install switch is on for every plugin |
+| tools-service with plugins on and the test plugin loaded | `tools({"OPS_PLUGINS": "true", "OPS_PLUGIN_PATHS": [services/tools-service/tests/plugin_templates/templates_desk]})`; an installed plugin is there for every team, and each team turns it on for itself |
 | agents-service reading tools-service's operations and templates | `agents(gateway_url=<tools>, kb_url=<that kb>)` |
 | documents-service reading templates from tools-service | `kb(..., documents_env={OPS_TOOLS_URL: <tools>, platform sign-in})`, so one files-service serves both |
 | People | Dev auth: Priya Shah (team_ops admin) turns the plugin on for team_ops; William Kamau (team_platform admin) is the team with it off |

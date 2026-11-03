@@ -242,7 +242,9 @@ def generate(out: Path, ref: str | None = None) -> None:
                 capture_output=True,
             )  # fmt: skip
             (ts_root / f"{service}-operations.ts").write_text(typescript_operations(service, ops))
-    subprocess.run(["uv", "run", "ruff", "format", "--quiet", str(py_root)], check=True, cwd=ROOT)
+    # This interpreter's ruff, never `uv run`: the pre-commit check runs this on a copy of the tree that shares the
+    # checkout's environment, and `uv run` there re-points the environment's packages at the copy, which is deleted.
+    subprocess.run([sys.executable, "-m", "ruff", "format", "--quiet", str(py_root)], check=True, cwd=ROOT)
 
 
 def main() -> int:

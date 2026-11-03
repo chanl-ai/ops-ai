@@ -21,13 +21,12 @@ from ops_tools.executor import HttpExecutor
 from ops_tools.graph_mailbox import CursorSeal
 from ops_tools.plugins.executor import PluginExecutor
 from ops_tools.plugins.host import PluginHost, module_of
-from ops_tools.plugins.switches import InstallSwitches
 from ops_tools.registry import ToolRegistry
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
 
 from .plugin_pager import plugin as pager
-from .test_plugins import AllowAll, Policy
+from .test_plugins import AllowAll
 
 KEY = b"k" * 32
 INSTANCE = "https://alpha.my.pager.test"
@@ -71,8 +70,7 @@ class Rig:
             self.seen.append(request)
             return answer(request)
 
-        switches = InstallSwitches(Policy({"test.pager": {"enabled": True}}))
-        plugins = PluginHost(store, PluginBindings(engine), switches, [Loaded("pager", pager, None)])
+        plugins = PluginHost(store, PluginBindings(engine), {}, [Loaded("pager", pager, None)])
         http = HttpExecutor(httpx.AsyncClient(transport=httpx.MockTransport(record)), AllowAll())  # type: ignore[arg-type]
         self.executor = PluginExecutor(plugins, http, KEY)
         self.tenant = tenant
@@ -92,7 +90,7 @@ class Rig:
 
     async def call(self, tool: str, args: dict[str, Any]) -> Any:
         op = self.ops[f"pager_{tool}"]
-        return await self.executor.run(self.module, op, args, actor="t", environment=None, acting_for=None)
+        return await self.executor.run(self.module, op, args, actor="t", environment="test", acting_for=None)
 
     def sent(self, i: int = -1) -> dict[str, list[str]]:
         return parse_qs(self.seen[i].url.query.decode())
@@ -264,8 +262,7 @@ async def test_a_plugin_tools_title_is_listed_with_it(
 ) -> None:
     bindings = PluginBindings(engine)
     await bindings.put(tenant, "team_a", "test.pager", enabled=True, connection_id="con_a", settings={}, by="t")
-    switches = InstallSwitches(Policy({"test.pager": {"enabled": True}}))
-    plugins = PluginHost(store, bindings, switches, [Loaded("pager", pager, None)])
+    plugins = PluginHost(store, bindings, {}, [Loaded("pager", pager, None)])
     monkeypatch.setattr(reg, "acting_team", lambda: "team_a")
     rows = {t["name"]: t for t in await ToolRegistry(local_catalog, store, plugins).grantable(tenant)}
     assert rows["pager_find_cases"]["title"] == "Find cases", rows.get("pager_find_cases")

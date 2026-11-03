@@ -40,7 +40,7 @@ Connect window asks for more than the steps above.
 
 | Who | What | Where |
 |---|---|---|
-| Platform admin | Allows the plugin for the install; until then the catalog reads "No apps yet" | `PUT /v1/policies/plugins` on platform-service; there is no console page for it yet |
+| Platform admin | Installs the plugin (its folder in the plugins folder, or pinned in the image); it is then offered to every team. Settings fixed for every team come from the install config | `OPS_PLUGINS_DIR`, `deploy/plugins.json`, `OPS_PLUGIN_LOCKED` |
 | Security admin | Lists the App's hosts, so its sign-in and calls may leave | **Settings › Security › Egress**, Add host (and Add range for a host on a private network) |
 | Team admin | Presses **Connect** | The window shows the App's settings (such as its API address), whose account calls use (the team's, each person's, or each person's with the team's as backup), the OAuth app (Ops AI's, or your own with its client ID and secret and the return address to register), and the **Production** environment with its sign-in address. **Save and connect the team account** opens the App's sign-in page |
 

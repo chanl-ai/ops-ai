@@ -3,7 +3,7 @@ export type PolicyValue = boolean | number | string | null | string[] | Record<s
 
 /** One workspace access policy as platform-service serves it (GET /v1/policies, c-186). Every default is open. */
 /** How a policy's value is set: a switch, a confidence floor, a number of days or hours, or a mode per area. */
-export type PolicyKind = 'bool' | 'floor' | 'days' | 'hours' | 'publish_modes' | 'plugins' | 'names' | 'choice';
+export type PolicyKind = 'bool' | 'floor' | 'days' | 'hours' | 'publish_modes' | 'names' | 'choice';
 
 export interface WorkspacePolicy {
   key: string;

@@ -33,7 +33,6 @@ from ops_tools.modules.directory import Directory
 from ops_tools.plugins.executor import PluginExecutor
 from ops_tools.plugins.host import PluginHost, SignInRefused, module_id_of, module_of, settle_at_sign_in
 from ops_tools.plugins.routes import plugins_router
-from ops_tools.plugins.switches import InstallSwitches
 from ops_tools.registry import Resolved, ToolRegistry
 from ops_tools.secrets import SecretResolver
 from ops_tools.store.connections import ConnectionStore
@@ -43,7 +42,7 @@ from ops_tools.store.secrets import SecretStore
 
 from .conftest import CONSOLE_URL, build_app, credentials, response_checker
 from .test_personal_sign_in import JAMES_P, SETTINGS, client, personal_connection, system
-from .test_plugins import AllowAll, Policy
+from .test_plugins import AllowAll
 from .test_review_decisions import introspect, jwks, person
 
 # pytest finds a fixture by its name in this module, so the personal sign-in rig is imported for its last test.
@@ -69,7 +68,7 @@ class Rig:
         self.bindings = PluginBindings(engine)
         loaded = discover(found=[], folders=[str(FOLDER)])
         assert all(item.ok for item in loaded), [item.error for item in loaded]
-        self.host = PluginHost(store, self.bindings, InstallSwitches(Policy({ID: {"enabled": True}})), loaded)
+        self.host = PluginHost(store, self.bindings, {}, loaded)
         self.registry = ToolRegistry(local_catalog, store, self.host)
         upstream = httpx.AsyncClient(transport=httpx.MockTransport(self._answer))
         self.http = HttpExecutor(upstream, AllowAll(), auth=TeamSignIn())  # type: ignore[arg-type]
@@ -240,8 +239,7 @@ async def desk_rig(engine: AsyncEngine, seed: dict[str, Any], tenant: str) -> As
     )
     loaded = discover(found=[], folders=[str(p) for p in sorted(FOLDER.parent.glob("fields_*"))])
     assert all(item.ok for item in loaded), [item.error for item in loaded]
-    policy = {item.plugin.manifest.id: {"enabled": True} for item in loaded if item.plugin}
-    host = PluginHost(ModuleStore(engine), PluginBindings(engine), InstallSwitches(Policy(policy)), loaded, store)
+    host = PluginHost(ModuleStore(engine), PluginBindings(engine), {}, loaded, store)
     app.include_router(plugins_router(host, connections, directory))
     authenticator = Authenticator(
         store, SecretResolver(SecretStore(engine), vault), tokens, ConnectLinks(store, CONSOLE_URL)

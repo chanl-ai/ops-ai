@@ -1,5 +1,5 @@
 """uc-581, api layer: docs/usecases/tools-service/agents-query-salesforce-many-ways.md, stories S1 (steps 1-4) and
-S2 (steps 5-11). platform-service signs the seeded people in and holds the install switch; tools-service runs with
+S2 (steps 5-11). platform-service signs the seeded people in; tools-service runs with
 plugins on and the Salesforce plugin from the ops-ai-plugins repository beside ops-ai; the fake Salesforce
 (docs/usecases/lib/fake_salesforce.py) holds one account's cases, one of them deleted, and records every query it
 answers. Each call is a gateway read as agents-service makes it for a run. No model call."""
@@ -83,8 +83,7 @@ with ExitStack() as stack:
     TENANT["id"] = str((priya_session.get("principal") or {}).get("tenantId") or priya_session.get("tenantId") or "")
     fake = sf["fake"]
 
-    # Set-up as uc-564's steps 1-5: the install switch, Salesforce's hosts, the team switch and the team's sign-in.
-    on = api.put("/v1/policies/plugins", json={"value": {PLUGIN: {"enabled": True}}}, headers=sam)
+    # Set-up as uc-564's steps 2-5: Salesforce's hosts, the team switch and the team's sign-in.
     for h in sf["hosts"]:
         gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-581"}, headers=sam)
     gw.post("/v1/egress/ranges", json={"value": sf["range"], "note": "uc-581"}, headers=sam)
@@ -100,9 +99,9 @@ with ExitStack() as stack:
         headers=priya,
     )
     check(
-        "setup: Salesforce is on for the install and the team, and the team signed in",
-        on.status_code == 200 and turned.status_code == 200 and done.status_code == 200,
-        {"on": on.text[:200], "turned": turned.text[:200], "done": done.text[:200]},
+        "setup: Salesforce is on for the team, and the team signed in",
+        turned.status_code == 200 and done.status_code == 200,
+        {"turned": turned.text[:200], "done": done.text[:200]},
     )
 
     # 1. An agent asks for escalated cases changed since a date: one page and a sealed cursor, from checked inputs.

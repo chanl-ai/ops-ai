@@ -689,7 +689,7 @@ class PolicyOut(Out):
     default: bool | int | float | str | dict[str, Any] | list[str] | None
     changed_by: str
     effect: str
-    kind: Literal["bool", "floor", "days", "hours", "publish_modes", "plugins", "names", "choice"]
+    kind: Literal["bool", "floor", "days", "hours", "publish_modes", "names", "choice"]
     title: str
     # A "choice" policy's options, in order.
     choices: list[PolicyChoice] | None = None

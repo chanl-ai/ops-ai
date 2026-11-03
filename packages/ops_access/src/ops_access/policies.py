@@ -37,7 +37,7 @@ class Policy:
     note: str = ""
 
 
-KINDS = ("bool", "floor", "days", "hours", "publish_modes", "plugins", "names", "choice")
+KINDS = ("bool", "floor", "days", "hours", "publish_modes", "names", "choice")
 
 
 # Which publishes wait for a second person's review (c-086, moved here by c-214), per team and area:
@@ -185,16 +185,6 @@ POLICIES: tuple[Policy, ...] = (
         title="Mask personal data in AI steps",
     ),
     Policy(
-        "plugins",
-        # An installed plugin is on unless its entry says enabled: false; teams then turn it on for themselves. A
-        # plugin's entry may also lock settings every team uses ({"api_version": "61.0"}).
-        {},
-        "Which installed plugins teams may not turn on, and the settings fixed for every team.",
-        kind="plugins",
-        live=True,
-        title="Plugins",
-    ),
-    Policy(
         "egressNewHosts",
         # Asking Security is the default: a new address waits for a person who manages the egress list, as before the
         # policy existed. A plugin's own hosts never need listing for its own calls.
@@ -261,21 +251,6 @@ def check_value(key: str, value: Any) -> Any:
         modes = cast(dict[Any, Any], value)
         if all(a in PUBLISH_AREAS and m in PUBLISH_MODES for a, m in modes.items()):
             return {str(a): str(m) for a, m in modes.items()}
-    if policy.kind == "plugins" and isinstance(value, dict):
-        out: dict[str, Any] = {}
-        for pid, entry in cast(dict[Any, Any], value).items():
-            if not isinstance(entry, dict) or not isinstance(cast(dict[str, Any], entry).get("enabled"), bool):
-                break
-            e = cast(dict[str, Any], entry)
-            locked: object = e.get("locked") or {}
-            if set(e) - {"enabled", "locked"} or not isinstance(locked, dict):
-                break
-            fixed = cast(dict[Any, Any], locked)
-            if not all(isinstance(k, str) and isinstance(v, str | int | float | bool) for k, v in fixed.items()):
-                break
-            out[str(pid)] = {"enabled": e["enabled"], "locked": {str(k): v for k, v in fixed.items()}}
-        else:
-            return out
     takes = {
         "bool": "true or false",
         "floor": "a number from 0 to 1, or null",
@@ -284,7 +259,6 @@ def check_value(key: str, value: Any) -> Any:
         "names": "a list of up to 500 names, each 1 to 200 characters",
         "publish_modes": f"an object of area ({', '.join(PUBLISH_AREAS)}) to mode ({', '.join(PUBLISH_MODES)})",
         "choice": f"one of {', '.join(c[0] for c in policy.choices)}",
-        "plugins": ('an object of plugin id to {"enabled": true or false, "locked": {setting: value}}'),
     }
     raise ValueError(f"{key} takes {takes[policy.kind]}")
 

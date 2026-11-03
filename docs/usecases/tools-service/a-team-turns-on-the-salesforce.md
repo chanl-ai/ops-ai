@@ -7,7 +7,7 @@ Service: `tools-service` with platform-service, kb-service and agents-service. L
 
 | # | Story | Layer | Steps | Proved by |
 |---|---|---|---|---|
-| S1 | The platform admin turns Salesforce on, a team admin turns it on for the team and signs in once, and Test connection passes | api | 1-7, 51 | 6 |
+| S1 | Installed, Salesforce is there for every team; a team admin turns it on for the team and signs in once, and Test connection passes | api | 1-7, 51 | 6 |
 | S2 | An agent in chat finds a case and, once a person approves a card naming the field it changes, changes it in Salesforce | ui | 13-15 | 15 |
 | S3 | A knowledge base syncs the team's Salesforce articles, only changes are fetched again, and chat cites an article | ui | 16-19, 30 | 19 |
 | S4 | A team admin turns Salesforce off and its tools disappear; turned on again, everything is still there | api | 8-12 | 10 |
@@ -26,6 +26,7 @@ Service: `tools-service` with platform-service, kb-service and agents-service. L
 |---|---|
 | PostgreSQL and OPA | `make db-up` |
 | Plugins on | Each layer starts its services with `OPS_PLUGINS=true`; S7 starts tools-service with it off |
+| Locked settings | The api layer starts tools-service with `OPS_PLUGIN_LOCKED='{"opsai.salesforce": {"api_version": "61.0"}}'`, the install config that fixes a setting for every team |
 | The Salesforce plugin | The `ops-ai-plugins` repository checked out beside ops-ai; each layer names `plugins/salesforce/src/ops_plugin_salesforce` in `OPS_PLUGIN_PATHS` |
 | A fake Salesforce | `docs/usecases/lib/fake_salesforce.py`: mock-oauth2-server in Docker behind https, the REST API with cases, Knowledge articles in pages of two (one with an attachment), the limits call, and switches for a token naming a bad host, a 401 and a 429; it records the OAuth app each sign-in used |
 | People | Sam Adeyemi (Security admin: the platform admin of this install), Priya Shah (team_ops admin), James Richardson (builder), Maya Okafor (approver), Wanjiru Kamau (team_platform admin); password `northfield-demo` |
@@ -34,7 +35,7 @@ Service: `tools-service` with platform-service, kb-service and agents-service. L
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Sam sets the `plugins` policy: Salesforce on, `api_version` locked at 61.0; James tries the same | 200 for Sam; 403 for James |
+| 1 | Priya reads the installed plugins, with no admin step before | Salesforce is listed, off for team_ops, with `api_version` locked |
 | 2 | Priya turns Salesforce on for team_ops with the team's OAuth app; James tries; Priya tries to set `api_version` | 200 with a new connection; 403 for James; 400 `setting_locked`; the team reads 61.0 |
 | 3 | Sam lists Salesforce's hosts and the fake's range | Each 200, 201 or 409 |
 | 4 | Priya signs the team in while the token answer names `https://evil.example` | 400 naming the host; no instance kept |
@@ -44,7 +45,7 @@ Service: `tools-service` with platform-service, kb-service and agents-service. L
 | 8 | A run calls `salesforce_query` with a SOQL query | 200 at once; the fake received exactly that query |
 | 9 | Priya turns Salesforce off for the team | Its tools leave the grantable list; a call answers 403 `PLUGIN_DISABLED` |
 | 10 | Priya turns it on again | The same connection and instance; calls run with no new sign-in |
-| 11 | Sam turns it off for the install, then on | Within six seconds calls are refused, then run again; no restart |
+| 11 | Priya turns it off for the team, then on | A call answers 403 `PLUGIN_DISABLED`, then runs again; no restart |
 | 12 | Priya edits and deletes the plugin's module | 403 `plugin_module` to both |
 | 13 | James asks the case helper in chat about case 00044818 | The agent calls `salesforce_query` and shows the case |
 | 14 | James asks it to escalate the case | The approval card names the tool "Update a record", from the plugin's title, and shows the row "Fields · Status: Escalated", never a raw object; `salesforce_update_record` waits in Human Tasks; Salesforce is unchanged |
@@ -62,7 +63,7 @@ Service: `tools-service` with platform-service, kb-service and agents-service. L
 | 26 | Wanjiru signs the team in | The token exchange carries the platform's client id and secret; team_platform's calls run |
 | 27 | Priya signs team_ops in again | The exchange carries team_ops's own app |
 | 28 | Read the plugins and team_platform's connection, as Sam and as Wanjiru | The platform's secret appears in none |
-| 29 | tools-service starts with an empty plugins folder (`OPS_PLUGINS_DIR`), no plugin paths and the install switch on | `/v1/plugins` and the team switch answer 404; no `salesforce_` or other plugin tool is grantable |
+| 29 | tools-service starts with an empty plugins folder (`OPS_PLUGINS_DIR`) and no plugin paths | `/v1/plugins` and the team switch answer 404; no `salesforce_` or other plugin tool is grantable |
 | 30 | Priya opens the source page while its answer names a source type this console does not know | The page opens with its Sync now button and no page error |
 | 40 | Priya reads the app's page (`GET /v1/apps/plugin:opsai.salesforce`) | Its tools list salesforce_query with its title |
 | 41 | James runs `POST /v1/tool-modules/{module}/operations/salesforce_query/run` with mode `mock` | 200, `mocked` true; Salesforce received no query |

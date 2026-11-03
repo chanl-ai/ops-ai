@@ -57,7 +57,6 @@ from .opa import OpaClient
 from .platform_events import member_removed_handlers, team_created_handlers
 from .plugins.host import PluginHost
 from .plugins.routes import plugins_router
-from .plugins.switches import InstallSwitches
 from .plugins.templates import plugin_templates_router
 from .registry import ToolRegistry
 from .secrets import SecretResolver
@@ -158,9 +157,6 @@ def main() -> None:
         settings,
         store,
         PluginBindings(engine),
-        InstallSwitches(
-            client("platform", settings.platform_url, ["settings:view"]) if settings.platform_url else None,
-        ),
         connection_store,
         # The lookup after a plugin's sign-in goes out through the egress client, as any call does (c-584).
         http=egress_client(policy, ca_file=ca),

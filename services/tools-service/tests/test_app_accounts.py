@@ -24,7 +24,6 @@ from ops_tools.modules.service import ModuleService
 from ops_tools.modules.tool_users import StaticToolUsers
 from ops_tools.plugins.host import PluginHost, module_id_of
 from ops_tools.plugins.routes import plugins_router
-from ops_tools.plugins.switches import InstallSwitches
 from ops_tools.registry import ToolRegistry
 from ops_tools.secrets import SecretResolver
 from ops_tools.store.connections import ConnectionStore
@@ -36,7 +35,7 @@ from ops_tools.systems import Systems, systems_router
 from .conftest import CONSOLE_URL, build_app, credentials, response_checker
 from .plugin_desk import plugin as desk
 from .test_plugin_credentials import INSTALL
-from .test_plugins import ID, Policy
+from .test_plugins import ID
 from .test_review_decisions import introspect, jwks, person
 
 TEAM = "team_platform"
@@ -81,7 +80,7 @@ async def world(
     host = PluginHost(
         ModuleStore(engine),
         PluginBindings(engine),
-        InstallSwitches(Policy({ID: {"enabled": True}})),
+        {},
         [Loaded("desk", desk, None)],
         store,
         accounts=True,

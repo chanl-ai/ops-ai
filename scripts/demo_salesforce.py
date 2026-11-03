@@ -9,8 +9,8 @@ What it does, each step a no-op when already done: the plugin's folder (.run/plu
 the fake Salesforce kept running in the background; the plugin settings every restart reads (.run/demo-addons.env:
 OPS_PLUGINS, OPS_PLUGIN_PATHS, the console's address for sign-ins, and the fake's CA and host map), with tools, agents,
 the worker, kb and documents restarted when they changed; the demo's model alias `salesforce-demo` on its own
-connection to the fake model, so the case helper's chat turns never reach a real provider; the plugin turned on for the
-account and its hosts listed for egress.
+connection to the fake model, so the case helper's chat turns never reach a real provider; the plugin's hosts listed
+for egress.
 
 The team admin's steps (connect in the dialog, add the templates, publish) are the demo itself and are left to the
 walk (scripts/demo-salesforce/walk.mjs) or a person. No key, secret or password is printed.
@@ -283,21 +283,6 @@ def heads(token: str, team: str | None = None) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}", **({"X-Team-Id": team} if team else {})}
 
 
-def turn_on_for_account(admin: str, team: str) -> None:
-    """The operator's switch: the `plugins` policy, merged so other plugins' entries stay."""
-    got = httpx.get(f"{PLATFORM}/v1/policies/plugins", headers=heads(admin, team), timeout=20)
-    value: dict[str, Any] = dict((got.json().get("data") or {}).get("value") or {}) if got.status_code == 200 else {}
-    if (value.get(PLUGIN) or {}).get("enabled"):
-        say("FOUND", "Salesforce on for the account (plugins policy)")
-        return
-    value[PLUGIN] = {**(value.get(PLUGIN) or {}), "enabled": True}
-    data(
-        httpx.put(f"{PLATFORM}/v1/policies/plugins", headers=heads(admin, team), json={"value": value}, timeout=20),
-        "plugins policy",
-    )
-    say("MADE", "Salesforce on for the account (plugins policy)")
-
-
 def egress(admin: str, team: str, hosts: list[str], ranges: list[str]) -> None:
     h = heads(admin, team)
     for host in hosts:
@@ -478,7 +463,6 @@ def main() -> int:
     admin_env = read_env(RUN / "dev-admin.env")
     admin = sign_in(admin_env["OPS_BOOTSTRAP_ADMIN_EMAIL"], admin_env["OPS_BOOTSTRAP_ADMIN_PASSWORD"])
     team = team_id(admin)
-    turn_on_for_account(admin, team)
     # SF=real lists nothing: the plugin's own hosts (its sign-in and instance) pass for its own requests.
     if mode != "real" and info is not None:
         egress(admin, team, list(info["hosts"]), [str(info["range"])])

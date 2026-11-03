@@ -28,7 +28,6 @@ from ops_tools.modules.directory import Directory
 from ops_tools.plugins.executor import PluginExecutor
 from ops_tools.plugins.host import PluginHost
 from ops_tools.plugins.routes import plugins_router
-from ops_tools.plugins.switches import InstallSwitches
 from ops_tools.registry import ToolRegistry
 from ops_tools.secrets import SecretResolver
 from ops_tools.store.connections import ConnectionStore
@@ -37,7 +36,7 @@ from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.store.secrets import SecretStore
 
 from .conftest import CONSOLE_URL, build_app, credentials, response_checker
-from .test_plugins import AllowAll, Policy
+from .test_plugins import AllowAll
 from .test_review_decisions import introspect, jwks, person
 
 ID = "test.fields"
@@ -93,8 +92,7 @@ class Upgrade:
         self.host = self.host_for(self.v1)
 
     def host_for(self, plugin: Plugin, *, versions: bool = True) -> PluginHost:
-        switches = InstallSwitches(Policy({ID: {"enabled": True}}))
-        return PluginHost(self.store, self.bindings, switches, [Loaded("fields_desk", plugin, None)], versions=versions)
+        return PluginHost(self.store, self.bindings, {}, [Loaded("fields_desk", plugin, None)], versions=versions)
 
     def upgrade(self, *, versions: bool = True) -> None:
         self.host = self.host_for(self.v2, versions=versions)
@@ -246,8 +244,7 @@ async def routes(
     loaded = discover(found=[], folders=[str(V1)])
     v1 = loaded[0].plugin
     assert v1 is not None
-    switches = InstallSwitches(Policy({ID: {"enabled": True}}))
-    host = PluginHost(ModuleStore(engine), PluginBindings(engine), switches, loaded, store, versions=True)
+    host = PluginHost(ModuleStore(engine), PluginBindings(engine), {}, loaded, store, versions=True)
     app.include_router(plugins_router(host, connections, directory))
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),

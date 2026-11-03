@@ -30,7 +30,6 @@ from ops_tools.modules.directory import Directory
 from ops_tools.modules.seed import load
 from ops_tools.plugins.host import PluginHost
 from ops_tools.plugins.routes import plugins_router
-from ops_tools.plugins.switches import InstallSwitches
 from ops_tools.secrets import SecretResolver
 from ops_tools.store.connections import ConnectionStore, app_credentials, connection_environments
 from ops_tools.store.modules import ModuleStore
@@ -40,7 +39,7 @@ from ops_tools.store.secrets import SecretStore
 from .conftest import CONSOLE_URL, build_app, credentials, response_checker
 from .plugin_desk import plugin as desk
 from .test_personal_sign_in import SETTINGS, AnyUrl, module
-from .test_plugins import ID, Policy
+from .test_plugins import ID
 from .test_review_decisions import introspect, jwks, person
 
 TEAM = "team_platform"
@@ -69,11 +68,10 @@ async def rig(
         vault, Tokens(store, vault, None, None), directory, egress=None,
         console_url=CONSOLE_URL,
     )  # fmt: skip
-    policy = {ID: {"enabled": True}}
     host = PluginHost(
         ModuleStore(engine),
         PluginBindings(engine),
-        InstallSwitches(Policy(policy)),
+        {},
         [Loaded("desk", desk, None)],
         store,
     )

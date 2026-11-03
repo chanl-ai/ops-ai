@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_plugin_sdk.loader import Loaded
 from ops_tools.connections.service import ConnectionService
 from ops_tools.plugins.host import PluginHost, module_id_of
-from ops_tools.plugins.switches import InstallSwitches
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
@@ -25,7 +24,7 @@ from .test_plugin_credentials import (  # noqa: F401  # pyright: ignore[reportUn
     rig,  # pyright: ignore[reportUnusedImport]
     team_admin,
 )
-from .test_plugins import ID, Policy
+from .test_plugins import ID
 
 Rig = tuple[httpx.AsyncClient, ConnectionService, ConnectionStore]
 
@@ -76,7 +75,7 @@ async def test_a_sandbox_sign_in_leaves_productions_instance_and_hosts_apart(
     host = PluginHost(
         ModuleStore(engine),
         PluginBindings(engine),
-        InstallSwitches(Policy({ID: {"enabled": True}})),
+        {},
         [Loaded("desk", desk, None)],
         ConnectionStore(engine),
     )
@@ -117,7 +116,7 @@ async def test_a_new_connection_never_calls_the_instance_a_removed_one_signed_in
     host = PluginHost(
         ModuleStore(engine),
         PluginBindings(engine),
-        InstallSwitches(Policy({ID: {"enabled": True}})),
+        {},
         [Loaded("desk", desk, None)],
         ConnectionStore(engine),
     )

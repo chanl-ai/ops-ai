@@ -1,7 +1,7 @@
 """uc-607, api layer: docs/usecases/console/connect-apps.md, stories S9-S10 (steps 20-23).
 
 The Apps stack of docs/usecases/lib/apps_walk.py: platform-service with the seed's own roles, tools-service with the
-nine test plugins on for the install, and the fake system. The steps call the routes named after the screen's words
+nine test plugins installed, and the fake system. The steps call the routes named after the screen's words
 (`GET /v1/systems`, `GET /v1/apps/{id}`, `PUT /v1/plugins/{id}/team`, kept as they are); a check whose behaviour is not
 built names the task it waits on. No model call."""
 

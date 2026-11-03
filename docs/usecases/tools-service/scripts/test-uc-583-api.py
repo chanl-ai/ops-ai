@@ -1,6 +1,6 @@
 """uc-583, api layer: docs/usecases/tools-service/plugin-sign-in-with-a-certificate.md, stories S1 to S4.
 
-platform-service signs the seeded people in and holds the install switch; tools-service runs with plugins on and loads
+platform-service signs the seeded people in; tools-service runs with plugins on and loads
 the three test plugins in services/tools-service/tests/plugin_signed (OPS_PLUGIN_PATHS); the fake sign-in
 (docs/usecases/lib/fake_token_endpoint.py) checks each assertion as Microsoft Entra does and answers Google and
 DocuSign style JWT grants. No model call."""
@@ -31,7 +31,6 @@ from usecase_harness import (
     service_headers,
     signed_in,
     tools,
-    until,
 )
 from usecase_harness import ROOT as REPO
 
@@ -126,18 +125,13 @@ with ExitStack() as stack:
 
     loaded = data(gw.get("/v1/plugins", headers=priya)) or {}
     ids = sorted(p["id"] for p in loaded.get("plugins", []))
-    policy = api.put("/v1/policies/plugins", json={"value": {i: {"enabled": True} for i in ids}}, headers=sam)
-    until(
-        lambda: all(p["installOn"] for p in (data(gw.get("/v1/plugins", headers=priya)) or {}).get("plugins", [])),
-        timeout=30,
-    )
     allowed = [gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-583"}, headers=sam) for h in m["hosts"]]
     allowed.append(gw.post("/v1/egress/ranges", json={"value": m["range"], "note": "uc-583"}, headers=sam))
     check(
-        "1 the three certificate plugins load and turn on for the install, and Security lists the sign-in's hosts",
-        ids == ["test.docusign", "test.entra", "test.google"] and policy.status_code == 200
+        "1 the three certificate plugins load, and Security lists the sign-in's hosts",
+        ids == ["test.docusign", "test.entra", "test.google"]
         and all(r.status_code in (200, 201, 409) for r in allowed),
-        {"ids": ids, "failed": loaded.get("failed"), "policy": policy.text[:200]},
+        {"ids": ids, "failed": loaded.get("failed")},
     )  # fmt: skip
 
     # S1. An Entra app proves itself with its certificate: no client secret is sent, and the call runs.

@@ -23,13 +23,11 @@ from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.loader import discover
 from ops_service_kit.settings import Settings
 from ops_tools.plugins.host import PluginHost
-from ops_tools.plugins.switches import InstallSwitches
 from ops_tools.plugins.templates import TemplateOutside, body_of, plugin_templates_router
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
 
 from .conftest import build_app, response_checker
-from .test_plugins import Policy
 from .test_review_decisions import introspect, jwks, person
 
 ON, OFF = "team_platform", "team_ops"
@@ -41,9 +39,7 @@ FOLDER = Path(__file__).parent / "plugin_templates" / "templates_desk"
 async def client(engine: AsyncEngine, seed: dict[str, Any], tenant: str) -> AsyncIterator[httpx.AsyncClient]:
     loaded = discover(found=[], folders=[str(FOLDER)])
     assert all(item.ok for item in loaded), [item.error for item in loaded if not item.ok]
-    host = PluginHost(
-        ModuleStore(engine), PluginBindings(engine), InstallSwitches(Policy({PLUGIN: {"enabled": True}})), loaded
-    )
+    host = PluginHost(ModuleStore(engine), PluginBindings(engine), {}, loaded)
     bindings = PluginBindings(engine)
     await bindings.put(tenant, ON, PLUGIN, enabled=True, connection_id=None, settings={}, by="test")
     await bindings.put(tenant, OFF, PLUGIN, enabled=False, connection_id=None, settings={}, by="test")

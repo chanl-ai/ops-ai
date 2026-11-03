@@ -187,11 +187,6 @@ with ExitStack() as stack:
     session = signed_in(api, "p.shah@harborpine.example")
     priya = bearer(session, "team_ops")
     tenant = str((session.get("principal") or {}).get("tenantId") or "")
-    api.put(
-        "/v1/policies/plugins",
-        json={"value": {"opsai.salesforce": {"enabled": True}, "test.reach": {"enabled": True}}},
-        headers=sam,
-    )
     # The workspace allows the host, so only the plugin's own list stands between its code and that host.
     gw.post("/v1/egress/hosts", json={"value": "elsewhere.example", "note": "uc-564"}, headers=sam)
     listing = data(gw.get("/v1/plugins", headers=priya)) or {}
@@ -211,8 +206,7 @@ with ExitStack() as stack:
         {"loaded": loaded, "failed": failed, "on": on.text[:200], "reached": str(reached)[:300]},
     )
 
-# 29. An install with no plugin (an empty plugins folder, no developer paths) loads none and serves no plugin route,
-# though the install switch still says on.
+# 29. An install with no plugin (an empty plugins folder, no developer paths) loads none and serves no plugin route.
 with ExitStack() as stack:
     api, _ = stack.enter_context(platform())
     empty = stack.enter_context(tempfile.TemporaryDirectory(prefix="uc564-no-plugins-"))
@@ -226,11 +220,9 @@ with ExitStack() as stack:
             }
         )
     )
-    sam = bearer(signed_in(api, "s.adeyemi@harborpine.example"), "team_security")
     session = signed_in(api, "p.shah@harborpine.example")
     priya = bearer(session, "team_ops")
     tenant = str((session.get("principal") or {}).get("tenantId") or "")
-    api.put("/v1/policies/plugins", json={"value": {"opsai.salesforce": {"enabled": True}}}, headers=sam)
     listed = gw.get("/v1/plugins", headers=priya)
     team_on = gw.put("/v1/plugins/opsai.salesforce/team", json={"enabled": True}, headers=priya)
     headers = service_headers("tools", tenant=tenant, service="agents", scopes=["tools:view"], team="team_ops")

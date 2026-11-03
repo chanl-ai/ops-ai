@@ -1,7 +1,7 @@
 // uc-564 A team turns on the Salesforce plugin, ui layer: docs/usecases/tools-service/a-team-turns-on-the-salesforce.md,
 // stories S2 (steps 13-15) and S3 (steps 16-19, 30). The demo stack with the fake Salesforce (docs/usecases/lib/fake_salesforce.py)
 // and plugins on (OPS_PLUGINS), loading the Salesforce plugin from the ops-ai-plugins repository beside ops-ai. Set-up goes
-// through the API as the api layer proved it: the install switch, the team switch and the team's sign-in. James asks the
+// through the API as the api layer proved it: the hosts, the team switch and the team's sign-in. James asks the
 // case helper about a case in chat and to escalate it; the approval card names the field the change writes and its new
 // value, the write waits in Human Tasks until Maya approves it there, and only then does Salesforce record it.
 // Priya syncs a knowledge source read through the plugin's two tools from the source's page: every article first, nothing
@@ -127,8 +127,7 @@ try {
       const james = as(await tokenFor('j.richardson@harborpine.example'), 'team_ops');
       const maya = as(await tokenFor('m.okafor@harborpine.example'), 'team_ops');
 
-      // Set-up through the API, as the api layer's steps 1-6 do: install switch, hosts, team switch, the team's sign-in.
-      const installed = await call(platform, 'PUT', '/v1/policies/plugins', sam, { value: { [PLUGIN]: { enabled: true } } });
+      // Set-up through the API, as the api layer's steps 2-6 do: hosts, team switch, the team's sign-in.
       for (const host of sf.info.hosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-564' });
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: sf.info.range, note: 'uc-564' });
       const login = sf.info.authorize_url.replace(/\/authorize$/, '');
@@ -148,9 +147,9 @@ try {
       const asked = await call(agents, 'POST', `/v1/agents/${agent.id}/publish-requests`, priya, { version: patched.data?.version, note: 'uc-564' });
       const live = asked.data?.status === 'pending' ? await call(agents, 'POST', `/v1/publish-requests/${asked.data.id}/decision`, maya, { decision: 'approved' }) : asked;
       check(
-        'setup: Salesforce is on for the install and the team, the team signed in, and the case helper holds its tools',
-        installed.status === 200 && on.status === 200 && signed.status === 200 && !!base.id && patched.status === 200 && live.status < 300,
-        { installed: installed.text, on: on.text, signed: signed.status, base: made.text, patched: patched.text, live: live.text },
+        'setup: Salesforce is on for the team, the team signed in, and the case helper holds its tools',
+        on.status === 200 && signed.status === 200 && !!base.id && patched.status === 200 && live.status < 300,
+        { on: on.text, signed: signed.status, base: made.text, patched: patched.text, live: live.text },
       );
       const thread = async (kbIds = []) => (await call(agents, 'POST', '/chat/threads', james, { agentId: agent.id, kbIds })).data?.id;
 

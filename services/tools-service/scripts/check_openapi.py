@@ -36,7 +36,6 @@ from ops_tools.opa import OpaClient
 from ops_tools.platform_events import member_removed_handlers
 from ops_tools.plugins.host import PluginHost
 from ops_tools.plugins.routes import plugins_router
-from ops_tools.plugins.switches import InstallSwitches
 from ops_tools.plugins.templates import plugin_templates_router
 from ops_tools.registry import ToolRegistry
 from ops_tools.secrets import SecretResolver
@@ -95,11 +94,11 @@ def document() -> dict[str, Any]:
             mocks_router(MockStore(engine), ModuleStore(engine), directory, security_team="team_security"),
             connections_router(connection_service, directory),
             plugins_router(
-                PluginHost(ModuleStore(engine), PluginBindings(engine), InstallSwitches(None)),
+                PluginHost(ModuleStore(engine), PluginBindings(engine), {}),
                 connection_service,
                 directory,
             ),
-            plugin_templates_router(PluginHost(ModuleStore(engine), PluginBindings(engine), InstallSwitches(None))),
+            plugin_templates_router(PluginHost(ModuleStore(engine), PluginBindings(engine), {})),
             systems_router(Systems(connection_service, ModuleStore(engine)), directory),
             platform_events_router(member_removed_handlers(connection_service.store, credentials)),
         ),

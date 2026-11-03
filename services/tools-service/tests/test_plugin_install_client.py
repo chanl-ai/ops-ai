@@ -1,7 +1,7 @@
 """The install's own OAuth client for a plugin, from the install config (OPS_PLUGIN_CLIENTS), through the real routes,
 by failure mode: an install that set its client still shows empty client fields and makes each team bring its own; the
 app card claims a managed client the install does not have; and an installed plugin stays off until someone finds the
-switch, or turns on when the policy cannot be read."""
+switch."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import pytest
 from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_identity import Auth, Identity, ServiceAuth, ServiceUnreachable, service_verifiers
+from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
 from ops_plugin_sdk.loader import Loaded
 from ops_service_kit.settings import PluginClient, Settings
 from ops_tools.auth.tokens import Tokens
@@ -23,7 +23,6 @@ from ops_tools.modules.directory import Directory
 from ops_tools.modules.seed import load
 from ops_tools.plugins.host import PluginHost
 from ops_tools.plugins.routes import plugins_router
-from ops_tools.plugins.switches import InstallSwitches
 from ops_tools.secrets import SecretResolver
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.modules import ModuleStore
@@ -34,7 +33,7 @@ from ops_tools.systems import Systems, systems_router
 from .conftest import CONSOLE_URL, build_app, credentials, response_checker
 from .plugin_desk import plugin as desk
 from .test_plugin_credentials import _caller, team_admin  # pyright: ignore[reportPrivateUsage]
-from .test_plugins import ID, Policy
+from .test_plugins import ID
 from .test_review_decisions import introspect, jwks
 
 INSTALL = {ID: PluginClient(id="install-client-id", secret=SecretStr("install-secret-5d1e"))}
@@ -42,7 +41,7 @@ INSTALL = {ID: PluginClient(id="install-client-id", secret=SecretStr("install-se
 Rig = tuple[httpx.AsyncClient, ConnectionService, ConnectionStore]
 
 
-def _rig(policy: dict[str, Any], install: dict[str, PluginClient]):
+def _rig(install: dict[str, PluginClient]):
     @pytest.fixture
     async def made(
         engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_tools: list[dict[str, Any]]
@@ -64,8 +63,7 @@ def _rig(policy: dict[str, Any], install: dict[str, PluginClient]):
             vault, Tokens(store, vault, None, None), directory, egress=None,
             console_url=CONSOLE_URL,
         )  # fmt: skip
-        switches = InstallSwitches(Policy(policy))
-        host = PluginHost(ModuleStore(engine), PluginBindings(engine), switches, [Loaded("desk", desk, None)], store)
+        host = PluginHost(ModuleStore(engine), PluginBindings(engine), {}, [Loaded("desk", desk, None)], store)
         app.include_router(plugins_router(host, connections, directory))
         app.include_router(systems_router(Systems(connections, ModuleStore(engine), host), directory))
         hooks = {"response": [response_checker(app)]}
@@ -77,9 +75,9 @@ def _rig(policy: dict[str, Any], install: dict[str, PluginClient]):
     return made
 
 
-# The policy never mentions the plugin: installed means on, and the install's client is the managed one.
-installed = _rig({}, INSTALL)
-bare = _rig({}, {})
+# Installed means on, and the install's client is the managed one.
+installed = _rig(INSTALL)
+bare = _rig({})
 
 
 async def _card(client: httpx.AsyncClient, tenant: str) -> dict[str, Any]:
@@ -109,39 +107,4 @@ async def test_an_install_client_signs_a_team_in_with_no_fields_and_no_admin_ste
 async def test_no_install_client_means_the_card_says_so(bare: Rig, tenant: str) -> None:
     client, _, _ = bare
     card = await _card(client, tenant)
-    assert card["managedClient"] is False and card["plugin"]["installOn"] is True, card
-
-
-class Down:
-    async def get(self, path: str, *, tenant: str) -> Any:
-        raise ServiceUnreachable("platform")
-
-
-class Flaky:
-    """Answers once, then is unreachable."""
-
-    def __init__(self, value: dict[str, Any]) -> None:
-        self.value: dict[str, Any] | None = value
-
-    async def get(self, path: str, *, tenant: str) -> Any:
-        if self.value is None:
-            raise ServiceUnreachable("platform")
-        value, self.value = self.value, None
-        return {"value": value}
-
-
-async def test_an_installed_plugin_is_on_unless_the_policy_turns_it_off() -> None:
-    assert await InstallSwitches(Policy({})).on("t", ID)
-    assert await InstallSwitches(Policy({ID: {"locked": {}}})).on("t", ID)
-    assert not await InstallSwitches(Policy({ID: {"enabled": False}})).on("t", ID)
-
-
-async def test_a_policy_that_cannot_be_read_turns_every_plugin_off() -> None:
-    assert not await InstallSwitches(Down()).on("t", ID)
-
-
-async def test_a_failed_read_after_a_good_one_keeps_the_last_answer() -> None:
-    clock = iter([0.0, 100.0, 100.0, 100.0])
-    switches = InstallSwitches(Flaky({ID: {"enabled": False}}), clock=lambda: next(clock))
-    assert not await switches.on("t", ID)
-    assert not await switches.on("t", ID), "an outage never turns a stopped plugin back on"
+    assert card["managedClient"] is False and card["plugin"]["platformApp"] is False, card

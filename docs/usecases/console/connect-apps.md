@@ -49,7 +49,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 
 | # | Step | Expect |
 |---|---|---|
-| 0 | Set-up through the API: the install turns on Person desk with Ops AI's own app (client id and sealed secret), the fake's hosts are allowed, and an agent holds Person desk's read tool | each call 2xx |
+| 0 | Set-up through the API: Person desk is listed with Ops AI's own app from the install config (`OPS_PLUGIN_CLIENTS`), the fake's hosts are allowed, and an agent holds Person desk's read tool | each call 2xx |
 | 1 | Priya opens Connections | a card for Person desk with 1 tool, Plugin and Connect; the page read `GET /v1/systems` and no other list |
 | 2 | She searches "person" | the count reads 1 of N and only Person desk shows |
 | 3 | She presses Connect on Person desk, then Authorize with Person desk, and the system sends her back refused (error=access_denied) | the window offers Ops AI's app and Your own app, the access asked for, and More options folded; the sign-in window opens on /connections/connect?app=Person desk; it reads Access was not given with Close, and the Connect window shows the refusal with Authorize enabled |
@@ -82,7 +82,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | 40 | Security takes Person desk's hosts off the allow list and the team account is tested; then the hosts go back and it is tested again | the account row and the catalog card read "Signed in, but a test call failed" with Reconnect; after, the account is Connected and the test passes |
 | 41 | On Salesforce's Settings, Priya presses Edit on Production and Save without typing | the sign-in address field is blank with "Blank keeps the saved value."; the saved settings are unchanged |
 | 43 | In Salesforce's Connect window, Priya picks Your own app and presses Authorize with the client fields empty | "Enter the client ID." and "Enter the client secret." under the fields; no sign-in window opens |
-| 42 | The install allows Person key desk too; Priya opens Apps, picks the Service desk category, clears it, then clicks Person desk's card | Connected (Person desk, "Connected · 1 tool", Open) above Available (Person key desk, Not installed, Connect); the category leaves 1 card; the card opens Person desk's page |
+| 42 | Person key desk is installed too, not on for the team; Priya opens Apps, picks the Service desk category, clears it, then clicks Person desk's card | Connected (Person desk, "Connected · 1 tool", Open) above Available (Person key desk, Not installed, Connect); the category leaves 1 card; the card opens Person desk's page |
 | 45 | Priya's run waits for her own Person desk account; she opens the run's page | the page shows the Human Task with Connect my account and Run as the team account |
 | 44 | James opens Read a record's page and its Logs tab | tabs General and Logs; the log lists Read a record, as j.richardson@harborpine.example, Succeeded |
 | 46 | James opens Tools, then Read a record's row | tabs All tools, Custom tools and Logs; the row reads Read a record, Person desk, App tool, Ready, Ticket desk; the tool's page names Ticket desk under Used by |

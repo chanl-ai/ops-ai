@@ -1,6 +1,6 @@
 """Plugins in tools-service (c-564), by failure mode: team A's call uses team B's connection, instance or egress hosts,
-because the plugin is one workspace-level module; a team sees or calls a plugin it never turned on, or one the platform
-admin turned off; a team's setting beats a field the platform admin locked; a token naming a host outside the system
+because the plugin is one workspace-level module; a team sees or calls a plugin it never turned on; a team's setting
+beats a field the install locked; a token naming a host outside the system
 points every call there; one team's calls spend another team's rate window; a Python tool reaches a host the plugin
 does not list; and a caller forges a next-page address that the team's token is then sent to."""
 
@@ -27,7 +27,6 @@ from ops_tools.gateway_calls import _before_policy  # pyright: ignore[reportPriv
 from ops_tools.graph_mailbox import CursorSeal
 from ops_tools.plugins.executor import PluginExecutor
 from ops_tools.plugins.host import PluginHost
-from ops_tools.plugins.switches import InstallSwitches
 from ops_tools.registry import Resolved, ToolRegistry
 from ops_tools.store.connections import SHARED, ConnectionStore
 from ops_tools.store.modules import ModuleStore
@@ -40,20 +39,9 @@ from .test_personal_sign_in import JAMES, MAYA, TEAM, connection, rig
 ID = "test.desk"
 
 
-class Policy:
-    """The platform's `plugins` policy as GET /v1/policies/plugins answers it."""
-
-    def __init__(self, value: dict[str, Any]) -> None:
-        self.value = value
-
-    async def get(self, path: str, *, tenant: str) -> Any:
-        assert path == "/v1/policies/plugins"
-        return {"value": self.value}
-
-
-def host(engine: AsyncEngine, store: ModuleStore, value: dict[str, Any] | None = None) -> PluginHost:
-    switches = InstallSwitches(Policy(value if value is not None else {ID: {"enabled": True}}))
-    return PluginHost(store, PluginBindings(engine), switches, [Loaded("desk", desk, None)])
+def host(engine: AsyncEngine, store: ModuleStore, locked: dict[str, Any] | None = None) -> PluginHost:
+    """The desk plugin installed, with the settings the install fixes for it (`locked`, plugin_locked)."""
+    return PluginHost(store, PluginBindings(engine), {ID: locked or {}}, [Loaded("desk", desk, None)])
 
 
 async def bind(engine: AsyncEngine, tenant: str, team: str, instance: str, conn: str, *, on: bool = True) -> None:
@@ -90,7 +78,7 @@ async def test_each_team_calls_with_its_own_connection_instance_and_hosts(
     assert a.operation["rate_key"] != b.operation["rate_key"]
 
 
-async def test_a_plugin_is_off_unless_both_switches_are_on(
+async def test_an_installed_plugin_is_off_until_the_team_turns_it_on(
     local_catalog: Any, engine: AsyncEngine, store: ModuleStore, tenant: str
 ) -> None:
     await bind(engine, tenant, "team_a", "https://alpha.my.desk.test", "con_a")
@@ -100,9 +88,6 @@ async def test_a_plugin_is_off_unless_both_switches_are_on(
         r = await on.resolve("desk_get_case", tenant_id=tenant, team_id=team)
         assert r is not None and r.module is not None and why in str(r.module.get("plugin_off")), (team, r)
     assert (await on.resolve("desk_get_case", tenant_id=tenant, team_id="team_a")).module.get("plugin_off") is None  # type: ignore[union-attr]
-    install_off = ToolRegistry(local_catalog, store, host(engine, store, {ID: {"enabled": False}}))
-    r = await install_off.resolve("desk_get_case", tenant_id=tenant, team_id="team_a")
-    assert r is not None and r.module is not None and "off for this install" in str(r.module["plugin_off"])
 
 
 async def test_a_team_without_the_plugin_does_not_list_its_tools(
@@ -132,7 +117,7 @@ async def test_a_plugins_tools_are_not_grantable_once_plugins_are_switched_off(
 
 
 async def test_a_locked_field_wins_over_the_team(engine: AsyncEngine, store: ModuleStore, tenant: str) -> None:
-    h = host(engine, store, {ID: {"enabled": True, "locked": {"api_version": "9"}}})
+    h = host(engine, store, {"api_version": "9"})
     merged = await h.settings(tenant, desk, {"api_version": "2", "instance_url": "https://a.my.desk.test"})
     assert merged["api_version"] == "9"
 
@@ -223,7 +208,7 @@ def test_plugins_load_from_the_install_folder_with_no_switch(
 ) -> None:
     # One plugins folder per install (owner, 2026-11-01): an empty folder reads nothing, a plugin dropped in loads with
     # no OPS_PLUGINS, and a broken one beside it is reported by name while the good one still loads.
-    parts = (store, PluginBindings(engine), InstallSwitches(None))
+    parts = (store, PluginBindings(engine))
     folder = tmp_path / "plugins"
     folder.mkdir()
     assert PluginHost.when_on(Settings(plugins_dir=folder), *parts) is None

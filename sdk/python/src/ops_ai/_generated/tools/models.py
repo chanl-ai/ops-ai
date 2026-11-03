@@ -771,7 +771,6 @@ class PluginView(TypedDict, closed=True):
     connectionId: str | None
     display: NotRequired[PluginDisplay]
     id: str
-    installOn: bool
     knowledgeSources: list[str]
     locked: list[str]
     platformApp: PlatformApp
@@ -966,7 +965,6 @@ class SystemEnvironment(TypedDict, closed=True):
 
 class SystemPlugin(TypedDict, closed=True):
     fixed: list[str]
-    installOn: bool
     kinds: list[str]
     platformApp: bool
     scopes: list[str]

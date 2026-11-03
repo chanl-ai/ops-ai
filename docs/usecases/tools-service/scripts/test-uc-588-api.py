@@ -1,10 +1,9 @@
 """uc-588, api layer: docs/usecases/tools-service/plugin-sign-in-methods.md, stories S1 to S5.
 
-platform-service signs the seeded people in and holds the install switch (the `plugins` policy); tools-service runs
-with plugins on and loads one test plugin per sign-in method from services/tools-service/tests/plugin_kinds
-(OPS_PLUGIN_PATHS); the fake system (docs/usecases/lib/fake_multi_auth.py) accepts each method's credential only,
-issues OAuth tokens through mock-oauth2-server, and serves a listener that demands a client certificate. No model
-call."""
+platform-service signs the seeded people in; tools-service runs with plugins on and loads one test plugin per sign-in
+method from services/tools-service/tests/plugin_kinds (OPS_PLUGIN_PATHS); the fake system
+(docs/usecases/lib/fake_multi_auth.py) accepts each method's credential only, issues OAuth tokens through
+mock-oauth2-server, and serves a listener that demands a client certificate. No model call."""
 
 from __future__ import annotations
 
@@ -29,7 +28,6 @@ from usecase_harness import (
     service_headers,
     signed_in,
     tools,
-    until,
 )
 from usecase_harness import ROOT as REPO
 
@@ -127,22 +125,16 @@ with ExitStack() as stack:
     wanjiru = bearer(signed_in(api, "w.kamau@harborpine.example"), "team_platform")
     ravi = bearer(signed_in(api, "r.menon@harborpine.example"), "team_ops")
 
-    # 1. The platform admin turns every test plugin on for the install; Security lists the system's hosts.
+    # 1. Every test plugin loads; Security lists the system's hosts.
     loaded = data(gw.get("/v1/plugins", headers=priya)) or {}
     ids = sorted(p["id"] for p in loaded.get("plugins", []))
-    policy = api.put("/v1/policies/plugins", json={"value": {i: {"enabled": True} for i in ids}}, headers=sam)
-    # The install switch is read through a short cache; every plugin reads as on before a team turns one on.
-    until(
-        lambda: all(p["installOn"] for p in (data(gw.get("/v1/plugins", headers=priya)) or {}).get("plugins", [])),
-        timeout=30,
-    )
     allowed = [gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-588"}, headers=sam) for h in m["hosts"]]
     allowed.append(gw.post("/v1/egress/ranges", json={"value": m["range"], "note": "uc-588"}, headers=sam))
     check(
-        "1 all nine test plugins load, the platform admin turns them on, and Security lists the system's hosts",
-        len(ids) == 9 and not loaded.get("failed") and policy.status_code == 200
+        "1 all nine test plugins load, and Security lists the system's hosts",
+        len(ids) == 9 and not loaded.get("failed")
         and all(r.status_code in (200, 201, 409) for r in allowed),
-        {"ids": ids, "failed": loaded.get("failed"), "policy": policy.text[:200]},
+        {"ids": ids, "failed": loaded.get("failed")},
     )  # fmt: skip
 
     # 2-6. Each method a team gives once: turned on, Test connection passes, and a run's call reaches the system

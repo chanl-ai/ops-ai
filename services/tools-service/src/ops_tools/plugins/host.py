@@ -33,7 +33,6 @@ from ..modules.seed import blank
 from ..store.connections import ConnectionStore
 from ..store.modules import Aggregate, ModuleStore, StaleModuleError
 from ..store.plugin_bindings import PluginBindings
-from .switches import InstallSwitches
 
 TEMPLATE_PREFIX = "plugin:"
 PLACE = re.compile(r"\{([a-z_][a-z0-9_]*)\}")
@@ -284,7 +283,8 @@ def module_of(plugin: Plugin, *, tenant_id: str, at: datetime) -> Aggregate:
 class PluginHost:
     store: ModuleStore
     bindings: PluginBindings
-    switches: InstallSwitches
+    # The settings the install fixes for every team, per plugin (plugin_locked in the install config).
+    locked: Mapping[str, Mapping[str, Any]] = field(default_factory=dict[str, Mapping[str, Any]])
     loaded: list[Loaded] = field(default_factory=list[Loaded])
     # Where each environment's own plugin settings are kept (c-580): on the team's connection, which the binding names.
     connections: ConnectionStore | None = None
@@ -303,7 +303,7 @@ class PluginHost:
         cls,
         store: ModuleStore,
         bindings: PluginBindings,
-        switches: InstallSwitches,
+        locked: Mapping[str, Mapping[str, Any]],
         folders: Sequence[str] = (),
         connections: ConnectionStore | None = None,
         *,
@@ -318,7 +318,7 @@ class PluginHost:
         return cls(
             store,
             bindings,
-            switches,
+            locked,
             loaded,
             connections,
             http=http,
@@ -333,7 +333,6 @@ class PluginHost:
         settings: Settings,
         store: ModuleStore,
         bindings: PluginBindings,
-        switches: InstallSwitches,
         connections: ConnectionStore | None = None,
         *,
         http: httpx.AsyncClient | None = None,
@@ -347,7 +346,7 @@ class PluginHost:
         return cls.start(
             store,
             bindings,
-            switches,
+            settings.plugin_locked,
             settings.plugin_folders,
             connections,
             http=http,
@@ -458,7 +457,7 @@ class PluginHost:
         shared = environment == "production"
         merged |= {k: v for k, v in team_settings.items() if k in m.settings and (k not in own or shared)}
         merged |= {k: v for k, v in (own_values or {}).items() if k in own}
-        merged |= await self.switches.locked(tenant_id, m.id)
+        merged |= self.locked_settings(m.id)
         return merged
 
     async def environment_settings(
@@ -490,10 +489,13 @@ class PluginHost:
         merged = await self.settings(tenant_id, plugin, dict(b.get("settings") or {}), environment, own)
         return hosts_of(plugin.manifest, merged)
 
+    def locked_settings(self, plugin_id: str) -> dict[str, Any]:
+        """The settings the install fixes for every team of the plugin; a team's own value never replaces one."""
+        return dict(self.locked.get(plugin_id) or {})
+
     async def off_reason(self, tenant_id: str, team_id: str | None, plugin: Plugin) -> str | None:
-        """Why the plugin is off for the team, or None when both switches are on."""
-        if not await self.switches.on(tenant_id, plugin.manifest.id):
-            return f"{plugin.manifest.title} is off for this install; the platform admin turns it on."
+        """Why the installed plugin is off for the team, or None when the team turned it on: the one place that
+        decides whether a plugin's tools run, list and template for a team."""
         if team_id is None:
             return f"{plugin.manifest.title} is turned on per team; this call names no team."
         b = await self.bindings.get(tenant_id, team_id, plugin.manifest.id)

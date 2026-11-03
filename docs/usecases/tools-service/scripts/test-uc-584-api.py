@@ -1,6 +1,6 @@
 """uc-584, api layer: docs/usecases/tools-service/plugin-manifest-fields.md, stories S1 to S4.
 
-Part one: platform-service signs the seeded people in and holds the install switch; tools-service runs with plugins on
+Part one: platform-service signs the seeded people in; tools-service runs with plugins on
 and the three test plugins in services/tools-service/tests/plugin_fields (OPS_PLUGIN_PATHS); the fake system
 (docs/usecases/lib/fake_multi_auth.py) shows the headers it was sent, takes chat messages only as a form, counts
 transfers, refuses the Zoom-style client unless it comes as basic auth, records each sign-in address and answers the
@@ -32,7 +32,6 @@ from usecase_harness import (
     service_headers,
     signed_in,
     tools,
-    until,
 )
 from usecase_harness import ROOT as REPO
 
@@ -113,21 +112,16 @@ with ExitStack() as stack:
     TENANT["id"] = str((priya_session.get("principal") or {}).get("tenantId") or priya_session.get("tenantId") or "")
     james = bearer(signed_in(api, "j.richardson@harborpine.example"), "team_ops")
 
-    # 1. The three test plugins load and are on for the install; Security lists the fake's hosts.
+    # 1. The three test plugins load; Security lists the fake's hosts.
     loaded = data(gw.get("/v1/plugins", headers=priya)) or {}
     ids = sorted(p["id"] for p in loaded.get("plugins", []))
-    policy = api.put("/v1/policies/plugins", json={"value": {i: {"enabled": True} for i in ids}}, headers=sam)
-    until(
-        lambda: all(p["installOn"] for p in (data(gw.get("/v1/plugins", headers=priya)) or {}).get("plugins", [])),
-        timeout=30,
-    )
     for h in m["hosts"]:
         gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-584"}, headers=sam)
     gw.post("/v1/egress/ranges", json={"value": m["range"], "note": "uc-584"}, headers=sam)
     check(
-        "1 the three test plugins load and the platform admin turns them on",
-        ids == ["test.fields", "test.fields-sites", "test.fields-zoom"] and policy.status_code == 200,
-        {"ids": ids, "failed": loaded.get("failed"), "policy": policy.text[:200]},
+        "1 the three test plugins load",
+        ids == ["test.fields", "test.fields-sites", "test.fields-zoom"],
+        {"ids": ids, "failed": loaded.get("failed")},
     )
 
     # 2. S1: a data tool carries the plugin's header and its own, beside the team's token, unchanged.
@@ -277,7 +271,6 @@ with ExitStack() as stack:
     priya = bearer(priya_session, "team_ops")
     TENANT["id"] = str((priya_session.get("principal") or {}).get("tenantId") or priya_session.get("tenantId") or "")
     sfake = sf["fake"]
-    api.put("/v1/policies/plugins", json={"value": {"opsai.salesforce": {"enabled": True}}}, headers=sam)
     for h in sf["hosts"]:
         gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-584"}, headers=sam)
     gw.post("/v1/egress/ranges", json={"value": sf["range"], "note": "uc-584"}, headers=sam)

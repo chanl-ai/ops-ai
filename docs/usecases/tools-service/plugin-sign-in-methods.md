@@ -34,7 +34,7 @@ Service: `tools-service` with platform-service. Layers: api, sdk, cli, ui. Guide
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | tools-service starts with the nine test plugins; Sam turns them on and lists the system's hosts | All nine load, none failed; 200 |
+| 1 | tools-service starts with the nine test plugins; Sam lists the system's hosts | All nine load, none failed; 200 |
 | 2-6 | For each of none, header key, query key, basic and bearer: Priya turns it on giving its credential, tests the connection, and a run calls its read tool | 200; Test connection ok; the record comes back and the system received the expected credential in the expected place |
 | 7 | Priya turns on the client-credentials plugin with the client's id and secret; a run calls it; every token expires; a run calls it again | Test connection ok; both calls answer as the client; at least two client-credentials token requests |
 | 8 | Priya turns on the person plugin for person sign-in; James and Maya each sign in with their own account and test the connection; a run with nobody behind it calls the tool | Each test reaches the system as that person; the call answers `CONNECTION_NOT_LINKED` |

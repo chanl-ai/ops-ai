@@ -3810,8 +3810,6 @@ export interface components {
             display?: components["schemas"]["PluginDisplay"];
             /** Id */
             id: string;
-            /** Installon */
-            installOn: boolean;
             /** Knowledgesources */
             knowledgeSources: string[];
             /** Locked */
@@ -4259,8 +4257,6 @@ export interface components {
         SystemPlugin: {
             /** Fixed */
             fixed: string[];
-            /** Installon */
-            installOn: boolean;
             /** Kinds */
             kinds: string[];
             /** Platformapp */

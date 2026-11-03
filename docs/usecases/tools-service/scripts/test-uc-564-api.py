@@ -1,7 +1,7 @@
 """uc-564, api layer: docs/usecases/tools-service/a-team-turns-on-the-salesforce.md, stories S1 (steps 1-7) and S4
-(steps 8-12) and S6 (steps 24-28). platform-service signs the seeded people in and holds the install switch (the
-`plugins` policy); tools-service runs with plugins on (OPS_PLUGINS) and loads the Salesforce plugin from the
-ops-ai-plugins repository beside ops-ai (OPS_PLUGIN_PATHS); the fake Salesforce (docs/usecases/lib/fake_salesforce.py)
+(steps 8-12) and S6 (steps 24-28). platform-service signs the seeded people in; tools-service runs with plugins on
+(OPS_PLUGINS), loads the Salesforce plugin from the ops-ai-plugins repository beside ops-ai (OPS_PLUGIN_PATHS) and
+takes the API version every team uses from the install config (OPS_PLUGIN_LOCKED); the fake Salesforce (docs/usecases/lib/fake_salesforce.py)
 signs each team in and answers its API, recording each query and the OAuth app each sign-in used. No model call."""
 
 from __future__ import annotations
@@ -44,6 +44,8 @@ SALESFORCE = REPO.parent / "ops-ai-plugins/plugins/salesforce/src/ops_plugin_sal
 PLUGINS = {"OPS_PLUGINS": "true", "OPS_PLUGIN_PATHS": json.dumps([str(SALESFORCE)])}
 # Ops AI's own OAuth app for Salesforce: the install's, from its config, as a deployment sets it.
 INSTALL_CLIENT = {"OPS_PLUGIN_CLIENTS": json.dumps({PLUGIN: {"id": PLATFORM_CLIENT, "secret": PLATFORM_SECRET}})}
+# The API version the install fixes for every team, from its config.
+LOCKED = {"OPS_PLUGIN_LOCKED": json.dumps({PLUGIN: {"api_version": "61.0"}})}
 QUERY = "SELECT Id, CaseNumber, Status FROM Case WHERE CaseNumber = '00044818'"
 
 
@@ -97,16 +99,20 @@ def sign_in_team(gw: httpx.Client, sf: dict[str, Any], who: dict[str, str], conn
     )
 
 
-def install(api: httpx.Client, who: dict[str, str], on: bool) -> httpx.Response:
-    value: dict[str, Any] = {PLUGIN: {"enabled": on, "locked": {"api_version": "61.0"}}}
-    return api.put("/v1/policies/plugins", json={"value": value}, headers=who)
-
-
 with ExitStack() as stack:
     sf = stack.enter_context(salesforce())
     api, INNER["api"] = stack.enter_context(platform())
     gw = stack.enter_context(
-        tools({**sf["settings"], **AUTH, **PLUGINS, **INSTALL_CLIENT, "OPS_CONSOLE_URL": "https://console.acme.test"})
+        tools(
+            {
+                **sf["settings"],
+                **AUTH,
+                **PLUGINS,
+                **INSTALL_CLIENT,
+                **LOCKED,
+                "OPS_CONSOLE_URL": "https://console.acme.test",
+            }
+        )
     )
     # agents-service on the scripted model, for step 45's chat turn; its tools come from this tools-service.
     chat = stack.enter_context(agents(gateway_url=str(gw.base_url).rstrip("/"), env=AUTH))
@@ -117,13 +123,14 @@ with ExitStack() as stack:
     james = bearer(signed_in(api, "j.richardson@harborpine.example"), "team_ops")
     wanjiru = bearer(signed_in(api, "w.kamau@harborpine.example"), "team_platform")
 
-    # 1. The platform admin turns Salesforce on for the install and locks the API version; a builder cannot.
-    by_builder = install(api, james, True)
-    on = install(api, sam, True)
+    # 1. Installed, Salesforce is listed for the team with no admin step, off until the team turns it on, and the
+    # API version the install config fixes reads as locked.
+    shown_plugins = (data(gw.get("/v1/plugins", headers=priya)) or {}).get("plugins", [])
+    view = next((p for p in shown_plugins if p.get("id") == PLUGIN), {})
     check(
-        "1 the platform admin turns Salesforce on for the install; a team builder is refused",
-        on.status_code == 200 and by_builder.status_code == 403,
-        {"admin": on.status_code, "builder": by_builder.status_code, "text": on.text[:200]},
+        "1 Salesforce is listed for the team with no install step, and its API version is fixed by the install",
+        bool(view) and view.get("teamOn") is False and "api_version" in (view.get("locked") or []),
+        {"view": str(view)[:300]},
     )
 
     # 2. The team admin turns it on for the team with the team's OAuth app; a builder cannot, nor change a locked field.
@@ -343,17 +350,23 @@ with ExitStack() as stack:
         },
     )
 
-    # 11. The platform admin turns it off for the install: every team's calls stop within seconds, with no restart.
-    install(api, sam, False)
-    time.sleep(6)
+    # 11. The team admin turns it off for the team: a call is refused at once, with no restart; on again, it runs.
+    team_off = gw.put(f"/v1/plugins/{PLUGIN}/team", json={"enabled": False}, headers=priya)
     stopped = call(gw, "salesforce_query", {"q": QUERY})
-    install(api, sam, True)
-    time.sleep(6)
+    team_back = gw.put(f"/v1/plugins/{PLUGIN}/team", json={"enabled": True}, headers=priya)
     back = call(gw, "salesforce_query", {"q": QUERY})
     check(
-        "11 off for the install, calls are refused within seconds; on again, they run",
-        code_of(stopped) == "PLUGIN_DISABLED" and bool(((data(back) or {}).get("output") or {}).get("records")),
-        {"stopped": stopped.text[:200], "back": back.status_code},
+        "11 off for the team, a call is refused with PLUGIN_DISABLED; on again, it runs",
+        team_off.status_code == 200
+        and code_of(stopped) == "PLUGIN_DISABLED"
+        and team_back.status_code == 200
+        and bool(((data(back) or {}).get("output") or {}).get("records")),
+        {
+            "off": team_off.status_code,
+            "stopped": stopped.text[:200],
+            "on": team_back.status_code,
+            "back": back.status_code,
+        },
     )
 
     # 12. Nobody edits, publishes or deletes the plugin's module, the team admin included.

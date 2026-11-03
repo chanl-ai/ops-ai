@@ -2,7 +2,7 @@
 
 One stack per script: platform-service with the dev seed's own roles, tools-service with plugins on and the nine test
 plugins of services/tools-service/tests/plugin_kinds, and the fake system of fake_multi_auth.py. Every test plugin is
-turned on for the install and the fake's hosts are allowed before a script's first step.
+installed, so every team sees it, and the fake's hosts are allowed before a script's first step.
 
 Writes use today's routes (`/v1/plugins`, `/v1/connections`). The page read is `GET /v1/apps/{id}`. A check whose
 behaviour is not built yet names the task it waits on in its detail (`target: waits on D2`), so a failing run says
@@ -38,7 +38,6 @@ from usecase_harness import (
     platform,
     service_headers,
     tools,
-    until,
 )
 
 AUTH = {
@@ -148,8 +147,8 @@ class Walk:
 
 @contextmanager
 def apps_stack(tools_env: dict[str, str] | None = None, ops_ai_apps: dict[str, str] | None = None) -> Generator[Walk]:
-    """The stack, every test plugin on for the install. `ops_ai_apps` names, per plugin, the fake's OAuth client that
-    is Ops AI's own app for it: its client id goes in the install policy and the account admin seals its secret."""
+    """The stack with every test plugin installed. `ops_ai_apps` names, per plugin, the fake's OAuth client that is
+    Ops AI's own app for it, passed to tools-service as install config (OPS_PLUGIN_CLIENTS)."""
     with ExitStack() as stack:
         m = stack.enter_context(multi_auth())
         api, inner = stack.enter_context(platform())
@@ -162,14 +161,6 @@ def apps_stack(tools_env: dict[str, str] | None = None, ops_ai_apps: dict[str, s
         me = data(api.get("/v1/me", headers=who["admin"])) or {}
         tenant = str(me.get("tenantId") or (me.get("principal") or {}).get("tenantId") or "")
         walk = Walk(api=api, inner=inner, gw=gw, m=m, who=who, tenant=tenant)
-        loaded = data(gw.get("/v1/plugins", headers=who["admin"])) or {}
-        ids = [p["id"] for p in loaded.get("plugins", [])]
-        policy = {i: {"enabled": True} for i in ids}
-        api.put("/v1/policies/plugins", json={"value": policy}, headers=who["security"])
-        until(
-            lambda: all(p["installOn"] for p in (data(gw.get("/v1/plugins", headers=who["admin"])) or {})["plugins"]),
-            timeout=30,
-        )
         for h in m["hosts"]:
             gw.post("/v1/egress/hosts", json={"value": h, "note": "apps"}, headers=who["security"])
         gw.post("/v1/egress/ranges", json={"value": m["range"], "note": "apps"}, headers=who["security"])

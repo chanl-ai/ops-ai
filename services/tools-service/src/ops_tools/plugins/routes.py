@@ -108,7 +108,6 @@ class PluginView(_Wire):
     id: str
     title: str
     version: str
-    install_on: bool
     team_on: bool
     connection_id: str | None
     settings: dict[str, Any]
@@ -245,11 +244,10 @@ def plugins_router(
             id=m.id,
             title=m.title,
             version=m.version,
-            install_on=await host.switches.on(who.tenant_id, m.id),
             team_on=bool(b.get("enabled")),
             connection_id=b.get("connection_id"),
             settings=_shown(plugin, settings),
-            locked=sorted(await host.switches.locked(who.tenant_id, m.id)),
+            locked=sorted(host.locked_settings(m.id)),
             tools=[m.operation(t) for t in _team_tools(plugin, b)],
             knowledge_sources=[s.name for s in m.knowledge_sources],
             platform_app=PlatformApp(
@@ -317,7 +315,7 @@ def plugins_router(
             connection_rights(who.principal, "manage", security_team=connections.security_team, what="plugins")
         plugin = _plugin(plugin_id)
         m = plugin.manifest
-        locked = await host.switches.locked(who.tenant_id, m.id)
+        locked = host.locked_settings(m.id)
         for k in body.settings:
             setting = m.settings.get(k)
             if setting is None:

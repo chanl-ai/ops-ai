@@ -25,7 +25,7 @@ Service: `tools-service` with platform-service. Layers: api. Guide: `docs/guide/
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | The platform admin turns the three plugins on for the install; Security lists `login.certs.test`, `api.certs.test` and the fake's address | All three load and read as on |
+| 1 | tools-service starts with the three plugins; Security lists `login.certs.test`, `api.certs.test` and the fake's address | All three load |
 | 2 | Priya turns on Entra records with the app's client id, `clientAuth` private_key_jwt, its certificate and key; tests it; a run calls `entra_get_record` | Test connection ok; the agreement comes back; every token request the fake saw carried `client_assertion` and no `client_secret` |
 | 3 | Priya turns on Google records (scopes as a claim) and DocuSign agreements (acting as user-5c0e2a, audience `account-d.docusign.com`) with their keys; a run calls each | Each token request holds only `grant_type` and `assertion` (DocuSign also `scope`); the calls answer as the service account and as the DocuSign user |
 | 4 | The use case sends the fake an unsigned assertion, one that lives an hour, and the same accepted assertion twice | Each refused with its reason: algorithm, ten minutes, replay |

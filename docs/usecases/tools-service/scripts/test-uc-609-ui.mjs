@@ -77,11 +77,8 @@ try {
       const priya = as(await tokenFor('p.shah@harborpine.example'), 'team_ops');
 
       // Set-up through the API, as the api layer's step 1 does; then the team's version as 0.1.0 left it.
-      await call(platform, 'PUT', '/v1/policies/plugins', sam, { value: { [ID]: { enabled: true } } });
       for (const host of fake.info.hosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-609' });
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: fake.info.range, note: 'uc-609' });
-      let listed = await call(tools, 'GET', '/v1/plugins', priya);
-      for (let i = 0; i < 40 && !(listed.data?.plugins ?? []).some((p) => p.installOn); i++) await new Promise((r) => setTimeout(r, 500)), (listed = await call(tools, 'GET', '/v1/plugins', priya));
       const on = await call(tools, 'PUT', `/v1/plugins/${ID}/team`, priya, { enabled: true, credentials: { token: fake.info.secrets.token } });
       const old = declared();
       const sql = `UPDATE plugin_bindings SET version = '0.1.0', digest = '${old.digest}', declarations = '${JSON.stringify(old.declarations).replaceAll("'", "''")}' WHERE team_id = 'team_ops' AND plugin_id = '${ID}'`;

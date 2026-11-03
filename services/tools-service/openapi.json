@@ -7647,10 +7647,6 @@
             "title": "Id",
             "type": "string"
           },
-          "installOn": {
-            "title": "Installon",
-            "type": "boolean"
-          },
           "knowledgeSources": {
             "items": {
               "type": "string"
@@ -7713,7 +7709,6 @@
           "id",
           "title",
           "version",
-          "installOn",
           "teamOn",
           "connectionId",
           "settings",
@@ -9119,10 +9114,6 @@
             "title": "Fixed",
             "type": "array"
           },
-          "installOn": {
-            "title": "Installon",
-            "type": "boolean"
-          },
           "kinds": {
             "items": {
               "type": "string"
@@ -9161,7 +9152,6 @@
           }
         },
         "required": [
-          "installOn",
           "teamOn",
           "platformApp",
           "kinds",

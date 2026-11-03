@@ -61,14 +61,13 @@ class PluginSetting(Out):
     secret: bool = False
     # Each environment keeps its own value (a sandbox signs in elsewhere), so the dialog asks for it per environment.
     per_environment: bool = False
-    # Fixed by the platform admin for every team; shown, never typed.
+    # Fixed by the install for every team (plugin_locked); shown, never typed.
     locked: bool = False
 
 
 class SystemPlugin(Out):
-    install_on: bool
     team_on: bool
-    # Whether an account admin set up the platform's app, so a team may sign in with no app of its own.
+    # Whether the install has Ops AI's own app for the plugin, so a team may sign in with no app of its own.
     platform_app: bool
     # The sign-in kinds the plugin offers, the first the default; a team's connection keeps the one it chose first.
     kinds: list[str]
@@ -289,14 +288,11 @@ class Systems:
             for pid, plugin in sorted(self.plugins.plugins.items()):
                 m = plugin.manifest
                 b = bindings.get(pid) or {}
-                install_on = await self.plugins.switches.on(who.tenant_id, pid)
-                if not install_on and not b:
-                    continue
                 conn = by_id.get(str(b.get("connection_id") or ""))
                 if conn is not None:
                     taken.add(str(conn["id"]))
                 platform = self.connections.store.install_client(pid) is not None
-                locked = await self.plugins.switches.locked(who.tenant_id, pid)
+                locked = self.plugins.locked_settings(pid)
                 own = per_environment(m)
                 settings = [
                     {
@@ -331,7 +327,6 @@ class Systems:
                         "mayManage": may,
                         "managedClient": platform,
                         "plugin": {
-                            "installOn": install_on,
                             "teamOn": bool(b.get("enabled")),
                             "platformApp": platform,
                             "kinds": list(m.connection.kinds),

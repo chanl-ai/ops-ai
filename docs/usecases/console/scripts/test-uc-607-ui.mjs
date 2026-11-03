@@ -169,7 +169,6 @@ try {
       const priya = as(await tokenFor('p.shah@harborpine.example'), 'team_ops');
       const maya = as(await tokenFor('m.okafor@harborpine.example'), 'team_ops');
 
-      const installed = await call(platform, 'PUT', '/v1/policies/plugins', sam, { value: { 'test.person': { enabled: true } } });
       for (const host of fake.info.hosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-607' });
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: fake.info.range, note: 'uc-607' });
       let card = null;
@@ -178,8 +177,7 @@ try {
         if (!card?.plugin?.platformApp) await new Promise((r) => setTimeout(r, 500));
       }
       const agent = (await call(agents, 'POST', '/v1/agents', priya, { name: 'Ticket desk', role: 'Reads tickets from Person desk' })).data ?? {};
-      check('0 set-up: Person desk is on for the install with Ops AI’s own app, and the fake’s hosts are allowed', installed.status === 200 && Boolean(card?.plugin?.platformApp) && Boolean(agent.id), {
-        installed: installed.text,
+      check('0 set-up: Person desk is listed with Ops AI’s own app, and the fake’s hosts are allowed', Boolean(card?.plugin?.platformApp) && Boolean(agent.id), {
         card,
       });
 
@@ -297,10 +295,7 @@ try {
         // The catalog: the team's connected apps first, then the ones it may connect, each card with its state and one
         // action; a category narrows it, and the whole card opens the app's page.
         await step('42 Apps lists Connected then Available, each card with its state and one action; a category narrows it; the card opens the app’s page', async () => {
-          // A second app for the install, not turned on for the team: Person key desk, in the Service desk category.
-          const both = { 'test.person': { enabled: true, client: { id: 'multi-app' } }, 'test.person-key': { enabled: true } };
-          await call(platform, 'PUT', '/v1/policies/plugins', sam, { value: both });
-          for (let i = 0; i < 30 && !((await call(tools, 'GET', '/v1/systems', priya)).data ?? []).some((c) => c.id === 'plugin:test.person-key'); i++) await page.waitForTimeout(1000);
+          // A second installed app, not turned on for the team: Person key desk, in the Service desk category.
           await page.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await page.getByTestId('apps-connected').waitFor({ timeout: 60_000 });
           await page.getByTestId('apps-available').waitFor({ timeout: 60_000 });
@@ -324,7 +319,6 @@ try {
           // A click anywhere on the card, away from its name, opens the app's page.
           await ours.click({ position: { x: 24, y: 110 } });
           const opened = await page.waitForURL((u) => u.pathname === `/integrations/apps/${encodeURIComponent(APP)}` || u.pathname === `/integrations/apps/${APP}`, { timeout: 30_000 }).then(() => true, () => false);
-          await call(platform, 'PUT', '/v1/policies/plugins', sam, { value: { 'test.person': both['test.person'] } });
           check(
             '42 Apps lists Connected then Available, each card with its state and one action; a category narrows it; the card opens the app’s page',
             heads[0]?.startsWith('Connected') && heads[1]?.startsWith('Available') && connectedHas && ourState === 'connected' && /Connected · 1 tool/.test(ourText) && oneAction &&
@@ -903,7 +897,6 @@ try {
     async (consoleUrl) => {
       const sam = as(await tokenFor('s.adeyemi@harborpine.example'), 'team_security');
       const priya = as(await tokenFor('p.shah@harborpine.example'), 'team_ops');
-      const installed = await call(platform, 'PUT', '/v1/policies/plugins', sam, { value: { 'test.entra': { enabled: true } } });
       for (const host of entraFake.hosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-607' });
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: entraFake.range, note: 'uc-607' });
       const browser = await chromium.launch();
@@ -936,8 +929,8 @@ try {
           const html = await page.content();
           check(
             "17 a certificate app connects in the window, and its Settings show the certificate's thumbprint and expiry, never its key",
-            installed.status === 200 && tested.status === 'ok' && /Signing certificate [0-9A-Za-z:_-]{16,} expires /.test(said) && !html.includes('PRIVATE KEY'),
-            { installed: installed.status, tested, said },
+            tested.status === 'ok' && /Signing certificate [0-9A-Za-z:_-]{16,} expires /.test(said) && !html.includes('PRIVATE KEY'),
+            { tested, said },
           );
         }, page);
         check('18 no page errors with the certificate app', page.errors.length === 0, page.errors.slice(0, 3));
@@ -988,7 +981,6 @@ try {
     async (consoleUrl) => {
       const sam = as(await tokenFor('s.adeyemi@harborpine.example'), 'team_security');
       const priya = as(await tokenFor('p.shah@harborpine.example'), 'team_ops');
-      const installed = await call(platform, 'PUT', '/v1/policies/plugins', sam, { value: { 'opsai.salesforce': { enabled: true } } });
       for (const host of sf.hosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-607' });
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: sf.range, note: 'uc-607' });
       const toLogin = (context) =>
@@ -1076,7 +1068,7 @@ try {
           check(
             "19 Salesforce's own app per environment: production in the window, the sandbox from Settings, each on its own instance",
             // The sign-in address typed on the first Connect is the one production signs in at.
-            installed.status === 200 && live === 'ok' && sandbox === 'ok' && rows.production.status === 'ok' && rows.test.status === 'ok' && bases.test === sf.sandbox_base && bases.production === sf.api_base &&
+            live === 'ok' && sandbox === 'ok' && rows.production.status === 'ok' && rows.test.status === 'ok' && bases.test === sf.sandbox_base && bases.production === sf.api_base &&
               String(detail.environments?.production?.settings?.authorizeUrl ?? '').startsWith(loginUrl),
             { live, sandbox, rows, bases, authorizeUrl: detail.environments?.production?.settings?.authorizeUrl },
           );

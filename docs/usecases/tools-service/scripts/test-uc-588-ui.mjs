@@ -2,7 +2,7 @@
 // stories S3 (steps 16-17) and S5 (step 18). The demo stack with plugins on (OPS_PLUGINS), the test plugins of
 // services/tools-service/tests/plugin_kinds (OPS_PLUGIN_PATHS), and the
 // fake system (docs/usecases/lib/fake_multi_auth.py). Set-up goes through the API as the api layer proved it: the
-// install switch, the hosts, the person plugin turned on for each person's own sign-in and the header-key plugin with its
+// hosts, the person plugin turned on for each person's own sign-in and the header-key plugin with its
 // key, and an agent holding the person plugin's read tool. James asks the agent for a record in chat; the call is
 // refused with a Connect card, he signs in through the pop-up with his own account, and the chat goes on with the
 // record the system answered to his account. The Connections page then lists both plugin connections with no key on
@@ -119,11 +119,8 @@ try {
       const maya = as(await tokenFor('m.okafor@harborpine.example'), 'team_ops');
 
       // Set-up through the API, as the api layer's steps 1-8 do.
-      const installed = await call(platform, 'PUT', '/v1/policies/plugins', sam, { value: { 'test.person': { enabled: true }, 'test.header-key': { enabled: true }, 'test.person-key': { enabled: true } } });
       for (const host of fake.info.hosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-588' });
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: fake.info.range, note: 'uc-588' });
-      let listed = await call(tools, 'GET', '/v1/plugins', priya);
-      for (let i = 0; i < 40 && !(listed.data?.plugins ?? []).filter((p) => p.installOn).length; i++) await new Promise((r) => setTimeout(r, 500)), (listed = await call(tools, 'GET', '/v1/plugins', priya));
       const person = await call(tools, 'PUT', '/v1/plugins/test.person/team', priya, { enabled: true, signIn: 'person', clientId: 'multi-app', clientSecret: fake.info.clients['multi-app'] });
       const keyed = await call(tools, 'PUT', '/v1/plugins/test.header-key/team', priya, { enabled: true, credentials: { key: fake.info.secrets.key } });
       await call(tools, 'POST', `/v1/connections/${keyed.data?.connectionId}/test`, priya, { environment: 'production' });
@@ -138,8 +135,8 @@ try {
       const live = asked.data?.status === 'pending' ? await call(agents, 'POST', `/v1/publish-requests/${asked.data.id}/decision`, maya, { decision: 'approved' }) : asked;
       check(
         'setup: the person plugin asks each person to sign in, the header-key plugin holds its key, and the agent holds the read tool',
-        installed.status === 200 && person.status === 200 && keyed.status === 200 && ownKeyed.status === 200 && patched.status === 200 && live.status < 300,
-        { installed: installed.text, person: person.text, keyed: keyed.status, ownKeyed: ownKeyed.text, patched: patched.text, live: live.text },
+        person.status === 200 && keyed.status === 200 && ownKeyed.status === 200 && patched.status === 200 && live.status < 300,
+        { person: person.text, keyed: keyed.status, ownKeyed: ownKeyed.text, patched: patched.text, live: live.text },
       );
 
       const browser = await chromium.launch();

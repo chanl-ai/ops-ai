@@ -38,7 +38,6 @@ from ops_tools.modules.directory import Directory
 from ops_tools.plugins.executor import PluginExecutor
 from ops_tools.plugins.host import PluginHost, module_id_of
 from ops_tools.plugins.routes import plugins_router
-from ops_tools.plugins.switches import InstallSwitches
 from ops_tools.secrets import SecretResolver
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.modules import ModuleStore
@@ -46,7 +45,7 @@ from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.store.secrets import SecretStore
 
 from .conftest import CONSOLE_URL, build_app, credentials, response_checker
-from .test_plugins import AllowAll, Policy
+from .test_plugins import AllowAll
 from .test_review_decisions import introspect, jwks, person
 
 TEAM = "team_platform"
@@ -145,8 +144,7 @@ async def rig(engine: AsyncEngine, seed: dict[str, Any], tenant: str) -> AsyncIt
     )
     loaded = discover(found=[], folders=[str(p) for p in sorted(KINDS_DIR.glob("kinds_*"))])
     assert all(item.ok for item in loaded), [item.error for item in loaded if not item.ok]
-    policy = {item.plugin.manifest.id: {"enabled": True} for item in loaded if item.plugin}
-    host = PluginHost(ModuleStore(engine), PluginBindings(engine), InstallSwitches(Policy(policy)), loaded, store)
+    host = PluginHost(ModuleStore(engine), PluginBindings(engine), {}, loaded, store)
     app.include_router(plugins_router(host, connections, directory))
     resolver = SecretResolver(SecretStore(engine), vault)
     authenticator = Authenticator(store, resolver, tokens, ConnectLinks(store, CONSOLE_URL))

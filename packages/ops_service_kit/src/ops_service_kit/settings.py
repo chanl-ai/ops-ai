@@ -164,6 +164,11 @@ class Settings(BaseSettings):
     # not bring its own: OPS_PLUGIN_CLIENTS='{"opsai.salesforce": {"id": "...", "secret": "..."}}', set from the
     # deploy's secret store. A client id and secret an account admin saves in the console take its place.
     plugin_clients: dict[str, PluginClient] = Field(default_factory=dict[str, PluginClient])
+    # Settings fixed for every team of a plugin, which no team can change: OPS_PLUGIN_LOCKED='{"opsai.salesforce":
+    # {"api_version": "61.0"}}'. An installed plugin is offered to every team; each team turns it on for itself.
+    plugin_locked: dict[str, dict[str, str | int | float | bool]] = Field(
+        default_factory=dict[str, dict[str, str | int | float | bool]]
+    )
     # The most text one call to agents-service's AI step route reads (c-298, tick 31): the kernel caps a step at two
     # model calls, so this bounds what one outside call can spend.
     ai_step_max_text_chars: int = Field(default=50_000, ge=1)

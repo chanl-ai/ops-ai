@@ -229,7 +229,7 @@ export default function PoliciesPage() {
       ) : (
         <div className="flex flex-col gap-4" data-testid="policy-cards">
           {/* The install's plugins (c-564) are switched through the API; they have no editor on this page yet. */}
-          {policies.data.filter((p) => p.kind !== 'plugins').map((p) => (
+          {policies.data.map((p) => (
             <React.Fragment key={p.key}>
               <PolicyCard policy={p} cells={editor.data?.cells ?? {}} sample={sample} teamId={team?.id ?? ''} />
               {/* The words Check before sending reads, right after the switch that turns it on. */}
