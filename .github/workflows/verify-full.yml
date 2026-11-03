@@ -1,5 +1,4 @@
-# The full `make verify`, every suite, on a GitHub-hosted runner: nightly on main, on every release tag, by hand, and
-# from ci.yml when a pull request changes uv.lock, pyproject.toml or the Makefiles.
+# The full `make verify`: nightly on main, on release tags, by hand, and from ci.yml when the lockfile or Makefiles change.
 name: verify-full
 
 on:
@@ -24,7 +23,7 @@ env:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     services:
       postgres:
@@ -35,7 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # The trailer checks read the commits that added baseline and exception lines.
+          # The trailer checks read the history of the baseline files.
           fetch-depth: 0
       - uses: actions/cache@v4
         with:

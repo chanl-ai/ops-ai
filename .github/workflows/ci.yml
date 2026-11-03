@@ -1,7 +1,4 @@
-# Pull request checks, on GitHub-hosted runners only: a fork's pull request runs its own code, and on a hosted runner
-# that code never reaches a machine of ours. Only the areas a change touches run (scripts/ci-plan.sh, which reads
-# scripts/verify-changed.sh's plan); a change to uv.lock, pyproject.toml or the Makefiles runs the full suite
-# (verify-full.yml), as it does nightly on main.
+# Pull request checks on GitHub-hosted runners only, since a fork's pull request runs its own code.
 name: ci
 
 on:
@@ -15,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Side containers instead of `make db-up`'s compose stack, reached on localhost.
+  # The suites reach PostgreSQL, OPA and the mail servers as side containers on localhost.
   OPS_INFRA: external
   OPS_DATABASE_URL: postgresql+asyncpg://ops:ops@localhost:5477/ops_runtime
   OPS_TEST_DATABASE_URL: postgresql+asyncpg://ops:ops@localhost:5477/ops_test
@@ -26,7 +23,7 @@ env:
 
 jobs:
   plan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
       full: ${{ steps.plan.outputs.full }}
@@ -46,11 +43,10 @@ jobs:
           scripts/ci-plan.sh "$base" | tee -a "$GITHUB_OUTPUT"
 
   checks:
-    # The fast checks every change gets, as scripts/verify-changed.sh runs them: lint and format of the changed Python,
-    # types of the packages, generated files current, import layers, the portable store and What's new entries.
+    # The fast checks scripts/verify-changed.sh runs on every change.
     needs: plan
     if: needs.plan.outputs.full != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
       postgres:
@@ -90,7 +86,7 @@ jobs:
       matrix:
         service: ${{ fromJSON(needs.plan.outputs.services) }}
     name: verify ${{ matrix.service }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
       postgres:
@@ -120,7 +116,7 @@ jobs:
       matrix:
         package: ${{ fromJSON(needs.plan.outputs.packages) }}
     name: test ${{ matrix.package }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
       postgres:
@@ -140,7 +136,7 @@ jobs:
   console:
     needs: plan
     if: needs.plan.outputs.full != 'true' && needs.plan.outputs.console == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -153,7 +149,7 @@ jobs:
   docs:
     needs: plan
     if: needs.plan.outputs.full != 'true' && needs.plan.outputs.docs == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -171,10 +167,10 @@ jobs:
     uses: ./.github/workflows/verify-full.yml
 
   result:
-    # One status for branch protection: green when every job that ran passed (a job the plan skipped counts as passed).
+    # One status for branch protection; a job the plan skipped counts as passed.
     if: always()
     needs: [plan, checks, service, package, console, docs, full]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - env:
           NEEDS: ${{ toJSON(needs) }}

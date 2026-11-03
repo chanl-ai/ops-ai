@@ -1,6 +1,4 @@
-# The toolchain a CI job needs, cached: Python 3.12 with the uv workspace, Node with the pnpm workspace, the Playwright
-# browser, and the side containers the suites call (OPA and the test mail servers; PostgreSQL is the job's own service
-# container on localhost:5477, the port the suites and `make` expect).
+# Cached toolchain for a CI job; PostgreSQL is the job's own service container on :5477, the port the suites expect.
 name: setup
 description: Install the workspace and start the test infrastructure
 inputs:
@@ -51,8 +49,7 @@ runs:
     - if: inputs.infra == 'true'
       shell: bash
       run: |
-        # The suites open up to 15 connections per service pool; PostgreSQL's default of 100 runs out on the full run.
-        # A service container takes no command line, so the limit is set and the container restarted.
+        # The full run needs more than the default 100 connections, and a service container takes no command line.
         pg=$(docker ps -q --filter "publish=5477")
         docker exec "$pg" psql -U ops -d ops_runtime -qc "ALTER SYSTEM SET max_connections = 300"
         docker restart "$pg" >/dev/null

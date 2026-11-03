@@ -1,15 +1,6 @@
 #!/usr/bin/env bash
-# What a pull request's CI runs (.github/workflows/ci.yml), as key=value lines for $GITHUB_OUTPUT. The suites come from
-# scripts/verify-changed.sh's own plan, so CI and a local `scripts/verify-changed.sh <base>` pick the same members:
-#
-#   full=true|false     uv.lock, pyproject.toml or the Makefiles changed: run the whole `make verify` instead
-#   services=[...]      service folders whose `make -C services/<name> verify` runs, as JSON
-#   packages=[...]      package folders whose tests run, as JSON
-#   console=true|false  apps/ changed: `pnpm verify`
-#   docs=true|false     a Markdown file or docs/ changed: `make docs-verify`
-#   scripts=true|false  scripts/ changed: their tests
-#
-#   scripts/ci-plan.sh <base sha>
+# Prints what ci.yml runs for the changes since <base sha>, as key=value lines; the suites come from verify-changed.sh's
+# plan so CI and a local run pick the same ones. Keys: full, services, packages (JSON lists), console, docs, scripts.
 set -euo pipefail
 base=${1:?usage: ci-plan.sh <base sha>}
 cd "$(git rev-parse --show-toplevel)"
@@ -26,7 +17,7 @@ else
   services=(); packages=()
   for j in ${jobs[@]+"${jobs[@]}"}; do
     if [ -d "services/$j" ]; then
-      # A planned service's Makefile answers every verb with "not started"; there is nothing to run.
+      # A planned service has no verify target.
       grep -q '^verify:' "services/$j/Makefile" && services+=("$j")
     elif [ -d "packages/$j/tests" ]; then
       packages+=("$j")
