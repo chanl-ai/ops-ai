@@ -133,7 +133,8 @@ async def test_a_new_connection_never_calls_the_instance_a_removed_one_signed_in
     assert module is not None
     seen = await host.for_call(tenant, TEAM, module, "production")
     assert "acme.my.desk.test" not in str(seen.get("endpoint")), "the new connection calls the removed one's instance"
-    assert seen.get("plugin_off"), seen.get("plugin_off")
+    # Not signed in yet reads as a missing instance, not as the plugin being off.
+    assert seen.get("instance_missing") and not seen.get("plugin_off"), seen
     # Signed in again, the new connection's own instance is the one a call uses.
     await host.on_token(tenant, str(again.json()["data"]["connectionId"]), {"instance_url": "https://new.my.desk.test"})
     seen = await host.for_call(tenant, TEAM, module, "production")
