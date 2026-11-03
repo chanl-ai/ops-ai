@@ -28,8 +28,6 @@ const PUBLISHED = [
 ];
 // Ignore files name private folders on purpose; they point at nothing.
 const IGNORE_FILE = /(^|\/)\.[a-z]*ignore$|\.dockerignore$/;
-// The script that links the private half into a checkout names its folders on purpose; it points at nothing public.
-const LINKS_PRIVATE = /^scripts\/link-private\.sh$/;
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const MENTION = new RegExp(
   `(?<![\\w/.-])(?:\\.\\./)*(?:\\./)?(?:${PRIVATE.map(escape).join("|")})`,
@@ -40,7 +38,6 @@ export function mentions(path, text) {
   const published = PUBLISHED.some((p) => path.startsWith(p));
   if (
     IGNORE_FILE.test(path) ||
-    LINKS_PRIVATE.test(path) ||
     (!published &&
       NEVER_SENT.some(
         (p) => path === p || (p.endsWith("/") && path.startsWith(p)),
@@ -69,7 +66,6 @@ function selfTest() {
     ["docs/a.md", `Linked from ../../${agents}commands/x.md`, 1],
     [`${board}wiki/a.md`, `${board}specs/x`, 0],
     [".gitignore", board, 0],
-    ["scripts/link-private.sh", `${agents}skills/x`, 0],
     [`apps/x/${agents}settings.json`, `apps/x/${agents}settings.json`, 0],
     ["docs/a.md", 'evidenceDir("500", "uc")', 0],
     ["docs/a.md", `Generated into \`${agents}skills/ops-run/SKILL.md\`.`, 0],

@@ -42,7 +42,8 @@ case "${1:-}" in
     git -C "$main" rev-parse --verify -q "$base" >/dev/null || base="origin/$base"
     git -C "$main" worktree add -q -b "lane/$name" "$dir" "$base"
     printf 'name=%s\nnumber=%s\n' "$name" "$number" > "$dir/.lane"
-    (cd "$dir" && bash scripts/link-private.sh >/dev/null)
+    # A local setup step for new lanes runs when one is installed (.git/hooks/lane-setup).
+    if [ -x "$main/.git/hooks/lane-setup" ]; then (cd "$dir" && "$main/.git/hooks/lane-setup" >/dev/null); fi
     for f in .env .devcontainer/.env.local apps/console/.env.local; do
       [ -f "$main/$f" ] && [ ! -e "$dir/$f" ] && cp -p "$main/$f" "$dir/$f"
     done
