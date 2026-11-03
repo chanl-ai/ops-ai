@@ -74,7 +74,7 @@ await withUiStack(
         return { res, sent: res ? JSON.parse(res.request().postData() ?? '{}') : {}, body: res ? await res.json() : {} };
       };
 
-      // 1. The module list warns that a secret its operations read is not set (T006).
+      // 1. The module list warns that a secret its operations read is not set.
       await step('1 the module list says one secret is not set', async () => {
         await page.goto(`${consoleUrl}/tools`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const warn = page.getByTestId(`unset-secrets-${id}`);
@@ -82,7 +82,7 @@ await withUiStack(
         check('1 the module list says one secret is not set', shown && (await warn.innerText()) === '1 secret not set', { shown, text: shown ? await warn.innerText() : null });
       });
 
-      // 2. The read's sheet names the secret its header reads, as not set, linking to Settings (T006).
+      // 2. The read's sheet names the secret its header reads, as not set, linking to Settings.
       await step('2 the operation sheet names the secret as not set', async () => {
         await sheet(READ);
         await policy();
@@ -91,7 +91,7 @@ await withUiStack(
         check('2 the operation sheet names the secret as not set', shown && (await link.getAttribute('href')) === '/integrations/credentials?tab=secrets', { shown, href: shown ? await link.getAttribute('href') : null });
       });
 
-      // 3. A default that is not the field's type is refused, and the reason shows on that field (T002, T005).
+      // 3. A default that is not the field's type is refused, and the reason shows on that field.
       await step('3 a default of the wrong type is refused on its field', async () => {
         await sheet(READ);
         await page.getByTestId('input-add-field').click();
@@ -105,7 +105,7 @@ await withUiStack(
       });
 
       // 4. A new optional field with allowed values and no default is a minor change; a default would be sent for the
-      // agent, so it would be major (T001, T005).
+      // agent, so it would be major.
       await step('4 an optional field with allowed values stages as a minor change', async () => {
         await page.getByLabel('Field 2 type').click();
         await page.getByRole('option', { name: 'string', exact: true }).click();
@@ -118,7 +118,7 @@ await withUiStack(
         check('4 an optional field with allowed values stages as a minor change', res?.status() === 200 && field?.default === undefined && field?.enum?.join() === 'retail,wholesale' && change?.major === false, { status: res?.status(), field, change });
       });
 
-      // 5. A new required field is major, and the publish dialog says so (T001).
+      // 5. A new required field is major, and the publish dialog says so.
       await step('5 a new required field is major and the publish dialog says so', async () => {
         await sheet(READ);
         await page.getByTestId('input-add-field').click();
@@ -133,7 +133,7 @@ await withUiStack(
         check('5 a new required field is major and the publish dialog says so', res?.status() === 200 && change?.major === true && /branch added \(required\)/.test(change?.detail ?? '') && major, { status: res?.status(), change, major });
       });
 
-      // 6. The write asks for a step-up, and the read becomes a write; both are major (T004, T006).
+      // 6. The write asks for a step-up, and the read becomes a write; both are major.
       await step('6 step-up on the write and an access change on the read stage as major', async () => {
         await sheet(WRITE);
         await policy();
@@ -154,7 +154,7 @@ await withUiStack(
         );
       });
 
-      // 7. Once the secret is set the sheet says so and the list stops warning (T006).
+      // 7. Once the secret is set the sheet says so and the list stops warning.
       await step('7 setting the secret clears both warnings', async () => {
         // The module is Operations', so its secret is Operations' too: the team's builder saves it (secrets per team).
         await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: J, body: JSON.stringify({ name: SECRET, value: 'k-uc090' }) });

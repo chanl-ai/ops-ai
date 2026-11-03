@@ -97,7 +97,7 @@ await withUiStack(
 
     const james = await signIn(browser, consoleUrl, JAMES, errors);
 
-    // 2. The bank's two keys go in as secrets; no response, list or page shows a value again (T002).
+    // 2. The bank's two keys go in as secrets; no response, list or page shows a value again.
     // A secret belongs to the team that uses it, and that team's builders add it: James, for Operations.
     await step('2 James adds the bank keys as Operations secrets in Settings', async () => {
       const builder = await signIn(browser, consoleUrl, JAMES, errors);
@@ -119,7 +119,7 @@ await withUiStack(
       check('2 James adds the bank keys as Operations secrets in Settings', made.every((m) => m.status === 201 && !m.leaked) && !page.includes(BANK_KEY), made);
     });
 
-    // 3. Import (T001): reads preselected, the write opt-in, the statement left for a later version; each operation
+    // 3. Import: reads preselected, the write opt-in, the statement left for a later version; each operation
     // carries the reference its security scheme names, the header key or the query key.
     await step('3 James imports the bank spec and saves the draft', async () => {
       await james.goto(`${consoleUrl}/tools`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -145,7 +145,7 @@ await withUiStack(
       );
     });
 
-    // 4. Security review (T004): James requests it on the module page; Nadia follows its link to Human Tasks, where
+    // 4. Security review: James requests it on the module page; Nadia follows its link to Human Tasks, where
     // every review is decided, and approves it there; it publishes.
     await step('4 Nadia approves the review in Human Tasks and it publishes', async () => {
       await james.goto(`${consoleUrl}/tools/${moduleId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -177,7 +177,7 @@ await withUiStack(
     });
 
     // 5. A new operation, imported into the published module, is a major version: James publishes it, Nadia approves
-    // it in Human Tasks, and only then is it served (T004).
+    // it in Human Tasks, and only then is it served.
     await step('5 James imports get_statement, publishes a version and Nadia approves it', async () => {
       await james.goto(`${consoleUrl}/tools/${moduleId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await james.getByTestId('ops-import').click({ timeout: 120_000 });
@@ -228,7 +228,7 @@ await withUiStack(
     });
 
     // 6. The maintainers tries the reads against the bank with no workflow approval: the header key and the query key are
-    // both resolved at call time (T003), and the key the statement route repeats back comes out scrubbed.
+    // both resolved at call time, and the key the statement route repeats back comes out scrubbed.
     await step('6 James runs get_account and get_statement against the bank from the test panel', async () => {
       const account = await tryOperation(james, consoleUrl, moduleId, 'get_account', { account_id: ACCOUNT });
       ownerContext = account.sent.contextId;
@@ -263,7 +263,7 @@ await withUiStack(
       check('7 James grants the operations to Branch Concierge and publishes it', patchRes?.status() === 200 && ['get_account', 'get_statement', 'place_hold'].every((t) => held.includes(t)) && pubRes?.status() === 201 && review?.status === 'approved', { patch: patchRes?.status(), toolIds: held, publish: pubRes?.status(), review: review?.status });
     });
 
-    // 8. A chat read runs through the gateway on the agent's grant (T005).
+    // 8. A chat read runs through the gateway on the agent's grant.
     await step('8 a chat read runs get_account through the gateway', async () => {
       await chat(james, consoleUrl, `call get_account {"account_id": "${ACCOUNT}"}`);
       const replied = await james.getByText('Here is what I found.').last().waitFor({ timeout: 60_000 }).then(() => true, () => false);
@@ -271,7 +271,7 @@ await withUiStack(
       check('8 a chat read runs get_account through the gateway', replied && calls.length === 1, { replied, agentCalls: calls.length });
     });
 
-    // 9. A chat write waits for an approval and sends nothing (T006).
+    // 9. A chat write waits for an approval and sends nothing.
     let before;
     await step('9 a chat write holds for approval and reaches nothing', async () => {
       before = await holdsOn(moduleId, ownerContext);
@@ -285,7 +285,7 @@ await withUiStack(
       check('9 a chat write holds for approval and reaches nothing', card && selfApprove === 0 && sent.length === 0 && before !== undefined && after?.length === before.length, { card, selfApprove, calls: sent.length, holdsBefore: before?.length, holdsAfter: after?.length, thread });
     });
 
-    // 10. An approver on the module's team decides it in Reviews; the write reaches the bank once (T006).
+    // 10. An approver on the module's team decides it in Reviews; the write reaches the bank once.
     await step('10 Maya approves the held write in Reviews and the bank holds it once', async () => {
       const maya = await signIn(browser, consoleUrl, MAYA, errors);
       const form = await openHeldChatWrite(maya, consoleUrl, thread);
@@ -308,7 +308,7 @@ await withUiStack(
       );
     });
 
-    // 11. The module's call log names who asked, who approved and how each call ended (T007).
+    // 11. The module's call log names who asked, who approved and how each call ended.
     await step('11 the Activity tab shows actor, decision and outcome for each call', async () => {
       await james.goto(`${consoleUrl}/tools/${moduleId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const loaded = armed(james.waitForResponse((r) => r.request().method() === 'GET' && r.url().endsWith(`/v1/tool-modules/${moduleId}/activity`), { timeout: 60_000 }));

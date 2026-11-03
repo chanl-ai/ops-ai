@@ -31,7 +31,7 @@ install: console-install python-install ## Install the console and the Python wo
 
 verify: console-verify docs-verify python-verify sdk-verify changelog-verify ## Everything a commit must pass (scripted model only)
 
-changelog-verify: ## What's new entries and Coming next items are written for a person using the console (c-510)
+changelog-verify: ## What's new entries and Coming next items are written for a person using the console
 	node scripts/changelog-check.mjs --entries
 	node scripts/changelog-check.mjs --self-test >/dev/null
 
