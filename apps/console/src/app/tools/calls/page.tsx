@@ -6,6 +6,7 @@ import { ScrollText } from 'lucide-react';
 import { AppsTabs } from '@/components/connections/apps-tabs';
 import { PageLayout } from '@/components/page-layout';
 import { ToolCallsView } from '@/components/tools/tool-calls-view';
+import { ToolsTabs } from '@/components/tools/tools-tabs';
 
 export default function ToolCallsPage() {
   const search = useSearchParams();
@@ -13,7 +14,10 @@ export default function ToolCallsPage() {
   const run = search.get('run');
   return (
     <PageLayout switcher icon={ScrollText} tabs={<AppsTabs />} title="Tool calls" description={run ? `Every gateway call behind run ${run}, with its approval and policy` : 'Every tool and model call through the data and AI gateways, with its approval and policy'}>
-      <ToolCallsView run={run} q={q} />
+      <div className="flex flex-col gap-4">
+        <ToolsTabs />
+        <ToolCallsView run={run} q={q} />
+      </div>
     </PageLayout>
   );
 }

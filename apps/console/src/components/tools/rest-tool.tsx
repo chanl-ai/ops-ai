@@ -49,6 +49,8 @@ export interface RestToolProps extends ToolRunProps {
   moduleId: string;
   /** The tool page's tabs (General, Logs), in the page header's tab slot. */
   tabs?: React.ReactNode;
+  /** Shown below the tool's call: who uses the tool. */
+  aside?: React.ReactNode;
   moduleName: string;
   /** The app's base address (baseOfApp): the request's address starts with it. */
   base: string;
@@ -300,6 +302,7 @@ export function RestTool(p: RestToolProps) {
         )}
         {extra === 'mocks' && <MockAnswers moduleId={p.moduleId} opId={op.id} />}
       </div>
+      {p.aside}
     </PageLayout>
   );
 }

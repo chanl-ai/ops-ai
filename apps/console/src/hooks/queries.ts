@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api, brand } from '@/lib/api';
+import type { ToolRowFilters } from '@/lib/types/tool-directory';
 import type {
   AgentInput,
   AgentPatch,
@@ -69,6 +70,10 @@ export const useReviews = (p: ReviewListParams) => usePagedQuery({ queryKey: qk.
 export const useOpenReviewCount = () => useTeamQuery({ queryKey: ['reviews', 'open-count'], queryFn: () => api.reviews.list({ view: 'open', page: 1, pageSize: 1 }), select: (r) => r.viewCounts.open });
 export const usePolicies = (p: ListParams<PolicyFilters>) => usePagedQuery({ queryKey: qk.policies(p), queryFn: () => api.policies.list(p) });
 export const useTools = (p: ListParams<ToolFilters>) => usePagedQuery({ queryKey: qk.tools(p), queryFn: () => api.tools.list(p) });
+/** Every tool the team can use, one row each, as the Tools page lists them. */
+export const useToolDirectory = (p: ListParams<ToolRowFilters>) => usePagedQuery({ queryKey: ['tools', 'directory', p], queryFn: () => api.tools.directory(p) });
+/** One tool's row, for its page's Used by. */
+export const useToolRow = (id: string | null) => useTeamQuery({ queryKey: ['tools', 'one', id], queryFn: () => api.tools.one(id!), enabled: !!id });
 
 /** Invalidates the given roots after a successful write so every list and count refreshes. */
 function useWrite<A, R>(fn: (a: A) => Promise<R>, roots: string[]) {

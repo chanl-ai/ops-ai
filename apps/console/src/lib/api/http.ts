@@ -157,6 +157,15 @@ export function createRegistryToolsList(baseUrl: string): OpsApi['tools']['list'
   };
 }
 
+/** The tools list and one tool's row on agents-service's `GET /v1/tools`, where agents' grants and workflows' steps are. */
+export function createRegistryToolsDirectory(baseUrl: string): Pick<OpsApi['tools'], 'directory' | 'one'> {
+  const { get } = createTransport(`${baseUrl}/v1`);
+  return {
+    directory: (p) => get(`/tools?${qs(p)}`),
+    one: (id) => get(`/tools/${encodeURIComponent(id)}`),
+  };
+}
+
 export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' | 'workflows' | 'engine' | 'channels' | 'skills' | 'guardrails' | 'widgets' | 'widgetDeployments' | 'forms' | 'batches' | 'caseRecords' | 'activity' | 'overview'> {
   const { agents, workflows, engine, channels, skills, guardrails, widgets, widgetDeployments, forms, batches, caseRecords, activity, overview } = createHttpApi(`${baseUrl}/v1`);
   const { bulkUpdate: _au, bulkRemove: _ar, ...agentCalls } = agents;
@@ -318,6 +327,8 @@ export function createHttpApi(baseUrl: string): OpsApi {
       test: (id, input) => send('POST', `/tools/${id}/test`, { input }),
       bulkUpdate: (ids, patch) => send('POST', '/tools/bulk-update', { ids, patch }),
       bulkRemove: (ids) => send('POST', '/tools/bulk-delete', { ids }),
+      directory: (p) => get(`/tools?${qs(p)}`),
+      one: (id) => get(`/tools/${encodeURIComponent(id)}`),
     },
     deployments: {
       list: (p) => get(`/deployments?${qs(p)}`),

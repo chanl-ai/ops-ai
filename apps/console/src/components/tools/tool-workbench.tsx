@@ -74,6 +74,8 @@ export interface ToolWorkbenchProps extends ToolRunProps {
   moduleId: string;
   /** The tool page's tabs (General, Logs), in the page header's tab slot. */
   tabs?: React.ReactNode;
+  /** Shown below the tool's call: who uses the tool. */
+  aside?: React.ReactNode;
   moduleName: string;
   /** The app's base address (baseOfApp): the request's address starts with it. */
   base: string;
@@ -240,6 +242,7 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
 } /></div>
       </BuilderFieldset>
       </Tabs>
+      {p.aside}
     </PageLayout>
   );
 }

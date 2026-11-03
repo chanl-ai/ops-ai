@@ -274,7 +274,7 @@ try {
         // The window closes once access is allowed and the account's first test runs after it. A test call that then
         // fails leaves the account Connected and says so beside it, with Reconnect: here Security takes the app's hosts
         // off the allow list, the test is refused at the gateway, and the hosts go back once it is shown.
-        await step('29 a test call that fails after the sign-in shows on the account and the catalog card, with Reconnect', async () => {
+        await step('40 a test call that fails after the sign-in shows on the account and the catalog card, with Reconnect', async () => {
           const conn = ((await call(tools, 'GET', '/v1/systems', priya)).data ?? []).find((c) => c.id === APP);
           const apiHosts = fake.info.hosts.filter((h) => h !== LOGIN_HOST);
           for (const host of apiHosts) await call(tools, 'POST', '/v1/egress/hosts/remove', sam, { value: host });
@@ -291,7 +291,7 @@ try {
           const passed = await call(tools, 'POST', `/v1/connections/${conn?.connectionId}/test`, priya, { environment: 'production', account: 'team' });
           const after = ((await call(tools, 'GET', '/v1/systems', priya)).data ?? []).find((c) => c.id === APP);
           check(
-            '29 a test call that fails after the sign-in shows on the account and the catalog card, with Reconnect',
+            '40 a test call that fails after the sign-in shows on the account and the catalog card, with Reconnect',
             /Signed in, but a test call failed/.test(row) && rowReconnect && /Signed in, but a test call failed/.test(card) && cardState === 'test_failed' && after?.state === 'connected' && after?.environments?.production?.health?.status === 'ok',
             { tested: failed.status, row, rowReconnect, card, cardState, retested: passed.status, health: after?.environments?.production?.health },
           );
@@ -299,7 +299,7 @@ try {
 
         // The catalog: the team's connected apps first, then the ones it may connect, each card with its state and one
         // action; a category narrows it, and the whole card opens the app's page.
-        await step('31 Apps lists Connected then Available, each card with its state and one action; a category narrows it; the card opens the app’s page', async () => {
+        await step('42 Apps lists Connected then Available, each card with its state and one action; a category narrows it; the card opens the app’s page', async () => {
           // A second app for the install, not turned on for the team: Person key desk, in the Service desk category.
           const both = { 'test.person': { enabled: true, client: { id: 'multi-app' } }, 'test.person-key': { enabled: true } };
           await call(platform, 'PUT', '/v1/policies/plugins', sam, { value: both });
@@ -329,7 +329,7 @@ try {
           const opened = await page.waitForURL((u) => u.pathname === `/integrations/apps/${encodeURIComponent(APP)}` || u.pathname === `/integrations/apps/${APP}`, { timeout: 30_000 }).then(() => true, () => false);
           await call(platform, 'PUT', '/v1/policies/plugins', sam, { value: { 'test.person': both['test.person'] } });
           check(
-            '31 Apps lists Connected then Available, each card with its state and one action; a category narrows it; the card opens the app’s page',
+            '42 Apps lists Connected then Available, each card with its state and one action; a category narrows it; the card opens the app’s page',
             heads[0]?.startsWith('Connected') && heads[1]?.startsWith('Available') && connectedHas && ourState === 'connected' && /Connected · 1 tool/.test(ourText) && oneAction &&
               others.length >= 1 && others.every(([, st]) => st === 'not_installed' || st === 'needs_sign_in') && othersConnect >= 1 &&
               narrowedCards === 1 && /^1 of \d+$/.test(narrowed) && href === `/integrations/apps/${encodeURIComponent(APP)}` && opened,
@@ -381,8 +381,26 @@ try {
           );
         }, james);
 
+        // Tools lists single tools, joined by the API: each with its app, kind, status and who uses it.
+        await step('46 Tools lists Read a record as one row with its app, kind, status and Used by Ticket desk; its page says the same', async () => {
+          await james.goto(`${consoleUrl}/tools`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          const row = james.getByTestId('tool-row-person_get_record');
+          await row.waitFor({ timeout: 60_000 });
+          const line = ((await james.locator('tr', { has: row }).innerText()) ?? '').replace(/\s+/g, ' ');
+          const tabs = (await james.getByTestId(/^tools-tab-/).allInnerTexts()).map((t) => t.trim());
+          await shoot(james, 'tools-single');
+          await row.click();
+          await james.waitForURL((u) => u.pathname.endsWith('/operations/person_get_record'), { timeout: 60_000 });
+          const usedBy = await james.locator('#tool-used-by').waitFor({ timeout: 60_000 }).then(async () => ((await james.locator('#tool-used-by').innerText()) ?? '').replace(/\s+/g, ' '), () => '');
+          check(
+            '46 Tools lists Read a record as one row with its app, kind, status and Used by Ticket desk; its page says the same',
+            tabs.join() === 'All tools,Custom tools,Logs' && /Read a record/.test(line) && /Person desk/.test(line) && /App tool/.test(line) && /Ready/.test(line) && /Ticket desk/.test(line) && /Ticket desk/.test(usedBy),
+            { tabs, line, usedBy },
+          );
+        }, james);
+
         // The tool's own page has the same log as a Logs tab, fixed to this tool.
-        await step('33 the tool’s page has General and Logs tabs, and Logs lists its calls with whom each ran as', async () => {
+        await step('44 the tool’s page has General and Logs tabs, and Logs lists its calls with whom each ran as', async () => {
           const card = ((await call(tools, 'GET', '/v1/systems', priya)).data ?? []).find((c) => c.id === APP);
           const moduleId = card?.moduleIds?.[0] ?? '';
           await james.goto(`${consoleUrl}/tools/${encodeURIComponent(moduleId)}/operations/person_get_record`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -394,7 +412,7 @@ try {
           const tabs = (await james.getByTestId(/^tool-tab-/).allInnerTexts()).map((t) => t.trim());
           await shoot(james, 'tool-logs');
           check(
-            '33 the tool’s page has General and Logs tabs, and Logs lists its calls with whom each ran as',
+            '44 the tool’s page has General and Logs tabs, and Logs lists its calls with whom each ran as',
             tabs.join() === 'General,Logs' && /Read a record/.test(rows) && /j\.richardson@harborpine\.example/.test(rows) && /Succeeded/.test(rows),
             { tabs, moduleId, rows: rows.slice(0, 300) },
           );
@@ -426,7 +444,7 @@ try {
           const callTabs = (await james.getByTestId(/^apps-tab-/).allInnerTexts().catch(() => [])).map((t) => t.trim());
           await shoot(james, 'itools-logs');
           await james.goto(`${consoleUrl}/tools`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          await james.getByTestId('tool-calls-link').waitFor({ timeout: 60_000 });
+          await james.getByTestId('tools-tab-logs').waitFor({ timeout: 60_000 });
           await shoot(james, 'itools');
           // The Apps menu tabs show on Tools and Credentials for a builder too, as on every Apps page. A tab counts only
           // when nothing covers it: on a page taller than the window the tab row once collapsed under the content.
@@ -490,7 +508,7 @@ try {
           await failing.close();
           // Tools and a tool page carry none of the retired words.
           await james.goto(`${consoleUrl}/tools`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          await james.getByTestId('tool-calls-link').waitFor({ timeout: 60_000 });
+          await james.getByTestId('tools-tab-logs').waitFor({ timeout: 60_000 });
           await james.locator('main tbody tr').first().waitFor({ timeout: 60_000 });
           const toolsText = ((await james.locator('main').innerText()) ?? '').replace(/\s+/g, ' ');
           out.oldWords = ['Owner Plugins', 'no connection', 'Module', 'connection’s sign-in'].filter((w) => toolsText.includes(w));
@@ -698,7 +716,7 @@ try {
           const runSays = onRun ? ((await page.getByTestId('run-connect-task').innerText()) ?? '').replace(/\s+/g, ' ') : '';
           const runBoth = onRun && (await page.getByTestId('run-connect-task').getByTestId('connect-wait-me').isVisible()) && (await page.getByTestId('run-connect-task').getByTestId('connect-wait-team').isVisible());
           await shoot(page, 'run-person-run-page');
-          check('34 the run page shows the task it waits on, with Connect my account and Run as the team account', onRun && runBoth && /Person desk/.test(runSays), { onRun, runBoth, runSays: runSays.slice(0, 200) });
+          check('45 the run page shows the task it waits on, with Connect my account and Run as the team account', onRun && runBoth && /Person desk/.test(runSays), { onRun, runBoth, runSays: runSays.slice(0, 200) });
           const listed = (await call(agents, 'GET', '/reviews?pageSize=100', priya)).data;
           const task = ((Array.isArray(listed) ? listed : listed?.data) ?? []).find((r) => r.runId === runId) ?? {};
           await page.goto(`${consoleUrl}/reviews?review=${encodeURIComponent(task.id ?? '')}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -1022,7 +1040,7 @@ try {
           await page.waitForTimeout(500);
           page.off('popup', onPopup);
           await shoot(page, 'connect-required');
-          check('32 an empty required field shows its error in place, and Authorize opens no sign-in window', /Enter the client ID/.test(idError) && /Enter the client secret/.test(secretError) && !opened, { idError, secretError, opened });
+          check('43 an empty required field shows its error in place, and Authorize opens no sign-in window', /Enter the client ID/.test(idError) && /Enter the client secret/.test(secretError) && !opened, { idError, secretError, opened });
           await window_.getByTestId('connect-window-client-id').fill(values.clientId);
           await window_.getByTestId('connect-window-client-secret').fill(values.clientSecret);
           await window_.getByTestId('connect-window-more').click();
@@ -1065,7 +1083,7 @@ try {
             { live, sandbox, rows, bases, authorizeUrl: detail.environments?.production?.settings?.authorizeUrl },
           );
         }, page);
-        await step('30 Settings › Edit starts its saved fields blank, and saving without typing keeps every saved value', async () => {
+        await step('41 Settings › Edit starts its saved fields blank, and saving without typing keeps every saved value', async () => {
           const card = ((await call(tools, 'GET', '/v1/systems', priya)).data ?? []).find((c) => c.pluginId === 'opsai.salesforce');
           const before = (await call(tools, 'GET', `/v1/connections/${card?.connectionId}`, priya)).data ?? {};
           await openSettings(page, consoleUrl, 'plugin:opsai.salesforce');
@@ -1080,7 +1098,7 @@ try {
           const after = (await call(tools, 'GET', `/v1/connections/${card?.connectionId}`, priya)).data ?? {};
           const kept = (e) => JSON.stringify(Object.fromEntries(Object.entries(e?.environments?.production?.settings ?? {}).filter(([k]) => k !== 'scopes')));
           check(
-            '30 Settings › Edit starts its saved fields blank, and saving without typing keeps every saved value',
+            '41 Settings › Edit starts its saved fields blank, and saving without typing keeps every saved value',
             field === '' && /Blank keeps the saved value/.test(said) && closed && kept(after) === kept(before),
             { field, closed, before: kept(before), after: kept(after) },
           );
