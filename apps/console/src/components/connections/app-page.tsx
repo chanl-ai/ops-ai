@@ -172,7 +172,9 @@ export function AppPageView({ appId }: { appId: string }) {
     const w = signInWindow.open(card.name, card.logo);
     if (!w) return;
     signedInAs.current = { account, environment };
-    start.mutate({ connectionId, environment, account }, { onSuccess: (s) => w.go(s, connectionId), onError: (e) => w.fail(e.message) });
+    const run = () => start.mutate({ connectionId, environment, account }, { onSuccess: (s) => w.go(s, connectionId), onError: (e) => w.fail(e.message) });
+    w.retry(run);
+    run();
   };
 
   // The person's own account is a row of Accounts (the final Apps design): Connected as them, or Not signed in.

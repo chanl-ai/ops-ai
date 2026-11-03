@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { CircleCheck } from 'lucide-react';
 
 import { SignInCard } from '@/components/connections/sign-in-card';
-import { CONNECTED_MESSAGE, FAILED_MESSAGE, forgetSignIn, signInFor, signInIsCheck, type ConnectedMessage, type FailedMessage } from '@/components/connections/sign-in';
+import { CONNECTED_MESSAGE, FAILED_MESSAGE, forgetSignIn, retrySignInHref, signInFor, signInIsCheck, type ConnectedMessage, type FailedMessage } from '@/components/connections/sign-in';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCompleteSignIn, useFinishCredentialCheck } from '@/hooks/connections-queries';
@@ -93,11 +93,23 @@ function SignInReturnPage() {
       <Link href="/chat">Back to chat</Link>
     </Button>
   );
+  // In the window a Connect button opened, Try again opens the connect page for the same app, whose load asks the page
+  // that opened this window to start the sign-in once more.
+  const again = popup ? (
+    <>
+      {back}
+      <Button onClick={() => window.location.assign(retrySignInHref())} data-testid="sign-in-retry">
+        Try again
+      </Button>
+    </>
+  ) : (
+    back
+  );
   if (denied)
-    return <SignInCard testId="sign-in-denied" title="Access was not given" description="You chose not to allow access on the app’s own page, so nothing was connected. Connect again to try once more." footer={back} />;
+    return <SignInCard testId="sign-in-denied" title="Access was not given" description="You chose not to allow access on the app’s own page, so nothing was connected." footer={again} />;
   if (!connectionId || !code)
     return <SignInCard testId="sign-in-lost" title="This sign-in has expired or was already used" description="Start it again from the chat or from the app’s page." footer={back} />;
-  if (complete.isError) return <SignInCard testId="sign-in-failed" title="The sign-in did not finish" description={complete.error.message} footer={back} />;
+  if (complete.isError) return <SignInCard testId="sign-in-failed" title="The sign-in did not finish" description={complete.error.message} footer={again} />;
   if (check && (finish.isError || finish.data?.health.status === 'failed'))
     return <SignInCard testId="sign-in-check-failed" title="The test with your account did not pass" description={failure ?? undefined} footer={back} />;
   if (check && finish.isSuccess)

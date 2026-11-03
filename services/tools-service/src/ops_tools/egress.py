@@ -70,6 +70,9 @@ def listable_range(value: str) -> str:
 
 # The policy every outbound request follows: discovery (OpenAPI fetch, MCP) and the http executor alike.
 
+# Said to people, on the Connect window and the tool page: what is wrong and who fixes it, with no network terms.
+NOT_ALLOWED = "{host} is not an allowed address yet. The Security team allows it on the Egress page in Settings."
+
 ALWAYS_DENIED = (
     ipaddress.ip_network("169.254.169.254/32"),
     ipaddress.ip_network("fd00:ec2::254/128"),
@@ -247,7 +250,7 @@ class EgressPolicy:
         if parts.port not in (None, 443):
             raise EgressDenied(f"{host} port {parts.port} is not allowed; only 443.")
         if not await self.host_passes(tenant_id, host, plugin_hosts(also)):
-            raise EgressDenied(f"{host} is not on the egress allow-list.")
+            raise EgressDenied(NOT_ALLOWED.format(host=host))
         return host
 
     def dial_port(self, host: str, port: int) -> int:
@@ -257,7 +260,7 @@ class EgressPolicy:
         """At connect time: resolve once and refuse unless every address is allowed. The caller connects to the
         address returned, never to the name again, so DNS cannot answer differently between check and connect."""
         if not await self.host_passes(tenant_id, host, also):
-            raise EgressDenied(f"{host} is not on the egress allow-list.")
+            raise EgressDenied(NOT_ALLOWED.format(host=host))
         addresses = await self.resolver.resolve(host, port)
         ranges = await self.store.ranges(tenant_id)
         if not addresses or not all(address_allowed(a, ranges) for a in addresses):

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
 import { SignInCard } from '@/components/connections/sign-in-card';
-import { goSignIn, READY_MESSAGE, START_MESSAGE, STOP_MESSAGE, type WindowMessage } from '@/components/connections/sign-in';
+import { goSignIn, READY_MESSAGE, START_MESSAGE, STOP_MESSAGE, type WindowMessage, rememberSignInApp } from '@/components/connections/sign-in';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useOpenConnectLink } from '@/hooks/connections-queries';
@@ -55,6 +55,7 @@ function LinkConnect({ link }: { link: string }) {
 function OpenedConnect({ app, logo }: { app: string; logo: string | null }) {
   const [failed, setFailed] = React.useState<string | null>(null);
   React.useEffect(() => {
+    rememberSignInApp(app, logo);
     const opener = window.opener as Window | null;
     const onMessage = (e: MessageEvent<WindowMessage>) => {
       if (e.origin !== window.location.origin || e.source !== opener) return;
@@ -64,10 +65,27 @@ function OpenedConnect({ app, logo }: { app: string; logo: string | null }) {
     window.addEventListener('message', onMessage);
     opener?.postMessage({ type: READY_MESSAGE }, window.location.origin);
     return () => window.removeEventListener('message', onMessage);
-  }, []);
+  }, [app, logo]);
   if (failed)
     return (
-      <SignInCard testId="connect-failed" app={app} logo={logo} title="Connection failed" description={failed} footer={<Button variant="outline" onClick={() => window.close()} data-testid="connect-close">Close</Button>} />
+      <SignInCard
+        testId="connect-failed"
+        app={app}
+        logo={logo}
+        title={`${app} could not connect`}
+        description={failed}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => window.close()} data-testid="connect-close">
+              Close
+            </Button>
+            {/* Reloading says ready again, and the page that opened this window starts the same sign-in again. */}
+            <Button onClick={() => window.location.reload()} data-testid="connect-retry">
+              Try again
+            </Button>
+          </>
+        }
+      />
     );
   return <Starting app={app} logo={logo} />;
 }

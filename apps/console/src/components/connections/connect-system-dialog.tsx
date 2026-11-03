@@ -299,14 +299,20 @@ function ConnectForm({
         );
       }
       if (w) {
-        const start = await signIn.mutateAsync({
-          connectionId: id,
-          environment: env,
-          account: 'team',
-        });
-        opened.current = { environment: env };
-        w.go(start, id);
-        dispatch({ type: 'signing-in' });
+        const begin = async () => {
+          const start = await signIn.mutateAsync({ connectionId: id, environment: env, account: 'team' });
+          opened.current = { environment: env };
+          w.go(start, id);
+          dispatch({ type: 'signing-in' });
+        };
+        // Try again in the window starts the same sign-in again, on the connection already saved.
+        w.retry(() =>
+          void begin().catch((e: unknown) => {
+            w.fail(message(e));
+            dispatch({ type: 'failed', environment: env, message: message(e) });
+          }),
+        );
+        await begin();
         return;
       }
       dispatch({ type: 'done' });

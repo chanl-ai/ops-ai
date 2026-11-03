@@ -1,7 +1,7 @@
 """Sets the shared stack up for the Salesforce plugin demo (`make demo-salesforce`), from scratch or again.
 
     make demo-salesforce              fake Salesforce (docs/usecases/lib/fake_salesforce.py) on this machine
-    make demo-salesforce SF=real      the owner's Developer org, from ~/.config/ops-ai/salesforce.env
+    make demo-salesforce SF=real      your own Salesforce org and connected app, from ~/.config/ops-ai/salesforce.env
     make demo-salesforce RESET=1      also removes the team's Salesforce connection and template copies, so the
                                       Connect dialog and the template install start again from nothing
 
@@ -189,8 +189,9 @@ def stop_fake() -> None:
 # ── settings every restart reads ──
 
 
-def addons(info: dict[str, Any] | None) -> bool:
-    """Writes .run/demo-addons.env; True when it changed, so the plugin services restart to read it."""
+def addons(info: dict[str, Any] | None, client: dict[str, str] | None = None) -> bool:
+    """Writes .run/demo-addons.env; True when it changed, so the plugin services restart to read it. `client` is the
+    install's own Salesforce app (SF=real: your connected app), so a team connects with no fields to type."""
     lines = [
         "# Written by make demo-salesforce (scripts/demo_salesforce.py); scripts/stack.sh reads it after .env.",
         "OPS_PLUGINS=true",
@@ -205,10 +206,16 @@ def addons(info: dict[str, Any] | None) -> bool:
             f"OPS_EGRESS_EXTRA_CA={FAKE_DIR / 'ca.pem'}",
             f"OPS_EGRESS_RESOLVE='{json.dumps(resolve, separators=(',', ':'))}'",
         ]
+    if client is not None:
+        clients = {PLUGIN: client}
+        lines.append(f"OPS_PLUGIN_CLIENTS='{json.dumps(clients, separators=(',', ':'))}'")
     text = "\n".join(lines) + "\n"
     if ADDONS.exists() and ADDONS.read_text() == text:
         say("FOUND", "plugin settings in .run/demo-addons.env")
         return False
+    # It may hold the app's secret: readable by this user only.
+    ADDONS.touch(mode=0o600)
+    ADDONS.chmod(0o600)
     ADDONS.write_text(text)
     say("MADE", "plugin settings in .run/demo-addons.env")
     return True
@@ -450,86 +457,6 @@ def publish_decided(approver: Any, review: dict[str, Any], name: str) -> None:
         say("MADE", f"{name} published ({review.get('status')})")
 
 
-# ── the owner's org: connect as the dialog does, up to Salesforce's own sign-in page ──
-
-
-def real_connect(team: str) -> None:
-    """Turns Salesforce on for the team with the owner's app (each person, team account as backup), as the Connect
-    dialog sends it, and checks the sign-in Salesforce is asked for: the return address and a PKCE challenge, then
-    what Salesforce answers to it. The owner's own sign-in and Allow finish it, in his browser."""
-    real = read_env(REAL_ENV)
-    lead = heads(sign_in(LEAD, password()), team)
-    login = real["SF_LOGIN"].rstrip("/")
-    cards = data(httpx.get(f"{TOOLS}/v1/systems", headers=lead, timeout=20), "systems")
-    card = next((c for c in cards if c.get("pluginId") == PLUGIN), None) or {}
-    conn_id = card.get("connectionId")
-    current = (
-        data(httpx.get(f"{TOOLS}/v1/connections/{conn_id}", headers=lead, timeout=20), "connection") if conn_id else {}
-    )
-    prod = ((current or {}).get("environments") or {}).get("production") or {}
-    if conn_id and not str((prod.get("settings") or {}).get("authorizeUrl", "")).startswith(login):
-        reset(lead["Authorization"].removeprefix("Bearer "), team)
-        conn_id = None
-    if not conn_id:
-        body = {
-            "enabled": True,
-            "environment": "production",
-            "kind": "oauth2_auth_code",
-            "signIn": "person_or_team",
-            "settings": {"login_url": login},
-            "clientId": real["SF_CLIENT_ID"],
-            "clientSecret": real["SF_CLIENT_SECRET"],
-        }
-        on = data(
-            httpx.put(f"{TOOLS}/v1/plugins/{PLUGIN}/team", headers=lead, json=body, timeout=30),
-            "turn on with the owner's app",
-        )
-        conn_id = on["connectionId"]
-        say("MADE", f"Salesforce on for {TEAM_NAME} with the owner's app (each person, team account as backup)")
-    else:
-        say("FOUND", f"Salesforce on for {TEAM_NAME} with the owner's app")
-    started = data(
-        httpx.post(
-            f"{TOOLS}/v1/connections/{conn_id}/sign-in",
-            headers=lead,
-            json={"environment": "production", "account": "team"},
-            timeout=30,
-        ),
-        "start the team account's sign-in",
-    )
-    url = urlsplit(started["authorizeUrl"])
-    query = dict(p.split("=", 1) for p in url.query.split("&") if "=" in p)
-    from urllib.parse import unquote  # noqa: PLC0415
-
-    redirect = unquote(query.get("redirect_uri", ""))
-    pkce = bool(query.get("code_challenge")) and query.get("code_challenge_method") == "S256"
-    say(
-        "OK",
-        f"sign-in asks {url.scheme}://{url.netloc}{url.path} with redirect_uri {redirect}, "
-        f"PKCE S256 {'sent' if pkce else 'NOT sent'}",
-    )
-    answer = httpx.get(started["authorizeUrl"], follow_redirects=True, timeout=30)
-    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", answer.text))
-    error = re.search(
-        r"(error=[\w_]+[^&]*|redirect_uri_mismatch|invalid_client_id|OAUTH_[A-Z_]+|[Ee]rror:[^.]{0,160})",
-        f"{answer.url} {text}",
-    )
-    shown = (
-        "its login form"
-        if re.search(r'id="username"|name="username"', answer.text)
-        else (error.group(0)[:200] if error else text[:200])
-    )
-    say(
-        "OK" if not error else "FAIL",
-        f"Salesforce answers {answer.status_code} at {urlsplit(str(answer.url)).netloc}"
-        f"{urlsplit(str(answer.url)).path}: {shown}",
-    )
-    print(
-        f"Owner: sign in as {LEAD} ({how_to_sign_in()}), open {CONSOLE}/tools/connections/{conn_id}, press "
-        "'Connect the team account', sign in to Salesforce and click Allow."
-    )
-
-
 def main() -> int:
     if sys.argv[1:] == ["templates"]:
         return add_templates()
@@ -542,22 +469,28 @@ def main() -> int:
         missing = [k for k in ("SF_LOGIN", "SF_CLIENT_ID", "SF_CLIENT_SECRET") if not real.get(k)]
         if missing:
             raise SystemExit(f"FAIL  {REAL_ENV} has no value for {', '.join(missing)}")
-    restart(addons(info))
+    client = None
+    if mode == "real":
+        real = read_env(REAL_ENV)
+        client = {"id": real["SF_CLIENT_ID"], "secret": real["SF_CLIENT_SECRET"]}
+    restart(addons(info, client))
     model_alias()
     admin_env = read_env(RUN / "dev-admin.env")
     admin = sign_in(admin_env["OPS_BOOTSTRAP_ADMIN_EMAIL"], admin_env["OPS_BOOTSTRAP_ADMIN_PASSWORD"])
     team = team_id(admin)
     turn_on_for_account(admin, team)
-    if mode == "real":
-        host = urlsplit(read_env(REAL_ENV)["SF_LOGIN"]).hostname or ""
-        egress(admin, team, [host], [])
-    elif info is not None:
+    # SF=real lists nothing: the plugin's own hosts (its sign-in and instance) pass for its own requests.
+    if mode != "real" and info is not None:
         egress(admin, team, list(info["hosts"]), [str(info["range"])])
     if os.environ.get("RESET") == "1":
         lead = sign_in(LEAD, password())
         reset(lead, team)
     if mode == "real":
-        real_connect(team)
+        print(
+            f"Next: sign in as {LEAD} ({how_to_sign_in()}), open {CONSOLE}/integrations, press Connect on Salesforce "
+            "and keep Ops AI's app; Salesforce asks you to sign in and Allow. Its connected app must list "
+            f"{CONSOLE}/connections/connect as a callback."
+        )
     print(f"Ready: {CONSOLE}/integrations as {LEAD} ({how_to_sign_in()})")
     return 0
 

@@ -97,7 +97,7 @@ await withUiStack(
         await page.getByTestId('connect-mailbox-submit').click();
         await page.getByTestId('mailbox-page').waitFor({ timeout: 60_000 });
         const title = page.url().includes('/channels/email/mbx_') ? await page.getByText(`Service desk ${RUN}`).first().innerText() : page.url();
-        check('2 James connects an IMAP mailbox, tests it and lands on its page', tested.ok === 'false' && /allow-list|Could not connect/.test(tested.text) && title.includes(`Service desk ${RUN}`), {
+        check('2 James connects an IMAP mailbox, tests it and lands on its page', tested.ok === 'false' && /allow-list|allowed address|Could not connect/.test(tested.text) && title.includes(`Service desk ${RUN}`), {
           tested,
           title,
         });

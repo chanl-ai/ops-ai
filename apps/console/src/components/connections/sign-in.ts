@@ -65,8 +65,10 @@ export interface SignInWindow {
   window: Window;
   /** Sends the window on to the system's sign-in; `check` makes it Test with my account. */
   go(start: SignInStart, connectionId: string, opts?: { check?: boolean }): void;
-  /** Shows the window's failure card with this reason; the person closes it. */
+  /** Shows the window's failure card with this reason; the person tries again or closes it. */
   fail(message: string): void;
+  /** What Try again on the failure card runs: the same sign-in started again, sent on to this window. */
+  retry(run: () => void): void;
 }
 
 /**
@@ -83,23 +85,35 @@ export function openSignInWindow(app: string, logo?: string | null): SignInWindo
     return null;
   }
   let ready = false;
+  let failed = false;
   let pending: WindowMessage | null = null;
+  let again: (() => void) | null = null;
   const send = () => {
     if (!ready || !pending) return;
     w.postMessage(pending, window.location.origin);
     pending = null;
-    window.removeEventListener('message', onReady);
   };
+  // The window says it is ready when it first loads, and again when Try again reloads it after a failure; the second
+  // time starts the sign-in again in the same window, so no new pop-up is needed.
   const onReady = (e: MessageEvent<{ type?: string }>) => {
-    if (e.origin !== window.location.origin || e.source !== w || e.data?.type !== READY_MESSAGE) return;
+    if (e.origin !== window.location.origin || e.source !== w) return;
+    // A refusal on the app's own page, or a sign-in that did not finish, also lets Try again start it once more.
+    if (e.data?.type === FAILED_MESSAGE) failed = true;
+    if (e.data?.type !== READY_MESSAGE) return;
     ready = true;
+    if (failed && again) {
+      failed = false;
+      again();
+      return;
+    }
     send();
   };
   window.addEventListener('message', onReady);
   return {
     window: w,
     go: (start, connectionId, opts) => ((pending = { type: START_MESSAGE, start, connectionId, check: opts?.check }), send()),
-    fail: (message) => ((pending = { type: STOP_MESSAGE, message }), send()),
+    fail: (message) => ((failed = true), (pending = { type: STOP_MESSAGE, message }), send()),
+    retry: (run) => void (again = run),
   };
 }
 
@@ -120,7 +134,7 @@ export function useSignInWindow(handlers: { onConnected?: (m: ConnectedMessage) 
         current.current = null;
         latest.current.onConnected?.(e.data);
       } else if (e.data?.type === FAILED_MESSAGE) {
-        current.current = null;
+        // The window stays this page's: Try again in it may still connect.
         latest.current.onFailed?.(e.data.message);
       }
     };
@@ -133,6 +147,29 @@ export function useSignInWindow(handlers: { onConnected?: (m: ConnectedMessage) 
     current.current = null;
   }, []);
   return { open, close, current };
+}
+
+const APP_KEY = 'ops-sign-in:app';
+
+/** Keeps the app this window connects, so a failed return can open the connect page for it again. */
+export function rememberSignInApp(app: string, logo: string | null): void {
+  try {
+    sessionStorage.setItem(APP_KEY, JSON.stringify({ app, logo }));
+  } catch {
+    // Try again then names no app.
+  }
+}
+
+/** The connect page address for the app this window was opened for; its load starts the sign-in again. */
+export function retrySignInHref(): string {
+  let kept: { app?: string; logo?: string | null } = {};
+  try {
+    kept = JSON.parse(sessionStorage.getItem(APP_KEY) ?? '{}') as typeof kept;
+  } catch {
+    // Nothing kept.
+  }
+  const q = new URLSearchParams({ app: kept.app || 'the app', ...(kept.logo ? { logo: kept.logo } : {}) });
+  return `/connections/connect?${q}`;
 }
 
 /** The connection a returning state was sent out for. */

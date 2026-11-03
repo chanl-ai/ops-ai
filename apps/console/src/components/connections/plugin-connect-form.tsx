@@ -168,7 +168,14 @@ export function PluginConnectForm({
     return id;
   };
 
-  const startSignIn = async (w: SignInWindow, id: string, env: Environment, closes = false) => {
+  const startSignIn = async (w: SignInWindow, id: string, env: Environment, closes = false): Promise<void> => {
+    // Try again in the window starts the same sign-in again, on the account already made.
+    w.retry(() =>
+      void startSignIn(w, id, env, closes).catch((e: unknown) => {
+        w.fail(message(e));
+        dispatch({ type: 'failed', environment: env, message: message(e) });
+      }),
+    );
     const start = await signIn.mutateAsync({ connectionId: id, environment: env, account: 'team' });
     opened.current = { environment: env, closes };
     w.go(start, id);
