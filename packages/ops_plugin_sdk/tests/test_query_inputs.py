@@ -171,6 +171,16 @@ def test_a_query_placeholder_naming_no_input_is_refused(tmp_path: Path) -> None:
             "paging: { rule: offset, limit: 25 }",
             "an offset rule names the answer's list",
         ),
+        (
+            "paging: { rule: offset, limit: 25, items: searchRecords }",
+            "paging: { rule: page, items: searchRecords }",
+            "a page rule names the page size (limit)",
+        ),
+        (
+            "paging: { rule: link, next: nextRecordsUrl }",
+            "paging: { rule: link_header, next: nextRecordsUrl }",
+            "a link_header rule reads the Link header and names no answer field",
+        ),
     ],
 )
 def test_a_paging_rule_with_no_field_to_read_is_refused(tmp_path: Path, old: str, new: str, said: str) -> None:

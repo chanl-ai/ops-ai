@@ -26,7 +26,7 @@ import json
 import re
 import ssl
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import parse_qsl, quote, quote_plus, urlencode, urlsplit
@@ -425,12 +425,12 @@ class HttpExecutor(_Secrets):
         trial: Trial | None = None,
         environment: str | None = None,
         acting_for: ActingForPerson | None = None,
-        on_answer: Callable[[Any], Any] | None = None,
+        on_answer: Callable[[Any, Mapping[str, str]], Any] | None = None,
     ) -> ToolOutcome:
         """With `trial` (the test console) the operation's own transform is not applied: the console applies its draft
         to `trial.raw`. `secret_values` are a test's typed values (_Secrets._resolve). `environment` is the run's (test
-        or production), which picks the connection's settings. `on_answer` sees the answer before the transform, as
-        a plugin's paging reads the next page from it (plugins/executor.py)."""
+        or production), which picks the connection's settings. `on_answer` sees the answer and its headers before the
+        transform, as a plugin's paging reads the next page from them (plugins/executor.py)."""
         if not module.get("endpoint"):
             return _failure("CONNECTION_NOT_SET", NO_ADDRESS)
         host = urlsplit(build_request(module, op, args).url).hostname
@@ -517,7 +517,7 @@ class HttpExecutor(_Secrets):
         output = scrub(masked(output, op.get("masked_output") or []), used)
         if on_answer is not None:
             try:
-                output = on_answer(output)
+                output = on_answer(output, dict(res.headers))
             except Exception as e:  # the caller's reading of the answer: the call fails, the gateway does not
                 return _failure("ANSWER_UNREADABLE", f"The answer from {host} could not be read ({type(e).__name__}).")
         if trial is not None:

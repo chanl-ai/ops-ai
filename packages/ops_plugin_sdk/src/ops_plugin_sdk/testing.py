@@ -66,7 +66,8 @@ def _send(fake: Fake, allowed: list[str], sent_headers: Mapping[str, str] | None
             raise EgressDenied(f"{host} is not one of this plugin's hosts.")
         # The plugin's and the tool's headers first, then the sign-in, which wins a name they share (paging.headers).
         out = {**dict(sent_headers or {}), "Authorization": f"Bearer {fake.token}"}
-        r = fake.client.request(method, url, params=dict(params or {}), json=body, headers=out)
+        # No params at all for a followed page address: an empty mapping would replace the query the address carries.
+        r = fake.client.request(method, url, params=dict(params) if params else None, json=body, headers=out)
         if r.status_code == 401:
             raise NeedsReconnect("The system refused the sign-in.")
         if r.status_code == 429:
@@ -103,7 +104,7 @@ def call(plugin: Plugin, tool: str, args: Mapping[str, Any], settings: Mapping[s
     sent = paging.arguments(t, given, state)
     method, body = req.method, None
     params: dict[str, Any] | None = None
-    if state is not None and req.paging is not None and req.paging.rule == "link":
+    if state is not None and req.paging is not None and req.paging.rule in paging.FOLLOWS_LINK:
         followed = paging.follow(endpoint, str(state.get("link") or ""))
         if followed is None:
             raise EgressDenied("The cursor holds no page address this plugin can follow.")
@@ -123,8 +124,7 @@ def call(plugin: Plugin, tool: str, args: Mapping[str, Any], settings: Mapping[s
     if r.status_code >= 400:
         raise RuntimeError(f"{tool} answered {r.status_code}: {r.text[:200]}")
     data: Any = r.json() if r.text else None
-    offset = int(sent.get(req.paging.offset_param, 0)) if req.paging and req.paging.rule == "offset" else 0
-    data, found = paging.next_page(req.paging, data, offset)
+    data, found = paging.next_page(req.paging, data, sent, r.headers)
     out: Any = data
     if t.transform:
         text = _ENV.from_string(t.transform).render(data=data, settings=merged)

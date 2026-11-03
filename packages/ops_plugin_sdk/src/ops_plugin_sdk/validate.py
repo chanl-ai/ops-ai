@@ -100,6 +100,10 @@ def _paging(tool: Tool, request: Request, where: str) -> list[Problem]:
         out.append(Problem(where, "a token rule names the parameter the token is sent back as (param)"))
     if paging.rule == "offset" and not (paging.limit and paging.items):
         out.append(Problem(where, "an offset rule names the answer's list (items) and the page size (limit)"))
+    if paging.rule == "page" and not paging.limit:
+        out.append(Problem(where, "a page rule names the page size (limit)"))
+    if paging.rule == "link_header" and (paging.next or paging.items):
+        out.append(Problem(where, "a link_header rule reads the Link header and names no answer field"))
     return out
 
 

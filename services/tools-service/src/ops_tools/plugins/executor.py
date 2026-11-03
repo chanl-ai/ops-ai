@@ -215,7 +215,7 @@ class PluginExecutor:
         except InputRefused as e:
             return _failure("INVALID_INPUT", str(e), 422, OURS)
         target, call = module, op
-        if state is not None and paging is not None and paging.rule == "link":
+        if state is not None and paging is not None and paging.rule in paged.FOLLOWS_LINK:
             followed = paged.follow(str(module["endpoint"]), str(state.get("link") or ""))
             if followed is None:
                 return _failure("INVALID_INPUT", "This cursor holds no page address this plugin can follow.", 422, OURS)
@@ -224,11 +224,11 @@ class PluginExecutor:
                 {**op, "method": "GET", "path": followed[1], "body": None},
             )
             sent = {}
-        offset = int(sent.get(paging.offset_param, 0)) if paging is not None and paging.rule == "offset" else 0
+        asked = dict(sent)
         found: dict[str, Any] = {}
 
-        def on_answer(answer: Any) -> Any:
-            shown, nxt = paged.next_page(paging, answer, offset)
+        def on_answer(answer: Any, headers: Mapping[str, str]) -> Any:
+            shown, nxt = paged.next_page(paging, answer, asked, headers)
             found.update(nxt)
             return shown
 

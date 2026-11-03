@@ -45,3 +45,23 @@ tools:
       path: /search
       query: { q: "FIND {{{q}}}" }
       paging: { rule: offset, limit: 2, items: searchRecords }
+  - name: issues
+    title: Issues
+    access: read
+    input:
+      state: { type: string, enum: [open, all], required: false, default: open }
+    request:
+      method: GET
+      path: /issues
+      query: { state: "{{state}}" }
+      paging: { rule: link_header }
+  - name: pages
+    title: Pages
+    access: read
+    input:
+      state: { type: string, enum: [open, all] }
+    request:
+      method: GET
+      path: /pages
+      query: { state: "{{state}}" }
+      paging: { rule: page, limit: 2, limit_param: per_page }
