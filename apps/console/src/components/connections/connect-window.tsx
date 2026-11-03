@@ -25,7 +25,6 @@ import {
   type SystemCard,
   type TeamPluginBody,
   useAddAccount,
-  useAppCredentials,
   useDeleteConnection,
   useSetTeamPlugin,
   useStartSignIn,
@@ -62,12 +61,13 @@ export function ConnectWindow({ card, kinds, another = false, open, onOpenChange
   const kind = kinds.kinds.find((k) => k.id === (card.authKind ?? plugin?.kinds[0]));
   const environment = keyed(kinds).find((e) => e.production)?.id ?? 'production';
 
-  // The app credential the team's connection already signs in with; Team admins read the list, others see the app's.
-  const credentials = useAppCredentials();
-  const existing = card.connectionId ? credentials.data?.find((c) => c.id === card.connectionId) : undefined;
+  // The app credential the team's connection already signs in with, as the app's card names it.
+  const existing = card.connectionId ? card.credential : null;
   const [newClient, setNewClient] = React.useState(false);
   const reusing = Boolean(card.connectionId) && !newClient;
-  const [app, setApp] = React.useState<App>(plugin?.platformApp ? 'platform' : 'own');
+  // Ops AI's own client exists only where the install set it up; without it the team's own is the one way to sign in.
+  const managed = card.managedClient ?? Boolean(plugin?.platformApp);
+  const [app, setApp] = React.useState<App>(managed ? 'platform' : 'own');
   const chosen: App = reusing ? (existing?.type === 'own' ? 'own' : 'platform') : newClient ? 'own' : app;
   const typing = !reusing && chosen === 'own';
   // The fields this window asks, as the API describes them: the team's own client when it brings one, and the plugin's
@@ -227,7 +227,12 @@ export function ConnectWindow({ card, kinds, another = false, open, onOpenChange
               Use a new client of your own
             </Button>
           </div>
-        ) : newClient ? null : (
+        ) : newClient ? null : !managed ? (
+          <div className="flex flex-col gap-1 rounded-md border p-3 text-sm" data-testid="connect-window-own-only">
+            <p>{card.name} signs in with your team’s own app: register one with {card.name} and give its client ID and secret.</p>
+            {card.mayManage && <p className="text-xs text-muted-foreground">Ops AI’s app is not set up for this install. An install admin sets it in the install’s configuration.</p>}
+          </div>
+        ) : (
           <Tabs value={app} onValueChange={(v) => setApp(v as App)}>
             <TabsList className="w-full" data-testid="connect-window-app">
               {/* Ops AI's app is offered once an account admin has set it up for this plugin. */}
@@ -259,7 +264,7 @@ export function ConnectWindow({ card, kinds, another = false, open, onOpenChange
             )}
             {card.docsUrl && (
               <a href={card.docsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm underline-offset-4 hover:underline">
-                Where to register an app with {card.name} <ExternalLink className="size-3.5" />
+                Where to find these for {card.name} <ExternalLink className="size-3.5" />
               </a>
             )}
           </div>

@@ -1,7 +1,7 @@
 import { ApiError } from '../../contract';
 import type { ConnectionsApi } from '../../connections-contract';
 import { notFound, respond } from '../runtime';
-import type { AuthKind, ConnectionDetail, ConnectionEnvironment, MyConnection } from '@/lib/types/connections';
+import type { AppCredentialRow, AuthKind, ConnectionDetail, ConnectionEnvironment, MyConnection } from '@/lib/types/connections';
 
 const KINDS: AuthKind[] = [
   { id: 'none', label: 'No sign-in', signsIn: false, holdsToken: false, perPerson: false },
@@ -33,6 +33,7 @@ export function createConnectionsMock(deps: { me: string }): ConnectionsApi {
     const kind = KINDS.find((k) => k.id === row.authKind);
     return { connectionId: row.id, connection: row.name, connectionStatus: row.status, environment, method: kind?.label ?? row.kindLabel, authKind: row.authKind, personFields: kind?.personFields ?? [], connected: true, docsUrl: null, scopes: [], since: new Date().toISOString() };
   };
+  const credentials: AppCredentialRow[] = [];
   const signIn = (id: string, environment: ConnectionEnvironment) => ({
     authorizeUrl: `/connections/callback?code=mock&state=${encodeURIComponent(`${id}:${environment}`)}`,
     redirectUri: '/connections/callback',
@@ -96,6 +97,21 @@ export function createConnectionsMock(deps: { me: string }): ConnectionsApi {
         const at = mine.findIndex((m) => m.connectionId === id && m.environment === environment);
         if (at < 0) notFound(`Your sign-in to ${id}`);
         mine.splice(at, 1);
+      }),
+    // The team's own client for an app: kept here as a row, the secret dropped as the service seals it.
+    createAppCredential: (i) =>
+      respond(() => {
+        if (credentials.some((c) => c.app === i.app)) throw new ApiError('This app already has an app credential; edit it instead.', 409, undefined, 'credential_exists');
+        const row = { id: `conn_${i.app.replace(/[^a-z0-9]+/gi, '_')}`, name: `${i.app.replace(/^plugin:/, '')}-credentials`, app: i.app, appName: i.app.replace(/^plugin:/, ''), type: 'own' as const, permissions: i.scopes ?? [], accounts: 0, status: 'not_tested' as const, created: new Date().toISOString() };
+        credentials.push(row);
+        return row;
+      }),
+    startCredentialCheck: (id, i) => respond(() => signIn(id, i.environment)),
+    finishCredentialCheck: (id) =>
+      respond(() => {
+        const row = credentials.find((c) => c.id === id);
+        if (row) row.status = 'working';
+        return { health: { status: 'ok' as const, account: `${deps.me.toLowerCase().replace(/\s+/g, '.')}@example.com`, environment: 'production' as const, at: new Date().toISOString(), by: deps.me } };
       }),
   };
 }

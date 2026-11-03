@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
+  type ConnectionDetail,
   type SystemCard,
   type TeamPluginBody,
   useDeleteConnection,
@@ -40,6 +41,7 @@ import {
   type FieldGroups,
   type Kind,
   type Kinds,
+  type SavedEnvironment,
 } from '@/lib/connect-plan';
 import { cn } from '@/lib/utils';
 
@@ -52,12 +54,15 @@ export function PluginConnectForm({
   open,
   card,
   kinds,
+  detail,
   first,
   onClose,
 }: {
   open: boolean;
   card: SystemCard;
   kinds: Kinds;
+  /** The app's connection when it has one: its saved settings fill the fields, its sealed secrets read as set. */
+  detail?: ConnectionDetail | null;
   first?: Environment;
   onClose: () => void;
 }) {
@@ -72,10 +77,19 @@ export function PluginConnectForm({
   const asksWho = kind.perPerson && offeredWho.length > 1 && !card.connectionId;
   const savedEnv = (env: Environment) => Boolean(card.environments[env]?.set);
   const groupsFor = (env: Environment, k: Kind, a: App) => pluginGroups(k, kinds, plugin, a, savedEnv(env));
+  // What the connection saved per environment: the plugin's settings with the connection's own, and which secrets are set.
+  const savedOf = (env: Environment): SavedEnvironment | null => {
+    const e = (detail?.environments as Record<string, { set?: boolean; settings?: Record<string, unknown>; pluginSettings?: Record<string, unknown>; pluginSecrets?: Record<string, boolean> }> | undefined)?.[env];
+    if (!e) return null;
+    return { set: Boolean(e.set), settings: { ...(e.settings ?? {}), ...(e.pluginSettings ?? {}) }, secrets: Object.fromEntries(Object.entries(e.pluginSecrets ?? {}).map(([k, v]) => [k, { set: v }])) };
+  };
   const teamFields = plugin.settings.filter((s) => !s.perEnvironment && !s.locked);
-  // The team's settings of a connection already made start blank: a blank one keeps the saved value.
-  const [team, setTeam] = React.useState<Record<string, string>>(() => Object.fromEntries(teamFields.map((s) => [s.name, card.connectionId ? '' : (s.default ?? '')])));
-  const sectionsOf = (k: Kind, a: App) => Object.fromEntries(keyed(kinds).map((e) => [e.id, draftFor(e.id, groupsFor(e.id, k, a))]));
+  const savedTeam = savedOf(keyed(kinds).find((e) => e.production)?.id ?? 'production')?.settings ?? {};
+  // The team's settings start as saved; one the connection does not send back starts blank and keeps its value.
+  const [team, setTeam] = React.useState<Record<string, string>>(() =>
+    Object.fromEntries(teamFields.map((s) => [s.name, savedTeam[s.name] != null ? String(savedTeam[s.name]) : card.connectionId ? '' : (s.default ?? '')])),
+  );
+  const sectionsOf = (k: Kind, a: App) => Object.fromEntries(keyed(kinds).map((e) => [e.id, draftFor(e.id, groupsFor(e.id, k, a), savedOf(e.id))]));
   const setOnConnection = keyed(kinds)
     .map((e) => e.id)
     .filter((id) => card.environments[id]?.set);

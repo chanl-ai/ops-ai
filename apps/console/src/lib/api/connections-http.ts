@@ -19,5 +19,8 @@ export function createConnectionsHttp(get: Get, send: Send): ConnectionsApi {
     mine: (every) => get(every ? '/me/connections?every=true' : '/me/connections'),
     giveOwn: (id, i) => send('PUT', `/me/connections/${encodeURIComponent(id)}/credentials`, i),
     disconnect: (id, environment) => send('DELETE', `/me/connections/${encodeURIComponent(id)}?environment=${environment}`),
+    createAppCredential: (i) => send('POST', '/app-credentials', i),
+    startCredentialCheck: (id, i) => send('POST', `${one(id)}/test-credential`, i),
+    finishCredentialCheck: (id, i) => send('POST', `${one(id)}/test-credential`, i),
   };
 }

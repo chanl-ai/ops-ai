@@ -3,11 +3,12 @@
 import * as React from 'react';
 import Link from 'next/link';
 import type { ColumnDef } from '@tanstack/react-table';
-import { KeyRound } from 'lucide-react';
+import { KeyRound, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
+import { NewAppCredentialDialog } from '@/components/connections/new-app-credential-dialog';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -70,12 +71,20 @@ const columns = (onEdit: (c: AppCredential) => void): ColumnDef<AppCredential>[]
 export function AppCredentialsPanel() {
   const creds = useAppCredentials();
   const [editing, setEditing] = React.useState<AppCredential | null>(null);
+  const [adding, setAdding] = React.useState(false);
   const cols = React.useMemo(() => columns(setEditing), []);
   // A first answer that failed shows the error with Retry at once, not a skeleton while the retries run.
   if (!creds.data && (creds.isError || creds.failureCount > 0)) return <QueryError what="the app credentials" error={creds.error ?? creds.failureReason} onRetry={() => creds.refetch()} retrying={creds.isFetching} />;
   if (creds.isPending) return <PageSkeleton statCards={0} tableRows={4} />;
   return (
     <div className="flex flex-col gap-4" data-testid="app-credentials-panel">
+      {/* The list answers team admins only, so the window that adds to it is theirs too. */}
+      <div className="flex justify-end">
+        <Button size="sm" onClick={() => setAdding(true)} data-testid="new-app-credential">
+          <Plus />
+          New app credential
+        </Button>
+      </div>
       <DataTableWithViews
         columns={cols}
         data={creds.data}
@@ -83,9 +92,10 @@ export function AppCredentialsPanel() {
         searchColumn="name"
         searchPlaceholder="Search app credentials…"
         hideViewSwitcher
-        emptyState={<ListEmpty icon={KeyRound} noun="app credentials" filtered={false} description="No app credentials yet. Connecting an app that signs in uses Ops AI’s app; use your own on the app’s Settings." />}
+        emptyState={<ListEmpty icon={KeyRound} noun="app credentials" filtered={false} description="No app credentials yet. Connecting an app that signs in uses Ops AI’s app; add your own with New app credential." />}
       />
       <EditSecretDialog credential={editing} onClose={() => setEditing(null)} />
+      <NewAppCredentialDialog open={adding} onOpenChange={setAdding} />
     </div>
   );
 }

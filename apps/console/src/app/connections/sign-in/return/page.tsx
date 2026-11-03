@@ -6,10 +6,10 @@ import { useSearchParams } from 'next/navigation';
 import { CircleCheck } from 'lucide-react';
 
 import { SignInCard } from '@/components/connections/sign-in-card';
-import { CONNECTED_MESSAGE, FAILED_MESSAGE, forgetSignIn, signInFor, type ConnectedMessage, type FailedMessage } from '@/components/connections/sign-in';
+import { CONNECTED_MESSAGE, FAILED_MESSAGE, forgetSignIn, signInFor, signInIsCheck, type ConnectedMessage, type FailedMessage } from '@/components/connections/sign-in';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useCompleteSignIn } from '@/hooks/connections-queries';
+import { useCompleteSignIn, useFinishCredentialCheck } from '@/hooks/connections-queries';
 
 /**
  * Where a connected system sends the person back after signing in (tools-service's SIGN_IN_RETURN_PATH, c-558):
@@ -22,11 +22,30 @@ function SignInReturnPage() {
   const code = params.get('code') ?? '';
   const denied = params.get('error');
   const [connectionId] = React.useState(() => (state ? signInFor(state) : null));
+  // Test with my account comes back here too: it finishes as a test of the app credential and keeps no sign-in.
+  const [check] = React.useState(() => (state ? signInIsCheck(state) : false));
   const complete = useCompleteSignIn(connectionId ?? '');
+  const finish = useFinishCredentialCheck(connectionId ?? '');
   const started = React.useRef(false);
   React.useEffect(() => {
     if (started.current || denied || !connectionId || !code) return;
     started.current = true;
+    if (check) {
+      finish.mutate(
+        { code, state },
+        {
+          onSuccess: (res) => {
+            forgetSignIn(state);
+            const opener = window.opener as Window | null;
+            if (res.health.status !== 'ok' || !opener || opener.closed) return;
+            const said: ConnectedMessage = { type: CONNECTED_MESSAGE, connectionId, connection: 'the app credential', account: res.health.account };
+            opener.postMessage(said, window.location.origin);
+            window.close();
+          },
+        },
+      );
+      return;
+    }
     complete.mutate(
       { code, state },
       {
@@ -40,7 +59,7 @@ function SignInReturnPage() {
         },
       },
     );
-  }, [code, complete, connectionId, denied, state]);
+  }, [check, code, complete, connectionId, denied, finish, state]);
 
   // The page that opened this window learns of a refusal or a failure too, so its Connect window stops waiting.
   const failure = denied
@@ -49,7 +68,11 @@ function SignInReturnPage() {
       ? 'This sign-in has expired or was already used.'
       : complete.isError
         ? complete.error.message
-        : null;
+        : finish.isError
+          ? finish.error.message
+          : finish.data?.health.status === 'failed'
+            ? (finish.data.health.message ?? 'The test with your account did not pass.')
+            : null;
   React.useEffect(() => {
     const opener = window.opener as Window | null;
     if (!failure || !opener || opener.closed) return;
@@ -75,6 +98,14 @@ function SignInReturnPage() {
   if (!connectionId || !code)
     return <SignInCard testId="sign-in-lost" title="This sign-in has expired or was already used" description="Start it again from the chat or from the app’s page." footer={back} />;
   if (complete.isError) return <SignInCard testId="sign-in-failed" title="The sign-in did not finish" description={complete.error.message} footer={back} />;
+  if (check && (finish.isError || finish.data?.health.status === 'failed'))
+    return <SignInCard testId="sign-in-check-failed" title="The test with your account did not pass" description={failure ?? undefined} footer={back} />;
+  if (check && finish.isSuccess)
+    return (
+      <SignInCard testId="sign-in-check-ok" title="The app credential works" description={finish.data.health.account ? `Signed in as ${finish.data.health.account}. You can close this window.` : 'You can close this window.'} footer={back}>
+        <CircleCheck className="size-8 text-success-text" />
+      </SignInCard>
+    );
   if (complete.isSuccess)
     return (
       <SignInCard testId="sign-in-connected" title={`${complete.data.name} is connected`} description={popup ? 'You can close this window.' : 'Go back to the chat; it goes on with your account.'} footer={back}>

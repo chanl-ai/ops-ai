@@ -76,7 +76,7 @@ function Controls({ c, onEnd, onGive }: { c: MyConnection; onEnd: () => void; on
       ) : (
         <Badge variant="secondary">Connected</Badge>
       )}
-      {c.refused && !keyed && <ConnectButton c={c} label="Reconnect" />}
+      {(c.refused || c.test?.status === 'failed') && !keyed && <ConnectButton c={c} label="Reconnect" />}
       {keyed && (
         <Button variant="outline" size="sm" onClick={onGive} data-testid={`replace-own-${c.connectionId}`}>
           Replace {noun}
@@ -97,6 +97,8 @@ function describe(c: MyConnection): string {
     const what = c.personFields.length ? `refused${when}` : `sign-in expired${when}`;
     return [c.method, what, c.refusedReason, c.environment].filter(Boolean).join(' · ');
   }
+  // Signed in, but the test call after it failed: the account stays connected and says why.
+  if (c.test?.status === 'failed') return [`Signed in, but a test call failed: ${c.test.message || 'no reason given'}`, c.environment].join(' · ');
   // A sign-in reads as the My accounts frame: whom it is connected as and since when; a key keeps its method first.
   if (!c.personFields.length) return [`Connected as ${c.account ?? 'an unnamed account'}${c.since ? ` on ${shortDate(c.since)}` : ''}`, c.environment].join(' · ');
   const when = c.since ? `set ${shortDate(c.since)}` : null;

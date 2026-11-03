@@ -76,7 +76,8 @@ export function ConnectSystemDialog({
   onConnected?: (c: ConnectionDetail) => void;
 }) {
   const kinds = useConnectionKinds();
-  const existingId = target.kind === 'connection' ? target.connectionId : null;
+  // A plugin's connection is read too, so its Edit starts from the settings saved on it.
+  const existingId = target.kind === 'connection' ? target.connectionId : target.kind === 'plugin' ? (target.card.connectionId ?? null) : null;
   const detail = useConnectionDetail(open ? existingId : null);
   const loading = kinds.isPending || (existingId != null && detail.isPending);
   const failed = kinds.isError ? kinds : detail.isError ? detail : null;
@@ -107,7 +108,7 @@ export function ConnectSystemDialog({
     );
   }
   if (target.kind === 'plugin') {
-    return <PluginConnectForm open={open} card={target.card} kinds={kinds.data as Kinds} first={environment ?? keyed(kinds.data as Kinds).find((e) => e.production)?.id} onClose={() => onOpenChange(false)} />;
+    return <PluginConnectForm open={open} card={target.card} kinds={kinds.data as Kinds} detail={detail.data ?? null} first={environment ?? keyed(kinds.data as Kinds).find((e) => e.production)?.id} onClose={() => onOpenChange(false)} />;
   }
   return (
     <ConnectForm

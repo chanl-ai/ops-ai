@@ -19,17 +19,29 @@ const key = (state: string) => `ops-sign-in:${state}`;
  * Sends the window to the system's sign-in. The system returns to one fixed page with only a code and a state, while
  * finishing needs the connection's id, so the id is kept in this window's session under the state it goes out with.
  */
-export function goSignIn(start: SignInStart, connectionId: string): void {
-  remember(start, connectionId);
+export function goSignIn(start: SignInStart, connectionId: string, opts: { check?: boolean } = {}): void {
+  remember(start, connectionId, Boolean(opts.check));
   window.location.assign(start.authorizeUrl);
 }
 
-function remember(start: SignInStart, connectionId: string): void {
+/** `check` marks Test with my account, which the return page finishes as a test of the app credential, not a sign-in. */
+function remember(start: SignInStart, connectionId: string, check: boolean): void {
   const state = new URL(start.authorizeUrl).searchParams.get('state') ?? '';
   try {
-    sessionStorage.setItem(key(state), connectionId);
+    sessionStorage.setItem(key(state), JSON.stringify({ connectionId, check }));
   } catch {
     // Without session storage the return page asks the person to start again.
+  }
+}
+
+function remembered(state: string): { connectionId: string; check: boolean } | null {
+  try {
+    const raw = sessionStorage.getItem(key(state));
+    if (!raw) return null;
+    const v = JSON.parse(raw) as { connectionId?: string; check?: boolean };
+    return v.connectionId ? { connectionId: v.connectionId, check: Boolean(v.check) } : null;
+  } catch {
+    return null;
   }
 }
 
@@ -46,13 +58,13 @@ export const READY_MESSAGE = 'ops:sign-in-window-ready';
 export const START_MESSAGE = 'ops:sign-in-start';
 export const STOP_MESSAGE = 'ops:sign-in-stop';
 
-export type WindowMessage = { type: typeof START_MESSAGE; start: SignInStart; connectionId: string } | { type: typeof STOP_MESSAGE; message: string };
+export type WindowMessage = { type: typeof START_MESSAGE; start: SignInStart; connectionId: string; check?: boolean } | { type: typeof STOP_MESSAGE; message: string };
 
 /** A sign-in window opened on the click, before the system's address is known. */
 export interface SignInWindow {
   window: Window;
-  /** Sends the window on to the system's sign-in. */
-  go(start: SignInStart, connectionId: string): void;
+  /** Sends the window on to the system's sign-in; `check` makes it Test with my account. */
+  go(start: SignInStart, connectionId: string, opts?: { check?: boolean }): void;
   /** Shows the window's failure card with this reason; the person closes it. */
   fail(message: string): void;
 }
@@ -86,7 +98,7 @@ export function openSignInWindow(app: string, logo?: string | null): SignInWindo
   window.addEventListener('message', onReady);
   return {
     window: w,
-    go: (start, connectionId) => ((pending = { type: START_MESSAGE, start, connectionId }), send()),
+    go: (start, connectionId, opts) => ((pending = { type: START_MESSAGE, start, connectionId, check: opts?.check }), send()),
     fail: (message) => ((pending = { type: STOP_MESSAGE, message }), send()),
   };
 }
@@ -125,11 +137,12 @@ export function useSignInWindow(handlers: { onConnected?: (m: ConnectedMessage) 
 
 /** The connection a returning state was sent out for. */
 export function signInFor(state: string): string | null {
-  try {
-    return sessionStorage.getItem(key(state));
-  } catch {
-    return null;
-  }
+  return remembered(state)?.connectionId ?? null;
+}
+
+/** Whether a returning state was Test with my account. */
+export function signInIsCheck(state: string): boolean {
+  return remembered(state)?.check ?? false;
 }
 
 /** Forgets a state once its sign-in finished; the service refuses a state used twice anyway. */

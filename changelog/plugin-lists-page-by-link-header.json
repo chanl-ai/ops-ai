@@ -2,8 +2,5 @@
   "date": "2026-11-02",
   "title": "Plugin lists from GitHub-style apps come back whole",
   "description": "A plugin's list tool can now follow the next-page link a system sends in its Link header, or ask for pages by number. Lists from systems such as GitHub and GitLab, which page that way, now come back a page at a time to the end instead of stopping after the first page.",
-  "tag": "improved",
-  "cards": [
-    "c-588"
-  ]
+  "tag": "improved"
 }

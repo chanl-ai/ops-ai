@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { type SystemCard, useSystems } from '@/hooks/systems-queries';
+import { type AppState, type SystemCard, useSystems } from '@/hooks/systems-queries';
 import { plural } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -22,38 +22,25 @@ import type { ConnectMode } from './connect-system-dialog';
 export type { ConnectMode };
 type View = 'all' | 'connected' | 'available';
 
-/**
- * Why the team account's last test failed, when it signed in but a test call then failed: the account still reads
- * Connected (signing in is what connects it) and the reason shows beside it with Reconnect.
- */
-export function testFailure(s: Pick<SystemCard, 'state' | 'environments'>): string | null {
-  if (s.state !== 'connected') return null;
-  const envs = Object.values(s.environments);
-  const failed = envs.find((e) => e?.health?.status === 'failed' && e.health.account === 'team');
-  if (!failed?.health) return null;
-  return failed.health.message || (failed.health.httpStatus ? `HTTP ${failed.health.httpStatus}` : 'no reason given');
-}
-
-/** An app's card state, from the app's own answer: whether the team turned it on, and its team account's state. */
-export type AppState = 'connected' | 'test_failed' | 'needs_sign_in' | 'not_installed';
-
-export function appState(card: SystemCard): AppState {
-  if (card.kind === 'builtin') return 'connected';
-  // A plugin the team turned off (Turn off) offers Connect again; its accounts stay for later.
-  const on = card.plugin ? card.plugin.teamOn !== false && Boolean(card.connectionId) : Boolean(card.connectionId) || Object.values(card.environments).some((e) => e?.set);
-  if (!on) return 'not_installed';
-  // Connected reads the team account's state, never settings saved alone: signed in, or a key that passed its test.
-  if (card.state === 'connected') return testFailure(card) ? 'test_failed' : 'connected';
-  if (card.state !== null && card.state !== undefined) return 'needs_sign_in';
-  return Object.values(card.environments).some((e) => e?.health?.status === 'ok') ? 'connected' : 'needs_sign_in';
-}
-
 const STATE: Record<AppState, { label: string; className: string; icon?: typeof CircleCheck }> = {
   connected: { label: 'Connected', className: 'border-success/40 bg-success/10 text-success-text', icon: CircleCheck },
   test_failed: { label: 'Signed in, test failed', className: 'border-warning/40 bg-warning/10 text-warning-text', icon: TriangleAlert },
   needs_sign_in: { label: 'Needs sign-in', className: 'border-warning/40 bg-warning/10 text-warning-text', icon: CircleAlert },
   not_installed: { label: 'Not installed', className: 'text-muted-foreground' },
 };
+
+/** The app's state as a badge, worded the same on its card and its page. */
+export function AppStateBadge({ card, testId, withTools }: { card: SystemCard; testId?: string; withTools?: boolean }) {
+  if (!card.appState) return null;
+  const shown = STATE[card.appState];
+  const Icon = shown.icon;
+  return (
+    <Badge variant="outline" className={shown.className} data-testid={testId}>
+      {Icon && <Icon />}
+      {card.appState === 'connected' && withTools && card.kind !== 'builtin' ? `Connected · ${plural(card.toolsCount, 'tool')}` : shown.label}
+    </Badge>
+  );
+}
 
 const initials = (name: string) =>
   name
@@ -72,11 +59,9 @@ export const appHref = (s: Pick<SystemCard, 'id' | 'href'>) => s.href ?? `/integ
  * action. The whole card opens the app's page; Connect sits above that link.
  */
 function AppCard({ system, onConnect }: { system: SystemCard; onConnect: (s: SystemCard, mode: ConnectMode) => void }) {
-  const state = appState(system);
-  const shown = STATE[state];
-  const failure = state === 'test_failed' ? testFailure(system) : null;
+  const state = system.appState;
+  const failure = state === 'test_failed' ? (system.appStateReason ?? 'no reason given') : null;
   const opens = state === 'connected' || state === 'test_failed';
-  const Icon = shown.icon;
   return (
     <Card className="relative min-h-40 gap-3 py-4 transition-all hover:border-primary/40 hover:shadow-md" data-testid={`system-${system.id}`} data-state={state}>
       <CardHeader className="flex flex-row items-center gap-2.5 px-4">
@@ -115,10 +100,7 @@ function AppCard({ system, onConnect }: { system: SystemCard; onConnect: (s: Sys
           </p>
         )}
         <div className="mt-auto flex items-center justify-between gap-2">
-          <Badge variant="outline" className={shown.className} data-testid={`system-${system.id}-state`}>
-            {Icon && <Icon />}
-            {state === 'connected' && system.kind !== 'builtin' ? `Connected · ${plural(system.toolsCount, 'tool')}` : shown.label}
-          </Badge>
+          <AppStateBadge card={system} withTools testId={`system-${system.id}-state`} />
           {opens ? (
             <span className="inline-flex items-center gap-1 text-sm font-medium" data-testid={`open-${system.id}`} data-href={appHref(system)}>
               Open
@@ -178,7 +160,8 @@ export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, m
   const [q, setQ] = React.useState('');
   const all = [...(systems.data ?? [])].sort((a, b) => Number(b.kind === 'plugin') - Number(a.kind === 'plugin'));
   const categories = [...new Set(all.map((s) => s.category).filter((c): c is string => Boolean(c)))].sort();
-  const isOn = (card: SystemCard) => appState(card) !== 'not_installed';
+  // Connected lists the apps the team turned on, whatever their account's state; the API decides which those are.
+  const isOn = (card: SystemCard) => Boolean(card.appState) && card.appState !== 'not_installed';
   const shown = all.filter(
     (s) =>
       (view === 'all' || (view === 'connected') === isOn(s)) &&

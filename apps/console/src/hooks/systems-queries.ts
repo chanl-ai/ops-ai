@@ -17,7 +17,20 @@ type Tools = OpsAI['raw']['tools'];
 type Args<K extends keyof Tools> = NonNullable<Parameters<Tools[K]>[0]>;
 type Data<K extends keyof Tools> = Awaited<ReturnType<Tools[K]>>;
 
-export type SystemCard = Data<'connections_list_systems'>[number];
+/** An app's state on its card, worded the same on the catalog and the app page; GET /v1/systems decides it. */
+export type AppState = 'connected' | 'test_failed' | 'needs_sign_in' | 'not_installed';
+/**
+ * Fields GET /v1/systems answers on each card beside the generated ones: the app's one state and why (a failed test's
+ * message, or why a sign-in is needed), and the app credential the team's connection signs in with.
+ */
+type CardExtras = {
+  appState?: AppState;
+  appStateReason?: string | null;
+  credential?: { name: string; type: 'ops_ai' | 'own' } | null;
+  /** Whether this install has Ops AI's own OAuth client for the app; false means each team brings its own. */
+  managedClient?: boolean;
+};
+export type SystemCard = Data<'connections_list_systems'>[number] & CardExtras;
 export type ConnectionDetail = Data<'connections_get_connection'>;
 export type PluginView = Data<'plugins_list_plugins'>['plugins'][number];
 export type SendPolicy = Data<'send_policy_get_send_policy'>;
@@ -28,8 +41,9 @@ const SYSTEMS = ['systems'] as const;
 const CONNECTIONS = ['connections'] as const;
 const APPS = ['apps'] as const;
 
+// Typed with the card fields the generated client does not name yet (appState, credential).
 export const useSystems = () =>
-  useTeamQuery({ queryKey: SYSTEMS, queryFn: () => sdk((ops) => ops.raw.tools.connections_list_systems()) });
+  useTeamQuery({ queryKey: SYSTEMS, queryFn: async (): Promise<SystemCard[]> => sdk((ops) => ops.raw.tools.connections_list_systems()) });
 export const usePlugins = () =>
   useTeamQuery({ queryKey: ['plugins'], queryFn: () => sdk((ops) => ops.raw.tools.plugins_list_plugins()) });
 

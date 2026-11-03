@@ -58,7 +58,7 @@ function OpenedConnect({ app, logo }: { app: string; logo: string | null }) {
     const opener = window.opener as Window | null;
     const onMessage = (e: MessageEvent<WindowMessage>) => {
       if (e.origin !== window.location.origin || e.source !== opener) return;
-      if (e.data?.type === START_MESSAGE) goSignIn(e.data.start, e.data.connectionId);
+      if (e.data?.type === START_MESSAGE) goSignIn(e.data.start, e.data.connectionId, { check: e.data.check });
       else if (e.data?.type === STOP_MESSAGE) setFailed(e.data.message);
     };
     window.addEventListener('message', onMessage);

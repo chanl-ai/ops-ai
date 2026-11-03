@@ -9,7 +9,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 
 import { AppsTabs } from '@/components/connections/apps-tabs';
 import { ConnectWindow, connectsInWindow } from '@/components/connections/connect-window';
-import { testFailure } from '@/components/connections/systems-grid';
+import { AppStateBadge } from '@/components/connections/systems-grid';
 import { ConnectSystemDialog, type ConnectMode } from '@/components/connections/connect-system-dialog';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
@@ -34,6 +34,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   type AppPage as AppData,
+  type SystemCard,
   useAddAccount,
   useApp,
   useAppUsers,
@@ -138,25 +139,29 @@ export function AppPageView({ appId }: { appId: string }) {
   if (app.isPending || kinds.isPending) return <RecordSkeleton />;
   if (app.isError) return <QueryError what="this app" error={app.error} onRetry={() => app.refetch()} retrying={app.isFetching} />;
   const data = app.data;
-  const card = data.card;
+  const card = data.card as SystemCard;
   const conn = data.connection;
   const all = kinds.data as Kinds | undefined;
   const kind = all?.kinds.find((k) => k.id === conn?.authKind);
   const envs = all ? keyed(all) : [];
   const set = envs.filter((e) => conn?.environments[e.id]?.set).map((e) => e.id);
   const environment = (all && leading(all, set)) ?? set[0] ?? 'production';
-  // Connected means an account signed in or a key passed its test (the app answer's state), not settings saved.
-  const connected = card.state ? card.state === 'connected' || card.state === 'expired' || card.state === 'refused' : set.length > 0;
+  // The app's state is the API's, the same word the catalog card shows; the page lists accounts once the team turned it on.
+  const installed = Boolean(card.appState) && card.appState !== 'not_installed';
   // People connect their own account only where the connection lets them; a team-only one shows its account alone.
   const signsIn = Boolean(kind?.signsIn) && conn?.signIn !== 'team';
   // The team account signed in, but the test call after it failed: shown on its row with Reconnect.
-  const failure = testFailure(card);
+  const failure = card.appState === 'test_failed' ? (card.appStateReason ?? 'no reason given') : null;
+  // A row's failed test: the account's own when the answer carries it, else the app's for its default account.
+  const testFailed = (a: { default: boolean; test?: { status: string; message?: string | null } | null }) =>
+    a.test?.status === 'failed' ? a.test.message || 'no reason given' : a.default ? failure : null;
 
-  type Account = NonNullable<AppData['accounts']>[number];
+  // `test` is the account's last test after its sign-in; on an app each person signs in to, the caller's own.
+  type Account = NonNullable<AppData['accounts']>[number] & { test?: { status: 'ok' | 'failed'; message?: string | null; at?: string } | null };
   // The page's answer lists the team's accounts, the default first; an older answer without them shows the one.
   const accounts: Account[] = data.accounts?.length
     ? data.accounts
-    : conn && connected
+    : conn && installed
       ? [{ id: conn.id, name: conn.name, default: true, state: conn.status === 'needs_reconnect' ? 'expired' : 'connected', status: conn.status, statusDetail: conn.statusDetail, mine: data.me.connected, account: data.me.account, pinned: false }]
       : [];
 
@@ -182,18 +187,7 @@ export function AppPageView({ appId }: { appId: string }) {
       // The Apps menu's tabs and a way back to the catalog, as the app page's frame draws them (Apps (final) group 4).
       backHref="/integrations"
       tabs={<AppsTabs />}
-      badge={
-        connected ? (
-          <Badge variant="outline" className={OK} data-testid="app-status">
-            <CircleCheck />
-            Connected
-          </Badge>
-        ) : (
-          <Badge variant="outline" data-testid="app-status">
-            Not connected
-          </Badge>
-        )
-      }
+      badge={<AppStateBadge card={card} testId="app-status" />}
       contentClassName="flex flex-col gap-4"
     >
       {card.kind === 'plugin' && <PluginUpdatePanel pluginId={card.id.replace(/^plugin:/, '')} name={card.name} />}
@@ -210,7 +204,7 @@ export function AppPageView({ appId }: { appId: string }) {
           ) : undefined
         }
       >
-        {!conn || (!connected && !signsIn) ? (
+        {!conn || (!installed && !signsIn) ? (
           // Connect comes first: an app has no account until someone signs in or a key passes its test. Where each
           // person signs in with their own account, their row shows even before any team account exists.
           <div className="p-4" data-testid="app-not-connected">
@@ -240,9 +234,9 @@ export function AppPageView({ appId }: { appId: string }) {
                   </span>
                 }
                 description={
-                  a.default && failure ? (
-                    <span className="text-warning-text" data-testid="app-test-failed">
-                      Signed in, but a test call failed: {failure}
+                  testFailed(a) ? (
+                    <span className="text-warning-text" data-testid={a.default ? 'app-test-failed' : `account-test-failed-${a.name}`}>
+                      Signed in, but a test call failed: {testFailed(a)}
                     </span>
                   ) : a.mine ? (
                     `Connected as ${a.account ?? 'you'}`
@@ -251,7 +245,13 @@ export function AppPageView({ appId }: { appId: string }) {
                   )
                 }
                 trailing={
-                  conn.mayManage && (a.state === 'expired' || a.state === 'refused' || a.status === 'needs_reconnect' || (a.default && failure)) ? (
+                  testFailed(a) && a.mine && conn.signIn !== 'team' ? (
+                    // The person's own sign-in failed its test: they sign in again as themselves.
+                    <Button size="sm" onClick={() => signIn('self', a.id)} data-testid={`account-reconnect-mine-${a.name}`}>
+                      <RefreshCw />
+                      Reconnect
+                    </Button>
+                  ) : conn.mayManage && (a.state === 'expired' || a.state === 'refused' || a.status === 'needs_reconnect' || testFailed(a)) ? (
                     // Reconnect is the team account signing in again on the app's own page; nothing is typed.
                     <Button size="sm" onClick={() => signIn('team', a.id)} data-testid={a.default ? 'app-reconnect' : `account-reconnect-${a.name}`}>
                       <RefreshCw />

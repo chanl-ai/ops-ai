@@ -1,4 +1,4 @@
-import type { AuthKind, ConnectionDetail, ConnectionEnvironment, MyConnection, SignInAccount, SignInSetting, SignInStart } from '@/lib/types/connections';
+import type { AppCredentialInput, AppCredentialRow, AuthKind, ConnectionDetail, ConnectionEnvironment, CredentialCheck, MyConnection, SignInAccount, SignInSetting, SignInStart } from '@/lib/types/connections';
 
 /**
  * A connected system's sign-in (tools-service, c-558): whose account its calls use, Test connection, and each person's
@@ -24,4 +24,10 @@ export interface ConnectionsApi {
   giveOwn(id: string, input: { environment: ConnectionEnvironment; credentials: Record<string, string> }): Promise<MyConnection>;
   /** Ends the caller's own sign-in, asking the system to revoke it; the next call asks them to connect again. */
   disconnect(id: string, environment: ConnectionEnvironment): Promise<void>;
+  /** Adds the team's own OAuth app to one of its apps; team admins only. 409 when the app takes no client or has one. */
+  createAppCredential(input: AppCredentialInput): Promise<AppCredentialRow>;
+  /** Test with my account: where the admin signs in through the app credential; nothing is kept but the result. */
+  startCredentialCheck(id: string, input: { environment: ConnectionEnvironment }): Promise<SignInStart>;
+  /** Finishes Test with my account with the code and state the sign-in returned. */
+  finishCredentialCheck(id: string, input: { state: string; code: string }): Promise<CredentialCheck>;
 }
