@@ -1,6 +1,6 @@
 # An install turns a feature on or off from its config
 
-Status: passing. Id: `uc-612`. Service: `tools-service`. Layers: api, ui. Card: an earlier change.
+Status: passing. Id: `uc-612`. Service: `tools-service`. Layers: api, ui.
 
 An install lists the features it turns on in `OPS_FLAGS` (`ops-ai.env`); every flag in the registry
 (`packages/ops_service_kit/src/ops_service_kit/flags.py`) is off until named. The first flag, `mcp_gateway`, hides the

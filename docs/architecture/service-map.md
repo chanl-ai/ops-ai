@@ -88,8 +88,7 @@ thin calls on the documents API (review checklist §3, "A node or tool with no A
 
 ### Background processes
 
-Work that runs without a person asking is one list, `PROCESSES` in `packages/ops_store/src/ops_store/background.py`
-(an earlier change). Each process runs once for the account, finds its next job across teams, and does that job inside the job's
+Work that runs without a person asking is one list, `PROCESSES` in `packages/ops_store/src/ops_store/background.py`. Each process runs once for the account, finds its next job across teams, and does that job inside the job's
 team. A loop starts only through `background.run`, which retries a failed pass after 1 s doubling to 60 s and writes a
 heartbeat at most every 10 s and on every error; `test_background_registry.py` fails on a loop not on the list.
 
@@ -226,7 +225,7 @@ SQL Server 2025 and Azure SQL are being added ([ADR-0017](decisions/database-sup
 | `ops-host` | One host that starts any set of services in one process |
 | Migrations per service | Done for tools: own chain (`alembic_version_tools`) adopting `gateway_calls` and `gateway_fences`; agents 0006 and 0008 still create them on a fresh database. Left: review tables, with `ops_hitl` |
 | `ops_service_kit` contents | Envelope, auth and wiring move in; the seed directory default stops pointing into agents tests |
-| `ops_engine` | Finish the runner slices after an earlier change |
+| `ops_engine` | Finish the runner's remaining parts |
 | models-service | Per-key ledger behind the key-admission port, on `ops_metering` |
 | `deploy/vm`, `deploy/k8s` | Build the targets |
 

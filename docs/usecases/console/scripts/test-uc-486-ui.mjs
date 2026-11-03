@@ -1,8 +1,8 @@
 // uc-486 every workflow lays itself out cleanly, ui layer: docs/usecases/console/workflow-canvas-layout.md.
 // The definition editor and the run canvas, signed in as James: the four demo workflows, the complaint triage seed (the
 // widest), fifty steps saved with no positions, a workflow created with no positions, a dragged step and its reroute
-// time, Tidy up and its Undo, a position-only save and publish, and a run's canvas. (The design mock this card was
-// reviewed on was deleted in an earlier change; every check it carried runs here on the real editor.)
+// time, Tidy up and its Undo, a position-only save and publish, and a run's canvas. (The design mock this was
+// reviewed on was deleted; every check it carried runs here on the real editor.)
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 

@@ -114,15 +114,15 @@ members and roles on `/v1/settings/members/*` as before.
 ## Workspace and team lifecycle
 
 The workspace's owner is the one person with the built-in role Owner in every team (`*`), the only role holding
-`workspace.manage`; a partial unique index keeps it to one. The first account admin becomes the maintainers when the
+`workspace.manage`; a partial unique index keeps it to one. The first account admin becomes the owner when the
 workspace is seeded or bootstrapped, and migration 0026 chose the earliest one for workspaces made before it.
 
 | Action | Who | What happens |
 |---|---|---|
-| Transfer | The maintainers, to an account admin | The Owner assignment moves in one transaction under a lock on the tenant row; a lost race is 409 `owner_changed` |
-| Leave the workspace | Anyone but the maintainers (409 `owner_must_transfer`) | Every membership and assignment goes, sessions end, their keys stop; the account stays for a later invite |
-| Close (delete) | The maintainers, typing the name, with no run in progress | Status `closed`; every session but the maintainers' ends; every key is disabled with the close's own time, so restore re-enables only those. Everyone else is refused at sign-in, on every route and with a service token: 403 `workspace_closed` |
-| Restore | The maintainers, while `closed` | Status back to `active`; 409 `purged` once the purge has started |
+| Transfer | The owner, to an account admin | The Owner assignment moves in one transaction under a lock on the tenant row; a lost race is 409 `owner_changed` |
+| Leave the workspace | Anyone but the owner (409 `owner_must_transfer`) | Every membership and assignment goes, sessions end, their keys stop; the account stays for a later invite |
+| Close (delete) | The owner, typing the name, with no run in progress | Status `closed`; every session but the owner's ends; every key is disabled with the close's own time, so restore re-enables only those. Everyone else is refused at sign-in, on every route and with a service token: 403 `workspace_closed` |
+| Restore | The owner, while `closed` | Status back to `active`; 409 `purged` once the purge has started |
 | Purge | The `workspace_lifecycle` background process, every 15 minutes | Workspaces closed longer than the window become `purging`, then `purged`: sessions, keys, assignments, members and sign-in settings go; tenants, users, teams, policies and audit entries stay |
 | Leave a team | A member; not its last admin (409 `last_admin`) | The membership and its assignments go |
 | Delete a team | An account admin, on an archived team past the window with no live workflow | Status `deleted`, name free again, members and assignments gone; the row stays for its audit entries |
@@ -168,6 +168,6 @@ as picker choices by email (a Human Task sent back to a person), searched in the
 |---|---|
 | agents-service and tools-service resolving callers through `ops_identity`, with RLS on their tables (uc-022, uc-024) | The adoption card |
 | MFA; a limit per client address on sign-in | Later slices of [sign-in library](../../packages/ops_signin/overview.md) |
-| SAML single logout and identity-provider-initiated sign-in | an earlier change (proposed) |
+| SAML single logout and identity-provider-initiated sign-in | Proposed |
 | Sending invitations by mail | The notifications slice; today the admin shares the link from the invite response |
 | A pushed revocation list | Only if 15 minutes of reach after sign-out proves too long |

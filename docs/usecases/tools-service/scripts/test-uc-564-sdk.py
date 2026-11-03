@@ -1,5 +1,5 @@
-"""uc-564, sdk layer: docs/usecases/tools-service/a-team-turns-on-the-salesforce.md, story S10 (step 43), group D of
-an earlier change. The Apps stack (docs/usecases/lib/apps_walk.py) and its fake system: the header-key desk is on for the team
+"""uc-564, sdk layer: docs/usecases/tools-service/a-team-turns-on-the-salesforce.md, story S10 (step 43).
+The Apps stack (docs/usecases/lib/apps_walk.py) and its fake system: the header-key desk is on for the team
 account, and a builder signed in through the Python SDK lists the app's tools and runs one Mock and Real with the
 SDK's layer in the screen's words (K1) over the tool page's run route (P1). No model call."""
 

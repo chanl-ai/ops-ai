@@ -197,11 +197,11 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `console/standards.md` | Console UI standard: tokens, layout primitives, compose-from-shadcn, designed states, responsive, one-screen create, and the review checks |
 | `console/ui-qa.md` | UI QA pass: one section at a time in a browser, checking what works, how easy it is and how it looks, with a findings table |
 | `console/channels-preview.md` | The channels design mock at /preview/channels: the gallery, every connection, connect a mailbox as a page and a dialog, the trigger sheet that picks it, and the server routes the real build needs |
-| `console/approved/channels/README.md` | The Channels screens the maintainers approved, at 1280 and 400 px, which the real pages are built to |
-| `console/approved/human-tasks/README.md` | The Human Tasks queue and task screens (layout A) the maintainers approved, at 1280 and 400 px, which /reviews is built to |
-| `console/proposed/files/README.md` | The file page and Extract screens built by an earlier change, at 1280 and 400 px, waiting for the maintainers' approval |
-| `console/proposed/reuse-c266/README.md` | Start run, run and case pages before and after an earlier change, side by side |
-| `console/proposed/tasks/README.md` | The Human Task page built by an earlier change beside wireframes A and B of the v2 design, at 1280 and 400 px, waiting for the maintainers' approval |
+| `console/approved/channels/README.md` | The approved Channels screens, at 1280 and 400 px, which the real pages are built to |
+| `console/approved/human-tasks/README.md` | The approved Human Tasks queue and task screens (layout A), at 1280 and 400 px, which /reviews is built to |
+| `console/proposed/files/README.md` | The file page and Extract screens, at 1280 and 400 px, waiting for approval |
+| `console/proposed/reuse-c266/README.md` | Start run, run and case pages before and after a change, side by side |
+| `console/proposed/tasks/README.md` | The Human Task page beside wireframes A and B of the v2 design, at 1280 and 400 px, waiting for approval |
 | `console/proposed/table-columns/README.md` | The shared data table's columns sized by kind, before beside after for Workflows, Runs, Files and Members at 1280 and 400 px |
 | `console/proposed/run-status/README.md` | Run status from where a run ended and from the runs it started: failed and waiting runs before beside after, and the End step's Counts as, at 1280 and 400 px |
 | `console/settings-tree.md` | The settings tree design mock at /preview/settings: the pages, the patterns, the dialogs with their mother pages, and the field kit |
@@ -241,7 +241,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/tools-service/import-tools.md` | uc-012: tools imported from OpenAPI and MCP, called only on hosts and ranges the tenant allows |
 | `usecases/tools-service/secrets.md` | uc-013: a tool's credential is a secret, sent at call time and never returned |
 | `usecases/tools-service/a-builder-adds-a-python-function-tool.md` | uc-531: a Python function tool runs sandboxed, reads bound tools through ops.call, hands a secret by name, and is stopped at an unbound tool, a socket, its time limit and its memory cap |
-| `usecases/console/tool-lifecycle-end-to-end.md` | uc-055: James imports the bank, Nadia reviews, James grants, the agent reads and holds, Maya approves in Reviews; US1 to US5 of an earlier change on the shared stack |
+| `usecases/console/tool-lifecycle-end-to-end.md` | uc-055: James imports the bank, Nadia reviews, James grants, the agent reads and holds, Maya approves in Reviews, on the shared stack |
 | `usecases/console/knowledge-bases-end-to-end.md` | uc-096: James creates a knowledge base, adds files and a page, watches them index (a scan fails with its reason), tests a question in the playground and retires the base |
 | `usecases/console/edit-an-operation.md` | uc-090: James edits an operation's input in a form (a wrong-typed default refused on its field, an optional field minor, a required one major), sets step-up and access, and sees the secrets it reads as set or not |
 | `usecases/console/import-to-governed-call.md` | uc-086: James stores the bank's keys as secrets, imports its OpenAPI document, Nadia approves it on the module page, a second version publishes, the agent reads and holds, Maya approves and the bank holds once; the call log names actor, approver and outcome |
@@ -251,7 +251,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/chat-act-in-thread.md` | uc-072: Maya gets a cited answer, approves a drafted wire hold in the thread after a step-up and rejects another with a reason |
 | `usecases/console/knowledge-from-uploaded-pdfs.md` | uc-075: James creates a knowledge base with its owner, uploads a PDF into a file source, watches it index, asks an agent granted only that base and opens the citation and document; a second version shows on Changes |
 | `usecases/console/advisor-helper-answers.md` | uc-078: the Advisor's Helper draws a customer's record and accounts, cites the product sheet by page and shows the comparison as a table |
-| `usecases/console/branch-policy-answers.md` | uc-079: the Branch Policy agent cites the manual and fee schedule by page, says when the answer is not in the knowledge base, and cites version 2 after a replacement (blocked on an earlier change T024) |
+| `usecases/console/branch-policy-answers.md` | uc-079: the Branch Policy agent cites the manual and fee schedule by page, says when the answer is not in the knowledge base, and cites version 2 after a replacement |
 | `usecases/console/chat-thread-blocks.md` | uc-074: the chat thread draws a cited answer (citation button, no raw marker) and a tool card with AI Elements blocks |
 | `usecases/console/widgets-through-chat.md` | uc-061: a granted agent's tool results stream in as widgets by shape (declared shape wins, unshaped stays a tool card) and survive a reload |
 | `usecases/console/agent-presents-widgets.md` | uc-089: an agent with no tools shows a table and a stat through the built-in present tool; a shape present does not allow draws nothing |
@@ -315,7 +315,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/agents-service/widget-mint-and-approve.md` | uc-117: the bank's server mints with the deployment's key, the chat's hold is decided through Reviews, team and revoked keys refused |
 | `usecases/console/widgets-by-shape.md` | uc-073: every chat widget shape draws with its default renderer on /dev/widgets, switches between chart and table, and records approve and submit |
 | `usecases/console/write-approval-policy.md` | uc-059: a builder sets a write's approvers, approving team and self-approval in the operation sheet, and the operation shows them |
-| `usecases/console/chat-read-only-for-others.md` | uc-058: another person's chat stays private; a teammate gets 404 and the maintainers keeps the message box |
+| `usecases/console/chat-read-only-for-others.md` | uc-058: another person's chat stays private; a teammate gets 404 and the owner keeps the message box |
 | `usecases/console/chat-holds-in-reviews.md` | uc-057: a write held in a chat appears in Reviews marked From chat and is approved there |
 | `usecases/console/levy-cases-decided.md` | uc-077, retired: the v1 court order run's cases decided from the console |
 | `usecases/console/import-presets-access.md` | uc-054: import presets Read for GET and Write otherwise, warns when a spec has no auth, and asks for no connection |
@@ -338,7 +338,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/console/steps-in-sentences.md` | uc-508: Activity, a Human Task, the case list and the run page read a hold's steps in sentences, by name, with the outcome in words |
 | `usecases/console/real-pages-not-mocks.md` | uc-517: the console has no preview mock pages; the pieces they drew that the real pages lacked are built |
 | `usecases/console/wait-for-long-work.md` | uc-525: a workflow waits for long-running work and carries on when it finishes |
-| `usecases/console/workflow-canvas-layout.md` | uc-486: workflow steps laid out with gaps and port order, lines routed around steps and again on drop (preview part for the maintainers' walk) |
+| `usecases/console/workflow-canvas-layout.md` | uc-486: workflow steps laid out with gaps and port order, lines routed around steps and again on drop |
 | `usecases/console/screen-speed.md` | uc-560: with OPS_REQUEST_TIMING on, each request's JSON line and Server-Timing, one request id across services and in the error envelope; screens open from saved data, wiped on sign-out and team switch |
 | `usecases/console/connect-every-system.md` | uc-580, superseded by uc-607: kept for the record; its steps moved to uc-607 |
 | `usecases/console/connect-apps.md` | uc-607: a team connects apps from one catalog; a catalog of apps, Connect in a small window, and an app's page where a person connects their own account |
@@ -446,7 +446,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `services/agents-service/experiments/own-checkpointer.md` | E0: own LangGraph checkpointer on asyncpg with tenant row-level security |
 | `services/agents-service/experiments/pause-survives-graph-change.md` | E1: a paused thread survives a graph change by version pinning |
 | `services/agents-service/experiments/leases-and-sweeper.md` | E2: thread leases and a sweeper continue a crashed run |
-| `services/agents-service/experiments/memory-decisions.md` | an earlier change: does the extraction prompt choose new, same, replaces or conflicts well (real run not done) |
+| `services/agents-service/experiments/memory-decisions.md` | Memory decisions: does the extraction prompt choose new, same, replaces or conflicts well (real run not done) |
 | `services/agents-service/experiments/fencing.md` | E2b: fencing every write a stale lease owner can make |
 | `services/agents-service/experiments/fence-on-takeover.md` | E2c: raising the tools-service fence when agents-service takes a thread over |
 | `services/agents-service/experiments/conformance-suite.md` | E9: the execution-engine conformance suite on the LangGraph adapter, with its two open gaps |

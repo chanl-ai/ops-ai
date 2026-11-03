@@ -1,6 +1,6 @@
 # A workflow's access is decided in Human Tasks by another person
 
-Status: current. Id: `uc-053`. Service: `console`. Layers: ui. Card: an earlier change.
+Status: current. Id: `uc-053`. Service: `console`. Layers: ui.
 
 A request for a workflow's access to a module's operations is a Human Task. The module's Access tab links to it and
 decides nothing itself; the module's team decides it in Human Tasks, and the decision reaches the grant.

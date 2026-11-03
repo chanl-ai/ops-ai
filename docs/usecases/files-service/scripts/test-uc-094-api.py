@@ -66,7 +66,7 @@ def main() -> None:
         other = f.get(f"/v1/internal/files/{file_id}", params={"team": "team_ops"}, headers=tenant)
         check("a service acting for another tenant gets 404", other.status_code == 404, other.text)
         still = f.get(f"/v1/files/{file_id}", headers=priya)
-        check("the maintainers still reads it", still.status_code == 200, still.text)
+        check("the owner still reads it", still.status_code == 200, still.text)
     finish()
 
 

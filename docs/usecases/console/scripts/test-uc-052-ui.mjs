@@ -24,7 +24,7 @@ await withUiStack(
     const moduleId = made.data.id;
     for (const [name, access, method] of [[`get_payment_${TAG}`, 'read', 'GET'], [`create_payment_${TAG}`, 'write', 'POST']])
       await setup(await fetch(`${tools}/v1/tool-modules/${moduleId}/operations`, { method: 'POST', headers: J, body: JSON.stringify({ name, description: '', access, method, url: `https://${HOST}/v1/payments` }) }));
-    // The write's approval policy asks for two approvers (an earlier change T005).
+    // The write's approval policy asks for two approvers.
     const detail = (await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })).json()).data;
     const write = detail.operations.find((o) => o.access === 'write');
     await setup(await fetch(`${tools}/v1/tool-modules/${moduleId}/operations/${write.id}`, { method: 'PATCH', headers: J, body: JSON.stringify({ approvers: 2 }) }));

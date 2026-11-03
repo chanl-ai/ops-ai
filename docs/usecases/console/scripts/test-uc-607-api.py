@@ -1,4 +1,4 @@
-"""uc-607, api layer: docs/usecases/console/connect-apps.md, stories S9-S10 (steps 20-23), group A of an earlier change.
+"""uc-607, api layer: docs/usecases/console/connect-apps.md, stories S9-S10 (steps 20-23).
 
 The Apps stack of docs/usecases/lib/apps_walk.py: platform-service with the seed's own roles, tools-service with the
 nine test plugins on for the install, and the fake system. The steps call the routes named after the screen's words
@@ -18,7 +18,7 @@ def ids(rows: object) -> list[str]:
 
 
 with apps_stack() as w:
-    # 20. One list of apps: the plugins and the apps a person added. A built-in app has its own menu (owner, 11-01).
+    # 20. One list of apps: the plugins and the apps a person added. A built-in app has its own menu.
     listed = w.kept(w.gw.get("/v1/systems", headers=w.who["admin"]))
     kinds = [r.get("kind") for r in data(listed) or []] if listed.status_code == 200 else []
     check(
@@ -30,7 +30,7 @@ with apps_stack() as w:
     # 21. A key saved at turn-on is not a sign-in: the app reads Connected only once its test has passed.
     def status() -> str | None:
         r = w.kept(w.gw.get("/v1/systems", headers=w.who["admin"]))
-        # The card's state says Connected (an earlier change S1); its status is the account record's own word.
+        # The card's state says Connected; its status is the account record's own word.
         return next((c.get("state") for c in data(r) or [] if c.get("id") == APP), None)
 
     account = w.turn_on("admin", "test.header-key", credentials={"key": w.m["secrets"]["key"]})

@@ -48,7 +48,7 @@ await withUiStack(
       await dialog.getByTestId('import-next').click();
       const discoverRes = await discovered;
       const found = discoverRes ? (await discoverRes.json()).data : undefined;
-      // Access comes from the method (an earlier change T006): both documented operations are GETs, so both read and start selected.
+      // Access comes from the method: both documented operations are GETs, so both read and start selected.
       check('the dialog reads the bank document through tools-service, each GET a read', discoverRes?.status() === 200 && found?.operations?.every((o) => o.access === 'read') && found.operations.length === 2, { status: discoverRes?.status(), ops: found?.operations?.map((o) => [o.name, o.access]) });
 
       await dialog.locator('#op-latest_statement').click();

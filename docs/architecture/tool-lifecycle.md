@@ -1,8 +1,8 @@
 # Tool lifecycle
 
 Status: current design, 2026-10-14. It describes the whole path a tool takes, from connecting a system to showing
-its calls, and marks each step built, broken or not built. It was written from the an earlier change live walk on the shared
-stack, and card an earlier change builds it. Service facts live in [tools-service](../services/tools-service/overview.md), pauses
+its calls, and marks each step built, broken or not built. It was written from a live walk on the shared
+stack. Service facts live in [tools-service](../services/tools-service/overview.md), pauses
 in [human in the loop](human-in-the-loop.md), and tokens in [identity and tenancy](identity-and-tenancy.md). This page
 links to them and does not repeat them.
 
@@ -26,7 +26,7 @@ Every step happens in the console as a named person. No step needs a direct API 
 | Security review | Owner requests, Security decides | Built | Unchanged |
 | Try an operation | Module owner | Refused (`no_approval`) unless a workflow holds an approval | The maintainers tries any operation of their own module without a workflow approval, in Mock or for real on a published module; a real write is logged under them |
 | Workflow access | Workflow owner requests, the module's team decides | Requests work. Approve is disabled for everyone, because "is this mine" compares against a fixed seed name | The decision compares the signed-in person with the requester. Anyone on the module's team except the requester decides |
-| Grant to an agent | Builder | Built (an earlier change G1): the picker lists published operations from the registry | A grant whose operation is no longer offered shows as stale and can be removed. Saving drops it instead of answering 400 |
+| Grant to an agent | Builder | Built: the picker lists published operations from the registry | A grant whose operation is no longer offered shows as stale and can be removed. Saving drops it instead of answering 400 |
 | Call: read | Agent | Built: runs through `/v1/calls` on the real model | Unchanged |
 | Call: write | Agent | Drafts an approval card. On the shared stack the approved call is refused (the token is not accepted) | The approved call runs once, with the token bound to its input |
 | Approve a write | Person | Only in the chat widget; never listed in Reviews | Listed in Reviews and decidable there or in the chat. The operation's approval policy applies |

@@ -1,6 +1,6 @@
 # A workflow's write is checked against the team's sending policy before it goes out
 
-Status: current. Id: `uc-266`. Service: `tools-service`. Layers: api, ui. Card: an earlier change; ui layer an earlier change.
+Status: current. Id: `uc-266`. Service: `tools-service`. Layers: api, ui.
 
 ## Stories
 

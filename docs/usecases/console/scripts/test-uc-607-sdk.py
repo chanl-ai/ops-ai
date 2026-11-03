@@ -1,4 +1,4 @@
-"""uc-607, sdk layer: docs/usecases/console/connect-apps.md, story S11 (step 24), group A of an earlier change.
+"""uc-607, sdk layer: docs/usecases/console/connect-apps.md, story S11 (step 24).
 
 The api layer's stack (docs/usecases/lib/apps_walk.py); the team account of the header-key desk is turned on and
 tested through the API, then a developer signed in through the Python SDK in sdk/python lists and reads apps. The SDK's

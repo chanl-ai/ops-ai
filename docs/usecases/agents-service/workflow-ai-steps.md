@@ -1,6 +1,6 @@
 # A workflow uses AI steps without a saved agent
 
-Status: current. Ids: `uc-258` to `uc-262`. Service: `agents-service`. Layers: api, ui. Card: an earlier change.
+Status: current. Ids: `uc-258` to `uc-262`. Service: `agents-service`. Layers: api, ui.
 
 Classify, Summarise, Extract from text and Draft are workflow steps that make one model call each, with the step's own
 instructions and model alias, no saved agent and no tools. Classify leaves by a category's port, or by `otherwise`

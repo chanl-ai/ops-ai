@@ -4,11 +4,11 @@ Status: superseded in part on 2026-10-16: Temporal was removed, so the Temporal 
 
 ## Context
 
-[ADR-0015](execution-engine-seam.md) builds the LangGraph-on-PostgreSQL engine first: our own checkpointer (E0), per-thread leases with a heartbeat and a sweeper (E2), and a tool gateway that dedupes writes against an approval token (E3). Two problems remain, and the maintainers asked for them to be rethought against how others solve them.
+[ADR-0015](execution-engine-seam.md) builds the LangGraph-on-PostgreSQL engine first: our own checkpointer (E0), per-thread leases with a heartbeat and a sweeper (E2), and a tool gateway that dedupes writes against an approval token (E3). Two problems remain, rethought here against how others solve them.
 
-**Fencing (E2b).** A worker that stalls (GC pause, network partition, SIGSTOP) loses its lease; the sweeper on another worker takes the thread over. The stalled worker then wakes and can still write a checkpoint, call the gateway, or write journal rows (E2 gotcha 3). Dedup in the gateway stops a second identical call; it does not stop a stale worker sending a different one (E3, row "Fencing"). the maintainers' question: do we fence a worker or a workflow?
+**Fencing (E2b).** A worker that stalls (GC pause, network partition, SIGSTOP) loses its lease; the sweeper on another worker takes the thread over. The stalled worker then wakes and can still write a checkpoint, call the gateway, or write journal rows (E2 gotcha 3). Dedup in the gateway stops a second identical call; it does not stop a stale worker sending a different one (E3, row "Fencing"). The question: do we fence a worker or a workflow?
 
-**Timers (E5).** LangGraph has no durable timers. E5 built a `timers` table and an in-process poller, and it works (9 tests, median latency 0.46 s at a 1 s poll). the maintainers' idea: reduce a timer to an external call to our own fire endpoint, so the poller is one scheduler among several.
+**Timers (E5).** LangGraph has no durable timers. E5 built a `timers` table and an in-process poller, and it works (9 tests, median latency 0.46 s at a 1 s poll). The idea: reduce a timer to an external call to our own fire endpoint, so the poller is one scheduler among several.
 
 **Oracle.** Should we bring Temporal in now to expose gaps in our LangGraph durability, given that the Temporal adapter of ADR-0015 is not built?
 

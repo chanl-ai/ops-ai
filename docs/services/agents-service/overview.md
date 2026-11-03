@@ -7,7 +7,7 @@ The agents service owns agents, workflows, their versions, chat and the runs tha
 SSE from a Pydantic AI agent loop (spec 15), gated writes that stop for approval and continue once approved, and
 citations from a keyword passage store. The tools an agent may hold are tools-service's published operations: `GET
 /v1/tools`, the grant check and every run read them from tools-service (`activities/tool_directory.py`), and every
-call, read or write, runs through its gateway's `/v1/calls` (an earlier change G1). The stack's seeded agents, granted seeded
+call, read or write, runs through its gateway's `/v1/calls`. The stack's seeded agents, granted seeded
 operations, are in `services/agents-service/seed/chat_agents.json`; passages and the fixture tools the unit tests
 run on stay in `services/agents-service/tests/fixtures/seed/`.
 
@@ -18,7 +18,7 @@ run on stay in `services/agents-service/tests/fixtures/seed/`.
 | `src/ops_agents/api` | FastAPI app, routers (chat, graphs, reviews, timers), chat turns, leases and sweeper, timers, metering, journal |
 | `src/ops_agents/graphs` | LangGraph graphs `agent_wrapper`, `simple_workflow`, `complex_workflow`; JSON definitions, versions, SLA settings |
 | `src/ops_agents/activities` | Tool, knowledge and gateway calls the graphs and the kernel make; seed catalogue loader |
-| `packages/ops_agent_kernel/present.py` | The built-in `present(shape, data, hint?)` tool every turn offers (an earlier change T021): the model returns a comparison table as `rows`, a figure as `metric`, a record or a series, and the turn emits it as a widget part with no tool result behind it. The chat shows only the part, never a tool card for it; a malformed part is refused as a tool error |
+| `packages/ops_agent_kernel/present.py` | The built-in `present(shape, data, hint?)` tool every turn offers: the model returns a comparison table as `rows`, a figure as `metric`, a record or a series, and the turn emits it as a widget part with no tool result behind it. The chat shows only the part, never a tool card for it; a malformed part is refused as a tool error |
 | `migrations/` | Alembic history 0001 onward. It still holds the tools service's and review tables until migrations split per service |
 | `tests/` | API, unit, checkpointer, gateway and timer tests; `tests/fixtures/` is the only place fixture data lives |
 | `experiments/` | Experiment scripts; their write-ups are in `experiments/` next to this page |
@@ -107,7 +107,7 @@ yet: `edited` is false for every field, since case values are written only by wo
 size or scan result, which the viewer link shows.
 
 Case types (`/v1/case-types`, `store/case_types.py`) are versioned records like task types, on the same store
-(`store/typed_records.py`). Both are kept per team, keyed (tenant, team, id) since an earlier change: each team holds its own copy
+(`store/typed_records.py`). Both are kept per team, keyed (tenant, team, id): each team holds its own copy
 of the seeded ones in `seed/task_types.json` and `seed/case_types.json`, made on the team's first read, and creates,
 saves and publishes its own with `workflows.create`, `edit` and `publish`; no team reads another team's types. An
 Open case step names one with `caseType`; the case pins its newest published version, and a type with none takes the
@@ -332,7 +332,7 @@ registration is what a team's mailbox uses.
 | 07 CD-11 AI SDK UI message stream | The console's `ChatStreamEvent` frames, which map one to one |
 | 15 §5 resume stream after approval | The approval request runs the continuation and stores it as a new message; the console re-fetches |
 | 13 step-up token verified | Any non-empty token is accepted and recorded on the interrupt |
-| an earlier change `levy-hold` as a child run started by the Hold decision | The hold runs as the `place_hold` step of the `levy-case` thread itself: the approval token is bound to the thread it was minted on (`tools-service/policy/gateway.rego`), so a child run could not present it. The `levy-intake` definition opens one `levy-case` child per matched customer instead |
+| A `levy-hold` child run started by the Hold decision | The hold runs as the `place_hold` step of the `levy-case` thread itself: the approval token is bound to the thread it was minted on (`tools-service/policy/gateway.rego`), so a child run could not present it. The `levy-intake` definition opens one `levy-case` child per matched customer instead |
 | 07 CD-7 no self-approval | Not enforced: the dev auth mode has one user |
 | 17 §2 schema `runtime` | Tables in `public`, so the API tests run on SQLite |
 | 17 §4 generated `ops_contracts` | Hand-written models mirroring `apps/console/src/lib/types/chat.ts` |

@@ -1,6 +1,6 @@
 # What's new tells people what changed, in plain words
 
-Status: current. Id: `uc-510`. Service: `console`. Layers: ui. Card: an earlier change.
+Status: current. Id: `uc-510`. Service: `console`. Layers: ui.
 
 People using Ops AI had no way to see what a merge changed without reading commits, which name files and cards. The
 console now has What's new in the sidebar footer: the repo's changelog entries, newest first, each a tag, a date, a title

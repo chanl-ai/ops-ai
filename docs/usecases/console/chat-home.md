@@ -1,6 +1,6 @@
 # Staff start, follow and finish their work in chat
 
-Status: current. Id: `uc-469`. Service: `console` with `agents-service`. Layers: ui. Card: an earlier change.
+Status: current. Id: `uc-469`. Service: `console` with `agents-service`. Layers: ui.
 
 A person signs in to Chat's home beside the open sidebar: the composer and hints from their own work, or four
 general starts when nothing waits. The team's default agent answers with cards drawn from the records themselves

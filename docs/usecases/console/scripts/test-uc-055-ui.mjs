@@ -114,14 +114,14 @@ await withUiStack(
       });
 
       // 5. The maintainers tries each operation with no workflow approval: the read for real, the write from the stub.
-      await step('5 (an earlier change T008) James tries the read for real and the write from the stub, as owner', async () => {
+      await step('5 James tries the read for real and the write from the stub, as owner', async () => {
         const panel = james.getByTestId('module-test-panel');
         const results = {};
         for (const op of ['get_account', 'place_hold']) {
           // Each operation is tried on its own workbench.
           await james.goto(`${consoleUrl}/tools/${moduleId}/operations/${op}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await panel.waitFor({ timeout: 120_000 });
-          // The panel starts on the mock; the maintainers' real call is the Real target.
+          // The panel starts on the mock; the real call is the Real target.
           await panel.getByRole('radio', { name: 'Real' }).or(panel.getByRole('button', { name: 'Real' })).first().click();
           const input = panel.locator('#t-accountId');
           if (await input.count()) await input.fill('CHQ-2219');
@@ -133,7 +133,7 @@ await withUiStack(
         const read = results.get_account;
         const write = results.place_hold;
         check(
-          '5 (an earlier change T008) James runs the read and the write for real, as owner',
+          '5 James runs the read and the write for real, as owner',
           read?.status === 200 && read.stubbed === false && read.reachedHost === stack.bank.host && write?.status === 200 && write.stubbed === false && write.reachedHost === stack.bank.host,
           { read: { status: read?.status, decision: read?.decision, reasons: read?.reasons, stubbed: read?.stubbed, reachedHost: read?.reachedHost, sent: read?.sent }, write: { status: write?.status, decision: write?.decision, reasons: write?.reasons, stubbed: write?.stubbed, sent: write?.sent } },
         );
@@ -184,7 +184,7 @@ await withUiStack(
       });
 
       // 9. An approver on the module's team decides it in Reviews; the write runs once.
-      await step('9 (an earlier change T013) Maya approves the held write in Reviews and it runs once', async () => {
+      await step('9 Maya approves the held write in Reviews and it runs once', async () => {
         const maya = await signIn(browser, consoleUrl, MAYA, errors);
         const form = await openHeldChatWrite(maya, consoleUrl, heldThread);
         const decided = armed(maya.waitForResponse((r) => r.request().method() === 'POST' && /\/decision$/.test(r.url()), { timeout: 60_000 }));
@@ -196,7 +196,7 @@ await withUiStack(
           sent = await sentWrites();
           if (sent === before) await new Promise((r) => setTimeout(r, 2_000));
         }
-        check('9 (an earlier change T013) Maya approves the held write in Reviews and it runs once', res?.status() === 200 && sent === before + 1, { decision: res?.status(), before, sent });
+        check('9 Maya approves the held write in Reviews and it runs once', res?.status() === 200 && sent === before + 1, { decision: res?.status(), before, sent });
       });
 
       // 10. The module's Activity tab shows the calls.
@@ -211,7 +211,7 @@ await withUiStack(
       });
 
       // 11. An operation that stops being offered shows on the agent as no longer offered, with Remove.
-      await step('11 (an earlier change T010/T011) a hidden operation shows as no longer offered on the agent, with Remove', async () => {
+      await step('11 a hidden operation shows as no longer offered on the agent, with Remove', async () => {
         const J = await headers(JAMES);
         const detail = (await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })).json()).data;
         const op = detail.operations.find((o) => o.name === 'get_account');
@@ -238,7 +238,7 @@ await withUiStack(
         const viewAgent = (await (await fetch(`${agents}/v1/agents/${AGENT}`, { headers: J })).json()).data;
         const offered = ((await (await fetch(`${agents}/v1/tools`, { headers: J })).json()).data ?? []).filter((t) => t.id === 'get_account').map((t) => t.moduleId);
         const opsNow = (await (await fetch(`${tools}/v1/tool-modules/${moduleId}`, { headers: J })).json()).data;
-        check('11 (an earlier change T010/T011) a hidden operation shows as no longer offered on the agent, with Remove', hid.status === 200 && pub.status === 200 && approved === 200 && stale && remove, { hide: hid.status, publish: pub.status, approved, stale, remove, toolIds: viewAgent?.toolIds, staleToolIds: viewAgent?.staleToolIds, offeredBy: offered, status: opsNow?.status, enabled: opsNow?.operations?.find((o) => o.name === 'get_account')?.enabled, pending: opsNow?.pendingChanges?.length });
+        check('11 a hidden operation shows as no longer offered on the agent, with Remove', hid.status === 200 && pub.status === 200 && approved === 200 && stale && remove, { hide: hid.status, publish: pub.status, approved, stale, remove, toolIds: viewAgent?.toolIds, staleToolIds: viewAgent?.staleToolIds, offeredBy: offered, status: opsNow?.status, enabled: opsNow?.operations?.find((o) => o.name === 'get_account')?.enabled, pending: opsNow?.pendingChanges?.length });
       });
 
       check('no page errors', errors.length === 0, errors);

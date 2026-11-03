@@ -1,7 +1,6 @@
 # Every workflow run ends with a clear outcome
 
 Status: current. Id: `uc-567`. Service: `agents-service`. Layers: api, ui.
-Card: an earlier change.
 
 A workflow run either finishes, fails with a reason, or shows as Stuck with the reason and Retry and Cancel. A write
 step whose result is uncertain fails the run at once and is never sent again; an outage of tools-service is retried

@@ -1,6 +1,6 @@
 # A court order notice runs on the workflow runner from its mailbox
 
-Status: current. Id: `uc-210`. Service: `agents-service` (the worker runs ops_engine). Layers: api, ui. Card: an earlier change; ui layer an earlier change.
+Status: current. Id: `uc-210`. Service: `agents-service` (the worker runs ops_engine). Layers: api, ui.
 
 ## Stories
 

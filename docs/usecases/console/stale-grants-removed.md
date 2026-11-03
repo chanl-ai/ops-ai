@@ -19,8 +19,7 @@ Status: current. Id: `uc-056`. Service: `console`. Layers: ui.
 | 3 | He opens the agent's Grant tools dialog | the grant is listed under "No longer offered" |
 | 4 | Remove, Save grants, then save the agent | 200; `toolIds` is the other read alone and `staleToolIds` is empty |
 
-agents-service reports a grant as stale when its tool directory no longer offers it, and a save drops stale grants
-(an earlier change T010). A grant of a fixture tool the registry does not list is stale too, so the use case starts from a new agent.
+agents-service reports a grant as stale when its tool directory no longer offers it, and a save drops stale grants. A grant of a fixture tool the registry does not list is stale too, so the use case starts from a new agent.
 
 ## Acceptance layers
 
@@ -30,4 +29,4 @@ agents-service reports a grant as stale when its tool directory no longer offers
 
 ## Non-vacuous check
 
-Step 3 fails on the dialog before an earlier change T011, which listed only offered tools, so a stale grant was invisible.
+Step 3 fails on the dialog before the fix, which listed only offered tools, so a stale grant was invisible.

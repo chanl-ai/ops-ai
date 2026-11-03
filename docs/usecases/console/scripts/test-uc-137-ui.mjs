@@ -1,5 +1,5 @@
 // uc-137 a changed publish review setting applies to the next tool module publish, ui layer:
-// docs/usecases/console/publish-review-applies-at-once.md (an earlier change T008). Platform sign-in. Priya is Operations'
+// docs/usecases/console/publish-review-applies-at-once.md. Platform sign-in. Priya is Operations'
 // admin and sets the Tool modules review in the console; James publishes his module's minor changes in the console; no
 // service restarts between the two settings.
 import { PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';

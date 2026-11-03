@@ -4,8 +4,7 @@ settings, the private range to list, the host), then serves until stdin closes o
 Two banks answer as `https://api.bank.test`: the Statements API (fake_bank_https), the default, and with
 OPS_FAKE_BANK_APP=core the core-banking system (services/tools-service/scripts/fake_bank: customers, accounts, holds,
 notes, and its sign-in routes), which a levy use case needs, also on https. The core bank also serves the same app as
-`https://mtls.bank.test` on a listener that refuses any handshake without a client certificate its own CA signed
-(an earlier change); the JSON line names that host, the CA and the client certificate's files."""
+`https://mtls.bank.test` on a listener that refuses any handshake without a client certificate its own CA signed; the JSON line names that host, the CA and the client certificate's files."""
 
 from __future__ import annotations
 
@@ -28,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 def _start(app: object, address: str, **ssl: Any) -> tuple[Any, threading.Thread, int]:
-    import uvicorn  # noqa: PLC0415 - the agents-service environment this runs under has it
+    import uvicorn  # the agents-service environment this runs under has it
 
     with socket.socket() as s:
         s.bind((address, 0))
@@ -45,7 +44,7 @@ def _start(app: object, address: str, **ssl: Any) -> tuple[Any, threading.Thread
 
 def serve_core_bank() -> None:
     sys.path.insert(0, str(ROOT / "services" / "tools-service" / "scripts"))
-    from fake_bank.app import app  # noqa: PLC0415 - a script folder, not a package on the path
+    from fake_bank.app import app  # a script folder, not a package on the path
 
     with tempfile.TemporaryDirectory() as tmp:
         cert, key = _certificate(Path(tmp))

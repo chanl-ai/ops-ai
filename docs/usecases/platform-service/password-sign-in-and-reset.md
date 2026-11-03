@@ -1,6 +1,6 @@
 # Password sign-in and reset
 
-Status: current. Id: `uc-160`. Service: `platform-service`. Layers: api, ui (ui layer an earlier change).
+Status: current. Id: `uc-160`. Service: `platform-service`. Layers: api, ui.
 
 ## Preconditions
 

@@ -82,7 +82,7 @@ await withUiStack(
         await page.getByTestId('extract-detect').click();
         const versionShown = await page.getByTestId('extract-version').count();
         if (file === invoice) {
-          // an earlier change's screen evidence: the dialog with Detect chosen, at 1280 and 400.
+          // Screen evidence: the dialog with Detect chosen, at 1280 and 400.
           mkdirSync(SHOTS, { recursive: true });
           await page.getByRole('listbox').waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => undefined);
           await page.waitForTimeout(500);

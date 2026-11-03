@@ -1,6 +1,6 @@
 # A tool signs in with a bearer token from its connection, by environment
 
-Status: passing. Id: `uc-392`. Service: `tools-service`. Layers: api, ui. Card: an earlier change.
+Status: passing. Id: `uc-392`. Service: `tools-service`. Layers: api, ui.
 
 The bearer strategy sends `Authorization: Bearer` with the environment's token. Replacing the token reaches the next
 call. The token's secret rows are listed on the Secrets page as the connection's and cannot be rotated or removed

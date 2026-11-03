@@ -1,7 +1,6 @@
 # Build your first tool
 
-Status: current for REST tools. Code tools, a function an agent calls, are not built in the console yet
-(an earlier change).
+Status: current for REST tools. Code tools, a function an agent calls, are not built in the console yet.
 
 A Tool lets an agent act on one of your Apps. This page takes you from nothing to a REST Tool an agent uses, in the
 order an API client works: an App that signs in, a request, a run in Mock, a run for real, then the agent. The example
@@ -42,10 +41,8 @@ Tool that calls the App and is changed in one place.
 
 ## Not built yet
 
-| What | Where it is tracked |
-|---|---|
-| Code tools: a function that shapes what a REST Tool returns | an earlier change |
-| API keys that build Tools from a script | an earlier change |
-| `ops login`: the SDK reads its address and key from arguments, `OPS_*` variables or a profile file you write | an earlier change |
+- Code tools: a function that shapes what a REST Tool returns.
+- API keys that build Tools from a script.
+- `ops login`: the SDK reads its address and key from arguments, `OPS_*` variables or a profile file you write.
 
 Proof: uc-611 runs these steps against a payments stand-in, in a browser and through the API.

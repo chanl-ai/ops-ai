@@ -121,7 +121,7 @@ def service_headers(
 ) -> dict[str, str]:
     """A calling service's Ed25519 token for `audience` (the dev key, dev only), naming the tenant it acts for and,
     when given, the `area:action` scopes and team it claims; the callee caps the scopes by `service`."""
-    from ops_identity import dev_service_signer, mint_service_token  # noqa: PLC0415
+    from ops_identity import dev_service_signer, mint_service_token
 
     token = mint_service_token(
         dev_service_signer(),
@@ -372,7 +372,7 @@ def kb(
         env["OPS_DATABASE_URL"] = pg_url()
         env["OPS_KB_PORT"] = str(KB_PORT)
         env["OPS_FILES_URL"] = files_url
-        # A knowledge base's "used by" comes from agents-service (an earlier change T007), on this run's port rather than the
+        # A knowledge base's "used by" comes from agents-service, on this run's port rather than the
         # shared stack's.
         env["OPS_AGENTS_URL"] = f"http://127.0.0.1:{AGENTS_PORT}"
         kb_dir = ROOT / "services" / "kb-service"
@@ -547,7 +547,7 @@ def platform(
     # what a builder or viewer may not do, so nobody is made Admin everywhere.
     if token_ttl_s is not None:
         settings["OPS_PLATFORM_TOKEN_TTL_SECONDS"] = str(token_ttl_s)
-    # Its events (a removed member's accounts, an earlier change S14) go to the run's own tools-service, never the shared stack's
+    # Its events (a removed member's accounts) go to the run's own tools-service, never the shared stack's
     # that make exports; the relay keeps an event until that service answers.
     settings["OPS_TOOLS_URL"] = f"http://127.0.0.1:{TOOLS_PORT}"
     settings |= env or {}
@@ -636,7 +636,7 @@ def as_role(api: httpx.Client, role: str, team: str | None = None) -> dict[str, 
     admin, builder, approver, viewer, security, platform) signed in through the password sign-in, acting in the team the
     sign-in names unless `team` is given. The same map and rule `make api AS=<role>` uses (scripts/api_as.py)."""
     sys.path.insert(0, str(ROOT / "scripts"))
-    from api_as import roles, team_of  # noqa: PLC0415 - scripts/ is on the path only from here
+    from api_as import roles, team_of  # scripts/ is on the path only from here
 
     session = signed_in(api, roles()[role])
     return bearer(session, team or team_of(session.get("principal", {})))

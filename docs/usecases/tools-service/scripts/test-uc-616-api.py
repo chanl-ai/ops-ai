@@ -1,5 +1,5 @@
-"""uc-616, api layer: docs/usecases/tools-service/usage-shows-only-this-team-s.md, stories S1-S3 (steps 1-4), group G
-of an earlier change. The Apps stack (docs/usecases/lib/apps_walk.py); each run's call is made as agents-service makes it. A check
+"""uc-616, api layer: docs/usecases/tools-service/usage-shows-only-this-team-s.md, stories S1-S3 (steps 1-4).
+The Apps stack (docs/usecases/lib/apps_walk.py); each run's call is made as agents-service makes it. A check
 whose behaviour is not built names the task it waits on. No model call."""
 
 from __future__ import annotations

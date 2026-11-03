@@ -1,6 +1,6 @@
 # Wrong passwords lock sign-in and step-up, and reset mail is capped
 
-Status: current. Id: `uc-214`. Service: `platform-service`. Layers: api, ui (ui layer an earlier change).
+Status: current. Id: `uc-214`. Service: `platform-service`. Layers: api, ui.
 
 ## Preconditions
 

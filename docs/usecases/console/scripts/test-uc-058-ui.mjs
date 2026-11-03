@@ -44,11 +44,11 @@ await withUiStack(
       const mayaApi = (await fetch(`${agentsUrl}/chat/threads/${thread}`, { headers: M })).status;
       const maya = await open('m.okafor@harborpine.example', false);
       const mayaReads = await maya.getByText(`Hello from James ${TAG}`).count();
-      check("a teammate gets 404 on the maintainers' chat and sees none of it", mayaApi === 404 && mayaReads === 0, { mayaApi, mayaReads });
+      check("a teammate gets 404 on the owner's chat and sees none of it", mayaApi === 404 && mayaReads === 0, { mayaApi, mayaReads });
 
       const james = await open('j.richardson@harborpine.example', true);
       const jamesBox = await james.locator('textarea').count();
-      check('the maintainers reads the chat and has the message box', jamesBox === 1, { jamesBox });
+      check('the owner reads the chat and has the message box', jamesBox === 1, { jamesBox });
 
       check('no page errors', errors.length === 0, errors);
     } finally {

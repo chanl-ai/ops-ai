@@ -1,4 +1,4 @@
-"""The Apps use cases' shared stack and calls (the planning repo docs/plans/ops-ai/apps-2.html).
+"""The Apps use cases' shared stack and calls.
 
 One stack per script: platform-service with the dev seed's own roles, tools-service with plugins on and the nine test
 plugins of services/tools-service/tests/plugin_kinds, and the fake system of fake_multi_auth.py. Every test plugin is
@@ -57,7 +57,7 @@ TEAM_OF = dict.fromkeys(("admin", "builder", "approver", "viewer"), "team_ops") 
 
 
 def target(task: str) -> str:
-    """The detail of a check whose behaviour waits on a task of an earlier change's list."""
+    """The detail of a check whose behaviour waits on work not built yet."""
     return f"target: waits on {task}"
 
 

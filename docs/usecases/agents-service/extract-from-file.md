@@ -1,6 +1,6 @@
 # A workflow turns an uploaded invoice into fields a person can check
 
-Status: current. Id: `uc-124`. Service: `agents-service`. Layers: api, ui. Card: an earlier change; ui layer an earlier change.
+Status: current. Id: `uc-124`. Service: `agents-service`. Layers: api, ui.
 
 ## Stories
 

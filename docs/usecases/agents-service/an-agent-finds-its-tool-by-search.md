@@ -1,6 +1,6 @@
 # An agent with many tools finds the one it needs by searching, and runs it through the same checks
 
-Status: passing. Id: `uc-610`. Service: `agents-service`. Layers: api. Card: an earlier change.
+Status: passing. Id: `uc-610`. Service: `agents-service`. Layers: api.
 
 Above OPS_TOOL_SEARCH_ABOVE granted tools (default 20), an agent is offered only its built-ins; it searches its tools
 by words, the matches are revealed with their inputs, and it calls the one it needs by its own name, through the same

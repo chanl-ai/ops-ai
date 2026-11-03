@@ -38,7 +38,7 @@ other team of the tenant, and a reload shows the conversation.
 
 ## Non-vacuous check
 
-Watched red on PostgreSQL before an earlier change T004: steps 1 to 3 and 5 pass, and step 4 finds no checkpoint in `team_all`,
+Watched red on PostgreSQL before the fix: steps 1 to 3 and 5 pass, and step 4 finds no checkpoint in `team_all`,
 since the saver writes every chat's checkpoints under one fixed team (three rows under `local`). Watched red on
 SQL Server the same day: agents stops at start, since the checkpointer opens an asyncpg pool and asyncpg refuses an
 `mssql+aioodbc` URL. On SQL Server the script serves a knowledge service that knows no knowledge base in place of

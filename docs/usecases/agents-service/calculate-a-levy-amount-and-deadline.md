@@ -1,6 +1,6 @@
 # A Calculate step works out a court order's amount and deadline
 
-Status: passing. Id: `uc-231`. Service: `agents-service`. Layers: api, ui (ui layer an earlier change).
+Status: passing. Id: `uc-231`. Service: `agents-service`. Layers: api, ui.
 
 ## Stories
 

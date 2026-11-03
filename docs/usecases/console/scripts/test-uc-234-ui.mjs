@@ -352,7 +352,7 @@ await withUiStack(
         const differs = await page.getByTestId('read-differs-0-case_no').count();
         const agreesElsewhere = await page.getByTestId('read-differs-0-court').count();
         await page.screenshot({ path: join(SHOTS, 'task-read-sources-1280.png') });
-        // an earlier change's screen evidence: the same check at 1280 and 400.
+        // Screen evidence: the same check at 1280 and 400.
         mkdirSync(evidenceDir('261', 'screens'), { recursive: true });
         await page.screenshot({ path: join(evidenceDir('261', 'screens'), 'read-sources-1280.png') });
         await page.setViewportSize({ width: 400, height: 800 });

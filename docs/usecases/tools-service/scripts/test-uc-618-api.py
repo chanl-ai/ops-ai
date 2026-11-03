@@ -1,5 +1,5 @@
-"""uc-618, api layer: docs/usecases/tools-service/turning-an-app-off-names-its.md, stories S1-S3 (steps 1-4), group K
-of an earlier change. The Apps stack (docs/usecases/lib/apps_walk.py) with agents-service beside tools-service, so an agent can
+"""uc-618, api layer: docs/usecases/tools-service/turning-an-app-off-names-its.md, stories S1-S3 (steps 1-4).
+The Apps stack (docs/usecases/lib/apps_walk.py) with agents-service beside tools-service, so an agent can
 hold the app's tool. A check whose behaviour is not built names the task it waits on. No model call."""
 
 from __future__ import annotations

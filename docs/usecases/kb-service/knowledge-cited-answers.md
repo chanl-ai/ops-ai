@@ -1,6 +1,6 @@
 # A banker asks an agent and gets an answer cited by page and section from uploaded PDFs
 
-Status: passing. Id: `uc-080`. Service: `kb-service`. Layers: api. Card: an earlier change.
+Status: passing. Id: `uc-080`. Service: `kb-service`. Layers: api.
 
 The card's tasks name uc-074 for this layer; uc-074 was already the console's chat-thread use case, so this one takes
 the next free id.

@@ -4,7 +4,7 @@
 // seen list, the popover still opens, the dot comes back on reload and nothing throws; 5 What's new is a round button in
 // the bottom-right corner, not in the sidebar, and its popover names the version the console was built from (a release
 // tag, or main and a short commit); 6 at 375 px the popover fits the screen. Step 8 (an entry behind a release switch
-// that is off is not listed) went with the console's last switches: a shipped feature has no switch (owner, 10-31).
+// that is off is not listed) went with the console's last switches: a shipped feature has no switch.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 

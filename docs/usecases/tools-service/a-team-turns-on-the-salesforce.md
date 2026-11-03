@@ -1,9 +1,7 @@
 # A team turns on the Salesforce plugin, and its agents work cases and cite its articles
 
 Status: current on main behind the `OPS_PLUGINS` switch, which every layer turns on for its own services. Id: `uc-564`.
-Service: `tools-service` with platform-service, kb-service and agents-service. Layers: api, sdk, cli, ui. Cards: an earlier change (the
-prototype), an earlier change (on main), an earlier change (story group D of `docs/plans/ops-ai/apps.html`, steps 40-46). Design: the planning repo `docs/plans/ops-ai/plugin-architecture.html` and
-`plugin-contents-and-knowledge.html`.
+Service: `tools-service` with platform-service, kb-service and agents-service. Layers: api, sdk, cli, ui.
 
 ## Stories
 

@@ -1,6 +1,6 @@
 # Another team's file is missing on every files-service route
 
-Status: passing. Id: `uc-094`. Service: `files-service`. Layers: api, ui (ui layer an earlier change). Card: an earlier change.
+Status: passing. Id: `uc-094`. Service: `files-service`. Layers: api, ui.
 
 ## Preconditions
 

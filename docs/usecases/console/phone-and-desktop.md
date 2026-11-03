@@ -1,6 +1,6 @@
 # Every console page reads well on a phone and on a desktop
 
-Status: current. Id: `uc-562`. Service: `console`. Layers: ui. Card: an earlier change.
+Status: current. Id: `uc-562`. Service: `console`. Layers: ui.
 
 The console UI sweep (2026-10-29) found ten classes of defect across 50 pages at 1440, 1024 and 390 px. Each is fixed
 once in the shared component, so this walk checks one page per class, plus the parts the sweep cannot see, and that the earlier workflow engine no longer shows. The sweep

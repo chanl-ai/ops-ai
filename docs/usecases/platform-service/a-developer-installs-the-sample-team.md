@@ -1,7 +1,6 @@
 # A developer installs the sample team with one command, and a second run makes nothing
 
 Status: current. Id: `uc-563`. Service: `platform-service` with every service the sample team uses. Layers: cli.
-Card: an earlier change.
 
 ## Stories
 

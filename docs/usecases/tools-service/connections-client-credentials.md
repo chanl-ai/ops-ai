@@ -1,6 +1,6 @@
 # A tool signs in with an OAuth client ID and secret
 
-Status: passing. Id: `uc-393`. Service: `tools-service`. Layers: api, ui. Card: an earlier change.
+Status: passing. Id: `uc-393`. Service: `tools-service`. Layers: api, ui.
 
 The client credentials strategy fetches a token from the connection's token address through the egress client, keeps
 it encrypted, and reuses it until a minute before it expires. When the system answers a read with 401, the gateway

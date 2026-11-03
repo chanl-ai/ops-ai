@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-106`. Service: `console`. Layers: ui.
 
-Card an earlier change: a table row that opens on click holds one named control (a link, or a button when it opens a sheet) in
+A table row that opens on click holds one named control (a link, or a button when it opens a sheet) in
 its name cell and no `tabindex` of its own. Pages that still show mock data while real services answer beside them
 carry a Preview badge in the page header and the sidebar. Settings that save a new version on each save do not save
 on Enter.

@@ -4,8 +4,7 @@
 // key comes from STRIPE_TEST_KEY, must be a test-mode key (sk_test_), and is never printed: the pages and the
 // tools-service log are searched for it.
 //
-//   the secret store run --project the planning repo --config dev -- \
-//     sh -c 'STRIPE_TEST_KEY="$STRIPE_SECRET_KEY" exec node docs/usecases/tools-service/scripts/evidence-uc-611-stripe.mjs'
+//   STRIPE_TEST_KEY=sk_test_... node docs/usecases/tools-service/scripts/evidence-uc-611-stripe.mjs
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 

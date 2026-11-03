@@ -1,6 +1,6 @@
 # An assistant lists and runs a team's read tools over MCP with an API key
 
-Status: passing. Id: `uc-410`. Service: `tools-service`. Layers: api. Card: an earlier change.
+Status: passing. Id: `uc-410`. Service: `tools-service`. Layers: api.
 
 An outside assistant (Claude Code, Cursor) connects to `/mcp/test/{team}` with an API key of that team and uses the
 official MCP Python SDK client to list and call the team's tools. Listing shows the team's published read operations

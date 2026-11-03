@@ -1,6 +1,6 @@
 # Personal data is masked in an agent's replies, stored messages and workflow step output
 
-Status: current. Id: `uc-265`. Service: `agents-service`. Layers: api, ui. Card: an earlier change; ui layer an earlier change.
+Status: current. Id: `uc-265`. Service: `agents-service`. Layers: api, ui.
 
 ## Stories
 

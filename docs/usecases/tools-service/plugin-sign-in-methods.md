@@ -1,8 +1,7 @@
 # A developer's plugin signs in every way a system asks, and its agents call it
 
 Status: current on main behind the `OPS_PLUGINS` switch, which every layer turns on for its own services. Id: `uc-588`.
-Service: `tools-service` with platform-service. Layers: api, sdk, cli, ui. Cards: an earlier change, an earlier change (story group C of
-the planning repo `docs/plans/ops-ai/apps.html`, steps 30-31 and 34-36; Reconnect and Disconnect are steps 21 and 23). Guide: `docs/guide/plugins.md`.
+Service: `tools-service` with platform-service. Layers: api, sdk, cli, ui. Guide: `docs/guide/plugins.md`.
 
 ## Stories
 

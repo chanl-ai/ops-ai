@@ -1,6 +1,6 @@
 # A team admin connects every system for real, from one grid
 
-Status: superseded by uc-607. Id: `uc-580`. Service: `console`. Layers: ui. Card: an earlier change.
+Status: superseded by uc-607. Id: `uc-580`. Service: `console`. Layers: ui.
 
 Retired 2026-11-01: its pages are gone (one Connect window, the app's page). What only it proved moved: a custom app's
 key refused then working and edited from Settings, the certificate app and its thumbprint, Salesforce's own app per
@@ -40,7 +40,7 @@ console never joins lists itself.
 | Needs | How |
 |---|---|
 | PostgreSQL and OPA | `make db-up` |
-| For step 15: plugins on with the an earlier change header-key test plugin, and the fake system | `tools: { env: { ...fake.settings, OPS_PLUGINS: 'true', OPS_PLUGIN_PATHS } }` |
+| For step 15: plugins on with the header-key test plugin, and the fake system | `tools: { env: { ...fake.settings, OPS_PLUGINS: 'true', OPS_PLUGIN_PATHS } }` |
 | The ui stack with platform sign-in and the bank stand-in | `withUiStack(..., { platform: true, tools: { bank: 'core' } })`; `allowBank` lists its host |
 
 ## Steps and expected results

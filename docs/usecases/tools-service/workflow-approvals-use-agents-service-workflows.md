@@ -1,6 +1,6 @@
 # Workflow approvals use agents-service workflows
 
-Status: passing. Id: `uc-041`. Service: `tools-service`. Layers: api. Card: an earlier change.
+Status: passing. Id: `uc-041`. Service: `tools-service`. Layers: api.
 
 ## Preconditions
 

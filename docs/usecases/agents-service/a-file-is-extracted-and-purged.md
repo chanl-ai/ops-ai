@@ -1,6 +1,6 @@
 # Extract on a file saves what was read, and deleting the file purges it
 
-Status: current. Id: `uc-244`. Service: `agents-service`. Layers: api, ui. Card: an earlier change; ui layer an earlier change.
+Status: current. Id: `uc-244`. Service: `agents-service`. Layers: api, ui.
 
 ## Stories
 

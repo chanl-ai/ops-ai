@@ -1,6 +1,6 @@
 # Every page draws the shared header
 
-Status: current. Id: `uc-264`. Service: `console`. Layers: ui. Card: an earlier change.
+Status: current. Id: `uc-264`. Service: `console`. Layers: ui.
 
 Check-standards rule 12 finds `<PageLayout` or `<RecordLayout` in a page's imports, but a page can satisfy it from a
 branch that never renders (a not-found state). This use case checks the rendered page instead.

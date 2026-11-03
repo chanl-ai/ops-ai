@@ -1,5 +1,5 @@
-"""uc-615, api layer: docs/usecases/tools-service/a-team-admin-sets-its-own.md, stories S1-S4 (steps 1-5), group B
-of an earlier change. The Apps stack (docs/usecases/lib/apps_walk.py); the fake's sign-in server knows the client `multi-app`.
+"""uc-615, api layer: docs/usecases/tools-service/a-team-admin-sets-its-own.md, stories S1-S4 (steps 1-5).
+The Apps stack (docs/usecases/lib/apps_walk.py); the fake's sign-in server knows the client `multi-app`.
 A check whose behaviour is not built names the task it waits on. No model call."""
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 # A builder adds an MCP server behind OAuth and its tools run through the same executor
 
-Status: passing. Id: `uc-396`. Service: `tools-service`. Layers: api, ui. Card: an earlier change.
+Status: passing. Id: `uc-396`. Service: `tools-service`. Layers: api, ui.
 
 An MCP server that needs sign-in answers 401 and names its protected resource metadata. `POST /v1/connections/mcp`
 follows it to the authorization server, checks the issuer, registers a public client when the server offers

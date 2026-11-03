@@ -32,5 +32,5 @@ In the console: an operation's test panel runs a read against the bank's test en
 
 ## Non-vacuous check
 
-`the test console's Test environment read reached postman-echo.com, not the stub`: before an earlier change the sandbox target
+`the test console's Test environment read reached postman-echo.com, not the stub`: before the fix the sandbox target
 answered from the stub with no host, and `stubbed` did not exist.

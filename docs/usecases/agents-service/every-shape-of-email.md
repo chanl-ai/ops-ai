@@ -1,6 +1,6 @@
 # A mailbox workflow takes every shape of email
 
-Status: current. Id: `uc-226`. Service: `agents-service`. Layers: api, ui. Card: an earlier change; ui layer an earlier change.
+Status: current. Id: `uc-226`. Service: `agents-service`. Layers: api, ui.
 
 ## Stories
 

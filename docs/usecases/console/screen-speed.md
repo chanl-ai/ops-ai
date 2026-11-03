@@ -1,7 +1,6 @@
 # Screens open from saved data, and every request shows where its time went
 
 Status: current. Id: `uc-560`. Service: `console` with every service through `ops_service_kit`. Layers: api, ui.
-Card: an earlier change.
 
 With `OPS_REQUEST_TIMING=1`, every service writes one JSON line per request on the `ops.request` logger and returns
 a `Server-Timing` header with the time spent in the app and in the database. A request id follows the request from the

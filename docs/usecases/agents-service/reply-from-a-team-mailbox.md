@@ -1,7 +1,7 @@
 # A reply leaves from the team mailbox the customer wrote to
 
 Status: current. Id: `uc-200`. Service: `agents-service` (mailbox records) and `tools-service` (send_reply). Layers:
-api. Card: an earlier change.
+api.
 
 A mailbox on Channels > Email carries the sender its replies go out through: SMTP or Resend, a from address and a
 Secrets-page secret. A `send_reply` that names the mailbox sends through it, for the calling team only.

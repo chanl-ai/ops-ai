@@ -1,7 +1,6 @@
 # A team admin sets its own app credential and tests it with their account
 
-Status: draft. Id: `uc-615`. Service: `tools-service`. Layers: api, sdk, cli, ui. Card: an earlier change (story group B of
-the planning repo `docs/plans/ops-ai/apps.html`).
+Status: draft. Id: `uc-615`. Service: `tools-service`. Layers: api, sdk, cli, ui.
 
 An app credential is how an app signs in: Ops AI's own app, or the team's own client id and secret. It was set in two
 places (the platform's app secret, and a client typed into each connection's settings), and a key could sit either in

@@ -1,7 +1,6 @@
 # People connect their own Salesforce account
 
 Status: current. Id: `uc-558`. Service: `tools-service`. Layers: api, ui.
-Card: an earlier change.
 
 A Salesforce connection set to "Each person's own account" signs each call in as the person it acts for, so Salesforce
 records that person as the editor and applies their own permissions. A person who has not connected gets
@@ -50,7 +49,7 @@ the request body.
 | 11 | James lists `GET /v1/me/connections`, then disconnects | His Salesforce sign-in is listed; after Disconnect his next run asks him to connect again |
 | 12 | James asks a chat agent holding the update operation to move a case | The reply shows the Connect Salesforce card; nothing reaches Salesforce |
 | 13 | He presses Connect, signs in to Salesforce in the pop-up as `handler@kestrel.example` | The pop-up closes, the card reads Connected, the chat sends a follow-up and the agent's new call updates the case: Salesforce records exactly one edit, his |
-| 14 | He opens My accounts from the person menu (Your connections until an earlier change; the old address opens it) | His Salesforce sign-in is listed with its account |
+| 14 | He opens My accounts from the person menu (formerly Your connections; the old address opens it) | His Salesforce sign-in is listed with its account |
 | 15 | At 375 px, My accounts and the chat with the card | Neither page scrolls sideways |
 | 16 | He disconnects on My accounts (the old address opens it) | His row offers Connect again and `GET /v1/me/connections` returns none |
 | 17 | Priya opens the old connection address, then Settings on the app's page, and turns Everyone signs in with their own account off and on | It reads on; off saves `team`, on saves `person` again |

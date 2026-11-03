@@ -100,13 +100,13 @@ with agents(), tools() as gw:
     check("the open request survives a restart", [a["status"] for a in approvals] == ["requested"], approvals)
 
 
-# an earlier change: an operation's HTTP call edited after it is added, called through the gateway against the fake bank.
+# An operation's HTTP call edited after it is added, called through the gateway against the fake bank.
 TOOL = f"bank_account_{RUN}"
 
 
 def publish(gw: Any, module_id: str) -> dict[str, Any]:
     """Publishes what is staged; a major version is approved by Security so it serves."""
-    out = data(gw.post(f"/v1/tool-modules/{module_id}/versions", json={"note": "an earlier change"}))
+    out = data(gw.post(f"/v1/tool-modules/{module_id}/versions", json={"note": "HTTP call edited"}))
     if any(v["status"] == "in_review" for v in out["versions"]):
         out = approve_tool_review(gw, module_id, SECURITY)
     return out

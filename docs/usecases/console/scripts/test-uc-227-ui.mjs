@@ -16,7 +16,7 @@ const json = async (r) => {
   if (body.data === undefined) throw new Error(`${r.url} answered ${r.status}: ${JSON.stringify(body).slice(0, 300)}`);
   return body.data;
 };
-// Screenshots for the maintainers to approve; approved screens then move to docs/console/approved/files.
+// Screenshots for approval; approved screens then move to docs/console/approved/files.
 const SHOTS = process.env.UC227_SHOTS ?? join(ROOT, 'docs/console/proposed/files');
 
 const runOf = {};

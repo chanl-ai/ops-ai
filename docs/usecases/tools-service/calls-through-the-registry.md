@@ -45,5 +45,5 @@ In the console: the module's Activity tab shows each call with who asked, the de
 
 `a registry read runs (200)` paired with the three refusals: a gateway that refused everything fails the read, and
 one that ran everything fails the refusals. `every call is logged, refused ones too` fails if a refusal leaves no row.
-an earlier change: `a call past the operation's rate limit is refused` fails if the gateway counts nothing, and `the console mock
+`a call past the operation's rate limit is refused` fails if the gateway counts nothing, and `the console mock
 refuses exactly the amounts the gateway refuses` fails if either side's amount rule drifts.

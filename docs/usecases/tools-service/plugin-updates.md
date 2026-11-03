@@ -2,7 +2,7 @@
 
 Status: current on main behind the `plugin_updates` install flag (off by default) and `OPS_PLUGINS`, which the layer
 turns on for its own services. Id: `uc-609`. Service: `tools-service` with platform-service and agents-service. Layers:
-api, ui. Card: an earlier change. Guide: `docs/guide/plugins.md`, Plugin updates.
+api, ui. Guide: `docs/guide/plugins.md`, Plugin updates.
 
 ## Stories
 

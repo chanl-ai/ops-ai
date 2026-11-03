@@ -1,6 +1,6 @@
 # A builder asks the first three published agents
 
-Status: current. Id: `uc-622`. Service: `agents-service`. Layers: sdk. Card: an earlier change (R4).
+Status: current. Id: `uc-622`. Service: `agents-service`. Layers: sdk.
 
 A builder on a fake stack publishes three agents that reuse the R1 handbook and read tool. Each answers through
 `ops.agents.chat`. A2 cites the account-opening page. A3 calls `search_customers`. A missing page or customer takes

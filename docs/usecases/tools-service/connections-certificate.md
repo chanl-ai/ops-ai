@@ -1,6 +1,6 @@
 # A tool presents a client certificate from its connection
 
-Status: passing. Id: `uc-395`. Service: `tools-service`. Layers: api, ui. Card: an earlier change.
+Status: passing. Id: `uc-395`. Service: `tools-service`. Layers: api, ui.
 
 A client certificate is a section of any connection environment: the certificate and the CA that signed the system's
 own certificate are plain settings, the private key a secret part. The egress transport presents it from a pool of
@@ -33,8 +33,8 @@ its own, so it never rides on another connection's calls.
 | 4 | Read the call log | No private key in it |
 | 5 | In the console as an Operations admin, open the certificate connection's page and press Test the team account | Working, 200; the key is not on the page |
 
-The ui harness's bank stand-in does not hand back its certificate-only listener or client certificate; card an earlier change
-adds them. Until then the ui layer fails at step 5 before it opens the page.
+The ui harness's bank stand-in does not hand back its certificate-only listener or client certificate.
+Until it does, the ui layer fails at step 5 before it opens the page.
 
 ## Acceptance layers
 

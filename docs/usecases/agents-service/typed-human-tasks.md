@@ -1,6 +1,6 @@
 # A builder copies a task type and an API caller opens typed Human Tasks
 
-Status: current. Id: `uc-254`. Service: `agents-service`. Layers: api, ui. Card: an earlier change.
+Status: current. Id: `uc-254`. Service: `agents-service`. Layers: api, ui.
 
 A Human Task's screen comes from a task type: a versioned record of params, regions and actions. Five general types
 are seeded and read-only; a team copies one to change it. A workflow review step or `POST /v1/tasks` names a type and

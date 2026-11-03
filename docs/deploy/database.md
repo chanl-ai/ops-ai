@@ -3,7 +3,7 @@
 Status: current for PostgreSQL, proven on a throwaway server. For SQL Server and Azure SQL the scripts are generated
 and reviewed, and not yet applied to a server ([SQL Server](#sql-server-and-azure-sql)).
 
-<!-- PostgreSQL: an earlier change, proof deploy/database/proof.sh. SQL Server: an earlier change (DIALECT=mssql), first apply is an earlier change. -->
+<!-- PostgreSQL proof: deploy/database/proof.sh. SQL Server: DIALECT=mssql. -->
 
 A bank's DBA applies every schema change in their own change window and never runs Ops AI's code against
 production. Each service's migration chain stays the source, and every script below is generated from those chains
@@ -83,7 +83,7 @@ every later revision renderable.
 
 `CREATE INDEX` holds writes on its table until it is built, and `upgrade.sql` runs each step in a transaction, where
 `CREATE INDEX CONCURRENTLY` cannot run. The index steps that may meet a large table create the index only when it is
-missing (agents 0071, an earlier change: the work queue, live workflow versions, thread lists and event polls, runs by workflow
+missing (agents 0071: the work queue, live workflow versions, thread lists and event polls, runs by workflow
 and checkpoints by run). On a table over about a million rows, build the index by hand first, outside a transaction,
 with the name and columns the revision gives, for example
 `CREATE INDEX CONCURRENTLY ix_engine_runs_workflow_created ON engine_runs (tenant_id, workflow_id, created_at)`;
@@ -182,7 +182,7 @@ Upgrades: `make db-upgrade-sql DIALECT=mssql FROM=<running release> TO=<new rele
 is elsewhere, `SET XACT_ABORT ON`), then run the new `grants.sql`. A step's statements that SQL Server refuses inside a
 transaction (the full-text catalog and index) run after its `COMMIT`, in their own batch. A range that starts before a
 chain's pin (`BASELINE` in `mssql.py`) is refused by name, as is a step whose offline SQL holds PostgreSQL-only SQL.
-SQL Server upgrades start from the first release whose bundle installs, the release cut after an earlier change: no SQL Server
+SQL Server upgrades start from the first release whose bundle installs: no SQL Server
 install of an earlier release exists, so the pins move to that release's heads when it is cut. Until a migration lands
 after it there is nothing to upgrade. `deploy/database/mssql_live.py drift` compares an installed database with the
 models; `make uc-sql-server` installs the bundle on the SQL Server test machine and runs it (uc-565).
@@ -191,7 +191,7 @@ models; `make uc-sql-server` installs the bundle on the SQL Server test machine 
 |---|---|
 | kb's full-text column `kb_chunks.tsv` and its GIN index (left out, listed in the kb file and the manifest) | kb's full-text card |
 | Platform's four pre-tenant lookup functions | the platform port |
-| A live run of `isolated_tables` on `sys.security_policies` (written, never run on a server) and of the isolation suite; a live check that `EXECUTE AS USER` and the column grant hold on a server | an earlier change on the an earlier change machine |
+| A live run of `isolated_tables` on `sys.security_policies` (written, never run on a server) and of the isolation suite; a live check that `EXECUTE AS USER` and the column grant hold on a server | a run on a SQL Server test machine |
 | An upgrade applied to a SQL Server install (uc-565 S2) | the first migration after the first installable release |
 
 `deploy/database/tests/test_mssql_ddl.py` compiles the models and compares every file with the reviewed golden files

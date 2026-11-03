@@ -1,7 +1,6 @@
 # A developer builds a REST tool and runs it for real
 
-Status: current. Id: `uc-611`. Service: `tools-service`. Layers: api, sdk, ui. Cards: an earlier change, an earlier change (story group F of
-the planning repo `docs/plans/ops-ai/apps.html`, steps 11-15).
+Status: current. Id: `uc-611`. Service: `tools-service`. Layers: api, sdk, ui.
 
 James, a developer in Operations, connects a payments system the way an API client does: he opens a REST tool,
 runs it in Mock before anything is set up, picks the connection that holds the system's key, and runs a form-encoded
@@ -63,6 +62,6 @@ only as a form body behind a Bearer key.
 
 ## Non-vacuous check
 
-Step 5 fails with Real answering writes from the stub (the rule before an earlier change), and step 8 fails when a save reports only
+Step 5 fails with Real answering writes from the stub (the earlier rule), and step 8 fails when a save reports only
 its first problem; both were seen failing in tools-service's tests (`tests/test_test_console_reads.py`,
 `tests/test_body_encoding.py`).

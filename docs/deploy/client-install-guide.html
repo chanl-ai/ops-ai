@@ -872,11 +872,11 @@ screen: <code>OPS_FLAGS</code> in <code>ops-ai.env</code> names the flags that a
 start. Change it, then restart the services (<code>./install.sh</code> on a running install applies a changed <code>ops-ai.env</code>).</p>
 <div class="cmd"><pre><code>OPS_FLAGS=mcp_gateway</code></pre></div>
 <div class="table-wrap"><table>
-<thead><tr><th>Flag</th><th>Turns on</th><th>Owner</th></tr></thead>
+<thead><tr><th>Flag</th><th>Turns on</th></tr></thead>
 <tbody>
-<tr><td><code>mcp_gateway</code></td><td>The address outside assistants (Claude, Cursor, Copilot) use to reach a team&#39;s tools, <code>/mcp/{env}/{team}</code>, and the console&#39;s MCP channel. Off, <code>/mcp</code> answers 404 <code>feature_off</code></td><td>an earlier change</td></tr>
-<tr><td><code>tool_search</code></td><td>Agents with more tools than <code>OPS_TOOL_SEARCH_ABOVE</code> search for the one they need</td><td>an earlier change</td></tr>
-<tr><td><code>several_accounts</code></td><td>A team connects several named accounts of one app (a second Salesforce org), and a tool or step names the one it uses. Off, each app has one account and naming one is refused</td><td>an earlier change</td></tr>
+<tr><td><code>mcp_gateway</code></td><td>The address outside assistants (Claude, Cursor, Copilot) use to reach a team&#39;s tools, <code>/mcp/{env}/{team}</code>, and the console&#39;s MCP channel. Off, <code>/mcp</code> answers 404 <code>feature_off</code></td></tr>
+<tr><td><code>tool_search</code></td><td>Agents with more tools than <code>OPS_TOOL_SEARCH_ABOVE</code> search for the one they need</td></tr>
+<tr><td><code>several_accounts</code></td><td>A team connects several named accounts of one app (a second Salesforce org), and a tool or step names the one it uses. Off, each app has one account and naming one is refused</td></tr>
 </tbody></table></div>
 <p>The list above is a copy for reading; the registry is <code>packages/ops_service_kit/src/ops_service_kit/flags.py</code>, and
 <code>docker compose</code>, the Kubernetes overlay (<code>ops-origin</code>) and Fly (<code>[env]</code>) each pass <code>OPS_FLAGS</code> to every service. A name

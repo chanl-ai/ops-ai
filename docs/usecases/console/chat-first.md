@@ -1,6 +1,6 @@
 # A person works from one chat, with every other page in one collapsible sidebar
 
-Status: current. Id: `uc-552`. Service: `console` with `agents-service`. Layers: api, ui. Card: an earlier change.
+Status: current. Id: `uc-552`. Service: `console` with `agents-service`. Layers: api, ui.
 
 A person signs in and lands on Chat: a greeting, the composer and up to three hints from their own work. One sidebar
 holds New chat, Overview, Cases and Human Tasks (with the count of tasks waiting for them) at the top, their

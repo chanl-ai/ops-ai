@@ -125,7 +125,7 @@ await withUiStack(
       check('Snippet says what it opens, and Pause and Resume name the pages and wait for a confirm', toggle.expanded === 'true' && toggle.opens === 1 && said && untouched && pausedStatus === 200 && badge && resumeAsk && resumedStatus === 200, { toggle, said, untouched, pausedStatus, badge, resumeAsk, resumedStatus });
 
       // Maya on the intranet, a second origin, chats with her SSO: the page loads /embed/v1.js and its getSession trades
-      // the intranet's token for a session bound to that page (an earlier change retired the first script, /widget/v1.js).
+      // the intranet's token for a session bound to that page (the first script, /widget/v1.js, is retired).
       const M = await tokenFor('m.okafor@harborpine.example');
       const tenant = JSON.parse(Buffer.from(M.split('.')[1], 'base64url').toString()).tenant_id;
       const embedTag = `<script src="${stack.embedUrl}/embed/v1.js" async></script>

@@ -1,7 +1,7 @@
 # A team connects a system that allows only certificate sign-in, and its agents call it
 
 Status: current on main behind the `OPS_PLUGINS` switch, which the layer turns on for its own services. Id: `uc-583`.
-Service: `tools-service` with platform-service. Layers: api. Card: an earlier change. Guide: `docs/guide/plugins.md`.
+Service: `tools-service` with platform-service. Layers: api. Guide: `docs/guide/plugins.md`.
 
 ## Stories
 

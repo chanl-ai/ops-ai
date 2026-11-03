@@ -33,11 +33,11 @@ Credentials are never typed into the channel: each field names a secret picked f
 | Route | Today | Needed for |
 |---|---|---|
 | `GET /v1/channels` | none; mailboxes are `OPS_EMAIL_MAILBOXES` in agents-service settings | The list, joined in the service with status, last activity, last message and the workflows bound to each, so the page makes one call |
-| `POST /v1/channels/mailboxes`, `PATCH /v1/channels/mailboxes/{id}` | none; mailboxes change by editing settings | Connect and edit: provider, address, IMAP host or Graph tenant and client, the password's secret name (an earlier change's `passwordSecret`), folder, team |
+| `POST /v1/channels/mailboxes`, `PATCH /v1/channels/mailboxes/{id}` | none; mailboxes change by editing settings | Connect and edit: provider, address, IMAP host or Graph tenant and client, the password's secret name (`passwordSecret`), folder, team |
 | `POST /v1/channels/mailboxes/{id}/test` and the same on an unsaved body | tools-service `POST /v1/mailboxes/read` reads an IMAP mailbox for agents-service with a service token | Test connection: sign in, list folders, read the newest message without marking it read, the reason on failure |
 | `PATCH /v1/channels/{id}` with `paused` | `PATCH /v1/deployments/{id}` pauses a v1 deployment, not a mailbox | Pause and resume |
 | `GET /v1/workflows/option-sources?source=mailboxes` | built (`routers/engine.py`) from settings | The trigger's picker; it reads the channels list once that exists |
-| Bind | the live version's trigger node names the mailbox in `parameters.mailbox`; publishing binds it | an earlier change proposes `trigger_bindings` records, which give the mailbox page its workflow list without scanning definitions |
+| Bind | the live version's trigger node names the mailbox in `parameters.mailbox`; publishing binds it | Proposed: `trigger_bindings` records, which give the mailbox page its workflow list without scanning definitions |
 
 The replies sender is per process today (`OPS_MAIL_PROVIDER`, `OPS_MAIL_FROM`, `packages/ops_email`). The mock puts a
 sender on each mailbox (SMTP, Resend or Microsoft 365, with its secret by name), which needs `EmailProviders` to build a

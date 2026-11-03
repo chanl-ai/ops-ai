@@ -1,6 +1,6 @@
 # A builder runs the three foundation Examples
 
-Status: current. Id: `uc-621`. Service: `agents-service`. Layers: sdk. Card: an earlier change (R1).
+Status: current. Id: `uc-621`. Service: `agents-service`. Layers: sdk.
 
 A builder on a fresh fake stack sends one message, searches the account-opening handbook, and calls the sample-team
 read tool. Each Example folder's setup prints READY, its public test uses the SDK (not YAML alone), and a second

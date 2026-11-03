@@ -1,6 +1,6 @@
 # A tool signs in with an API key from its connection, by environment
 
-Status: passing. Id: `uc-390`. Service: `tools-service`. Layers: api, ui. Card: an earlier change.
+Status: passing. Id: `uc-390`. Service: `tools-service`. Layers: api, ui.
 
 A connection holds how the platform signs in to one system, with a test value and a production value. A module that
 points at it carries no key: the gateway's API key strategy adds the key in a header or the query for the call's

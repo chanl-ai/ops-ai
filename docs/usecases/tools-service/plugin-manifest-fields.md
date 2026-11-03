@@ -1,7 +1,7 @@
 # A plugin sends the headers, forms, sign-in steps and limits a system needs
 
 Status: current on main behind the `OPS_PLUGINS` switch, which each layer turns on for its own services. Id: `uc-584`.
-Service: `tools-service` with platform-service. Layers: api, cli. Card: an earlier change. Guide: `docs/guide/plugins.md`, Headers,
+Service: `tools-service` with platform-service. Layers: api, cli. Guide: `docs/guide/plugins.md`, Headers,
 forms and sign-in steps.
 
 ## Stories

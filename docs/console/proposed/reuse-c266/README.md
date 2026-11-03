@@ -1,6 +1,6 @@
-# Start run, run and case pages: before and after an earlier change
+# Start run, run and case pages: before and after reuse
 
-Status: proposed, waiting for approval. Each image puts the screen before an earlier change (left) beside it after (right), from
+Status: proposed, waiting for approval. Each image puts the screen before the change (left) beside it after (right), from
 uc-228 on the same stack shape.
 
 | Screen | Changed pixels | Side by side |

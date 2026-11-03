@@ -1,5 +1,5 @@
-// uc-590 a team adds an app's resources as its own copies, ui layer: docs/usecases/agents-service/plugin-templates.md
-// (an earlier change U5). The ui stack with plugins on and the templates desk (services/tools-service/tests/plugin_templates/
+// uc-590 a team adds an app's resources as its own copies, ui layer: docs/usecases/agents-service/plugin-templates.md.
+// The ui stack with plugins on and the templates desk (services/tools-service/tests/plugin_templates/
 // templates_desk), turned on for the install by Sam and for Operations by Priya through the API. Priya opens the app's
 // Resources tab: the agent, skill, workflow and document type each offer Add to team. Adding the agent opens its copy;
 // back on the tab it reads Added and Open lands on the same copy; adding the document type opens its copy in Document

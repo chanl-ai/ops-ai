@@ -1,6 +1,6 @@
 # Memory decisions: does the extraction prompt choose new, same, replaces or conflicts well
 
-Status: an earlier change, holds, 2026-10-29. On gpt-5-mini from staging (8 calls each): 6 of 8 at first, failing both safety
+Status: holds, 2026-10-29. On gpt-5-mini from staging (8 calls each): 6 of 8 at first, failing both safety
 cases; after the fix in code (91ee89ae), 7 of 8 with both safety cases passing. Script:
 `services/agents-service/experiments/memory_decisions.py` (scripted model by default; `--real <model>` makes one call
 per conversation and raises on an eleventh). Tests: `services/agents-service/tests/api/test_memory.py`.
@@ -51,10 +51,10 @@ name. An answer passes when what `keepable` would save holds the expected kind, 
 
 - The cap counts attempts, not completed calls. From the build machine api.openai.com resets every TLS handshake, so
   the real runs go from staging.
-- Since an earlier change the card-number case no longer relies on the model: `keepable` drops card numbers, IBANs and national
+- The card-number case no longer relies on the model: `keepable` drops card numbers, IBANs and national
   ids by their check digits, and the saved memories offered come from the database's full-text search.
 
 ## What it feeds
 
-an earlier change's learning: whether the decision step can stand in for embedding similarity until models-service serves an
+The learning: whether the decision step can stand in for embedding similarity until models-service serves an
 embeddings alias. It can: the decisions hold on a small model once the save rules are in code.

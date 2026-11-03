@@ -1,5 +1,5 @@
-"""uc-616, sdk layer: docs/usecases/tools-service/usage-shows-only-this-team-s.md, story S4 (step 5), group G of
-an earlier change. The api layer's stack; a run in team_ops reads a record, and the team admin reads Usage through the Python SDK
+"""uc-616, sdk layer: docs/usecases/tools-service/usage-shows-only-this-team-s.md, story S4 (step 5).
+The api layer's stack; a run in team_ops reads a record, and the team admin reads Usage through the Python SDK
 layer in the screen's words (K1) over `GET /v1/executions`. No model call."""
 
 from __future__ import annotations

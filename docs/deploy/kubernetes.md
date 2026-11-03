@@ -2,7 +2,7 @@
 
 Status: current. Proven on a local kind cluster; not yet run on a bank's cluster.
 
-<!-- Built by an earlier change; the proof is deploy/k8s/proof.sh. -->
+<!-- The proof is deploy/k8s/proof.sh. -->
 
 Ops AI on Kubernetes uses Kustomize and no other tool: a base with one folder per service, and an overlay per
 environment that picks the images, the origin, the secrets and the database. The images are the ones Compose runs,

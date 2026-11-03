@@ -56,7 +56,7 @@ the team. A team is the data boundary: another team's records answer 404 on ever
 |---|---|---|---|
 | Harbor & Pine Operations | `team_a0877a1d8907` | The demo: the seeded bank's agents, handbooks, skills, guardrails, workflows (the dispute intake `northfield_card_dispute_intake`; the court order workflows `*_a0877a1d`, which `mailbox_demo.py levy` makes, since `--no-levy` leaves them out of the seed), runs, cases and chats, and the court order story by mailbox | admin@, builder@ and approver@demo.example with their roles, demo@example.com (viewer), the seed's four bank staff, the first admin |
 | Security | `team_security` | The workspace Security team: egress, secrets, the bank module and the platform tools; test leftovers from earlier walks | The first admin, approver@example.com, admin@demo.example (admin, for the mailbox and its secret) |
-| Customer Operations | `team_319b708e5de1` | A test team: an earlier change's first seed and probe records; its handbooks renamed "(Customer Operations test team)" | The seed's four bank staff, the first admin |
+| Customer Operations | `team_319b708e5de1` | A test team: the first seed and probe records; its handbooks renamed "(Customer Operations test team)" | The seed's four bank staff, the first admin |
 
 Walks and probes act in a test team and remove what they make where a route allows:
 
@@ -80,10 +80,9 @@ uv run python scripts/sample_team.py install --origin https://<your-app>.fly.dev
 The env file names the first admin (`OPS_BOOTSTRAP_ADMIN_*`), `OPS_DEMO_PASSWORD`, `OPS_DEMO_MODEL_ALIAS=fake` and
 `OPS_DEMO_LIVE_MODEL_ALIAS=default`, so the agents answer people on the real model once the install ends
 (`scripts/sample-team/admin.env.example`). `scripts/check_demo_team.py` proves each login's role in the team and that
-a test team's record is absent from it. `--tool-access` grants the team's workflows the Security team's bank module
-(an earlier change); the platform tools need no grant, since no team owns them.
+a test team's record is absent from it. `--tool-access` grants the team's workflows the Security team's bank module; the platform tools need no grant, since no team owns them.
 
-Records with no delete route stay in the test teams (cases, chats, runs, reviews, document types): an earlier change.
+Records with no delete route stay in the test teams (cases, chats, runs, reviews, document types).
 
 ## Deploy
 

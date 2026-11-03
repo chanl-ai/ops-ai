@@ -123,8 +123,7 @@ is the app's `MSSQL_SA_PASSWORD` secret, kept in `<private-dir>/staging-mssql-sa
 | Run the SQL Server use cases | `make uc-sql-server`: builds the bundle and the test image at HEAD, starts the machine, runs uc-565 on a runner machine beside it, then destroys the runner and stops the machine; prints when the machine is up and down |
 
 **State (2026-10-30): the bundle installs** on an empty database and matches the models (uc-565 S1); install
-runs sqlcmd with `-I`, since its filtered indexes need `QUOTED_IDENTIFIER`. Agents does not run on it yet (an earlier change T004
-to T006), and the test matrix (`OPS_TEST_DATABASE_URL` on SQL Server) has not been run. Cost: about 11 USD a month running, about 0.45 USD stopped (the volume). The machine is stopped.
+runs sqlcmd with `-I`, since its filtered indexes need `QUOTED_IDENTIFIER`. Agents does not run on it yet, and the test matrix (`OPS_TEST_DATABASE_URL` on SQL Server) has not been run. Cost: about 11 USD a month running, about 0.45 USD stopped (the volume). The machine is stopped.
 
 ## Cost
 

@@ -1,6 +1,6 @@
 # An email in an IMAP mailbox starts a workflow
 
-Status: current. Id: `uc-192`. Service: `agents-service`. Layers: api. Card: an earlier change.
+Status: current. Id: `uc-192`. Service: `agents-service`. Layers: api.
 
 A team mailbox read over IMAP, its password a Secrets-page secret that only tools-service reads. The worker asks
 tools-service's `/v1/mailboxes` for new mail (IDLE, with the poll as fallback) and starts one run per matching message,

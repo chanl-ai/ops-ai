@@ -1,6 +1,6 @@
 # A builder designs a workflow in forms, publishes it through review, pauses, resumes and cancels a run
 
-Status: current. Id: `uc-092`. Service: `agents-service`. Layers: ui, sdk. Card: an earlier change (MVP M6); sdk layer an earlier change.
+Status: current. Id: `uc-092`. Service: `agents-service`. Layers: ui, sdk.
 
 ## Stories
 

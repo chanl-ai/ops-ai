@@ -1,7 +1,7 @@
 # The use case runner puts docs/usecases/lib (usecase_harness) on the path; pyright alone cannot see it.
 # pyright: basic, reportMissingImports=false
 """uc-619 A new team's assistant answers from its knowledge and files, api layer:
-docs/usecases/agents-service/a-new-team-s-assistant-answers.md (an earlier change PV3).
+docs/usecases/agents-service/a-new-team-s-assistant-answers.md.
 
 Own services on a fresh database: platform-service (its relay delivering to this run's tools and agents), tools-service,
 agents-service on the scripted model, kb-service with files-service and documents-service. A workspace admin makes a

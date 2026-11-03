@@ -1,6 +1,6 @@
 # A write runs only after as many people as its policy names approve it
 
-Status: passing. Id: `uc-049`. Service: `agents-service`. Layers: api, ui. Card: an earlier change (T005); ui layer an earlier change.
+Status: passing. Id: `uc-049`. Service: `agents-service`. Layers: api, ui.
 
 ## Stories
 

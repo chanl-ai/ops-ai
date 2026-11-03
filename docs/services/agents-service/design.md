@@ -1,6 +1,6 @@
 # Agents service design
 
-Status: current for Human Tasks. Written when an earlier change first changed the service's Human Tasks routes; later cards
+Status: current for Human Tasks. Written when the service's Human Tasks routes first changed; later changes
 add their own rows. What the rest of the service does is in [overview.md](overview.md).
 
 ## Flow: a Human Task from pause to decision
@@ -23,8 +23,8 @@ decide forms (`components/reviews/task-decision.tsx`) read the routes below.
 
 | Method and path | Does | Who may | File | State |
 |---|---|---|---|---|
-| GET `/reviews?view=&group=case&page=&pageSize=` | One page of a view (open, mine, overdue, resolved, all) with view counts, facets and stats; `group=case` orders it by case and adds `caseTitle` from the reader's teams | signed in, the team's reviews | `api/routers/reviews.py` | built; `group` an earlier change |
-| GET `/reviews/{id}/place?view=&group=case` | Its position, the total and the reviews either side, in the order the list uses | signed in | `api/routers/reviews.py` | built; `group` an earlier change |
+| GET `/reviews?view=&group=case&page=&pageSize=` | One page of a view (open, mine, overdue, resolved, all) with view counts, facets and stats; `group=case` orders it by case and adds `caseTitle` from the reader's teams | signed in, the team's reviews | `api/routers/reviews.py` | built, with `group` |
+| GET `/reviews/{id}/place?view=&group=case` | Its position, the total and the reviews either side, in the order the list uses | signed in | `api/routers/reviews.py` | built, with `group` |
 | GET `/reviews/{id}` | One review with `canDecide` | signed in | `api/routers/reviews.py` | built |
 | POST `/reviews/{id}/decision` | Decide: a decision or an option, reason, inputs, step-up token; 409 `already_decided` | reviews.decide in the review's team | `api/routers/reviews.py` | built |
 | POST `/reviews/assign` | Assign reviews to a person | reviews.decide | `api/routers/reviews.py` | built |

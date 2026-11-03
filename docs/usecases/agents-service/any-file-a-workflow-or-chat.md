@@ -1,6 +1,6 @@
 # Any file a workflow or chat reads ends read or with a reason
 
-Status: draft. Id: `uc-620`. Service: `agents-service`. Layers: api. Card: an earlier change.
+Status: draft. Id: `uc-620`. Service: `agents-service`. Layers: api.
 
 ## Stories
 

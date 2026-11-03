@@ -1,6 +1,6 @@
 # An email in a watched mailbox starts a workflow
 
-Status: current. Id: `uc-150` (api), `uc-151` (ui). Service: `agents-service`. Layers: api, ui. Card: an earlier change.
+Status: current. Id: `uc-150` (api), `uc-151` (ui). Service: `agents-service`. Layers: api, ui.
 
 A builder picks Email received as a workflow's trigger and points it at a team mailbox. Once the workflow is live,
 the workflow worker reads the mailbox through `packages/ops_email`; each new message that matches the filters stores
