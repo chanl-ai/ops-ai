@@ -25,7 +25,7 @@ async def _ask(g: Gateway, workflow: str, days: int) -> str:
         "environment": "production",
         "operations": [g.tool("get_account")],
         "expiresInDays": days,
-        "justification": "grants",
+        "justification": "Grants for the account review workflow",
     }
     r = await g.client.post(f"{BASE}/approvals", json=body)
     assert r.status_code == 201, r.text

@@ -35,7 +35,7 @@ async def _context(g: Gateway) -> dict[str, Any]:
         "environment": "production",
         "operations": [g.tool("get_account"), g.tool("place_hold"), g.tool("limited")],
         "expiresInDays": 30,
-        "justification": "test console",
+        "justification": "Reads for the test console",
     }
     approval = await g.client.post(f"{BASE}/approvals", json=request)
     assert approval.status_code == 201, approval.text
