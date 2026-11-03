@@ -146,3 +146,23 @@ def test_a_lookup_path_reads_keys_and_list_positions() -> None:
     assert at([{"id": "cloud-7f3a"}], "[0].id") == "cloud-7f3a"
     assert at(answer, "accounts[3].base_uri") is None
     assert steps("[x") is None and steps("a[0]b") is None
+
+
+@pytest.mark.parametrize(
+    ("body", "said"),
+    [
+        ('{"amount": {{amount}}, "to": "{{to}}"}', "{{to}} sits inside quotes"),
+        ('{"amount": {{amount}}, "to": {{to}}', "is not JSON once each {{input}} is written in"),
+        ('{"amount": {{amount}}, "to": {{payee}}}', "{{payee}} in the body names no input"),
+    ],
+)
+def test_a_json_body_that_would_send_broken_json_is_refused(tmp_path: Path, body: str, said: str) -> None:
+    """A body's `{{input}}` is written as JSON with its own quotes, so one put inside quotes sends `""text""`."""
+    bad = FIELDS.replace("""body: '{"amount": {{amount}}, "to": {{to}}}'""", f"body: '{body}'")
+    assert bad != FIELDS
+    assert any(said in p for p in problems(plugin(tmp_path, bad))), problems(plugin(tmp_path, bad))
+
+
+def test_a_whole_object_body_still_validates(tmp_path: Path) -> None:
+    whole = FIELDS.replace("""body: '{"amount": {{amount}}, "to": {{to}}}'""", 'body: "{{to}}"')
+    assert problems(plugin(tmp_path, whole)) == []
