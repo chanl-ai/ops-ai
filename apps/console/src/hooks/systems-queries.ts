@@ -18,7 +18,7 @@ type Args<K extends keyof Tools> = NonNullable<Parameters<Tools[K]>[0]>;
 type Data<K extends keyof Tools> = Awaited<ReturnType<Tools[K]>>;
 
 /** An app's state on its card, worded the same on the catalog and the app page; GET /v1/systems decides it. */
-export type AppState = 'connected' | 'test_failed' | 'needs_sign_in' | 'not_installed';
+export type AppState = 'connected' | 'test_failed' | 'needs_sign_in' | 'not_installed' | 'removed';
 /**
  * Fields GET /v1/systems answers on each card beside the generated ones: the app's one state and why (a failed test's
  * message, or why a sign-in is needed), and the app credential the team's connection signs in with.

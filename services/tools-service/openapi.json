@@ -8829,7 +8829,8 @@
               "connected",
               "test_failed",
               "needs_sign_in",
-              "not_installed"
+              "not_installed",
+              "removed"
             ],
             "title": "Appstate",
             "type": "string"

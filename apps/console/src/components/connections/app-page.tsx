@@ -10,6 +10,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { AppsTabs } from '@/components/connections/apps-tabs';
 import { ConnectWindow, connectsInWindow } from '@/components/connections/connect-window';
 import { AppStateBadge } from '@/components/connections/systems-grid';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ConnectSystemDialog, type ConnectMode } from '@/components/connections/connect-system-dialog';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
@@ -190,7 +191,13 @@ export function AppPageView({ appId }: { appId: string }) {
       badge={<AppStateBadge card={card} testId="app-status" />}
       contentClassName="flex flex-col gap-4"
     >
-      {card.kind === 'plugin' && <PluginUpdatePanel pluginId={card.id.replace(/^plugin:/, '')} name={card.name} />}
+      {card.appState === 'removed' && (
+        <Alert variant="destructive" data-testid="app-removed">
+          <AlertTitle>{`${card.name} is no longer installed`}</AlertTitle>
+          <AlertDescription>{card.appStateReason}</AlertDescription>
+        </Alert>
+      )}
+      {card.kind === 'plugin' && card.appState !== 'removed' && <PluginUpdatePanel pluginId={card.id.replace(/^plugin:/, '')} name={card.name} />}
       <Section
         title="Accounts"
         description="Calls use the default account unless a step names another. Each person may connect their own."

@@ -1639,7 +1639,7 @@ class SecretMeta(TypedDict, closed=True):
 
 
 class SystemCard(TypedDict, closed=True):
-    appState: Literal["connected", "test_failed", "needs_sign_in", "not_installed"]
+    appState: Literal["connected", "test_failed", "needs_sign_in", "not_installed", "removed"]
     appStateReason: NotRequired[str | None]
     authKind: NotRequired[str | None]
     category: NotRequired[str | None]

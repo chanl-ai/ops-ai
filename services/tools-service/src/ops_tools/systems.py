@@ -39,7 +39,7 @@ from .modules.routes import ERRORS
 from .modules.schemas import In, ToolCallRow
 from .modules.seed import BUILT_IN, TOOL_ORIGIN, template_of
 from .modules.service import Caller, ModuleService
-from .plugins.host import PluginHost, fixed_fields, module_id_of, per_environment
+from .plugins.host import PluginHost, fixed_fields, module_id_of, per_environment, plugin_id_of
 from .plugins.templates import view_of
 from .store.connections import ConnectionStore
 from .store.modules import ModuleStore
@@ -81,7 +81,8 @@ class SystemPlugin(Out):
     fixed: list[str]
 
 
-AppState = Literal["connected", "test_failed", "needs_sign_in", "not_installed"]
+AppState = Literal["connected", "test_failed", "needs_sign_in", "not_installed", "removed"]
+REMOVED = "This app is no longer installed, so its tools are off. An admin installs it again to turn them back on."
 
 
 class CardCredential(Out):
@@ -115,7 +116,8 @@ class SystemCard(Out):
     # A built-in app's console page, where it is managed (its knowledge bases, its mailboxes).
     href: str | None = None
     # The card's one state for the caller, worked out here so no screen derives it: connected, test_failed (signed in,
-    # its test then failed), needs_sign_in, or not_installed (not turned on for the team); with why when not connected.
+    # its test then failed), needs_sign_in, not_installed (not turned on for the team), or removed (turned on, then
+    # taken off the install); with why when not connected.
     app_state: AppState
     app_state_reason: str | None = None
     # Whose OAuth app the card's account signs in with; none for an app that signs in without one.
@@ -339,6 +341,29 @@ class Systems:
                         },
                     }
                 )
+            # A plugin the team turned on that the install no longer holds keeps its card, so the team sees why its
+            # tools stopped instead of finding its account listed as a plain connection.
+            for pid, b in sorted(bindings.items()):
+                if pid in self.plugins.plugins or not b.get("enabled"):
+                    continue
+                conn = by_id.get(str(b.get("connection_id") or ""))
+                if conn is not None:
+                    taken.add(str(conn["id"]))
+                row = next((md for md in modules if plugin_id_of(md) == pid), None)
+                cards.append(
+                    {
+                        "id": f"plugin:{pid}",
+                        "kind": "plugin",
+                        # The connection the plugin made carries its title, which outlives the manifest.
+                        "name": str(row["display_name"]) if row else str(conn["name"]) if conn else pid,
+                        "toolsCount": 0,
+                        "connectionId": conn["id"] if conn else None,
+                        "pluginId": pid,
+                        "moduleIds": [str(row["id"])] if row else [],
+                        "environments": _environments(conn),
+                        "mayManage": may,
+                    }
+                )
         for conn in conns:
             if str(conn["id"]) in taken or (listed and conn.get("origin") == TOOL_ORIGIN):
                 continue
@@ -447,6 +472,9 @@ def app_state(
     if card["kind"] in ("builtin", "module"):
         return "connected", None
     plugin = cast(dict[str, Any] | None, card.get("plugin"))
+    # Only a plugin card the install no longer loads is drawn without its manifest's details.
+    if card["kind"] == "plugin" and plugin is None:
+        return "removed", REMOVED
     if conn is None or (plugin is not None and not plugin.get("teamOn")) or not conn.get("environments"):
         return "not_installed", None
     if (conn.get("sign_in") or "team") == "person":

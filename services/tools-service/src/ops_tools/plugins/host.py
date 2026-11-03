@@ -564,7 +564,11 @@ class PluginHost:
         the team, or not loaded, is marked so the gateway refuses the call before anything else."""
         plugin = self.by_module(module)
         if plugin is None:
-            return {**module, "plugin_off": f"{module['display_name']} is not installed on this service."}
+            return {
+                **module,
+                "plugin_off": f"{module['display_name']} is no longer installed, so its tools are off. An admin "
+                "installs it again to turn them back on.",
+            }
         reason = await self.off_reason(tenant_id, team_id, plugin)
         if reason is not None or team_id is None:
             return {**module, "plugin_off": reason or "No team.", "connection_id": None, "egress_hosts": []}

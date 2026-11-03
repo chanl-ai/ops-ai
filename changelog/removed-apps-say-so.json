@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-03",
+  "title": "A removed app says it is no longer installed",
+  "description": "When an app a team uses is taken off the install, its card and page say it is no longer installed and its tools refuse with that reason, instead of the app disappearing.",
+  "tag": "improved"
+}

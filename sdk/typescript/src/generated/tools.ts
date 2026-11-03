@@ -4196,7 +4196,7 @@ export interface components {
              * Appstate
              * @enum {string}
              */
-            appState: "connected" | "test_failed" | "needs_sign_in" | "not_installed";
+            appState: "connected" | "test_failed" | "needs_sign_in" | "not_installed" | "removed";
             /** Appstatereason */
             appStateReason?: string | null;
             /** Authkind */

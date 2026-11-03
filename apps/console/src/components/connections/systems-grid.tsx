@@ -27,6 +27,7 @@ const STATE: Record<AppState, { label: string; className: string; icon?: typeof 
   test_failed: { label: 'Signed in, test failed', className: 'border-warning/40 bg-warning/10 text-warning-text', icon: TriangleAlert },
   needs_sign_in: { label: 'Needs sign-in', className: 'border-warning/40 bg-warning/10 text-warning-text', icon: CircleAlert },
   not_installed: { label: 'Not installed', className: 'text-muted-foreground' },
+  removed: { label: 'No longer installed', className: 'border-destructive/40 bg-destructive/10 text-destructive', icon: CircleAlert },
 };
 
 /** The app's state as a badge, worded the same on its card and its page. */
@@ -61,7 +62,8 @@ export const appHref = (s: Pick<SystemCard, 'id' | 'href'>) => s.href ?? `/integ
 function AppCard({ system, onConnect }: { system: SystemCard; onConnect: (s: SystemCard, mode: ConnectMode) => void }) {
   const state = system.appState;
   const failure = state === 'test_failed' ? (system.appStateReason ?? 'no reason given') : null;
-  const opens = state === 'connected' || state === 'test_failed';
+  // A removed app has nothing to connect; its page says why its tools stopped.
+  const opens = state === 'connected' || state === 'test_failed' || state === 'removed';
   return (
     <Card className="relative min-h-40 gap-3 py-4 transition-all hover:border-primary/40 hover:shadow-md" data-testid={`system-${system.id}`} data-state={state}>
       <CardHeader className="flex flex-row items-center gap-2.5 px-4">
@@ -93,6 +95,11 @@ function AppCard({ system, onConnect }: { system: SystemCard; onConnect: (s: Sys
           <div>
             <Badge variant="secondary">{system.category}</Badge>
           </div>
+        )}
+        {state === 'removed' && (
+          <p className="line-clamp-2 text-xs text-destructive" data-testid={`system-${system.id}-removed`}>
+            {system.appStateReason}
+          </p>
         )}
         {failure && (
           <p className="line-clamp-2 text-xs text-warning-text" data-testid={`system-${system.id}-test-failed`}>
