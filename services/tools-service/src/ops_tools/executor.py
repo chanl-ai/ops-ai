@@ -467,7 +467,8 @@ class HttpExecutor(_Secrets):
         # The operation's own timeout when it has one, else the module's.
         limit_ms: int = op.get("timeout_ms") or module["timeout_ms"]
         try:
-            await self.policy.check_url(module["tenant_id"], req.url)
+            # The app's own hosts (its module's) pass for its own calls, as the plugin host renders them for a plugin.
+            await self.policy.check_url(module["tenant_id"], req.url, module["egress_hosts"])
             res = await self._send(module, req, prepared, limit_ms)
             if res.status_code == 401 and prepared is not None and prepared.renewable:
                 if op.get("access") != "read":
@@ -548,7 +549,9 @@ class HttpExecutor(_Secrets):
             content=req.content,
             headers=headers,
             timeout=limit_ms / 1000,
-            extensions=for_tenant(module["tenant_id"], prepared.certificate if prepared else None),
+            extensions=for_tenant(
+                module["tenant_id"], prepared.certificate if prepared else None, module["egress_hosts"]
+            ),
         )
 
 
@@ -582,6 +585,7 @@ class McpExecutor(_Secrets):
             str(module["endpoint"]),
             headers={**headers, **(prepared.headers if prepared else {})},
             tenant_id=module["tenant_id"],
+            hosts=module["egress_hosts"],
             certificate=prepared.certificate if prepared else None,
         )
         await session.initialize()
@@ -622,7 +626,7 @@ class McpExecutor(_Secrets):
         if trial is not None:
             trial.used = used
         try:
-            await self.policy.check_url(module["tenant_id"], url)
+            await self.policy.check_url(module["tenant_id"], url, module["egress_hosts"])
             try:
                 result = await self._call(module, op, args, headers, prepared)
             except mcp.McpError as e:

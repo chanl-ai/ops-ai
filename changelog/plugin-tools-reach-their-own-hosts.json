@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-03",
+  "title": "Every plugin tool reaches its own system",
+  "description": "A plugin's request-template tools and MCP tools now reach the plugin's own addresses without Security listing them, as its code tools already did; a call to any other address still needs the allowed list.",
+  "tag": "fix"
+}

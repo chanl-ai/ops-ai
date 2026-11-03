@@ -22,6 +22,7 @@ from ops_plugin_sdk.loader import GROUP, Loaded
 from ops_plugin_sdk.manifest import SIGN_IN_KINDS
 from ops_service_kit.settings import PLUGIN_ENTRY_POINTS, Settings
 from ops_tools.auth.kinds import BY_ID
+from ops_tools.egress import EgressPolicy
 from ops_tools.executor import Executor, HttpExecutor
 from ops_tools.gateway_calls import _before_policy  # pyright: ignore[reportPrivateUsage]
 from ops_tools.graph_mailbox import CursorSeal
@@ -29,6 +30,7 @@ from ops_tools.plugins.executor import PluginExecutor
 from ops_tools.plugins.host import PluginHost
 from ops_tools.registry import Resolved, ToolRegistry
 from ops_tools.store.connections import SHARED, ConnectionStore
+from ops_tools.store.egress import EgressStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.tools import ToolCaller
@@ -331,3 +333,35 @@ async def test_a_plugin_tools_call_keeps_the_plugins_address_not_the_connections
     )
     assert out.ok, out
     assert heard == ["https://crm.bank.test/api/v1/cases/c1"]
+
+
+async def test_a_declarative_plugin_tool_reaches_its_own_host_with_nothing_listed(
+    local_catalog: Any, engine: AsyncEngine, store: ModuleStore, tenant: str
+) -> None:
+    """A plugin's hosts pass for its own calls through the gateway's http executor, as they do for a Python tool, and
+    an app's call to a host neither it nor the tenant lists is still refused."""
+    connections, tokens, auth = rig(engine)
+    conn = await connection(connections, tenant, "team")
+    await tokens.store_answer(tenant, conn, "test", {"access_token": "at-team", "expires_in": 3600}, SHARED)
+    await bind(engine, tenant, TEAM, "https://crm.bank.test", conn)
+    await connections.set_plugin_settings(tenant, conn, "test", {"instance_url": "https://crm.bank.test"})
+    h = host(engine, store)
+    h.connections = connections
+    resolved = await ToolRegistry(local_catalog, store, h).resolve(
+        "desk_get_case", tenant_id=tenant, team_id=TEAM, run="test"
+    )
+    assert resolved is not None and resolved.module is not None
+    client = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"id": "c1"})))
+    # The tenant lists nothing: only the plugin's own hosts can let the call through.
+    http = HttpExecutor(client, EgressPolicy(EgressStore(engine)), None, auth)
+    caller = ToolCaller(tenant_id=tenant, team_id=TEAM, sub="service:agents", kind="service")
+    out = await Executor(local_catalog, http).run(
+        resolved, "desk_get_case", {"id": "c1"}, key="k2", caller=caller, environment="test"
+    )
+    assert out.ok, out
+    elsewhere = {**resolved.module, "egress_hosts": ["other.bank.test"]}
+    moved = Resolved(resolved.access, resolved.executor, elsewhere, resolved.operation)
+    refused = await Executor(local_catalog, http).run(
+        moved, "desk_get_case", {"id": "c1"}, key="k3", caller=caller, environment="test"
+    )
+    assert not refused.ok and "EGRESS_DENIED" in str(refused.output), refused

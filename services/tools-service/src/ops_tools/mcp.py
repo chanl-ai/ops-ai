@@ -10,6 +10,7 @@ address.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from typing import Any, cast
 
 import httpx
@@ -77,13 +78,15 @@ class McpSession:
         tenant_id: str,
         headers: dict[str, str] | None = None,
         certificate: Any = None,
+        hosts: Sequence[str] = (),
     ) -> None:
         """`tenant_id` is the tenant every request of the session is dialled for (egress `for_tenant`); `certificate` a
-        connection's client certificate to present."""
+        connection's client certificate to present; `hosts` the app's own, reached for its calls unlisted."""
         self.client = client
         self.url = url
         self.tenant_id = tenant_id
         self.certificate = certificate
+        self.hosts = tuple(hosts)
         self.headers = {"Accept": "application/json, text/event-stream", **(headers or {})}
         self.next_id = 0
 
@@ -100,7 +103,7 @@ class McpSession:
                 json=body,
                 headers=self.headers,
                 timeout=TIMEOUT_MS / 1000,
-                extensions=for_tenant(self.tenant_id, self.certificate),
+                extensions=for_tenant(self.tenant_id, self.certificate, self.hosts),
             )
         except httpx.HTTPError as e:
             raise McpError(f"The server could not be reached ({type(e).__name__}).") from e
