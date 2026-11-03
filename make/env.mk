@@ -183,8 +183,10 @@ $(call reset_inherited,OPS_TEST_DATABASE_URL,postgresql+asyncpg://ops:ops@localh
 SHARED_DATABASE := localhost:5477/ops_runtime
 # AUTH=platform: agents and tools verify platform-service tokens and the console signs people in through it (James,
 # Maya, Nadia from platform's dev seed) instead of the mock; AUTH=dev runs dev auth and the mock sign-in. The shared
-# stack defaults to platform, the one the demos run on; an isolated stack defaults to dev.
-AUTH ?= $(if $(filter shared,$(OPS_STACK)),platform,dev)
+# stack defaults to platform, the one the demos run on; an isolated stack defaults to dev. A stack already running keeps
+# the mode it was started in, so `make restart SVC=x` without AUTH= never brings one service back in the other mode.
+STARTED_AUTH := $(shell cat $(OPS_RUN_DIR)/console.auth $(OPS_RUN_DIR)/platform.auth 2>/dev/null | head -1)
+AUTH ?= $(or $(STARTED_AUTH),$(if $(filter shared,$(OPS_STACK)),platform,dev))
 export OPS_STACK_AUTH := $(if $(filter platform,$(AUTH)),platform,dev)
 export OPS_CORS_ORIGINS ?= ["http://localhost:$(OPS_CONSOLE_PORT)","http://localhost:$(OPS_CONSOLE_RUNTIME_PORT)"]
 $(call reset_inherited,OPS_CORS_ORIGINS,["http://localhost:$(OPS_CONSOLE_PORT)"$(comma)"http://localhost:$(OPS_CONSOLE_RUNTIME_PORT)"])
