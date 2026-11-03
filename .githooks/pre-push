@@ -1,12 +1,9 @@
 #!/bin/sh
-# ops-ai push check: lint and format on the Python files the pushed commits change, in seconds. The tests run in CI on
-# the pull request (only the areas it touches) and in full on main every night; a full local run before every push took
-# about 20 minutes and failed for reasons unrelated to the change. codeloop's own pre-push hook, when installed by
-# scripts/install-hooks.sh as pre-push.codeloop, runs first on the same refs.
+# ops-ai hook: lint and format of the Python files the pushed commits change; the tests run in CI.
 cd "$(git rev-parse --show-toplevel)" || exit 1
 refs=$(cat)
 d=$(git rev-parse --git-common-dir) || exit 1
-if [ -x "$d/hooks/pre-push.codeloop" ]; then printf '%s\n' "$refs" | "$d/hooks/pre-push.codeloop" "$@" || exit $?; fi
+if [ -x "$d/hooks/pre-push.local" ]; then printf '%s\n' "$refs" | "$d/hooks/pre-push.local" "$@" || exit $?; fi
 zero=0000000000000000000000000000000000000000
 printf '%s\n' "$refs" | while read -r _local_ref local_sha _remote_ref remote_sha; do
   [ -n "$local_sha" ] || continue

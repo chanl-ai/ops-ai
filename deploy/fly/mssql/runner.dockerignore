@@ -1,4 +1,4 @@
-# The test-mssql target copies only these; the rest of a checkout (a .venv, .codeloop, docs) would be uploaded for nothing.
+# The test-mssql target copies only these; the rest of a checkout (a .venv, docs) would be uploaded for nothing.
 *
 !pyproject.toml
 !uv.lock

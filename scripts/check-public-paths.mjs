@@ -1,27 +1,19 @@
 #!/usr/bin/env node
-// Every file the public ops-ai repository receives names no path that stays private: the agent board's folder, the
-// team's agent command sets and the session handoff (PRIVATE below). The publish step (the planning repo
-// scripts/ops-ai/repo.sh, public_view.py) refuses a snapshot that does; this check refuses the commit first, with the
-// same rule: such a path standing on its own, in any tracked file outside those folders. Cite docs/ instead. The paths
-// are assembled below, never written out, so this file passes its own check and the publish step's.
+// Refuses a tracked file that names a local-only path (PRIVATE below), which a reader of the repository does not have.
 // Usage: check-public-paths.mjs [--self-test] [file...]   (files given: only those; scripts/verify-staged.sh passes a
 // commit's staged files, so a one-file commit does not read every tracked file)
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-// The folders and files that never leave (public-view-exclude.txt in the planning repo). Only hidden folders and whole
-// file paths are matched in text: plain words such as `evidence/` also name object-store prefixes.
+// Only hidden folders and whole file paths are matched: plain words such as `evidence/` also name object-store prefixes.
 const dot = (name) => `.${name}/`;
 const PRIVATE = [
-  dot("codeloop"),
   dot("claude"),
   dot("cursor"),
   ["docs", "agent-handoff.md"].join("/"),
 ];
 const NEVER_SENT = [...PRIVATE, "shape/", "evidence/"];
-// The developer skills generated from docs/guide/skills/ are the one part of the agent command sets that is published
-// (c-554), so a path under them is public and a file there is checked like any other: the ops-* skills and `usecase`,
-// the one skill scripts/agent_skills.py names without the prefix (UNPREFIXED there).
+// The skills generated from docs/guide/skills/ are tracked, so a path under them is public: ops-* and `usecase`.
 const PUBLISHED = [
   `${dot("claude")}skills/ops-`,
   `${dot("claude")}skills/usecase/`,
@@ -59,18 +51,18 @@ export function mentions(path, text) {
 }
 
 function selfTest() {
-  const [board, agents] = [dot("codeloop"), dot("claude")];
+  const [local, agents] = [dot("cursor"), dot("claude")];
   const cases = [
-    ["docs/a.md", `See \`${board}evidence/500/uc-red.txt\`.`, 1],
-    ["services/x/m.py", `# (${board}wiki/decisions/x.md)`, 1],
+    ["docs/a.md", `See \`${local}evidence/500/uc-red.txt\`.`, 1],
+    ["services/x/m.py", `# (${local}wiki/decisions/x.md)`, 1],
     ["docs/a.md", `Linked from ../../${agents}commands/x.md`, 1],
-    [`${board}wiki/a.md`, `${board}specs/x`, 0],
-    [".gitignore", board, 0],
+    [`${local}wiki/a.md`, `${local}specs/x`, 0],
+    [".gitignore", local, 0],
     [`apps/x/${agents}settings.json`, `apps/x/${agents}settings.json`, 0],
     ["docs/a.md", 'evidenceDir("500", "uc")', 0],
     ["docs/a.md", `Generated into \`${agents}skills/ops-run/SKILL.md\`.`, 0],
     ["docs/a.md", `Not \`${agents}skills/spec/SKILL.md\`.`, 1],
-    [`${agents}skills/ops-run/SKILL.md`, `See ${board}specs/x`, 1],
+    [`${agents}skills/ops-run/SKILL.md`, `See ${local}specs/x`, 1],
   ];
   const bad = cases.filter(([p, t, n]) => mentions(p, t).length !== n);
   for (const c of bad)

@@ -18,9 +18,8 @@ export const REPO = 'chanl-ai/ops-ai';
 // The commit a GitHub link points at: the deployed commit on Vercel, otherwise main.
 export const REF = process.env.VERCEL_GIT_COMMIT_SHA || process.env.OPS_DOCS_GIT_REF || 'main';
 
-// Folders that exist in a working copy but never in the public repository (the maintainers' board and the evidence and
-// shape folders are stripped from snapshots); a link into one is a broken link.
-const NOT_PUBLIC = ['.codeloop', 'evidence', 'shape', 'triage', 'dist'];
+// Folders that exist in a working copy but not in the repository; a link into one is a broken link.
+const NOT_PUBLIC = ['evidence', 'shape', 'triage', 'dist'];
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.next', '.source', '.venv', '__pycache__', '.pytest_cache', '.turbo']);
 // Folders of docs/ the site does not show: docs/plan/ (delivery plans) and docs/media/ (README screenshots).
 export const SITE_EXCLUDE = ['docs/plan/', 'docs/media/'];
