@@ -1,6 +1,6 @@
 """the workspace owner: built-in role Owner, its one cell, the backfilled owner and the closed-workspace columns
 
-c-529 (owner, 2026-10-23): the access catalogue gains the area `workspace` with one cell, `workspace.manage`, held only
+The access catalogue gains the area `workspace` with one cell, `workspace.manage`, held only
 by the new built-in role Owner; Admin's every-cell grid leaves the area out. Each tenant gets the role and its grid
 row, and the earliest person holding Admin in every team (`*`) becomes its owner; a tenant with no such person has
 none. A partial unique index keeps one Owner assignment per tenant.

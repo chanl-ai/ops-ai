@@ -1,6 +1,6 @@
 """wrong passwords are counted per person and lock sign-in after too many
 
-One row per person who has typed a wrong password recently (c-196): how many in the current window, when the window
+One row per person who has typed a wrong password recently: how many in the current window, when the window
 began, and until when the person is locked. Sign-in and step-up both count here. The row carries tenant_id under the
 same row-level security as 0001; it is read after the person, and so the tenant, is known.
 

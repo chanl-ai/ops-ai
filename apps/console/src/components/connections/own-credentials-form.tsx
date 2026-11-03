@@ -10,7 +10,7 @@ import { useConnectionKinds, useGiveOwn } from '@/hooks/connections-queries';
 import type { ConnectionEnvironment } from '@/lib/types/connections';
 
 /**
- * A person's own key, password or token for a connection each person signs in to (c-595): one field per person field
+ * A person's own key, password or token for a connection each person signs in to: one field per person field
  * the connection's kind names, labelled as the service labels it. Nothing typed is shown back: secret fields are
  * password inputs with autocomplete off, and every field is cleared once sent.
  */

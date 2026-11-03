@@ -16,8 +16,8 @@ import { plural } from '@/lib/format';
 import type { BatchMode } from '@/lib/types/batches';
 
 /**
- * Start from a file, after the Start run dialog picked the file (c-535): the dry run, the columns each input takes and
- * the first rows, then Start runs. Its own page because a dialog stays small (owner, 10-30); the dialog only picks.
+ * Start from a file, after the Start run dialog picked the file: the dry run, the columns each input takes and
+ * the first rows, then Start runs. Its own page because a dialog stays small; the dialog only picks.
  */
 export default function CheckBatchPage() {
   const params = useSearchParams();

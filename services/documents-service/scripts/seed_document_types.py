@@ -1,6 +1,6 @@
-"""Seeds the demo's document types in documents-service (c-236, c-256): levy_notice version 1, the fields a levy
+"""Seeds the demo's document types in documents-service: levy_notice version 1, the fields a levy
 notice is read with, and the two levy fixtures as its samples with the values they should read; and
-restraining_notice version 1 (c-248), with the synthetic restraining notices' text PDFs as its samples
+restraining_notice version 1, with the synthetic restraining notices' text PDFs as its samples
 (tests/fixtures/restraining/expected.json). Re-runnable: a type that exists is left as it is.
 
     uv run python scripts/seed_document_types.py --platform http://127.0.0.1:8710
@@ -102,7 +102,7 @@ def _text(
     return field | rules
 
 
-# Phrases a notice prints where it gives no value; read as one, the field is emptied and marked (c-247).
+# Phrases a notice prints where it gives no value; read as one, the field is emptied and marked.
 NOT_GIVEN = ["Not supplied on this form", "Not supplied", "Not provided", "N/A", "Unknown"]
 
 
@@ -113,7 +113,7 @@ RESTRAINING_NOTICE: dict[str, Any] = {
     "name": "Restraining notice",
     "description": "A restraining notice, levy, warrant or writ served on the bank about one judgment debtor.",
     "many": False,
-    "note": "Fields and provenance rules from the synthetic restraining notices (c-248).",
+    "note": "Fields and provenance rules from the synthetic restraining notices.",
     "fields": [
         _text(
             "notice_kind",
@@ -188,13 +188,13 @@ RESTRAINING_NOTICE: dict[str, Any] = {
 }
 
 
-# A state or federal tax levy served on the bank (c-270): the levy demo's second kind beside the restraining notice.
+# A state or federal tax levy served on the bank: the levy demo's second kind beside the restraining notice.
 TAX_LEVY: dict[str, Any] = {
     "id": "tax_levy",
     "name": "Tax levy",
     "description": "A state or federal tax authority's levy or warrant served on the bank for a taxpayer's unpaid tax.",
     "many": False,
-    "note": "Fields from the synthetic tax levies (c-270).",
+    "note": "Fields from the synthetic tax levies.",
     "fields": [
         _text(
             "notice_kind",
@@ -260,14 +260,14 @@ TAX_LEVY: dict[str, Any] = {
 }
 
 
-# Two kinds that are not levies (c-255), so classify, templates and boxes are proven on more than one kind of document.
+# Two kinds that are not levies, so classify, templates and boxes are proven on more than one kind of document.
 SUPPLIER_INVOICE: dict[str, Any] = {
     "id": "supplier_invoice",
     "name": "Supplier invoice",
     "description": "A vendor's invoice to the bank for goods or services, with its number, dates and total due.",
     "many": False,
-    "note": "Fields from the synthetic supplier invoices (c-255).",
-    # An invoice is due after it is issued (c-296).
+    "note": "Fields from the synthetic supplier invoices.",
+    # An invoice is due after it is issued.
     "checks": [{"id": "due_after_issue", "kind": "before", "earlier": "invoice_date", "later": "due_date"}],
     "fields": [
         _text(
@@ -310,7 +310,7 @@ BANK_STATEMENT: dict[str, Any] = {
     "name": "Bank statement",
     "description": "A bank or credit union's account statement for one account holder over one period, with balances.",
     "many": False,
-    "note": "Fields from the synthetic bank statements (c-255).",
+    "note": "Fields from the synthetic bank statements.",
     "fields": [
         _text(
             "account_holder",

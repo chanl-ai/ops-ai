@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils';
 import type { Review } from '@/lib/types/domain';
 
 /**
- * The decision, top to bottom (c-460, layout A): where the task comes from and what is asked; what decides it (the
+ * The decision, top to bottom (layout A): where the task comes from and what is asked; what decides it (the
  * task's facts, its write and form, Details) with the choice; then Decide, Reassign and the evidence export. The header
  * and the footer never scroll; only the middle does, and only when the window is too short for it.
  */

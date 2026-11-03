@@ -1,4 +1,4 @@
-"""Whose account a module and an operation may be signed in with (c-558), by failure mode: a module given a connection
+"""Whose account a module and an operation may be signed in with, by failure mode: a module given a connection
 whose sign-in it does not support, a module changed to a sign-in its connection does not give, an operation that must
 act as a person run on the team's account by a call with nobody behind it, and that rule loosened without review."""
 
@@ -117,7 +117,7 @@ async def test_the_kinds_say_which_take_each_persons_own_sign_in(client: httpx.A
 async def test_a_module_reads_in_its_connections_names_whichever_it_was_saved_with(
     client: httpx.AsyncClient, tenant: str
 ) -> None:
-    """c-591: `either` is still taken for one release and reads back as person_or_team, and the module's auth kind is
+    """`either` is still taken for one release and reads back as person_or_team, and the module's auth kind is
     its connection's own name, not a second spelling of it."""
     security = person(tenant, "Sam Adeyemi", {"team_security": "admin"})
     await client.post("/v1/egress/hosts", json={"value": "crm.test"}, headers=security)

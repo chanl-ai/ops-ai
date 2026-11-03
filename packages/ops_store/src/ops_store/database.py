@@ -4,7 +4,7 @@
 
 A pooled connection is tested before it is handed out, and replaced when the database or a proxy closed it while it
 sat in the pool. On asyncpg the test is one round trip; SQLAlchemy's pool_pre_ping wraps it in BEGIN and ROLLBACK (for
-pgbouncer's transaction mode, which no install uses), three round trips on every transaction (c-451). Each connect
+pgbouncer's transaction mode, which no install uses), three round trips on every transaction. Each connect
 attempt is bounded by `database_connect_timeout_s`, and a stalled or reset attempt is made again, up to
 `database_connect_attempts`.
 
@@ -32,13 +32,13 @@ from ops_service_kit.settings import Settings
 
 log = get_logger(__name__)
 # The handle routes, workers and entry points hold. It is the engine today; code outside a store only passes it to a
-# store, so a pool or driver change stays inside ops_store and the stores (c-346).
+# store, so a pool or driver change stays inside ops_store and the stores.
 Database = AsyncEngine
 
 
 # Set on a pooled connection once it has been used: a connection made for this checkout needs no test.
 _CHECKED_IN = "ops_checked_in"
-# The start of each statement running on a connection, for the request timing (c-560).
+# The start of each statement running on a connection, for the request timing.
 _STARTED = "ops_statement_started"
 
 

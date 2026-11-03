@@ -34,7 +34,7 @@ export interface OperationSeed {
   requiresApproval?: boolean;
   /** Canned, schema-valid output for test mode. */
   stub: Record<string, unknown>;
-  /** Literal values or `{{NAME}}` secret references (c-093 shows which operations read each secret). */
+  /** Literal values or `{{NAME}}` secret references. */
   headers?: { key: string; value: string }[];
 }
 

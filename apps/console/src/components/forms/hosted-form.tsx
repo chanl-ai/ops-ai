@@ -14,7 +14,7 @@ import type { HostedFormReceived, HostedFormView } from '@/lib/types/forms';
 const THANKS = 'Thank you. Your request has been sent.';
 
 /**
- * A hosted form as the person filling it sees it (c-535): the title, description and fields of the workflow's start
+ * A hosted form as the person filling it sees it: the title, description and fields of the workflow's start
  * form, Send, then the thank-you. Shared by the embed app's link page and the console's members-only page, which pass
  * how to send and how a file field uploads. A refused submission keeps what was typed and says why.
  */

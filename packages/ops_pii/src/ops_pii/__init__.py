@@ -1,4 +1,4 @@
-"""Personal data masked in what people see (c-293): SSNs and their last four, card and account
+"""Personal data masked in what people see: SSNs and their last four, card and account
 numbers, emails and phone numbers. Names are not masked: no pattern finds them without a model call. A caller decides
 what is shown; the real value stays wherever it is kept or sent on (an agent's model, a document type's examples).
 

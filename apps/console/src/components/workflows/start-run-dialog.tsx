@@ -79,12 +79,12 @@ function StartRunShell({
 
 
 /**
- * The one start dialog (c-466). It draws the start form the workflow's trigger declares (`startForm`: a test email, a
+ * The one start dialog. It draws the start form the workflow's trigger declares (`startForm`: a test email, a
  * Request trigger's input, any later kind) with the shared field widgets, and runs it live on the version that is
  * live or as a test run of the latest saved version, which is how a draft runs before review. A trigger that declares
  * no start form takes a JSON input. `file` arrives attached in the form's first file field (Files' "Start a workflow
  * with this file"). A failed start keeps the dialog and what was typed. With hosted forms on, a form trigger also
- * offers Start from a file: one run per row of a CSV or Excel file, followed on the batch's page (c-535).
+ * offers Start from a file: one run per row of a CSV or Excel file, followed on the batch's page.
  */
 export function StartDefinitionRunDialog({
   open,

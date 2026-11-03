@@ -1,4 +1,4 @@
-"""Secrets in an operation's URL (c-070 T003), by failure mode: the path's own query dropped when arguments are sent
+"""Secrets in an operation's URL, by failure mode: the path's own query dropped when arguments are sent
 as the query, a reference resolved from a caller's argument instead of the operation's definition, a value that
 breaks the URL it is put in, a resolved value coming back through an upstream that echoes its URL, a call sent
 without its credential, and an OpenAPI API key `in: query` imported as an input the agent fills."""

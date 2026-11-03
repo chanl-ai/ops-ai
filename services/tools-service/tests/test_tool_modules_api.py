@@ -37,7 +37,7 @@ async def test_a_team_sees_only_its_modules_and_is_told_who_owns_the_rest(api: A
     assert "Core Banking Platform" in owners, "seen through the Lending Ops workflow approved for it"
     assert "Payments Operations" not in owners
     r = await api.call("GET", "/mod_payments_hub", team="team_lending")
-    assert r.status_code == 404, "another team's module answers 404, naming no owner (c-423)"
+    assert r.status_code == 404, "another team's module answers 404, naming no owner"
 
 
 async def test_a_sign_in_header_is_refused_whatever_it_holds(api: Api) -> None:
@@ -96,7 +96,7 @@ async def test_an_operation_two_people_approve_cannot_drop_its_approval(api: Api
 
 
 async def test_an_amount_limit_is_refused_on_an_operation_with_no_amount_input(api: Api) -> None:
-    """The gateway reads the limit from the `amount` input (c-028); a limit on an operation without one would be
+    """The gateway reads the limit from the `amount` input; a limit on an operation without one would be
     shown and never hold."""
     hub = await _ok(await api.call("GET", "/mod_payments_hub"))
     wire = next(o for o in hub["operations"] if o["name"] == "place_wire_hold")
@@ -125,7 +125,7 @@ async def test_outside_dev_a_header_cannot_name_who_decides(api: Api) -> None:
 
 
 async def test_a_first_review_approved_in_reviews_publishes_the_module(api: Api) -> None:
-    """Who may approve is Reviews' rule (c-163); here the approval it sends publishes the version."""
+    """Who may approve is Reviews' rule; here the approval it sends publishes the version."""
     await api.client.post("/v1/egress/hosts", json={"value": "statements.example.com"})
     op = {
         "name": "get_statement",

@@ -1,4 +1,4 @@
-"""Writes two non-levy fixture families (c-255) under tests/fixtures/invoice and tests/fixtures/bank_statement, so
+"""Writes two non-levy fixture families under tests/fixtures/invoice and tests/fixtures/bank_statement, so
 classify, templates and boxes are proven on more than one kind of document.
 
     uv run python scripts/make_form_fixtures.py

@@ -1,4 +1,4 @@
-"""plugin_app_keys: the platform's own OAuth app secret per plugin, sealed, at the account (c-565)
+"""plugin_app_keys: the platform's own OAuth app secret per plugin, sealed, at the account
 
 An install registers one app per vendor and every team signs in with it unless the team brings its own. The secret
 belongs to no team, so a team's secrets never serve another team's sign-in.

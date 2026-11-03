@@ -47,7 +47,7 @@ KIND = {
     "access.check": "checked",
 }
 
-# Every route that changes a workspace or a team, and the audit action it writes in the same transaction (c-529). The
+# Every route that changes a workspace or a team, and the audit action it writes in the same transaction. The
 # route-table walk in tests/test_workspace_lifecycle.py fails on a changing route missing here or an action missing
 # from KIND, so a new route says what it records before it ships.
 ROUTE_ACTIONS: dict[tuple[str, str], str] = {
@@ -178,7 +178,7 @@ def _seen(team_id: str, account: bool) -> sa.ColumnElement[bool]:
 
 class AuditLog:
     """Reads one team's entries, newest first, and with `account` the entries no team holds (sign-in, membership: the
-    account's own records). Never another team's (c-507)."""
+    account's own records). Never another team's."""
 
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.RLS})
 

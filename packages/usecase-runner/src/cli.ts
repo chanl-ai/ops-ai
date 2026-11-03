@@ -51,7 +51,7 @@ export async function test(
     console.error(`could not check ${env[DB_VAR]}'s migrations; a chain behind may stop the scripts at start`);
   }
   // Each script gets its own database when the run owns the name: a stack's files folder is new per script, so rows an
-  // earlier script left behind name files that are gone, and kb-service's startup seed failed on them (c-553).
+  // earlier script left behind name files that are gone, and kb-service's startup seed failed on them.
   let current: string | undefined;
   const databaseFor = ownedDb
     ? async (run: (env: NodeJS.ProcessEnv) => Promise<Outcome>) => {

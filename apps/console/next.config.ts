@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 
 import type { NextConfig } from 'next';
 
-// What's new and Coming next (c-510): the entries under the repo's changelog/ (one file each, the file name its id) and
+// What's new and Coming next: the entries under the repo's changelog/ (one file each, the file name its id) and
 // roadmap.json, read once here and inlined into the build, so the console shows the list it was built with.
 const repoRoot = resolve(process.cwd(), '../..');
 const changelogDir = join(repoRoot, 'changelog');
@@ -16,7 +16,7 @@ const changelog = existsSync(changelogDir)
 const roadmapFile = join(repoRoot, 'roadmap.json');
 const roadmap = existsSync(roadmapFile) ? JSON.parse(readFileSync(roadmapFile, 'utf8')) : [];
 
-// The version What's new shows (c-510): OPS_VERSION and OPS_COMMIT when the build is given them (the image has no .git:
+// The version What's new shows: OPS_VERSION and OPS_COMMIT when the build is given them (the image has no .git:
 // deploy/fly/stg_deploy.sh passes them as build args), else read from git here. Empty when neither answers.
 const git = (args: string[]) => {
   try {

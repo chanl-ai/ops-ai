@@ -1,4 +1,4 @@
-"""A plugin's own app per environment (c-580), by failure mode: a second turn-on for the sandbox never reaches the
+"""A plugin's own app per environment, by failure mode: a second turn-on for the sandbox never reaches the
 connection; a sandbox sign-in overwrites the production instance a live call goes to; a test call reaches production's
 host; the team's client secret comes back in an answer; a plugin's card details are lost on the way to the console."""
 
@@ -110,7 +110,7 @@ async def test_a_new_connection_never_calls_the_instance_a_removed_one_signed_in
     tenant: str,
     rig: Rig,  # noqa: F811
 ) -> None:
-    """An environment's own settings are kept once, on its connection (c-580). A copy on the team's binding outlived
+    """An environment's own settings are kept once, on its connection. A copy on the team's binding outlived
     the connection it came from: after Cancel removed one, the next connection called the old instance before anyone
     signed in to it."""
     client, _, _ = rig

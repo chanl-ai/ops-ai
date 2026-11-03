@@ -1,4 +1,4 @@
-"""Certificate and signed-JWT sign-in (c-583), by failure mode: a connection that proves itself with its certificate
+"""Certificate and signed-JWT sign-in, by failure mode: a connection that proves itself with its certificate
 is refused for the client secret it does not use, or saved without the signing pair it does; the signed service account
 kind is missing from the platform or from the plugin kit; the connection form is not told which fields a choice makes
 required, so it lets Save through to the server's refusal; and the signing key reads back."""

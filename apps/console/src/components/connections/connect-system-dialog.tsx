@@ -55,7 +55,7 @@ export type ConnectMode = 'connect' | 'edit' | 'reconnect';
 const message = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong');
 
 /**
- * The one dialog that connects, edits and reconnects a system (c-580): the fields come from the system's sign-in kind
+ * The one dialog that connects, edits and reconnects a system: the fields come from the system's sign-in kind
  * (`GET /v1/connection-kinds`), one section per environment, each saved and tested on its own before the connection is
  * called working; a sealed key reads as set and is replaced only by typing a new one. A new system that is cancelled
  * after a test made it is deleted. A kind whose `signsIn` is set ends with someone signing in, in a window of its own.
@@ -81,7 +81,7 @@ export function ConnectSystemDialog({
   const loading = kinds.isPending || (existingId != null && detail.isPending);
   const failed = kinds.isError ? kinds : detail.isError ? detail : null;
 
-  // The one Connect window (c-617): one environment at a time, small; who signs in and the other environment are on
+  // The one Connect window: one environment at a time, small; who signs in and the other environment are on
   // the app page's Settings, so nothing here repeats them.
   const title = existingId
     ? `${mode === 'reconnect' ? 'Reconnect' : 'Connect'} ${detail.data?.name ?? 'the app'}`

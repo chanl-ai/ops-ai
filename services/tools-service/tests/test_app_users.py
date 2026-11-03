@@ -1,4 +1,4 @@
-"""Who uses an app before a team turns it off (c-616 P1, `GET /v1/plugins/{id}/team/users`), by failure mode: the
+"""Who uses an app before a team turns it off (`GET /v1/plugins/{id}/team/users`), by failure mode: the
 answer names another app's tools or misses one of this app's; it lists people outside the team's agents and
 workflows; a viewer reads it; and a missing agents-service answer reads as "nobody uses it"."""
 

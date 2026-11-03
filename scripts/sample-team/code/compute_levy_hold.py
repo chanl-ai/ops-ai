@@ -1,4 +1,4 @@
-"""compute_levy_hold, the levy demo's code tool (c-531, c-532): how much of a levy notice the bank holds, and on which
+"""compute_levy_hold, the levy demo's code tool: how much of a levy notice the bank holds, and on which
 account. It runs on runner-service, so it reaches nothing but `get_levy_rules`, the bank's exempt-funds rules, and
 hands that read the bank key by name; the key's value never reaches this function.
 

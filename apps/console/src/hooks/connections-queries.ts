@@ -32,7 +32,7 @@ export const useStartSignIn = (id: string) =>
   useMutation({ mutationFn: (i: { environment: ConnectionEnvironment; account?: SignInAccount }) => api.connections.startSignIn(id, i) });
 export const useOpenConnectLink = () => useMutation({ mutationFn: (link: string) => api.connections.openConnectLink(link) });
 export const useCompleteSignIn = (id: string) => useConnectionMutation((i: { code: string; state: string }) => api.connections.completeSignIn(id, i));
-/** The person's own key, password or token on a connection each person signs in to (c-595). */
+/** The person's own key, password or token on a connection each person signs in to. */
 export const useGiveOwn = () =>
   useConnectionMutation((i: { connectionId: string; environment: ConnectionEnvironment; credentials: Record<string, string> }) =>
     api.connections.giveOwn(i.connectionId, { environment: i.environment, credentials: i.credentials }),

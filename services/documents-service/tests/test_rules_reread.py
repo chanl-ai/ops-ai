@@ -1,4 +1,4 @@
-"""Checks and the one targeted re-read (c-296), through the extraction API, by failure mode: a total that does not add
+"""Checks and the one targeted re-read, through the extraction API, by failure mode: a total that does not add
 up saved as checked (F1); a failed field never retried, or the whole document asked again (F3); a re-read value taken
 although it fails again (F4); a check naming a field the version lacks saved (F5); a template read's bad field sending
 the whole file to the model (US4)."""

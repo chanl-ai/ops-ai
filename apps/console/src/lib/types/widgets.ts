@@ -1,5 +1,5 @@
 // A widget part carries a shape and its data, never a tool or component name: agents-service shapes tool results,
-// and the console picks how to draw them (components/chat/widget-registry.ts). Contract: c-055 spec.md.
+// and the console picks how to draw them (components/chat/widget-registry.ts).
 
 export type WidgetShape = 'rows' | 'series' | 'record' | 'metric' | 'form' | 'decision' | 'steps';
 
@@ -71,7 +71,7 @@ export type WidgetPart = {
   [S in WidgetShape]: { type: 'widget'; id: string; shape: S; data: ShapeData[S]; hint?: WidgetHint; schema?: unknown };
 }[WidgetShape];
 
-// ── Layouts (c-082, docs/architecture/chat-widgets.md) ──
+// ── Layouts (docs/architecture/chat-widgets.md) ──
 // A tree of catalogue primitives the kernel checked before sending (ops_agent_kernel.layout): filled from one of the
 // agent's widget templates (`template` names it) or composed by the model. Nothing outside these node types can arrive.
 
@@ -93,7 +93,7 @@ export type LayoutNode =
   | { type: 'image'; alt: string }
   | KindNode;
 
-// ── Widget kinds (c-176): generic, schema-driven, the same in any industry. Each mirrors its JSON Schema in
+// ── Widget kinds: generic, schema-driven, the same in any industry. Each mirrors its JSON Schema in
 // ops_agent_kernel.kinds (copied to lib/widgets/kinds.schema.json and compared in the kernel's tests). ──
 
 export type StepStateKind = 'pending' | 'active' | 'done' | 'failed';
@@ -163,7 +163,7 @@ export type KindNode =
       total: number;
       status?: KindStatus;
     }
-  /** A file's pages with boxes over the values in question (documents-service's c-252 boxes). */
+  /** A file's pages with boxes over the values in question (documents-service's boxes). */
   | { type: 'viewer'; fileId: string; name?: string; mime?: string; boxes?: { key: string; page: number; x: number; y: number; w: number; h: number; check?: boolean }[] }
   /** Values read from a document for a person to check and correct: the read check's table. */
   | { type: 'field_check'; read: import('./domain').DocumentRead }
@@ -184,7 +184,7 @@ export interface LayoutPart {
   layout: LayoutNode;
   /** Present when the layout was filled from a published template; absent when the agent composed it. */
   template?: WidgetTemplateRef;
-  /** Present when the agent showed one generic kind (`present {kind, data}`, c-176). */
+  /** Present when the agent showed one generic kind (`present {kind, data}`). */
   kind?: WidgetKind;
 }
 
@@ -193,7 +193,7 @@ export type MessagePart = WidgetPart | LayoutPart;
 
 export const isLayoutPart = (p: MessagePart): p is LayoutPart => 'layout' in p && !!p.layout;
 
-// ── Widget templates (c-082) ──
+// ── Widget templates ──
 
 /** A template node: a LayoutNode whose fields may hold `{ "$bind": "/json/pointer" }` into the template's data. */
 export type TemplateNode = { type: LayoutNode['type'] } & Record<string, unknown>;

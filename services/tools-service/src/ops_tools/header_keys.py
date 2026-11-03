@@ -1,4 +1,4 @@
-"""Sign-in header keys move onto their module's connection (c-616 D3b-2b).
+"""Sign-in header keys move onto their module's connection.
 
 A tool's Authorization, X-Api-Key or Cookie header is refused on save now that every custom module is on a connection,
 but tools saved before still carry one. At each start this moves the clear case: the module's connection signs in with

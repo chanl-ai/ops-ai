@@ -1,4 +1,4 @@
-"""Every read of a team-owned table names the caller's team (c-407). A table marked `TEAM_OWNED` (or
+"""Every read of a team-owned table names the caller's team. A table marked `TEAM_OWNED` (or
 `team_owned_via`) in its `info` is read only inside a function that also calls `team_visible(<table>)`, or
 `any_team(<table>, reason)` where a lookup must see every team to decide a refusal. A store that selects from the table
 without one shows another team's records, which is how agents, skills and guardrails leaked on staging (2026-10-20).
@@ -31,7 +31,7 @@ NOT_YET_MARKED = {
     # tools-service
     "send_policies",
     "send_checks",
-    # the call log: Usage reads it by the acting team passed in (c-616); the database lock on it is c-414's
+    # the call log: Usage reads it by the acting team passed in; the database lock on it comes later
     "gateway_calls",
     # files-service and documents-service: their `team` column
     # platform-service: identity and administration, read by team and role through platform's own routes

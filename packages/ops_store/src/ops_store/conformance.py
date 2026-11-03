@@ -112,7 +112,7 @@ async def audit_suite(backend: Backend, make: Callable[[], Awaitable[AuditPort]]
     assert (await log.value(entity), await log.entries(entity)) == ("v1", 1), "neither the change nor an entry landed"
 
 
-# Isolation (c-410) -------------------------------------------------------------------------------------------------
+# Isolation -------------------------------------------------------------------------------------------------
 
 RowFill = Callable[[str, str | None], dict[str, Any]]
 # The reason the suite reads a tenant-wide view of what it wrote.
@@ -131,7 +131,7 @@ async def isolation_suite(
     row-level security (as the engine's own user, which must bypass it: a superuser or a BYPASSRLS role) and read back
     as `role`
     with raw SQL and no WHERE clause, so only the policy can filter: for a team table (T1, A), (T1, B), (T1, no team
-    where the column allows it, which no team reads, c-507) and (T2, A); for a tenant table one row of each tenant.
+    where the column allows it, which no team reads) and (T2, A); for a tenant table one row of each tenant.
     `fill` builds a row's other columns a table's types cannot give (a foreign key), over the values the suite makes
     from its types."""
     t1, t2, a, b = (f"{p}_{secrets.token_hex(3)}" for p in ("iso_t1", "iso_t2", "iso_a", "iso_b"))

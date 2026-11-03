@@ -18,7 +18,7 @@ from .tables import ENGINE_BUILD, engine_work
 from .tx import CLAIM_WORK, Transactions
 
 # A row whose claim lapsed more often than this is not claimed again: its run kills the worker that takes it, and the
-# run reconciler marks it Stuck with that reason (c-561).
+# run reconciler marks it Stuck with that reason.
 MAX_LAPSES = 5
 
 
@@ -67,7 +67,7 @@ class WorkQueue:
                         claimed_by=self.owner,
                         lease_expires_at=now + self.ttl,
                         attempts=w.c.attempts + 1,
-                        # Still claimed when taken again: its worker died with the claim, not gave it back (c-561).
+                        # Still claimed when taken again: its worker died with the claim, not gave it back.
                         lapses=w.c.lapses + sa.case((w.c.status == "claimed", 1), else_=0),
                     )
                     .returning(w.c.id, w.c.tenant_id, w.c.run_id, w.c.kind, w.c.payload, w.c.attempts, w.c.claimed_by)
@@ -76,7 +76,7 @@ class WorkQueue:
         return Work(int(row.id), row.tenant_id, row.run_id, row.kind, row.payload, int(row.attempts), row.claimed_by)
 
     async def due(self) -> int:
-        """How many rows wait to be claimed now, for the workflow worker's heartbeat (c-516)."""
+        """How many rows wait to be claimed now, for the workflow worker's heartbeat."""
         w = engine_work
         async with self.tx.system_tx(CLAIM_WORK) as c:
             now = db_now(c)

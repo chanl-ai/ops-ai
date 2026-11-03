@@ -1,4 +1,4 @@
-"""A write refused because the person it acts for has not connected their own account runs once they have (c-616 S12),
+"""A write refused because the person it acts for has not connected their own account runs once they have,
 by failure mode: the refusal keeps the write's claim, so the run that waited for them sends the same write under the
 same key and gets the refusal replayed, and the write never reaches the system. Rig: test_calls' gateway and fake
 bank."""

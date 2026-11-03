@@ -1,4 +1,4 @@
-"""`can` by failure mode (c-148): a role a person does not hold in the record's team passing; a record of another
+"""`can` by failure mode: a role a person does not hold in the record's team passing; a record of another
 team passing because the person holds the role there; a Security team action passing for an admin of another team, or
 refused to a Security admin acting in another team; `own` scope passing on someone else's record; an API key doing
 more than start a live run and cancel its own; a service token without the scope; the requester deciding; a token
@@ -253,7 +253,7 @@ async def test_may_answers_from_the_same_grid_as_can() -> None:
 
 
 async def test_security_actions_are_held_in_the_workspaces_own_security_team() -> None:
-    """A workspace whose security team is not the deployment's (c-202): the token names it, and only a role there
+    """A workspace whose security team is not the deployment's: the token names it, and only a role there
     holds the Security team's actions."""
     teams = {"team_ops": ["admin"], "team_sec2": ["admin"]}
     p = await person("team_ops", team_ids=["team_ops", "team_sec2"], access=teams, security_team="team_sec2")
@@ -269,7 +269,7 @@ async def test_security_actions_are_held_in_the_workspaces_own_security_team() -
 
 async def test_a_role_that_reads_all_chats_reads_its_own_while_the_workspace_keeps_them_private() -> None:
     """chatThreadsOwnerOnly (on by default) caps a chat read at one's own whatever the grid grants; off, the grid
-    decides (c-186)."""
+    decides."""
 
     async def fetch(_t: str, _v: int, _ids: list[str]) -> dict[str, Iterable[Grant]]:
         return {"chat_reader": [("chat", "view", "all")]}

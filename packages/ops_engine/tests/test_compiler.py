@@ -149,7 +149,7 @@ async def test_a_dangling_write_is_reconciled_by_its_key_and_never_sent_again_un
     recorded: ToolResult | None, sent: list[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Done at the gateway: its record is the result. No record: the gateway blocks the key, and the write is sent
-    under the next attempt's key, never the first (c-561)."""
+    under the next attempt's key, never the first."""
     monkeypatch.setattr("ops_engine.compiler.sleep", _no_wait)
     tools, journal, saver = FakeTools(access="write", recorded=recorded), MemoryJournal(), InMemorySaver()
     with pytest.raises(Killed):
@@ -169,7 +169,7 @@ async def test_a_read_is_retried_and_a_write_only_under_a_new_key(monkeypatch: p
     reads, journal = FakeTools(fail=2), MemoryJournal()
     await build(reads, journal, InMemorySaver()).ainvoke({"input": PAYLOAD}, config("r5"), durability="sync")
     assert [r.status for r in await journal.steps("r5", "lookup", 1)] == ["error", "error", "ok"]
-    # The write's call raised and the gateway has no record: sent again only under attempt 2's key (c-561).
+    # The write's call raised and the gateway has no record: sent again only under attempt 2's key.
     writes, journal = FakeTools(access="write", fail=1), MemoryJournal()
     g = build(writes, journal, InMemorySaver())
     await g.ainvoke({"input": PAYLOAD}, config("r6"), durability="sync")

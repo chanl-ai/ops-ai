@@ -1,4 +1,4 @@
-"""kb-service reaches files only through files-service's client (c-094): importing files-service's own code
+"""kb-service reaches files only through files-service's client: importing files-service's own code
 (`ops_files`) would couple kb-service to its tables and storage, and a second copy of its upload logic would drift."""
 
 from __future__ import annotations

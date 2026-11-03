@@ -24,7 +24,7 @@ export function putToStorage(ticket: { uploadUrl: string; method: 'PUT'; headers
   });
 }
 
-/** `/document-types` on documents-service (c-256); `get` and `send` carry the transport's identity and envelope. */
+/** `/document-types` on documents-service; `get` and `send` carry the transport's identity and envelope. */
 export function createDocumentTypesHttp(get: Get, send: Send): FilesApi['documentTypes'] {
   const base = '/document-types';
   const one = (id: string) => `${base}/${encodeURIComponent(id)}`;

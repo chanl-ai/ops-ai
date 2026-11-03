@@ -18,7 +18,7 @@ export const EGRESS_COPY = {
 
 /**
  * Adds a host or private range to the egress allowlist: the Egress settings page's form, also opened in place from a
- * tool whose request goes to a host that is not listed (c-517), so the same form and the same audit serve both.
+ * tool whose request goes to a host that is not listed, so the same form and the same audit serve both.
  */
 export function EgressAddDialog({
   kind,

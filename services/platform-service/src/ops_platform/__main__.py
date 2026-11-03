@@ -61,7 +61,7 @@ async def serve(settings: Settings) -> None:
             uvicorn.Config(internal, host=settings.bind_host, port=settings.platform_internal_port, log_level="info")
         ),
     ]
-    # Workspaces closed longer than the restore window are purged here (c-529), one copy for the account.
+    # Workspaces closed longer than the restore window are purged here, one copy for the account.
     purge = WorkspacePurge(
         LifecycleStore(store.db, security_team=settings.security_team_id), restore_days=settings.workspace_restore_days
     )

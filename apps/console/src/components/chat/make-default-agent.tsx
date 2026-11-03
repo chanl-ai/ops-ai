@@ -7,7 +7,7 @@ import { useSetDefaultAgent } from '@/hooks/chat-queries';
 import { useTeam } from '@/hooks/use-team';
 
 /**
- * Confirms making `agent` the team's default (c-174): the settings dropdown, the agents list row and the agent page all
+ * Confirms making `agent` the team's default: the settings dropdown, the agents list row and the agent page all
  * open this one dialog. agents-service refuses anyone but a team admin, so callers show it to team admins only.
  */
 export function MakeDefaultAgentDialog({ agent, open, onOpenChange }: { agent?: { id: string; name: string }; open: boolean; onOpenChange: (open: boolean) => void }) {

@@ -1,4 +1,4 @@
-// Sample documents for the c-159 preview: one knowledge base's documents as the simplified page would show them.
+// Sample documents for the preview: one knowledge base's documents as the simplified page would show them.
 import type { ItemStatus } from '@/lib/types/knowledge';
 
 export interface PreviewDoc {

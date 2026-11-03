@@ -1,4 +1,4 @@
-"""A connection's details and its health per environment (c-580), by failure mode: a failing sandbox test turns a
+"""A connection's details and its health per environment, by failure mode: a failing sandbox test turns a
 working production connection to failed, or overwrites the health production showed; a connection's category,
 description or docs link is lost or takes an address that is not https; the redirect address to register is unknown
 until a connection exists."""

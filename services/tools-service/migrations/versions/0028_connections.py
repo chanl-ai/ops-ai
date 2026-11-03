@@ -1,4 +1,4 @@
-"""connections: how the platform signs in to a system, per environment, with the tokens a sign-in holds (c-330)
+"""connections: how the platform signs in to a system, per environment, with the tokens a sign-in holds
 
 A module's credential was a `{{NAME}}` header row repeated on every operation, and its connection a picture read from
 the console seed. A connection is now a record with an auth kind, one row of settings per environment (test,

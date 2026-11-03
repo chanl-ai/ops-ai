@@ -1,4 +1,4 @@
-"""Knowledge sources read through a connection's tools (c-564)
+"""Knowledge sources read through a connection's tools
 
 A "tool" source keeps what it reads from (the plugin, its two tools, the connection), where the last sync ended (its
 watermark and saved cursor) and a lease so one source never syncs twice at once. An item read through it keeps the

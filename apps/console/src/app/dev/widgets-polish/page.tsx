@@ -29,14 +29,14 @@ const KINDS: Record<string, { name: string; empty: string; error: string }> = {
 };
 
 /**
- * The c-176 gallery: every widget kind an agent can emit, each with samples from two industries, drawn by the same
+ * The gallery: every widget kind an agent can emit, each with samples from two industries, drawn by the same
  * renderer the chat uses (components/chat/widgets/kind-view.tsx), then its loading, empty and error states. Samples are
  * lib/widgets/kind-samples.json, which the kernel's tests check against each kind's schema. Dev server only.
  */
 export default function WidgetsPolishPreview() {
   const all = samples as Record<string, { industry: string; data: Record<string, unknown> }[]>;
   return (
-    <PageLayout icon={Sparkles} title="Chat widgets (c-176)" description="Every kind an agent can show, in two industries each, then its loading, empty and error states.">
+    <PageLayout icon={Sparkles} title="Chat widgets" description="Every kind an agent can show, in two industries each, then its loading, empty and error states.">
       <div className="flex flex-col gap-10">
         {Object.entries(KINDS).map(([kind, meta]) => (
           <section key={kind} data-screen={kind} className="flex flex-col gap-3">

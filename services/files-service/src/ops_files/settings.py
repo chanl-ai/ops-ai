@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""Where each upload purpose stores its bytes, under which limits, and with which credential (c-100).
+"""Where each upload purpose stores its bytes, under which limits, and with which credential.
 
 One document per tenant, saved by an admin on the Security team: a target per purpose (or the default target), each
 naming its backend, bucket or container, region, credential and upload path; size and type limits per purpose; the
@@ -9,7 +9,7 @@ delete a small object) and is refused naming the purpose when the probe fails, s
 Files keep the backend and container they were stored in; a save may not drop a target that still holds files.
 
 Credentials are kept by name in `storage_credentials`, sealed with the service's secrets key; nothing here returns a
-credential's value. Design: docs/services/files-service/overview.md; card c-100.
+credential's value. Design: docs/services/files-service/overview.md.
 """
 
 from __future__ import annotations

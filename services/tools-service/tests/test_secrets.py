@@ -148,7 +148,7 @@ async def test_every_create_rotate_delete_and_use_is_audited(keyed: Bank, engine
     await c.post("/v1/secrets", json={"name": "BANK_KEY", "value": VALUE})
     await _call(keyed, f"echo_{keyed.api.tenant}")
     await c.post("/v1/secrets/BANK_KEY/rotate", json={"value": ROTATED})
-    # BANK_KEY is read by the module's operations, so it cannot be deleted (c-093); an unused one can.
+    # BANK_KEY is read by the module's operations, so it cannot be deleted; an unused one can.
     await c.post("/v1/secrets", json={"name": "SPARE_KEY", "value": VALUE})
     await c.post("/v1/secrets/SPARE_KEY/rotate", json={"value": ROTATED})
     gone = await c.delete("/v1/secrets/SPARE_KEY")

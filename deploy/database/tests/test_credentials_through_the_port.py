@@ -1,4 +1,4 @@
-"""Every secret value is written and read through the credential store port (c-616 C7, C8), so a vault adapter is the
+"""Every secret value is written and read through the credential store port, so a vault adapter is the
 only change needed to keep values outside the database. Two rules over each service's source: nothing seals or opens
 a value with the cipher itself, and only the files listed below name a column that holds a credential reference."""
 

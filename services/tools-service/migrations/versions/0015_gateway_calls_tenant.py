@@ -1,5 +1,5 @@
-"""gateway_calls carries the tenant the call was made in, so every read is scoped to one tenant (c-057 T013,
-security review: the log was filtered by module only, and a scope-all team read every tenant's calls)
+"""gateway_calls carries the tenant the call was made in, so every read is scoped to one tenant (security review: the
+log was filtered by module only, and a scope-all team read every tenant's calls)
 Revision ID: tools_0015_calls_tenant
 Revises: tools_0014_step_up
 """

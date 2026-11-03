@@ -155,7 +155,7 @@ export function ActorCell({ kind, name, detail }: { kind: 'person' | 'workflow';
 export function CallerCell({ call }: { call: Pick<ToolCallRow, 'subject' | 'actor' | 'workflowName' | 'agentName' | 'actingFor' | 'credential'> }) {
   const who = call.subject?.name ?? call.workflowName;
   const via = call.subject ? call.actor?.name : call.agentName;
-  // Whose account the system saw: a person's own sign-in or the team's (c-558); nothing for a call with no sign-in.
+  // Whose account the system saw: a person's own sign-in or the team's; nothing for a call with no sign-in.
   const signedIn = call.credential === 'person' ? `Signed in as ${call.actingFor ?? 'the person'}` : call.credential === 'team' ? 'Team account' : undefined;
   return (
     <div className="max-w-56 min-w-36" data-testid="caller-cell">

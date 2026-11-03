@@ -263,7 +263,7 @@ export interface paths {
         /**
          * Set File Data
          * @description Records what was read from the file: its document type and version, template or model, how many fields
-         *     wait for a person, and the extraction (c-250). The extract workflow's step writes it; files-service calls no
+         *     wait for a person, and the extraction. The extract workflow's step writes it; files-service calls no
          *     other service for it.
          */
         put: operations["files_set_file_data"];
@@ -305,7 +305,7 @@ export interface paths {
         put?: never;
         /**
          * Request Read
-         * @description Asks for the file to be read with a document type (c-250): the system extract workflow runs as the caller,
+         * @description Asks for the file to be read with a document type: the system extract workflow runs as the caller,
          *     started by this service's file.read_requested event, and saves what was read on the file. 202 at once; the
          *     request carries the run once the event is delivered. A repeat with the same Idempotency-Key returns the first
          *     request.
@@ -701,9 +701,9 @@ export interface components {
         };
         /**
          * FileData
-         * @description What was read from the file, as the extract workflow records it (c-250): the document type and version it was
+         * @description What was read from the file, as the extract workflow records it: the document type and version it was
          *     read as, whether a template or the model read it, how many fields wait for a person, and the extraction. A file read
-         *     with Detect whose kind is none of the team's types has no type and no version: it was not recognised (c-335).
+         *     with Detect whose kind is none of the team's types has no type and no version: it was not recognised.
          */
         FileData: {
             /** Extractionid */
@@ -1075,8 +1075,8 @@ export interface components {
         };
         /**
          * ReadRequestIn
-         * @description Read the file with a team's document type (c-250), the newest version when none is named; with no type, the file
-         *     is classified over the team's types and read with the one found (Detect, c-335).
+         * @description Read the file with a team's document type, the newest version when none is named; with no type, the file
+         *     is classified over the team's types and read with the one found (Detect).
          */
         ReadRequestIn: {
             /** Documenttypeid */

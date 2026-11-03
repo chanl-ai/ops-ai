@@ -211,7 +211,7 @@ export default function ToolsPage() {
       tabs={<AppsTabs />}
       actions={
         <div className="flex items-center gap-2">
-          {/* Every call these tools made, under Tools since the Apps menu (c-617). */}
+          {/* Every call these tools made, under Tools since the Apps menu. */}
           <Button variant="ghost" size="sm" asChild>
             <Link href="/tools/calls" data-testid="tool-calls-link">
               Tool calls <ArrowRight className="size-4" />

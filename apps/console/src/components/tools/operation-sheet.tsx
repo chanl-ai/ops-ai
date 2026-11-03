@@ -69,7 +69,7 @@ export function OperationSheet({
   navigation?: DetailSheetNavigation;
   onSave: (patch: OperationPatch) => Promise<unknown>;
   saving: boolean;
-  /** Opened from the workbench, which edits the call and the input itself: the sheet keeps the policy (c-088). */
+  /** Opened from the workbench, which edits the call and the input itself: the sheet keeps the policy. */
   policyOnly?: boolean;
 }) {
   const [d, setD] = React.useState<Draft | null>(op ? draftOf(op, appBase) : null);
@@ -292,7 +292,7 @@ export function OperationSheet({
         <Section title="Limits and approval">
           <div className="grid gap-3 sm:grid-cols-2">
             <FormField id="op-access" label="Access" hint="Whether a call changes data. Any change is a major version.">
-              {/* Approvals are off by default (owner rule): a write waits only when its approval switch is turned on. */}
+              {/* Approvals are off by default: a write waits only when its approval switch is turned on. */}
               <Select value={d.access} onValueChange={(v) => set({ access: v as ToolAccess })}>
                 <SelectTrigger id="op-access" className="w-full">
                   <SelectValue />

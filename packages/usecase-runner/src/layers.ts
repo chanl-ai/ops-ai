@@ -10,7 +10,7 @@ export type Layer = (typeof LAYERS)[number];
 export const LAYER_PROVIDERS: Record<Layer, string[]> = {
   api: [],
   sdk: ['sdk/python', 'sdk/typescript'],
-  // The sample team installer is the command a developer runs against the platform today; c-564's `ops` command in
+  // The sample team installer is the command a developer runs against the platform today; the `ops` command in
   // packages/ops_plugins joins it once it is built.
   cli: ['scripts/sample_team.py', 'packages/ops_plugins'],
   ui: ['apps/console'],

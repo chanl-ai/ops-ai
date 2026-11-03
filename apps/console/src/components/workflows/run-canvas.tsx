@@ -34,7 +34,7 @@ export interface RunCanvasProps {
 }
 
 /**
- * A run on its workflow's own canvas (c-097): the editor's nodes and edges, read-only, each node marked with what its
+ * A run on its workflow's own canvas: the editor's nodes and edges, read-only, each node marked with what its
  * step did, and the paths the run took drawn solid. Clicking a node that ran opens its input, output and attempts.
  */
 function Canvas({ definition, types, steps, runStatus, onOpenStep }: RunCanvasProps) {

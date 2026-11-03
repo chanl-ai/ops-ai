@@ -27,12 +27,12 @@ tool_secrets = sa.Table(
     "tool_secrets",
     metadata,
     sa.Column("tenant_id", sa.String(64), primary_key=True),
-    # The team whose tool modules and connections read it (c-509): two teams that call the same system each hold their
+    # The team whose tool modules and connections read it: two teams that call the same system each hold their
     # own row under the same name, so a module installed in both resolves `{{NAME}}` to its own team's value.
     sa.Column("team_id", sa.String(64), primary_key=True),
     # ^[A-Z][A-Z0-9_]*$, the name a `{{NAME}}` reference uses.
     sa.Column("name", sa.String(120), primary_key=True),
-    # The credential store's reference to the value (c-616 C6): the sealed value itself with the row-sealed adapter, a
+    # The credential store's reference to the value: the sealed value itself with the row-sealed adapter, a
     # vault's secret id with a vault adapter. Read and written only through the credential store.
     sa.Column("ciphertext", sa.Text, nullable=False),
     # Rises on every rotation, so a reader can tell which value a call used.
@@ -42,13 +42,13 @@ tool_secrets = sa.Table(
     sa.Column("rotated_at", _TS),
     sa.Column("last_used_at", _TS),
     # The template slot a provisioned record fills, found again by it on the next run, and what a person may change:
-    # `system` nothing, `managed` anything (c-180). Null on a record no template made.
+    # `system` nothing, `managed` anything. Null on a record no template made.
     sa.Column("template_id", sa.String(120), index=True),
     sa.Column("protection", sa.String(16)),
-    # The connection whose secret part this is (c-330); written through the connection, listed as belonging to it,
+    # The connection whose secret part this is; written through the connection, listed as belonging to it,
     # never rotated or deleted on its own. Null for a secret a person added on the Secrets page.
     sa.Column("connection_id", sa.String(64)),
-    # Held to its team by the database (c-616 C1): only a transaction run as ROLE in the row's team reads it.
+    # Held to its team by the database: only a transaction run as ROLE in the row's team reads it.
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 secret_audit = sa.Table(
@@ -144,7 +144,7 @@ class SecretStore:
         connection_id: str | None = None,
     ) -> bool:
         """False when the team already has the name (nothing written). `template` carries the provisioner's
-        `template_id` and `protection` (c-180); `connection_id` marks a connection's secret part (c-330)."""
+        `template_id` and `protection`; `connection_id` marks a connection's secret part."""
         row = {"tenant_id": tenant_id, "team_id": team_id, "name": name, "ciphertext": ref, "version": 1}
         if connection_id is not None:
             row["connection_id"] = connection_id

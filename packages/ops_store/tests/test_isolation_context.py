@@ -1,8 +1,8 @@
-"""ops_store.isolation (c-409), by failure mode: a transaction that does not carry the caller's tenant, team and scope;
+"""ops_store.isolation, by failure mode: a transaction that does not carry the caller's tenant, team and scope;
 a setting that outlives its transaction (SQL Server keeps session context on the pooled connection); a statement with
 no context that reads anyway; a widening that names no reason or leaves no log line; a widening that loses the caller's
 tenant. The live cases run on the PostgreSQL conformance database; SQL Server's statements are checked as sent, and run
-live in c-419."""
+live."""
 
 from __future__ import annotations
 
@@ -107,7 +107,7 @@ def test_a_widening_names_its_reason_and_logs_it(caplog: pytest.LogCaptureFixtur
 
 
 def test_a_loops_widening_is_logged_below_info(caplog: pytest.LogCaptureFixture) -> None:
-    """A relay or claim loop widens on every pass; its line is DEBUG, so INFO keeps the requests' widenings (c-451)."""
+    """A relay or claim loop widens on every pass; its line is DEBUG, so INFO keeps the requests' widenings."""
 
     def loop() -> None:
         with isolation.tenant_wide("outbox_relay", tenant_id="tenant-a"):

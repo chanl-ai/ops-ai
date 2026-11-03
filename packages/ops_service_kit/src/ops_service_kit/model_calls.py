@@ -1,4 +1,4 @@
-"""One structured model call through models-service, for a service that is not an agent (c-300): the service holds its
+"""One structured model call through models-service, for a service that is not an agent: the service holds its
 own model key (its budget line in models-service, never a provider credential), sends a system and a user message,
 and reads the answer as the `final_result` function's arguments, the form the agent kernel asks structured output in.
 documents-service's extraction carries the same call and moves onto this one in a follow-on."""

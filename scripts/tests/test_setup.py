@@ -1,4 +1,4 @@
-"""make setup (c-545), one test per failure mode in its spec: a database that is unreachable, the wrong version or
+"""make setup, one test per failure mode in its spec: a database that is unreachable, the wrong version or
 missing its row policy; a mirror that lists a package and refuses its pinned file; a model key whose base URL is wrong;
 a secret in any printed line; a second run over a hand-edited value; the devcontainer's database host; and a run that
 stops half-way. Live services are stood in by local HTTP servers and a patched driver call."""

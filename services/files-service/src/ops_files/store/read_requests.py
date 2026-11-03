@@ -1,4 +1,4 @@
-"""Read requests (c-250): a person asks for a file to be read with a document type. The request and its
+"""Read requests: a person asks for a file to be read with a document type. The request and its
 file.read_requested service event are written in one transaction, so the system extract workflow starts however long
 agents-service is down; the relay records the run it started on the request, which the console follows.
 
@@ -27,7 +27,7 @@ read_requests = sa.Table(
     sa.Column("file_id", sa.String(64), nullable=False),
     sa.Column("team", sa.String(64), nullable=False),
     sa.Column("requested_by", sa.String(320), nullable=False),
-    # None: read with Detect, which classifies the file over the team's types first (c-335).
+    # None: read with Detect, which classifies the file over the team's types first.
     sa.Column("document_type_id", sa.String(64)),
     sa.Column("version", sa.Integer),
     sa.Column("type_name", sa.String(200)),

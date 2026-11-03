@@ -1,4 +1,4 @@
-"""What tools-service does with platform-service's events (c-616): each event's handler, with the right its caller
+"""What tools-service does with platform-service's events: each event's handler, with the right its caller
 must hold, served at `POST /v1/platform-events` by `ops_access.platform_events`."""
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ def member_removed_handlers(store: ConnectionStore, credentials: CredentialStore
 
 
 def team_created_handlers(modules: ModuleStore, defaults: TeamDefaults) -> dict[str, Handler]:
-    """A new team gets this service's defaults, its built-in apps, before anyone opens it (c-616 PV2)."""
+    """A new team gets this service's defaults, its built-in apps, before anyone opens it."""
 
     async def provision(tenant_id: str, team_id: str, _: dict[str, Any]) -> int:
         at = datetime.now(UTC)

@@ -1,4 +1,4 @@
-"""module approvals keep the requester's email (c-186)
+"""module approvals keep the requester's email
 
 Revision ID: tools_0022_requester_email
 Revises: tools_0021_template_protection

@@ -1,4 +1,4 @@
-"""Document type pins (c-236): a saved workflow follows "newest" after a newer version is saved (a step left without a
+"""Document type pins: a saved workflow follows "newest" after a newer version is saved (a step left without a
 version), or a pin overwrites a version the builder chose."""
 
 from __future__ import annotations

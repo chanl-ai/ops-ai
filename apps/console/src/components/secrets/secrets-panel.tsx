@@ -119,8 +119,8 @@ function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onDelete: 
 }
 
 /**
- * The team's secrets (c-178): the values tool calls send, such as API keys, with Add, Rotate and Delete for the Security
- * team's admins, and the storage credentials files-service keeps. Shown on Apps › Credentials (c-617).
+ * The team's secrets: the values tool calls send, such as API keys, with Add, Rotate and Delete for the Security
+ * team's admins, and the storage credentials files-service keeps. Shown on Apps › Credentials.
  */
 export function SecretsPanel() {
   const list = useListParams('name');
@@ -192,7 +192,7 @@ export function SecretsPanel() {
   );
 }
 
-/** The storage credentials files-service keeps (c-100), listed here so every credential is in one place. Each stays in
+/** The storage credentials files-service keeps, listed here so every credential is in one place. Each stays in
  * the service that uses it; they are added and changed on the Storage page, where each target names its credential. */
 function StorageCredentials() {
   const creds = useStorageCredentials();

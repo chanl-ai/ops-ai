@@ -1,4 +1,4 @@
-"""Editing an operation's input, access and the secrets it reads (c-073), by failure mode: a new required field or a
+"""Editing an operation's input, access and the secrets it reads, by failure mode: a new required field or a
 removed one slipping in as a minor version, a field a binding or the call uses removed, a schema no call could honour
 saved, a `{{SECRET}}` in the path becoming an input an agent fills, an access change staged as minor, a default the
 agent is promised but the system never receives, and a secret the operation reads that nobody set."""
@@ -108,7 +108,7 @@ async def test_an_access_change_is_major_and_leaves_approval_off(api: Api) -> No
     change = next(c for c in staged["pendingChanges"] if c["operation"] == "get_payoff_statement")
     assert change == {**change, "kind": "access_widened", "major": True}
     after = next(o for o in staged["operations"] if o["name"] == "get_payoff_statement")
-    # Approvals are off by default (owner, 2026-11-01): a read made a write does not start waiting by itself.
+    # Approvals are off by default: a read made a write does not start waiting by itself.
     assert (after["access"], after["requiresApproval"]) == ("write", False)
 
 
@@ -126,7 +126,7 @@ async def test_a_default_reaches_the_agents_schema_once_published(api: Api) -> N
 
 async def test_the_secrets_an_operation_reads_show_whether_they_are_set(api: Api) -> None:
     op = await _http_op(api, "get_rate_keyed")
-    # Not a sign-in header: the module's connection signs its calls, so a key there is refused (c-616).
+    # Not a sign-in header: the module's connection signs its calls, so a key there is refused.
     await _ok(await _patch(api, op, {"headers": [{"key": "X-Partner-Id", "value": "{{CORE_KEY}}"}]}))
     before = await _ok(await api.call("GET", MOD))
     assert next(o for o in before["operations"] if o["id"] == op["id"])["secrets"] == [
@@ -197,7 +197,7 @@ async def test_a_teams_new_module_counts_its_unset_secret_until_that_team_saves_
 
 
 async def test_asking_for_two_approvers_turns_the_tools_approval_on(api: Api) -> None:
-    """With approvals off by default (owner, 2026-11-01), a write set to two approvers would otherwise never wait."""
+    """With approvals off by default, a write set to two approvers would otherwise never wait."""
     op = await _op(api, "get_payoff_statement")
     await _ok(await _patch(api, op, {"access": "write"}))
     staged = await _ok(await _patch(api, op, {"approvers": 2}))

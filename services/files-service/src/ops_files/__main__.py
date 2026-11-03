@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
 """`uv run python -m ops_files`: files-service on settings.files_port (8750). Files go to the local backend under
-settings.files_dir until a tenant's storage settings name another target (c-100, ops_files.settings)."""
+settings.files_dir until a tenant's storage settings name another target (ops_files.settings)."""
 
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ def main() -> None:
     files = build(settings)
     background: list[Callable[[], Coroutine[Any, Any, None]]] = []
     if settings.agents_url:
-        # A deleted file's file.deleted reaches agents-service, which runs the purge workflow (c-250).
+        # A deleted file's file.deleted reaches agents-service, which runs the purge workflow.
         http = httpx.AsyncClient(base_url=settings.agents_url, timeout=5)
         agents = ServiceClient.for_settings(settings, http, service="files", audience="agents", scopes=["events:emit"])
         background.append(lambda: keep_relaying(files.engine, agents))

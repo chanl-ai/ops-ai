@@ -1,4 +1,4 @@
-"""`POST /v1/platform-events`, as every service that acts on platform-service's events serves it (c-616): delivered by
+"""`POST /v1/platform-events`, as every service that acts on platform-service's events serves it: delivered by
 platform-service's outbox relay, as that service, for the event's tenant and team.
 
 One route for every event: a service passes its handlers, each with the right its caller must hold, so a new event is

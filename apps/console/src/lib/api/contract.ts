@@ -126,7 +126,7 @@ export interface OpsApi {
     setPaused(id: string, paused: boolean): Promise<Agent>;
     /** The tools any agent may be granted; a grant names their ids, and an unknown id is refused. */
     grantableTools(): Promise<GrantableTool[]>;
-    /** The tools picker: grantable tools searched and paged on the server; `ids` labels stored grants (c-135). */
+    /** The tools picker: grantable tools searched and paged on the server; `ids` labels stored grants. */
     toolOptions(p: OptionsParams): Promise<OptionsPage>;
     /** The model aliases an agent may name; a publish naming any other is refused (422 unknown_model_alias). */
     modelAliases(): Promise<ModelAlias[]>;
@@ -136,7 +136,7 @@ export interface OpsApi {
   };
   /** The workflow runner: node types, v2 definitions and their runs. */
   engine: EngineApi;
-  /** Channels > Email: the team's mailboxes (c-199). */
+  /** Channels > Email: the team's mailboxes. */
   channels: ChannelsApi;
   workflows: {
     list(params: ListParams<WorkflowFilters>): Promise<ListResult<Workflow>>;
@@ -165,7 +165,7 @@ export interface OpsApi {
   reviews: {
     list(params: ReviewListParams): Promise<ListResult<Review> & { viewCounts: ReviewViewCounts; stats: ReviewStats }>;
     get(id: string): Promise<Review>;
-    /** The review of the system workflow run a service event started, by its run key `<event>:<key>` (c-257). */
+    /** The review of the system workflow run a service event started, by its run key `<event>:<key>`. */
     byRunKey(runKey: string): Promise<Review>;
     /** Where a review sits in the open queue, in the list's order: position, total and the reviews either side. */
     place(id: string, opts?: { view?: string; group?: 'case' }): Promise<ReviewPlace>;
@@ -193,7 +193,7 @@ export interface OpsApi {
   signInPolicy: SignInPolicyApi;
   invites: InvitesApi;
   account: AccountApi;
-  /** The workspace's access policies (platform-service, c-186); other stacks get sample ones. */
+  /** The workspace's access policies (platform-service); other stacks get sample ones. */
   workspacePolicies: WorkspacePoliciesApi;
   workspaceTeams: WorkspaceTeamsApi;
   signInProviders: SignInProvidersApi;
@@ -208,7 +208,7 @@ export interface OpsApi {
   egress: EgressApi;
   /** Credentials tool calls send; values never come back (tools-service). */
   secrets: SecretsApi;
-  /** A connected system's sign-in: whose account, Test connection, and each person's own (tools-service, c-558). */
+  /** A connected system's sign-in: whose account, Test connection, and each person's own (tools-service). */
   connections: ConnectionsApi;
   integrations: IntegrationsApi;
   files: FilesApi;
@@ -217,11 +217,11 @@ export interface OpsApi {
   skills: SkillsApi;
   widgets: WidgetsApi;
   widgetDeployments: WidgetDeploymentsApi;
-  /** A workflow's start form shared as a page (agents-service /v1/workflows/{id}/forms, c-535). */
+  /** A workflow's start form shared as a page (agents-service /v1/workflows/{id}/forms). */
   forms: FormsApi;
-  /** A workflow started once per row of a file, and the batch's page (agents-service /v1/workflows/{id}/batches, c-535). */
+  /** A workflow started once per row of a file, and the batch's page (agents-service /v1/workflows/{id}/batches). */
   batches: BatchesApi;
-  /** The team's customer issues with their deadlines and timelines (agents-service /v1/cases, c-220). */
+  /** The team's customer issues with their deadlines and timelines (agents-service /v1/cases). */
   caseRecords: CaseRecordsApi;
   activity: ActivityApi;
   guardrails: GuardrailsApi;
@@ -270,12 +270,12 @@ export interface OpsApi {
      * again. Absent off platform sign-in, where the session's role stands in. */
     me?(): Promise<Me>;
     /** What `can()` grants the person in each team and in every team (`*`), from platform-service
-     * (GET /v1/me/permissions, c-186). Absent off platform sign-in, where the session's role stands in. */
+     * (GET /v1/me/permissions). Absent off platform sign-in, where the session's role stands in. */
     permissions?(): Promise<MyPermissions>;
     /** The roles that grant `area.action` in `team` (the current team when omitted) and who holds them there
      * (GET /v1/access/holders); asking about a team the person is not in is refused. */
     holders?(area: string, action: string, team?: string): Promise<Holders>;
-    /** The workspace's roles, one role's grid, and a person's grants with the role behind each (c-150). Absent off
+    /** The workspace's roles, one role's grid, and a person's grants with the role behind each. Absent off
      * platform sign-in. */
     roles?(): Promise<RoleSummary[]>;
     role?(id: string): Promise<RoleDetail>;

@@ -70,7 +70,7 @@ class Identity:
         self.keys = JwksCache(jwks, audience, clock=clock)
         self.introspect = introspect
         self.dev_user = dev_user
-        # Service tokens on public routes: verified against the service keys and capped by their scopes (c-167).
+        # Service tokens on public routes: verified against the service keys and capped by their scopes.
         self.services = services
         self.key_cache_s = key_cache_s
         self.clock = clock
@@ -101,8 +101,8 @@ class Identity:
         raise _refused()
 
     async def bearer(self, authorization: str | None, team: str | None = None) -> Principal:
-        """The caller behind `Authorization: Bearer` on a route FastAPI does not resolve (tools-service's MCP adapter,
-        c-356): an API key or a person's token, acting in `team` (403 `team_forbidden` when the key or token is not in
+        """The caller behind `Authorization: Bearer` on a route FastAPI does not resolve (tools-service's MCP adapter):
+        an API key or a person's token, acting in `team` (403 `team_forbidden` when the key or token is not in
         it). No HTTP-method read gate: every MCP request is a POST, and that route keeps a key to what it may run. A
         service token, the dev caller and a missing credential are refused."""
         scheme, _, given = (authorization or "").partition(" ")
@@ -116,8 +116,8 @@ class Identity:
         return await self._from_token(token, team)
 
     async def acting_for(self, token: str, caller: Principal) -> ActingForPerson:
-        """The person `caller` (a service) says its call acts for, from the acting-for token platform-service signed
-        (c-558): its own `kind`, minted for this service, in the call's tenant and team. In dev a token the calling
+        """The person `caller` (a service) says its call acts for, from the acting-for token platform-service signed:
+        its own `kind`, minted for this service, in the call's tenant and team. In dev a token the calling
         service signed itself is accepted instead, since no platform-service runs; a platform stack never takes one."""
         if caller.kind != "service":
             raise acting_for_refused("only a service call names whom it acts for")

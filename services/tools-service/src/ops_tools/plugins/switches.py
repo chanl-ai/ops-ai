@@ -1,4 +1,4 @@
-"""The install switch: which plugins the platform admin turned on for the install, and the fields they locked (c-564).
+"""The install switch: which plugins the platform admin turned on for the install, and the fields they locked.
 
 It is platform-service's `plugins` workspace policy ({plugin id: {enabled, locked}}), which only a holder of
 settings.manage in the Security team may change. tools-service reads it with its own `settings:view` token and keeps
@@ -58,7 +58,7 @@ class InstallSwitches:
         return (await self._entry(tenant_id, plugin_id)).get("enabled") is True
 
     async def app_client_id(self, tenant_id: str, plugin_id: str) -> str | None:
-        """The client id of the platform's own OAuth app for the plugin (c-565), when the platform admin set one."""
+        """The client id of the platform's own OAuth app for the plugin, when the platform admin set one."""
         client = (await self._entry(tenant_id, plugin_id)).get("client")
         cid = cast(dict[str, Any], client).get("id") if isinstance(client, dict) else None
         return cid if isinstance(cid, str) and cid else None

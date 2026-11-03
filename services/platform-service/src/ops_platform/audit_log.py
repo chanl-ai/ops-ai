@@ -101,7 +101,7 @@ class AuditReader:
     async def page(self, actor: Actor, filters: dict[str, str | None], page: int, size: int) -> dict[str, Any]:
         await self.members.require_admin(actor, "audit", "view")
         # The acting team's entries; the account's own (no team) only for whoever reads audit in every team, the
-        # account admin (owner's answer, c-507 Q1). No team reads another team's.
+        # account admin. No team reads another team's.
         account = await self._account_admin(actor)
         team = actor.team_id
         rows, total = await self.log.page(actor.tenant_id, team, account=account, filters=filters, page=page, size=size)

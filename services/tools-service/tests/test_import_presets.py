@@ -1,4 +1,4 @@
-"""Import's presets (c-048 T006), by failure mode: access guessed from a name instead of the method, a document with no
+"""Import's presets, by failure mode: access guessed from a name instead of the method, a document with no
 auth imported silently so its calls go out with no credentials, and an imported write's stub answering a placeholder
 instead of what the system's documentation shows."""
 

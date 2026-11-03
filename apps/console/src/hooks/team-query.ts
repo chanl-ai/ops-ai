@@ -17,7 +17,7 @@ import { currentTeamId, teamStore } from '@/lib/api/team-context';
 import { useTeamReady } from './use-team';
 
 /**
- * The one way the console reads through React Query (c-505). A team's data waits until the person's teams are known
+ * The one way the console reads through React Query. A team's data waits until the person's teams are known
  * and the team it would be asked for is one of them, and its key ends with that team, so no request leaves for a team
  * the person does not hold and one team's answer is never shown in another. `scripts/check-standards.mjs` refuses the
  * React Query read hooks anywhere else.

@@ -1,4 +1,4 @@
-"""The extract step's scoring (c-157), by failure mode: an invented quote accepted; a quote on another page accepted; a
+"""The extract step's scoring, by failure mode: an invented quote accepted; a quote on another page accepted; a
 money or date value in another format rejected, or a wrong one accepted; an OCR'd field scored as if read cleanly; a
 missing required field passing; a step threshold below the workspace floor skipping review."""
 
@@ -60,7 +60,7 @@ def test_an_ocr_page_scores_down() -> None:
 
 
 def test_a_missing_required_field_cannot_pass_and_nothing_found_carries_no_confidence() -> None:
-    """An empty optional field showed 100% confidence on the file page (c-262)."""
+    """An empty optional field showed 100% confidence on the file page."""
     missing = scored(DUE, {"value": None, "quote": None, "page": None})
     optional = scored({**DUE, "required": False}, None)
     assert missing["confidence"] is None and missing["needsReview"] and missing["citation"] is None
@@ -96,7 +96,7 @@ def test_a_real_quote_with_an_invented_value_scores_zero() -> None:
 
 
 def test_a_numeric_date_reads_in_the_types_order() -> None:
-    """03/04/2026 is March 4 on a US levy and 3 April on a day-first document (levy demo, c-270)."""
+    """03/04/2026 is March 4 on a US levy and 3 April on a day-first document (levy demo)."""
     pages = {1: "Due 03/04/2026"}
     answer: dict[str, Any] = {"value": "03/04/2026", "quote": "Due 03/04/2026", "page": 1}
     us = score({**DUE, "dateOrder": "MDY"}, answer, pages, set(), file_id="fil_1", schema_below=None, floor=0.8)
@@ -121,7 +121,7 @@ CLEAN_FLOOR: dict[str, Any] = {"file_id": "fil_1", "schema_below": None, "floor"
 
 
 def test_cleanup_rules_save_the_value_without_what_the_model_copied_around_it() -> None:
-    """c-287: a trailing comma, a masked number given whole and a kept label are cleaned before scoring; what the model
+    """A trailing comma, a masked number given whole and a kept label are cleaned before scoring; what the model
     said stays as extractedValue, and the cleaned value is still backed by the quote."""
     name = clean_score({"key": "n", "type": "text", "clean": ["trimPunctuation"]}, "QUINN CAPTION,", "QUINN CAPTION,")
     last4 = clean_score(

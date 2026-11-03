@@ -1,4 +1,4 @@
-"""The access checker's gaps (c-338), by failure mode: a refusal raised as a typed error goes unseen, a 409 that decides
+"""The access checker's gaps, by failure mode: a refusal raised as a typed error goes unseen, a 409 that decides
 access goes unseen, an allowlist line names a row the register does not hold (or one already resolved), a line is
 added on a row the owner has not decided, and an exception line lands with no Standards-exception: trailer naming its
 approver."""

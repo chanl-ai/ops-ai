@@ -1,4 +1,4 @@
-"""The tool workbench's runs (c-088), by failure mode: a draft transform or mock reaching what agents get before it is
+"""The tool workbench's runs, by failure mode: a draft transform or mock reaching what agents get before it is
 staged, a transform failure with no reason or a blank answer, a value typed for a secret being stored, logged or shown,
 and an edited mock skipping review."""
 
@@ -77,7 +77,7 @@ async def reversing(
 
 async def _run(g: Gateway, base: str, target: str, args: dict[str, Any], **extra: Any) -> dict[str, Any]:
     body = {"operation": g.tool(base), "contextId": "owner", "target": target, "input": args, **extra}
-    # In the module's team, as the console sends it: a Real run is a gateway call made in the acting team (c-616).
+    # In the module's team, as the console sends it: a Real run is a gateway call made in the acting team.
     r = await g.client.post(f"{BASE}/test", json=body, headers={"X-Team-Id": "team_platform"})
     assert r.status_code == 200, r.text
     return r.json()["data"]

@@ -1,4 +1,4 @@
-"""The workspace's access policies at rest (c-186). A change writes the row, its audit entry and the tenant's next
+"""The workspace's access policies at rest. A change writes the row, its audit entry and the tenant's next
 permission version in one transaction, so a token minted after the change carries the new value and one minted before
 it is refreshed by every service that caches on the version."""
 

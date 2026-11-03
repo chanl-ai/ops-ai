@@ -111,7 +111,7 @@ export function AssistantMessage({
   cardsReadOnly,
 }: {
   message: ChatMessage;
-  /** Draws Ops cards with Open and no buttons: the embedded chat, whose widget API serves no record routes (c-469). */
+  /** Draws Ops cards with Open and no buttons: the embedded chat, whose widget API serves no record routes. */
   cardsReadOnly?: boolean;
   /** Set while the reply is in flight and nothing has been written yet. */
   phaseLabel?: string;
@@ -123,15 +123,15 @@ export function AssistantMessage({
   onRegenerate?: () => void;
   onFeedback?: (feedback: MessageFeedback | null) => void;
   onWidgetAction?: (widgetId: string, action: WidgetAction) => Promise<unknown>;
-  /** Sends a widget button's reply as the person's next message (c-082); undefined in a read-only conversation. */
+  /** Sends a widget button's reply as the person's next message; undefined in a read-only conversation. */
   onReply?: (text: string) => void;
   /** Opens how the cited passages were found: queries, filters, scores and precedence. */
   onOpenTrace?: (trace: NonNullable<ChatMessage['trace']>) => void;
-  /** The conversation's budget card when this turn paused on it (c-103); the page decides who may answer. */
+  /** The conversation's budget card when this turn paused on it; the page decides who may answer. */
   budgetCard?: React.ReactNode;
-  /** Names the agent that wrote this reply, shown once a conversation has had more than one agent (c-174). */
+  /** Names the agent that wrote this reply, shown once a conversation has had more than one agent. */
   byline?: string;
-  /** Opens What I remember from the line saying what this reply saved (c-206); absent in someone else's chat. */
+  /** Opens What I remember from the line saying what this reply saved; absent in someone else's chat. */
   onOpenMemory?: () => void;
 }) {
   const [feedbackOpen, setFeedbackOpen] = React.useState(false);

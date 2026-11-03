@@ -1,6 +1,6 @@
-"""Delivers tools-service's service events (c-258's outbox) to agents-service's POST /v1/events, as this service with
+"""Delivers tools-service's service events (the outbox) to agents-service's POST /v1/events, as this service with
 the events:emit scope, for the event's tenant and team. Runs beside the server; an event waits in the outbox while
-agents-service is down and is delivered when it is back (c-257)."""
+agents-service is down and is delivered when it is back."""
 
 from __future__ import annotations
 

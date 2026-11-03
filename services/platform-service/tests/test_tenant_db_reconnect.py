@@ -1,5 +1,5 @@
 """A database connection the server closed while the pool held it (idle timeout, failover, restart) is replaced on the
-next checkout, so the first request after an idle spell does not fail with "connection is closed" (c-384)."""
+next checkout, so the first request after an idle spell does not fail with "connection is closed"."""
 
 from __future__ import annotations
 

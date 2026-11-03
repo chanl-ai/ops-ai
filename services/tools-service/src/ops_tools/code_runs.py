@@ -1,4 +1,4 @@
-"""Code operations (c-531): a builder's Python function, run on runner-service, that reaches other systems only through
+"""Code operations: a builder's Python function, run on runner-service, that reaches other systems only through
 the tools it is bound to.
 
 The gateway decides a call to a code operation like any other, then this executor sends the function, the call's input
@@ -63,7 +63,7 @@ class CodeExecutor:
             "purpose": PURPOSE,
             "tenant_id": caller.tenant_id,
             "team_id": caller.team_id,
-            # Whose secrets a handle reads: the function module's team, as for a tool call (c-509), never the caller's.
+            # Whose secrets a handle reads: the function module's team, as for a tool call, never the caller's.
             "module_team_id": module_team,
             "sub": caller.sub,
             "kind": caller.kind,
@@ -73,7 +73,7 @@ class CodeExecutor:
             "secrets": list(code.get("secrets") or []),
             "key": key,
             "environment": env,
-            # The person the run's caller acts for, so a call the function makes acts for them too (c-558).
+            # The person the run's caller acts for, so a call the function makes acts for them too.
             "acting_for": asdict(caller.acting_for) if caller.acting_for else None,
         }
         return mint(claims, self.signer, ttl_s=int(float(limits.get("timeS", 10)) + TOKEN_GRACE_S))

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""Which document types a team installed from a template (c-590): one row per copy, in the copy's team, naming the
+"""Which document types a team installed from a template: one row per copy, in the copy's team, naming the
 template's source (`plugin:<plugin id>`), id and version. The copy itself is an ordinary document type made through
 the create path; this table is the only place that remembers where it came from, so no type or response changes.
 

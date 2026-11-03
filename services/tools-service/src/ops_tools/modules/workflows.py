@@ -1,4 +1,4 @@
-"""The workflows tools-service governs calls for, read from agents-service, which owns them (c-039).
+"""The workflows tools-service governs calls for, read from agents-service, which owns them.
 
 `AgentsWorkflows` asks agents-service's internal route with this service's Ed25519 token for the caller's tenant and
 keeps each tenant's answer for a short while, so a module page does not cost one request per approval. When

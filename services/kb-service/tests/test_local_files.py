@@ -1,4 +1,5 @@
-"""The local file store keeps reading what it stored before c-094 (the files-service library's layout: a StoredFile
+"""The local file store keeps reading what it stored in the older layout (the files-service library's layout: a
+StoredFile
 record with `storage.key`, the bytes at `objects/data/<key>`), so a stack that has not moved to files-service still
 syncs its sources."""
 

@@ -1,7 +1,7 @@
 """The database answer: our container, a PostgreSQL URL (Azure Database for PostgreSQL among them) or Azure SQL. A
 PostgreSQL database must connect, run version 15 to 17, and have the row policy on for every tenant table the chains
 declare (deploy/database/models.py) that it already holds. An empty database passes: the install applies the schema
-with its policies. Azure SQL fails until the store runs on it (c-543, c-544)."""
+with its policies. Azure SQL fails until the store runs on it."""
 
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ async def _inspect(url: str, ssl: bool) -> tuple[int, set[str], set[str]]:
 def check(answer: str) -> Result:
     answer = answer.strip()
     if answer.split(":", 1)[0] in ("mssql", "sqlserver", "azuresql") or "database.windows.net" in answer:
-        return Result(ITEM, False, "Azure SQL is not supported in this version (c-543, c-544)", answer=answer)
+        return Result(ITEM, False, "Azure SQL is not supported in this version", answer=answer)
     url = container_url() if answer == CONTAINER else answer
     parts = urllib.parse.urlsplit(url.replace("postgresql+asyncpg://", "postgresql://"))
     if parts.scheme not in ("postgresql", "postgres"):

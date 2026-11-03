@@ -1,4 +1,4 @@
-"""The bank stand-in's sign-in: an OAuth 2.0 server and routes protected each way a connection signs in (c-330).
+"""The bank stand-in's sign-in: an OAuth 2.0 server and routes protected each way a connection signs in.
 
 Every protected route answers which credential arrived and for which environment, so a use case can tell that a call
 carried the test value and not the production one. None of it is in the bank's OpenAPI document: importing the core
@@ -17,7 +17,7 @@ banking API brings none of these operations along.
 | `POST /mcp/screening` | An MCP server that answers only a token issued for it (`resource`) |
 | `GET /.well-known/oauth-protected-resource/mcp/screening` | Its protected resource metadata (RFC 9728) |
 | `GET /.well-known/oauth-authorization-server/oauth2` | The authorization server's metadata (RFC 8414) |
-| `POST /oauth2/register` | Dynamic client registration of a public client (c-331) |
+| `POST /oauth2/register` | Dynamic client registration of a public client |
 """
 
 from __future__ import annotations
@@ -196,13 +196,13 @@ def bearer(authorization: Annotated[str | None, Header()] = None) -> dict[str, s
     return {"environment": BEARERS[given]}
 
 
-# Customers made through the Stripe-shaped write below, in the order made (c-591).
+# Customers made through the Stripe-shaped write below, in the order made.
 CUSTOMERS: list[dict[str, Any]] = []
 
 
 @router.post("/auth/bearer/customers")
 async def bearer_customer(request: Request, authorization: Annotated[str | None, Header()] = None) -> dict[str, Any]:
-    """A Stripe-shaped write behind a bearer key (c-591): it takes a form body only, as Stripe does, and answers with
+    """A Stripe-shaped write behind a bearer key: it takes a form body only, as Stripe does, and answers with
     the customer made, so a use case shows a REST tool's form body and its key reach the system."""
     if _bearer(authorization) not in BEARERS:
         raise HTTPException(401, "wrong bearer token")
@@ -255,7 +255,7 @@ def mtls() -> dict[str, bool]:
     return {"mtls": True}
 
 
-# ── An MCP server behind OAuth (c-331) ───────────────────────────────────
+# ── An MCP server behind OAuth ───────────────────────────────────
 
 BASE = "https://api.bank.test"
 MCP_RESOURCE = f"{BASE}/mcp/screening"

@@ -1,4 +1,4 @@
-"""A plugin's OAuth app through the real routes (c-565), by failure mode: a team with no app of its own cannot sign in
+"""A plugin's OAuth app through the real routes, by failure mode: a team with no app of its own cannot sign in
 although the platform set one up; the platform's app wins over a team's own; the platform's secret is set by a team
 admin, copied into a team, or shown back by any read; and a team points its connection at the platform's app by hand.
 
@@ -134,7 +134,7 @@ async def test_a_teams_own_app_wins_over_the_platforms(
 async def test_edit_keys_on_a_platform_app_connection_keeps_the_platforms_app(
     rig: tuple[httpx.AsyncClient, ConnectionService, PluginAppKeys], tenant: str
 ) -> None:
-    """The connection page's Edit keys sends back the kind's fields it shows, as the dialog does (c-580): the app the
+    """The connection page's Edit keys sends back the kind's fields it shows, as the dialog does: the app the
     environment signs in with is not one of them, so a save that rewrites the settings must not drop it."""
     client, connections, _ = rig
     await client.put(f"/v1/plugins/{ID}/app-secret", json={"clientSecret": SECRET}, headers=account_admin(tenant))

@@ -1,4 +1,4 @@
-"""Code runs' calls back (c-531): the call token is this service's own and holds only for its purpose and its time, and
+"""Code runs' calls back: the call token is this service's own and holds only for its purpose and its time, and
 a secret handle becomes a value only for a bound secret handed to a read over http as a query value."""
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ async def test_a_bound_secret_becomes_a_query_value_and_is_named_for_scrubbing()
 
 
 async def test_a_function_reads_its_own_modules_team_secret_whoever_calls_it() -> None:
-    """A secret belongs to the function module's team (c-509), as for a tool call: a caller in another team, or a
+    """A secret belongs to the function module's team, as for a tool call: a caller in another team, or a
     service naming none, gets that team's value, never its own team's or nothing."""
     asked: list[str | None] = []
 

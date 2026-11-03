@@ -1,5 +1,5 @@
-"""Writes the synthetic restraining notices under tests/fixtures/restraining from notices.json (c-248), the tax levies
-under tests/fixtures/tax_levy from levies.json, and the levy demo's mixed email under tests/fixtures/mail (c-270).
+"""Writes the synthetic restraining notices under tests/fixtures/restraining from notices.json, the tax levies
+under tests/fixtures/tax_levy from levies.json, and the levy demo's mixed email under tests/fixtures/mail.
 
     uv run python scripts/make_restraining_fixtures.py
 
@@ -35,7 +35,7 @@ rl_config.invariant = 1
 
 FIXTURES = Path(__file__).resolve().parents[1] / "tests" / "fixtures"
 HERE = FIXTURES / "restraining"
-# Each folder's source file and the family its notices are filed under; the tax levies came for the levy demo (c-270).
+# Each folder's source file and the family its notices are filed under; the tax levies came for the levy demo.
 DATASETS = (("restraining", "notices.json", "photographed"), ("tax_levy", "levies.json", "tax_levy"))
 BANNER = "SYNTHETIC TEST DOCUMENT - NOT A REAL LEVY - NO REAL PERSON OR ACCOUNT"
 FOOTER = "Synthetic QA fixture. All names, addresses, identifiers, case numbers and agencies are fictional."
@@ -279,7 +279,7 @@ def catalogue(data: dict[str, Any], family: str = "photographed") -> tuple[dict[
     return files, expected
 
 
-# The levy demo's email (c-270): one message carrying several documents of different kinds, as a Graph message item
+# The levy demo's email: one message carrying several documents of different kinds, as a Graph message item
 # (the mailbox fixtures' form, services/agents-service/scripts/send_levy_email.py sends one through GreenMail).
 MIXED_EMAIL = (("restraining", "TEST006.pdf"), ("restraining", "TEST012.pdf"), ("tax_levy", "TAXLEVY01.pdf"))
 

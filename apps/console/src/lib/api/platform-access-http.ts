@@ -27,7 +27,7 @@ interface PlatformAuditRow {
 type PlatformInvite = Omit<InvitePreview, 'invitedBy' | 'sso' | 'mfaRequired' | 'passwordless'> & { invitedBy: string | null };
 
 // People read reviewer for the stored approver (roles-and-permissions, open question 1). `chat_user` is the membership a
-// first SSO sign-in gives a person new to the workspace (c-188).
+// first SSO sign-in gives a person new to the workspace.
 const ROLE_LABEL: Record<string, string> = { admin: 'Admin', builder: 'Builder', approver: 'Reviewer', viewer: 'Viewer', chat_user: 'Chat user' };
 const TARGETS = new Set<string>(['member', 'api_key', 'session', 'team']);
 

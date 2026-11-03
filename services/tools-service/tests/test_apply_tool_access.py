@@ -1,7 +1,7 @@
-"""A tool access request's decision applied through the gateway (c-257), by failure mode: a team's own workflow, or
+"""A tool access request's decision applied through the gateway, by failure mode: a team's own workflow, or
 an agent, granting access with an approval its own review minted; a call with no approval at all; the decision
 recorded under nobody, or the rejection's reason lost; a decision for a request another team decides; and a retried
-run applying its decision twice, or reviving a request revoked meanwhile (c-166's rules, now on this path)."""
+run applying its decision twice, or reviving a request revoked meanwhile (the rules, now on this path)."""
 
 from __future__ import annotations
 
@@ -139,7 +139,7 @@ async def test_a_decision_applies_once_and_never_revives_a_revoked_request(gatew
 
 
 async def test_the_requester_does_not_approve_their_own_request(gateway: Gateway, engine: AsyncEngine) -> None:  # noqa: F811
-    # tick 25: whoever asked for the access is not its approver, whichever run applies the decision.
+    # Whoever asked for the access is not its approver, whichever run applies the decision.
     approval = await _ask(gateway)
     m = await ModuleStore(engine).get(gateway.tenant, "mod_core_banking")
     assert m is not None
@@ -164,7 +164,7 @@ async def test_the_requester_approves_their_own_request_only_while_the_policy_al
     engine: AsyncEngine,
     seed: dict[str, Any],
 ) -> None:
-    """tick 29: separation of duties on an access request follows requesterMayDecide, as every other decision does."""
+    """Separation of duties on an access request follows requesterMayDecide, as every other decision does."""
     approval = await _ask(gateway)
     m = await ModuleStore(engine).get(gateway.tenant, "mod_core_banking")
     assert m is not None
@@ -182,7 +182,7 @@ async def test_the_requester_approves_their_own_request_only_while_the_policy_al
 
 
 async def test_with_no_platform_service_the_requester_policy_is_the_dev_policy_at_its_open_default() -> None:
-    """tick 30: with no platform URL the decision followed no policy and always refused; it follows the dev policies,
+    """With no platform URL the decision followed no policy and always refused; it follows the dev policies,
     as the dev caller's own identity does for every other decision."""
     assert await RequesterMayDecide(None).allowed("t") is True
     assert await RequesterMayDecide(None, dev={"requesterMayDecide": False}).allowed("t") is False

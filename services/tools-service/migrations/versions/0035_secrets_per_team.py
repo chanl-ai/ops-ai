@@ -1,4 +1,4 @@
-"""A secret belongs to one team (c-509)
+"""A secret belongs to one team
 
 Revision ID: tools_0035_secrets_per_team
 Revises: tools_0034_tools_per_team
@@ -10,7 +10,7 @@ system each keep a row under the same name. The key becomes (tenant, team, name)
 Each row goes to the teams it was limited to, or, when it named none, to every team whose modules name `{{NAME}}` in an
 operation or a published baseline; a connection's secret part goes to the connection's team. A row owned by several
 teams is copied into each, ciphertext and version unchanged (its key context is the tenant and name). A row no team
-reads is deleted (owner, 2026-10-26: existing data is test data); where model provider keys live is the owner's
+reads is deleted (existing data is test data); where model provider keys live is the owner's
 decision still to come. An audit row keeps the history of a name one team owns; the rest are deleted with it.
 
 The steps are SQL, so the revision renders offline for both databases.

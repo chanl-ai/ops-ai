@@ -4,7 +4,7 @@ import * as React from 'react';
 
 /**
  * Full-height chat shell: the open conversation fills the space beside the app sidebar, whose Chats group lists the
- * person's chats (c-552). Chat pages use this instead of PageLayout because the message list and composer must fill
+ * person's chats. Chat pages use this instead of PageLayout because the message list and composer must fill
  * the viewport and scroll on their own.
  */
 export function ChatLayout({ children }: { children: React.ReactNode }) {

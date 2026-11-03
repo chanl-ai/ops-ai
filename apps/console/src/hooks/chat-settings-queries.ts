@@ -21,5 +21,5 @@ export function useSaveThreadSettings(threadId: string) {
   });
 }
 
-/** Uploads one file for the next chat message; the server checks its type and size and parses it (c-071). */
+/** Uploads one file for the next chat message; the server checks its type and size and parses it. */
 export const useAttachChatFile = () => api.chat.settings.attach;

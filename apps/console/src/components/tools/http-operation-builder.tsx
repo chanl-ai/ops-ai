@@ -140,7 +140,7 @@ export function HeadersEditor({ value, onChange, note }: { value: HttpOperationI
   );
 }
 
-/** The body as JSON, form fields or raw text (c-591): a form's fields are rows, stored as a JSON object. */
+/** The body as JSON, form fields or raw text: a form's fields are rows, stored as a JSON object. */
 export function BodyEditor({ value, onChange, error }: { value: HttpOperationInput; onChange: (v: HttpOperationInput) => void; error?: string }) {
   const encoding = value.bodyEncoding ?? 'json';
   const rows = encoding === 'form' ? formRows(value.body) : [];

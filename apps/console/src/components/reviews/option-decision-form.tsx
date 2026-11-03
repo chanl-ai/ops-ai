@@ -65,7 +65,7 @@ export function OptionDecisionForm({
   blocked?: Record<string, string | undefined>;
   /** `sheet` sticks to the bottom of a side sheet; `footer` is one row of a page grid: the focused option's consequence
    * and the buttons, with an option's inputs opening a row above only once that option is chosen. `panel` is the Human
-   * Tasks decision panel (c-460): every option as a choice with its consequence, the chosen one's inputs and a reason,
+   * Tasks decision panel: every option as a choice with its consequence, the chosen one's inputs and a reason,
    * and one Decide named after the chosen option, handed to `parts` so the panel keeps Decide in its fixed footer. */
   layout?: 'sheet' | 'footer' | 'panel';
   /** With `panel`: where the choice and the Decide button go. */

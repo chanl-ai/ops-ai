@@ -1,4 +1,4 @@
-"""platform-service's events reaching tools-service (c-616 S14): a member removed from a team loses their own accounts
+"""platform-service's events reaching tools-service: a member removed from a team loses their own accounts
 on that team's apps. By failure mode: the removed person's sign-ins stay, so their tokens work again if they come back;
 someone else's sign-in in the team goes too, or the person's own in another team; any service may delete sign-ins; and
 an event tools-service has no handler for fails, holding platform-service's outbox."""
@@ -94,7 +94,7 @@ async def test_a_removed_member_loses_their_accounts_on_that_teams_apps_only(
 async def test_a_new_team_gets_its_built_in_apps_from_the_team_created_event(
     engine: AsyncEngine, seed: dict[str, Any], tenant: str
 ) -> None:
-    # PV2 (c-616): the team's defaults are written when platform-service reports the team, before anyone opens it.
+    # PV2: the team's defaults are written when platform-service reports the team, before anyone opens it.
     store = ModuleStore(engine)
     app = build_app(engine, seed, tenant)
     app.include_router(platform_events_router(team_created_handlers(store, TeamDefaults(engine))))

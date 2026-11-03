@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""Extractions at rest (c-235): one row per extraction, its status kept on the row so a restart picks up what was
+"""Extractions at rest: one row per extraction, its status kept on the row so a restart picks up what was
 queued or running, and one row per checker correction beside the value it corrected.
 
 The request and the answer are JSON kept as text and never queried (database portability D5). `key_hash` is never
@@ -56,12 +56,12 @@ extractions = sa.Table(
     sa.Column("started_at", sa.DateTime(timezone=True)),
     sa.Column("finished_at", sa.DateTime(timezone=True)),
     # The document type read with, and the model's measured tokens, so a test estimate prices what reading that type
-    # spends rather than a fixed guess (c-247).
+    # spends rather than a fixed guess.
     sa.Column("type_id", sa.String(64)),
     sa.Column("input_tokens", sa.Integer),
     sa.Column("output_tokens", sa.Integer),
     # A model read's layout without its values (ops_extract.templates.fingerprint), so template offers group stored
-    # values instead of reading every file's layout again (c-254).
+    # values instead of reading every file's layout again.
     sa.Column("layout_fingerprint", sa.String(32)),
     sa.UniqueConstraint("tenant_id", "key_hash", name="uq_extractions_key"),
     sa.Index("ix_extractions_status", "status"),
@@ -70,19 +70,19 @@ extractions = sa.Table(
     info={**TENANT_SCOPED, **team_owned("team")},
 )
 
-# A correction keeps what it replaced, so per-field accuracy can be counted from these rows (c-240).
+# A correction keeps what it replaced, so per-field accuracy can be counted from these rows.
 # Service events documents-service reports (extraction.*), written in the transaction of the change they report and
-# relayed to agents-service (c-258's outbox).
+# relayed to agents-service (the outbox).
 service_outbox = outbox_table(metadata, "documents_outbox", info=TENANT_SCOPED)
 # A correction's event waits this long before it is sent, and a newer correction of the same extraction replaces it, so
 # a person correcting several fields in a row starts one Save data run with the final read, not one per field.
 CORRECTION_SETTLE_SECONDS = 5.0
 # Reported from the transaction that ends every read (done, unreadable, failed), keyed by the extraction id: a workflow
-# step that parked on a long read resumes on it (c-525).
+# step that parked on a long read resumes on it.
 FINISHED_EVENT = "extraction.finished"
 # Reported beside it when a read of a document type finished with fields (outcome ok or review), keyed by the
 # extraction id: its event workflow saves what the file was read as, so a file read by any workflow, agent or API call
-# shows it in Files, not only one whose workflow has a Save data on file step (c-378).
+# shows it in Files, not only one whose workflow has a Save data on file step.
 READ_EVENT = "extraction.read"
 SUPERSEDED = "superseded by a newer correction"
 
@@ -101,7 +101,7 @@ extraction_corrections = sa.Table(
     sa.Column("corrected_by", sa.String(320), nullable=False),
     sa.Column("corrected_at", sa.DateTime(timezone=True), nullable=False),
     sa.Index("ix_extraction_corrections_extraction", "tenant_id", "extraction_id"),
-    # The extraction's team, copied when the correction is written (c-415).
+    # The extraction's team, copied when the correction is written.
     sa.Column("team", sa.String(64), nullable=False),
     info={**TENANT_SCOPED, **team_owned("team")},
 )
@@ -315,7 +315,7 @@ class ExtractionsStore:
         return (float(tokens_in), float(tokens_out)) if count else None
 
     async def recent_reads(self, team: str, type_id: str, *, last: int) -> list[ExtractionRow]:
-        """The team's last `last` finished reads of a document type, newest first (c-254's template offers)."""
+        """The team's last `last` finished reads of a document type, newest first (the template offers)."""
         tenant = isolation.tenant()
         async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             rows = (
@@ -339,7 +339,7 @@ class ExtractionsStore:
         return [_row(m) for m in rows]
 
     async def keep_fingerprint(self, extraction_id: str, fingerprint: str) -> None:
-        """A read saved before fingerprints were stored gets its own once (c-254)."""
+        """A read saved before fingerprints were stored gets its own once."""
         tenant = isolation.tenant()
         async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             await c.execute(
@@ -395,7 +395,7 @@ class ExtractionsStore:
         example: Mapping[str, Any] | None = None,
     ) -> None:
         """Records a correction and writes the extraction's answer with the corrected value, its event when given, and
-        the example it teaches its document type (c-297), in one transaction."""
+        the example it teaches its document type, in one transaction."""
         async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             if example is not None:
                 await _keep_example(c, example)
@@ -499,7 +499,7 @@ class ExtractionsStore:
 
 
 async def _keep_example(c: AsyncConnection, example: Mapping[str, Any]) -> None:
-    """The example a correction teaches (c-297): it replaces the one the same read's field taught before, and adds
+    """The example a correction teaches: it replaces the one the same read's field taught before, and adds
     nothing when another read of the type already taught the same field, line and value."""
     e = document_type_examples.c
     value = json.dumps(example["value"], sort_keys=True)

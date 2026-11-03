@@ -194,7 +194,7 @@ async def current_tenant_caller(
     x_dev_user: Annotated[str | None, Header()] = None,
 ) -> Principal:
     """`current_caller`, except that a service token need not name a team: for a route whose answer to a service is
-    tenant-wide while a person gets their team's (c-222). The route still decides with `ops_access.can`."""
+    tenant-wide while a person gets their team's. The route still decides with `ops_access.can`."""
     try:
         return await current_caller(
             request, authorization=authorization, x_api_key=x_api_key, x_team_id=x_team_id, x_dev_user=x_dev_user

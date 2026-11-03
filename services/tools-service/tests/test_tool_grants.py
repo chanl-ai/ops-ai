@@ -1,4 +1,4 @@
-"""GET /v1/tool-modules/grants (c-144): every workflow's access to the modules the team sees, by view, with counts,
+"""GET /v1/tool-modules/grants: every workflow's access to the modules the team sees, by view, with counts,
 searched and paged on the server. One test per way the Access tab could show the wrong access."""
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ async def _ask(g: Gateway, workflow: str, days: int) -> str:
         "environment": "production",
         "operations": [g.tool("get_account")],
         "expiresInDays": days,
-        "justification": "c-144 grants",
+        "justification": "grants",
     }
     r = await g.client.post(f"{BASE}/approvals", json=body)
     assert r.status_code == 201, r.text
@@ -41,7 +41,7 @@ async def _grants(g: Gateway, **params: Any) -> dict[str, Any]:
 async def test_a_granted_and_an_asked_access_are_listed_and_one_ending_this_week_is_expiring(g: Gateway) -> None:
     before = (await _grants(g))["facets"]["view"]
     soon = await _ask(g, "wf_dispute", 3)
-    # Decided in Human Tasks (c-166), applied here by agents-service.
+    # Decided in Human Tasks, applied here by agents-service.
     decided = await apply_access(g.client, g.tenant, {"id": soon, "moduleId": MODULE})
     assert decided.status_code == 200, decided.text
     asked = await _ask(g, "wf_dispute", 90)

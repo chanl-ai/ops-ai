@@ -47,7 +47,7 @@ export function useCanInWorkspace(area: string, action: string): boolean | undef
   return (perms.data.workspace ?? []).some((p) => p.area === area && p.action === action);
 }
 
-/** The workspace's roles, one role with its grid, and a person's grants (c-150); disabled off platform sign-in. */
+/** The workspace's roles, one role with its grid, and a person's grants; disabled off platform sign-in. */
 export const useRoles = () => useTeamQuery({ queryKey: ['access', 'roles'], queryFn: () => api.teams.roles!(), enabled: !!api.teams.roles });
 export const useRole = (id: string) => useTeamQuery({ queryKey: ['access', 'role', id], queryFn: () => api.teams.role!(id), enabled: !!api.teams.role && !!id });
 export const usePersonPermissions = (id: string) =>
@@ -59,7 +59,7 @@ export function useWhy(area: string, action: string, enabled: boolean) {
   return useTeamQuery({ queryKey: ['access', 'why', teamId, area, action], queryFn: () => api.teams.why!(area, action), enabled: enabled && !!api.teams.why, staleTime: 60_000 });
 }
 
-/** Runs one access check (c-150); a mutation, as each check is written to the audit log. */
+/** Runs one access check; a mutation, as each check is written to the audit log. */
 export const useCheckAccess = () =>
   useMutation({ mutationFn: (input: { personId: string; area: string; action: string; owner?: string; requestedBy?: string }) => api.teams.checkAccess!(input) });
 
@@ -100,7 +100,7 @@ export function useHolders(area: string, action: string, enabled: boolean, forTe
 
 /**
  * Whether the person may change the team's `area` records (agents by default): `can(area, edit)`, the cell the
- * services check, so the console and the service never disagree (c-186). False while loading.
+ * services check, so the console and the service never disagree. False while loading.
  */
 export function useCanBuild(area = 'agents'): boolean {
   return useCan(area, 'edit') === true;

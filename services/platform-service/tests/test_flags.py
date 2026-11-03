@@ -1,4 +1,4 @@
-"""The install's feature flags in the console's one answer, GET /v1/me (c-611)."""
+"""The install's feature flags in the console's one answer, GET /v1/me."""
 
 from __future__ import annotations
 

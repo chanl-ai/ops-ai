@@ -1,4 +1,4 @@
-"""a retired knowledge base leaves a tombstone (c-094 T007)
+"""a retired knowledge base leaves a tombstone
 
 Revision ID: kb_0007
 Revises: kb_0006

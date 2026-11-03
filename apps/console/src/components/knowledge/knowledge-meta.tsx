@@ -181,7 +181,7 @@ export const SOURCE_TYPES: SourceTypeMeta[] = [
 ];
 
 /**
- * A source read through an installed plugin's list and get tools (c-564). Not in SOURCE_TYPES: the add dialogs offer
+ * A source read through an installed plugin's list and get tools. Not in SOURCE_TYPES: the add dialogs offer
  * those, and a plugin source is made through kb-service's API until a Plugins page exists.
  */
 const PLUGIN_SOURCE: SourceTypeMeta = { type: 'tool', label: 'Plugin source', short: 'Plugin', description: "Read through an installed plugin's list and get tools.", group: 'Connected apps', icon: Puzzle, connected: true, supportsInherit: false, supportsWebhook: false, changeDetection: 'Each item\'s last-changed time since the last sync', scopeLabel: 'Source' };

@@ -29,19 +29,19 @@ export function createPlatformTeamsHttp(baseUrl: string): OpsApi['teams'] {
   };
 }
 
-/** The workspace's access policies on platform-service (GET and PUT /v1/policies, c-186). */
+/** The workspace's access policies on platform-service (GET and PUT /v1/policies). */
 export function createPlatformPoliciesHttp(baseUrl: string): OpsApi['workspacePolicies'] {
   const { get, send } = createTransport(`${baseUrl}/v1`);
   return createWorkspacePoliciesHttp(get, send);
 }
 
-/** The workspace's sign-in providers and their domain proofs (/v1/settings/sign-in/…, c-195). */
+/** The workspace's sign-in providers and their domain proofs (/v1/settings/sign-in/…). */
 export function createPlatformSignInProvidersHttp(baseUrl: string): OpsApi['signInProviders'] {
   const { get, send } = createTransport(`${baseUrl}/v1`);
   return { ...createSignInProvidersHttp(get, send), samlMetadataUrl: `${baseUrl}/v1/auth/saml/metadata` };
 }
 
-/** Every team of the workspace, for workspace admins (GET, POST, PATCH /v1/settings/teams, c-198). */
+/** Every team of the workspace, for workspace admins (GET, POST, PATCH /v1/settings/teams). */
 export function createPlatformWorkspaceTeamsHttp(baseUrl: string): OpsApi['workspaceTeams'] {
   const { get, send } = createTransport(`${baseUrl}/v1`);
   return createWorkspaceTeamsHttp(get, send);

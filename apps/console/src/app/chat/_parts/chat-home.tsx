@@ -13,7 +13,7 @@ import { useOverview } from '@/hooks/queries';
 import { hintsFrom } from '@/lib/overview';
 import type { ChatAttachment } from '@/lib/types/chat';
 
-/** The four general ways to begin when nothing waits, each sent as the first message (c-469); the Ops Assistant answers them with cards. */
+/** The four general ways to begin when nothing waits, each sent as the first message; the Ops Assistant answers them with cards. */
 const STARTS = [
   { id: 'needs', label: 'What needs me today', detail: 'Your Human Tasks, oldest first', text: 'What needs me today?' },
   { id: 'case', label: 'Find a case', detail: 'By customer, subject or status', text: 'Find my open cases' },
@@ -28,7 +28,7 @@ function greeting(now = new Date()): string {
 
 /**
  * Chat's home, where a person lands after signing in: the greeting, the composer and up to three hints from their own
- * work, or the four general starts when nothing waits (c-552; the sidebar stays as the person left it). A team with no
+ * work, or the four general starts when nothing waits (the sidebar stays as the person left it). A team with no
  * default agent starts on its Ops Assistant, which the first message creates; the header's picker chooses another agent.
  */
 export function ChatHome({

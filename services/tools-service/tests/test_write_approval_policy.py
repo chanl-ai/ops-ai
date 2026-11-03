@@ -1,4 +1,4 @@
-"""The write approval policy per operation (c-048 T005), by failure mode: a policy no reviewer could satisfy saved, a
+"""The write approval policy per operation, by failure mode: a policy no reviewer could satisfy saved, a
 money operation left with one approver, an approving team that does not exist, and a loosened policy taking effect
 before Security reviews it. OPA's side, a token with too few approvers, is in test_calls.py."""
 
@@ -50,7 +50,7 @@ async def test_an_operation_shows_its_policy_with_the_owning_team_by_default(api
 
 
 async def test_a_step_up_can_be_asked_of_one_approver_and_is_implied_by_two(api: Api) -> None:
-    """c-057: a hold on a customer's funds is approved by one person, who still re-authenticates. The setting is
+    """A hold on a customer's funds is approved by one person, who still re-authenticates. The setting is
     part of the approval policy, so Security reviews it like the rest; until then calls keep the published one."""
     op = await _op(api, "mod_core_banking", "update_address")
     path = f"/mod_core_banking/operations/{op['id']}"
@@ -242,7 +242,7 @@ async def test_the_seeded_wire_hold_is_approved_by_two_people_of_fraud_operation
 
 
 async def test_a_tools_policy_reads_its_module_once(api: Api, monkeypatch: Any) -> None:
-    """A review list asks each tool's policy (c-451): access, approval and output come from one read of the module."""
+    """A review list asks each tool's policy: access, approval and output come from one read of the module."""
     reads: list[str] = []
     real = ModuleStore.get
 

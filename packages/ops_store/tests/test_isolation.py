@@ -1,8 +1,8 @@
-"""Generated isolation policies on PostgreSQL (c-410), by failure mode, with raw SQL and no WHERE clause so only the
+"""Generated isolation policies on PostgreSQL, by failure mode, with raw SQL and no WHERE clause so only the
 policy can filter: a team transaction that reads another team's rows; a team transaction that writes another team's
 or a null-team row; a tenant-wide transaction that reads another tenant; a team table left with a tenant-only policy,
 with no policy, or with a second permissive policy beside its own (PostgreSQL ORs them). Each of the last three must
-fail the suite naming the table. SQL Server runs the same suite in c-419."""
+fail the suite naming the table. SQL Server runs the same suite."""
 
 from __future__ import annotations
 

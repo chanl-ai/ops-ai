@@ -1,4 +1,4 @@
-"""What the console's Files page reads from files-service (c-126), by failure mode: a view or its count computed over
+"""What the console's Files page reads from files-service, by failure mode: a view or its count computed over
 one page instead of in the query; search and the uploaded-since date ignored; a held file missing its hold on the list
 row; the sheet's delete reason disagreeing with the 409; bulk delete removing a referenced or held file; upload limits
 the upload component cannot read."""

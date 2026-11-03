@@ -1,4 +1,4 @@
-"""A custom module with no connection gets one that needs no sign-in and holds its address (c-616 D3b-2a)
+"""A custom module with no connection gets one that needs no sign-in and holds its address
 
 A custom app's address lives on its connection, which a call reads per environment; a module made from a full URL kept
 its address only on itself. Each team's http, openapi and MCP module with no connection gets one: auth kind none, its

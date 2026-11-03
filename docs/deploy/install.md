@@ -132,7 +132,7 @@ For developers:
 
 | Step | What to do |
 |---|---|
-| Add a flag | One entry in `FLAGS` and its name in `FlagName` (`flags.py`): name, a one-line description, the card that owns the feature, and when to remove it. `packages/ops_service_kit/tests/test_flags.py` fails an entry with no card or removal note. Regenerate `services/platform-service/openapi.json` and run `make sdk`, so the console's types carry the name |
+| Add a flag | One entry in `FLAGS` and its name in `FlagName` (`flags.py`): name, a one-line description, and when to remove it. `packages/ops_service_kit/tests/test_flags.py` fails an entry with no description or removal note. Regenerate `services/platform-service/openapi.json` and run `make sdk`, so the console's types carry the name |
 | Read it in a service | `settings.feature_flags.on("<name>")`; a name the registry does not hold raises |
 | Read it in the console | `useFlag('<name>')`, or `flag: '<name>'` on a list entry filtered by `useFlagged` (`apps/console/src/hooks/flag-queries.ts`); both are off while the answer loads |
 | Remove it | The release that fully ships the feature deletes the entry, every check that reads it and this table's row, so an install never sets a flag to get a shipped feature |

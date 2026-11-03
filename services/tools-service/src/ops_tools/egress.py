@@ -72,7 +72,7 @@ ALWAYS_DENIED = (
 TENANT_EXTENSION = "ops_tenant"
 
 
-# The request extension carrying a client certificate to present (c-330): an object with `fingerprint`, `cert_pem`,
+# The request extension carrying a client certificate to present: an object with `fingerprint`, `cert_pem`,
 # `key_pem` and `ca_pem` (ops_tools.auth.ClientCertificate).
 CERTIFICATE_EXTENSION = "ops_client_certificate"
 
@@ -258,7 +258,7 @@ class EgressTransport(httpx.AsyncBaseTransport):
         self.network = network
         self.ca_file = ca_file
         self.pools: dict[str, httpx.AsyncHTTPTransport] = {}
-        # A pool per tenant and client certificate (c-330): a connection that presented a certificate is never reused
+        # A pool per tenant and client certificate: a connection that presented a certificate is never reused
         # for a call that did not ask for it, nor one for another certificate.
         self.certificate_pools: dict[tuple[str, str], httpx.AsyncHTTPTransport] = {}
 
@@ -307,8 +307,8 @@ def egress_client(
 
 
 def egress_transport(policy: EgressPolicy, *, ca_file: str | None = None) -> EgressTransport:
-    """The transport an outbound client dials through, for a client built with its own base URL and hooks (Graph,
-    c-228); `ca_file` as for `egress_client`."""
+    """The transport an outbound client dials through, for a client built with its own base URL and hooks (Graph);
+    `ca_file` as for `egress_client`."""
     ssl_context = httpx.create_ssl_context()
     if ca_file:
         ssl_context.load_verify_locations(cafile=ca_file)

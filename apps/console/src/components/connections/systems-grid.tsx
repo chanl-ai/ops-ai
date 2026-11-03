@@ -34,11 +34,11 @@ const initials = (name: string) =>
     .join('')
     .toUpperCase();
 
-/** The app's page, where its accounts, tools, skills, sign-ins, runs and settings are (c-607); a built-in app's is the
+/** The app's page, where its accounts, tools, skills, sign-ins, runs and settings are; a built-in app's is the
  * console page that manages it (its knowledge bases, its mailboxes). */
 export const appHref = (s: SystemCard) => s.href ?? `/integrations/apps/${encodeURIComponent(s.id)}`;
 
-// Only Ops AI's own apps carry a tag; how an app was installed is never named on screen (owner, 11-01: one word, App).
+// Only Ops AI's own apps carry a tag; how an app was installed is never named on screen (one word, App).
 
 /** One app's card: logo, name, tools and how it signs in, one line, its category. */
 function AppCard({ system, onConnect }: { system: SystemCard; onConnect: (s: SystemCard, mode: ConnectMode) => void }) {
@@ -110,7 +110,7 @@ function FilterBadge({ on, onClick, children, testId }: { on: boolean; onClick: 
 }
 
 /**
- * Connections as an apps catalog (c-607), read from GET /v1/systems so each card arrives joined: plugins first,
+ * Connections as an apps catalog, read from GET /v1/systems so each card arrives joined: plugins first,
  * then the team's own apps. One search, with Connected only and Available only.
  */
 export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, mode: ConnectMode) => void; onNew: () => void }) {

@@ -1,4 +1,4 @@
-"""A review step's deadline (c-074): the step records when it opened and how long a person has, and one set to expire
+"""A review step's deadline: the step records when it opened and how long a person has, and one set to expire
 leaves on its own `timeout` port when the host resumes it as timed out. By failure mode: the deadline's facts are not
 on the waiting payload, so nothing can tell it is overdue; an expiring step has no port to leave by, so a timeout
 fails the run; a step left to wait gets a port it must wire."""

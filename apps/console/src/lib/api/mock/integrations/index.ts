@@ -172,7 +172,7 @@ export function createIntegrationsMock(deps: {
 
   const ref = (c: Conn): ConnectionLink => ({ id: c.id, name: c.name, kind: catalogOf(c.catalogId).kind, status: statusOf(c), expiresAt: c.expiresAt, catalogId: c.catalogId, authMethod: c.authMethod, instanceUrl: c.instanceUrl });
 
-  // The connections a knowledge source can read through; the sample integrations writes went with their pages (c-617).
+  // The connections a knowledge source can read through; the sample integrations writes went with their pages.
   const api: IntegrationsApi = {
     options: () => respond(() => visible().map(ref)),
   };

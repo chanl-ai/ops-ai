@@ -51,5 +51,5 @@ export function useRevokeWidgetMintKey() {
 /** Where pages load the widget script from; the snippet names it. */
 export const useWidgetScriptUrl = () => api.widgetDeployments.scriptUrl();
 
-/** A preview session for the signed-in builder, bound to the console's origin (Preview as a person, c-232). */
+/** A preview session for the signed-in builder, bound to the console's origin (Preview as a person). */
 export const useWidgetPreviewSession = () => useMutation({ mutationFn: (id: string) => api.widgetDeployments.previewSession(id) });

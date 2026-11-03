@@ -1,4 +1,4 @@
-"""`make ... ISOLATED=1` acts only on the isolated stack (c-099, tick 14), by failure mode: a run started inside
+"""`make ... ISOLATED=1` acts only on the isolated stack, by failure mode: a run started inside
 another make inherits the shared stack's exported addresses and `?=` keeps them, so an isolated reset or migrate
 would drop or change the shared database. `make -n` prints what would run without running it."""
 

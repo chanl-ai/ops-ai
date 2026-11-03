@@ -1,4 +1,4 @@
-"""a write approval setting that asks the approver for a step-up whatever the approver count (c-057 T012)
+"""a write approval setting that asks the approver for a step-up whatever the approver count
 Revision ID: tools_0014_step_up
 Revises: tools_0013_output_shape
 """

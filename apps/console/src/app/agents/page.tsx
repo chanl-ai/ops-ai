@@ -41,7 +41,7 @@ type Row = Agent & { onRowClick: (a: Agent) => void };
 
 const AVAILABILITY_OPTIONS = (['published', 'not_published', 'paused'] as const).map((value) => ({ value, label: AVAILABILITY_LABEL[value] }));
 
-/** `onMakeDefault` is set for team admins only (c-174); `defaultId` marks the agent new chats start on. */
+/** `onMakeDefault` is set for team admins only; `defaultId` marks the agent new chats start on. */
 function columns(open: (a: Agent) => void, onDelete: (a: Agent) => void, canBuild: boolean, defaultId?: string, onMakeDefault?: (a: Agent) => void): ColumnDef<Row>[] {
   return [
     selectColumn<Row>((a) => a.name),

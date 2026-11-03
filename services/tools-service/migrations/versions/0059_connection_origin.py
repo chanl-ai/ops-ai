@@ -1,6 +1,6 @@
-"""connections.origin: "tool" for a connection the platform made to hold a custom tool's address (c-616)
+"""connections.origin: "tool" for a connection the platform made to hold a custom tool's address
 
-The Apps grid lists the apps a person added (owner, 2026-11-01); a connection made for a tool is reached from the tool.
+The Apps grid lists the apps a person added; a connection made for a tool is reached from the tool.
 Existing ones are marked: those tools_0056 made (created_by "module address"), the dev seed's `con_mod_` ones, and an
 auth-none connection a person's tool page made, named after the one module that uses it. The seed's integrations are
 the demo's apps and stay listed.

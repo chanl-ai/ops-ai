@@ -1,4 +1,4 @@
-"""Layout templates through the extraction API (c-253), on non-levy forms so nothing rests on one document type: an
+"""Layout templates through the extraction API, on non-levy forms so nothing rests on one document type: an
 invoice read from its template with no model call (F1), a bank statement of another layout taking the model path with
 the miss recorded (F2), a shifted scan of the invoice read through OCR (F3), the token estimate left alone by template
 reads (F5), and a template naming a field the version lacks refused (F6). Forms are printed here from one master."""
@@ -62,7 +62,7 @@ def scan(pdf: bytes) -> bytes:
 
 
 def template_from(pdf: bytes) -> dict[str, Any]:
-    """Anchors at the master's labels and zones around its values, as c-254 will infer them."""
+    """Anchors at the master's labels and zones around its values, as templates infer them."""
     words = [w for w in build_layout(pdf, filename="m.pdf")["words"] if w["page"] == 1]
     anchors: list[dict[str, Any]] = []
     zones: list[dict[str, Any]] = []
@@ -175,7 +175,7 @@ async def test_a_date_printed_impossible_is_read_from_its_zone_but_saved_with_no
     make: Make,
 ) -> None:
     """The template reads what the form prints; the date check rejects 13/45/2026, so it is never saved as found. The
-    one re-read of that field (c-296) finds nothing better, so it stays in review."""
+    one re-read of that field finds nothing better, so it stays in review."""
     models = NoModel()
     s = make(models, Floor())
     async with s.client as c:

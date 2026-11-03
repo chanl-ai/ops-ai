@@ -1,4 +1,4 @@
-"""Call any Ops AI API as a standard dev user (c-614): `make api GET /v1/me AS=viewer`, `make sdk-call CALL=… AS=…`.
+"""Call any Ops AI API as a standard dev user: `make api GET /v1/me AS=viewer`, `make sdk-call CALL=… AS=…`.
 
 Each role in services/platform-service/seed/dev-roles.json is a seeded person; the call acts in the team the sign-in
 names as the person's default (TEAM= overrides). The person signs in through the real password sign-in, POST

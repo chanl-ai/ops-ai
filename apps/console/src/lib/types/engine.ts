@@ -153,7 +153,7 @@ export interface EngineRunInput {
 }
 
 /**
- * How a person starts a workflow by hand, as its trigger declares it (c-466): the dialog's title and button, how a run
+ * How a person starts a workflow by hand, as its trigger declares it: the dialog's title and button, how a run
  * started this way reads in audit, and the form as JSON Schema. The console draws any kind from this alone.
  */
 export interface StartForm {
@@ -200,7 +200,7 @@ export interface EngineRun {
   startedBy?: { kind: 'run' | 'trigger' | 'agent' | 'person' | 'key'; id: string; name: string; runId?: string };
   /** Whether the signed-in person may cancel it now (runs/cancel, from agents-service); absent from the mock. */
   canCancel?: boolean;
-  /** Whether the signed-in person may retry it now: it is Stuck and they may cancel it (c-561). */
+  /** Whether the signed-in person may retry it now: it is Stuck and they may cancel it. */
   canRetry?: boolean;
   workflowId: string;
   version: number;
@@ -255,7 +255,7 @@ export interface EngineRunDetail extends EngineRun {
   files?: { id: string; name: string | null }[];
   /** Each Human Task decided in the run: who (named), when, why, and the task it was made on. */
   decisions?: { nodeId: string; iteration: number; reviewId: string; action: string; reason: string | null; by: { kind: string; id: string; name: string } | null; at: string | null }[];
-  /** The run told from its steps' output shapes (c-477): the email it began with, what it read, and the runs it started. */
+  /** The run told from its steps' output shapes: the email it began with, what it read, and the runs it started. */
   story?: RunStory;
 }
 

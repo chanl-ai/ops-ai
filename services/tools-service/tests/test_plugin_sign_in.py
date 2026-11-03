@@ -1,4 +1,4 @@
-"""A plugin turned on for a team with each sign-in method (c-588), through the real routes, by failure mode: the turn-on
+"""A plugin turned on for a team with each sign-in method, through the real routes, by failure mode: the turn-on
 makes a connection without its credential, so the plugin cannot be used at all; the credential goes in the wrong
 place, under the wrong name, or not at all; Test connection has nowhere to read; a field the method does not have,
 or a method the plugin does not offer, is taken silently; a second turn-on changes the method under a working
@@ -279,7 +279,7 @@ async def test_a_client_credentials_plugin_fetches_its_token_and_gets_a_new_one_
 
 async def test_the_dialogs_client_id_in_credentials_turns_a_client_credentials_plugin_on(rig: Rig, tenant: str) -> None:
     """The connect dialog sends a client-credentials app as the kind's fields, inside `credentials`, as it does every
-    other kind's (c-580 PM test: refused as client_missing, so no such plugin could be turned on from the console)."""
+    other kind's (refused as client_missing, so no such plugin could be turned on from the console)."""
     on = await turn_on(rig, tenant, "test.client", credentials={"clientId": CLIENT, "clientSecret": CLIENT_SECRET})
     assert on.status_code == 200, on.text
     assert (await call_as_team(rig, tenant, "test.client")).ok
@@ -299,7 +299,7 @@ async def test_a_sign_in_address_the_plugin_fixes_is_refused_rather_than_typed_o
 async def test_a_cancelled_connect_leaves_nothing_and_the_next_turn_on_makes_a_new_connection(
     rig: Rig, tenant: str
 ) -> None:
-    """The connect dialog's Cancel removes the connection it made, then turns the plugin off (c-580 PM test: a
+    """The connect dialog's Cancel removes the connection it made, then turns the plugin off (a
     half-made connection was left, and a binding naming a removed connection could never be turned on again)."""
     first = await turn_on(rig, tenant, "test.bearer", credentials={"token": TOKEN})
     made = str(first.json()["data"]["connectionId"])

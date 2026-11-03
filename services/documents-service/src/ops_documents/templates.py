@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""`/v1/templates` (c-590): the document types a team may install from its plugins, and the install that makes the
+"""`/v1/templates`: the document types a team may install from its plugins, and the install that makes the
 team's own copy. agents-service serves the same routes for agents, skills and workflows.
 
 tools-service is the one service that loads plugins; it answers the templates of the plugins on for the acting team,
@@ -113,7 +113,7 @@ def templates_router(
 ) -> APIRouter:
     """The routes, acting as `caller` resolves the request (documents' `who`) under `scope(action)`. tools-service is
     reached through `app.state.plugin_templates`; with none, both routes answer 503."""
-    # No router-wide tag: the list is `templates`, the copy `resources` (c-616, Add to team in the screen's words, the
+    # No router-wide tag: the list is `templates`, the copy `resources` (Add to team in the screen's words, the
     # same route agents-service answers for agents, skills and workflows), and the first tag names the SDK operation.
     router = APIRouter(responses=responses)
 

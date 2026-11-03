@@ -1,4 +1,4 @@
-"""files-service's tables are held to the caller's tenant and team by the database (c-415)
+"""files-service's tables are held to the caller's tenant and team by the database
 
 Revision ID: files_0011
 Revises: files_0010

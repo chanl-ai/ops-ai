@@ -1,4 +1,4 @@
-"""Where a team's document type copies came from (c-590, migration documents_0014), by failure mode: a team reads or
+"""Where a team's document type copies came from (migration documents_0014), by failure mode: a team reads or
 writes another team's copies, so it could find another team's type as its own copy; a second install of the same
 template version makes a second live copy; and a copy whose type was deleted still counts, so the template can never be
 installed again. On the PostgreSQL test database migrated to head, as ops_documents_tenant."""

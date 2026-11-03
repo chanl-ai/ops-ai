@@ -1,4 +1,4 @@
-"""The one way a service calls another service's API (c-189). Every caller builds a `ServiceClient` for its callee and
+"""The one way a service calls another service's API. Every caller builds a `ServiceClient` for its callee and
 asks it for `get`, `post`, `delete` or `pages`; no service writes its own token minting, envelope reading or retry.
 
   kb = ServiceClient.for_settings(settings, http, service="agents", audience="kb", scopes=["knowledge:view"],
@@ -91,7 +91,7 @@ class ServiceClient:
             team_id=team if team is not None else self.team(),
         )
         headers = {token_header: f"Bearer {token}"}
-        # The request this call is made for, so the callee's log lines join the caller's (c-560).
+        # The request this call is made for, so the callee's log lines join the caller's.
         if (request_id := current_request_id()) is not None:
             headers["X-Request-Id"] = request_id
         return headers

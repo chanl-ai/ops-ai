@@ -251,7 +251,7 @@ export class OpsAI {
   readonly files: Files;
   readonly runs: Runs;
   readonly tasks: Tasks;
-  // The Apps area in the screen's words (c-616).
+  // The Apps area in the screen's words.
   readonly apps: Apps;
   readonly credentials: Credentials;
   readonly accounts: Accounts;

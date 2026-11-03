@@ -1,4 +1,4 @@
-"""A JWT signed with a connection's private key (RFC 7523, c-583): the client assertion a system takes in place of a
+"""A JWT signed with a connection's private key (RFC 7523): the client assertion a system takes in place of a
 client secret (Microsoft Entra apps at banks), and the grant a service account signs in with (DocuSign, Google).
 
 Signed with `cryptography`, already a dependency: RS256 for an RSA key and ES256 for a P-256 key cover the systems

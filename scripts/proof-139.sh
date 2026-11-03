@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# c-139 proof so far (T001, T002, T004, T006, T007): the policy, deployment and contract tests in agents-service, the
+# Proof so far: the policy, deployment and contract tests in agents-service, the
 # tools-service policy client, and uc-114 through the console.
 set -euo pipefail
 cd "$(dirname "$0")/.."

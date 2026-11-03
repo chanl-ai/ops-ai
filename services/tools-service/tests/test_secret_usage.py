@@ -1,6 +1,6 @@
-"""Secrets managed in one place (c-093), by failure mode: a delete that breaks an operation still naming the secret
+"""Secrets managed in one place, by failure mode: a delete that breaks an operation still naming the secret
 (published or staged), a rotation that misses one of the operations reading it, another team's secret of the same name
-reaching this team's module (c-509), and a name rule that strands secrets created before it."""
+reaching this team's module, and a name rule that strands secrets created before it."""
 
 from __future__ import annotations
 
@@ -100,7 +100,7 @@ async def test_a_name_made_before_the_64_character_rule_keeps_working(k: Bank, e
     store = SecretStore(engine)
     # Written as the older rule allowed, with the vault the app uses (tests/conftest.py build_app).
     blob = await credentials().put(VALUE, context=context_of(tenant, long))
-    assert await store.create(tenant, TEAM, long, blob, actor="before c-093", at=datetime.now(UTC))
+    assert await store.create(tenant, TEAM, long, blob, actor="before usage tracking", at=datetime.now(UTC))
     assert (await c.post(f"/v1/secrets/{long}/rotate", json={"value": ROTATED})).status_code == 200
     assert long in [s["name"] for s in (await c.get("/v1/secrets")).json()["data"]]
 

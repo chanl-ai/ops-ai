@@ -11,7 +11,7 @@ export const usePublicFormPage = () => publicFormPage;
 
 const key = (workflowId: string) => ['forms', workflowId] as const;
 
-/** A workflow's hosted forms (c-535), without their tokens. */
+/** A workflow's hosted forms, without their tokens. */
 export const useWorkflowForms = (workflowId: string, enabled = true) => useTeamQuery({ queryKey: key(workflowId), queryFn: () => api.forms.list(workflowId), enabled });
 
 export function useCreateForm(workflowId: string) {

@@ -1,4 +1,4 @@
-"""Whom a service's call acts for (c-558), proven by a token platform-service signs, never by a field in the body.
+"""Whom a service's call acts for, proven by a token platform-service signs, never by a field in the body.
 
 agents-service gets one per (person, team) from platform-service's internal `POST /v1/acting-for-tokens`, which checks
 the person is a member of the team, and sends it on each tools call as `X-Acting-For`, beside its own service token.

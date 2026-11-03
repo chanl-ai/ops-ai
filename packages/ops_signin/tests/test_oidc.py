@@ -1,4 +1,4 @@
-"""OIDC sign-in, by failure mode (c-188 F3): an id_token from another issuer or audience, a replayed nonce, a token
+"""OIDC sign-in, by failure mode: an id_token from another issuer or audience, a replayed nonce, a token
 signed by another key or with a symmetric or no algorithm, an expired token, a step-up on an old login, an unverified
 email, and a discovery document that names another issuer. Each answer comes from a provider that serves the token
 under test; the happy path runs through the fake identity provider."""

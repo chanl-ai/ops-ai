@@ -77,7 +77,7 @@ def client(engine: AsyncEngine, tenant: str, tmp_path: Path) -> Client:
 
 def sign_in(app: FastAPI, tenant: str, role: str, email: str = "james@harborpine.example") -> None:
     """A person signed in with a real role in the team they act in (X-Team-Id, else team_ops), so `can()` decides as
-    it does in a deployment (c-149); a request with a bearer token (a service) is resolved as usual."""
+    it does in a deployment; a request with a bearer token (a service) is resolved as usual."""
 
     async def as_person(
         request: Request,
@@ -270,7 +270,7 @@ def _kb(tenant: str, team: str, scopes: list[str]) -> dict[str, str]:
 
 async def test_a_service_writes_and_reads_a_file_for_the_team_its_token_names(client: Client, tenant: str) -> None:
     service = {**_kb(tenant, "team_ops", ["files:create", "files:view"]), "Content-Type": "application/pdf"}
-    # A team in the query is not read: the token's team decides (c-168).
+    # A team in the query is not read: the token's team decides.
     params = {"team": "team_security", "name": "mail.pdf", "purpose": "case_attachment", "uploadedBy": "mailbox"}
     async with client() as c:
         done = _data(await c.post("/v1/files", params=params, content=PDF, headers=service))
@@ -281,7 +281,7 @@ async def test_a_service_writes_and_reads_a_file_for_the_team_its_token_names(cl
         assert other.status_code == 404
         unscoped = await c.get(f"/v1/files/{file_id}", headers=_kb(tenant, "team_ops", ["files:create"]))
         assert unscoped.status_code == 403 and unscoped.json()["error"]["code"] == "scope_required"
-        # A service holding files:view lists its token's team's files, to find one by name (c-613); no other team's,
+        # A service holding files:view lists its token's team's files, to find one by name; no other team's,
         # and not without the scope.
         listing = _data(await c.get("/v1/files", params={"search": "mail"}, headers=service))
         assert [f["id"] for f in listing["data"]] == [file_id], listing
@@ -420,7 +420,7 @@ async def test_a_retried_upload_with_one_idempotency_key_is_one_file(client: Cli
 
 
 async def test_the_detail_says_who_may_delete_and_a_chat_only_member_cannot(client: Client) -> None:
-    """c-216: a chat-only member reads a team file but neither sees Delete nor deletes it; a builder does both."""
+    """A chat-only member reads a team file but neither sees Delete nor deletes it; a builder does both."""
     async with client() as builder:
         ticket = await _upload(builder)
         f = _data(await builder.post(f"/v1/files/uploads/{ticket['fileId']}/complete", headers=OPS))["file"]

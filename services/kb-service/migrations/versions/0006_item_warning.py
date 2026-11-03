@@ -1,4 +1,4 @@
-"""a document that indexed with pages unread says which (c-072 review)
+"""a document that indexed with pages unread says which
 
 Revision ID: kb_0006
 Revises: kb_0005

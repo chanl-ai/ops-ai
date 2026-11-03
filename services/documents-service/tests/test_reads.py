@@ -1,4 +1,4 @@
-"""Reading a document without a document type (c-535), by failure mode: a full-text read that calls a model or charges
+"""Reading a document without a document type, by failure mode: a full-text read that calls a model or charges
 the team; a proposed value with no quote, or with the model's own confidence instead of the checks'; a proposal asked
 over the whole of a long scan; a read past its token ceiling that fails instead of stopping with what it read; a
 budget or rate refusal from models-service read as the model being down; an unknown read accepted; and a saved

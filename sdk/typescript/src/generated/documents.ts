@@ -91,7 +91,7 @@ export interface paths {
         };
         /**
          * List Examples
-         * @description The corrections people made on the type's reads, which its later reads are given, newest first (c-297).
+         * @description The corrections people made on the type's reads, which its later reads are given, newest first.
          */
         get: operations["document_types_list_examples"];
         put?: never;
@@ -168,7 +168,7 @@ export interface paths {
         };
         /**
          * Template Offers
-         * @description Groups of at least 5 checked model reads of one layout that no current template reads (c-254).
+         * @description Groups of at least 5 checked model reads of one layout that no current template reads.
          */
         get: operations["document_types_template_offers"];
         put?: never;
@@ -191,7 +191,7 @@ export interface paths {
         /**
          * Suggest Template
          * @description A layout template drafted from the team's finished reads of the type, and how it reads each; nothing is
-         *     saved until a builder posts it as a new version (c-254).
+         *     saved until a builder posts it as a new version.
          */
         post: operations["document_types_suggest_template"];
         delete?: never;
@@ -305,8 +305,8 @@ export interface paths {
         put?: never;
         /**
          * Classify File
-         * @description Which of the team's document types the file is, by the model over each type's name and description
-         *     (c-249); typeId null and needsReview when none fits or the model is less sure than the floor.
+         * @description Which of the team's document types the file is, by the model over each type's name and description; typeId
+         *     null and needsReview when none fits or the model is less sure than the floor.
          */
         post: operations["documents_classify_file"];
         delete?: never;
@@ -390,7 +390,7 @@ export interface paths {
         /**
          * Compute Layout
          * @description The file's layout: pages, blocks in reading order with table cells, and words with confidence, boxes as
-         *     fractions of the page. Read on the first ask and cached by the file's content digest (c-247).
+         *     fractions of the page. Read on the first ask and cached by the file's content digest.
          */
         post: operations["documents_compute_layout"];
         delete?: never;
@@ -527,7 +527,7 @@ export interface components {
         };
         /**
          * Classification
-         * @description Which of the team's document types a file is (c-249): the model's choice and how sure it is, or none.
+         * @description Which of the team's document types a file is: the model's choice and how sure it is, or none.
          *     `needsReview` when none fits or the confidence is under the floor.
          */
         Classification: {
@@ -607,7 +607,7 @@ export interface components {
         };
         /**
          * DocumentTypeExample
-         * @description A correction a person made on a read of the type, which later reads of it are given (c-297). `line` is where the
+         * @description A correction a person made on a read of the type, which later reads of it are given. `line` is where the
          *     value was printed, masked as the team masks personal data; `record` is the record's position, for several.
          */
         DocumentTypeExample: {
@@ -1040,7 +1040,7 @@ export interface components {
         /**
          * ExtractionRequest
          * @description `fields` follow the Extract from file step's schema (key, label, type, required, description, enum,
-         *     reviewBelow, alwaysReview); `many` answers one record per thing the document names (c-235).
+         *     reviewBelow, alwaysReview); `many` answers one record per thing the document names.
          */
         ExtractionRequest: {
             /**
@@ -1125,7 +1125,7 @@ export interface components {
         };
         /**
          * Layout
-         * @description A file's layout (c-247): pages, blocks in reading order with their table cells, and words.
+         * @description A file's layout: pages, blocks in reading order with their table cells, and words.
          */
         Layout: {
             /** Blocks */
@@ -1287,7 +1287,7 @@ export interface components {
         };
         /**
          * TemplateOffer
-         * @description Checked model reads of the type that share one layout no current template reads (c-254).
+         * @description Checked model reads of the type that share one layout no current template reads.
          */
         TemplateOffer: {
             /** Count */
@@ -1317,7 +1317,7 @@ export interface components {
         };
         /**
          * TemplateSuggestIn
-         * @description The team's finished reads of the type a suggestion is drawn from (c-254).
+         * @description The team's finished reads of the type a suggestion is drawn from.
          */
         TemplateSuggestIn: {
             /** Extractionids */
@@ -1359,8 +1359,8 @@ export interface components {
         };
         /**
          * TestEstimate
-         * @description What testing a version spends, before it runs (c-236): priced at the type's measured tokens per call, the
-         *     tenant's when the type has none yet, else a fixed guess (c-247); `basis` says which.
+         * @description What testing a version spends, before it runs: priced at the type's measured tokens per call, the
+         *     tenant's when the type has none yet, else a fixed guess; `basis` says which.
          */
         TestEstimate: {
             /** Alias */

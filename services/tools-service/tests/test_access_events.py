@@ -1,4 +1,4 @@
-"""A workflow's request for a module's operations is reported as a service event (c-257), by failure mode: the request
+"""A workflow's request for a module's operations is reported as a service event, by failure mode: the request
 saved with no event, so no run ever asks anyone; an event for the wrong team or with no asker, so the wrong people
 decide or the requester rule has nobody to refuse; an event left behind by a request that was refused; and the relay
 sending it somewhere agents-service does not read it."""
@@ -87,8 +87,8 @@ async def test_a_request_for_a_module_no_team_owns_is_refused_plainly(
     engine: AsyncEngine,
     tenant: str,
 ) -> None:
-    """A workspace-level module (the platform's tools, c-433) serves every team's runs with no grant, and no team
-    would decide a request for it: the asker is told so, not answered 500 (c-439)."""
+    """A workspace-level module (the platform's tools) serves every team's runs with no grant, and no team
+    would decide a request for it: the asker is told so, not answered 500."""
     c, people = signed_in
     m, o = tool_modules, module_operations
     async with engine.connect() as conn:

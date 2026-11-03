@@ -1,4 +1,4 @@
-"""Widget kinds (c-176): generic, schema-driven widgets an agent shows with `present {kind, data}`, the same in any
+"""Widget kinds: generic, schema-driven widgets an agent shows with `present {kind, data}`, the same in any
 industry. The industry is in the data and its labels, never in the kind: a tracker follows an order, a claim, an
 application or a shipment alike.
 
@@ -267,7 +267,7 @@ SCHEMAS: dict[str, dict[str, Any]] = {
 }
 
 KINDS = tuple(SCHEMAS)
-# Kinds that were catalogue primitives before c-176 and keep their own field checks in `layout.CATALOGUE`.
+# Kinds that were catalogue primitives before the widget kinds and keep their own field checks in `layout.CATALOGUE`.
 PRIMITIVES = ("metric", "table", "chart")
 
 

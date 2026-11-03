@@ -1,4 +1,4 @@
-"""The run reconciler (c-561): finds workflow runs nothing is behind and gives each a clear state.
+"""The run reconciler: finds workflow runs nothing is behind and gives each a clear state.
 
 A run moves only when a worker claims one of its work rows, so a run that reads Queued, Running or Waiting with no row
 a worker can claim or holds never moves again. The reconciler reads every tenant's unfinished runs past row-level
@@ -199,7 +199,7 @@ async def find(
     ran_s: dict[str, float] = {}
     for step in steps:
         if step.status == "waiting" or step.effects == "human":
-            continue  # waited for a person, an event or a timer: not counted (c-561, review 6)
+            continue  # waited for a person, an event or a timer: not counted (review 6)
         began, ended = _when(step.started_at), _when(step.finished_at) if step.finished_at else now
         if began is None or ended is None:
             continue

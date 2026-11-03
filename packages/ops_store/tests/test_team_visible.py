@@ -1,6 +1,6 @@
-"""`team_visible` (c-407), by failure mode: a nullable team column whose workspace-level rows (null team) are hidden
+"""`team_visible`, by failure mode: a nullable team column whose workspace-level rows (null team) are hidden
 from a team, and a NOT NULL team column whose filter carries `OR team IS NULL`, which stops the planner seeking on the
-(tenant_id, team_id, ...) index of a team's list (c-429, tests/engine/test_hot_query_indexes.py in agents-service)."""
+(tenant_id, team_id, ...) index of a team's list (tests/engine/test_hot_query_indexes.py in agents-service)."""
 
 from __future__ import annotations
 

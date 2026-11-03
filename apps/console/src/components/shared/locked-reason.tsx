@@ -12,7 +12,7 @@ import { useWhy } from '@/hooks/me-queries';
 const words = (xs: string[]) => (xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
 /**
- * A control the signed-in person may not use (c-150): shown disabled, with an ⓘ that says why in one line, which roles
+ * A control the signed-in person may not use: shown disabled, with an ⓘ that says why in one line, which roles
  * grant it and who in the team can give roles, from the same check the services run (GET /v1/me/why). The reason is
  * read only when the control is locked.
  */

@@ -1,4 +1,4 @@
-"""Where a request's time went, and the id that follows it across services (c-560).
+"""Where a request's time went, and the id that follows it across services.
 
 Every service gets this middleware from `install_error_handlers`. It always keeps or mints the request's id: the error
 envelope's requestId and the X-Request-Id sent on by `ServiceClient` read it from here, and the response returns it.

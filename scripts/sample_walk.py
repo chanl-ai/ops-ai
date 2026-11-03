@@ -1,4 +1,4 @@
-"""Walks the sample team end to end through the public API (`make demo-walk`, c-542): the install, a chat that loads a
+"""Walks the sample team end to end through the public API (`make demo-walk`): the install, a chat that loads a
 skill and cites knowledge, a blocked topic, bank reads, a write a person approves, then a levy notice emailed to the
 team's mailbox through to the second reply in the sender's inbox.
 

@@ -31,7 +31,7 @@ interface WidgetBase {
   app: string;
   /** The tool call whose result the widget renders. */
   tool: string;
-  /** The tool's action in words (agents-service call_label, c-508); the footer shows this, never `tool`. */
+  /** The tool's action in words (agents-service call_label); the footer shows this, never `tool`. */
   toolLabel: string;
   /** When the data was read from the system of record. */
   asOf: string;
@@ -146,7 +146,7 @@ export interface ChatAttachment {
   size: number;
 }
 
-/** One memory a reply saved about the person (c-206); an episode has no key. */
+/** One memory a reply saved about the person; an episode has no key. */
 /** One memory a reply saved, confirmed or asked about. Key and value come only to the memory's person. */
 export interface RememberedItem {
   id: string;
@@ -165,7 +165,7 @@ export interface GuardrailAudit {
   at?: string;
 }
 
-/** One reply's spend, as the thread returns it (c-286). */
+/** One reply's spend, as the thread returns it. */
 export interface ReplyUsage {
   calls: number;
   inputTokens: number;
@@ -182,12 +182,12 @@ export interface ChatMessage {
   at: string;
   /** Assistant messages: the model that answered, as the provider reported it (e.g. gpt-5.5-2026-04-23). */
   model?: string;
-  /** What the reply spent (c-286): model calls, tokens, cost and seconds; absent when nothing was recorded. */
+  /** What the reply spent: model calls, tokens, cost and seconds; absent when nothing was recorded. */
   usage?: ReplyUsage;
-  /** Assistant messages: the agent that wrote the reply; after a handover it is not the chat's first agent (c-174). */
+  /** Assistant messages: the agent that wrote the reply; after a handover it is not the chat's first agent. */
   agentId?: string;
   agentName?: string;
-  /** Assistant messages: what this turn saved about the person, shown under the reply (c-206). */
+  /** Assistant messages: what this turn saved about the person, shown under the reply. */
   remembered?: RememberedItem[];
   attachments?: ChatAttachment[];
   citations?: Citation[];
@@ -213,9 +213,9 @@ export interface ChatMessage {
   guardrailAudit?: GuardrailAudit[];
   /** Skills the turn loaded, always-on first. */
   skills?: { skillId: string; name: string; version: number; matched: string }[];
-  /** The settings the turn ran on (c-071), for whoever explains the answer later. */
+  /** The settings the turn ran on, for whoever explains the answer later. */
   settings?: EffectiveSettings;
-  /** The conversation's budget ran out at this turn (c-103); its numbers are the server's ledger. */
+  /** The conversation's budget ran out at this turn; its numbers are the server's ledger. */
   budget?: BudgetPause;
 }
 
@@ -247,10 +247,10 @@ export interface ChatThread {
   createdAt: string;
   lastMessageAt: string;
   messageCount: number;
-  /** Set while the chat is handed over (c-174): the agent it started on, which Back returns to. */
+  /** Set while the chat is handed over: the agent it started on, which Back returns to. */
   startAgentId?: string;
   startAgentName?: string;
-  /** A builder's test of the agent (c-284), set by the server: runs the newest draft, left out of counts and memory. */
+  /** A builder's test of the agent, set by the server: runs the newest draft, left out of counts and memory. */
   test?: boolean;
   messages: ChatMessage[];
 }
@@ -336,12 +336,12 @@ export interface ThreadSettings {
 }
 
 export interface ChatThreadInput {
-  /** Left out, the chat starts on the team's default agent (c-174). */
+  /** Left out, the chat starts on the team's default agent. */
   agentId?: string;
   kbIds: string[];
-  /** Test the agent (c-284): granted only to someone who may edit it; each message runs its newest version. */
+  /** Test the agent: granted only to someone who may edit it; each message runs its newest version. */
   test?: boolean;
-  /** With `test`, run this saved version instead of the newest (c-286's compare). */
+  /** With `test`, run this saved version instead of the newest (the compare). */
   testVersion?: number;
   title?: string;
   /** Apply to every message in the thread. */
@@ -349,7 +349,7 @@ export interface ChatThreadInput {
   attachments?: ChatAttachment[];
 }
 
-/** `agentId` hands the chat to another agent (an @mention); the agent it started on hands it back (c-174). */
+/** `agentId` hands the chat to another agent (an @mention); the agent it started on hands it back. */
 export type ChatThreadPatch = Partial<Pick<ChatThread, 'title' | 'pinned' | 'archived' | 'kbIds' | 'agentId'>>;
 
 /** The agent the team's new chats start on; absent until provisioning or a team admin sets one. */

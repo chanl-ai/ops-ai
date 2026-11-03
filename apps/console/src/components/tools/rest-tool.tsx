@@ -71,7 +71,7 @@ export interface RestToolProps extends ToolRunProps {
 }
 
 /**
- * A REST tool's operation on one page, in an API client's order (c-591): the connection that signs it in, the method
+ * A REST tool's operation on one page, in an API client's order: the connection that signs it in, the method
  * and address with Mock or Real and Run, the inputs, headers and body, then the answer and exactly what was sent, then
  * Save. Mock answers from the operation's mock and sends nothing; Real calls the system with the connection's sign-in.
  */

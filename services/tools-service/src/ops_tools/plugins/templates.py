@@ -1,4 +1,4 @@
-"""`/v1/plugin-templates` (c-590): the agents, skills, workflows and document types a plugin brings, as one team sees
+"""`/v1/plugin-templates`: the agents, skills, workflows and document types a plugin brings, as one team sees
 them, with each body a copy is made from.
 
 tools-service is the one service that loads plugins, so agents-service and documents-service read a template's body

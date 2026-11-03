@@ -58,7 +58,7 @@ def _pinned_widget_ids(spec: dict[str, Any]) -> list[str]:
 
 
 def default_limits(spec: dict[str, Any]) -> AgentLimits:
-    """For a version saved before limits existed (owner assumption, 2026-10-16): its one model, its default knowledge
+    """For a version saved before limits existed: its one model, its default knowledge
     bases, every granted tool switchable off, no added instructions."""
     model = str(spec.get("model") or "")
     return AgentLimits(

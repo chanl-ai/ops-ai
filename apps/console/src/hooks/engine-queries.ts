@@ -75,7 +75,7 @@ export function useCancelEngineRun() {
   });
 }
 
-/** Retry on a Stuck run (c-561): it is queued again and the page polls it on. */
+/** Retry on a Stuck run: it is queued again and the page polls it on. */
 export function useRetryEngineRun() {
   const qc = useQueryClient();
   return useMutation({
@@ -84,7 +84,7 @@ export function useRetryEngineRun() {
   });
 }
 
-/** Run again on an email the mailbox listener set aside (c-561); Activity lists the run it starts. */
+/** Run again on an email the mailbox listener set aside; Activity lists the run it starts. */
 export function useRunSetAsideEmail() {
   const qc = useQueryClient();
   return useMutation({

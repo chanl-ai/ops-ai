@@ -1,4 +1,4 @@
-"""connection_details_and_health: a connection's card details and each environment's last test (c-580)
+"""connection_details_and_health: a connection's card details and each environment's last test
 
 The console's Connections grid shows a system connected by name with the category, one line and keys link its admin
 gave. Each environment keeps its own Test connection result, so a failing sandbox no longer overwrites the health of a

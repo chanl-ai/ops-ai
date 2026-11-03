@@ -1,4 +1,4 @@
-"""Installs the sample team on an Ops AI install through its public HTTP API only (c-542; from c-383's demo seed).
+"""Installs the sample team on an Ops AI install through its public HTTP API only (from the demo seed).
 
     make sample-team                          the local stack, signed in as the first admin in .run/dev-admin.env
     uv run python scripts/sample_team.py install [--name NAME] [--origin URL] [--admin-env FILE]
@@ -342,7 +342,7 @@ def ensure_knowledge(who: Session, bases: list[dict[str, Any]]) -> dict[str, str
         listed = items(data(kb.get("/v1/knowledge-bases", params={"search": base["name"], "pageSize": 100})))
         same = [b for b in listed if b["name"].lower() == base["name"].lower()]
         # This team's copy first; an unowned handbook with the same name is visible here and blocks a second
-        # create, so the seed reuses it rather than 409 (c-532).
+        # create, so the seed reuses it rather than 409.
         found = next((b for b in same if b.get("teamId") == who.team), None) or next(
             (b for b in same if not b.get("teamId")), None
         )
@@ -460,7 +460,7 @@ def ensure_bank_module(builder: Session, admin: Session) -> None:
     Reads come from GET; place_hold needs one approver of the team with a step-up; the levy webhook runs at once."""
     api = builder("tools")
     listed = items(data(api.get("/v1/tool-modules", params={"search": BANK_MODULE, "pageSize": 50})))
-    # The list is this team's: a published module of the same name another team holds is not here (c-509).
+    # The list is this team's: a published module of the same name another team holds is not here.
     found = next((m for m in listed if m["name"] == BANK_MODULE and m.get("status") == "published"), None)
     if found is not None:
         say("FOUND", "bank module", str(found["id"]))
@@ -679,7 +679,7 @@ def ensure_mailbox(admin: Session, lead: Session, env: dict[str, str], spec: dic
     smtp_host, smtp_port = hostport(env.get("OPS_DEMO_REPLY_SMTP") or spec["replySmtp"])
     tls = env["OPS_DEMO_MAIL_TLS"] != "0" if "OPS_DEMO_MAIL_TLS" in env else bool(spec.get("tls"))
     secret = spec["secret"]
-    # The secret is the lead's team's own (c-509); a Security admin writes and reads it by naming that team.
+    # The secret is the lead's team's own; a Security admin writes and reads it by naming that team.
     ensure_team_secret(admin, str(lead.team), secret, env.get("OPS_DEMO_MAILBOX_PASSWORD") or uuid.uuid4().hex)
     boxes = items(data(lead("agents").get("/v1/channels/mailboxes")))
     box = next((b for b in boxes if b["address"] == address), None)
@@ -770,7 +770,7 @@ def definition_of(wf: dict[str, Any], names: dict[str, str], mailbox: str | None
         if isinstance(kind, dict) and kind.get("id") in wf.get("documentTypes", {}):
             params["documentType"] = {**kind, "id": wf["documentTypes"][kind["id"]], "version": 1}
         if node["type"] == "ops.trigger.email":
-            # With no mailbox the trigger reads no mail; Start run still sends it a test email (c-466).
+            # With no mailbox the trigger reads no mail; Start run still sends it a test email.
             if mailbox:
                 params["mailbox"] = mailbox
             else:
@@ -826,7 +826,7 @@ def ensure_workflows(
 
 
 def ensure_code_modules(builder: Session, security: Session, modules: list[dict[str, Any]]) -> None:
-    """Each code tool module (c-531), its function's source read from code/ beside this script, made by the builder
+    """Each code tool module, its function's source read from code/ beside this script, made by the builder
     and published through Security's review as any module is. A module of that name already in the team is FOUND and
     left as it is."""
     api = builder("tools")
@@ -865,8 +865,8 @@ def ensure_tool_access(
 ) -> None:
     """`--tool-access`: each of the team's live workflows is granted the operations of each module another team owns
     (the bank system, the platform tools), as a builder asks on the module's Access tab and that team's approver
-    decides in Human Tasks. The grant is what lets the team's people see those modules and its runs call them (c-423,
-    c-433). A workflow no team owns is left out; one already granted, or waiting, is not asked again."""
+    decides in Human Tasks. The grant is what lets the team's people see those modules and its runs call them. A
+    workflow no team owns is left out; one already granted, or waiting, is not asked again."""
     ours = Session(admin.urls, admin.token, admin.email, team)
     flows = [
         w
@@ -980,7 +980,7 @@ TEMPLATE_READS = {"caseType": "/v1/case-types/{id}", "taskType": "/v1/task-types
 
 
 def ensure_templates(builder: Session, templates: list[dict[str, Any]]) -> None:
-    """The built-in types the team installs from templates (c-541). GET /v1/templates lists plugin copies (c-590);
+    """The built-in types the team installs from templates. GET /v1/templates lists plugin copies;
     POST /v1/templates/install is not that list's write. Until a case/task install route exists, each type is one
     every team reads already, so it is checked rather than made."""
     api = builder("agents")
@@ -992,7 +992,7 @@ def ensure_templates(builder: Session, templates: list[dict[str, Any]]) -> None:
             if read.status_code == 200:
                 say("FOUND", what, "built in")
             else:
-                say("FAIL", what, f"not readable ({read.status_code}) and no template install route (c-541)")
+                say("FAIL", what, f"not readable ({read.status_code}) and no template install route")
             continue
         if r.status_code == 409:
             say("FOUND", what, f"v{t['version']}")
@@ -1124,7 +1124,7 @@ def run_detail(who: Session, run_id: str) -> dict[str, Any]:
 def prefixed(spec: dict[str, Any], prefix: str) -> None:
     """Every workflow and document type the team makes under `prefix` + its id, with the workflows and types each
     workflow names following, so the team's copies never meet another team's ids: both kinds of id are unique in the
-    workspace and belong to the first team that makes one (c-440)."""
+    workspace and belong to the first team that makes one."""
     ids: dict[str, str] = {}
     for wf in spec["workflows"]:
         own = wf.get("id") or json.loads((WORKFLOWS / wf["file"]).read_text())["id"]

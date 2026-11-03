@@ -1,4 +1,4 @@
-"""A workspace admin acts in any team (c-208), by failure mode: a workspace admin refused in a team they do not belong
+"""A workspace admin acts in any team, by failure mode: a workspace admin refused in a team they do not belong
 to, here or at another service that picks `X-Team-Id` from the token (F1); a team admin, the Security team's included,
 let into a team they do not belong to (F2); an archived team offered to a workspace admin (F3)."""
 

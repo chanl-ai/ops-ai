@@ -1,4 +1,4 @@
-"""Every custom module's address lives on a connection (c-616 D3b-2a), by failure mode: a module made from a full URL
+"""Every custom module's address lives on a connection, by failure mode: a module made from a full URL
 with no connection keeps its address only on itself, so dropping the module's copy strands it; a blank module's first
 tool sets the module's address but not its connection's; an app that needs no sign-in reads "not signed in" forever,
 since it has no token and nothing to test; and the migration gives a connection to a plugin's system module, or its
@@ -118,7 +118,7 @@ async def test_a_blank_modules_first_tool_makes_the_connection_its_address_lives
     gateway: Gateway,  # noqa: F811
     engine: AsyncEngine,
 ) -> None:
-    # A blank module has no kind until its first tool (c-616): a code module must never get an empty app.
+    # A blank module has no kind until its first tool: a code module must never get an empty app.
     body = {"displayName": "Ledger", "name": f"ledger-empty-{gateway.suffix}"}
     made = await gateway.client.post("/v1/tool-modules/blank", json=body, headers=TEAM)
     assert made.status_code == 201, made.text
@@ -184,7 +184,7 @@ async def test_the_migration_moves_each_custom_modules_address_onto_a_connection
 
 
 async def test_a_sign_in_header_is_refused_on_a_module_with_no_app_of_its_own(gateway: Gateway) -> None:  # noqa: F811
-    # Its open connection is where the key goes (c-616 D3b-2b): a header key would be a second home for sign-in.
+    # Its open connection is where the key goes: a header key would be a second home for sign-in.
     op = {**tool(gateway, f"{ORIGIN}/v1/accounts/{{accountId}}"), "headers": [{"key": "X-Api-Key", "value": "{{K}}"}]}
     body = {"name": f"ledger-keyed-{gateway.suffix}", "displayName": "Ledger", "system": "Ledger", "http": op}
     made = await gateway.client.post("/v1/tool-modules", json=body, headers=TEAM)

@@ -1,4 +1,4 @@
-/** What an agent remembers about the person using the console (c-124, c-206); only ever their own. */
+/** What an agent remembers about the person using the console; only ever their own. */
 export type MemoryKind = 'fact' | 'preference' | 'episode';
 
 export interface Memory {

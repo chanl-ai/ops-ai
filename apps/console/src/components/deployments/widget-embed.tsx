@@ -193,7 +193,7 @@ function confirmText(d: WidgetDeployment, change: EmbedChange, latest: number | 
 }
 
 /**
- * The agent's chat on other sites (agents-service `/v1/widget-deployments`, c-117/c-118): each embed pins a published
+ * The agent's chat on other sites (agents-service `/v1/widget-deployments`): each embed pins a published
  * version and lists the origins allowed to load it. Builders and admins of the agent's team create, pause and move
  * embeds; the snippet carries only the deployment id. `scriptUrl` comes from `useWidgetScriptUrl` in the page.
  */
@@ -208,7 +208,7 @@ export function WidgetEmbeds({
   agentId: string;
   publishedVersion?: number | null;
   scriptUrl: string;
-  /** Lets the page's header open the embed dialog (c-130); the section keeps its own state otherwise. */
+  /** Lets the page's header open the embed dialog; the section keeps its own state otherwise. */
   createOpen?: boolean;
   onCreateOpenChange?: (open: boolean) => void;
   /** The agent's own flag (its detail response asks the route's check); the team's permission until it loads. */

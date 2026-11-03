@@ -6,7 +6,7 @@ import { HostedFormPage } from '~/hosted-form-page';
 export const metadata: Metadata = { title: 'Form', referrer: 'no-referrer', robots: { index: false, follow: false } };
 
 /**
- * A hosted form opened from its signed link (c-535): no sign-in, and only the form's title, description and fields.
+ * A hosted form opened from its signed link: no sign-in, and only the form's title, description and fields.
  * agents-service checks the token on every read, upload and send; next.config.ts forbids framing this page.
  */
 export default async function FormPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ t?: string | string[] }> }) {

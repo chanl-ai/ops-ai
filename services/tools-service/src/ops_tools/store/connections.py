@@ -32,7 +32,7 @@ from .modules import metadata, module_operations, service_outbox, tool_modules
 
 _TS = sa.DateTime(timezone=True)
 SHARED = ""
-# The role every transaction of this store runs as (c-602): row-level security applies to it, not to the owner the
+# The role every transaction of this store runs as: row-level security applies to it, not to the owner the
 # service connects as, so the database holds a person's sign-ins to their connection's team.
 ROLE = "ops_tools_tenant"
 
@@ -41,7 +41,7 @@ connections = sa.Table(
     metadata,
     sa.Column("tenant_id", sa.String(64), primary_key=True),
     sa.Column("id", sa.String(64), primary_key=True),
-    # The team that owns it; only that team's modules use it (c-509).
+    # The team that owns it; only that team's modules use it.
     sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("name", sa.String(200), nullable=False),
     # A kind in ops_tools.auth.kinds (none, api_key, basic, bearer, oauth2_client_credentials, oauth2_auth_code).
@@ -52,24 +52,24 @@ connections = sa.Table(
     # When the consent an older integration record carries runs out (the dev seed's); null for none.
     sa.Column("expires_at", _TS),
     sa.Column("catalog_id", sa.String(64)),
-    # Whose account a call signs in with (c-558): team, person, or person_or_team; with person_or_team, a call with
+    # Whose account a call signs in with: team, person, or person_or_team; with person_or_team, a call with
     # nobody behind it uses the team's sign-in only while `team_backup` is on.
     sa.Column("sign_in", sa.String(16), nullable=False, server_default="team"),
     sa.Column("team_backup", sa.Boolean, nullable=False, server_default=sa.false()),
-    # The last Test connection (c-558) of the environment that decides the connection: production when it is set,
-    # else test (c-580). Each environment's own last result is on its row in connection_environments.
+    # The last Test connection of the environment that decides the connection: production when it is set,
+    # else test. Each environment's own last result is on its row in connection_environments.
     sa.Column("health", sa.JSON),
-    # What the console's card shows for a system connected by name (c-580): a category, one line, where its keys are.
+    # What the console's card shows for a system connected by name: a category, one line, where its keys are.
     sa.Column("category", sa.String(80)),
     sa.Column("description", sa.String(300)),
     sa.Column("docs_url", sa.String(500)),
-    # The plugin whose account this is (c-608): a team keeps several named accounts of one app, each a connection,
+    # The plugin whose account this is: a team keeps several named accounts of one app, each a connection,
     # and the binding's connection is the default. Null for a connection made by name.
     sa.Column("plugin_id", sa.String(120)),
     # The account's name, which a tool or step names to use it ("EU org"). One per team and plugin, checked when an
     # account is made: a unique index would treat nulls as equal on SQL Server, refusing a second by-name connection.
     sa.Column("account_name", sa.String(200)),
-    # "tool" for a connection the platform made to hold a custom tool's address (c-616), which the Apps grid does not
+    # "tool" for a connection the platform made to hold a custom tool's address, which the Apps grid does not
     # list; null for one a person added.
     sa.Column("origin", sa.String(16)),
     sa.Column("revision", sa.Integer, nullable=False),
@@ -78,7 +78,7 @@ connections = sa.Table(
     sa.Column("updated_by", sa.String(200), nullable=False),
     sa.Column("updated_at", _TS, nullable=False),
     sa.Index("ix_connections_team", "tenant_id", "team_id"),
-    # Held to its team by the database (c-616 C2): only a transaction run as ROLE in that team reads it.
+    # Held to its team by the database: only a transaction run as ROLE in that team reads it.
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -95,12 +95,12 @@ connection_environments = sa.Table(
     sa.Column("settings", sa.JSON, nullable=False),
     # Each secret field to the tool_secrets name holding its value.
     sa.Column("secrets", sa.JSON, nullable=False),
-    # This environment's last Test connection (c-580), the same shape as connections.health.
+    # This environment's last Test connection, the same shape as connections.health.
     sa.Column("health", sa.JSON),
-    # The plugin whose platform app this environment signs in with (c-565), its secret the account's; null for the
-    # team's own app. A column, not a setting, so a save that rewrites the settings (Edit keys) keeps it (c-580).
+    # The plugin whose platform app this environment signs in with, its secret the account's; null for the
+    # team's own app. A column, not a setting, so a save that rewrites the settings (Edit keys) keeps it.
     sa.Column("platform_app", sa.String(120)),
-    # A plugin's settings this environment keeps its own (c-580): the sandbox's sign-in address, the instance its token
+    # A plugin's settings this environment keeps its own: the sandbox's sign-in address, the instance its token
     # named. Kept here once, where the connection's addresses are; the team's binding names the connection.
     sa.Column("plugin_settings", sa.JSON),
     sa.Column("updated_by", sa.String(200), nullable=False),
@@ -130,11 +130,11 @@ connection_tokens = sa.Table(
     # Rises on every refresh; a reader can tell which token a call used.
     sa.Column("rotations", sa.Integer, nullable=False),
     sa.Column("refreshed_at", _TS, nullable=False),
-    # When the system refused this person's key or sign-in, and what it said (c-595): their next call asks them for a
+    # When the system refused this person's key or sign-in, and what it said: their next call asks them for a
     # new one instead of sending the refused one again. A new key or sign-in clears it.
     sa.Column("refused_at", _TS),
     sa.Column("refused_reason", sa.String(300)),
-    # The person's default among their sign-ins to one app's accounts (c-608); none pinned means the newest live one.
+    # The person's default among their sign-ins to one app's accounts; none pinned means the newest live one.
     sa.Column("pinned", sa.Boolean, nullable=False, server_default=sa.false()),
     sa.ForeignKeyConstraint(
         ["tenant_id", "connection_id"], ["connections.tenant_id", "connections.id"], ondelete="CASCADE"
@@ -159,7 +159,7 @@ oauth_states = sa.Table(
     sa.Column("expires_at", _TS, nullable=False),
     # Set in the transaction that exchanges the code: a state is used once.
     sa.Column("used_at", _TS),
-    # The token row the sign-in fills: SHARED for the team's, the person's id for their own (c-558).
+    # The token row the sign-in fills: SHARED for the team's, the person's id for their own.
     sa.Column("token_for", sa.String(200), nullable=False, server_default=""),
     # The scopes the sign-in asked for, separated by spaces: what it granted when the token answer does not say.
     sa.Column("scopes", sa.Text, nullable=False, server_default=""),
@@ -322,7 +322,7 @@ class ConnectionStore:
             return (await self._whole(c, tenant_id, [dict(row)]))[0] if row else None
 
     async def accounts(self, tenant_id: str, team_id: str, plugin_id: str) -> list[Row]:
-        """The team's accounts of one app (c-608), oldest first, each whole with its environments."""
+        """The team's accounts of one app, oldest first, each whole with its environments."""
         k = connections.c
         q = (
             connections.select()
@@ -335,7 +335,7 @@ class ConnectionStore:
 
     async def by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, Row]:
         """The named connections with their environments (one more query), without the modules using them: what a
-        module list shows of each, its base addresses included (c-616)."""
+        module list shows of each, its base addresses included."""
         if not ids:
             return {}
         k = connections.c
@@ -347,7 +347,7 @@ class ConnectionStore:
 
     @staticmethod
     def _visible(tenant_id: str, teams: list[str], search: str) -> sa.ColumnElement[bool]:
-        """`teams`: the owning teams the caller sees (its own, c-509)."""
+        """`teams`: the owning teams the caller sees (its own)."""
         where = sa.and_(connections.c.tenant_id == tenant_id, contains(connections.c.name, search))
         return sa.and_(where, connections.c.team_id.in_(teams))
 
@@ -451,7 +451,7 @@ class ConnectionStore:
     async def set_base(
         self, tenant_id: str, connection_id: str, base: str, environments: Sequence[str], *, actor: str, at: datetime
     ) -> None:
-        """Sets the app's address in each of `environments` (c-616), keeping each one's other settings."""
+        """Sets the app's address in each of `environments`, keeping each one's other settings."""
         async with self._tx() as c:
             key = (
                 connection_environments.c.tenant_id == tenant_id,
@@ -557,7 +557,7 @@ class ConnectionStore:
             await c.execute(q)
 
     async def needs_reconnect(self, tenant_id: str, connection_id: str, detail: str | None, event: Row) -> None:
-        """The gateway's finding that the team account stopped working (c-616 S12): with `detail`, what the system
+        """The gateway's finding that the team account stopped working: with `detail`, what the system
         refused, the connection is marked needs_reconnect; `event` is the admins' notice (connections.account_events),
         written in the same transaction unless the outbox already holds one under its key, so a call made while the
         account stays broken tells nobody again."""
@@ -658,7 +658,7 @@ class ConnectionStore:
 
     async def team_tokens(self, tenant_id: str, connection_ids: list[str]) -> dict[str, dict[str, Row]]:
         """The team account's token rows (never a person's) of these connections, by connection then environment: what
-        an app's state is derived from (c-616)."""
+        an app's state is derived from."""
         if not connection_ids:
             return {}
         q = connection_tokens.select().where(
@@ -738,13 +738,13 @@ class ConnectionStore:
     async def mark_refused(
         self, tenant_id: str, connection_id: str, environment: str, person: str, *, reason: str, at: datetime
     ) -> bool:
-        """Marks a person's own row refused by the system (c-595); False when they hold none."""
+        """Marks a person's own row refused by the system; False when they hold none."""
         q = connection_tokens.update().where(*self._token_key(tenant_id, connection_id, environment, person))
         async with self._tx() as c:
             return (await c.execute(q.values(refused_at=at, refused_reason=reason[:300]))).rowcount > 0
 
     async def forget_person(self, tenant_id: str, team_id: str, person: str) -> list[Row]:
-        """Deletes every sign-in of `person`'s own on `team_id`'s connections, in every environment (c-616 S14: they
+        """Deletes every sign-in of `person`'s own on `team_id`'s connections, in every environment (they
         left the team); the rows deleted (`held_of`). Their sign-ins on another team's connections and the team
         accounts stay."""
         if person == SHARED:
@@ -763,7 +763,7 @@ class ConnectionStore:
             return [dict(r) for r in (await c.execute(q.returning(*_HELD_TOKEN))).mappings()]
 
     async def own_sign_ins(self, tenant_id: str, person: str, connection_ids: list[str], environment: str) -> list[Row]:
-        """One person's own sign-ins on these connections (an app's accounts, c-608) in one environment, newest
+        """One person's own sign-ins on these connections (an app's accounts) in one environment, newest
         first: which they pinned and which the system refused."""
         if not connection_ids:
             return []
@@ -805,7 +805,7 @@ class ConnectionStore:
         return True
 
     async def people(self, tenant_id: str, connection_id: str) -> list[Row]:
-        """Every person's own sign-in on the connection (c-558), oldest first; the team's shared row is not one."""
+        """Every person's own sign-in on the connection, oldest first; the team's shared row is not one."""
         t = connection_tokens.c
         q = (
             sa.select(t.environment, t.person_id, t.account, t.scopes, t.refreshed_at, t.expires_at)
@@ -821,7 +821,7 @@ class ConnectionStore:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def operation_scopes(self, tenant_id: str, connection_id: str) -> list[str]:
-        """Every scope an operation of a module on this connection needs (c-558), in a stable order: what the team's
+        """Every scope an operation of a module on this connection needs, in a stable order: what the team's
         account asks for when it signs in, since the calls it signs have nobody to ask for more."""
         o, m = module_operations.c, tool_modules.c
         q = (
@@ -835,7 +835,7 @@ class ConnectionStore:
         return list(dict.fromkeys(str(x) for r in rows if isinstance(r, list) for x in cast(list[Any], r)))
 
     async def mine(self, tenant_id: str, team_id: str, person: str) -> list[Row]:
-        """One person's own sign-ins on the team's connections (c-558), by connection name then environment."""
+        """One person's own sign-ins on the team's connections, by connection name then environment."""
         t, k = connection_tokens.c, connections.c
         q = (
             sa.select(
@@ -865,7 +865,7 @@ class ConnectionStore:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def connectable(self, tenant_id: str, team_id: str, person: str, kinds: list[str]) -> list[Row]:
-        """Every environment of the team's connections each person signs in to with one of `kinds` (c-595), with the
+        """Every environment of the team's connections each person signs in to with one of `kinds`, with the
         person's own row where they have one: Your connections, connected or not, by connection name."""
         t, k, e = connection_tokens.c, connections.c, connection_environments.c
         own = sa.and_(

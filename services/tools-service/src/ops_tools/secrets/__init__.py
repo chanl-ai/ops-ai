@@ -96,7 +96,7 @@ class SecretResolver:
     ) -> dict[str, str]:
         """Each named secret's value from `team_id`'s own secrets (the calling module's, mailbox's or connection's
         team), its use audited; SecretMissing names any the team lacks or cannot decrypt. A caller with no team has
-        no secrets: every secret belongs to a team (c-509)."""
+        no secrets: every secret belongs to a team."""
         if team_id is None:
             raise SecretMissing(names)
         found = await self.store.use(tenant_id, team_id, names, actor=actor, tool=tool, at=datetime.now(UTC))

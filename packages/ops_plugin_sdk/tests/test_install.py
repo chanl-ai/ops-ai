@@ -1,4 +1,4 @@
-"""`ops plugin install|remove` (c-616 M2), by failure mode: a plugin that fails validation lands in the install's
+"""`ops plugin install|remove`, by failure mode: a plugin that fails validation lands in the install's
 plugins folder anyway; an installed plugin is not where the services load from; an upgrade leaves the old version's
 files behind; remove deletes the wrong folder, or says nothing when the plugin is not there."""
 

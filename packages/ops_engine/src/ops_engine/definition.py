@@ -208,7 +208,7 @@ INPUT_FILE_PATH = re.compile(r"^\$\.input\.([A-Za-z0-9_]+)(?:\.fileId)?$")
 
 def _unmarked_file_inputs(d: WorkflowDefinition, registry: TypeRegistry) -> list[dict[str, Any]]:
     """`file_input_unmarked`: a step parameter its type marks `format: "file"` reads a start form's input that the
-    trigger's schema does not declare a file field, so the form would ask for a file id in a text box (c-466). A
+    trigger's schema does not declare a file field, so the form would ask for a file id in a text box. A
     Request trigger always has a form. A Service event trigger has one only when it declares an input schema. The
     rule reads the node types' schemas, never a field's or step's name."""
     trigger = next(
@@ -267,7 +267,7 @@ def _parameter(err: Any) -> str | None:
 
 def advise(d: WorkflowDefinition, registry: TypeRegistry) -> list[dict[str, Any]]:
     """Warnings that never refuse a save. `fork_without_join`: a step other than a Join reached from two steps one port
-    leads to runs once per branch that reaches it (c-278); a Join after the branches runs it once."""
+    leads to runs once per branch that reaches it; a Join after the branches runs it once."""
     deferred = {n.id for n in d.nodes if (t := registry.find(n.type, n.type_version)) is not None and t.deferred}
     out: list[dict[str, Any]] = []
     warned: set[str] = set()

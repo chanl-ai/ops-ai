@@ -50,7 +50,7 @@ export interface paths {
         };
         /**
          * List App Credentials
-         * @description The team's app credentials, for the Credentials page under Apps (c-616 C0): each app's type, permissions,
+         * @description The team's app credentials, for the Credentials page under Apps: each app's type, permissions,
          *     accounts and the last Test with my account. Team admins only; no secret.
          */
         get: operations["connections_list_app_credentials"];
@@ -71,7 +71,7 @@ export interface paths {
         };
         /**
          * Get App
-         * @description One app's page (c-607): its card, account, the caller's own sign-in, tools, skills and latest runs.
+         * @description One app's page: its card, account, the caller's own sign-in, tools, skills and latest runs.
          */
         get: operations["connections_get_app"];
         put?: never;
@@ -131,7 +131,7 @@ export interface paths {
         put?: never;
         /**
          * Open Connect Link
-         * @description Starts the sign-in a connect link asks for, for the one person it was made for (c-558).
+         * @description Starts the sign-in a connect link asks for, for the one person it was made for.
          */
         post: operations["connections_open_connect_link"];
         delete?: never;
@@ -151,7 +151,7 @@ export interface paths {
         put?: never;
         /**
          * Connect Mcp
-         * @description An MCP server's connection, its sign-in found from the server's 401 and metadata (c-331).
+         * @description An MCP server's connection, its sign-in found from the server's 401 and metadata.
          */
         post: operations["connections_connect_mcp"];
         delete?: never;
@@ -192,7 +192,7 @@ export interface paths {
         get?: never;
         /**
          * Pin Default
-         * @description Makes this account the caller's default of its app (c-608): their calls that name no account use it.
+         * @description Makes this account the caller's default of its app: their calls that name no account use it.
          */
         put: operations["connections_pin_default"];
         post?: never;
@@ -291,7 +291,7 @@ export interface paths {
         /**
          * Test Connection
          * @description Reads the environment's test address signed in with the caller's own account or the team's, and stores the
-         *     result as the connection's `health` (c-558). A failed test answers 200 with the failure in `health`.
+         *     result as the connection's `health`. A failed test answers 200 with the failure in `health`.
          */
         post: operations["connections_test_connection"];
         delete?: never;
@@ -349,7 +349,7 @@ export interface paths {
         /**
          * List Hosts
          * @description The hosts, by name, a page at a time; `search` matches the host or its note, `templateId` the template slot
-         *     a provisioned host fills (c-180). The page and its count are queried, not sliced.
+         *     a provisioned host fills. The page and its count are queried, not sliced.
          */
         get: operations["egress_list_hosts"];
         put?: never;
@@ -438,7 +438,7 @@ export interface paths {
         };
         /**
          * Get Execution
-         * @description One call by its id, as the list shows it, so an Activity row opens to its call (c-057 T013).
+         * @description One call by its id, as the list shows it, so an Activity row opens to its call.
          */
         get: operations["executions_get_execution"];
         put?: never;
@@ -496,8 +496,8 @@ export interface paths {
         };
         /**
          * My Connections
-         * @description The caller's own sign-ins on their team's connections (c-558): Your connections in the person menu. With
-         *     `every`, also each connection of the team they can connect themselves and have not (c-595).
+         * @description The caller's own sign-ins on their team's connections: Your connections in the person menu. With
+         *     `every`, also each connection of the team they can connect themselves and have not.
          */
         get: operations["connections_my_connections"];
         put?: never;
@@ -539,7 +539,7 @@ export interface paths {
         get?: never;
         /**
          * Give Own Credentials
-         * @description The caller's own key, password or token on a connection each person signs in to (c-595), replacing any they
+         * @description The caller's own key, password or token on a connection each person signs in to, replacing any they
          *     gave before; answers their row in Your connections, never the values.
          */
         put: operations["connections_give_own_credentials"];
@@ -603,7 +603,7 @@ export interface paths {
         put?: never;
         /**
          * Add Account
-         * @description Another named account of an app the team has connected (c-608, with several_accounts on): a second org or a
+         * @description Another named account of an app the team has connected (with several_accounts on): a second org or a
          *     second account of the same system, made with the first's contract. The first stays the default.
          */
         post: operations["plugins_add_account"];
@@ -623,7 +623,7 @@ export interface paths {
         get?: never;
         /**
          * Set App Secret
-         * @description Seals the platform's own OAuth app secret for the plugin at the account (c-565). Its client id is in the
+         * @description Seals the platform's own OAuth app secret for the plugin at the account. Its client id is in the
          *     plugins policy; a team with no app of its own signs in with this one. The answer never carries the secret.
          */
         put: operations["plugins_set_app_secret"];
@@ -793,8 +793,8 @@ export interface paths {
         };
         /**
          * List Systems
-         * @description The team's apps for the Apps grid (c-580): its plugins and the apps a person added. `include=builtin` adds
-         *     the built-in apps, for the approval policy's app picker (owner, 2026-11-01).
+         * @description The team's apps for the Apps grid: its plugins and the apps a person added. `include=builtin` adds
+         *     the built-in apps, for the approval policy's app picker.
          */
         get: operations["connections_list_systems"];
         put?: never;
@@ -883,7 +883,7 @@ export interface paths {
         };
         /**
          * List Grants
-         * @description Every workflow's access to the modules the team sees (c-144): a page of one view, with each view's count.
+         * @description Every workflow's access to the modules the team sees: a page of one view, with each view's count.
          */
         get: operations["tool_modules_list_grants"];
         put?: never;
@@ -1009,7 +1009,7 @@ export interface paths {
         put?: never;
         /**
          * Add Function
-         * @description Adds a Python function to a code module (c-531); it runs on runner-service when called.
+         * @description Adds a Python function to a code module; it runs on runner-service when called.
          */
         post: operations["tool_modules_add_function"];
         delete?: never;
@@ -1240,7 +1240,7 @@ export interface components {
         };
         /**
          * AccountIn
-         * @description Another account of an app the team has connected (c-608): its name, and the same turn-on contract as the
+         * @description Another account of an app the team has connected: its name, and the same turn-on contract as the
          *     first account's (the environment, the kind, whose account calls use, the app and the credentials).
          */
         AccountIn: {
@@ -1296,7 +1296,7 @@ export interface components {
         };
         /**
          * AppAccount
-         * @description One of the team's accounts of the app (c-608): the default is the one calls use unless they name another.
+         * @description One of the team's accounts of the app: the default is the one calls use unless they name another.
          */
         AppAccount: {
             /** Account */
@@ -1331,7 +1331,7 @@ export interface components {
         };
         /**
          * AppCredential
-         * @description How one of the team's apps signs in (c-616 C0): Ops AI's app or the team's own OAuth client, never its secret.
+         * @description How one of the team's apps signs in: Ops AI's app or the team's own OAuth client, never its secret.
          */
         AppCredential: {
             /** Accounts */
@@ -1371,7 +1371,7 @@ export interface components {
         };
         /**
          * AppPage
-         * @description One app's page (c-607), joined here: its card, its account's connection, the caller's own sign-in, how many
+         * @description One app's page, joined here: its card, its account's connection, the caller's own sign-in, how many
          *     people signed in, its tools, the plugin's skills and the latest runs of its tools.
          */
         AppPage: {
@@ -1423,7 +1423,7 @@ export interface components {
         };
         /**
          * AppUsers
-         * @description Who uses an app's tools in the team, read before turning it off (c-616).
+         * @description Who uses an app's tools in the team, read before turning it off.
          */
         AppUsers: {
             /** Agents */
@@ -1690,7 +1690,7 @@ export interface components {
         };
         /**
          * CodeSettings
-         * @description A code operation's function (c-531): what runs, the tools it may call and the secrets it may hand them.
+         * @description A code operation's function: what runs, the tools it may call and the secrets it may hand them.
          */
         CodeSettings: {
             /** Bindings */
@@ -2035,7 +2035,7 @@ export interface components {
         };
         /**
          * CredentialCheckIn
-         * @description Test with my account (c-616): `environment` starts it; the `state` and `code` the sign-in page was handed back
+         * @description Test with my account: `environment` starts it; the `state` and `code` the sign-in page was handed back
          *     finish it, on the same route.
          */
         CredentialCheckIn: {
@@ -2880,7 +2880,7 @@ export interface components {
         };
         /**
          * McpConnectionIn
-         * @description An MCP server by its address; its sign-in is found from the server (c-331).
+         * @description An MCP server by its address; its sign-in is found from the server.
          */
         McpConnectionIn: {
             /** Clientid */
@@ -3389,7 +3389,7 @@ export interface components {
         };
         /**
          * MyConnection
-         * @description One of the caller's own sign-ins (c-558), as Your connections lists it.
+         * @description One of the caller's own sign-ins, as Your connections lists it.
          */
         MyConnection: {
             /** Account */
@@ -3570,7 +3570,7 @@ export interface components {
         };
         /**
          * PersonCredentialsIn
-         * @description A person's own key, password or token on a connection each person signs in to (c-595): the kind's person
+         * @description A person's own key, password or token on a connection each person signs in to: the kind's person
          *     fields, each a value of at most 2,000 characters.
          */
         PersonCredentialsIn: {
@@ -3643,7 +3643,7 @@ export interface components {
         };
         /**
          * PluginDisplay
-         * @description The manifest's card details (c-580): a logo, a category, one line, and where to read how to set up its app.
+         * @description The manifest's card details: a logo, a category, one line, and where to read how to set up its app.
          */
         PluginDisplay: {
             /** Category */
@@ -3721,7 +3721,7 @@ export interface components {
         };
         /**
          * PluginUpdateView
-         * @description What taking the installed version would change for the team (c-609): empty `tools` when it runs it already.
+         * @description What taking the installed version would change for the team: empty `tools` when it runs it already.
          */
         PluginUpdateView: {
             /** Available */
@@ -3805,7 +3805,7 @@ export interface components {
         };
         /**
          * ReviewDecisionIn
-         * @description A decision made in Reviews, sent by agents-service (c-163).
+         * @description A decision made in Reviews, sent by agents-service.
          */
         ReviewDecisionIn: {
             /** By */
@@ -4237,7 +4237,7 @@ export interface components {
         };
         /**
          * TestDraftIn
-         * @description The workbench's unsaved transform and mock, tried by one test without staging them (c-088). A key left out
+         * @description The workbench's unsaved transform and mock, tried by one test without staging them. A key left out
          *     uses the operation's own; `responseTransform: null` runs with no transform.
          */
         TestDraftIn: {
@@ -4388,7 +4388,7 @@ export interface components {
         };
         /**
          * ToolChange
-         * @description One tool an update adds, changes or removes, by its operation name (c-609).
+         * @description One tool an update adds, changes or removes, by its operation name.
          */
         ToolChange: {
             /** Access */
@@ -4410,7 +4410,7 @@ export interface components {
         };
         /**
          * ToolGrant
-         * @description A workflow's access to one module, as the Access tab lists it across modules (c-144).
+         * @description A workflow's access to one module, as the Access tab lists it across modules.
          */
         ToolGrant: {
             /** Constraints */
@@ -4658,7 +4658,7 @@ export interface components {
         };
         /**
          * ToolRunIn
-         * @description One run of one tool from its page (c-616): Mock answers from its mock and reaches nothing, Real is the gateway
+         * @description One run of one tool from its page: Mock answers from its mock and reaches nothing, Real is the gateway
          *     call, with every check, in the environment picked.
          */
         ToolRunIn: {

@@ -1,4 +1,4 @@
-"""Mock answers (c-332) through the real routes: a test call gets the first mock that matches its input or the default
+"""Mock answers through the real routes: a test call gets the first mock that matches its input or the default
 and nothing reaches the system; a production call, or one that names no environment, never gets a mock; a delay and a
 timeout wait no longer than the operation's limit; and changing mocks is tools.edit."""
 

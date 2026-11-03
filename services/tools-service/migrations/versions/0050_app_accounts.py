@@ -1,4 +1,4 @@
-"""app_accounts: a team keeps several named accounts of one app (c-608)
+"""app_accounts: a team keeps several named accounts of one app
 
 A team held one connection per plugin and a person one sign-in per connection, so a second Salesforce org or a
 second account of the same app could not be connected. An app's accounts are now its connections that name the

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""Storage settings (c-100), one test per failure mode: a credential's value returned or stored in the clear; someone
+"""Storage settings, one test per failure mode: a credential's value returned or stored in the clear; someone
 other than a Security admin seeing or changing storage; two admins overwriting each other; a target that fails its
 test saved anyway, or the saved version changed by the failed save; uploads ignoring the saved target and limits, or
 files stored earlier becoming unreadable; a target that still holds files dropped."""
@@ -66,7 +66,7 @@ def client(engine: AsyncEngine, tenant: str, tmp_path: Path) -> Client:
         auth = Auth.for_dev(Settings(), audience="files", name="sam", email="sam@harborpine.example", tenant_id=tenant)
         app = create_files_app(files, engine=engine, auth=auth, settings=storage)
         if not admin:
-            # A builder of team_ops: no Security admin, so `can()` refuses storage settings (c-149).
+            # A builder of team_ops: no Security admin, so `can()` refuses storage settings.
             sign_in(app, tenant, "builder", "sam@harborpine.example")
         if admin:
             # What a platform token with admin on team_security resolves to; dev sign-in carries no roles.
@@ -228,7 +228,7 @@ async def test_uploads_follow_the_saved_target_and_limits(client: Client, engine
 
 
 async def test_a_purposes_allowed_types_are_checked_against_the_bytes(client: Client) -> None:
-    """c-234: a PDF sent as octet-stream under a bare name is taken and recorded as a PDF; a zip named .pdf and an
+    """A PDF sent as octet-stream under a bare name is taken and recorded as a PDF; a zip named .pdf and an
     executable declared as a PDF are refused with 415, which the mail trigger lists on the run and moves past."""
     zipped = b"PK\x03\x04\x14\x00\x00\x00\x08\x00" + b"\x00" * 64
     exe = b"MZ\x90\x00\x03\x00\x00\x00\x04\x00\x00\x00\xff\xff" + b"\x00" * 64

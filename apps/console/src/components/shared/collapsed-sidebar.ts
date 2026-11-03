@@ -14,7 +14,7 @@ export const FOLD_BELOW = 1440;
 const holders = new Set<symbol>();
 let before: boolean | null = null;
 
-/** True while a page holds the sidebar folded, so a change then is the page's, not the person's choice (c-552). */
+/** True while a page holds the sidebar folded, so a change then is the page's, not the person's choice. */
 export function sidebarFoldHeld(): boolean {
   return holders.size > 0;
 }

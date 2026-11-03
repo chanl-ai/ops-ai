@@ -30,7 +30,7 @@ const STEP_ICON: Record<CardStepState, React.ReactNode> = {
 };
 
 /**
- * The one card an agent shows in chat (c-469), drawn the same in the console and the embedded chat: the record's
+ * The one card an agent shows in chat, drawn the same in the console and the embedded chat: the record's
  * type and title, one status, a body, at most two buttons plus More, and Open to the record's page. It only draws:
  * what a button does, and whether it shows at all, is decided by the record's own rules (components/chat/record-cards).
  * `children` is a body of its own, such as a workflow's start form; `outcome` replaces the buttons once one acted.

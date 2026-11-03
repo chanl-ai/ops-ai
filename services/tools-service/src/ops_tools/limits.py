@@ -1,5 +1,5 @@
 """An operation's limits, checked the same way by the gateway (`/v1/calls`) and the console test panel, so the two
-cannot disagree (c-028). The rate limit is spent at the gateway only (store/rate_windows.py); a test-panel call runs
+cannot disagree. The rate limit is spent at the gateway only (store/rate_windows.py); a test-panel call runs
 nothing and spends nothing."""
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ def amount_refusal(operation: dict[str, Any], args: dict[str, Any]) -> Refusal |
     """Why `args` break the operation's amount limit, or None. The limit applies to the operation's `amount` input:
     when the operation declares one, a call that leaves it out, sends a non-number or sends a negative amount is
     refused too, since a limit that a missing field or a sign flip skips is no limit. An operation that declares no
-    `amount` input has nothing the limit can read; naming another field as the amount is a follow-up (c-028)."""
+    `amount` input has nothing the limit can read; naming another field as the amount is a follow-up."""
     if operation.get("amount_max") is None or not any(f.get("name") == "amount" for f in operation.get("input", [])):
         return None
     name, limit = operation["name"], Decimal(str(operation["amount_max"]))

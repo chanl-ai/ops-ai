@@ -1,4 +1,4 @@
-"""The synthetic restraining notices (c-248), by failure mode: an expected value the file does not print on the page it
+"""The synthetic restraining notices, by failure mode: an expected value the file does not print on the page it
 names, so a correct reader fails its sample (F1); a value that should sit only on a later page printed on page 1 too,
 so the cross-page case proves nothing (F2); a scan that carries a text layer, so OCR is never exercised (F3); OCR
 that cannot read the identifiers on the degraded pages (F4); expected.json out of step with notices.json after an
@@ -23,7 +23,7 @@ from ops_ingest.parsers.ocr import OcrUnavailableError, TesseractEngine
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures"
-# The restraining notices (c-248) and the tax levies (c-270), each file named by its folder.
+# The restraining notices and the tax levies, each file named by its folder.
 DATASETS = (("restraining", "notices.json", "photographed"), ("tax_levy", "levies.json", "tax_levy"))
 EXPECTED: dict[str, dict[str, Any]] = {
     f"{folder}/{name}": entry
@@ -49,7 +49,7 @@ def printed_text(name: str) -> dict[int, str]:
 
 
 def read(name: str, *, ocr: bool = False) -> Pages:
-    """The file as an extraction reads it: its layout's page text (c-247)."""
+    """The file as an extraction reads it: its layout's page text."""
     return page_text(build_layout((FIXTURES / name).read_bytes(), filename=name, ocr=ocr))
 
 
@@ -69,7 +69,7 @@ def test_every_expected_value_is_printed_on_its_page(name: str) -> None:
 @pytest.mark.parametrize("name", TEXT)
 def test_an_extraction_reads_every_expected_value_on_its_page(name: str) -> None:
     """The page text the model is given and quotes are checked against holds each value, titles and case lines
-    included (c-260)."""
+    included."""
     texts = {n: fold(t) for n, t in read(name).texts.items()}
     missing = [f"{k} p{p}: {v}" for k, (v, p) in printed(EXPECTED[name]).items() if fold(v) not in texts.get(p, "")]
     assert missing == [], texts

@@ -1,4 +1,4 @@
-"""The database holds kb's tables to the caller's team (c-507, migration kb_0011), with raw SQL and no WHERE clause as
+"""The database holds kb's tables to the caller's team (migration kb_0011), with raw SQL and no WHERE clause as
 ops_kb_tenant, by failure mode: a team transaction reading or writing another team's base, source, change or retired
 base, and a tenant-wide one reading another tenant's. The tables that need a parent row (links, documents, versions,
 chunks, runs) carry the same generated policy, which deploy/database's parity test requires of every marked table."""

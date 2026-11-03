@@ -10,7 +10,7 @@ import { teamOfError, useTeam } from '@/hooks/use-team';
 import { errorKind } from '@/lib/session-gate';
 
 /**
- * The one state for a failed query (c-505), chosen by the answer's status so every page says the same thing for the
+ * The one state for a failed query, chosen by the answer's status so every page says the same thing for the
  * same failure: 401 asks the person to sign in again, 403 says they have no access here (or names the team that owns
  * the record and offers to switch to it), 404 says it was not found or belongs to another team and offers the switch,
  * and a 5xx or no answer at all offers a retry. Nothing renders an empty list that reads as "nothing exists".

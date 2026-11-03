@@ -11,7 +11,7 @@ export interface OverviewLists {
 
 /**
  * The overview's lists with a missing field read as empty: the sidebar, Chat and Overview are on every page, so an
- * agents-service still serving an older overview (no `counts`, no lists) must leave them empty, never crash the page (c-552).
+ * agents-service still serving an older overview (no `counts`, no lists) must leave them empty, never crash the page.
  */
 export function readOverview(o: Partial<Overview> | undefined): OverviewLists {
   return {
@@ -29,7 +29,7 @@ export interface Hint {
   text: string;
 }
 
-/** Up to three hints from the person's own work (c-552): the Human Task waiting longest, the case due soonest, the newest
+/** Up to three hints from the person's own work: the Human Task waiting longest, the case due soonest, the newest
  * run in flight, each read from the overview's first row of that kind. A clicked hint sends its text as the first message. */
 export function hintsFrom(raw: Partial<Overview> | undefined, now: number = Date.now()): Hint[] {
   const o = readOverview(raw);

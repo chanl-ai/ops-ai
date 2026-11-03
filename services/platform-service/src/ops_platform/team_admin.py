@@ -1,6 +1,6 @@
-"""Teams as workspace admins manage them (c-198): list every team, create one with its first admin, rename, archive
-and restore. A workspace admin holds `access.manage` in every team: an Admin role assignment in team `*` (owner,
-2026-10-17). `can()` decides it on the workspace (`*`) as the team, so an admin of one team is refused and no new grid
+"""Teams as workspace admins manage them: list every team, create one with its first admin, rename, archive
+and restore. A workspace admin holds `access.manage` in every team: an Admin role assignment in team `*`. `can()`
+decides it on the workspace (`*`) as the team, so an admin of one team is refused and no new grid
 cell is needed; listing needs `access.view` there. Team admins keep managing members and roles on the member routes.
 The Security team cannot be archived: workspace settings are decided there.
 """

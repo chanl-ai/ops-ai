@@ -32,7 +32,7 @@ TIMEOUT_MS = 15_000
 class McpError(RuntimeError):
     """The server could not be reached, answered something that is not MCP, or returned a JSON-RPC error. `status` is
     the HTTP status when the server answered one of 400 or more, and `challenge` its `WWW-Authenticate` (a 401 names
-    where its sign-in is described, c-331)."""
+    where its sign-in is described)."""
 
     def __init__(self, message: str, *, status: int | None = None, challenge: str | None = None) -> None:
         super().__init__(message)

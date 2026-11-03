@@ -1,10 +1,9 @@
-"""The Extract from file step (c-157, c-235) on documents-service's extraction API, by failure mode: the step's outputs
+"""The Extract from file step on documents-service's extraction API, by failure mode: the step's outputs
 changing shape when the answer moved to the API (workflows read `fields`, `records`, `needsReview`, `floor` and
 `schema`); a review answer taking the ok port; an unreadable scan passing as found; a schema error crashing the step
 instead of taking the error port; a failure files-service may get past on a retry (the floor out of reach) taking a
 port instead of being retried; a retry asking for a new extraction instead of reading the same one; a state the step
-does not know turned into a port it does not have; the step writing to the file, which is Save data on file's job
-(c-378)."""
+does not know turned into a port it does not have; the step writing to the file, which is Save data on file's job."""
 
 from __future__ import annotations
 
@@ -114,7 +113,7 @@ async def test_a_document_type_step_asks_for_the_type_and_its_pinned_version() -
 
 
 async def test_detect_asks_for_a_classified_read_and_an_unknown_kind_goes_to_review() -> None:
-    """Extract with Detect (c-249): the step asks documents-service to classify the file first; a kind it cannot name
+    """Extract with Detect: the step asks documents-service to classify the file first; a kind it cannot name
     takes review, so a person decides, never ok with no fields."""
     files = Files(
         {"id": "ext_1", "status": "done", "outcome": "unknown", "fields": {}, "needsReview": ["documentType"]}
@@ -139,7 +138,7 @@ async def test_detect_asks_for_a_classified_read_and_an_unknown_kind_goes_to_rev
 
 
 async def test_a_read_request_with_no_type_reads_with_detect() -> None:
-    """The system extract workflow always passes documentType from its input (c-335): a request that named no type
+    """The system extract workflow always passes documentType from its input: a request that named no type
     resolves it to an empty id, which must read with Detect, never ask documents-service for type None."""
     files = Files({"id": "ext_1", "status": "done", "outcome": "ok", **SCORED})
     await ai_extract(call(files, fields=[], documentType={"id": None, "version": None}, detect=True, ocr=True))
@@ -150,7 +149,7 @@ async def test_a_read_request_with_no_type_reads_with_detect() -> None:
 
 
 async def test_the_extract_step_writes_nothing_to_the_file() -> None:
-    """Recording a read on the file is the workflow's Save data on file step (c-378, tick 36): an Extract step that
+    """Recording a read on the file is the workflow's Save data on file step: an Extract step that
     wrote it too gave every read a second writer, which a workflow could neither see nor turn off."""
     files = Files(
         {
@@ -169,7 +168,7 @@ async def test_the_extract_step_writes_nothing_to_the_file() -> None:
 
 async def test_save_data_on_file_names_the_type_the_read_names() -> None:
     """A workflow that does not pass typeName still shows what the file was read as: documents-service names the type
-    on the read (c-378 T001)."""
+    on the read."""
     files = Files({})
     read = {
         "extractionId": "ext_7",
@@ -191,7 +190,7 @@ async def test_save_data_on_file_names_the_type_the_read_names() -> None:
 async def test_a_background_read_parks_on_its_extraction_and_its_time_limit_takes_the_ports_it_asks_for(
     status: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A long file was polled inside the step's own time limit, so a read past it left by error with no fields (c-525).
+    """A long file was polled inside the step's own time limit, so a read past it left by error with no fields.
     It now parks on extraction.finished keyed by the extraction; past the limit it takes Timeout when the step asks,
     Error otherwise. (A read that finished is read again under the same key when the step resumes: the done path.)"""
     parked: list[dict[str, Any]] = []

@@ -1,4 +1,4 @@
-"""SAML sign-in, by failure mode (c-188 F4): a response signed by another provider, an unsigned assertion wrapped
+"""SAML sign-in, by failure mode: a response signed by another provider, an unsigned assertion wrapped
 around a signed one, an edited signed assertion, another audience, recipient or request, an expired assertion, a
 failed status, and a step-up on an old login."""
 
@@ -164,7 +164,7 @@ def test_groups_are_read_from_the_named_attribute_of_the_signed_assertion() -> N
     assert plain.complete(saml_response=carried, request_id=start.request_id).groups == ()
 
 
-# ── Signed requests and encrypted assertions (c-197) ──
+# ── Signed requests and encrypted assertions ──
 # F1 a request that should be signed goes out unsigned; F2 a request signed by another key passes; F3 old key transport,
 # an unknown cipher or the wrong key is read; F4 a decrypted assertion no signature covers signs in; F5 a tampered
 # ciphertext is refused with a different reason; F6 a plain assertion passes where encryption is required.

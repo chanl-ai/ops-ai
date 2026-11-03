@@ -1,4 +1,4 @@
-"""a write's approval no longer carries a per-operation self-approval switch (c-186)
+"""a write's approval no longer carries a per-operation self-approval switch
 
 `module_operations.self_approval` was stored and returned but no check read it once the tenant's requesterMayDecide
 policy became the one switch (adce035c); a setting that is shown and ignored misleads whoever sets it. Dropped; the

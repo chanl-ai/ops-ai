@@ -1,4 +1,4 @@
-"""The call log's rows (c-070 T007), by failure mode: an approved write that does not say who approved it, and a chat
+"""The call log's rows, by failure mode: an approved write that does not say who approved it, and a chat
 call whose run cannot be told from a workflow's."""
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ def test_a_chat_call_carries_its_thread_and_no_workflow() -> None:
 
 
 def test_a_call_shows_its_tools_title_and_app_never_only_the_slug() -> None:
-    """c-607: a chat, an approval and the call log read the tool's title and its app's name from the row."""
+    """A chat, an approval and the call log read the tool's title and its app's name from the row."""
     module = {"id": "mod_plugin_salesforce", "display_name": "Salesforce", "system": "Salesforce"}
     row = call_row(_row(tool="salesforce_get_record"), {}, module, "Get a record")
     assert (row["title"], row["app"]) == ("Get a record", "Salesforce"), row

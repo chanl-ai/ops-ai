@@ -1,7 +1,7 @@
 import type { ProviderConnection, ProviderConnectionInput } from '@/lib/types/models';
 
 /**
- * The account's model provider connections on models-service (`/v1/models/providers`, c-605): account admins
+ * The account's model provider connections on models-service (`/v1/models/providers`): account admins
  * (settings.manage, held in the Security team) list and add them; a connection names its key, never holds it.
  */
 export interface ProviderConnectionsApi {

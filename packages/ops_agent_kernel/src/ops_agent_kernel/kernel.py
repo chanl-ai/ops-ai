@@ -118,7 +118,7 @@ class _TurnState:
     # Text already sent as deltas this turn.
     shown_text: str = ""
     loads: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
-    # Widget parts present showed this turn, against the agent's widgets_per_turn (c-082).
+    # Widget parts present showed this turn, against the agent's widgets_per_turn.
     shown: int = 0
     # Set once present is refused for the cap: a further call ends the turn.
     present_closed: bool = False
@@ -156,7 +156,7 @@ class _TurnState:
 
 def _present(state: _TurnState) -> Tool[None]:
     """The built-in present tool: a shaped part on the call record, no port behind it (present.py). An agent's widgets
-    and composition widen it per turn (c-082); each shown part counts toward the agent's widgets per turn."""
+    and composition widen it per turn; each shown part counts toward the agent's widgets per turn."""
     g = state.grants[present.NAME]
     cap = state.req.settings.widgets_per_turn
 
@@ -195,7 +195,7 @@ def _present(state: _TurnState) -> Tool[None]:
 
 
 class WidgetLimitReached(UsageLimitExceeded):
-    """present called after the per-answer widget limit refused it and was withdrawn (c-082). Ends the turn with the
+    """present called after the per-answer widget limit refused it and was withdrawn. Ends the turn with the
     text and widgets it already has."""
 
 
@@ -305,7 +305,7 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
         state.granted_calls += 1
         rec = state.record(tool_call_id, grant.name, arguments)
         started = time.monotonic()
-        # A call a person approved carries the token: a gated write's, or one the gateway sent for review (c-300).
+        # A call a person approved carries the token: a gated write's, or one the gateway sent for review.
         approved = grant.gated or ctx.tool_call_approved
         outcome = await ports.tools.execute(
             grant.name, arguments, key=rec.key, approval_token=token if approved else None
@@ -326,7 +326,7 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
     )
     # A write stops at a gate: the library ends the run with a deferred request (spec 15 5).
     tool.requires_approval = grant.gated
-    # Above the agent's tool-search threshold its schema is sent only once a search finds it (c-610).
+    # Above the agent's tool-search threshold its schema is sent only once a search finds it.
     tool.defer_loading = deferred
 
     async def offered(_ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition | None:
@@ -419,7 +419,7 @@ KNOWLEDGE_WITHDRAWN = (
 
 
 async def run_turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEvent]:
-    """Streams one turn's events, ending with exactly one `TurnFinished`. With the agent's redactPii on (c-293), what
+    """Streams one turn's events, ending with exactly one `TurnFinished`. With the agent's redactPii on, what
     the turn shows and returns has personal data masked (pii.py); what the model reads, and the history a pause keeps,
     are not."""
     if not req.settings.redact_pii:
@@ -453,12 +453,12 @@ async def run_turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[Kernel
 
 async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEvent]:
     """One turn's events as the model's loop produces them."""
-    # Every turn may present a shaped answer (a comparison table) without a tool behind it (c-055 T021). A structured
+    # Every turn may present a shaped answer (a comparison table) without a tool behind it. A structured
     # call with no tools (memory extraction, a workflow's AI step) answers with its schema's JSON only, so it is offered
     # nothing to call.
     builtins = bool(req.tools) or req.output_schema is None
     # Many tools: each is deferred and pydantic-ai's tool search (search.strategy) reveals the ones the model finds;
-    # its `search_tools` replaces the kernel's own, so that one is not added (c-610).
+    # its `search_tools` replaces the kernel's own, so that one is not added.
     above = req.settings.tool_search_above
     searching = builtins and above is not None and len(req.tools) > above
     state = _TurnState(

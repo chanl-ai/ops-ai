@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""Layout templates (c-253): a known form read from its zones with no model call.
+"""Layout templates: a known form read from its zones with no model call.
 
 A template sits on a document type version and lists, per template page, anchor labels with the box each is printed
 in and one zone per field, all as [x0, top, x1, bottom] fractions of the page, the layout's own boxes. A file page
@@ -211,7 +211,7 @@ def problems(templates: Any, keys: set[str]) -> list[str]:
     return found
 
 
-# ── Suggestions (c-254) ──
+# ── Suggestions ──
 
 # A suggested zone is widened by this much past its value on the right (a longer value on the next file) and by
 # ZONE_MARGIN around it. An anchor is at most LABEL_WORDS words: the nearest word left of the value on its line within
@@ -229,7 +229,7 @@ FINGERPRINT_STEP = 0.02
 
 @dataclass(frozen=True)
 class Read:
-    """A finished read of a file: its layout, and each field's boxes (from c-252) where its value was found."""
+    """A finished read of a file: its layout, and each field's boxes where its value was found."""
 
     layout: Layout
     boxes: dict[str, list[dict[str, Any]]]

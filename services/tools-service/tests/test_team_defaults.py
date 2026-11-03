@@ -1,4 +1,4 @@
-"""Every team's built-in apps come from provisioning (c-616 PV1), by failure mode: a team starts with no built-in
+"""Every team's built-in apps come from provisioning, by failure mode: a team starts with no built-in
 tools; a team reads another team's copy; a second run writes again; a newer declaration skips a team's untouched copy
 or overwrites one a person changed; and the team's own module holding a tool is joined by a second copy of it."""
 

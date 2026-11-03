@@ -50,7 +50,7 @@ class ActingForOut(Out):
 
 
 class KeyTarget(Out):
-    """What an API key may start (c-246). `version` pins a workflow version; null runs the live one."""
+    """What an API key may start. `version` pins a workflow version; null runs the live one."""
 
     kind: Literal["agent", "workflow"]
     id: str = Field(min_length=1, max_length=64)
@@ -73,7 +73,7 @@ class Principal(Out):
     roles: dict[str, str]
     scopes: list[str]
     auth_method: str
-    # The tenant's access policies (c-186); a missing key has its open default.
+    # The tenant's access policies; a missing key has its open default.
     policies: dict[str, Any] = Field(default_factory=dict[str, Any])
     # An API key's id and what it may start; None for a person.
     api_key: KeyRef | None = None
@@ -125,7 +125,7 @@ class MeTeam(Out):
 
 
 class WorkspaceStateOut(Out):
-    """The workspace's owner and status (c-529): `purgeAfter` is when a closed workspace's records go, else null."""
+    """The workspace's owner and status: `purgeAfter` is when a closed workspace's records go, else null."""
 
     owner_user_id: str | None
     status: Literal["active", "suspended", "closed", "purging", "purged"]
@@ -133,7 +133,7 @@ class WorkspaceStateOut(Out):
 
 
 class FlagOut(Out):
-    """One feature flag of the install (c-611): on only when the install config names it in OPS_FLAGS."""
+    """One feature flag of the install: on only when the install config names it in OPS_FLAGS."""
 
     name: FlagName
     description: str
@@ -146,7 +146,7 @@ class Me(Out):
     # The workspace's name, for the console's header.
     tenant_name: str
     teams: list[MeTeam]
-    # The tenant's access policies now (c-186), every key with its value.
+    # The tenant's access policies now, every key with its value.
     policies: dict[str, Any]
     # The team that holds the Security team's actions in this deployment.
     security_team_id: str
@@ -211,7 +211,7 @@ class WorkspaceCloseIn(In):
 
 
 class TeamDeleteCheckOut(Out):
-    """Whether a team may be deleted now and why not (c-529): the Delete card reads it in one call."""
+    """Whether a team may be deleted now and why not: the Delete card reads it in one call."""
 
     team_id: str
     status: str
@@ -226,7 +226,7 @@ class TeamDeleteCheckOut(Out):
 
 
 class WorkspaceTeamOut(Out):
-    """A team as a workspace admin sees it (c-198): counts joined by the service."""
+    """A team as a workspace admin sees it: counts joined by the service."""
 
     id: str
     name: str
@@ -334,7 +334,7 @@ class ApiKeyOut(Out):
 
 
 class ApiKeySummary(Out):
-    """A key as another service lists it (c-246): what it serves and whether it works."""
+    """A key as another service lists it: what it serves and whether it works."""
 
     id: str
     name: str
@@ -500,12 +500,12 @@ class PermissionsOut(Out):
     name: str | None = None
     email: str | None = None
     permission_version: int
-    # What the person may do in every team at once, from their `*` assignments (a workspace admin, c-198).
+    # What the person may do in every team at once, from their `*` assignments (a workspace admin).
     workspace: list[EffectivePermission]
     teams: list[TeamPermissions]
 
 
-# ── Sign-in methods, SSO and password reset (c-188) ──
+# ── Sign-in methods, SSO and password reset ──
 
 # A console path to return to: one leading slash, so it can never name another host.
 NEXT_PATH = r"^/([^/\\\s][^\s]{0,498})?$"
@@ -569,14 +569,14 @@ class SamlSettings(In):
     certificate: str = Field(min_length=100, max_length=20000)
     email_attribute: str | None = Field(default=None, max_length=255)
     name_attribute: str | None = Field(default=None, max_length=255)
-    # c-197: sign each AuthnRequest, and refuse an assertion that is not encrypted; both need the SP key.
+    # Sign each AuthnRequest, and refuse an assertion that is not encrypted; both need the SP key.
     sign_requests: bool = False
     require_encryption: bool = False
 
 
 class JitSettings(In):
     """Where a person new to the workspace lands on their first sign-in through this provider: the team, or with no
-    team the workspace's default team (c-202)."""
+    team the workspace's default team."""
 
     team: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,64}$")
     role: str = Field(max_length=16)
@@ -589,7 +589,7 @@ class GroupRule(In):
 
 
 class GroupSettings(In):
-    """Identity provider groups to team memberships (c-202): `source` is the OIDC claim or SAML attribute that lists
+    """Identity provider groups to team memberships: `source` is the OIDC claim or SAML attribute that lists
     the person's groups (default `groups`)."""
 
     source: str | None = Field(default=None, max_length=255)

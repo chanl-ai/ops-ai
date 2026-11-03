@@ -1,4 +1,4 @@
-"""Every table that holds or points at a credential is held by the database (c-616 C5, the proof for C1-C4): another
+"""Every table that holds or points at a credential is held by the database (the proof for C1-C4): another
 team or tenant reads none of a row the owner wrote, through any SQL, as the service's own login or as its tenant role
 scoped elsewhere; only the service's tenant role, scoped to the row's team or tenant, reads it. The two install tables
 (an install's model connections, and model keys spent for many tenants) name no tenant and hold no secret value, so

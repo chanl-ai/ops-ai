@@ -32,7 +32,7 @@ KEY = os.environ.get("FAKE_BANK_KEY", "dev-bank-key")
 # the stand-in's public https address where it runs as a staging app (deploy/fly/staging/bank.toml).
 PUBLIC_URL = os.environ.get("FAKE_BANK_PUBLIC_URL", "https://api.bank.test")
 app = FastAPI(title="Harbor & Pine Core Banking", version="1.0.0", servers=[{"url": PUBLIC_URL}])
-# The bank's sign-in and the routes protected each way a connection signs in (c-330); kept out of the OpenAPI document.
+# The bank's sign-in and the routes protected each way a connection signs in; kept out of the OpenAPI document.
 app.include_router(auth_router)  # pyright: ignore[reportUnknownArgumentType]
 
 
@@ -335,7 +335,7 @@ class LevyRules(BaseModel):
 def get_levy_rules(rules_key: Annotated[str | None, Query(alias="rulesKey")] = None) -> LevyRules:
     """The levy handbook's exempt funds: the first 2,500.00 CAD of a personal chequing or savings account. The key is
     an ordinary query parameter, not a security scheme, so an import makes it an input that a code tool fills with a
-    secret handle (c-531), and the value never reaches the function."""
+    secret handle, and the value never reaches the function."""
     if rules_key != KEY:
         raise HTTPException(401, "missing or wrong rulesKey")
     return LevyRules(protectedBalance=2500.0, currency="CAD", exemptAccountTypes=["chequing", "savings"])

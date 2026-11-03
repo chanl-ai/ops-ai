@@ -1,4 +1,4 @@
-"""The places PostgreSQL and SQL Server differ, each written once (c-343; decisions/database-support.md). Stores
+"""The places PostgreSQL and SQL Server differ, each written once (decisions/database-support.md). Stores
 build every statement with SQLAlchemy Core and reach for one of these where Core has no portable form. Each renders
 for postgresql, mssql and sqlite (the unit tests' database); any other dialect is refused.
 

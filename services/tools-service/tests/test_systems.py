@@ -1,4 +1,4 @@
-"""The team's systems as one list of cards (c-580), by failure mode: a module and the connection it uses show as two
+"""The team's systems as one list of cards, by failure mode: a module and the connection it uses show as two
 cards; a plugin's connection shows beside the plugin; another team's connection reaches this team's grid; a card loses
 its environments' health or its details."""
 
@@ -93,7 +93,7 @@ async def systems(client: httpx.AsyncClient, tenant: str) -> list[dict[str, Any]
 async def test_a_module_and_the_connection_it_uses_are_one_card(
     client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
 ) -> None:
-    # Every custom module is on a connection (c-616): one moved to another is that connection's card alone.
+    # Every custom module is on a connection: one moved to another is that connection's card alone.
     mine = [m for m in await ModuleStore(engine).all_teams(tenant) if m["team_id"] == TEAM and m["connection_id"]]
     assert mine, "the seed has a module of the team on a connection"
     module = mine[0]
@@ -155,7 +155,7 @@ async def test_the_environments_come_from_the_service_with_their_names_and_which
 async def test_every_pem_field_is_marked_so_the_dialog_never_asks_for_it_on_one_line(
     client: httpx.AsyncClient, tenant: str
 ) -> None:
-    """A certificate or key pasted into a one-line box loses its line breaks and no longer reads (c-580 PM test)."""
+    """A certificate or key pasted into a one-line box loses its line breaks and no longer reads."""
     kinds = (await client.get("/v1/connection-kinds", headers=admin(tenant))).json()["data"]
     fields = [*kinds["certificate"], *(f for k in kinds["kinds"] for f in k["fields"])]
     pem = {f["name"] for f in fields if f.get("pem")}
@@ -183,14 +183,14 @@ async def test_a_field_the_plugin_fixes_is_never_asked_so_a_team_cannot_send_it_
     cards = {c["pluginId"]: c["plugin"] for c in await systems(client, tenant) if c["kind"] == "plugin"}
     assert cards["test.header-key"]["fixed"] == ["name", "placement"], cards["test.header-key"]
     # A plugin that names its sign-in addresses and permissions fixes them too: a typed token address would send the
-    # client secret to another host (c-580 PM test, "Token address" asked though the plugin sets it).
+    # client secret to another host ("Token address" asked though the plugin sets it).
     assert cards[ID]["fixed"] == ["authorizeUrl", "scopes", "tokenUrl"], cards[ID]
 
 
 async def test_an_apps_page_is_one_answer_with_its_card_connection_tools_and_who_is_signed_in(
     client: httpx.AsyncClient, tenant: str
 ) -> None:
-    """The app's page (c-607) shows its accounts, tools, skills, usage and settings from one answer, so the console
+    """The app's page shows its accounts, tools, skills, usage and settings from one answer, so the console
     never joins the systems, connection, module and plugin lists itself; another team's app is not found."""
     on = await client.put(f"/v1/plugins/{ID}/team", json={"enabled": True, "clientId": "app"}, headers=admin(tenant))
     assert on.status_code == 200, on.text
@@ -211,7 +211,7 @@ async def test_an_apps_page_is_one_answer_with_its_card_connection_tools_and_who
 async def test_the_apps_grid_lists_no_built_in_app_or_connection_made_for_a_tool(
     client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
 ) -> None:
-    """The Apps grid lists the plugins and the apps a person added (owner, 2026-11-01): a built-in app has its own menu
+    """The Apps grid lists the plugins and the apps a person added: a built-in app has its own menu
     and a connection made to hold a custom tool's address is reached from the tool, though both pages still answer."""
     await ensure_platform_tools(ModuleStore(engine), tenant_id=tenant, at=datetime.now(UTC), team_id=TEAM)
     tool = {
@@ -234,7 +234,7 @@ async def test_the_apps_grid_lists_no_built_in_app_or_connection_made_for_a_tool
     assert tool_app.status_code == 200 and tool_app.json()["data"]["tools"][0]["name"] == "read_rate", tool_app.text
 
 
-# ── An app reads Connected only after a sign-in or a passing test (c-616) ──
+# ── An app reads Connected only after a sign-in or a passing test ──
 
 
 async def _turned_on(client: httpx.AsyncClient, tenant: str) -> str:
@@ -303,7 +303,7 @@ async def test_a_passing_test_with_no_token_reads_connected(
 async def test_the_approval_pickers_list_keeps_the_built_in_apps(
     client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
 ) -> None:
-    # A mailbox reply is the write a team most often approves (owner, 2026-11-01): its picker asks for the built-ins.
+    # A mailbox reply is the write a team most often approves: its picker asks for the built-ins.
     await ensure_platform_tools(ModuleStore(engine), tenant_id=tenant, at=datetime.now(UTC), team_id=TEAM)
     r = await client.get("/v1/systems", params={"include": "builtin"}, headers=admin(tenant))
     assert r.status_code == 200, r.text

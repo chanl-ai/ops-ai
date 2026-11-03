@@ -5,7 +5,7 @@ A module and its children are one aggregate. The service reads it whole, changes
 the one read, so two concurrent edits cannot silently overwrite each other.
 
 Every table carries `tenant_id`; `tool_modules` also carries `team_id`, the team that owns the module. Row-level
-security on them arrives with ops_identity (c-006), as the checkpointer does it.
+security on them arrives with ops_identity, as the checkpointer does it.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ tool_modules = sa.Table(
     # Ids are unique within a tenant only: every tenant's dev seed uses the console's ids (mod_core_banking).
     sa.Column("tenant_id", sa.String(64), primary_key=True),
     sa.Column("id", sa.String(64), primary_key=True),
-    # Null for a workspace-level module every team reads and calls (the platform tools, c-433).
+    # Null for a workspace-level module every team reads and calls (the platform tools).
     sa.Column("team_id", sa.String(64)),
     sa.Column("name", sa.String(120), nullable=False),
     sa.Column("display_name", sa.String(200), nullable=False),
@@ -50,11 +50,11 @@ tool_modules = sa.Table(
     sa.Column("data_classification", sa.String(16), nullable=False),
     sa.Column("catalog_id", sa.String(64)),
     sa.Column("connection_id", sa.String(64)),
-    # Whose account the module's calls may sign in with (c-558): team, person or either; a connection whose sign-in
+    # Whose account the module's calls may sign in with: team, person or either; a connection whose sign-in
     # does not fit is refused when it is chosen.
     sa.Column("sign_in", sa.String(16), nullable=False, server_default="person_or_team"),
     # The template slot a provisioned record fills, found again by it on the next run, and what a person may change:
-    # `system` nothing, `managed` anything (c-180). Null on a record no template made.
+    # `system` nothing, `managed` anything. Null on a record no template made.
     sa.Column("template_id", sa.String(120), index=True),
     sa.Column("protection", sa.String(16)),
     sa.Column("reachable", sa.Boolean, nullable=False),
@@ -68,7 +68,7 @@ tool_modules = sa.Table(
     sa.Column("revision", sa.Integer, nullable=False),
     sa.Column("created_at", _TS, nullable=False),
     sa.Column("updated_at", _TS, nullable=False),
-    # Workflows pin a module by name, so a name is unique within a team (c-509). A workspace-level
+    # Workflows pin a module by name, so a name is unique within a team. A workspace-level
     # module (null team) is unique on (tenant, name) so two shared copies cannot land.
     info=TEAM_OWNED,
 )
@@ -132,7 +132,7 @@ module_operations = _child(
     sa.Column("headers", sa.JSON, nullable=False, server_default="[]"),
     # A JSON body template with {{arg}} placeholders; without one the arguments the URL did not use are the body.
     sa.Column("body", sa.Text),
-    # How `body` is sent (c-591): json (null, as before), form (a JSON object of field to template, form-encoded) or raw
+    # How `body` is sent: json (null, as before), form (a JSON object of field to template, form-encoded) or raw
     # (the template as text, with the Content-Type header the operation sets).
     sa.Column("body_encoding", sa.String(8)),
     # A Jinja2 template over the parsed response (ops_tools.transform); null returns the response as it came.
@@ -149,26 +149,26 @@ module_operations = _child(
     # team they come from (None: the module's owning team), and whether the person who asked may be one of them.
     sa.Column("approvers", sa.Integer, nullable=False, server_default="1"),
     sa.Column("approver_team", sa.String(64)),
-    # Approving asks the approver to re-authenticate even with one approver (c-057): a hold on a customer's funds.
+    # Approving asks the approver to re-authenticate even with one approver: a hold on a customer's funds.
     sa.Column("step_up", sa.Boolean, nullable=False, server_default=sa.false()),
-    # Only a person's own sign-in may sign this operation's calls (c-558): a call with nobody behind it is refused
+    # Only a person's own sign-in may sign this operation's calls: a call with nobody behind it is refused
     # even where the connection's team backup is on.
     sa.Column("needs_person", sa.Boolean, nullable=False, server_default=sa.false()),
-    # The scopes a person's own sign-in must hold to call it (c-558); one lacking any is asked to sign in again with
+    # The scopes a person's own sign-in must hold to call it; one lacking any is asked to sign in again with
     # them. Not reviewed: asking for a scope grants nothing, the system decides what a token may do.
     sa.Column("scopes", sa.JSON, nullable=False, server_default="[]"),
     # The result shape the operation declares (`x-ops-shape`: rows, series, record or metric), for the chat's shaper.
     sa.Column("output_shape", sa.String(16)),
-    # The JSON Schema of the first success response, as an imported OpenAPI document gives it (c-353): a workflow
+    # The JSON Schema of the first success response, as an imported OpenAPI document gives it: a workflow
     # step's output fields before it runs. Null when the import had none.
     sa.Column("response_schema", sa.JSON),
-    # A code operation's function (c-531): source, entry, the tool names it may call, the secret names it may hand to
+    # A code operation's function: source, entry, the tool names it may call, the secret names it may hand to
     # them, and its limits. Null for every other executor.
     sa.Column("code", sa.JSON),
     # Read or write only (migration tools_0012): a database holding any other class is rebuilt, never read.
     sa.CheckConstraint("access IN ('read', 'write')", name="ck_module_operations_access"),
     # The gateway resolves a call by tool name in the run's team, so the same name may exist in
-    # another team's module (c-509). Unique per module: two operations of one module cannot share it.
+    # another team's module. Unique per module: two operations of one module cannot share it.
     sa.UniqueConstraint("tenant_id", "module_id", "name", name="ux_module_operations_name"),
 )
 
@@ -203,7 +203,7 @@ operation_mocks = sa.Table(
     sa.Index("ix_operation_mocks_operation", "tenant_id", "operation", "environment", "position"),
 )
 
-# The mock "environment" holding an operation's example answer (c-616): what Mock answers when no test mock matches,
+# The mock "environment" holding an operation's example answer: what Mock answers when no test mock matches,
 # what a system with no upstream answers in every environment, and what an output schema is inferred from. Apart from
 # "test" on purpose: a test mock intercepts test-environment calls, and an example must not keep a Real run in test from
 # reaching the system.
@@ -224,13 +224,13 @@ module_versions = _child(
     sa.Column("changes", sa.JSON, nullable=False),
     sa.Column("pinned_by", sa.JSON, nullable=False),
     sa.Column("reachability", sa.JSON, nullable=False),
-    # The version's review, a publish request in agents-service's Reviews (c-163): its id, when it was asked for, and
+    # The version's review, a publish request in agents-service's Reviews: its id, when it was asked for, and
     # once decided who decided and, for a no, the reason, which the module shows as the finding.
     sa.Column("review_id", sa.String(64)),
     sa.Column("requested_at", _TS),
     sa.Column("reviewer", sa.String(200)),
     sa.Column("finding", sa.Text),
-    # Whether the publish waited for a review, and the team's publish-review mode it followed (c-139); null on a
+    # Whether the publish waited for a review, and the team's publish-review mode it followed; null on a
     # version published before the mode was read.
     sa.Column("review_required", sa.Boolean),
     sa.Column("policy", sa.String(16)),
@@ -241,7 +241,7 @@ module_approvals = _child(
     "module_approvals",
     sa.Column("workflow_id", sa.String(64), nullable=False),
     sa.Column("workflow_name", sa.String(200), nullable=False),
-    # The team owning the workflow when the approval was requested, from agents-service (c-039): who may see the
+    # The team owning the workflow when the approval was requested, from agents-service: who may see the
     # module through this approval. Null on approvals made before workflows came from agents-service.
     sa.Column("workflow_team_id", sa.String(64)),
     sa.Column("environment", sa.String(16), nullable=False),
@@ -249,7 +249,7 @@ module_approvals = _child(
     sa.Column("operations", sa.JSON, nullable=False),
     sa.Column("constraints", sa.Text),
     sa.Column("requested_by", sa.String(200), nullable=False),
-    # The requester as the token names them (c-186): the requester rule compares it, never the display name above.
+    # The requester as the token names them: the requester rule compares it, never the display name above.
     # Null on approvals made before it was kept, which then match nobody.
     sa.Column("requested_by_email", sa.String(320)),
     sa.Column("justification", sa.Text, nullable=False),
@@ -260,7 +260,7 @@ module_approvals = _child(
     sa.Column("status", sa.String(16), nullable=False),
     sa.Column("expires_at", _TS),
     sa.Column("reason", sa.Text),
-    # The team whose reviewers decide the request and the Human Tasks review deciding it (c-166); null on approvals
+    # The team whose reviewers decide the request and the Human Tasks review deciding it; null on approvals
     # made before requests went to Reviews.
     sa.Column("decider_team", sa.String(64)),
     sa.Column("review_id", sa.String(64)),
@@ -290,7 +290,7 @@ APPROVAL_POLICY = ("approvers", "approver_team", "step_up")
 # Every field of an operation whose edit can be major, so Security reviews it: where and how it is called, what it may
 # be sent, whether it is exposed, and how a write to it is approved and limited. Calls see these from the published
 # operations while edits are staged (operation_named), and publish compares them with the published ones to decide
-# major; one list, so the two cannot drift. Headers, transform and timeout are minor (c-027).
+# major; one list, so the two cannot drift. Headers, transform and timeout are minor.
 REVIEWED = (
     "method",
     "path",
@@ -325,8 +325,8 @@ CHILD_DEFAULTS: dict[str, dict[str, Any]] = {
     "versions": {"review_id": None, "requested_at": None, "reviewer": None, "finding": None},
 }
 
-# Service events (c-258) this store reports, written in the transaction that makes the change: a workflow's access
-# request and a version's review each start a system workflow (c-257).
+# Service events this store reports, written in the transaction that makes the change: a workflow's access
+# request and a version's review each start a system workflow.
 service_outbox = outbox_table(metadata)
 
 CHILDREN: dict[str, sa.Table] = {
@@ -370,7 +370,7 @@ def served_operations(agg: Aggregate) -> list[dict[str, Any]]:
 
 class RetiredAccessError(RuntimeError):
     """A stored operation names an access class that no longer exists ("money_movement"). It is refused rather than
-    read as anything else: such a database predates Read and Write only (c-048 T003) and is rebuilt by `make up`."""
+    read as anything else: such a database predates Read and Write only and is rebuilt by `make up`."""
 
 
 ACCESS_CLASSES = frozenset({"read", "write"})
@@ -389,9 +389,9 @@ class StaleModuleError(RuntimeError):
 
 
 # Why a read crosses teams: another service asks on a run's behalf, and the run's grants and approval token decide.
-RUN_PATHS = "a run's call or grant list is authorized by its grants and approval token (c-433 scopes it)"
+RUN_PATHS = "a run's call or grant list is authorized by its grants and approval token"
 # Why the start-up move of sign-in header keys reads every team's headers: it finds the modules to move, then acts on
-# each in its own team (c-616 D3b-2b); it reads header names and references, never a secret.
+# each in its own team; it reads header names and references, never a secret.
 HEADER_KEYS = "the start-up move of sign-in header keys finds each module whose tools still carry one"
 
 
@@ -407,7 +407,7 @@ def _as_team(team_id: str | None) -> Generator[None]:
 
 
 def _granted(tenant_id: str) -> sa.ColumnElement[bool]:
-    """Modules approved for one of the acting team's workflows: the explicit grant across teams (c-423 Q3)."""
+    """Modules approved for one of the acting team's workflows: the explicit grant across teams."""
     team = acting_team()
     if team is None:
         return sa.false()
@@ -488,7 +488,7 @@ class ModuleStore:
             )  # fmt: skip
 
     async def all(self, tenant_id: str) -> list[Aggregate]:
-        """The modules the acting team reads (c-423): its own, workspace-level ones (no team) and those approved for one
+        """The modules the acting team reads: its own, workspace-level ones (no team) and those approved for one
         of its workflows, which is the explicit grant across teams. Every module with no acting team."""
         async with self.engine.connect() as c:
             q = (
@@ -503,7 +503,7 @@ class ModuleStore:
     async def all_teams(self, tenant_id: str) -> list[Aggregate]:
         """Every team's modules: for what another service asks on a run's behalf (the operations an agent or workflow
         may be granted, a call's resolution), which the run's grants and its approval token decide, not the caller's
-        team. c-433 scopes those to the grant."""
+        team."""
         async with self.engine.connect() as c:
             q = (
                 tool_modules.select()
@@ -530,8 +530,8 @@ class ModuleStore:
             return [dict(r) for r in (await c.execute(q)).mappings() if r["headers"]]
 
     async def names(self, tenant_id: str, team_id: str | None = None) -> set[str]:
-        """Module names of the acting team (or `team_id`), plus workspace-level names: a name is unique per team
-        (c-509), so the check before a create does not see another team's."""
+        """Module names of the acting team (or `team_id`), plus workspace-level names: a name is unique per team, so the
+        check before a create does not see another team's."""
         with _as_team(team_id):
             q = sa.select(tool_modules.c.name).where(tool_modules.c.tenant_id == tenant_id, team_visible(tool_modules))
             async with self.engine.connect() as c:
@@ -697,7 +697,7 @@ class ModuleStore:
                 # Every row names the same columns (an insert of many rows takes its columns from the first); a
                 # seeded or older operation may predate response_transform and timeout_ms, an approval its team.
                 # Only the table's own columns: a baseline or staged copy written before a column was dropped
-                # (self_approval, c-186) still carries it, and a discard writes those copies back.
+                # (self_approval) still carries it, and a discard writes those copies back.
                 rows = [
                     {
                         k: v

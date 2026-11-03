@@ -1,4 +1,4 @@
-"""The banker demo's knowledge seed (c-058 T001) against kb-service in process: the rendered PDFs index by page and
+"""The banker demo's knowledge seed against kb-service in process: the rendered PDFs index by page and
 section, each base belongs to its owner, every covered demo question clears the retrieval floor and the uncovered
 one gets no passage, and version 2 of the fee schedule replaces version 1."""
 
@@ -111,8 +111,8 @@ async def test_the_seed_indexes_both_bases_for_their_owners_and_clears_the_floor
 
 
 async def test_each_question_is_asked_by_the_team_that_owns_its_base() -> None:
-    """Under platform sign-in a person reads only their team's bases (c-407): asking every question as James, in the
-    operations team, answered 404 on Security's Branch operations and stopped uc-248 and uc-249 in setup (c-453)."""
+    """Under platform sign-in a person reads only their team's bases: asking every question as James, in the
+    operations team, answered 404 on Security's Branch operations and stopped uc-248 and uc-249 in setup."""
     seed = seed_module()
     asked: dict[str, set[str]] = {seed.JAMES: set(), seed.NADIA: set()}
 
@@ -133,7 +133,7 @@ async def test_a_dev_start_seeds_both_bases_under_the_ids_the_agents_name(
     engine: AsyncEngine, tenant: str, tmp_path: Path
 ) -> None:
     """The FAQ agents' seed names kb_retail_products and kb_branch_operations; the bases must exist under those ids,
-    indexed, after a start, and a second start must change nothing (c-072 T006)."""
+    indexed, after a start, and a second start must change nothing."""
     store = KnowledgeStore(engine)
     service = KnowledgeService(store, KnowledgeFiles(tmp_path), PostgresFullTextRetriever(engine), StaticAgents())
     with seeding(tenant):
@@ -155,7 +155,7 @@ async def test_a_dev_start_seeds_both_bases_under_the_ids_the_agents_name(
     assert named == {"ag_advisor": ["kb_retail_products"], "ag_policy": ["kb_branch_operations"]}
     async with kb_client(engine, tenant, email="j.richardson@harborpine.example", files=KnowledgeFiles(tmp_path)) as c:
         answer = (
-            # The base is team_security's; a person reads it acting in that team (c-407).
+            # The base is team_security's; a person reads it acting in that team.
             await c.post(
                 "/v1/knowledge-bases/kb_branch_operations/query",
                 json={"question": "fee for an outgoing wire transfer"},
@@ -168,7 +168,7 @@ async def test_a_dev_start_seeds_both_bases_under_the_ids_the_agents_name(
 async def test_a_dev_start_leaves_a_persons_source_of_a_demo_sources_name_alone(
     engine: AsyncEngine, tenant: str, tmp_path: Path
 ) -> None:
-    """c-072 review: the seed reused any source of a demo source's name, uploading into it as the demo owner; a
+    """The seed reused any source of a demo source's name, uploading into it as the demo owner; a
     different owner raised Forbidden and stopped kb-service starting. The base is skipped and the source untouched."""
     store = KnowledgeStore(engine)
     service = KnowledgeService(store, KnowledgeFiles(tmp_path), PostgresFullTextRetriever(engine), StaticAgents())
@@ -185,7 +185,7 @@ async def test_a_dev_start_leaves_a_persons_source_of_a_demo_sources_name_alone(
 async def test_a_start_on_a_new_file_store_uploads_the_demo_files_again(
     engine: AsyncEngine, tenant: str, tmp_path: Path
 ) -> None:
-    """c-094: the shared stack moved kb-service from its own store to files-service, so the demo sources held file
+    """The shared stack moved kb-service from its own store to files-service, so the demo sources held file
     ids the new store had never seen and every sync failed. The next start uploads the demo files again."""
     store = KnowledgeStore(engine)
     retriever = PostgresFullTextRetriever(engine)

@@ -1,4 +1,4 @@
-"""operation_body_encoding: an HTTP operation says how its body is sent, JSON, form or raw (c-591)
+"""operation_body_encoding: an HTTP operation says how its body is sent, JSON, form or raw
 
 Bodies were JSON only, so a system that takes a form-encoded write, such as Stripe, could not be called from a REST
 operation. Null keeps the JSON body every existing operation sends.

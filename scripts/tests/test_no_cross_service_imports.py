@@ -1,4 +1,4 @@
-"""No service depends on another service's code (c-189): services talk over their APIs through
+"""No service depends on another service's code: services talk over their APIs through
 `ops_identity.ServiceClient` and share code only through packages/. By failure mode: an import of another service's
 package coming back in source or tests; a service call written by hand (its own token minting next to a raw HTTP
 client) instead of through ServiceClient; and a scan that finds nothing because it reads nothing (first run on a file
@@ -20,7 +20,7 @@ PACKAGES = {
     "models-service": "ops_models",
     "platform-service": "ops_platform",
 }
-# What remains to move (c-189 T006: the tool catalog leaves agents-service; the gateway tests move to tools-service).
+# What remains to move (the tool catalog leaves agents-service; the gateway tests move to tools-service).
 # The list only shrinks: an import not on it fails, and an entry that no longer matches fails too.
 KNOWN = {
     "services/tools-service/src/ops_tools/__main__.py: ops_agents",
@@ -75,7 +75,7 @@ def test_no_service_imports_another_services_code() -> None:
 
 
 # Raw HTTP clients stay for calls outside the platform (providers, a bank's API); a service token minted outside
-# ops_identity is the mark of a call to another service written by hand. None is left (c-189); keep it that way.
+# ops_identity is the mark of a call to another service written by hand. None is left; keep it that way.
 MINTERS_KNOWN: set[str] = set()
 
 
@@ -116,7 +116,7 @@ def test_every_service_call_goes_through_service_client() -> None:
     )
 
 
-# Reading a document is documents-service's job (c-256): the workflow runner and the agent kernel ask it through
+# Reading a document is documents-service's job: the workflow runner and the agent kernel ask it through
 # ops_documents_client, so the checks that score a field run in one place, never inside a worker.
 NO_EXTRACT = ("packages/ops_engine", "packages/ops_agent_kernel", "services/agents-service")
 

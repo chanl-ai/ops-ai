@@ -1,4 +1,4 @@
-"""a tool secret may be limited to teams (c-093)
+"""a tool secret may be limited to teams
 
 Revision ID: tools_0018_secret_teams
 Revises: tools_0017_effect_scope

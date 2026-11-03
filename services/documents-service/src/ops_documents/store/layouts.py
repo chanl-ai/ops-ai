@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""Layouts at rest (c-247): one per tenant, file content digest, layout engine version and OCR choice, so the same
+"""Layouts at rest: one per tenant, file content digest, layout engine version and OCR choice, so the same
 bytes are read once and a change to how layouts are built reads them again. The layout is JSON kept as text and never
 queried (database portability D5)."""
 
@@ -29,7 +29,7 @@ documents_layouts = sa.Table(
     sa.Column("pages", sa.Integer, nullable=False),
     sa.Column("layout", sa.Text, nullable=False),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-    # Workspace-level: a layout is read from the bytes, which any team holding the same file already has (c-415).
+    # Workspace-level: a layout is read from the bytes, which any team holding the same file already has.
     info=TENANT_SCOPED,
 )
 

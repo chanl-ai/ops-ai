@@ -44,7 +44,7 @@ class Members:
 
     async def require_admin(self, actor: Actor, area: str = "access", action: str = "manage") -> None:
         """`can(area, action)` in the actor's team, from the roles the database holds now rather than the token's, so a
-        demoted admin loses the right at once (c-149). The refusal keeps its documented code, `admin_required`."""
+        demoted admin loses the right at once. The refusal keeps its documented code, `admin_required`."""
         roles = self.roles or RoleStore(self.store.db)
         held = await roles.holdings(actor.tenant_id, actor.user_id)
         live = active(held.assignments, now_iso())

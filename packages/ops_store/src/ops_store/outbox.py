@@ -1,4 +1,4 @@
-"""The service event outbox (c-258): a service writes the event it reports in the same transaction as the change the
+"""The service event outbox: a service writes the event it reports in the same transaction as the change the
 event is about, and a relay delivers it to agents-service's POST /v1/events afterwards. Neither is lost when the other
 is down: the change and its event commit together, and the relay retries until delivery.
 
@@ -26,9 +26,9 @@ from . import background, isolation
 from .dialect import claim
 from .schema import system
 
-# An outbox not yet held to its tenant by the database (tools-service's, until c-414); a service that isolates its
+# An outbox not yet held to its tenant by the database (tools-service's); a service that isolates its
 # outbox passes TENANT_SCOPED: the request role then reads and writes its own tenant's events, and the relay reads
-# every tenant's as the service's system role (c-415).
+# every tenant's as the service's system role.
 OUTBOX = system("service event outbox, read by its relay across tenants")
 # Why the relay reads past the tenant: it delivers every tenant's due events.
 RELAY = "outbox_relay"

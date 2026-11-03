@@ -1,4 +1,4 @@
-"""What was read from a file (c-250), by failure mode: the files list needing another call per row to say what a file
+"""What was read from a file, by failure mode: the files list needing another call per row to say what a file
 was read as, or unable to filter by it (F1); a caller who may not change the team's files recording data, or a
 service without files:edit (F2); data recorded on another team's file (F3)."""
 
@@ -48,7 +48,7 @@ async def test_the_list_carries_and_filters_what_each_file_was_read_as(client: C
 async def test_only_a_caller_who_may_change_files_records_data(client: Client, tenant: str) -> None:
     async with client() as builder:
         fid = await stored(builder)
-    # TODO(c-250): the person path goes once the extract workflow's setData step writes it; until then a member
+    # TODO: the person path goes once the extract workflow's setData step writes it; until then a member
     # without files.create (a chat-only member) is refused.
     async with client(role="chat_user") as chatter:
         refused = await chatter.put(f"/v1/files/{fid}/data", json=READ, headers=OPS)
@@ -67,7 +67,7 @@ async def test_data_on_another_teams_file_is_not_found(client: Client) -> None:
 
 
 async def test_a_later_save_of_the_same_read_never_puts_checked_fields_back(client: Client) -> None:
-    """A read's own save (extraction.read, c-378) can land after a workflow saved it checked: the count stays at what
+    """A read's own save (extraction.read) can land after a workflow saved it checked: the count stays at what
     the check left. A new extraction replaces the record as before."""
     async with client() as c:
         fid = await stored(c)

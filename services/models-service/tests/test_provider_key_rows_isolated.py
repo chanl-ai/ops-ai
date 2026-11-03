@@ -1,4 +1,4 @@
-"""An account's model provider keys are held to their tenant by the database (c-616 C3), by failure mode: another
+"""An account's model provider keys are held to their tenant by the database, by failure mode: another
 account reads them through the store; another account reads or changes them with SQL that names no tenant, which only
 the database policy can stop. Runs on the test PostgreSQL as `ops_models_tenant`, the role every provider key
 transaction runs as, since the database user the tests connect as bypasses row security."""

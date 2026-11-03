@@ -1,7 +1,7 @@
-"""The platform's own OAuth app secret for a plugin (c-565), one per account and plugin, sealed with the settings'
+"""The platform's own OAuth app secret for a plugin, one per account and plugin, sealed with the settings'
 secrets key: the app an install registers once with a vendor, which every team uses unless it brings its own.
 
-It belongs to no team. A team is the boundary and nothing crosses teams (owner, 2026-10-29), so the secret is not a
+It belongs to no team. A team is the boundary and nothing crosses teams, so the secret is not a
 team's secret that other teams read: it lives at the account, set by an account admin only, as model provider keys
 do in models-service. Its value leaves only through `value`, which a sign-in's token exchange uses; no route returns
 it. The value is kept in the credential store (`ops_policy.credentials`) under the tenant and the plugin id, so a
@@ -33,11 +33,11 @@ plugin_app_keys = sa.Table(
     metadata,
     sa.Column("tenant_id", sa.String(64), primary_key=True),
     sa.Column("plugin_id", sa.String(120), primary_key=True),
-    # The credential store's reference to the secret (c-616 C6), read and written only through it.
+    # The credential store's reference to the secret, read and written only through it.
     sa.Column("ciphertext", sa.Text, nullable=False),
     sa.Column("updated_by", sa.String(320), nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
-    # The account's, no team's: held to its tenant by the database (c-616 C1), read only as ROLE.
+    # The account's, no team's: held to its tenant by the database, read only as ROLE.
     info=TENANT_SCOPED,
 )
 

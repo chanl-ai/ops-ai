@@ -12,7 +12,7 @@ import { useOpenConnectLink } from '@/hooks/connections-queries';
 import { ApiError } from '@/lib/api/contract';
 
 /**
- * Where a chat's Connect card sends the person (c-558): opens the single-use link made for them and goes on to the
+ * Where a chat's Connect card sends the person: opens the single-use link made for them and goes on to the
  * system's own sign-in. Errors keep them here: another person's link, an expired or used one.
  */
 function ConnectPage() {

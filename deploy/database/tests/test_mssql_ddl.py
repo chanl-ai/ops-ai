@@ -1,7 +1,7 @@
-"""SQL Server DDL compiled from the store models (c-344), checked with no server: the reviewed golden files under
+"""SQL Server DDL compiled from the store models, checked with no server: the reviewed golden files under
 deploy/database/golden/mssql/ equal what the models compile to now, isolation follows the table markings exactly,
 a unique key over a nullable column admits the rows PostgreSQL admits, and an upgrade never replays PostgreSQL history.
-Applying the DDL to a SQL Server is c-345.
+Applying the DDL to a SQL Server is not covered here.
 
 A model change fails test_the_golden_file_is_what_the_models_compile_to, naming the chain's file; review the new DDL
 and run `make db-ddl-golden`."""
@@ -103,7 +103,7 @@ def test_every_marked_table_and_no_other_has_the_policy_its_markings_ask_for(
             assert "SESSION_CONTEXT(N'tenant_id')" in fn and "ops_system" not in fn
             assert (system is not None and system in fn) == (chain in mssql.SYSTEM_USERS)
         if kind == "team":
-            # No team reads or writes a row with no team (c-507).
+            # No team reads or writes a row with no team.
             assert "@team_id IS NULL" not in read.group(0) and "@team_id IS NULL" not in write.group(0)
             assert "SESSION_CONTEXT(N'team_id')" in write.group(0)
 

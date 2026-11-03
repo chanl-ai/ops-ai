@@ -230,7 +230,7 @@ def watch(target: Callable[..., None], args: tuple[Any, ...], what: str) -> tupl
 async def apply(template: str, data: Any, settings: Any = None) -> tuple[Any, str | None]:
     """The transformed output and None, or `data` unchanged and why the render failed. Rendered text that parses as
     JSON is returned as JSON, otherwise as the text. `data` must already be scrubbed of secrets. `settings` is a
-    plugin's merged settings (c-564), read as `settings.<name>`; it holds no secret values."""
+    plugin's merged settings, read as `settings.<name>`; it holds no secret values."""
     kind, text = await asyncio.to_thread(_run, template, data, settings)
     if kind != "ok":
         return data, text

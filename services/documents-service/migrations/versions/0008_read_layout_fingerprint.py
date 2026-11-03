@@ -1,4 +1,4 @@
-"""a read keeps its layout fingerprint, and a type's recent reads are found by index (c-254)
+"""a read keeps its layout fingerprint, and a type's recent reads are found by index
 
 Template offers grouped a type's last 200 reads by layout by reading every one of those files' layouts again on each
 request. A model read now stores its fingerprint when it finishes, and the offers group the stored values; reads

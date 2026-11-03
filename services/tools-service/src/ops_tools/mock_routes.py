@@ -1,4 +1,4 @@
-"""`/v1/tool-modules/{id}/operations/{op}/mocks` (c-332): an operation's mock answers in test. Every member of the
+"""`/v1/tool-modules/{id}/operations/{op}/mocks`: an operation's mock answers in test. Every member of the
 module's team reads them; changing them is `tools.edit` (a system module's, `tools.manage` too). They never reach
 production, so they are not module versions and need no Security review."""
 
@@ -35,7 +35,7 @@ class _Wire(BaseModel):
 
 class MockIn(_Wire):
     name: str = Field(min_length=1, max_length=200)
-    # test: answers test-environment calls; example: the operation's example answer (c-616), one per operation.
+    # test: answers test-environment calls; example: the operation's example answer, one per operation.
     environment: Literal["test", "example"] = "test"
     # Input field to the value it must equal; empty matches every call (use it as the default).
     match: dict[str, Any] = Field(default_factory=dict[str, Any])

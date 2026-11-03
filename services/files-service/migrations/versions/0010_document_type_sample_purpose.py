@@ -1,4 +1,4 @@
-"""files a document type is tested against carry their own purpose, document_type_sample (c-379)
+"""files a document type is tested against carry their own purpose, document_type_sample
 
 The document types' seed uploaded its sample PDFs as case attachments, so Files labelled them "Email attachment". A file
 kept only by `test_set` references, which documents-service adds for a type's samples and nothing else does, takes the

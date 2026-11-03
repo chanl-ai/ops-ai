@@ -1,4 +1,4 @@
-"""Blocked-topic guardrails (c-063): one classification call, with structured output validated against a schema whose
+"""Blocked-topic guardrails: one classification call, with structured output validated against a schema whose
 topic is one of the pinned topics or "none". Through models-service the call runs on its own alias, `guardrail-check`,
 so an operator can give the check a stronger model than the answering one; while that alias is not bound it runs on
 the turn's own model, so nothing changes without the binding. It runs on the person's message before

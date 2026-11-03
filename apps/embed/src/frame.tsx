@@ -37,7 +37,7 @@ export interface FrameProps {
 }
 
 /**
- * The chat inside the loader's iframe (c-158). It takes messages only from its parent window at the origin the
+ * The chat inside the loader's iframe. It takes messages only from its parent window at the origin the
  * deployment lists, and posts only there: ready (repeated until identified), identified, session-ended on a 401,
  * sign-in, closed, and message with the role and time only. The transcript never leaves this frame.
  */

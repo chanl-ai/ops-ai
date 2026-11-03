@@ -1,4 +1,4 @@
-"""A run waiting for a person's own account goes on once they connect (c-616 S12), tools-service's half, by failure
+"""A run waiting for a person's own account goes on once they connect, tools-service's half, by failure
 mode: the refusal does not say which event and key mean "this person connected", so a run cannot wait for it; and a
 person who connects, by an OAuth sign-in or by giving their key, reports nothing, so a waiting run never wakes. The
 event's key is the one the refusal named, so the run wakes for its person and environment only."""

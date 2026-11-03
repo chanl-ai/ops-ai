@@ -129,7 +129,7 @@ async function signIn(email) {
   }
 }
 
-/** The app's page on Connections (c-607), on one tab, screenshotted as `name`. */
+/** The app's page on Connections, on one tab, screenshotted as `name`. */
 async function appPage(page, name, tab) {
   await page.goto(`${CONSOLE}/integrations/apps/${encodeURIComponent(`plugin:${PLUGIN}`)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   await page.getByRole('tab', { name: 'Tools' }).waitFor({ timeout: 90_000 });

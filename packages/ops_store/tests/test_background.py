@@ -1,4 +1,4 @@
-"""Background loops (c-516), by failure mode: a database error ends a loop for good, so its work stops unseen; a stopped
+"""Background loops, by failure mode: a database error ends a loop for good, so its work stops unseen; a stopped
 process still looks alive; heartbeat writes slow the loop they report on; a process not on the list starts anyway."""
 
 from __future__ import annotations

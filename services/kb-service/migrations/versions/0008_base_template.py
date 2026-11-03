@@ -1,9 +1,9 @@
-"""kb_bases carry a template id and a protection level (c-180)
+"""kb_bases carry a template id and a protection level
 
 Revision ID: kb_0008
 Revises: kb_0007
 
-The provisioning service (c-175) finds a knowledge base again by the template it was made from, and marks it `system`
+The provisioning service finds a knowledge base again by the template it was made from, and marks it `system`
 (no person may change it) or `managed` (people may; the template's fields come back on the next run). Both are null on
 every knowledge base made before.
 """

@@ -1,8 +1,8 @@
 """Brings the imported bank module up to the fake bank's current OpenAPI document and sets the hold's approval
-policy (c-057 T003): operations the document lists and the module lacks (search_customers, add_customer_note) are
+policy: operations the document lists and the module lacks (search_customers, add_customer_note) are
 imported with access preset from their method, `place_hold` is approved by one person of the approving team with no
 self-approval, the staged changes are published as a version, and Security's review of it (a new write or a changed
-policy is major) is approved in agents-service's Reviews through `--decide-as` (c-163), so the registry serves the new
+policy is major) is approved in agents-service's Reviews through `--decide-as`, so the registry serves the new
 operations.
 
     uv run python scripts/reimport_bank_module.py                      # dev auth: the fixed dev user
@@ -93,7 +93,7 @@ async def reimport(
     if hold is None:
         raise SystemExit(f"{HOLD} is not in the module or the document; nothing to approve")
     # One approver from the team and a step-up although one person approves: a hold on funds. Whether the asker may
-    # approve is the tenant's requesterMayDecide policy (c-186).
+    # approve is the tenant's requesterMayDecide policy.
     wanted = {
         "approvers": 1,
         "approverTeam": hold_team,
@@ -131,7 +131,7 @@ async def reimport(
     # Staged changes serve nothing until a version is published; a major one (a new write, a changed policy) waits
     # for Security, and only its approval moves the served operations forward.
     if module.get("pendingChanges"):
-        module = data(await api.post(f"/v1/tool-modules/{module_id}/versions", json={"note": "c-057 levy operations"}))
+        module = data(await api.post(f"/v1/tool-modules/{module_id}/versions", json={"note": "levy operations"}))
         module = await decide_pending(approver, api, module_id, module)
     return module
 

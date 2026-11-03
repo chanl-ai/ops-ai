@@ -3,7 +3,7 @@ import { createDocumentTypesHttp, createExtractionsRoutes, createLayoutsRoutes }
 import { createTransport } from './http';
 
 /**
- * Document types on documents-service (`/v1/document-types`, c-256). Files keeps the bytes; documents-service reads
+ * Document types on documents-service (`/v1/document-types`). Files keeps the bytes; documents-service reads
  * them as the person's team and owns the types, their versions, samples and test runs.
  */
 export function createDocumentsHttp(baseUrl: string): FilesApi['documentTypes'] {

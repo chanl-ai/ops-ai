@@ -1,4 +1,4 @@
-"""a write with no thread is claimed once per tenant, step, tool and input (c-070 review)
+"""a write with no thread is claimed once per tenant, step, tool and input
 
 Revision ID: tools_0016_threadless_once
 Revises: tools_0015_calls_tenant

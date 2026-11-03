@@ -1,11 +1,11 @@
-"""The SQL Server and Azure SQL dialect of the schema tool (c-344; ADR docs/architecture/decisions/database-support.md).
+"""The SQL Server and Azure SQL dialect of the schema tool (ADR docs/architecture/decisions/database-support.md).
 
     make db-ddl DIALECT=mssql OUT=<dir>                  roles.sql, one file per chain, bundle.sql, grants.sql, manifest
     make db-upgrade-sql DIALECT=mssql FROM=<ref> TO=<ref>  upgrade.sql and downgrade.sql from Alembic's offline SQL
     make db-ddl-golden                                    deploy/database/golden/mssql/ from this checkout's models
 
 No server is needed. The baseline is compiled from each chain's store metadata (models.chain_metadata) with SQLAlchemy's
-mssql dialect, because 53 of the 150 PostgreSQL migrations hold SQL that cannot run on SQL Server; c-342 holds the
+mssql dialect, because 53 of the 150 PostgreSQL migrations hold SQL that cannot run on SQL Server; a test holds the
 metadata equal to what the migrations build. Each chain's baseline is stamped at its head, and only revisions after
 BASELINE render for SQL Server. Isolation is a security policy per tenant-scoped table, generated from its markings by
 ops_store.schema.security_ddl (by tenant, or by tenant and team for a team-owned one), the SQL Server form of the
@@ -58,24 +58,24 @@ SYSTEM_READS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "review_approvals": (("SELECT",), ()),
     "engine_definitions": (("SELECT",), ()),
     "engine_work": (("SELECT", "UPDATE"), ()),
-    # The run reconciler finds runs with nothing behind them across tenants and changes each in its own (c-561).
+    # The run reconciler finds runs with nothing behind them across tenants and changes each in its own.
     "engine_runs": (("SELECT",), ()),
     "engine_steps": (("SELECT",), ()),
     # The retention sweep lists the tenants holding memories; it never reads what an agent remembers.
     "agent_memories": (("SELECT",), ("tenant_id",)),
-    # Every background process writes its heartbeat; the Background page reads every team's jobs (c-516).
+    # Every background process writes its heartbeat; the Background page reads every team's jobs.
     "background_heartbeats": (("SELECT", "INSERT", "UPDATE", "DELETE"), ()),
     "background_jobs": (("SELECT",), ()),
-    # The batch starter finds every tenant's pending rows, then starts each in its own tenant and team (c-535).
+    # The batch starter finds every tenant's pending rows, then starts each in its own tenant and team.
     "run_batches": (("SELECT",), ()),
     "run_batch_rows": (("SELECT",), ()),
-    # The start-up catch-up finds every team whose default agent is its Ops Assistant (c-616, agents 0096).
+    # The start-up catch-up finds every team whose default agent is its Ops Assistant (agents 0096).
     "team_default_agents": (("SELECT",), ()),
 }
 Grants = dict[str, tuple[tuple[str, ...], tuple[str, ...]]]
 # Each chain's system principal (a user without a login its runtime user alone may impersonate) and what it reads, as
 # that chain's migrations grant its BYPASSRLS role on PostgreSQL: the agents loops' role, and the outbox relays and
-# documents' restart (c-415). Held equal to the PostgreSQL grants by test_model_parity.py.
+# documents' restart. Held equal to the PostgreSQL grants by test_model_parity.py.
 SYSTEM_USERS: dict[str, tuple[str, Grants]] = {
     SYSTEM_CHAIN: (SYSTEM_USER, SYSTEM_READS),
     "files": ("ops_files_system", {"files_outbox": (("SELECT", "UPDATE", "DELETE"), ())}),
@@ -90,7 +90,7 @@ SYSTEM_USERS: dict[str, tuple[str, Grants]] = {
 }
 # Where each chain's portable migrations begin (2026-10-19, each chain's head that day). Revisions up to and including
 # it are PostgreSQL history and never render for SQL Server; every later one is written with Alembic operations both
-# run. SQL Server upgrades start from the first release whose bundle installs, the release cut after c-549; the pins
+# run. SQL Server upgrades start from the first release whose bundle installs, the release cut; the pins
 # move to its heads when it is cut, since no SQL Server install of an earlier release exists.
 BASELINE = {
     "agents": "0070_engine_definitions_archived",
@@ -612,7 +612,7 @@ def run(a: argparse.Namespace) -> None:
         for r in refused:
             print(r)
     else:
-        print(f"{a.cmd} DIALECT=mssql needs a server (c-345); nothing was checked.")
+        print(f"{a.cmd} DIALECT=mssql needs a server; nothing was checked.")
         sys.exit(2)
 
 

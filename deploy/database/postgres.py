@@ -337,7 +337,7 @@ class Postgres:
         """Run by the migrator after the bundle and after every upgrade; every statement can run again. `members`: per
         runtime role, the roles it switches to, as roles.sql grants them. A role a migration added after roles.sql ran
         reaches its login here, run as a superuser (staging's deploy); as the migrator each is already a member, from
-        roles.sql or the step's upgrade-roles.sql, and the statement changes nothing (c-444)."""
+        roles.sql or the step's upgrade-roles.sql, and the statement changes nothing."""
         out = [
             "-- Each service's runtime role: DML on its own tables, its sequences, read on its version table.\n",
             "-- Only the owner creates objects: some server templates still grant CREATE on public to PUBLIC.\n",

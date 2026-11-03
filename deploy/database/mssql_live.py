@@ -1,4 +1,4 @@
-"""SQL Server against a live server (c-345): install the SQL Server bundle the way a DBA does (sqlcmd), compare the
+"""SQL Server against a live server: install the SQL Server bundle the way a DBA does (sqlcmd), compare the
 database with the store models, and read its tenant security predicates. It runs where ODBC Driver 18 and sqlcmd are,
 the test image (deploy/fly/Dockerfile, target test-mssql), never a laptop (docs/deploy/fly.md, SQL Server test machine).
 
@@ -42,7 +42,7 @@ def password() -> str:
 
 def sqlcmd(database: str, script: Path, variables: dict[str, str] | None = None) -> None:
     # -I: QUOTED_IDENTIFIER on. sqlcmd leaves it off, and SQL Server refuses a filtered index (the bundle has them)
-    # without it; the bundle does not set it itself yet (reported to c-344).
+    # without it; the bundle does not set it itself yet.
     argv = [SQLCMD, "-S", server(), "-U", "sa", "-C", "-b", "-I", "-d", database, "-i", str(script)]
     for k, v in (variables or {}).items():
         argv += ["-v", f"{k}={v}"]

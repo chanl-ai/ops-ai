@@ -1,4 +1,4 @@
-"""The MCP adapter (c-356), driven by the official SDK's client in process: one test per way an assistant could list or
+"""The MCP adapter, driven by the official SDK's client in process: one test per way an assistant could list or
 run what its key should not, run a write without a person, or go unseen in the call log."""
 
 from __future__ import annotations
@@ -165,7 +165,7 @@ async def test_a_tool_of_a_module_outside_the_team_is_refused_and_logged(stack: 
     async with stack.running(), stack.http("ok_cards") as http, stack.client(http, "/mcp/test/team_cards") as c:
         result = await c.call_tool("lookup_case", {"caseId": "CASE-4112"})
     assert result.is_error is True and result.structured_content is not None
-    # Another team's operation is not found (c-509); the refusal names no owner.
+    # Another team's operation is not found; the refusal names no owner.
     assert result.structured_content["code"] == "gateway_refused"
     [row] = await stack.rows("lookup_case")
     assert (row["channel"], row["outcome"]) == ("mcp", "refused")
@@ -204,7 +204,7 @@ async def test_a_key_holding_tools_run_cannot_use_the_test_console(stack: Stack)
 async def test_with_the_flag_off_the_mcp_address_says_it_is_off(
     engine: AsyncEngine, seed: dict[str, Any], tenant: str
 ) -> None:
-    """mcp_gateway is off unless the install config names it (c-611): /mcp answers 404 with the setting that turns it
+    """mcp_gateway is off unless the install config names it: /mcp answers 404 with the setting that turns it
     on, and no MCP session is started."""
     app = build_app(engine, seed, tenant, mcp=True, flags=Flags())
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tools") as http:

@@ -7,7 +7,7 @@ and read from settings, and a name settings does not hold is refused here, not a
 the names, never the values. A first sign-in may make a member, never an admin.
 
 A listed domain is a claim that routes nobody until verified: the workspace publishes the claim's TXT record and asks
-for it to be checked (c-195). The DNS answer is read before any transaction opens, so a slow resolver holds no lock.
+for it to be checked. The DNS answer is read before any transaction opens, so a slow resolver holds no lock.
 """
 
 from __future__ import annotations

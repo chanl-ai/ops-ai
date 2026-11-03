@@ -1,4 +1,4 @@
-"""send_policies, send_checks: a team's sending policy and the gateway's judgements of writes against it (c-300)
+"""send_policies, send_checks: a team's sending policy and the gateway's judgements of writes against it
 
 A write left the gateway with nothing reading it against the team's own rules. With the team's checkBeforeSend on,
 the gateway judges each write's payload against the newest policy version and keeps the judgement by input hash and

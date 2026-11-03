@@ -1,4 +1,4 @@
-"""secret_isolation: tool secrets, their audit and Ops AI's own app secrets are held by the database (c-616 C1)
+"""secret_isolation: tool secrets, their audit and Ops AI's own app secrets are held by the database
 
 tool_secrets and secret_audit were filtered only by the team clause the store wrote, and plugin_app_keys by its tenant
 clause: nothing in the database stopped a query that left the clause out from reading another team's sealed values.

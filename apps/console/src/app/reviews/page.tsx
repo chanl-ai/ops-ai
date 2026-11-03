@@ -30,7 +30,7 @@ const VIEWS = ['open', 'mine', 'overdue'] as const satisfies readonly ReviewView
 const PAGE = 50;
 
 /**
- * Human Tasks as queue and task (c-460, layout A, owner 2026-10-23): the queue grouped by case on the left, the open
+ * Human Tasks as queue and task (layout A): the queue grouped by case on the left, the open
  * task's evidence beside a decision panel that keeps Decide in view. From 1280 px the queue and the task sit side by
  * side, below that they take turns; from 1024 px the evidence and the decision sit side by side, below that they take
  * turns behind an Evidence and Decide switch. The app's navigation folds while the page is open, so the document has
@@ -60,7 +60,7 @@ export default function HumanTasksPage() {
     },
     [params, pathname, router],
   );
-  // A service links to a system workflow's review by its run key before the run has a step (c-257).
+  // A service links to a system workflow's review by its run key before the run has a step.
   const byKey = useReviewByRunKey(activeId ? null : params.get('runKey'));
   React.useEffect(() => {
     if (byKey.data) go({ review: byKey.data.id });

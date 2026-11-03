@@ -241,7 +241,7 @@ try {
   check('the console signs in through platform-service', true);
 
   await page.goto(`${origin}/agents`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-  // Searched for by name: a busy test team's list pages, and the new agent can sort onto any page (c-441).
+  // Searched for by name: a busy test team's list pages, and the new agent can sort onto any page.
   await page.getByPlaceholder('Search agents…').fill(`Smoke ${TAG}`, { timeout: 60_000 });
   const listed = await page.getByText(`Smoke ${TAG}`).first().waitFor({ timeout: 60_000 }).then(() => true, () => false);
   check('Agents lists the new agent from agents-service', listed);

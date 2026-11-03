@@ -96,7 +96,7 @@ def bank_module(tenant: str, suffix: str) -> dict[str, Any]:
 
 async def on_its_connection(engine: AsyncEngine, module: dict[str, Any], base: str) -> dict[str, Any]:
     """The module on a connection of its own that signs nothing in and holds `base` in every environment: where a
-    module's address lives (c-616)."""
+    module's address lives."""
     now = datetime.now(UTC)
     row, envs = open_connection(
         tenant_id=module["tenant_id"], team_id=module["team_id"], connection_id=f"con_{module['id']}",
@@ -264,7 +264,7 @@ async def test_the_registry_and_the_agents_catalogue_agree_on_every_access_class
 
 async def test_an_approved_write_runs_after_opa_reloads_its_data_and_loses_the_review_key(gateway: Gateway) -> None:
     """OPA's file watch reloads data.ops from the mounted policy folder, dropping the key the gateway wrote at start
-    (c-048 G23: every approved write on the shared stack read as unsigned)."""
+    (every approved write on the shared stack read as unsigned)."""
     async with opa_client() as opa:
         (await opa.put("/v1/data/ops", json={"identities": ["service:agents"]})).raise_for_status()
     args = {"accountId": "CHQ-2219", "hours": 24}
@@ -300,7 +300,7 @@ async def test_a_write_whose_policy_needs_two_approvers_refuses_a_token_naming_o
     assert two.status_code == 200, two.text
 
 
-# ── Tenant isolation of the call log (c-057 T013, security review), on the real routes ──
+# ── Tenant isolation of the call log (security review), on the real routes ──
 
 
 @pytest.fixture
@@ -358,7 +358,7 @@ async def test_another_tenants_call_is_not_in_a_modules_traffic_or_activity(
 
 
 async def test_executions_find_the_call_sent_under_one_key(gateway: Gateway) -> None:
-    """A workflow run reconciles a write after a crash by its key (c-061 T005): the filter finds that call alone, and
+    """A workflow run reconciles a write after a crash by its key: the filter finds that call alone, and
     a key never sent finds nothing, which the run reads as "the write never arrived"."""
     for step in ("wfrun_a:lookup:1:1", "wfrun_a:lookup:1:2"):
         r = await gateway.call("get_account", {"accountId": "CHQ-2219"}, step=step)
@@ -372,12 +372,12 @@ async def test_a_write_received_but_not_finished_reads_as_running_by_its_key(
     gateway: Gateway, engine: AsyncEngine
 ) -> None:
     """The gateway claims a write's row (outcome running) when it receives the call, before the executor runs. A
-    workflow reconciling by key must see that as not yet known, never as done; Executions shows it running (c-561)."""
+    workflow reconciling by key must see that as not yet known, never as done; Executions shows it running."""
     key = f"wfrun_{uuid4().hex[:8]}:hold:1:1"
     row: dict[str, Any] = {
         "id": new_id("call"),
         "tenant_id": gateway.tenant,
-        # The module's team, which a call from a service acting for the whole tenant is logged under (c-616).
+        # The module's team, which a call from a service acting for the whole tenant is logged under.
         "team_id": "team_platform",
         "tool": gateway.tool("place_hold"),
         "access": "write",
@@ -432,7 +432,7 @@ async def test_a_write_running_past_its_expiry_reads_as_lost(gateway: Gateway, e
     row: dict[str, Any] = {
         "id": new_id("call"),
         "tenant_id": gateway.tenant,
-        # The module's team, which a call from a service acting for the whole tenant is logged under (c-616).
+        # The module's team, which a call from a service acting for the whole tenant is logged under.
         "team_id": "team_platform",
         "tool": gateway.tool("place_hold"),
         "access": "write",
@@ -476,7 +476,7 @@ async def test_an_approved_write_with_no_thread_runs_once_by_its_key(gateway: Ga
 async def test_an_optional_field_left_out_is_sent_with_its_default(
     gateway: Gateway, engine: AsyncEngine, tenant: str
 ) -> None:
-    """The agent's schema promises the default (c-073), so the system must receive it when the call omits the field."""
+    """The agent's schema promises the default, so the system must receive it when the call omits the field."""
     store = ModuleStore(engine)
     m = await store.get(tenant, MODULE)
     assert m is not None

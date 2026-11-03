@@ -105,7 +105,7 @@ async def test_filters_and_pages(platform: Platform) -> None:
 async def test_no_team_reads_another_teams_entries_and_only_the_account_admin_reads_the_accounts(
     platform: Platform,
 ) -> None:
-    """c-507 (owner's answer Q1): a team's audit page lists that team's entries only, whatever its scope; the entries
+    """A team's audit page lists that team's entries only, whatever its scope; the entries
     no team holds (sign-ins, membership) show only to the account admin, who holds audit in every team."""
     admin, h = await as_admin(platform)
     async with platform.engine.begin() as c:

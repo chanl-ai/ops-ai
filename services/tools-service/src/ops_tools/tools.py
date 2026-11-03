@@ -35,7 +35,7 @@ class ToolCaller:
     kind: str
     # The people the call's approval token names, after the gateway verified it; empty for a call with none.
     approvers: tuple[str, ...] = ()
-    # The person the call acts for, from a verified acting-for token (c-558); None for a call with nobody behind it.
+    # The person the call acts for, from a verified acting-for token; None for a call with nobody behind it.
     acting_for: ActingForPerson | None = None
 
     @classmethod
@@ -89,9 +89,9 @@ class LocalToolRunner:
         reading that caller's tenant's secrets; `mail` is one fixed sender (tests). With neither, or none configured,
         every send_reply fails with that reason. `mailbox_sender(tenant, team, address)` is the sender of a named
         mailbox of the caller's team (mailboxes.MailboxSenders), used when send_reply names `mailbox`. `cases` is
-        agents-service, where open_case opens a case in the caller's team (c-219). `file_tools` reads the caller's
-        team's files and documents (c-613) through documents-service; `knowledge` searches its knowledge bases
-        (c-616) through kb-service."""
+        agents-service, where open_case opens a case in the caller's team. `file_tools` reads the caller's
+        team's files and documents through documents-service; `knowledge` searches its knowledge bases through
+        kb-service."""
         self.tools = LocalToolExecutor(catalog)
         self.mail = mail
         self.mail_for = mail_for
@@ -127,7 +127,7 @@ class LocalToolRunner:
         return await self.tools.execute(tool, arguments, key=key, approval_token=DECIDED)
 
     async def _apply_access(self, arguments: dict[str, Any], caller: ToolCaller) -> ToolOutcome:
-        """A tool access request's decision, applied to the module's grant (c-257). Who decided is the person the
+        """A tool access request's decision, applied to the module's grant. Who decided is the person the
         verified approval token names; the request must be one the calling team decides."""
         if self.decisions is None:
             return ToolOutcome(False, {"error": "This tools-service applies no access decisions."})

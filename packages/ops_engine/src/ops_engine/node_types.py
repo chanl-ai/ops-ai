@@ -61,7 +61,7 @@ class Retry:
         return {"attempts": self.attempts, "backoffSeconds": backoff}
 
 
-# An outage's backoff (owner, c-561): 5 s, then 30 s, so a service restart or a short blip is ridden out.
+# An outage's backoff: 5 s, then 30 s, so a service restart or a short blip is ridden out.
 OUTAGE_WAITS = (5.0, 30.0)
 
 
@@ -70,7 +70,7 @@ RETRY_BY_EFFECTS: dict[Effects, Retry] = {
     "none": Retry(3),
     "read": Retry(3, waits=OUTAGE_WAITS),
     "model": Retry(2),
-    # A write is sent again only when the gateway proves it never ran it, each time under a new attempt key (c-561).
+    # A write is sent again only when the gateway proves it never ran it, each time under a new attempt key.
     "write": Retry(3, waits=OUTAGE_WAITS),
     "human": Retry(1),
 }
@@ -107,13 +107,13 @@ class NodeType:
     # `timeout` port when it expires.
     optional_outputs: tuple[tuple[str, Any, str], ...] = ()
     # (parameter, value, port): a declared out port the instance drops while `parameter` is `value`, e.g. Run
-    # workflow's `started` while it waits for its children (c-263). A value of SET matches any value set.
+    # workflow's `started` while it waits for its children. A value of SET matches any value set.
     outputs_unless: tuple[tuple[str, Any, str], ...] = ()
     # Out ports every instance has besides the ones `outputs_from` lists, such as a Switch's otherwise.
     extra_outputs: tuple[str, ...] = ()
     retry: Retry | None = None
     # Runs once, when no other step of the run can still run (a LangGraph deferred node): a Join waits for every branch
-    # that will arrive and never for one routed away (c-278).
+    # that will arrive and never for one routed away.
     deferred: bool = False
     # A write keyed by its step, so a retry repeats nothing (starting a child run): retried by `retry`, never reconciled
     # through the tool gateway, which does not see it.
@@ -157,7 +157,7 @@ class NodeType:
             "extraOutputs": list(self.extra_outputs),
             # So an editor draws the extra port while the instance's parameter holds the value, as output_ports does.
             "optionalOutputs": [_port_rule(a, v, p) for a, v, p in self.optional_outputs],
-            # A declared port the instance drops while `parameter` is `value` ("*": any value set), c-263.
+            # A declared port the instance drops while `parameter` is `value` ("*": any value set).
             "outputsUnless": [_port_rule(a, v, p) for a, v, p in self.outputs_unless],
             "parameters": dict(self.parameters),
             "effects": self.effects,
@@ -293,13 +293,13 @@ _MATCH_RULE_FORM = _form(
     ("right", _f("Candidate field", "text")),
     ("minLength", _f("Least length", "number")),
 )
-# A service event's name (c-258): dotted lower-case words, the subject first, e.g. tool_access.requested.
+# A service event's name: dotted lower-case words, the subject first, e.g. tool_access.requested.
 EVENT_NAME = r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$"
 # A Start workflow step's limits: how many children one step may start, and its default.
 MAX_ITEMS, DEFAULT_MAX_ITEMS = 500, 50
 _TIMEOUT = ("timeoutSeconds", _f("Time limit (seconds)", "number", "Per attempt; the type's default when empty"))
 
-# What every AI step (c-298) takes: the text it reads, extra instructions and a model alias. Each step adds its own.
+# What every AI step takes: the text it reads, extra instructions and a model alias. Each step adds its own.
 _AI_COMMON: dict[str, Any] = {
     "text": {"description": "What the model reads: " + _MAPPING},
     "instructions": {"type": "string", "description": "Anything the model should know or do besides the step's job"},
@@ -545,7 +545,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         effects="none",
         inputs=MAIN_IN,
         outputs=(Port("out"),),
-        # A step that asks for it leaves by `disagree` when the sources disagree, so a person can settle them (c-535).
+        # A step that asks for it leaves by `disagree` when the sources disagree, so a person can settle them.
         optional_outputs=(("onDisagreement", "port", "disagree"),),
         parameters={
             "type": "object",
@@ -958,11 +958,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         ),
         executor="gateway.call",
         effects="write",
-        # Owner's default (c-561); editable per step with timeoutSeconds.
+        # Owner's default; editable per step with timeoutSeconds.
         timeout_seconds=60.0,
         inputs=MAIN_IN,
         outputs=(Port("ok"), Port("refused"), Port("error")),
-        # A system that does not answer in time leaves by a port of its own when the step asks (c-332).
+        # A system that does not answer in time leaves by a port of its own when the step asks.
         optional_outputs=(("onTimeout", "port", "timeout"),),
         parameters={
             "type": "object",
@@ -1106,16 +1106,16 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         effects="model",
         inputs=MAIN_IN,
         # A kind Detect cannot name, or is unsure of, takes review with no fields: a person decides what the file is,
-        # and `classification` on the output says why (c-249).
+        # and `classification` on the output says why.
         outputs=(Port("ok"), Port("review"), Port("unreadable"), Port("error")),
-        # A long file is read in the background and the step waits for it holding no worker (c-525); past `waitSeconds`
+        # A long file is read in the background and the step waits for it holding no worker; past `waitSeconds`
         # it leaves by a port of its own when the step asks, else by error.
         optional_outputs=(("onTimeout", "port", "timeout"),),
         parameters={
             "type": "object",
             "required": ["file"],
-            # The fields inline, a team's document type whose version holds them (c-236), Detect (c-249), or a full-text
-            # or proposed read, which names no fields (c-535).
+            # The fields inline, a team's document type whose version holds them, Detect, or a full-text
+            # or proposed read, which names no fields.
             "anyOf": [
                 {"required": ["fields"]},
                 {"required": ["documentType"]},
@@ -1124,7 +1124,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             ],
             "properties": {
                 "file": {"format": "file", "description": "The files-service file id: " + _MAPPING},
-                # What comes back (c-535). A path into the run takes the read a request asked for (the system extract
+                # What comes back. A path into the run takes the read a request asked for (the system extract
                 # workflow carries the Files page's choice).
                 "read": {
                     "oneOf": [
@@ -1150,7 +1150,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                     "properties": {
                         "id": {"type": "string", "minLength": 1, "maxLength": 64},
                         # A path into the run reads the version the run was started with (the system extract
-                        # workflow, c-250); a path is never pinned on save.
+                        # workflow); a path is never pinned on save.
                         "version": {
                             "anyOf": [{"type": "integer", "minimum": 1}, {"type": "string", "pattern": "^\\$\\."}]
                         },
@@ -1326,9 +1326,9 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                 # approves. Only ever adds refusals; the run's starter is refused separately by policy.
                 "notDecidedBy": {"description": "Emails who may not decide it: " + _MAPPING},
                 # Who asked for the decision when the run's starter is not them (an event a service reported for a
-                # person): refused as the starter is, only while the tenant's requesterMayDecide is off (c-186).
+                # person): refused as the starter is, only while the tenant's requesterMayDecide is off.
                 "requestedBy": {"description": "Emails who asked for it: " + _MAPPING},
-                # A reminder while the review still waits (c-277): a task.reminder service event every N hours, which a
+                # A reminder while the review still waits: a task.reminder service event every N hours, which a
                 # system workflow the team configures may act on; the review keeps waiting.
                 "remindEveryHours": {"type": "number", "exclusiveMinimum": 0},
                 "onTimeout": {
@@ -1341,7 +1341,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                     "description": "The tool node whose write Approve authorises",
                     **_NOT_A_PATH,
                 },
-                # The task screen (c-288): a task type by id, pinned to its newest published version when the step
+                # The task screen: a task type by id, pinned to its newest published version when the step
                 # pauses unless a version is named, and the values its params read. A path reads the type from the run,
                 # so one workflow can open any type (the task API's api_task).
                 "taskType": {
@@ -1498,7 +1498,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         retry=Retry(3, (1.0, 30.0)),
         inputs=MAIN_IN,
         outputs=(Port("started"), Port("error")),
-        # Waiting (c-263): `done` once every child ended, `timeout` when its hours pass first; `started` is not taken.
+        # Waiting: `done` once every child ended, `timeout` when its hours pass first; `started` is not taken.
         optional_outputs=(("wait", True, "done"), ("timeoutHours", SET, "timeout")),
         outputs_unless=(("wait", True, "started"),),
         parameters={
@@ -1568,7 +1568,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                 "customerId": {"type": "string", "description": _MAPPING},
                 "customerName": {"type": "string", "description": _MAPPING},
                 "assignee": {"type": "string", "description": _MAPPING},
-                # The case type whose fields and order the case shows (c-291); its newest published version is pinned.
+                # The case type whose fields and order the case shows; its newest published version is pinned.
                 "caseType": {"type": "string", "maxLength": 64},
                 "fields": {
                     "type": "object",
@@ -1647,7 +1647,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         deferred=True,
         parameters={
             "type": "object",
-            # One value today: the Join goes on once every branch that can arrive has (c-278 Q2, no first-to-finish).
+            # One value today: the Join goes on once every branch that can arrive has (no first-to-finish).
             "properties": {"waitFor": {"enum": ["all"], "default": "all"}},
         },
         ui=_form(

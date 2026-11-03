@@ -1,4 +1,4 @@
-"""The environments tools-service knows, as one list (c-580). A module's versions are promoted through all of them; a
+"""The environments tools-service knows, as one list. A module's versions are promoted through all of them; a
 connection holds keys for those marked `keys`. Each route's environment type below is checked against this list
 (tests/test_environments.py), so adding a row and forgetting a route, or the reverse, fails a test rather than a call.
 

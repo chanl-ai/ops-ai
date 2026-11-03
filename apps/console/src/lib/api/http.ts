@@ -174,7 +174,7 @@ export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' |
     batches,
     caseRecords,
     activity,
-    // Counted on the server from the same review list Human Tasks reads and the team's cases (c-129).
+    // Counted on the server from the same review list Human Tasks reads and the team's cases.
     overview,
     skills: {
       ...skills,
@@ -244,7 +244,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
       bulkRemove: (ids) => send('POST', '/agents/bulk-delete', { ids }),
     },
     workflows: {
-      // The current engine's workflows only: the console no longer shows the earlier engine's (c-562).
+      // The current engine's workflows only: the console no longer shows the earlier engine's.
       list: (p) => get(`/workflows?${qs(p)}&engine=current`),
       get: (id) => get(`/workflows/${id}`),
       create: (i) => send('POST', '/workflows', i),

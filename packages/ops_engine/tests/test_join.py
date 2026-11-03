@@ -1,4 +1,4 @@
-"""The Join (c-278) on an in-memory checkpointer and journal, by failure mode: the step after a fork runs once per
+"""The Join on an in-memory checkpointer and journal, by failure mode: the step after a fork runs once per
 arriving branch; a Join waits for ever on a branch an If sent elsewhere; a Join reached by one branch, or two
 branches meeting at a step that cannot wait, saves without a word; a crash between a branch and the Join replays a
 branch's call or runs the Join twice; a Join goes on while a branch still waits on a person."""

@@ -1,5 +1,5 @@
 /**
- * The generated TypeScript SDK (@chanl-ai/ops-ai) as the console's screens call it (c-580). Its typed operations go out
+ * The generated TypeScript SDK (@chanl-ai/ops-ai) as the console's screens call it. Its typed operations go out
  * through the console's own fetch (request-identity), so each call carries the signed-in person's token and team and
  * renews an expired token once, like every other console call. A refusal comes back as the console's ApiError, so
  * QueryError and the not-found and other-team states read it unchanged.

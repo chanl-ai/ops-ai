@@ -317,7 +317,7 @@
       },
       "ApiKeySummary": {
         "additionalProperties": false,
-        "description": "A key as another service lists it (c-246): what it serves and whether it works.",
+        "description": "A key as another service lists it: what it serves and whether it works.",
         "properties": {
           "createdAt": {
             "title": "Createdat",
@@ -1620,7 +1620,7 @@
       },
       "FlagOut": {
         "additionalProperties": false,
-        "description": "One feature flag of the install (c-611): on only when the install config names it in OPS_FLAGS.",
+        "description": "One feature flag of the install: on only when the install config names it in OPS_FLAGS.",
         "properties": {
           "description": {
             "title": "Description",
@@ -1781,7 +1781,7 @@
       },
       "GroupSettings": {
         "additionalProperties": false,
-        "description": "Identity provider groups to team memberships (c-202): `source` is the OIDC claim or SAML attribute that lists\nthe person's groups (default `groups`).",
+        "description": "Identity provider groups to team memberships: `source` is the OIDC claim or SAML attribute that lists\nthe person's groups (default `groups`).",
         "properties": {
           "map": {
             "items": {
@@ -2117,7 +2117,7 @@
       },
       "JitSettings": {
         "additionalProperties": false,
-        "description": "Where a person new to the workspace lands on their first sign-in through this provider: the team, or with no\nteam the workspace's default team (c-202).",
+        "description": "Where a person new to the workspace lands on their first sign-in through this provider: the team, or with no\nteam the workspace's default team.",
         "properties": {
           "role": {
             "maxLength": 16,
@@ -2227,7 +2227,7 @@
       },
       "KeyTarget": {
         "additionalProperties": false,
-        "description": "What an API key may start (c-246). `version` pins a workflow version; null runs the live one.",
+        "description": "What an API key may start. `version` pins a workflow version; null runs the live one.",
         "properties": {
           "id": {
             "maxLength": 64,
@@ -3811,7 +3811,7 @@
       },
       "TeamDeleteCheckOut": {
         "additionalProperties": false,
-        "description": "Whether a team may be deleted now and why not (c-529): the Delete card reads it in one call.",
+        "description": "Whether a team may be deleted now and why not: the Delete card reads it in one call.",
         "properties": {
           "canDelete": {
             "title": "Candelete",
@@ -4177,7 +4177,7 @@
       },
       "WorkspaceStateOut": {
         "additionalProperties": false,
-        "description": "The workspace's owner and status (c-529): `purgeAfter` is when a closed workspace's records go, else null.",
+        "description": "The workspace's owner and status: `purgeAfter` is when a closed workspace's records go, else null.",
         "properties": {
           "ownerUserId": {
             "anyOf": [
@@ -4223,7 +4223,7 @@
       },
       "WorkspaceTeamOut": {
         "additionalProperties": false,
-        "description": "A team as a workspace admin sees it (c-198): counts joined by the service.",
+        "description": "A team as a workspace admin sees it: counts joined by the service.",
         "properties": {
           "adminCount": {
             "title": "Admincount",
@@ -4395,7 +4395,7 @@
     },
     "/v1/access/check": {
       "post": {
-        "description": "Whether a person may take `area.action` in the team the request acts in (c-150), by the same `can()` the\nservices run with the workspace's policies: allowed with the granting roles, or refused with the reason. The\ncaller needs access.view there; each check is audited as access.check.",
+        "description": "Whether a person may take `area.action` in the team the request acts in, by the same `can()` the\nservices run with the workspace's policies: allowed with the granting roles, or refused with the reason. The\ncaller needs access.view there; each check is audited as access.check.",
         "operationId": "access_check_access",
         "parameters": [
           {
@@ -4552,7 +4552,7 @@
     },
     "/v1/access/holders": {
       "get": {
-        "description": "Which roles grant `area.action` in a team (the Security team for its actions), and who holds them there:\nwhat a \"View only\" notice names (c-186). The team is `team`, the record's, when the page shows another team's\nrecord, else the one the request acts in; a member of that team, or a workspace admin, may ask.",
+        "description": "Which roles grant `area.action` in a team (the Security team for its actions), and who holds them there:\nwhat a \"View only\" notice names. The team is `team`, the record's, when the page shows another team's\nrecord, else the one the request acts in; a member of that team, or a workspace admin, may ask.",
         "operationId": "access_access_holders",
         "parameters": [
           {
@@ -4736,7 +4736,7 @@
     },
     "/v1/api-key-summaries": {
       "get": {
-        "description": "Every team's keys in the workspace with what each serves (c-246): for agents-service's list of API channels\n(a service token with the `settings:view` scope), or for a person who manages access across the workspace\n(`can('access', 'manage')` in every team), as an admin may do everything.",
+        "description": "Every team's keys in the workspace with what each serves: for agents-service's list of API channels\n(a service token with the `settings:view` scope), or for a person who manages access across the workspace\n(`can('access', 'manage')` in every team), as an admin may do everything.",
         "operationId": "api_keys_api_key_summaries",
         "parameters": [
           {
@@ -6483,7 +6483,7 @@
     },
     "/v1/auth/saml/metadata": {
       "get": {
-        "description": "The SAML service provider metadata a bank's identity provider imports: entity id, consumer URL and the\ncertificate for signed requests and encrypted assertions (c-197). Public: it holds nothing secret.",
+        "description": "The SAML service provider metadata a bank's identity provider imports: entity id, consumer URL and the\ncertificate for signed requests and encrypted assertions. Public: it holds nothing secret.",
         "operationId": "auth_saml_metadata",
         "responses": {
           "200": {
@@ -8197,7 +8197,7 @@
     },
     "/v1/me/why": {
       "get": {
-        "description": "Whether the caller may take `area.action` in the team they act in, and if not why, which roles grant it\nand who in the team can give roles (c-150): the reason a locked button gives.",
+        "description": "Whether the caller may take `area.action` in the team they act in, and if not why, which roles grant it\nand who in the team can give roles: the reason a locked button gives.",
         "operationId": "me_why_not",
         "parameters": [
           {
@@ -8364,7 +8364,7 @@
     },
     "/v1/people-names": {
       "get": {
-        "description": "Every person's display name in the workspace by email (c-201), so a list naming who did something shows a\nname rather than an address. Any member reads them; a service token needs the `settings:view` scope.",
+        "description": "Every person's display name in the workspace by email, so a list naming who did something shows a\nname rather than an address. Any member reads them; a service token needs the `settings:view` scope.",
         "operationId": "people_people_names",
         "parameters": [
           {
@@ -8783,7 +8783,7 @@
     },
     "/v1/policies/{key}": {
       "get": {
-        "description": "One policy of the workspace. Any member reads it; a service token needs the\n`settings:view` scope and reads its own tenant's value, as a background job with no person does (c-206's\nmemory sweep). 400 `policy_value` for a key the catalogue does not hold.",
+        "description": "One policy of the workspace. Any member reads it; a service token needs the\n`settings:view` scope and reads its own tenant's value, as a background job with no person does (the\nmemory sweep). 400 `policy_value` for a key the catalogue does not hold.",
         "operationId": "policies_get_policy",
         "parameters": [
           {
@@ -9561,7 +9561,7 @@
     },
     "/v1/settings/members/delete": {
       "post": {
-        "description": "The owner is never removed here: 409 `owner_must_transfer` (c-529).",
+        "description": "The owner is never removed here: 409 `owner_must_transfer`.",
         "operationId": "members_remove_members",
         "parameters": [
           {
@@ -10083,7 +10083,7 @@
     },
     "/v1/settings/members/role": {
       "post": {
-        "description": "The owner is never demoted here: 409 `owner_must_transfer` (c-529).",
+        "description": "The owner is never demoted here: 409 `owner_must_transfer`.",
         "operationId": "members_change_roles",
         "parameters": [
           {
@@ -12312,7 +12312,7 @@
     },
     "/v1/settings/workspace-teams": {
       "get": {
-        "description": "The workspace's security team and the team new people join when nothing else names one (c-202). A workspace\nadmin reads them; a service token needs the `settings:view` scope and reads its own tenant's (c-230).",
+        "description": "The workspace's security team and the team new people join when nothing else names one. A workspace\nadmin reads them; a service token needs the `settings:view` scope and reads its own tenant's.",
         "operationId": "teams_read_workspace_teams",
         "parameters": [
           {
@@ -12582,7 +12582,7 @@
     },
     "/v1/team-names": {
       "get": {
-        "description": "Every team's display name in the workspace (c-224), so a page showing another team's record names its team.\nAny member reads them; a service token needs the `settings:view` scope and reads its own tenant's.",
+        "description": "Every team's display name in the workspace, so a page showing another team's record names its team.\nAny member reads them; a service token needs the `settings:view` scope and reads its own tenant's.",
         "operationId": "teams_team_names",
         "parameters": [
           {
@@ -12713,7 +12713,7 @@
     },
     "/v1/teams": {
       "get": {
-        "description": "The teams the caller may switch to: their own, and every active team for a workspace admin (c-208).",
+        "description": "The teams the caller may switch to: their own, and every active team for a workspace admin.",
         "operationId": "teams_list_teams",
         "parameters": [
           {
@@ -13240,7 +13240,7 @@
     },
     "/v1/workspace/transfer": {
       "post": {
-        "description": "The owner hands the workspace to an account admin, at once and audited (c-529); the old owner stays an\nadmin. Only the owner (`workspace.manage`); 409 `not_an_account_admin` for a target without access.manage in\nevery team.",
+        "description": "The owner hands the workspace to an account admin, at once and audited; the old owner stays an\nadmin. Only the owner (`workspace.manage`); 409 `not_an_account_admin` for a target without access.manage in\nevery team.",
         "operationId": "workspace_transfer_workspace",
         "parameters": [
           {

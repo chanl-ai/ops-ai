@@ -1,4 +1,4 @@
-"""What an operation answers, kept from its import (c-353), by failure mode: an import drops the success response's
+"""What an operation answers, kept from its import, by failure mode: an import drops the success response's
 schema, or keeps it with its references unresolved; an operation with only an example gives nothing to map from; a
 tool's route leaves its output out."""
 

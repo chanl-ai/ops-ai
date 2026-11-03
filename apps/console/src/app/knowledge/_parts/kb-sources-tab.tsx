@@ -33,7 +33,7 @@ type Row = KbSourceView & { onRowClick: (r: KbSourceView) => void };
 const ALL = { page: 1, pageSize: 100 };
 
 /**
- * Which sources feed this knowledge base, and what each one contributes. Add documents is the main way in (c-159):
+ * Which sources feed this knowledge base, and what each one contributes. Add documents is the main way in:
  * new files go to Files first, then into the base's documents source with any picked from Files, synced at once.
  */
 export function KbSourcesTab({ kb }: { kb: KnowledgeBaseDetail }) {

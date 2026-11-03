@@ -14,7 +14,7 @@ import { EgressAddDialog } from './egress-add-dialog';
 /**
  * A request whose host is not on the egress allowlist is refused before anything is sent (tools-service matches the
  * host exactly). Said beside the URL, with the allowlist's own form opened in place for a person who may add hosts;
- * anyone else's save asks the Security team in Human Tasks (c-616 S13).
+ * anyone else's save asks the Security team in Human Tasks.
  * Nothing shows while the list is loading or the person may not read it.
  */
 export function EgressHostNotice({ url }: { url: string }) {

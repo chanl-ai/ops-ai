@@ -20,7 +20,7 @@ import type { Memory } from '@/lib/types/memory';
 const KIND: Record<Memory['kind'], string> = { fact: 'Fact', preference: 'Preference', episode: 'Earlier chat' };
 
 /**
- * What agents remember about the signed-in person, which they correct, forget and export (c-206). With `agentId` it
+ * What agents remember about the signed-in person, which they correct, forget and export. With `agentId` it
  * shows one agent's (the chat's What I remember sheet); without, every agent's grouped by agent (My account > Memory).
  */
 export function MemoryList({ agentId }: { agentId?: string }) {

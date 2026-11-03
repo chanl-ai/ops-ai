@@ -1,4 +1,4 @@
-"""What `ops plugin validate` checks of a plugin's sign-in (c-588), one test per way it can be wrong and still look
+"""What `ops plugin validate` checks of a plugin's sign-in, one test per way it can be wrong and still look
 installable: a plugin that lets each person sign in with a method that holds no person's credential (a service
 account's client credentials), which a team learns only when it turns the plugin on; and an API key the plugin does
 not say how to send, which a team admin would have to guess."""
@@ -25,7 +25,7 @@ def test_person_sign_in_needs_a_method_that_holds_a_persons_credential(tmp_path:
 
 
 def test_each_person_may_give_their_own_api_key(tmp_path: Path) -> None:
-    """c-595: a key, password or token is held per person as an OAuth sign-in is."""
+    """A key, password or token is held per person as an OAuth sign-in is."""
     assert problems(plugin(tmp_path, KEYED.replace("sign_in: [team]", "sign_in: [team, person]"))) == []
 
 

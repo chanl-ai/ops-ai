@@ -1,4 +1,4 @@
-"""A tool module name is unique per team, not per tenant (c-509)
+"""A tool module name is unique per team, not per tenant
 
 Revision ID: tools_0034_tools_per_team
 Revises: tools_0033_operation_code

@@ -83,7 +83,7 @@ function KeyDialog({ open, onOpenChange, replacing }: { open: boolean; onOpenCha
   );
 }
 
-/** The region a connection names and, once called, the one Azure answered from. A mismatch is shown, not refused (owner, 2026-10-31). */
+/** The region a connection names and, once called, the one Azure answered from. A mismatch is shown, not refused. */
 function Region({ c }: { c: ProviderConnection }) {
   if (!c.region) return <span className="text-sm text-muted-foreground">Not applicable</span>;
   const seen = c.observedRegion;
@@ -179,7 +179,7 @@ function columns(onReplace: (k: ProviderKey) => void, onRemove: (k: ProviderKey)
 }
 
 /**
- * The account's model provider keys (models-service `/v1/provider-keys`, owner 2026-10-27): account admins add, replace
+ * The account's model provider keys (models-service `/v1/provider-keys`): account admins add, replace
  * and remove them; only the models service reads a value, and no team sees one, so a new team needs no setup.
  */
 export default function ModelProvidersPage() {

@@ -1,4 +1,4 @@
-// Edits to a widget template's layout tree by path (c-110): the layout form changes one block at a time and the tree
+// Edits to a widget template's layout tree by path: the layout form changes one block at a time and the tree
 // stays the one value the preview, the JSON view and the save all read. A path is the child indexes from the root.
 // Relative imports: the tests run under `node --test`, which does not resolve the `@/` alias.
 import type { LayoutNode, TemplateNode } from '../types/widgets';

@@ -10,7 +10,7 @@ import { useTeamQuery } from './team-query';
 
 const KEY = ['workspace-teams'] as const;
 
-/** Every team of the workspace, one server page at a time (workspace admins, c-198). */
+/** Every team of the workspace, one server page at a time (workspace admins). */
 export const useWorkspaceTeams = (params: ListParams<WorkspaceTeamFilters>) =>
   usePagedQuery({ queryKey: [...KEY, params], queryFn: () => api.workspaceTeams.list(params) });
 

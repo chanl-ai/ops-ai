@@ -1,4 +1,4 @@
-"""Who may run a tool module's test (c-115): the workbench and the operation sheet both call POST
+"""Who may run a tool module's test: the workbench and the operation sheet both call POST
 /v1/tool-modules/{id}/test, which makes a real read on the sandbox target. A builder or admin in the team acting runs
 it; a viewer or reviewer gets 403 role_required, so a hidden button is never the only guard."""
 

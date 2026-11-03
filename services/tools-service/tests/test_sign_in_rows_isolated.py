@@ -1,4 +1,4 @@
-"""A person's saved sign-ins are held to their connection's team by the database (c-602), by failure mode: another team
+"""A person's saved sign-ins are held to their connection's team by the database, by failure mode: another team
 reads them through the store; another team reads or changes them with SQL that names no team, which only the
 database policy can stop; a new row lands without its connection's team; a connection moved to another team leaves
 its rows behind. Runs on the compose PostgreSQL as `ops_tools_tenant`, the role every store transaction runs as, since

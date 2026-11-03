@@ -66,7 +66,7 @@ function Side({ label, threadId, open }: { label: string; threadId?: string; ope
 }
 
 /**
- * Compare (c-286): one question asked of the newest draft and of a saved version, each on its own test thread, with
+ * Compare: one question asked of the newest draft and of a saved version, each on its own test thread, with
  * each reply's tokens, cost and seconds beside it. Nothing is counted or remembered, as in Test.
  */
 export function TestCompare({ agentId, agentName, newest, versions, open }: { agentId: string; agentName: string; newest: number; versions: AgentVersion[]; open: Openers }) {

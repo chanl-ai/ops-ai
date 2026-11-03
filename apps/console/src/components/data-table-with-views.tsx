@@ -137,7 +137,7 @@ interface DataTableWithViewsProps<TData, TValue> {
   prependFilters?: React.ReactNode;
 }
 
-/** How many data columns a list shows before the rest wait under View (owner, 2026-10-19: five or six; six overflowed
+/** How many data columns a list shows before the rest wait under View (five or six; six overflowed
  * Files at 1280). */
 const SHOWN_BY_DEFAULT = 5;
 const keyOf = <T, V>(c: ColumnDef<T, V>) => c.id ?? ((c as { accessorKey?: string }).accessorKey ? String((c as { accessorKey?: string }).accessorKey) : undefined);

@@ -7,7 +7,7 @@ refusal does the same hashing work as a success, so timing does not tell an unkn
 reset link is mailed only to a person who could sign in by password, and the reply to the request is the same whether
 or not one went out. Using the link sets the password and ends every session the person had.
 
-Wrong passwords at sign-in and step-up count together per person (c-196): reaching the limit in the window locks the
+Wrong passwords at sign-in and step-up count together per person: reaching the limit in the window locks the
 person for the lockout time, during which even the right password is refused with 429 `signin_locked`. A right
 password clears the count, and a used reset link ends a lock. One person is sent at most the limit of reset links per
 window; past it the request is answered the same and nothing is sent.
@@ -124,7 +124,7 @@ class Passwords:
 
     async def screen_email(self, email: str, password: str) -> None:
         """Refuses a sign-in for an address locked by wrong passwords, known or not, after the same hashing work a
-        check costs (c-196): sign-in counts per address so an unknown one locks exactly as a known one does."""
+        check costs: sign-in counts per address so an unknown one locks exactly as a known one does."""
         now = _now()
         until = await self.store.email_locked_until(self._email_hash(email), now=_iso(now))
         if until is not None:

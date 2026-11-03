@@ -1,4 +1,4 @@
-"""operation_mocks: a tool operation's mock answers per environment (c-332)
+"""operation_mocks: a tool operation's mock answers per environment
 
 An operation had one stub, always a success with a JSON body, and calls never used it unless the operation ran on the
 stub executor. Mock answers are rows per operation and environment, in order, each a status, body, headers, a delay or

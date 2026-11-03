@@ -1,4 +1,4 @@
-"""Finding tools by words (c-062 T003, c-610). Below the agent's tool-search threshold, the built-in `search_tools`
+"""Finding tools by words. Below the agent's tool-search threshold, the built-in `search_tools`
 looks up the tools this turn already offers (the agent's granted registry operations and granted, published workflows)
 and returns each match's name, description and input schema. Above it, every granted tool is deferred and
 pydantic-ai's own tool search finds them with `strategy`, the same word scoring: a found tool is revealed and then

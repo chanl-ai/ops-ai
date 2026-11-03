@@ -71,7 +71,7 @@ export function RetrievalForm({
   disabled?: boolean;
 }) {
   const rail = variant === 'rail';
-  // Outside assistants query over MCP only while the install serves that address (c-611).
+  // Outside assistants query over MCP only while the install serves that address.
   const callers = useFlag('mcp_gateway') ? 'the API and MCP' : 'the API';
   const id = (x: string) => `${idPrefix}-${x}`;
   const table = v.searchMode === 'table_lookup';

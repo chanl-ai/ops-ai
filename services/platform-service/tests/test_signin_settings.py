@@ -1,4 +1,4 @@
-"""A workspace's sign-in providers (c-188), by failure mode (F9): a member who is not a Security team admin changes
+"""A workspace's sign-in providers, by failure mode (F9): a member who is not a Security team admin changes
 them; a provider sends new people to a team its author may not add people to; a first sign-in makes an admin; a
 domain already used by another workspace is taken over; a secret that settings do not hold is accepted and fails at
 the first sign-in; another tenant's provider is reached by id."""

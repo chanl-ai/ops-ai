@@ -1,4 +1,4 @@
-"""The call log names a replay and a same-write-running refusal for what they are (c-041), so the executions table
+"""The call log names a replay and a same-write-running refusal for what they are, so the executions table
 agrees row for row with the module's call and denied counts. Needs OPA (`make db-up`)."""
 
 from __future__ import annotations

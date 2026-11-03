@@ -1,4 +1,4 @@
-"""Layouts (c-247), by failure mode: another team's or an unscanned file read into a layout (F1); a layout read again
+"""Layouts, by failure mode: another team's or an unscanned file read into a layout (F1); a layout read again
 for every caller, or an old one served after the layout engine changed (F2); a layout read with OCR confused with one
 read without it (F2)."""
 

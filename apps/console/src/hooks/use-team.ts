@@ -16,7 +16,7 @@ const teamsQuery = { queryKey: TEAMS_KEY, queryFn: () => api.teams.list(), stale
 /**
  * Whether requests may go out for the current team: the person's teams have loaded and the current team is one of
  * them. Until then a team remembered in the tab, or the console default, may be one they do not hold, and its requests
- * would answer 404 or 403 (c-505). The shell's gate (app-shell.tsx) picks a team they hold when the current one is not.
+ * would answer 404 or 403. The shell's gate (app-shell.tsx) picks a team they hold when the current one is not.
  */
 export function useTeamReady(): boolean {
   const teamId = React.useSyncExternalStore(teamStore.subscribe, teamStore.get, teamStore.getServer);
@@ -37,7 +37,7 @@ export function useTeam() {
   const switchTeam = React.useCallback(
     (id: string) => {
       if (id === teamStore.get()) return;
-      // Nothing saved for the old team outlives the switch (c-560).
+      // Nothing saved for the old team outlives the switch.
       void wipeSavedQueries();
       setCurrentTeamId(id);
       // Teams are not team-scoped; everything else is answered for the new team.

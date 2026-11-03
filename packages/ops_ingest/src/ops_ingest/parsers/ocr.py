@@ -70,7 +70,7 @@ class TesseractEngine:
         return words
 
     def prepared(self, image: object) -> object:
-        """The page as Tesseract reads it best (c-294): turned upright, straightened, despeckled. No contrast step:
+        """The page as Tesseract reads it best: turned upright, straightened, despeckled. No contrast step:
         Tesseract's own thresholding read a uniformly faint page at every level tried, down to five grey levels."""
         return self._prepared(image)[0]
 
@@ -186,7 +186,7 @@ def _turned(image: Image.Image, angle: float) -> Image.Image:
 def _despeckled(image: object) -> object:
     """Grayscale and a 3 px median filter. Scanner speckle made Tesseract misread characters next to it (a postcode's
     "M8V" as "Mav" on the levy notice scan); a higher resolution or another page mode only moved the misread or added
-    noise, while the filter read every field of that scan (triage/c-233/capture.md)."""
+    noise, while the filter read every field of that scan."""
     if not isinstance(image, Image.Image):
         return image
     return ImageOps.grayscale(image).filter(ImageFilter.MedianFilter(3))

@@ -83,7 +83,7 @@ function columns(canManage: boolean, act: Act): ColumnDef<WorkspaceTeam>[] {
   ];
 }
 
-/** Every team of the workspace (c-198): workspace admins create, rename, archive and restore them here. */
+/** Every team of the workspace: workspace admins create, rename, archive and restore them here. */
 export default function TeamsPage() {
   const editor = useWorkspaceTeamsEditor();
   const list = useListParams<WorkspaceTeamFilters>('name');

@@ -53,7 +53,7 @@ class Idp:
     kid: str
     logins: dict[str, int] = field(default_factory=dict[str, int])
     codes: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
-    # What this provider knows of the service provider (c-197): its certificate, whether requests must be signed,
+    # What this provider knows of the service provider: its certificate, whether requests must be signed,
     # and how to encrypt assertions to it.
     sp: dict[str, Any] = field(default_factory=dict[str, Any])
 

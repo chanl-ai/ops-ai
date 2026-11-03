@@ -5,7 +5,7 @@ import type { KindNode } from '@/lib/types/widgets';
 /**
  * A Human Task as the page draws it (design: the Human Task redesign, version 2):
  * one question, the evidence for it, what to decide on, and everything else under Details. Built from today's review
- * data here, and nowhere else, so c-288's task types replace this one function. No engine words (gates, run ids, event
+ * data here, and nowhere else, so the task types replace this one function. No engine words (gates, run ids, event
  * names, raw calls) reach `question`, `evidence`, `decide` or `consequence`; they live in `details`.
  */
 export interface TaskView {
@@ -84,7 +84,7 @@ function readOf(fileId: string, fields: unknown, name: string | undefined): Docu
 }
 
 /**
- * A typed task as the page's regions (c-288): the server bound each region from the task's params, so this only
+ * A typed task as the page's regions: the server bound each region from the task's params, so this only
  * chooses the kind that draws it. The question is the header's; a document or a received email is the evidence, and a
  * message joins it when there is one; why it waits, facts, the write and the form are what the person decides on;
  * history and the engine's own facts fold under Details.
@@ -127,7 +127,7 @@ function typedView(r: Review, task: TypedTask, details: KindNode[]): TaskView {
   } else if (message) {
     (evidence.length ? evidence : decide).push({ type: 'document', name: 'Why it was asked', passage: message });
   }
-  // The AI assist (c-302) comes first when the team has it on, labelled as AI so nobody reads it as the record.
+  // The AI assist comes first when the team has it on, labelled as AI so nobody reads it as the record.
   const assist = regions.assist;
   if (assist?.pending)
     decide.push({ type: 'entity', title: 'AI assist', category: 'AI', subtitle: 'Writing a summary and a suggestion…', fields: [] });
@@ -161,7 +161,7 @@ function typedView(r: Review, task: TypedTask, details: KindNode[]): TaskView {
   const emailShown = [...evidence, ...decide].some((n) => n.type === 'email');
   const unsaid = facts.filter((f) => !inQuestion(f.value) && !(emailShown && /^(from|to|subject)$/i.test(f.label)));
   if (unsaid.length) decide.push({ type: 'entity', title: task.type.name, fields: unsaid });
-  // The write's fields as the operation labels them, worded by the API (write_preview.fields, c-508).
+  // The write's fields as the operation labels them, worded by the API (write_preview.fields).
   const described = Array.isArray(regions.write_preview?.fields) ? (regions.write_preview!.fields as Data[]) : [];
   if (described.length) {
     // A value the facts or the question already show (account, amount, reason) is said once: matched by its label, or

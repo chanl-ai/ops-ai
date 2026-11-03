@@ -1,4 +1,4 @@
-# Every merge to main is tagged `vYYYY-MM-DD.N` (What's new shows it, c-510) and then deployed to staging, so staging
+# Every merge to main is tagged `vYYYY-MM-DD.N` (What's new shows it) and then deployed to staging, so staging
 # runs main unless someone overrides it. Each step is a make target that runs the same way locally: `make release-tag`
 # (DRY=1 prints the next name) and `make stg-deploy REF=<sha>`.
 #

@@ -1,4 +1,4 @@
-"""The team's systems, one card each, for the console's Connections grid (c-580): a plugin the install offers or the
+"""The team's systems, one card each, for the console's Connections grid: a plugin the install offers or the
 team turned on, a connection, or a tool module with no connection yet. Each card is joined here (its details, how many
 tools use it, each environment's health) so the console never joins the module, connection and plugin lists itself.
 
@@ -85,7 +85,7 @@ class SystemCard(Out):
     plugin_id: str | None = None
     module_ids: list[str]
     status: str | None = None
-    # The team account's state (c-616): connected, not_signed_in, expired, refused or revoked; none for an app the
+    # The team account's state: connected, not_signed_in, expired, refused or revoked; none for an app the
     # team has not turned on and a module with no connection.
     state: AccountState | None = None
     environments: dict[str, SystemEnvironment]
@@ -101,7 +101,7 @@ CHECKED = "credential_checked"
 
 
 class AppCredential(Out):
-    """How one of the team's apps signs in (c-616 C0): Ops AI's app or the team's own OAuth client, never its secret."""
+    """How one of the team's apps signs in: Ops AI's app or the team's own OAuth client, never its secret."""
 
     # The account the credential is set on; the Credentials page opens it.
     id: str
@@ -136,26 +136,26 @@ class AppMe(Out):
 
 
 class AppAccount(Out):
-    """One of the team's accounts of the app (c-608): the default is the one calls use unless they name another."""
+    """One of the team's accounts of the app: the default is the one calls use unless they name another."""
 
     id: str
     name: str
     default: bool
     status: str
     status_detail: str | None = None
-    # Connected only after a sign-in or a passing test (c-616), as the card's.
+    # Connected only after a sign-in or a passing test, as the card's.
     state: AccountState
-    # Why it is refused or expired (c-616 S12): the system's words, or the day the sign-in ended.
+    # Why it is refused or expired: the system's words, or the day the sign-in ended.
     state_reason: str | None = None
     # Whether the caller has signed in to this account themselves, and as whom.
     mine: bool = False
     account: str | None = None
-    # The caller's own default among their sign-ins to the app (c-608).
+    # The caller's own default among their sign-ins to the app.
     pinned: bool = False
 
 
 class AppPage(Out):
-    """One app's page (c-607), joined here: its card, its account's connection, the caller's own sign-in, how many
+    """One app's page, joined here: its card, its account's connection, the caller's own sign-in, how many
     people signed in, its tools, the plugin's skills and the latest runs of its tools."""
 
     card: SystemCard
@@ -201,7 +201,7 @@ class Systems:
         self.calls = calls
 
     async def states(self, tenant_id: str, conns: list[dict[str, Any]]) -> dict[str, tuple[str, str, str | None]]:
-        """Each connection's (state, status, why) from its team account's token, read in one query (c-616)."""
+        """Each connection's (state, status, why) from its team account's token, read in one query."""
         tokens = await self.connections.store.team_tokens(tenant_id, [str(c["id"]) for c in conns])
         now = self.connections.clock()
         out: dict[str, tuple[str, str, str | None]] = {}
@@ -212,13 +212,13 @@ class Systems:
         return out
 
     async def cards(self, who: Caller, *, listed: bool = False, builtins: bool = True) -> list[dict[str, Any]]:
-        """Every app the team has; `listed`: only the Apps grid's (owner, 2026-11-01), the plugins and the apps a person
+        """Every app the team has; `listed`: only the Apps grid's, the plugins and the apps a person
         added. A built-in app has its own menu, and a connection made to hold a custom tool's address (origin "tool")
         or a module with none is reached from its tool, so neither is listed; their pages still answer. `builtins` keeps
         the built-in apps in a listed answer, for a picker where they belong (approvals: a mailbox reply)."""
         if builtins or not listed:
             # A team made before team.created reached this service has no defaults row, so the start-up catch-up never
-            # finds it: listing its built-in apps provisions them, as a first tool lookup does (c-616).
+            # finds it: listing its built-in apps provisions them, as a first tool lookup does.
             await ensure_defaults(
                 self.modules, TeamDefaults(self.modules.engine), tenant_id=who.tenant_id, team_id=who.team.id,
                 at=datetime.now(UTC),
@@ -318,7 +318,7 @@ class Systems:
             )
         built: set[str] = set()
         for app in BUILT_IN:
-            # The team's provisioned copy (c-616) when it has one; else the module of the app's older name. A module
+            # The team's provisioned copy when it has one; else the module of the app's older name. A module
             # bound to a connection is that connection's: it is served by the system, not by the platform.
             own = [m for m in modules if m.get("template_id") == template_of(app)]
             named = own or [m for m in modules if m["name"] == app["module"] and not m.get("connection_id")]
@@ -367,7 +367,7 @@ class Systems:
 
 
 async def app_credentials(systems: Systems, who: Caller) -> list[dict[str, Any]]:
-    """Each app the team set up that signs in through an OAuth app, with how (c-616 C0): only a person who manages the
+    """Each app the team set up that signs in through an OAuth app, with how: only a person who manages the
     team's apps reads them, and no secret is read."""
     systems.connections.check(who, "manage", what="app credentials")
     store = systems.connections.store
@@ -512,20 +512,20 @@ def systems_router(systems: Systems, directory: Directory) -> APIRouter:
     async def list_systems(  # pyright: ignore[reportUnusedFunction]
         who: Annotated[Caller, Depends(caller)], include: Annotated[Literal["builtin"] | None, Query()] = None
     ) -> JSONResponse:
-        """The team's apps for the Apps grid (c-580): its plugins and the apps a person added. `include=builtin` adds
-        the built-in apps, for the approval policy's app picker (owner, 2026-11-01)."""
+        """The team's apps for the Apps grid: its plugins and the apps a person added. `include=builtin` adds
+        the built-in apps, for the approval policy's app picker."""
         cards = await systems.cards(who, listed=True, builtins=include == "builtin")
         return ok([SystemCard(**c).model_dump(by_alias=True) for c in cards])
 
     @r.get("/v1/app-credentials", response_model=Envelope[list[AppCredential]])
     async def list_app_credentials(who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """The team's app credentials, for the Credentials page under Apps (c-616 C0): each app's type, permissions,
+        """The team's app credentials, for the Credentials page under Apps: each app's type, permissions,
         accounts and the last Test with my account. Team admins only; no secret."""
         return ok([AppCredential(**c).model_dump(by_alias=True) for c in await app_credentials(systems, who)])
 
     @r.get("/v1/apps/{app_id}", response_model=Envelope[AppPage])
     async def get_app(app_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """One app's page (c-607): its card, account, the caller's own sign-in, tools, skills and latest runs."""
+        """One app's page: its card, account, the caller's own sign-in, tools, skills and latest runs."""
         return ok(AppPage(**await app_page(systems, who, app_id)).model_dump(by_alias=True))
 
     return r

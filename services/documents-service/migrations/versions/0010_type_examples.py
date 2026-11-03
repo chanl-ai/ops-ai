@@ -1,4 +1,4 @@
-"""a document type's examples, from the corrections people make on its reads (c-297)
+"""a document type's examples, from the corrections people make on its reads
 
 Each correction of a read of a type keeps the field, the line its value was printed on and the corrected value, for the
 tenant, team and type; later model reads of the type are given the most recent few. One per read and field: a later

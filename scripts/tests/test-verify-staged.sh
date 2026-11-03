@@ -48,7 +48,7 @@ pp=$(ls -d "$PWD"/packages/*/src "$PWD"/services/*/src | tr '\n' ':')
 (cd services/models-service && "$root/.venv/bin/python" -I -c "import runpy, sys; sys.path[:0] = '$pp'.split(':'); sys.argv = ['check_openapi.py', '--write']; runpy.run_path('scripts/check_openapi.py', run_name='__main__')" >/dev/null)
 git add services/models-service/openapi.json
 if commit routed "$app" services/models-service/openapi.json; then echo "PASS the same change with its regenerated openapi.json goes through"; else echo "FAIL the regenerated openapi.json was refused:"; tail -5 "$tmp/routed.log"; pass=1; fi
-# A database driver imported outside a store package (the import contracts, c-346).
+# A database driver imported outside a store package (the import contracts).
 leak=services/files-service/src/ops_files/service.py
 printf 'import sqlalchemy as _sa  # probe\n' >> "$leak"
 git add "$leak"

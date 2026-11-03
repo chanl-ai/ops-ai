@@ -38,7 +38,7 @@ from .store.clock import now_iso
 log = get_logger("ops_engine.worker")
 
 MAX_PASSES = 4
-# The wait before a failed pass is tried again (owner, c-561): an outage such as a service restart is ridden out.
+# The wait before a failed pass is tried again: an outage such as a service restart is ridden out.
 PASS_WAITS = (5.0, 30.0, 120.0)
 # A write still in doubt after this many passes (backoff capped at 30 s, so about ten minutes) fails its run for a
 # person to settle: the gateway expires a stale claim to lost well before, so this is reached only when it cannot.
@@ -83,10 +83,10 @@ class WorkerHost:
     enter_run: Callable[[dict[str, Any]], None] | None = None
     # The tenant's review deadline in hours, for a review step that sets none (the workspace's reviewSlaHours).
     review_hours: Callable[[], Awaitable[float]] | None = None
-    # Records a reminder on a review still waiting (c-277), with the run and {node, iteration, n, title, openedAt,
+    # Records a reminder on a review still waiting, with the run and {node, iteration, n, title, openedAt,
     # waitedHours}: the host reports it as its `task.reminder` service event. None records only the run's own event.
     remind: Callable[[dict[str, Any], dict[str, Any]], Awaitable[None]] | None = None
-    # The URL and token an outside system resumes a step parked on its work with (c-525), from the run and its waiting
+    # The URL and token an outside system resumes a step parked on its work with, from the run and its waiting
     # state; None gives a parked step no callback, so only its event or its time limit wakes it.
     resume_link: Callable[[dict[str, Any], dict[str, Any], float], dict[str, str]] | None = None
     _cache: CompiledCache | None = field(default=None, init=False)
@@ -145,7 +145,7 @@ def plain_error(text: str) -> str:
 
 class Worker:
     def __init__(self, host: WorkerHost, beat: background.Beat | None = None) -> None:
-        """`beat` is the workflow worker's heartbeat (c-516), written from this loop's own scope, never a pass's."""
+        """`beat` is the workflow worker's heartbeat, written from this loop's own scope, never a pass's."""
         self.host, self.beat = host, beat
         self.queue = WorkQueue(host.tx, host.owner, host.leases.ttl)
         self.runs = RunStore(host.tx)
@@ -253,13 +253,13 @@ class Worker:
             log.warning("engine_claim_lost", run=run["id"], work=work.id, error=str(e))
         except WriteInDoubtError as e:
             # Whether the write happened is not known yet; never re-sent, the run is tried again later. The step ends
-            # the wait itself at its deadline (WriteUncertainError), so no pass count caps it (c-561).
+            # the wait itself at its deadline (WriteUncertainError), so no pass count caps it.
             log.warning("engine_write_in_doubt", run=run["id"], work=work.id, error=str(e))
             with suppress(LeaseSupersededError):
                 await self.runs.update(run["id"], generation=generation, status="queued", error=str(e))
                 await self.queue.release(work, min(30.0, float(2**work.attempts)), error=str(e))
         except WriteUncertainError as e:
-            # A write that may have run: the run fails now with the reason, and no pass sends it again (c-561).
+            # A write that may have run: the run fails now with the reason, and no pass sends it again.
             log.warning("engine_write_uncertain", run=run["id"], work=work.id, error=e.detail)
             with suppress(LeaseSupersededError):
                 await self._fail(run, generation, work, e.plain, e.detail)
@@ -380,7 +380,7 @@ class Worker:
         iteration = int(payload.get("iteration") or 1)
         waiting = {"node": node, "iteration": iteration, "interruptId": interrupt.id, "payload": payload}
         if payload.get("kind") == "external":
-            # A step parked on outside work (c-525): the row its event or callback finds it by is written with the
+            # A step parked on outside work: the row its event or callback finds it by is written with the
             # waiting state, and the callback's URL and token are derived now, never stored apart from the run.
             seconds = float(payload.get("timeoutSeconds") or 0)
             if self.host.resume_link is not None:
@@ -399,7 +399,7 @@ class Worker:
             await self.runs.settle_parents(run)
             await self._event(run, generation, "waiting_review", node, {"payload": payload})
         if payload.get("wakeAfterSeconds"):
-            # A step paused for a time (Wait, c-277; Run workflow's timeout, c-263) is woken by delayed work, queued
+            # A step paused for a time (Wait; Run workflow's timeout) is woken by delayed work, queued
             # once per step and iteration at the first pause: later pauses of the same step find it.
             await self.queue.enqueue(
                 run["id"],

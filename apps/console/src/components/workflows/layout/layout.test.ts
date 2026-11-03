@@ -1,4 +1,4 @@
-// The workflow layout (c-486), by failure mode: steps that touch or overlap, lines from one step crossing at it because
+// The workflow layout, by failure mode: steps that touch or overlap, lines from one step crossing at it because
 // ports were ignored, a cycle or a disconnected step breaking the layout, a step added by API sitting on the trigger,
 // placed steps moving, the baked seeds going stale, ELK failing on an unknown type, and a large workflow too slow.
 import assert from 'node:assert/strict';

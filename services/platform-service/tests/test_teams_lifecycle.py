@@ -1,4 +1,4 @@
-"""Teams as workspace admins manage them (c-198), by failure mode: a member who is not a workspace admin creates,
+"""Teams as workspace admins manage them, by failure mode: a member who is not a workspace admin creates,
 renames, archives, restores or lists every team (F1); two teams share a name in another case (F2); an archived team
 keeps acting in tokens, the switcher, a team admin's rights or new invitations (F3); a team is made with no admin or one
 from another workspace (F4); another workspace's team is changed by id (F5); the Security team is archived (F6)."""

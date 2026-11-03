@@ -21,7 +21,7 @@ export interface NavItem {
   tabTitle?: string;
   /** The icon of the parent's own sub-row, when the parent shows one beside a lone child. */
   tabIcon?: Icon;
-  /** Drawn as a row at the top of the sidebar rather than in its group (c-552); still matched for crumbs and search. */
+  /** Drawn as a row at the top of the sidebar rather than in its group; still matched for crumbs and search. */
   top?: boolean;
 }
 
@@ -35,7 +35,7 @@ export const NAV: NavGroup[] = [
     label: 'Work',
     items: [
       { title: 'Overview', url: '/', icon: IconHome, top: true },
-      // The team's customer issues, with their deadlines and timelines (c-220); workflow runs are under Workflows.
+      // The team's customer issues, with their deadlines and timelines; workflow runs are under Workflows.
       { title: 'Cases', url: '/cases', icon: IconMail },
       // Reviews is daily work for reviewers, so it sits with Cases and Chat rather than with configuration.
       { title: 'Human Tasks', url: '/reviews', icon: IconUserCheck },
@@ -48,7 +48,7 @@ export const NAV: NavGroup[] = [
     items: [
       { title: 'Agents', url: '/agents', icon: IconRobot },
       { title: 'Workflows', tabTitle: 'All workflows', url: '/workflows', icon: IconRoute, tabIcon: IconList, children: [{ title: 'Runs', url: '/workflows/runs', icon: IconPlayerPlay }] },
-      // Where workflows hear from outside: the mailboxes an Email received trigger watches (c-199).
+      // Where workflows hear from outside: the mailboxes an Email received trigger watches.
       { title: 'Channels', url: '/channels', icon: IconInbox },
       { title: 'Skills', url: '/skills', icon: IconSparkles },
       { title: 'Guardrails', url: '/guardrails', icon: IconShield },
@@ -58,10 +58,10 @@ export const NAV: NavGroup[] = [
   {
     label: 'Data Hub',
     items: [
-      // Wiki is hidden from the sidebar (owner, 2026-10-23); its pages still answer at /wiki.
+      // Wiki is hidden from the sidebar; its pages still answer at /wiki.
       // Knowledge bases decide what an agent searches and how; each KB page has its own tabs, so the row is flat.
       { title: 'Knowledge bases', url: '/knowledge', icon: IconDatabase },
-      // The Apps menu: the catalog, My accounts and Tools as tabs (owner, 11-01).
+      // The Apps menu: the catalog, My accounts and Tools as tabs.
       { title: 'Apps', url: '/integrations', icon: IconPlugConnected },
       { title: 'Tools', url: '/tools', icon: IconTool },
       // Every file the platform stores, whatever brought it in (wiki, chat, mail, imports, exports), so it sits beside the Wiki rather than under it.
@@ -128,7 +128,7 @@ export function crumbsFor(pathname: string): Crumb[] {
   if (setting) return [link('Settings', '/settings'), { label: setting.group }, ...(setting.section ? [{ label: setting.section }] : []), link(setting.title, setting.href)];
   const best = navMatch(pathname);
   if (!best) return [];
-  // The first group's pages sit at the top of the sidebar under no heading (c-552), so their trail names no group.
+  // The first group's pages sit at the top of the sidebar under no heading, so their trail names no group.
   const group: Crumb[] = best.group === NAV[0] ? [] : [{ label: best.group.label }];
   const crumbs: Crumb[] = [...group, link(best.item.title, best.item.url), ...(best.child ? [link(best.child.title, best.child.url)] : [])];
   // A group and its item can share a name (Agents › Agents); the trail names it once, keeping the item's link.

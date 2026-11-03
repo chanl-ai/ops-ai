@@ -1,4 +1,4 @@
-"""What still runs in a team, read from agents-service before a team is deleted or a workspace closed (c-529).
+"""What still runs in a team, read from agents-service before a team is deleted or a workspace closed.
 
 platform-service's one call to another service: `GET /v1/teams/usage` on agents-service with a service token naming
 the team, which agents-service caps at `workflows:view` (Settings.service_scopes["platform"]). An answer that does not

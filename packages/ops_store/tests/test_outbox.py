@@ -1,4 +1,4 @@
-"""The service event outbox (c-258), by failure mode: an event written in a transaction that rolls back is sent
+"""The service event outbox, by failure mode: an event written in a transaction that rolls back is sent
 anyway; one the receiver refuses while it is down is dropped instead of retried; a failing event holds back the ones
 behind it; an event is sent again after it was delivered; two relays deliver the same event at once."""
 

@@ -47,7 +47,7 @@ const AllLink = ({ href, label }: { href: string | null | undefined; label: stri
   ) : null;
 
 /**
- * One case (GET /v1/cases/{id}, c-291 assembled, c-292 page): what it is about, what it waits on, what is drafted and
+ * One case (GET /v1/cases/{id}): what it is about, what it waits on, what is drafted and
  * what is next. Every value, label and link comes from the response, so a new case type needs no console change.
  */
 export default function CasePage() {
@@ -72,7 +72,7 @@ export default function CasePage() {
       </PageLayout>
     );
   const c: CaseRecordDetail = query.data;
-  // A service without c-291's keys still answers; the server enforces each write either way.
+  // A service without the keys still answers; the server enforces each write either way.
   const may = c.permissions ?? { assign: true, changeStatus: true, close: true, note: true };
   const owner = c.owner?.name ?? c.assignee ?? 'Unassigned';
   const customer = c.customer?.name ?? c.customerName ?? c.customerId;
@@ -116,7 +116,7 @@ export default function CasePage() {
           <Badge variant="outline" className="font-normal" data-testid="case-priority-badge">
             {CASE_PRIORITY[c.priority]}
           </Badge>
-          {/* One timer (c-500): the case type's deadline field, else the resolution clock; first response stays in Details. */}
+          {/* One timer: the case type's deadline field, else the resolution clock; first response stays in Details. */}
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="case-timer">
             {c.timer?.label ?? 'Resolution'}{' '}
             <ClockState

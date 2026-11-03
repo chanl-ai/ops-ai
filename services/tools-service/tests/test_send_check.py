@@ -1,4 +1,4 @@
-"""Check before sending at the gateway (c-300), on the real Rego in OPA and a seeded tenant's registry, by failure mode:
+"""Check before sending at the gateway, on the real Rego in OPA and a seeded tenant's registry, by failure mode:
 a write the team's sending policy forbids runs; a judge that cannot be reached lets the write through; a retried
 payload is judged twice; with the setting off, on a read, or on a call carrying an approval, a model call is made or
 the answer changes. open_case is a write that runs without approval, so it shows the check alone."""
@@ -150,7 +150,7 @@ async def test_a_team_saves_its_sending_policy_as_versions_and_reads_the_newest(
 
 
 async def test_judgements_nobody_can_read_again_are_not_kept(engine: AsyncEngine, tenant: str) -> None:
-    """tick 31: send_checks only grew. Judgements against an older policy version go when a new one is saved, and
+    """Send_checks only grew. Judgements against an older policy version go when a new one is saved, and
     any past KEEP go as the next one is kept."""
     store = SendPolicies(engine)
     await store.save(tenant, TEAM, POLICY, by="p@x")

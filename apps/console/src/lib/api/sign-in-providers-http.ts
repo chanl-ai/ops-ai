@@ -3,7 +3,7 @@ import type { SignInProvidersApi } from './sign-in-providers-contract';
 type Get = <T>(path: string) => Promise<T>;
 type Send = <T>(method: string, path: string, body?: unknown) => Promise<T>;
 
-/** platform-service's sign-in provider routes (/v1/settings/sign-in/…, c-188 and c-195). */
+/** platform-service's sign-in provider routes (/v1/settings/sign-in/…). */
 export function createSignInProvidersHttp(get: Get, send: Send): SignInProvidersApi {
   return {
     list: () => get('/settings/sign-in/providers'),

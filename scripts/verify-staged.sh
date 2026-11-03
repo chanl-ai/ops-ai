@@ -23,7 +23,7 @@ for dep in node_modules apps/console/node_modules apps/embed/node_modules packag
   if [ -e "$root/$dep" ] && [ -d "$(dirname "$tmp/$dep")" ]; then ln -s "$root/$dep" "$tmp/$dep"; fi
 done
 cd "$tmp"
-# Each check below runs only when a staged path can change its result (c-566): a docs-only commit ran all the console's
+# Each check below runs only when a staged path can change its result: a docs-only commit ran all the console's
 # tests and read every tracked file. The thorough per-service tests run before a push (.githooks/pre-push), and the
 # full suite on each new HEAD (the QA runner) and before a snapshot leaves (repo.sh).
 mapfile -t staged < <(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --name-only --diff-filter=ACMRD || true)
@@ -69,7 +69,7 @@ gate() {
   PYTHONPATH="$export_path" "$@" >"$tmp/.gate-$name.log" 2>&1 \
     || { tail -20 "$tmp/.gate-$name.log"; echo "verify-staged: $name: $fix"; exit 1; }
 }
-# The reviewed SQL Server DDL is what the store models and migrations compile to (c-344), every revision renders
+# The reviewed SQL Server DDL is what the store models and migrations compile to, every revision renders
 # offline for SQL Server installs, and the SQL Server system principal reads what PostgreSQL's system role reads;
 # the last two reddened HEAD three times on 10-30 because only the full QA run checked them.
 gate golden-ddl '(^|/)migrations/|/store/|^packages/ops_store/|^deploy/database/' \
@@ -126,7 +126,7 @@ if [ "${#py[@]}" -gt 0 ]; then
   "$root/.venv/bin/ruff" check "${py[@]}"
   "$root/.venv/bin/ruff" format --check "${py[@]}"
 fi
-# Database code only in store packages, and the layers' import directions (.importlinter, c-346), on this export: the
+# Database code only in store packages, and the layers' import directions (.importlinter), on this export: the
 # shared venv's editable installs point at the working tree, so the export's source goes first on PYTHONPATH.
 if [ "${#py[@]}" -gt 0 ] || [ -n "$(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --name-only -- .importlinter)" ]; then
   PYTHONPATH="$(ls -d "$PWD"/packages/*/src "$PWD"/services/*/src 2>/dev/null | tr '\n' ':')" "$root/.venv/bin/lint-imports" --no-logo --no-cache
@@ -152,7 +152,7 @@ if [ "${#py[@]}" -gt 0 ] || [ "${#docs[@]}" -gt 0 ]; then
       || { echo "verify-staged: $svc/openapi.json does not match the committed app; run make -C $svc openapi and stage it"; exit 1; }
   done
 fi
-# Database-specific code outside ops_store (c-343), on this export with its own checker and baseline (an export whose
+# Database-specific code outside ops_store, on this export with its own checker and baseline (an export whose
 # checker predates the strict rule skips it); --commits reads the repository for a raised row without its trailer.
 base_staged=$(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --name-only -- portable-baseline.txt)
 if grep -q -- '--commits' scripts/check_portable_store.py && { [ "${#py[@]}" -gt 0 ] || [ -n "$base_staged" ]; }; then

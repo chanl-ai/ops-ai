@@ -1,4 +1,4 @@
-"""Approvals are off by default and roles decide when they are on (owner, 2026-11-01; c-616), by failure mode:
+"""Approvals are off by default and roles decide when they are on, by failure mode:
 
 - a write nobody turned approval on for still waits for a token;
 - a team that lists an app in appWritesNeedApproval has that app's writes run without one;

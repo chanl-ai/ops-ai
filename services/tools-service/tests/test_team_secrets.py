@@ -1,4 +1,4 @@
-"""A team's secrets are its own (c-186, owner 2026-10-17; one team per secret, c-509), by failure mode: a builder
+"""A team's secrets are its own (one team per secret), by failure mode: a builder
 refused a secret for their own team's tools, a builder reading or writing another team's secret, a caller still
 limiting a secret to several teams, a builder changing the egress list, and the `securityTeamAddsSecrets` policy not
 moving those writes back to the Security team."""

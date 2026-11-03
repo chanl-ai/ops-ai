@@ -6,7 +6,7 @@ import type { CardFact, CardStatus, CardStep, OpsCardRef, OpsCardSpec } from '@/
 import { dateTime, money } from './format.ts';
 
 /**
- * A card's record as its card draws it (c-469): the facts a person decides on, formatted by type, never raw JSON or
+ * A card's record as its card draws it: the facts a person decides on, formatted by type, never raw JSON or
  * engine keys. Pure, so each record type's rules are tested without a page.
  */
 

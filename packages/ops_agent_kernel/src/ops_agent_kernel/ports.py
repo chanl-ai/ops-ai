@@ -16,7 +16,7 @@ class ToolOutcome:
     output: Any
     # A view payload (spec 07 CD-4) the tool returned with its result, rendered as a widget by the host.
     view: dict[str, Any] | None = None
-    # Why the call must wait for a person before it runs (the gateway's check before sending, c-300); the kernel
+    # Why the call must wait for a person before it runs (the gateway's check before sending); the kernel
     # pauses the turn for approval with it, as a gated write's.
     needs_review: str | None = None
 

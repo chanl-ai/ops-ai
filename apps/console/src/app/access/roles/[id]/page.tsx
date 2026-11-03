@@ -10,7 +10,7 @@ import { QueryError } from '@/components/shared/query-states';
 import { Badge } from '@/components/ui/badge';
 import { useRole } from '@/hooks/me-queries';
 
-/** A role's grid (c-150): one row per area, one column per action, each cell All, Own or empty. Built-ins are read-only. */
+/** A role's grid: one row per area, one column per action, each cell All, Own or empty. Built-ins are read-only. */
 export default function RolePage() {
   const { id } = useParams<{ id: string }>();
   const role = useRole(id);

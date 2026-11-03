@@ -52,7 +52,7 @@ export interface paths {
         put?: never;
         /**
          * Check Access
-         * @description Whether a person may take `area.action` in the team the request acts in (c-150), by the same `can()` the
+         * @description Whether a person may take `area.action` in the team the request acts in, by the same `can()` the
          *     services run with the workspace's policies: allowed with the granting roles, or refused with the reason. The
          *     caller needs access.view there; each check is audited as access.check.
          */
@@ -73,7 +73,7 @@ export interface paths {
         /**
          * Access Holders
          * @description Which roles grant `area.action` in a team (the Security team for its actions), and who holds them there:
-         *     what a "View only" notice names (c-186). The team is `team`, the record's, when the page shows another team's
+         *     what a "View only" notice names. The team is `team`, the record's, when the page shows another team's
          *     record, else the one the request acts in; a member of that team, or a workspace admin, may ask.
          */
         get: operations["access_access_holders"];
@@ -94,7 +94,7 @@ export interface paths {
         };
         /**
          * Api Key Summaries
-         * @description Every team's keys in the workspace with what each serves (c-246): for agents-service's list of API channels
+         * @description Every team's keys in the workspace with what each serves: for agents-service's list of API channels
          *     (a service token with the `settings:view` scope), or for a person who manages access across the workspace
          *     (`can('access', 'manage')` in every team), as an admin may do everything.
          */
@@ -287,7 +287,7 @@ export interface paths {
         /**
          * Saml Metadata
          * @description The SAML service provider metadata a bank's identity provider imports: entity id, consumer URL and the
-         *     certificate for signed requests and encrypted assertions (c-197). Public: it holds nothing secret.
+         *     certificate for signed requests and encrypted assertions. Public: it holds nothing secret.
          */
         get: operations["auth_saml_metadata"];
         put?: never;
@@ -548,7 +548,7 @@ export interface paths {
         /**
          * Why Not
          * @description Whether the caller may take `area.action` in the team they act in, and if not why, which roles grant it
-         *     and who in the team can give roles (c-150): the reason a locked button gives.
+         *     and who in the team can give roles: the reason a locked button gives.
          */
         get: operations["me_why_not"];
         put?: never;
@@ -568,7 +568,7 @@ export interface paths {
         };
         /**
          * People Names
-         * @description Every person's display name in the workspace by email (c-201), so a list naming who did something shows a
+         * @description Every person's display name in the workspace by email, so a list naming who did something shows a
          *     name rather than an address. Any member reads them; a service token needs the `settings:view` scope.
          */
         get: operations["people_people_names"];
@@ -631,7 +631,7 @@ export interface paths {
         /**
          * Get Policy
          * @description One policy of the workspace. Any member reads it; a service token needs the
-         *     `settings:view` scope and reads its own tenant's value, as a background job with no person does (c-206's
+         *     `settings:view` scope and reads its own tenant's value, as a background job with no person does (the
          *     memory sweep). 400 `policy_value` for a key the catalogue does not hold.
          */
         get: operations["policies_get_policy"];
@@ -716,7 +716,7 @@ export interface paths {
         put?: never;
         /**
          * Remove Members
-         * @description The owner is never removed here: 409 `owner_must_transfer` (c-529).
+         * @description The owner is never removed here: 409 `owner_must_transfer`.
          */
         post: operations["members_remove_members"];
         delete?: never;
@@ -770,7 +770,7 @@ export interface paths {
         put?: never;
         /**
          * Change Roles
-         * @description The owner is never demoted here: 409 `owner_must_transfer` (c-529).
+         * @description The owner is never demoted here: 409 `owner_must_transfer`.
          */
         post: operations["members_change_roles"];
         delete?: never;
@@ -1016,8 +1016,8 @@ export interface paths {
         };
         /**
          * Read Workspace Teams
-         * @description The workspace's security team and the team new people join when nothing else names one (c-202). A workspace
-         *     admin reads them; a service token needs the `settings:view` scope and reads its own tenant's (c-230).
+         * @description The workspace's security team and the team new people join when nothing else names one. A workspace
+         *     admin reads them; a service token needs the `settings:view` scope and reads its own tenant's.
          */
         get: operations["teams_read_workspace_teams"];
         /**
@@ -1041,7 +1041,7 @@ export interface paths {
         };
         /**
          * Team Names
-         * @description Every team's display name in the workspace (c-224), so a page showing another team's record names its team.
+         * @description Every team's display name in the workspace, so a page showing another team's record names its team.
          *     Any member reads them; a service token needs the `settings:view` scope and reads its own tenant's.
          */
         get: operations["teams_team_names"];
@@ -1062,7 +1062,7 @@ export interface paths {
         };
         /**
          * List Teams
-         * @description The teams the caller may switch to: their own, and every active team for a workspace admin (c-208).
+         * @description The teams the caller may switch to: their own, and every active team for a workspace admin.
          */
         get: operations["teams_list_teams"];
         put?: never;
@@ -1147,7 +1147,7 @@ export interface paths {
         put?: never;
         /**
          * Transfer Workspace
-         * @description The owner hands the workspace to an account admin, at once and audited (c-529); the old owner stays an
+         * @description The owner hands the workspace to an account admin, at once and audited; the old owner stays an
          *     admin. Only the owner (`workspace.manage`); 409 `not_an_account_admin` for a target without access.manage in
          *     every team.
          */
@@ -1245,7 +1245,7 @@ export interface components {
         };
         /**
          * ApiKeySummary
-         * @description A key as another service lists it (c-246): what it serves and whether it works.
+         * @description A key as another service lists it: what it serves and whether it works.
          */
         ApiKeySummary: {
             /** Createdat */
@@ -1779,7 +1779,7 @@ export interface components {
         };
         /**
          * FlagOut
-         * @description One feature flag of the install (c-611): on only when the install config names it in OPS_FLAGS.
+         * @description One feature flag of the install: on only when the install config names it in OPS_FLAGS.
          */
         FlagOut: {
             /** Description */
@@ -1838,7 +1838,7 @@ export interface components {
         };
         /**
          * GroupSettings
-         * @description Identity provider groups to team memberships (c-202): `source` is the OIDC claim or SAML attribute that lists
+         * @description Identity provider groups to team memberships: `source` is the OIDC claim or SAML attribute that lists
          *     the person's groups (default `groups`).
          */
         GroupSettings: {
@@ -1951,7 +1951,7 @@ export interface components {
         /**
          * JitSettings
          * @description Where a person new to the workspace lands on their first sign-in through this provider: the team, or with no
-         *     team the workspace's default team (c-202).
+         *     team the workspace's default team.
          */
         JitSettings: {
             /** Role */
@@ -1990,7 +1990,7 @@ export interface components {
         };
         /**
          * KeyTarget
-         * @description What an API key may start (c-246). `version` pins a workflow version; null runs the live one.
+         * @description What an API key may start. `version` pins a workflow version; null runs the live one.
          */
         KeyTarget: {
             /** Id */
@@ -2491,7 +2491,7 @@ export interface components {
         };
         /**
          * TeamDeleteCheckOut
-         * @description Whether a team may be deleted now and why not (c-529): the Delete card reads it in one call.
+         * @description Whether a team may be deleted now and why not: the Delete card reads it in one call.
          */
         TeamDeleteCheckOut: {
             /** Candelete */
@@ -2616,7 +2616,7 @@ export interface components {
         };
         /**
          * WorkspaceStateOut
-         * @description The workspace's owner and status (c-529): `purgeAfter` is when a closed workspace's records go, else null.
+         * @description The workspace's owner and status: `purgeAfter` is when a closed workspace's records go, else null.
          */
         WorkspaceStateOut: {
             /** Owneruserid */
@@ -2631,7 +2631,7 @@ export interface components {
         };
         /**
          * WorkspaceTeamOut
-         * @description A team as a workspace admin sees it (c-198): counts joined by the service.
+         * @description A team as a workspace admin sees it: counts joined by the service.
          */
         WorkspaceTeamOut: {
             /** Admincount */

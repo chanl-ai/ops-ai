@@ -1,4 +1,4 @@
-"""A page written in the console (c-094 T004), by failure mode: a page that is stored but never indexed, a page that
+"""A page written in the console, by failure mode: a page that is stored but never indexed, a page that
 cannot be found by a question, a second save under the same title made a second document, and an empty page saved."""
 
 from __future__ import annotations

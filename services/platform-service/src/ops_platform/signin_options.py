@@ -1,4 +1,4 @@
-"""What sign-in needs from settings beyond the database, gathered once at start-up (c-188)."""
+"""What sign-in needs from settings beyond the database, gathered once at start-up."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from ops_signin.dns import TxtResolver
 
 @dataclass(frozen=True)
 class Limits:
-    """How many wrong passwords lock a person and for how long, and how many reset links one person is sent (c-196)."""
+    """How many wrong passwords lock a person and for how long, and how many reset links one person is sent."""
 
     max_failures: int = 5
     failure_window_s: int = 900
@@ -40,7 +40,7 @@ class SignInOptions:
     transport: httpx.AsyncBaseTransport | None = None
     dns: TxtResolver = field(default_factory=TxtResolver)
     limits: Limits = field(default_factory=Limits)
-    # The SAML service provider's key and certificate, PEM (c-197); both or neither.
+    # The SAML service provider's key and certificate, PEM; both or neither.
     saml_sp_key: SecretStr | None = None
     saml_sp_certificate: str | None = None
 

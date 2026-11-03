@@ -1,4 +1,4 @@
-"""One-click sign-in for the seeded demo people (c-504), by failure mode: the routes answering outside dev, where the
+"""One-click sign-in for the seeded demo people, by failure mode: the routes answering outside dev, where the
 seeded people share one public password; the password reaching the browser; a click signing in someone who is not a
 seeded demo person."""
 

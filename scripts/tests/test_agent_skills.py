@@ -1,4 +1,4 @@
-"""The developer skills' generator (c-554), one test per failure mode: a generated file edited by hand, a skill named
+"""The developer skills' generator, one test per failure mode: a generated file edited by hand, a skill named
 like a process skill, a page with no proof block, and an instructions file grown past what Copilot reads."""
 
 from __future__ import annotations

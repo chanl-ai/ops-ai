@@ -1,4 +1,4 @@
-"""The scopes an operation needs a person's own sign-in to hold (c-558)
+"""The scopes an operation needs a person's own sign-in to hold
 
 `module_operations.scopes` lists them; a personal token lacking one answers CONNECTION_NOT_LINKED with reason
 insufficient_scope and a link asking for the union. `oauth_states.scopes` keeps what a sign-in asked for, which is what

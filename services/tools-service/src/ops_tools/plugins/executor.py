@@ -1,4 +1,4 @@
-"""Runs a plugin's Python tool in this process, after the gateway has decided the call (c-564).
+"""Runs a plugin's Python tool in this process, after the gateway has decided the call.
 
 The function gets a Context: the team's merged settings, an HTTP client and a deadline. The client is the only way out:
 it sends to the module's egress hosts (rendered from the team's settings) and nowhere else, through the tenant's egress
@@ -6,7 +6,7 @@ policy, with the credential the call's sign-in setting picks, and the function n
 listing's next-page address is sealed to the tenant, the connection and the tool before it leaves, and a cursor comes
 back only if it opens for the same three, so a caller cannot choose a host the token is sent to.
 
-A data tool that pages, builds a query or has inputs to check runs here too (c-581): each value is checked against its
+A data tool that pages, builds a query or has inputs to check runs here too: each value is checked against its
 manifest input and written into the query by its format (ops_plugin_sdk.formats), so a model's value cannot change the
 query; then the http executor sends it. An agent's call gets one page and a sealed `next_cursor` for the next; a page
 address the system answered is followed only as a GET to one of the module's hosts, carrying the connection's sign-in
@@ -78,7 +78,7 @@ class PluginExecutor:
         if plugin is None:
             return _failure("PLUGIN_DISABLED", f"{module['display_name']} is not installed on this service.")
         name = str(op["name"]).removeprefix(f"{plugin.manifest.short}_")
-        # The team's version of the tool (c-609), so a query or paged tool runs as the team's version declared it.
+        # The team's version of the tool, so a query or paged tool runs as the team's version declared it.
         tool = self.host.tool_for(module, plugin, name)
         if tool is not None and tool.request is not None:
             return await self._data(tool, module, op, args, actor=actor, environment=environment, acting_for=acting_for)
@@ -89,7 +89,7 @@ class PluginExecutor:
         except AuthFailed as e:
             return ToolOutcome(False, {"error": {"code": e.code, "message": str(e), "side": OURS}})
         # A Python tool sees what the system answers, and a system may repeat the request's sign-in back; nothing it
-        # returns or raises may carry the connection's credential, as the http executor's answers never do (c-588).
+        # returns or raises may carry the connection's credential, as the http executor's answers never do.
         used = scrubbed_values({f"connection:{n}": v for n, v in enumerate(prepared.values if prepared else [])})
         outcome = await self._python(plugin, tool, module=module, op=op, args=args, prepared=prepared)
         return replace(outcome, output=scrub(outcome.output, used))
@@ -120,7 +120,7 @@ class PluginExecutor:
                 await policy.check_url(tenant, url)
             except EgressDenied as e:
                 raise PluginEgressDenied(str(e)) from e
-            # The plugin's headers first, then the connection's, which win over a name they share (c-584).
+            # The plugin's headers first, then the connection's, which win over a name they share.
             headers = {**plugin_headers, **(dict(prepared.headers) if prepared else {})}
             query = {**(dict(params or {})), **(dict(prepared.params) if prepared else {})}
             r = await client.request(

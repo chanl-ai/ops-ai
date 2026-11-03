@@ -1,4 +1,4 @@
-"""A stuck call never hangs a run (c-558), by failure mode: a hand-built body template quotes a placeholder, which is
+"""A stuck call never hangs a run, by failure mode: a hand-built body template quotes a placeholder, which is
 filled in as JSON and so can never make a request, and the executor fails on a call in a way it does not answer for,
 which left a write's row running so the engine could neither retry the step nor end it. Needs OPA (`make db-up`)."""
 

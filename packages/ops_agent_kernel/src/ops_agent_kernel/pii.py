@@ -1,4 +1,4 @@
-"""Personal data masked in what people see (c-293): SSNs and their last four, card and account
+"""Personal data masked in what people see: SSNs and their last four, card and account
 numbers, emails and phone numbers. The model still sees the real values, so a turn can chain calls on an account id;
 only what a turn shows and returns is masked: its streamed text, its answer, its structured output, the tool calls
 it records and the passages it cites. Names are not masked: no pattern finds them without a model call.
@@ -12,8 +12,8 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, cast
 
-# The patterns and whole-text masking live in ops_pii, which services that are not agents use too (documents' examples,
-# c-297); they are re-exported here so every caller of ops_agent_kernel.pii is unchanged.
+# The patterns and whole-text masking live in ops_pii, which services that are not agents use too (documents' examples);
+# they are re-exported here so every caller of ops_agent_kernel.pii is unchanged.
 from ops_pii import HOLD, StreamMasker, mask
 
 from .types import CitationRef, ToolCallRecord, TurnResult

@@ -1,9 +1,9 @@
-"""connection_isolation: an app's accounts and their history are held to their team by the database (c-616 C2)
+"""connection_isolation: an app's accounts and their history are held to their team by the database
 
 connections and connection_audit were filtered only by the team clauses the store wrote; the sign-in rows under them
 were already held (tools_0044). connection_audit now carries its connection's team, written with each row, and both
 tables carry the generated team policy for ops_tools_tenant, the role every connection-store transaction runs as.
-History whose connection is gone has no team to take and is deleted (existing rows are test data, owner 2026-10-26).
+History whose connection is gone has no team to take and is deleted (existing rows are test data).
 
 Revision ID: tools_0057_connection_isolation
 Revises: tools_0056_module_connections

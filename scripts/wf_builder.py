@@ -1,4 +1,4 @@
-"""What the /wf-builder skill runs (c-535): draw a workflow from what a developer wants, check it with the engine,
+"""What the /wf-builder skill runs: draw a workflow from what a developer wants, check it with the engine,
 and create it only when they say so, on the profile they name.
 
     uv run python scripts/wf_builder.py <command> ...   (the SDK comes from sdk/python)
@@ -13,7 +13,7 @@ and create it only when they say so, on the profile they name.
 created without `--create`; on a profile that is not local (named other than `local`, or not on this machine) the
 workflow id must also be typed back. Creating acts as a person (OPS_TOKEN, or the profile's accessToken); an API key
 reads and validates only. Every call goes through the Python SDK on the named profile (the ops CLI is not
-built yet, c-527): the node catalog is read live from that profile, never from a copy.
+built yet): the node catalog is read live from that profile, never from a copy.
 """
 
 from __future__ import annotations

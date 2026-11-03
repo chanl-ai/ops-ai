@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""A file's layout (c-247): pages, blocks and table cells with ids, boxes as fractions of the page from the top left,
+"""A file's layout: pages, blocks and table cells with ids, boxes as fractions of the page from the top left,
 and reading order, and words with a confidence (1.0 on a text layer, Tesseract's on OCR). One layout is read once per
 file and shared by extraction, highlights, templates and classify; `page_text` renders the text an extraction reads.
 

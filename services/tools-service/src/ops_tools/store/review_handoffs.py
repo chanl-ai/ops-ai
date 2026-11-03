@@ -1,4 +1,4 @@
-"""What the start-up hand-over of reviews reads and marks (c-163, c-222, `modules.review_handoff`): the modules' teams,
+"""What the start-up hand-over of reviews reads and marks (`modules.review_handoff`): the modules' teams,
 the versions waiting for a review Reviews has not opened, and open tool access requests."""
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ class ReviewHandoffs:
             )
 
     async def open_access(self) -> list[dict[str, Any]]:
-        """Workflow requests for a module's operations still open and not yet a system workflow run (c-257): none
+        """Workflow requests for a module's operations still open and not yet a system workflow run: none
         recorded, or a review opened in Reviews before requests ran as workflows (TAR-)."""
         a = module_approvals
         async with self.engine.connect() as c:

@@ -7,7 +7,7 @@ import { readConfig } from './config';
 const CONSOLE = process.env.OPS_CONSOLE_URL ? new URL(process.env.OPS_CONSOLE_URL).origin : null;
 
 /**
- * `frame-ancestors` for the chat page from the deployment's listed origins (c-158), plus the console's for its preview:
+ * `frame-ancestors` for the chat page from the deployment's listed origins, plus the console's for its preview:
  * only those pages may frame it. An unknown or paused deployment, or a failed read, answers `'none'`, so the page never
  * falls open.
  */

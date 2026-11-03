@@ -1,4 +1,4 @@
-"""The stricter rules an admin may switch on for a workspace (c-186). Each policy's default is open, the AI uses
+"""The stricter rules an admin may switch on for a workspace. Each policy's default is open, the AI uses
 aside (aiSteps, taskAssist, checkBeforeSend): a new workspace meets no control until an admin sets one, and every value
 is changed through `can(settings, manage)` in the security team. platform-service stores the values per tenant and puts
 them on every token; services read them there with `policy(p, key)`."""
@@ -27,7 +27,7 @@ class Policy:
     # A value per team ({team: value}): a change sets the acting team's part only, checked in that team.
     per_team: bool = False
     # Read live from platform-service on each decision (GET /v1/policies/{key}), never carried in a token, so a change
-    # applies at once rather than at the next token refresh (owner, 2026-10-18).
+    # applies at once rather than at the next token refresh.
     live: bool = False
     # A short name for the Policies page, so a new policy is drawn there with no console change.
     title: str = ""
@@ -36,7 +36,7 @@ class Policy:
 KINDS = ("bool", "floor", "days", "hours", "publish_modes", "plugins", "names")
 
 
-# Which publishes wait for a second person's review (c-086, moved here by c-214), per team and area:
+# Which publishes wait for a second person's review (moved here), per team and area:
 #   always  every publish opens a review, in dev too
 #   major   a major change opens a review; a minor one publishes at once (the default)
 #   never   a publish goes live at once, unless it is a security change
@@ -55,7 +55,7 @@ POLICIES: tuple[Policy, ...] = (
     Policy(
         "extractionFloor",
         # A quality threshold, not an access rule: its default is the engine's floor (ops_extract.checks.DEFAULT_FLOOR),
-        # so moving it into settings changes no running workspace (owner via orch, 2026-10-17).
+        # so moving it into settings changes no running workspace.
         0.8,
         "The lowest confidence an Extract from file step may accept; no step can ask for less.",
         kind="floor",
@@ -80,7 +80,7 @@ POLICIES: tuple[Policy, ...] = (
     ),
     Policy(
         "chatThreadsOwnerOnly",
-        # People's chats stay private by default (owner via orch, 2026-10-17); off lets the team's admins read them.
+        # People's chats stay private by default; off lets the team's admins read them.
         True,
         "Each chat thread is read only by the person who started it. Off: the team's admins read them too.",
         title="Private chat threads",
@@ -90,7 +90,7 @@ POLICIES: tuple[Policy, ...] = (
         None,
         "How long agents keep what they remember about each person. Unset: kept until the person removes it.",
         kind="days",
-        # Any team admin sets it (owner, 2026-10-17), not only the security team.
+        # Any team admin sets it, not only the security team.
         changed_by=("chat", "manage"),
         title="Memory retention",
     ),
@@ -105,7 +105,7 @@ POLICIES: tuple[Policy, ...] = (
     ),
     Policy(
         "toolWritesNeedApproval",
-        # Approvals are off by default (owner, 2026-11-01): no team set, a write waits only when its tool's own switch
+        # Approvals are off by default: no team set, a write waits only when its tool's own switch
         # is on or its app is listed in appWritesNeedApproval; when one waits, a person holding reviews.decide is not
         # asked.
         {},
@@ -117,7 +117,7 @@ POLICIES: tuple[Policy, ...] = (
     ),
     Policy(
         "appWritesNeedApproval",
-        # Off by default like every approval (owner, 2026-11-01): a team lists the apps whose writes wait, by the id
+        # Off by default like every approval: a team lists the apps whose writes wait, by the id
         # the Apps page shows (plugin:<id>, a connection's id, or module:<id>).
         {},
         "Writes from the listed apps wait for a person's approval. Other writes run unless their tool asks for one.",
@@ -129,8 +129,8 @@ POLICIES: tuple[Policy, ...] = (
     ),
     Policy(
         "aiSteps",
-        # The one policy whose default holds something back: no team has AI steps until it turns them on (owner,
-        # 2026-10-18, c-298). No team set: off everywhere.
+        # The one policy whose default holds something back: no team has AI steps until it turns them on.
+        # No team set: off everywhere.
         {},
         "The team's workflows may use AI steps: Classify, Summarise, Extract from text, Draft. Off until turned on.",
         changed_by=("workflows", "manage"),
@@ -140,7 +140,7 @@ POLICIES: tuple[Policy, ...] = (
     ),
     Policy(
         "taskAssist",
-        # Off until a team turns it on, as aiSteps (owner, 2026-10-18, c-302).
+        # Off until a team turns it on, as aiSteps.
         {},
         "A typed task opens with AI help: its question, a summary, doubtful fields and a suggestion. Off until on.",
         changed_by=("workflows", "manage"),
@@ -150,7 +150,7 @@ POLICIES: tuple[Policy, ...] = (
     ),
     Policy(
         "checkBeforeSend",
-        # Off until a team turns it on, as aiSteps (owner, 2026-10-18, c-300).
+        # Off until a team turns it on, as aiSteps.
         {},
         "Every write the team sends is checked against its sending policy first; a failure waits for a person.",
         changed_by=("workflows", "manage"),
@@ -160,7 +160,7 @@ POLICIES: tuple[Policy, ...] = (
     ),
     Policy(
         "pageImages",
-        # Off until a team turns it on, as aiSteps (owner, 2026-10-18, c-295): the page image leaves for the model
+        # Off until a team turns it on, as aiSteps: the page image leaves for the model
         # provider, so the Security team decides which teams may send it, and a document type turns it on under that.
         {},
         "Document types in the team may show the model the page image of a scan or a doubtful field. Off until on.",
@@ -170,8 +170,8 @@ POLICIES: tuple[Policy, ...] = (
     ),
     Policy(
         "aiStepsMaskPersonalData",
-        # Masks by default, as an agent's redactPii does (owner, 2026-10-19, c-321); a team turns it off with false. It
-        # covers what people see of a document type's examples too (c-297); the key stays, a generic name comes later.
+        # Masks by default, as an agent's redactPii does; a team turns it off with false. It
+        # covers what people see of a document type's examples too; the key stays, a generic name comes later.
         {},
         "People see SSNs, card and account numbers, emails and phones masked in AI steps' output and in document type "
         "examples. A team may turn it off.",
@@ -182,7 +182,7 @@ POLICIES: tuple[Policy, ...] = (
     ),
     Policy(
         "plugins",
-        # No plugin is on until the platform admin turns it on for the install (c-564); teams then turn it on for
+        # No plugin is on until the platform admin turns it on for the install; teams then turn it on for
         # themselves. A plugin's entry may also lock settings every team uses ({"api_version": "61.0"}).
         {},
         "Which installed plugins teams may turn on, and the settings fixed for every team.",
@@ -250,7 +250,7 @@ def check_value(key: str, value: Any) -> Any:
             fixed = cast(dict[Any, Any], locked)
             if not all(isinstance(k, str) and isinstance(v, str | int | float | bool) for k, v in fixed.items()):
                 break
-            # The platform's own OAuth app for the plugin (c-565): its client id only; the secret is sealed in
+            # The platform's own OAuth app for the plugin: its client id only; the secret is sealed in
             # tools-service at the account and never travels in a policy.
             client: object = e.get("client")
             if client is not None and not _app_client(client):

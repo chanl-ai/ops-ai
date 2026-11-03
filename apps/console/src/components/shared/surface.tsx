@@ -116,7 +116,7 @@ export function StatTile({ label, value, hint, tone = 'default', href }: { label
 }
 
 /** Label and value pairs for summaries and review steps; values wrap instead of truncating. Each pair is a FieldRow, so
- * the label sits above its value in a narrow panel, as on every record rail (c-434). */
+ * the label sits above its value in a narrow panel, as on every record rail. */
 export function KeyValues({ rows }: { rows: [string, ReactNode][] }) {
   return (
     <div>

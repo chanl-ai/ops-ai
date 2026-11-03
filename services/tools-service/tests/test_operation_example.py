@@ -1,4 +1,4 @@
-"""An operation's example answer is its default mock (c-616 D3a), by failure mode: the example and the mocks are two
+"""An operation's example answer is its default mock, by failure mode: the example and the mocks are two
 homes that disagree, so Mock answers one thing and the mock list shows another; a mock made for one team's operation
 answers another team's operation of the same name; and a system with no upstream stops answering in production once
 its example moves to a test-only mock."""

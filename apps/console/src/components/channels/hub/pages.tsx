@@ -32,7 +32,7 @@ const CONNECT: Partial<Record<ChannelType, { label: string; href: string; note?:
   api: { label: 'Open API keys', href: '/settings/api-keys', note: 'A system calls the API with a key from Settings › API keys; each key acts for its team.' },
 };
 
-/** Channels: one card per kind, then every connection with what it serves, its health and traffic (c-242). */
+/** Channels: one card per kind, then every connection with what it serves, its health and traffic. */
 export function ChannelsHubPage() {
   const params = useSearchParams();
   const fromDeployments = params.get('from') === 'deployments';
