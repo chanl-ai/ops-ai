@@ -57,19 +57,24 @@ its operation name.
 |---|---|---|
 | `path` | `{input}` for a path segment, URL-encoded; give the input a `pattern` so a value cannot change the path | `"/repos/{owner}/{repo}/issues/{number}"` |
 | `query` | A map of parameter names to text; `{{input}}` is checked and written by its `enum` or `format` (below), and text with no `{{...}}` is sent as written | `{state: "{{state}}", per_page: "50"}` |
-| `body` | One string of JSON. Each `{{input}}` is written as JSON, quotes included, so it is never put inside quotes | `'{"body": {{body}}}'` sends `{"body": "Seen again on \"Leeds\"."}`; `"{{fields}}"` sends a whole object input |
+| `body` | One string of JSON. Each `{{input}}` is written as JSON, quotes included, so it is never put inside quotes; validate refuses one in quotes, one naming no input, and a body that is not JSON once the inputs are written in | `'{"body": {{body}}}'` sends `{"body": "Seen again on \"Leeds\"."}`; `"{{fields}}"` sends a whole object input |
 | `form` | A map for a form-encoded body (Headers, forms and sign-in steps) | Slack's `chat.postMessage` |
 
 
 ## Paging and queries
 
-A listing tool says how it reaches its next page in `request.paging`, with one of three rules:
+A listing tool says how it reaches its next page in `request.paging`, with one of five rules:
 
 | Rule | Fields | Example |
 |---|---|---|
 | `link` | `next`: the answer field holding the next page's address | Salesforce's `nextRecordsUrl`, Graph's `@odata.nextLink` |
+| `link_header` | none: the next page's address is the answer's `Link` header, `rel="next"` | GitHub, GitLab |
 | `token` | `next`: the answer field holding a token; `param`: the parameter it is sent back as | Salesforce UI API's `nextPageToken`, sent as `pageToken` |
 | `offset` | `items`: the answer's list; `limit`: the page size; `offset_param` and `limit_param` when not `offset` and `limit` | Salesforce's `parameterizedSearch`, with `limit_param: overallLimit` |
+| `page` | `limit`: the page size; `param` (default `page`) and `limit_param` (default `limit`); `start`, the first page's number (default 1); `items` when the list is not the whole answer | An API that takes `page=2&per_page=50` |
+
+With `offset` and `page`, a page shorter than `limit` is the last. A list answer that pages is returned as
+`{records: [...], next_cursor}` while there is a next page, and as the list on the last one.
 
 An agent's call gets one page and a `next_cursor`, and asks again with the cursor alone for the next. tools-service
 seals the cursor to the tenant, the connection and the tool, so a caller cannot change it or use it on another tool. A
@@ -181,12 +186,10 @@ Fake(client, token))`, where `client` is an `httpx.Client` bound to a fake of th
 `httpx.MockTransport(handler)` with a handler that answers like the system (`tests/test_tools.py` in Salesforce,
 `tests/fake_github.py` in GitHub).
 
-`testing.call` differs from tools-service in two ways a test should know:
-
-| tools-service | `testing.call` |
-|---|---|
-| Fills an input's `default` when a call leaves it out | Sends the template with the input empty, so test a default on a local stack (below) |
-| Sends the plugin's and the tool's `headers` | Sends only the bearer token, so assert headers on the manifest (`plugin.manifest.headers`) |
+`testing.call` builds the request with the same kit functions tools-service uses: each input left out as its
+`default`, the plugin's and the tool's `headers` (a header naming an unset setting left out), then the bearer token,
+which wins a name they share. A paged tool answers one page and a `next_cursor` that is the page state as plain JSON,
+which a test passes back as `{"cursor": ...}`.
 
 ## Try a plugin on a local stack
 
@@ -198,7 +201,7 @@ names are and to trust that certificate. GitHub's `tests/fake_github.py` does th
 | Step | How |
 |---|---|
 | 1. Start the stack with sign-in and fakes | `make up AUTH=platform DEMO_MODEL=fake`; in a lane add `OPS_STACK_FAKES=1` (CONTRIBUTING, Lanes) |
-| 2. Install the plugin | `uv run ops plugin install <plugin folder>`, then `make restart SVC=tools` and `make restart SVC=kb` |
+| 2. Install the plugin | `uv run ops plugin install <plugin folder>`, then `make restart SVC=tools` and `make restart SVC=kb`, each with `AUTH=platform` in a lane |
 | 3. Serve the fake | `uv run --directory services/tools-service python <plugin>/tests/fake_github.py --dir .run/fake-github`; it prints its address, certificate and host map |
 | 4. Point tools-service at it | Write `OPS_EGRESS_EXTRA_CA=<certificate>` and `OPS_EGRESS_RESOLVE='{"github.test":"<address>","api.github.test":"<address>"}'` to `.run/demo-addons.env` (`.run/isolated/demo-addons.env` in a lane), then `make restart SVC=tools`. The stack reads that file after `.env` on every restart, and the map is used in development only |
 | 5. Allow the hosts | As a Security admin, Settings › Security › Egress: Add host for each name, and Add range for `<address>/32` |
@@ -208,11 +211,10 @@ A person's browser opens the sign-in page at the fake's name too, which no DNS a
 host to the fake's address, as `scripts/demo-salesforce/walk.mjs` does with `context.route`; by hand, add the names to
 `/etc/hosts` with the fake's address and accept its certificate once.
 
-To have an agent call a plugin's tool in chat, the stack's fake model needs a rule for the message, and its rules are
-the stack's own (models.md, The test model). Without one, point the chat alias at a real model for the turn
-(`make demo-model MODEL=gpt-5-nano`, then `MODEL=fake`); each turn that calls a tool is two model calls. `make
-demo-model` acts on the shared stack's models-service even inside a lane; in a lane run
-`OPS_MODELS_PORT=<8730 plus the lane's offset> MODEL=gpt-5-nano uv run python scripts/demo_model.py` instead.
+To have an agent call a plugin's tool in chat on the fake model, grant the tool to the agent and send
+`call <tool> {json}`, such as `call github_list_issues {"owner": "acme-logistics", "repo": "dispatch-api"}`: the fake
+calls that tool with that JSON object as its input, then replies with the gist of the result (models.md, The test model). No real
+model is needed.
 
 ## Install a plugin
 
@@ -340,7 +342,6 @@ limit to Stripe in test mode.
 | Gap | Today |
 |---|---|
 | The platform admin's switch in the console | `PUT /v1/policies/plugins` only; the team's switch and sign-in are the App's Connect window |
-| Paging by a `Link` header or by page number | No rule reads them (GitHub, GitLab); such a list tool returns one page |
 | An end-to-end use case in a plugin's own repository | A plugin repository has `ops plugin test`; end-to-end proof is ops-ai's use cases below, or a walk through Try a plugin on a local stack |
 | Per-person access lists | Stored on the binding, not enforced |
 | Adding a plugin knowledge source from the console | kb-service API only; the source page syncs and shows it |
