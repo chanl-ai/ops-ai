@@ -4,7 +4,7 @@ import * as React from 'react';
 import { ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { CONNECTED_MESSAGE, openSignIn, type ConnectedMessage } from '@/components/connections/sign-in';
+import { useSignInWindow } from '@/components/connections/sign-in';
 import { EnvSection } from '@/components/connections/env-section';
 import { PluginConnectForm } from '@/components/connections/plugin-connect-form';
 import type { SignIn } from '@/components/connections/who-signs-in';
@@ -163,7 +163,7 @@ function ConnectForm({
   const [state, dispatch] = React.useReducer(reduce, initialState(sectionsFor(kind, kinds, detail), detail?.id ?? null));
   const revision = React.useRef(detail?.revision ?? 0);
   const latest = React.useRef<ConnectionDetail | null>(detail);
-  const opened = React.useRef<{ window: Window | null; environment: Environment } | null>(null);
+  const opened = React.useRef<{ environment: Environment } | null>(null);
   const connected = React.useRef(onConnected);
   const close = React.useRef(onClose);
   React.useEffect(() => {
@@ -195,21 +195,24 @@ function ConnectForm({
     });
   };
 
-  React.useEffect(() => {
-    const onMessage = (e: MessageEvent<ConnectedMessage>) => {
+  const signInWindow = useSignInWindow({
+    onConnected: (m) => {
       const waiting = opened.current;
-      if (e.origin !== window.location.origin || e.data?.type !== CONNECTED_MESSAGE || !waiting || e.source !== waiting.window) return;
+      if (!waiting) return;
       opened.current = null;
       dispatch({ type: 'signed-in', environment: waiting.environment });
-      toast.success(`${e.data.connection} is connected with the team account`);
+      toast.success(`${m.connection} is connected with the team account`);
       // Save opened this window, so the account signing in is the last step: the dialog closes.
       dispatch({ type: 'done' });
       if (latest.current) connected.current?.(latest.current);
       close.current();
-    };
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, []);
+    },
+    onFailed: (why) => {
+      const waiting = opened.current;
+      opened.current = null;
+      if (waiting) dispatch({ type: 'failed', environment: waiting.environment, message: why });
+    },
+  });
 
   /** The connection to save into: the one open, or a new one made from the name and kind on the first save. */
   const ensure = async (): Promise<string> => {
@@ -274,6 +277,10 @@ function ConnectForm({
   const finish = async () => {
     if (state.busy) return;
     const env = leading(kinds, ready) ?? envs[0].id;
+    // A sign-in window opens in the click, before any call, so a pop-up blocker lets it through.
+    const signsInNow = plan.kind === 'account' && !state.signedIn.includes(env);
+    const w = signsInNow ? signInWindow.open(latest.current?.name ?? name) : null;
+    if (signsInNow && !w) return;
     dispatch({ type: 'start', environment: env, status: 'saving' });
     try {
       const id = await ensure();
@@ -290,13 +297,14 @@ function ConnectForm({
           }),
         );
       }
-      if (plan.kind === 'account' && !state.signedIn.includes(env)) {
+      if (w) {
         const start = await signIn.mutateAsync({
           connectionId: id,
           environment: env,
           account: 'team',
         });
-        opened.current = { window: openSignIn(start, id), environment: env };
+        opened.current = { environment: env };
+        w.go(start, id);
         dispatch({ type: 'signing-in' });
         return;
       }
@@ -305,6 +313,7 @@ function ConnectForm({
       if (latest.current) onConnected?.(latest.current);
       onClose();
     } catch (e) {
+      w?.fail(message(e));
       dispatch({ type: 'failed', environment: env, message: message(e) });
     }
   };

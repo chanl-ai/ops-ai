@@ -163,7 +163,8 @@ for (const f of files) {
 // A page that only calls next/navigation `redirect()` and renders no JSX (a retired route) has nothing to lay out.
 const redirectOnly = (text) => /\bredirect\(/.test(text) && !/<\/|\/>/.test(text);
 // Sign-in pages under app/(auth) are laid out by app/(auth)/layout.tsx (centred card, no sidebar), not PageLayout.
-const authShell = (rel) => rel.startsWith('src/app/(auth)/');
+// The sign-in pages, and the sign-in window's pages under connections/, draw one card alone as the shell renders them.
+const authShell = (rel) => rel.startsWith('src/app/(auth)/') || rel.startsWith('src/app/connections/');
 const LAYOUT = /<(PageLayout|RecordLayout)\b/;
 const FULL_HEIGHT_SHELL = /<(ChatLayout|ChatWorkspace|EmbedChat|SampleIntranet|WorkflowEditor)\b/;
 /** The file of the component `name` that `f` imports, as {abs, text}, or null when it is not imported from src. */

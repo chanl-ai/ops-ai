@@ -26,6 +26,18 @@ type View = 'all' | 'connected' | 'available';
 // saved alone. A plugin the team turned off (Turn off, group K) offers Connect again; its accounts stay for later.
 const connected = (s: SystemCard) =>
   s.plugin?.teamOn !== false && (s.state ? s.state === 'connected' || s.state === 'expired' || s.state === 'refused' : Object.values(s.environments).some((e) => e?.set));
+/**
+ * Why the team account's last test failed, when it signed in but a test call then failed: the account still reads
+ * Connected (signing in is what connects it) and the reason shows beside it with Reconnect.
+ */
+export function testFailure(s: Pick<SystemCard, 'state' | 'environments'>): string | null {
+  if (s.state !== 'connected') return null;
+  const envs = Object.values(s.environments);
+  const failed = envs.find((e) => e?.health?.status === 'failed' && e.health.account === 'team');
+  if (!failed?.health) return null;
+  return failed.health.message || (failed.health.httpStatus ? `HTTP ${failed.health.httpStatus}` : 'no reason given');
+}
+
 const initials = (name: string) =>
   name
     .split(/\s+/)
@@ -43,6 +55,7 @@ export const appHref = (s: SystemCard) => s.href ?? `/integrations/apps/${encode
 /** One app's card: logo, name, tools and how it signs in, one line, its category. */
 function AppCard({ system, onConnect }: { system: SystemCard; onConnect: (s: SystemCard, mode: ConnectMode) => void }) {
   const isConnected = system.kind === 'builtin' || connected(system);
+  const failure = testFailure(system);
   return (
     <Card className="min-h-40 gap-3 py-4 transition-all hover:border-primary/40 hover:shadow-md" data-testid={`system-${system.id}`}>
       <CardHeader className="flex flex-row items-center gap-2.5 px-4">
@@ -69,6 +82,11 @@ function AppCard({ system, onConnect }: { system: SystemCard; onConnect: (s: Sys
             <Badge variant="secondary">{system.category}</Badge>
           </div>
         )}
+        {isConnected && failure && (
+          <p className="line-clamp-2 text-xs text-warning-text" data-testid={`system-${system.id}-test-failed`}>
+            Signed in, but a test call failed: {failure}
+          </p>
+        )}
         <div className="mt-auto flex items-center justify-between gap-2">
           {isConnected ? (
             <>
@@ -76,6 +94,11 @@ function AppCard({ system, onConnect }: { system: SystemCard; onConnect: (s: Sys
                 <CircleCheck />
                 Connected · {plural(system.toolsCount, 'tool')}
               </Badge>
+              {failure && system.mayManage && (
+                <Button size="sm" variant="outline" onClick={() => onConnect(system, 'connect')} data-testid={`reconnect-${system.id}`}>
+                  Reconnect
+                </Button>
+              )}
               <Button size="sm" variant="ghost" asChild>
                 <Link href={appHref(system)} data-testid={`open-${system.id}`}>
                   Open

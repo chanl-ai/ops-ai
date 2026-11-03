@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-03",
+  "title": "Connect an app in one window",
+  "description": "Connect opens one window for every app that signs in with an account: choose Ops AI's app or your team's own, see the access it asks for, then Authorize, and the sign-in window closes once access is allowed. A refused sign-in, or a test call that fails after it, says why in place, with a way to try again.",
+  "tag": "improved"
+}
