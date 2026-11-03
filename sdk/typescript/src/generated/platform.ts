@@ -2210,10 +2210,19 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** PolicyChoice */
+        PolicyChoice: {
+            /** Description */
+            description: string;
+            /** Title */
+            title: string;
+            /** Value */
+            value: string;
+        };
         /** PolicyIn */
         PolicyIn: {
             /** Value */
-            value: boolean | number | {
+            value: boolean | number | string | {
                 [key: string]: unknown;
             } | string[] | null;
         };
@@ -2221,10 +2230,12 @@ export interface components {
         PolicyOut: {
             /** Changedby */
             changedBy: string;
+            /** Choices */
+            choices?: components["schemas"]["PolicyChoice"][] | null;
             /** Default */
-            default: boolean | number | {
+            default: boolean | number | string | {
                 [key: string]: unknown;
-            } | null;
+            } | string[] | null;
             /** Effect */
             effect: string;
             /** Key */
@@ -2233,13 +2244,15 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "bool" | "floor" | "days" | "hours" | "publish_modes" | "plugins" | "names";
+            kind: "bool" | "floor" | "days" | "hours" | "publish_modes" | "plugins" | "names" | "choice";
+            /** Note */
+            note?: string | null;
             /** Title */
             title: string;
             /** Value */
-            value: boolean | number | {
+            value: boolean | number | string | {
                 [key: string]: unknown;
-            } | null;
+            } | string[] | null;
         };
         /** Principal */
         Principal: {

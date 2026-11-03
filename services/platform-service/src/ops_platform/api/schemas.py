@@ -671,19 +671,30 @@ class ProviderOut(Out):
 class PolicyIn(In):
     # A bool for a switch, a number from 0 to 1 or null for a floor, whole days or null for a retention; the catalogue
     # checks which the key takes. int before float, so whole days stay whole. A per-team key (publishReview) takes
-    # the acting team's {area: mode}; a list policy (appWritesNeedApproval) takes the acting team's names.
-    value: bool | int | float | dict[str, Any] | list[str] | None
+    # the acting team's {area: mode}; a list policy (appWritesNeedApproval) takes the acting team's names; a choice
+    # policy (egressNewHosts) takes one of its values.
+    value: bool | int | float | str | dict[str, Any] | list[str] | None
+
+
+class PolicyChoice(Out):
+    value: str
+    title: str
+    description: str
 
 
 class PolicyOut(Out):
     key: str
     # A per-team key's value is the whole {team: {area: mode}}.
-    value: bool | int | float | dict[str, Any] | None
-    default: bool | int | float | dict[str, Any] | None
+    value: bool | int | float | str | dict[str, Any] | list[str] | None
+    default: bool | int | float | str | dict[str, Any] | list[str] | None
     changed_by: str
     effect: str
-    kind: Literal["bool", "floor", "days", "hours", "publish_modes", "plugins", "names"]
+    kind: Literal["bool", "floor", "days", "hours", "publish_modes", "plugins", "names", "choice"]
     title: str
+    # A "choice" policy's options, in order.
+    choices: list[PolicyChoice] | None = None
+    # A fact no value of the policy changes.
+    note: str | None = None
 
 
 class DevSignInIn(In):

@@ -6,6 +6,7 @@ does not list; and a caller forges a next-page address that the team's token is 
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 from shutil import copytree, ignore_patterns
 from typing import Any
@@ -152,7 +153,7 @@ async def test_the_instance_comes_from_the_token_and_only_from_the_systems_hosts
 
 
 class AllowAll:
-    async def check_url(self, tenant_id: str, url: str) -> None:
+    async def check_url(self, tenant_id: str, url: str, also: Iterable[str] = ()) -> None:
         return None
 
 

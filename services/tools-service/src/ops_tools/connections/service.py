@@ -692,7 +692,9 @@ class ConnectionService:
         if self.egress is None:
             raise ServiceUnavailable("This service has no egress policy, so it starts no sign-in.")
         try:
-            await self.egress.check_url(who.tenant_id, url)
+            await self.egress.check_url(
+                who.tenant_id, url, await self.tokens.hosts(who.tenant_id, connection_id, environment)
+            )
         except EgressDenied as e:
             raise ValidationFailed(f"The sign-in address: {e}", code="egress_denied") from e
         state, secret = random.token_urlsafe(32), verifier()
@@ -784,7 +786,8 @@ class ConnectionService:
         }
         if settings.get("resource"):
             form["resource"] = str(settings["resource"])
-        return await self.tokens.post(who.tenant_id, str(settings["tokenUrl"]), form, settings, proof)
+        hosts = await self.tokens.hosts(who.tenant_id, str(conn["id"]), str(taken["environment"]))
+        return await self.tokens.post(who.tenant_id, str(settings["tokenUrl"]), form, settings, proof, hosts=hosts)
 
     async def check_credential(self, who: Caller, connection_id: str, state: str, code: str) -> dict[str, Any]:
         """Finishes an admin's Test with my account (c-616): the code is exchanged through the environment's app, and
@@ -1092,8 +1095,9 @@ class ConnectionService:
             prepared = await self.auth.prepare(
                 probe, environment, tool="test connection", actor=who.name, acting_for=person, team_account=not own
             )
-            await self.egress.check_url(who.tenant_id, url)
-            res = await self._probe(url, prepared, who.tenant_id)
+            hosts = await self.tokens.hosts(who.tenant_id, connection_id, environment)
+            await self.egress.check_url(who.tenant_id, url, hosts)
+            res = await self._probe(url, prepared, who.tenant_id, hosts)
             if res.status_code == 401 and prepared is not None and prepared.renewable:
                 # A token the system no longer takes (expired early, or revoked) is fetched again once, as a tool
                 # call's read is (executor.py), so the test reports the sign-in, not a token's age.
@@ -1149,14 +1153,16 @@ class ConnectionService:
         await self.store.note(who.tenant_id, connection_id, self._event(who, "tested", environment, detail))
         return await self.detail(who, connection_id)
 
-    async def _probe(self, url: str, prepared: Prepared | None, tenant_id: str) -> httpx.Response:
+    async def _probe(
+        self, url: str, prepared: Prepared | None, tenant_id: str, hosts: list[str] | None = None
+    ) -> httpx.Response:
         assert self.http is not None
         return await self.http.get(
             url,
             params=(prepared.params or None) if prepared else None,
             headers=prepared.headers if prepared else None,
             timeout=TEST_TIMEOUT_S,
-            extensions=for_tenant(tenant_id, prepared.certificate if prepared else None),
+            extensions=for_tenant(tenant_id, prepared.certificate if prepared else None, hosts or ()),
         )
 
     async def pin_default(self, who: Caller, connection_id: str) -> dict[str, Any]:

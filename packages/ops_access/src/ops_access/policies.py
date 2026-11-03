@@ -20,7 +20,7 @@ class Policy:
     effect: str
     # "bool"; "floor": a number from 0 to 1, or None for no floor; "days": a whole number of days, or None for no limit;
     # "hours": a whole number of hours; "publish_modes": one team's {area: mode}, see PUBLISH_AREAS and PUBLISH_MODES.
-    # "names": a list of names (appWritesNeedApproval: app ids).
+    # "names": a list of names (appWritesNeedApproval: app ids). "choice": one of `choices`.
     kind: str = "bool"
     # The grid cell a change needs; the security team holds it.
     changed_by: tuple[str, str] = ("settings", "manage")
@@ -31,9 +31,13 @@ class Policy:
     live: bool = False
     # A short name for the Policies page, so a new policy is drawn there with no console change.
     title: str = ""
+    # A "choice" policy's options, in order: (value, title, what it means).
+    choices: tuple[tuple[str, str, str], ...] = ()
+    # A fact no value of the policy changes, said under it on the Policies page.
+    note: str = ""
 
 
-KINDS = ("bool", "floor", "days", "hours", "publish_modes", "plugins", "names")
+KINDS = ("bool", "floor", "days", "hours", "publish_modes", "plugins", "names", "choice")
 
 
 # Which publishes wait for a second person's review (c-086, moved here by c-214), per team and area:
@@ -182,13 +186,39 @@ POLICIES: tuple[Policy, ...] = (
     ),
     Policy(
         "plugins",
-        # No plugin is on until the platform admin turns it on for the install (c-564); teams then turn it on for
-        # themselves. A plugin's entry may also lock settings every team uses ({"api_version": "61.0"}).
+        # An installed plugin is on unless its entry says enabled: false; teams then turn it on for themselves. A
+        # plugin's entry may also lock settings every team uses ({"api_version": "61.0"}).
         {},
-        "Which installed plugins teams may turn on, and the settings fixed for every team.",
+        "Which installed plugins teams may not turn on, and the settings fixed for every team.",
         kind="plugins",
         live=True,
         title="Plugins",
+    ),
+    Policy(
+        "egressNewHosts",
+        # Asking Security is the default: a new address waits for a person who manages the egress list, as before the
+        # policy existed. A plugin's own hosts never need listing for its own calls.
+        "ask_security",
+        "What happens when an app or tool names an address the account has not allowed yet.",
+        kind="choice",
+        live=True,
+        title="New app addresses",
+        choices=(
+            ("ask_security", "Ask Security", "A new address waits until someone on the Security team allows it."),
+            (
+                "builders",
+                "Builders allow it",
+                "Whoever builds the app or tool allows the address, recorded in their name.",
+            ),
+            ("any_public", "Any public address", "Apps and tools may call any public address without listing it."),
+            (
+                "block",
+                "Only listed addresses",
+                "A new address is refused; Security lists addresses on the Egress page.",
+            ),
+        ),
+        note="Private, loopback, link-local and cloud metadata addresses are never reached unless Security lists a "
+        "private range, and only https is called.",
     ),
     Policy(
         "securityTeamAddsSecrets",
@@ -234,6 +264,8 @@ def check_value(key: str, value: Any) -> Any:
         and all(isinstance(n, str) and 0 < len(n) <= 200 for n in cast(list[Any], value))
     ):
         return list(dict.fromkeys(cast(list[str], value)))
+    if policy.kind == "choice" and isinstance(value, str) and value in {c[0] for c in policy.choices}:
+        return value
     if policy.kind == "publish_modes" and isinstance(value, dict):
         modes = cast(dict[Any, Any], value)
         if all(a in PUBLISH_AREAS and m in PUBLISH_MODES for a, m in modes.items()):
@@ -267,6 +299,7 @@ def check_value(key: str, value: Any) -> Any:
         "hours": "a whole number of hours from 1 to 8760",
         "names": "a list of up to 500 names, each 1 to 200 characters",
         "publish_modes": f"an object of area ({', '.join(PUBLISH_AREAS)}) to mode ({', '.join(PUBLISH_MODES)})",
+        "choice": f"one of {', '.join(c[0] for c in policy.choices)}",
         "plugins": (
             'an object of plugin id to {"enabled": true or false, "locked": {setting: value}, "client": {"id": text}}'
         ),

@@ -29,6 +29,7 @@ DEFAULTS: dict[str, Any] = {
     "stepUp": False,
     "publishReview": {},
     "chatThreadsOwnerOnly": True,
+    "egressNewHosts": "ask_security",
     "securityTeamAddsSecrets": False,
     "memoryRetentionDays": None,
     "reviewSlaHours": 8,

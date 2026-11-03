@@ -56,6 +56,7 @@ packages/ops_access/src/ops_access/policies.py policy-default aiSteps={} 1 E03
 packages/ops_access/src/ops_access/policies.py policy-default aiStepsMaskPersonalData={} 1 E34
 packages/ops_access/src/ops_access/policies.py policy-default chatThreadsOwnerOnly=true 1 E02
 packages/ops_access/src/ops_access/policies.py policy-default checkBeforeSend={} 1 E03
+packages/ops_access/src/ops_access/policies.py policy-default egressNewHosts="ask_security" 1 E48
 packages/ops_access/src/ops_access/policies.py policy-default extractionFloor=0.8 1 open
 packages/ops_access/src/ops_access/policies.py policy-default memoryRetentionDays=null 1 open
 packages/ops_access/src/ops_access/policies.py policy-default pageImages={} 1 E03

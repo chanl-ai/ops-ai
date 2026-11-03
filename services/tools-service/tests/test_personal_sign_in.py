@@ -10,7 +10,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
@@ -45,7 +45,7 @@ MAYA = ActingForPerson(sub="usr_maya", email="maya@bank.example", name="Maya", t
 
 
 class AnyUrl:
-    async def check_url(self, tenant_id: str, url: str) -> str:
+    async def check_url(self, tenant_id: str, url: str, also: Iterable[str] = ()) -> str:
         return "login.bank.test"
 
 

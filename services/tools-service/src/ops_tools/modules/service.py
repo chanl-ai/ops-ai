@@ -1224,18 +1224,27 @@ class ModuleService:
         return conn
 
     async def _held_unless_listed(self, who: Caller, host: str | None, app: str) -> None:
-        """An app's address on a host the tenant has not listed asks the Security team instead of failing (c-616 S13),
-        before anything is saved: HostHeld with the task's run key while it waits, its reason once it was refused.
-        Roles decide (owner, 2026-11-01): a caller who may manage the egress list is not asked, and the host is listed
-        in their name, audited. Without Reviews or an egress policy the store's own check refuses the host."""
+        """An app's address on a host the tenant has not listed, decided by the account's egressNewHosts policy before
+        anything is saved. Under `any_public` the host passes as it is. A caller who may manage the egress list, or
+        any builder under `builders`, lists it in their own name, audited. Under `block` it is refused. Otherwise it
+        asks the Security team (c-616 S13): HostHeld with the task's run key while it waits, its reason once refused.
+        Without Reviews or an egress policy the call-time check refuses the host."""
         if not host or self.egress is None or self.reviews is None:
             return
-        if await self.egress.store.host_allowed(who.tenant_id, host):
+        if await self.egress.host_passes(who.tenant_id, host):
             return
-        if who.principal is not None and self._manages_egress(who):
+        mode = await self.egress.new_hosts.mode(who.tenant_id) if self.egress.new_hosts else "ask_security"
+        manages = who.principal is not None and self._manages_egress(who)
+        if manages or (mode == "builders" and who.principal is not None):
             note = f"Listed when {app} first named it"
             await self.egress.store.add(who.tenant_id, "host", host, actor=who.name, note=note, at=self.clock())
             return
+        if mode == "block":
+            raise ValidationFailed(
+                f"{host} is not an allowed address, and this account adds no new ones from here. Ask the Security "
+                "team to add it on the Egress page.",
+                code="egress_denied",
+            )
         task = await self.reviews.open_host(
             who.credentials, tenant_id=who.tenant_id, team_id=who.team.id, host=host, app=app
         )

@@ -258,7 +258,7 @@ admin take its place; set both, since a saved id with the install's secret signs
 | Platform admin (`settings.manage`) | platform-service `PUT /v1/policies/plugins` with `{value: {"opsai.salesforce": {enabled: false, locked: {api_version: "61.0"}}}}` | `enabled: false` stops every team's calls within seconds; `locked` fixes any lockable setting |
 | Account admin (`settings.manage`) | the policy entry's `client: {id}`, then tools-service `PUT /v1/plugins/opsai.salesforce/app-secret` with `{clientSecret}` | Sets up the platform's own OAuth app once for every team, in place of the install config's; the secret is sealed at the account and no read returns it |
 | Team admin (`connections.manage`) | tools-service `PUT /v1/plugins/opsai.salesforce/team` with `{enabled, settings, signIn, kind, credentials, clientId, clientSecret}` | Turns it on for the team and makes the team's connection, whole, for its sign-in kind (below); off again keeps the connection and settings |
-| Security | tools-service `POST /v1/egress/hosts` | Adds the system's hosts to the workspace's allow-list, as for any outside system |
+| Security | nothing for the plugin's own hosts | The hosts in the manifest's `egress` (rendered with the team's settings) are reached by that plugin's sign-in, token, test and tool requests without listing; no other call reaches them unlisted. Private, loopback, link-local and metadata addresses stay refused |
 | Team admin | `POST /v1/connections/{id}/sign-in`, then `/sign-in/complete` | Signs the team in; `from_token` settings are read from the token answer here |
 
 The first turn-on makes the connection in one call, whatever the plugin's kind. `kind` picks one of the plugin's

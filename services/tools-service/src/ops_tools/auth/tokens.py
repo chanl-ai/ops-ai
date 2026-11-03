@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -172,6 +172,12 @@ class Tokens:
         self.clock = clock
         # One token request at a time per token in this process; across processes the store's CAS decides.
         self._flight: dict[tuple[str, str, str], asyncio.Lock] = {}
+        # The hosts a plugin's connection may reach unlisted (tenant, connection, environment), set once plugins load.
+        self.plugin_hosts: Callable[[str, str, str], Awaitable[list[str]]] | None = None
+
+    async def hosts(self, tenant_id: str, connection_id: str, environment: str) -> list[str]:
+        """The plugin's own hosts for a plugin's connection; none for any other."""
+        return await self.plugin_hosts(tenant_id, connection_id, environment) if self.plugin_hosts else []
 
     async def post(
         self,
@@ -182,17 +188,19 @@ class Tokens:
         proof: ClientProof | None,
         *,
         client: bool = True,
+        hosts: Iterable[str] = (),
     ) -> dict[str, Any]:
         """A token request: the form, with the client sent as `clientAuth` says, or not at all (`client` False, for a
-        JWT grant). Raises AuthFailed naming the host and the system's error code, never the secret."""
+        JWT grant). `hosts` are a plugin's own, reached unlisted. Raises AuthFailed naming the host and the system's
+        error code, never the secret."""
         if self.http is None or self.policy is None:
             raise AuthFailed("EGRESS_DENIED", "This gateway has no egress policy, so it fetches no token.")
         host = urlsplit(url).hostname
         body, headers = _client(form, settings, proof) if client else (form, {"Accept": "application/json"})
         try:
-            await self.policy.check_url(tenant_id, url)
+            await self.policy.check_url(tenant_id, url, hosts)
             res = await self.http.post(
-                url, data=body, headers=headers, timeout=TOKEN_TIMEOUT_S, extensions=for_tenant(tenant_id)
+                url, data=body, headers=headers, timeout=TOKEN_TIMEOUT_S, extensions=for_tenant(tenant_id, hosts=hosts)
             )
         except EgressDenied as e:
             raise AuthFailed("EGRESS_DENIED", f"The token address: {e}") from e
@@ -345,7 +353,8 @@ class Tokens:
             if settings.get("resource"):
                 # The token stays bound to the server it was issued for (RFC 8707), as the MCP spec asks.
                 form["resource"] = str(settings["resource"])
-            answer = await self.post(tenant_id, str(settings["tokenUrl"]), form, settings, proof)
+            hosts = await self.hosts(tenant_id, connection_id, environment)
+            answer = await self.post(tenant_id, str(settings["tokenUrl"]), form, settings, proof, hosts=hosts)
             # A refresh grants what the sign-in did unless it says otherwise (RFC 6749 6).
             held = scope_list((row or {}).get("scopes"))
             return await self._row(tenant_id, key, answer, rotations, keep_refresh=str(refresh_ct), requested=held)
@@ -357,7 +366,8 @@ class Tokens:
         for name in ("scopes", "audience"):
             if settings.get(name):
                 form["scope" if name == "scopes" else name] = str(settings[name])
-        answer = await self.post(tenant_id, str(settings["tokenUrl"]), form, settings, proof)
+        hosts = await self.hosts(tenant_id, connection_id, environment)
+        answer = await self.post(tenant_id, str(settings["tokenUrl"]), form, settings, proof, hosts=hosts)
         asked = str(settings.get("scopes") or "").split()
         return await self._row(tenant_id, key, answer, rotations, keep_refresh=None, requested=asked)
 
@@ -380,7 +390,8 @@ class Tokens:
         )
         if scopes and not claim:
             form["scope"] = scopes
-        answer = await self.post(tenant_id, str(settings["tokenUrl"]), form, settings, proof, client=False)
+        hosts = await self.hosts(tenant_id, key[0], key[1])
+        answer = await self.post(tenant_id, str(settings["tokenUrl"]), form, settings, proof, client=False, hosts=hosts)
         return await self._row(tenant_id, key, answer, rotations, keep_refresh=None, requested=scopes.split())
 
     async def revoke(
@@ -408,10 +419,11 @@ class Tokens:
         except CipherError:
             return False
         body, headers = _client({"token": token, "token_type_hint": hint}, settings, proof)
+        hosts = await self.hosts(tenant_id, connection_id, environment)
         try:
-            await self.policy.check_url(tenant_id, url)
+            await self.policy.check_url(tenant_id, url, hosts)
             res = await self.http.post(
-                url, data=body, headers=headers, timeout=TOKEN_TIMEOUT_S, extensions=for_tenant(tenant_id)
+                url, data=body, headers=headers, timeout=TOKEN_TIMEOUT_S, extensions=for_tenant(tenant_id, hosts=hosts)
             )
         except (EgressDenied, httpx.HTTPError):
             return False

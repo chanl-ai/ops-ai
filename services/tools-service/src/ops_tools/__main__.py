@@ -35,7 +35,7 @@ from .connections.connect_links import ConnectLinks
 from .connections.routes import connections_router
 from .connections.service import ConnectionService
 from .defaults import catch_up_at_start
-from .egress import EgressPolicy, OverrideResolver, egress_client, egress_transport
+from .egress import EgressPolicy, NewHosts, OverrideResolver, egress_client, egress_transport
 from .egress_routes import egress_router
 from .expression_routes import expressions_router
 from .file_tools import FileTools
@@ -129,7 +129,17 @@ def main() -> None:
     engine = open_database(settings.database_url)
     directory = Directory.from_seed(seed, datetime.now(UTC))
     store, calls = ModuleStore(engine), CallLog(engine)
-    policy = EgressPolicy(EgressStore(engine), OverrideResolver(settings.egress_resolve))
+
+    def client(audience: str, base_url: str, scopes: list[str] | None = None) -> ServiceClient:
+        """This service's calls to another; each names the tenant (and team) it acts for."""
+        http = httpx.AsyncClient(base_url=base_url, timeout=5)
+        return ServiceClient.for_settings(settings, http, service="tools", audience=audience, scopes=scopes, timeout=5)
+
+    # The account's egressNewHosts policy decides an unlisted host (ask Security, builders, any public host, block).
+    new_hosts = (
+        NewHosts(client("platform", settings.platform_url, ["settings:view"])) if settings.platform_url else None
+    )
+    policy = EgressPolicy(EgressStore(engine), OverrideResolver(settings.egress_resolve), new_hosts)
     ca = str(settings.egress_ca_file) if settings.egress_ca_file else None
     # Every secret value is put and read through the credential store; rows keep only its reference (c-616 C6).
     credentials = credential_store(settings)
@@ -145,11 +155,6 @@ def main() -> None:
         connection_store, secrets, tokens, links, app_secret=app_keys.value if app_keys else None
     )
     agents_url = settings.agents_url or f"http://127.0.0.1:{settings.port}"
-
-    def client(audience: str, base_url: str, scopes: list[str] | None = None) -> ServiceClient:
-        """This service's calls to another; each names the tenant (and team) it acts for."""
-        http = httpx.AsyncClient(base_url=base_url, timeout=5)
-        return ServiceClient.for_settings(settings, http, service="tools", audience=audience, scopes=scopes, timeout=5)
 
     # The install's plugins (its plugins folder, OPS_PLUGINS_DIR), read once at start: a failed one is reported on
     # /v1/plugins and left out. With none, the plugin routes are not mounted and calls never reach a plugin.
@@ -186,6 +191,8 @@ def main() -> None:
         ),
         auth=authenticator,
     )
+    # A plugin's sign-in, token and test requests reach the hosts it declares without the tenant listing them.
+    tokens.plugin_hosts = plugins.connection_hosts if plugins else None
     # The call log names a plugin tool by its manifest title (c-607).
     modules.titles = plugins.title_of if plugins else None
     # A plugin tool's page names the team's own account of the app (c-616).

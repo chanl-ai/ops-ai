@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import base64
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast, get_args
@@ -333,7 +333,7 @@ def test_the_console_knows_every_reason_a_call_is_refused_for_a_missing_sign_in(
 
 
 class AllowLedger:
-    async def check_url(self, tenant_id: str, url: str) -> str:
+    async def check_url(self, tenant_id: str, url: str, also: Iterable[str] = ()) -> str:
         return "ledger.bank.test"
 
 

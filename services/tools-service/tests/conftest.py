@@ -277,17 +277,18 @@ def build_app(
     send_check: Any = None,
     mcp: bool = False,
     flags: Flags | None = None,
+    new_hosts: Any = None,
 ) -> FastAPI:
     """The gateway app as __main__ builds it, on the tenant's registry. `opa` defaults to an address nothing answers,
     for tests that never reach a decision; `upstream` is what http operations call. `mcp` serves /mcp: its SDK manager
     runs a task group that must be left in the task that entered it, so a test using it enters the lifespan itself,
     never in a fixture whose teardown runs in another task. `flags` default to `mcp_gateway` on when `mcp` is
-    asked for."""
+    asked for. `new_hosts` is the account's egressNewHosts policy (anything with `async mode(tenant)`)."""
     settings = Settings()
     catalog = load_catalog(AGENTS_FIXTURES)
     directory = Directory.from_seed(seed, datetime.now(UTC))
     store, calls = ModuleStore(engine), CallLog(engine)
-    policy = EgressPolicy(EgressStore(engine))
+    policy = EgressPolicy(EgressStore(engine), new_hosts=new_hosts)
     vault = credentials()
     resolver = SecretResolver(SecretStore(engine), vault)
     connections = ConnectionStore(engine)

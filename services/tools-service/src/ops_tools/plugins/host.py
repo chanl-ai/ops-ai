@@ -477,6 +477,18 @@ class PluginHost:
             out[env] = {"pluginSettings": plain, "pluginSecrets": secrets}
         return out
 
+    async def connection_hosts(self, tenant_id: str, connection_id: str, environment: str) -> list[str]:
+        """The hosts the plugin serving a connection declares, rendered with that environment's settings: what its
+        sign-in, token and test requests reach without the tenant listing them. None for a connection no plugin
+        serves."""
+        b = await self.binding_of(tenant_id, connection_id)
+        plugin = self.plugins.get(str(b["plugin_id"])) if b else None
+        if b is None or plugin is None:
+            return []
+        own = (await self.own_settings(tenant_id, connection_id)).get(environment)
+        merged = await self.settings(tenant_id, plugin, dict(b.get("settings") or {}), environment, own)
+        return hosts_of(plugin.manifest, merged)
+
     async def off_reason(self, tenant_id: str, team_id: str | None, plugin: Plugin) -> str | None:
         """Why the plugin is off for the team, or None when both switches are on."""
         if not await self.switches.on(tenant_id, plugin.manifest.id):
@@ -664,13 +676,14 @@ class PluginHost:
                 "This service has no egress client, so it runs no lookup after sign-in.", "lookup_failed"
             )
         try:
-            await self.policy.check_url(tenant_id, url)
+            own = hosts_of(m, settings)
+            await self.policy.check_url(tenant_id, url, own)
             r = await self.http.get(
                 url,
                 headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
                 timeout=LOOKUP_TIMEOUT_S,
                 follow_redirects=False,
-                extensions=for_tenant(tenant_id),
+                extensions=for_tenant(tenant_id, hosts=own),
             )
         except EgressDenied as e:
             raise SignInRefused(f"{m.title}'s lookup after sign-in: {e}", "lookup_failed") from e

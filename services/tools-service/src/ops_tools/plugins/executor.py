@@ -121,7 +121,7 @@ class PluginExecutor:
             if policy is None:
                 raise PluginEgressDenied("This gateway has no egress policy, so it calls no external system.")
             try:
-                await policy.check_url(tenant, url)
+                await policy.check_url(tenant, url, allowed)
             except EgressDenied as e:
                 raise PluginEgressDenied(str(e)) from e
             # The plugin's headers first, then the connection's, which win over a name they share (c-584).
@@ -134,7 +134,7 @@ class PluginExecutor:
                 json=body,
                 headers=headers,
                 timeout=DEADLINE_S,
-                extensions=for_tenant(tenant, prepared.certificate if prepared else None),
+                extensions=for_tenant(tenant, prepared.certificate if prepared else None, allowed),
             )
             if r.status_code == 401:
                 raise NeedsReconnect(f"{urlsplit(url).hostname} refused the connection's sign-in.")

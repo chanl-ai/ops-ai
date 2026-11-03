@@ -2898,6 +2898,30 @@
         "title": "PersonName",
         "type": "object"
       },
+      "PolicyChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "title",
+          "description"
+        ],
+        "title": "PolicyChoice",
+        "type": "object"
+      },
       "PolicyIn": {
         "additionalProperties": false,
         "properties": {
@@ -2911,6 +2935,9 @@
               },
               {
                 "type": "number"
+              },
+              {
+                "type": "string"
               },
               {
                 "additionalProperties": true,
@@ -2942,6 +2969,20 @@
             "title": "Changedby",
             "type": "string"
           },
+          "choices": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PolicyChoice"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choices"
+          },
           "default": {
             "anyOf": [
               {
@@ -2954,8 +2995,17 @@
                 "type": "number"
               },
               {
+                "type": "string"
+              },
+              {
                 "additionalProperties": true,
                 "type": "object"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               },
               {
                 "type": "null"
@@ -2979,10 +3029,22 @@
               "hours",
               "publish_modes",
               "plugins",
-              "names"
+              "names",
+              "choice"
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
           },
           "title": {
             "title": "Title",
@@ -3000,8 +3062,17 @@
                 "type": "number"
               },
               {
+                "type": "string"
+              },
+              {
                 "additionalProperties": true,
                 "type": "object"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               },
               {
                 "type": "null"

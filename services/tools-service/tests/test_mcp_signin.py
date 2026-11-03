@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +37,7 @@ class Listed:
         self.refused = refused
         self.checked: list[str] = []
 
-    async def check_url(self, tenant_id: str, url: str) -> str:
+    async def check_url(self, tenant_id: str, url: str, also: Iterable[str] = ()) -> str:
         self.checked.append(url)
         if self.refused and self.refused in url:
             raise EgressDenied("not on the allow-list")

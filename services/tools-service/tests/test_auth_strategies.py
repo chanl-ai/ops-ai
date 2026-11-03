@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import parse_qs
@@ -21,7 +22,7 @@ SETTINGS = {"tokenUrl": "https://login.bank.test/token", "clientId": "ops-consol
 
 
 class AnyUrl:
-    async def check_url(self, tenant_id: str, url: str) -> str:
+    async def check_url(self, tenant_id: str, url: str, also: Iterable[str] = ()) -> str:
         return "login.bank.test"
 
 
