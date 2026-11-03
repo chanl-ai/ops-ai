@@ -123,4 +123,14 @@ with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
     )
     w.gw.post("/v1/egress/hosts", json={"value": API_HOST, "note": "apps"}, headers=w.who["security"])
 
+    # 32. The app's Settings read what is saved for each environment; the secret ones only say whether they are set.
+    shown = data(w.kept(w.gw.get(f"/v1/connections/{person_app}", headers=w.who["admin"]))) or {}
+    production = (shown.get("environments") or {}).get("production") or {}
+    check(
+        "32 an app's account shows its saved settings per environment, as a call reads them",
+        (production.get("pluginSettings") or {}).get("base_url") == "https://api.multi.test"
+        and production.get("pluginSecrets") == {},
+        production,
+    )
+
 finish()

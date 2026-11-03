@@ -78,6 +78,15 @@ test('credentials.list answers the rows of the app credentials route', async () 
   assert.ok(seen.at(-1).url.pathname.endsWith('/v1/app-credentials'));
 });
 
+test('credentials.create posts the app, its client and secret to the app credentials route', async () => {
+  const seen = [];
+  const row = { id: 'con_desk', app: 'plugin:desk', type: 'own' };
+  const ops = client({ 'POST app-credentials': row }, seen);
+  assert.deepEqual(await ops.credentials.create('plugin:desk', { clientId: 'bank-app', clientSecret: 's3' }), row);
+  assert.equal(seen.at(-1).method, 'POST');
+  assert.deepEqual(seen.at(-1).body, { app: 'plugin:desk', clientId: 'bank-app', clientSecret: 's3', environment: 'production' });
+});
+
 test('a run uses production when only production is set', async () => {
   // The app page lists every environment with whether it is set; a listed but unset test is not one to run in.
   const seen = [];

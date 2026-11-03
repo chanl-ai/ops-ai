@@ -224,6 +224,9 @@ class ConnectionEnvironment(Out):
     health: ConnectionHealth | None = None
     # The plugin whose platform app this environment signs in with (c-565); null on the team's own app.
     platform_app: str | None = None
+    # An app from a plugin: its settings here as a call reads them, and for a secret one only whether it is set.
+    plugin_settings: dict[str, Any] | None = None
+    plugin_secrets: dict[str, bool] | None = None
 
 
 class ConnectionEvent(Out):

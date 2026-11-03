@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import httpx
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.ids import new_id
@@ -182,3 +183,15 @@ async def test_a_call_with_no_tenant_is_read_by_nobody(engine: AsyncEngine) -> N
     await logged(log, None, "op", outcome="ok", latency=1, at=NOW, tenant=None, thread=thread)  # type: ignore[arg-type]
     rows, total = await log.search(thread_id=thread, tenant_id="local", team_ids=[TEAM])
     assert (rows, total) == ([], 0)
+
+
+async def test_usage_of_an_app_with_several_tool_sets_lists_the_calls_of_each(api: Api, engine: AsyncEngine) -> None:
+    # An app's Usage asks for all its tool sets at once; another app's calls are not mixed in.
+    log = CallLog(engine)
+    a, b, other = new_id("mod"), new_id("mod"), new_id("mod")
+    ids = {m: await logged(log, m, "op", outcome="ok", latency=1, at=NOW, tenant=api.tenant) for m in (a, b, other)}
+    params = httpx.QueryParams([("moduleId", a), ("moduleId", b), ("pageSize", "200")])
+    r = await api.client.get("/v1/executions", params=params)
+    assert r.status_code == 200, r.text
+    shown = {row["id"] for row in r.json()["data"]["data"]}
+    assert shown == {ids[a], ids[b]}, shown

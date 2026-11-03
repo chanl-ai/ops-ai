@@ -913,7 +913,7 @@ class ModuleService:
         page: int,
         page_size: int,
         tool: str | None,
-        module_id: str | None,
+        module_ids: list[str] | None,
         thread_id: str | None,
         decision: str | None,
         key: str | None = None,
@@ -922,8 +922,8 @@ class ModuleService:
         sent under one idempotency key: how a workflow run reconciles a write after a crash."""
         mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self._sees(who, m)}
         scope = None if not who.verified and who.team.scope == "all" else list(mods)
-        if module_id is not None:
-            scope = [module_id] if scope is None or module_id in scope else []
+        if module_ids is not None:
+            scope = [m for m in module_ids if scope is None or m in scope]
         if key is not None:
             # A lookup by key shows a claim as it stands: one still running past its expiry reads as lost.
             await self.calls.expire_running(tenant_id=who.tenant_id, key=key)

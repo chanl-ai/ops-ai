@@ -103,6 +103,20 @@ def test_credentials_list_answers_the_rows_of_the_app_credentials_route() -> Non
     assert seen[-1].url.path.endswith("/v1/app-credentials")
 
 
+def test_credentials_create_posts_the_app_its_client_and_secret_to_the_app_credentials_route() -> None:
+    seen: list[httpx.Request] = []
+    row = {"id": "con_desk", "app": "plugin:desk", "type": "own"}
+    ops = client({("POST", "app-credentials"): row}, seen)
+    assert ops.credentials.create("plugin:desk", client_id="bank-app", client_secret="s3") == row
+    assert seen[-1].method == "POST"
+    assert json.loads(seen[-1].content) == {
+        "app": "plugin:desk",
+        "clientId": "bank-app",
+        "clientSecret": "s3",
+        "environment": "production",
+    }
+
+
 def test_a_run_uses_production_when_only_production_is_set() -> None:
     # The app page lists every environment with whether it is set; a listed but unset test is not one to run in.
     seen: list[httpx.Request] = []

@@ -55,7 +55,12 @@ export interface paths {
          */
         get: operations["connections_list_app_credentials"];
         put?: never;
-        post?: never;
+        /**
+         * Create App Credential
+         * @description Adds the team's own OAuth app to one of its apps: client id, secret and permissions. Team admins only; the
+         *     answer is the Credentials page's row, with no secret.
+         */
+        post: operations["connections_create_app_credential"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1376,6 +1381,26 @@ export interface components {
             type: "ops_ai" | "own";
         };
         /**
+         * AppCredentialIn
+         * @description The team's own OAuth app for one of its apps (the New app credential window).
+         */
+        AppCredentialIn: {
+            /** App */
+            app: string;
+            /** Clientid */
+            clientId: string;
+            /** Clientsecret */
+            clientSecret: string;
+            /**
+             * Environment
+             * @default production
+             * @enum {string}
+             */
+            environment: "test" | "production";
+            /** Scopes */
+            scopes?: string[] | null;
+        };
+        /**
          * AppMe
          * @description The caller's own sign-in on the app's account: Connect my account, or Connected as.
          */
@@ -1616,6 +1641,16 @@ export interface components {
              */
             kind: "person" | "team";
         };
+        /** CardCredential */
+        CardCredential: {
+            /** Name */
+            name: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "ops_ai" | "own";
+        };
         /** Change */
         Change: {
             /** Changed */
@@ -1842,6 +1877,14 @@ export interface components {
             health?: components["schemas"]["ConnectionHealth"] | null;
             /** Platformapp */
             platformApp?: string | null;
+            /** Pluginsecrets */
+            pluginSecrets?: {
+                [key: string]: boolean;
+            } | null;
+            /** Pluginsettings */
+            pluginSettings?: {
+                [key: string]: unknown;
+            } | null;
             /** Secrets */
             secrets: {
                 [key: string]: components["schemas"]["SecretPart"];
@@ -2167,6 +2210,15 @@ export interface components {
         /** Envelope[AllowList] */
         Envelope_AllowList_: {
             data: components["schemas"]["AllowList"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[AppCredential] */
+        Envelope_AppCredential_: {
+            data: components["schemas"]["AppCredential"];
             /**
              * Success
              * @constant
@@ -4139,12 +4191,20 @@ export interface components {
         };
         /** SystemCard */
         SystemCard: {
+            /**
+             * Appstate
+             * @enum {string}
+             */
+            appState: "connected" | "test_failed" | "needs_sign_in" | "not_installed";
+            /** Appstatereason */
+            appStateReason?: string | null;
             /** Authkind */
             authKind?: string | null;
             /** Category */
             category?: string | null;
             /** Connectionid */
             connectionId?: string | null;
+            credential?: components["schemas"]["CardCredential"] | null;
             /** Description */
             description?: string | null;
             /** Docsurl */
@@ -4842,6 +4902,129 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_list_AppCredential__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    connections_create_app_credential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppCredentialIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AppCredential_"];
                 };
             };
             /** @description Invalid request */
@@ -7277,7 +7460,7 @@ export interface operations {
                 page?: number;
                 pageSize?: number;
                 tool?: string | null;
-                moduleId?: string | null;
+                moduleId?: string[] | null;
                 thread?: string | null;
                 decision?: string | null;
                 key?: string | null;

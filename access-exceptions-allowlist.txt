@@ -75,8 +75,10 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict already_decided 0 state
 * conflict already_published 0 state
 * conflict already_resumed 0 state
+* conflict app_not_set_up 0 state
 * conflict archived_too_recently 0 state
 * conflict budget_paused 0 state
+* conflict credential_exists 0 state
 * conflict channel_managed_elsewhere 0 state
 * conflict channel_retired 0 state
 * conflict conflict 0 state

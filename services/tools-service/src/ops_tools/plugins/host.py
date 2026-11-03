@@ -69,6 +69,14 @@ def settle_at_sign_in(held: Mapping[str, Any], read: Mapping[str, Any], *, own: 
     return dict(read)
 
 
+def readable(manifest: Manifest, settings: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, bool]]:
+    """Settings as a person may read them: each plain value, and for a secret one only whether it is set, never even
+    its reference."""
+    secret = {k for k, s in manifest.settings.items() if s.secret}
+    plain = {k: v for k, v in settings.items() if k not in secret}
+    return plain, {k: settings.get(k) not in (None, "") for k in sorted(secret)}
+
+
 def hosts_of(manifest: Manifest, settings: Mapping[str, Any]) -> list[str]:
     """The plugin's egress hosts rendered with the settings; one whose setting is unset is left out."""
     return [urlsplit(h).hostname or h for h in (render(e, settings) for e in manifest.egress) if h]
@@ -454,6 +462,23 @@ class PluginHost:
         merged |= {k: v for k, v in (own_values or {}).items() if k in own}
         merged |= await self.switches.locked(tenant_id, m.id)
         return merged
+
+    async def environment_settings(
+        self, tenant_id: str, connection_id: str, environments: Iterable[str]
+    ) -> dict[str, dict[str, Any]]:
+        """Each environment's plugin settings on an app's account, merged as a call there reads them, as a person may
+        read them (`readable`): what the app's Settings shows and edits. Empty for a connection no plugin serves."""
+        b = await self.binding_of(tenant_id, connection_id)
+        plugin = self.plugins.get(str(b["plugin_id"])) if b else None
+        if b is None or plugin is None:
+            return {}
+        owns = await self.own_settings(tenant_id, connection_id)
+        out: dict[str, dict[str, Any]] = {}
+        for env in environments:
+            merged = await self.settings(tenant_id, plugin, dict(b.get("settings") or {}), env, owns.get(env))
+            plain, secrets = readable(plugin.manifest, merged)
+            out[env] = {"pluginSettings": plain, "pluginSecrets": secrets}
+        return out
 
     async def off_reason(self, tenant_id: str, team_id: str | None, plugin: Plugin) -> str | None:
         """Why the plugin is off for the team, or None when both switches are on."""

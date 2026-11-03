@@ -31,7 +31,7 @@ from ..modules.routes import ERRORS
 from ..modules.service import Caller
 from ..modules.tool_users import ToolUsers
 from ..store.plugin_app_keys import PluginAppKeys
-from .host import PluginHost, fixed_fields, per_environment, render, sign_in_fixed
+from .host import PluginHost, fixed_fields, per_environment, readable, render, sign_in_fixed
 
 # A credential value: a key, a password or token, or a PEM certificate or private key, the longest of them.
 CREDENTIAL_MAX = 16_000
@@ -210,8 +210,7 @@ class KnowledgeSourceView(_Wire):
 
 def _shown(plugin: Plugin, settings: dict[str, Any]) -> dict[str, Any]:
     """Settings as a person may read them: a secret field never, even as its reference."""
-    secret = {k for k, s in plugin.manifest.settings.items() if s.secret}
-    return {k: v for k, v in settings.items() if k not in secret}
+    return readable(plugin.manifest, settings)[0]
 
 
 def _split(plugin: Plugin, given: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:

@@ -124,6 +124,24 @@ class Credentials:
         """Each app's credential: Ops AI's app or the team's own client, its permissions, accounts and last test."""
         return cast(list[dict[str, Any]], self._raw.tools.connections_list_app_credentials())
 
+    def create(
+        self,
+        app: str,
+        *,
+        client_id: str,
+        client_secret: str,
+        scopes: list[str] | None = None,
+        environment: str = "production",
+    ) -> dict[str, Any]:
+        """Adds the team's own client to an app the team set up: its client id, secret and permissions (all when left
+        out). The answer is the credential's row; it never carries the secret."""
+        body: dict[str, Any] = {
+            "app": app, "clientId": client_id, "clientSecret": client_secret, "environment": environment
+        }  # fmt: skip
+        if scopes is not None:
+            body["scopes"] = scopes
+        return cast(dict[str, Any], self._raw.tools.connections_create_app_credential(body))
+
     def set(
         self, app: str, *, client_id: str, client_secret: str | None = None, environment: str = "production"
     ) -> dict[str, Any]:

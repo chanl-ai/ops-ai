@@ -75,6 +75,17 @@ class AppCredential(TypedDict, closed=True):
     type: Literal["ops_ai", "own"]
 
 
+Scope: TypeAlias = str
+
+
+class AppCredentialIn(TypedDict, closed=True):
+    app: str
+    clientId: str
+    clientSecret: str
+    environment: NotRequired[Literal["test", "production"]]
+    scopes: NotRequired[list[Scope] | None]
+
+
 class AppMe(TypedDict, closed=True):
     account: NotRequired[str | None]
     connected: bool
@@ -177,6 +188,11 @@ class CallResult(TypedDict, closed=True):
 class CallRunAs(TypedDict, closed=True):
     email: NotRequired[str | None]
     kind: Literal["person", "team"]
+
+
+class CardCredential(TypedDict, closed=True):
+    name: str
+    type: Literal["ops_ai", "own"]
 
 
 class Change(TypedDict, closed=True):
@@ -315,6 +331,11 @@ class EntryIn(TypedDict, closed=True):
     protection: NotRequired[Literal["system", "managed"] | None]
     templateId: NotRequired[str | None]
     value: str
+
+
+class EnvelopeAppCredential(TypedDict, closed=True):
+    data: AppCredential
+    success: Literal[True]
 
 
 class EnvelopeAppUsers(TypedDict, closed=True):
@@ -667,9 +688,6 @@ class OperationChange(TypedDict, closed=True):
 class OperationHeader(TypedDict, closed=True):
     key: str
     value: str
-
-
-Scope: TypeAlias = str
 
 
 class PageOut(TypedDict):
@@ -1218,6 +1236,8 @@ class ConnectionEnvironment(TypedDict, closed=True):
     certificate: NotRequired[SigningCertificate | None]
     health: NotRequired[ConnectionHealth | None]
     platformApp: NotRequired[str | None]
+    pluginSecrets: NotRequired[dict[str, bool] | None]
+    pluginSettings: NotRequired[dict[str, Any] | None]
     secrets: dict[str, SecretPart]
     set: bool
     settings: dict[str, str]
@@ -1619,9 +1639,12 @@ class SecretMeta(TypedDict, closed=True):
 
 
 class SystemCard(TypedDict, closed=True):
+    appState: Literal["connected", "test_failed", "needs_sign_in", "not_installed"]
+    appStateReason: NotRequired[str | None]
     authKind: NotRequired[str | None]
     category: NotRequired[str | None]
     connectionId: NotRequired[str | None]
+    credential: NotRequired[CardCredential | None]
     description: NotRequired[str | None]
     docsUrl: NotRequired[str | None]
     environments: dict[str, SystemEnvironment]

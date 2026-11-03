@@ -42,6 +42,15 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "connections_create_app_credential": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/app-credentials",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "connections_create_connection": {
     "body": "json",
     "headers": [],

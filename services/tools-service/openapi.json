@@ -460,6 +460,63 @@
         "title": "AppCredential",
         "type": "object"
       },
+      "AppCredentialIn": {
+        "additionalProperties": false,
+        "description": "The team's own OAuth app for one of its apps (the New app credential window).",
+        "properties": {
+          "app": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "App",
+            "type": "string"
+          },
+          "clientId": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Clientid",
+            "type": "string"
+          },
+          "clientSecret": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Clientsecret",
+            "type": "string"
+          },
+          "environment": {
+            "default": "production",
+            "enum": [
+              "test",
+              "production"
+            ],
+            "title": "Environment",
+            "type": "string"
+          },
+          "scopes": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scopes"
+          }
+        },
+        "required": [
+          "app",
+          "clientId",
+          "clientSecret"
+        ],
+        "title": "AppCredentialIn",
+        "type": "object"
+      },
       "AppMe": {
         "additionalProperties": false,
         "description": "The caller's own sign-in on the app's account: Connect my account, or Connected as.",
@@ -1217,6 +1274,29 @@
         "title": "CallRunAs",
         "type": "object"
       },
+      "CardCredential": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "ops_ai",
+              "own"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "CardCredential",
+        "type": "object"
+      },
       "Change": {
         "additionalProperties": false,
         "properties": {
@@ -1872,6 +1952,32 @@
               }
             ],
             "title": "Platformapp"
+          },
+          "pluginSecrets": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "boolean"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pluginsecrets"
+          },
+          "pluginSettings": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pluginsettings"
           },
           "secrets": {
             "additionalProperties": {
@@ -2894,6 +3000,25 @@
           "data"
         ],
         "title": "Envelope[AllowList]",
+        "type": "object"
+      },
+      "Envelope_AppCredential_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AppCredential"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[AppCredential]",
         "type": "object"
       },
       "Envelope_AppPage_": {
@@ -8699,6 +8824,27 @@
       "SystemCard": {
         "additionalProperties": false,
         "properties": {
+          "appState": {
+            "enum": [
+              "connected",
+              "test_failed",
+              "needs_sign_in",
+              "not_installed"
+            ],
+            "title": "Appstate",
+            "type": "string"
+          },
+          "appStateReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appstatereason"
+          },
           "authKind": {
             "anyOf": [
               {
@@ -8731,6 +8877,16 @@
               }
             ],
             "title": "Connectionid"
+          },
+          "credential": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CardCredential"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "description": {
             "anyOf": [
@@ -8885,7 +9041,8 @@
           "toolsCount",
           "moduleIds",
           "environments",
-          "mayManage"
+          "mayManage",
+          "appState"
         ],
         "title": "SystemCard",
         "type": "object"
@@ -11041,6 +11198,213 @@
           }
         },
         "summary": "List App Credentials",
+        "tags": [
+          "connections"
+        ],
+        "x-ops-public": "sdk"
+      },
+      "post": {
+        "description": "Adds the team's own OAuth app to one of its apps: client id, secret and permissions. Team admins only; the\nanswer is the Credentials page's row, with no secret.",
+        "operationId": "connections_create_app_credential",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppCredentialIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AppCredential_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not available on this service yet"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The source could not be reached"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Create App Credential",
         "tags": [
           "connections"
         ],
@@ -15971,7 +16335,11 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 50,
+                  "type": "array"
                 },
                 {
                   "type": "null"

@@ -65,6 +65,7 @@ OWN = "own"
 # tenant, connection, the token answer, the environment signed in (c-580), and whether it is a person's own sign-in
 # (c-584), which may not change what the team's sign-in set. A ValueError with a `code` names why for the event.
 OnToken = Callable[[str, str, dict[str, Any], str, bool], Awaitable[dict[str, Any] | None]]
+PluginSettings = Callable[[str, str, list[str]], Awaitable[dict[str, dict[str, Any]]]]
 TOKEN_SETTINGS = (
     "tokenUrl", "clientId", "scopes", "audience", "resource", "authorizeUrl", "clientAuth", "signingCertificate",
     "subject", "scopeIn",
@@ -152,6 +153,7 @@ class ConnectionService:
         http: httpx.AsyncClient | None = None,
         on_token: OnToken | None = None,
         app_secret: AppSecret | None = None,
+        plugin_settings: PluginSettings | None = None,
     ) -> None:
         """`console_url` is where a sign-in returns (`SIGN_IN_RETURN_PATH` on it); without it no sign-in starts.
         `discovery` finds an MCP server's sign-in (c-331); without it no MCP connection is made from an address.
@@ -174,6 +176,9 @@ class ConnectionService:
         self.on_token = on_token
         # A plugin connection on the platform's own OAuth app reads its secret from the account (c-565).
         self.app_secret = app_secret
+        # A plugin's settings per environment as a person may read them (PluginHost.environment_settings); without it
+        # an account's page shows none.
+        self.plugin_settings = plugin_settings
         # Tests that run after a sign-in, held so the event loop keeps them until they finish.
         self._after_sign_in: set[asyncio.Task[None]] = set()
 
@@ -302,6 +307,10 @@ class ConnectionService:
         out["environments"] = {
             e: self._environment(kind, conn["environments"].get(e), meta, tokens.get(e)) for e in ENVIRONMENTS
         }
+        if self.plugin_settings is not None and conn.get("plugin_id"):
+            held = [e for e in ENVIRONMENTS if conn["environments"].get(e)]
+            for e, shown in (await self.plugin_settings(who.tenant_id, str(conn["id"]), held)).items():
+                out["environments"][e] |= shown
         out["redirectUri"] = self._redirect() if kind.signs_in and self.console_url else None
         mine = own_key(who)
         out["people"] = [

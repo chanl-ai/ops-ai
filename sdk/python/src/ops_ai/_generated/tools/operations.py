@@ -46,6 +46,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "connections_create_app_credential": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/app-credentials",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "connections_create_connection": {
         "body": "json",
         "headers": [],
@@ -717,6 +726,10 @@ class Operations:
         "List App Credentials"
         return self._t.call(SERVICE, OPERATIONS["connections_list_app_credentials"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def connections_create_app_credential(self, body: AppCredentialIn) -> AppCredential:
+        "Create App Credential"
+        return self._t.call(SERVICE, OPERATIONS["connections_create_app_credential"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     def connections_get_app(self, app_id: str) -> AppPage:
         "Get App"
         return self._t.call(SERVICE, OPERATIONS["connections_get_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -859,7 +872,7 @@ class Operations:
         page: int | None = None,
         page_size: int | None = None,
         tool: str | None = None,
-        module_id: str | None = None,
+        module_id: list[str] | None = None,
         thread: str | None = None,
         decision: str | None = None,
         key: str | None = None,
@@ -1215,6 +1228,10 @@ class AsyncOperations:
         "List App Credentials"
         return await self._t.call(SERVICE, OPERATIONS["connections_list_app_credentials"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
+    async def connections_create_app_credential(self, body: AppCredentialIn) -> AppCredential:
+        "Create App Credential"
+        return await self._t.call(SERVICE, OPERATIONS["connections_create_app_credential"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     async def connections_get_app(self, app_id: str) -> AppPage:
         "Get App"
         return await self._t.call(SERVICE, OPERATIONS["connections_get_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -1359,7 +1376,7 @@ class AsyncOperations:
         page: int | None = None,
         page_size: int | None = None,
         tool: str | None = None,
-        module_id: str | None = None,
+        module_id: list[str] | None = None,
         thread: str | None = None,
         decision: str | None = None,
         key: str | None = None,

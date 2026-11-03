@@ -89,6 +89,17 @@ export class Credentials {
     return call(this.raw, 'tools', 'connections_list_app_credentials', {});
   }
 
+  /** Adds the team's own client to an app the team set up: its client id, secret and permissions (all when left
+   * out). The answer is the credential's row; it never carries the secret. */
+  async create(
+    app: string,
+    o: { clientId: string; clientSecret: string; scopes?: string[]; environment?: string },
+  ): Promise<Obj> {
+    const body: Obj = { app, clientId: o.clientId, clientSecret: o.clientSecret, environment: o.environment ?? 'production' };
+    if (o.scopes) body.scopes = o.scopes;
+    return call(this.raw, 'tools', 'connections_create_app_credential', { body });
+  }
+
   async set(app: string, o: { clientId: string; clientSecret?: string; environment?: string }): Promise<Obj> {
     const account = accountOf(await this.apps.get(app));
     const detail = await call(this.raw, 'tools', 'connections_get_connection', { path: { connection_id: account } });

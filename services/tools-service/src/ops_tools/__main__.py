@@ -219,6 +219,7 @@ def main() -> None:
         # A plugin's connection takes its instance from the token answer (c-564).
         on_token=plugins.on_token if plugins else None,
         app_secret=app_keys.value if app_keys else None,
+        plugin_settings=plugins.environment_settings if plugins else None,
     )
     app = create_gateway_app(
         opa=OpaClient(httpx.AsyncClient(base_url=settings.opa_url, timeout=5)),
