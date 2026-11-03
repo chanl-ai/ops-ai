@@ -25,19 +25,19 @@ template is copied into a workspace rather than referenced across.
 
 ### Where the code still crosses teams
 
-Each line is removed or changed by the card named; the boundary lock (`scripts/tests/test_team_boundary.py`) fails on
+Each line says how it is removed or changed; the boundary lock (`scripts/tests/test_team_boundary.py`) fails on
 any new crossing: a table with a team column that is not team-owned or allows no team, a row policy that reads rows
 with no team, or code that means "every team".
 
 | Crossing | Where | Change |
 |---|---|---|
-| Tool modules with no team, and modules approved for another team's workflow | `services/tools-service/src/ops_tools/modules/directory.py:70` (`sees_module`), the no-team Platform tools module | an earlier change: each team installs its own; keys are per team |
-| The dev header acts for every team at the request level | `ops_store.isolation.enter_caller` (reason `dev`) | an earlier change; inside agents-service the dev caller already acts in the one team its request names |
+| Tool modules with no team, and modules approved for another team's workflow | `services/tools-service/src/ops_tools/modules/directory.py:70` (`sees_module`), the no-team Platform tools module | Each team installs its own; keys are per team |
+| The dev header acts for every team at the request level | `ops_store.isolation.enter_caller` (reason `dev`) | inside agents-service the dev caller already acts in the one team its request names |
 
-Removed by an earlier change: a tool's approver being the module's owning team. agents-service decides every held write in its
+No longer exists: a tool's approver being the module's owning team. agents-service decides every held write in its
 run's team and ignores the approving team tools-service names, and the console no longer offers one.
 
-Removed by an earlier change: rows with no team (every team-owned table's team column is `NOT NULL` and the read policy has no
+No longer exist: rows with no team (every team-owned table's team column is `NOT NULL` and the read policy has no
 null branch), task and case types shared across teams (each team holds its own copy, keyed by team), knowledge usage
 counting other teams' agents, case reads with no team filter, and every agents-service code path meaning "every team".
 Knowledge bases are held to their team by the database as well (kb_0011).
@@ -84,7 +84,7 @@ reasons are tested ([gateway-approval-token](../services/agents-service/experime
 | Tables | `graph_threads`, `graph_runs`, `thread_events`, `review_decisions`, `review_approvals` (migration 0021) and `ops_checkpoints`, `ops_checkpoint_writes`, `ops_checkpoint_fences` (0004, 0008) carry `tenant_id`; existing rows are the dev tenant `local` |
 | Policy | Each `ENABLE` and `FORCE ROW LEVEL SECURITY` with `tenant_id = current_setting('app.tenant_id', true)` for reads and writes; an unset tenant matches nothing |
 | Tenant source | `ops_identity` enters each request's isolation context (`ops_store.isolation`: tenant, one team, scope) from the verified token or key, after the principal resolves; no service sets its own, and none is read from a body, header or path. Stores and the checkpointer read it per transaction; no repository takes a tenant argument. A path wider than one team names a reason (`isolation.tenant_wide`, `isolation.system_tx`), logged as `isolation.widen` and listed in `packages/ops_store/tests/test_isolation_sites.py` |
-| One tenant or many | `tenancy_mode` (`single`, the default, or `multi`) is the only difference: single refuses creating any tenant but the install's (`bootstrap_tenant_id`, else `local`), 409 `single_tenant` (`ops_platform/tenants.py`, `tests/test_tenancy_mode.py`). Still one tenant per deployment until an earlier change closes them: `model_keys_tenant` (the tenant whose provider keys a model call naming no tenant uses), `graph_tenant_id` (Microsoft Graph mail), and the 21 agents and 3 models tables with no `tenant_id` |
+| One tenant or many | `tenancy_mode` (`single`, the default, or `multi`) is the only difference: single refuses creating any tenant but the install's (`bootstrap_tenant_id`, else `local`), 409 `single_tenant` (`ops_platform/tenants.py`, `tests/test_tenancy_mode.py`). Still one tenant per deployment: `model_keys_tenant` (the tenant whose provider keys a model call naming no tenant uses), `graph_tenant_id` (Microsoft Graph mail), and the 21 agents and 3 models tables with no `tenant_id` |
 | No tenant | A store call with no tenant raises `NoTenantError`; below the store, the tenant role with no `app.tenant_id` sees no row |
 | Role | The compose database user is a superuser and bypasses RLS, so every tenant transaction runs `SET LOCAL ROLE ops_runtime_tenant`. A deployment must connect as a non-superuser role that owns no tables and may `SET ROLE` to `ops_runtime_tenant` and `ops_runtime_system` |
 | Loops (answer a) | The sweeper and the timer poller claim before they know the tenant. They read it from the thread's row as `ops_runtime_system` (`BYPASSRLS`, `GraphStore.tenant_of`), then do the work in a new task that sets it, never on the loop's own context. Requests never run as that role; `tests/store/test_tenancy.py` holds the list of callers. The inbox drain runs inside a run and has its run's tenant |

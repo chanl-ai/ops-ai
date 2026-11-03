@@ -207,7 +207,7 @@ def bank_module(gw: httpx.Client, host: str) -> str:
     )
     note = next(o for o in made["operations"] if o["name"] == "add_customer_note")
     data(gw.patch(f"/v1/tool-modules/{made['id']}/operations/{note['id']}", json={"requiresApproval": False}))
-    # A test call for CUS-1002 answers as a system that took the note and never replied (an earlier change's mock answers).
+    # A test call for CUS-1002 answers as a system that took the note and never replied (its mock answer).
     mock = {"name": "Never answers", "match": {"customer_id": "CUS-1002"}, "timeout": True}
     data(gw.post(f"/v1/tool-modules/{made['id']}/operations/{note['id']}/mocks", json=mock))
     data(gw.post(f"/v1/tool-modules/{made['id']}/reviews", json={"note": "uc-567"}))

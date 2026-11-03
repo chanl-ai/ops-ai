@@ -1,6 +1,6 @@
 # A team runs its agents on its own Azure OpenAI resource, set on Settings or at install, and calls stay in its region
 
-Status: passing. Id: `uc-605`. Service: `models-service`. Layers: api, cli, ui. Card: an earlier change.
+Status: passing. Id: `uc-605`. Service: `models-service`. Layers: api, cli, ui.
 
 An Azure OpenAI connection names the resource's endpoint, an api-version (`v1`, or a dated version from 2024-10-21 on),
 optionally the region it runs in, and the name of a saved provider key. models-service sends the key in the `api-key` header to

@@ -105,7 +105,7 @@ async function step(name, body, page) {
  * dark theme is its `.dark` class on the root (globals.css), which no setting turns on yet, so the walk sets it.
  */
 async function shoot(page, name) {
-  // At 1280 and at 375, light and dark, for the built-beside-mock page (owner, 11-01: output matches the design).
+  // At 1280 and at 375, light and dark, for the built-beside-mock page: output matches the design.
   const wide = page.viewportSize() ?? { width: 1280, height: 900 };
   // An Apps menu page draws its tabs once the route has rendered; a shot taken before shows an empty tab row.
   // A page left behind by client navigation stays in the DOM hidden, so only a visible tab of this page counts.
@@ -448,7 +448,7 @@ try {
           );
         }, page);
 
-        // an earlier change: a second named account of the app, a call naming it, and a person's own default among their accounts.
+        // A second named account of the app, a call naming it, and a person's own default among their accounts.
         const tenant = (await call(platform, 'GET', '/v1/me', priya)).data?.tenantId;
         /** A gateway call as agents-service makes it for a run in team_ops with nobody behind it, naming `account`. */
         const asAgents = (account) =>

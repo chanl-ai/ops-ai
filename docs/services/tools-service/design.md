@@ -2,7 +2,7 @@
 
 Status: current. What tools-service does, its screens, API, data and sequences.
 
-Status: current for an earlier change (connections and the one executor), an earlier change (MCP sign-in), an earlier change (mock answers) and an earlier change (the MCP server, slice 1: a team's reads over MCP with an API key). The tools service is the one way out for tool calls: a call resolves through the registry, passes the gateway's checks, signs in through its module's connection for the run's environment, and goes out through the egress client. Full product design: the tools system design in the planning notes, outside this repo.
+Status: current for connections and the one executor, MCP sign-in, mock answers, and the MCP server (a team's reads over MCP with an API key). The tools service is the one way out for tool calls: a call resolves through the registry, passes the gateway's checks, signs in through its module's connection for the run's environment, and goes out through the egress client. Full product design: the tools system design in the planning notes, outside this repo.
 
 ## Flow
 

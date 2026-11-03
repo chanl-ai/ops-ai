@@ -89,7 +89,7 @@ are separate lines. An OCR'd field scores at the mean recognition confidence of 
 Each field whose quote is found on its page carries `boxes`, one `{page, x, y, w, h}` per printed line as fractions
 of the page from the top left, narrowed to the value's words when the quote includes a label, and `blocks`, the layout
 block or table cell ids they sit in (`ops_extract.boxes`). A quote not on its page, a file without word boxes
-(DOCX, HTML, text) and reads made before an earlier change carry none. On a page OCR turned upright or straightened, each
+(DOCX, HTML, text) and older reads carry none. On a page OCR turned upright or straightened, each
 word's box is mapped back through those turns, so it lies where the word is printed on the scan as uploaded
 (layout-3). On five real court order reads every quoted field was boxed.
 
@@ -218,7 +218,7 @@ the groups wait for tables.
 ## Baseline accuracy (model path)
 
 restraining_notice v1 tested on its 16 text samples on the shared stack, 2026-10-18, alias `extract` on gpt-5-mini,
-no templates, after an earlier change (headings in page text). 180 expected values in all.
+no templates, with headings in page text. 180 expected values in all.
 
 | Measure | Value |
 |---|---|
@@ -265,7 +265,7 @@ it fell from 11/11 to 9/11, `notice_kind` read as a tax order. That finding is w
 its cited line shows the corrected value; that correction would teach nothing. **Unverified:** no rerun since the fix,
 so the gain from examples is not yet measured.
 
-After an earlier change (scans turned upright and straightened from 1.75 degrees before OCR, layout-2) the four invoice and
+With scans turned upright and straightened from 1.75 degrees before OCR (layout-2), the four invoice and
 statement scans, shifted and skewed, read 26/26 on the template path, about 0.9 s each for a first OCR, with no model
 call (2026-10-19, read again on the shared stack); the skewed invoice's due date was the template's one miss before.
 

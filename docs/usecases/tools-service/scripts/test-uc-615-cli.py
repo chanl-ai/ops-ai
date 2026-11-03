@@ -1,4 +1,4 @@
-"""uc-615, cli layer: docs/usecases/tools-service/a-team-admin-sets-its-own.md, story S6 (step 7), group B of an earlier change.
+"""uc-615, cli layer: docs/usecases/tools-service/a-team-admin-sets-its-own.md, story S6 (step 7).
 The api layer's stack; the team admin runs `ops apps credential` from the repo, signed in as their dev role the way
 `make api` signs in, with the client secret on standard input so it is never on a command line (L1). No model call."""
 

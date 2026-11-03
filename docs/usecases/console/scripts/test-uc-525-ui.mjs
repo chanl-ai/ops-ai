@@ -76,7 +76,7 @@ const trigger = {
 const end = (id, outcome, result) => ({ id, type: 'ops.flow.end', typeVersion: 1, name: id, parameters: { outcome, ...(result ? { result } : {}) } });
 const link = (from, port, to) => ({ from: { node: from, port }, to: { node: to, port: 'in' } });
 
-/** Read the levy, then decide on the amount it found: the case the maintainers asked for. */
+/** Read the levy, then decide on the amount it found. */
 const READ_AND_DECIDE = {
   schemaVersion: 2,
   id: 'uc525_read_decide',

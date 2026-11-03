@@ -1,4 +1,4 @@
-"""The SDK's layer in the screen's words (an earlier change K1): `ops.apps`, `ops.credentials`, `ops.accounts`, `ops.tools`,
+"""The SDK's layer in the screen's words: `ops.apps`, `ops.credentials`, `ops.accounts`, `ops.tools`,
 `ops.resources`, `ops.usage`, each a thin set of methods over the generated clients, which call today's routes.
 
 A use case's sdk step asks for a method by area and verb; while K1 is not built the method is missing, the step's
@@ -17,7 +17,7 @@ def layer(ops: Any, area: str, verb: str) -> Callable[..., Any] | None:
 
 
 def run_path(module_id: str, operation: str) -> str:
-    """A tool's run route (an earlier change P1): Mock or Real from the tool page, Real through the gateway's checks."""
+    """A tool's run route: Mock or Real from the tool page, Real through the gateway's checks."""
     return f"/v1/tool-modules/{module_id}/operations/{operation}/run"
 
 

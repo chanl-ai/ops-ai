@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-098`. Service: `console`. Layers: ui.
 
-Card an earlier change: Guardrails, Widgets, Egress hosts, Secrets, Wiki collections and a connection's sources ask the API for one
+Guardrails, Widgets, Egress hosts, Secrets, Wiki collections and a connection's sources ask the API for one
 page and its total (`?page=&pageSize=&search=`) instead of loading every row and paging in the browser. This use case
 drives Guardrails, on agents-service, end to end.
 

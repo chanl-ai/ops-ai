@@ -1,6 +1,6 @@
 # Workflow runner
 
-Status: agreed design, 2026-10-16; slice 1 is card an earlier change. The runner is built on LangGraph, made resilient with a step
+Status: agreed design, 2026-10-16. The runner is built on LangGraph, made resilient with a step
 journal, a Postgres queue and worker processes. Node types and instances, the catalogue, and the runner options
 weighed with their sources: [workflow nodes](../design/workflows/workflow-nodes.md). This page replaces the 2026-10-15 proposal.
 
@@ -118,8 +118,7 @@ open, because the write it approves reads nothing from the run, is a failed step
 ## 7 Versioning
 
 Each run pins its definition version and digest; each node instance pins its type version; each work row carries the
-engine build, and a worker claims only its own build's rows. An archived workflow (`archived_at` on every version,
-an earlier change) starts no run of any mode and leaves the lists; runs already started finish on their pinned version. Definitions with `schemaVersion: 1` keep compiling on the
+engine build, and a worker claims only its own build's rows. An archived workflow (`archived_at` on every version) starts no run of any mode and leaves the lists; runs already started finish on their pinned version. Definitions with `schemaVersion: 1` keep compiling on the
 v1 compiler until no open thread pins one.
 
 ## 8 Proof

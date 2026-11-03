@@ -1,4 +1,4 @@
-"""uc-615, sdk layer: docs/usecases/tools-service/a-team-admin-sets-its-own.md, story S5 (step 6), group B of an earlier change.
+"""uc-615, sdk layer: docs/usecases/tools-service/a-team-admin-sets-its-own.md, story S5 (step 6).
 The api layer's stack; a developer signed in through the Python SDK sets the app credential with the layer in the
 screen's words (K1), which calls today's environment route. No model call."""
 

@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-086`. Service: `console`. Layers: ui.
 
-an earlier change's path in one run, as the seeded people, in the console: the bank's keys stored as secrets, its OpenAPI
+The import-to-call path in one run, as the seeded people, in the console: the bank's keys stored as secrets, its OpenAPI
 document imported, reviewed and published, a second version published, the reads tried and granted to an agent, a
 chat write held until a second person approves it, and the call log naming who asked, who approved and how each call
 ended. The design is [tool lifecycle](../../architecture/tool-lifecycle.md). It replaces uc-055 as the card's gate;

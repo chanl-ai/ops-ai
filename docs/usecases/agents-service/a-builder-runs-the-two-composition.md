@@ -1,6 +1,6 @@
 # A builder runs the two composition Examples
 
-Status: current. Id: `uc-624`. Service: `agents-service`. Layers: sdk. Card: an earlier change (R5).
+Status: current. Id: `uc-624`. Service: `agents-service`. Layers: sdk.
 
 A builder on a fake stack reuses the R4 citing agent and the R2 three-node workflow. A workflow Agent step
 asks A2 and keeps the cited answer. A published agent starts W1 as `workflow:<id>` and returns the three-node

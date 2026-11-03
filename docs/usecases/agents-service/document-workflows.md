@@ -1,7 +1,6 @@
 # uc-568 Document workflows
 
 Status: current. Id: `uc-568`. Service: `agents-service`. Layers: api, ui, cli.
-Card: an earlier change.
 
 A builder today can read a document only into fields someone has already defined, and can start a workflow only one
 run at a time from the console or an API call. So an unknown document, a request from a person outside the console, or

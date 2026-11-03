@@ -62,6 +62,6 @@ only as a form body behind a Bearer key.
 
 ## Non-vacuous check
 
-Step 5 fails with Real answering writes from the stub (the rule before an earlier change), and step 8 fails when a save reports only
+Step 5 fails with Real answering writes from the stub (the earlier rule), and step 8 fails when a save reports only
 its first problem; both were seen failing in tools-service's tests (`tests/test_test_console_reads.py`,
 `tests/test_body_encoding.py`).

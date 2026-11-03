@@ -14,14 +14,14 @@ Status: current. Id: `uc-075`. Service: `console`. Layers: ui.
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | James creates a knowledge base | kb-service answers 201; the maintainers sent is his email, filled in by default |
+| 1 | James creates a knowledge base | kb-service answers 201; the `owner` sent is his email, filled in by default |
 | 2 | He adds a file source, uploads the branch operations manual into it and syncs | the upload goes to the source's files route (201); the item reads Indexed |
 | 3 | He searches the knowledge bases list for it | one row |
 | 4 | An agent granted only this base is asked the daily ATM limit; he opens the citation | the popover shows the Branch Operations Manual with page, section and version; Open document shows the PDF and its pages |
 | 5 | A second version of the file is uploaded under the same name and synced | the Changes page lists it |
 | 6 | Throughout | no knowledge call answers 404 and no page error |
 
-Step 5 uploads through kb-service directly: the source page has no "add files" control on an earlier change.
+Step 5 uploads through kb-service directly: the source page has no "add files" control.
 
 ## Acceptance layers
 

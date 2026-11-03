@@ -1,6 +1,6 @@
 # Basic workflow nodes run through the queue and survive a worker crash
 
-Status: current. Id: `uc-081`. Service: `agents-service`. Layers: api. Card: an earlier change slice 1.
+Status: current. Id: `uc-081`. Service: `agents-service`. Layers: api.
 
 ## Preconditions
 

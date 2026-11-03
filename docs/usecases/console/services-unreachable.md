@@ -1,6 +1,6 @@
 # The console says when its services are out of reach, when a session has ended, and when a linked task is gone
 
-Status: current. Id: `uc-404`. Service: `console`. Layers: ui. Card: overview UX run 2026-10-19.
+Status: current. Id: `uc-404`. Service: `console`. Layers: ui.
 
 During a database outage every call answered 500 and each page said something different: the overview could not
 load, the sidebar said teams were unavailable, and sign-in said something went wrong. The shell now says it once,

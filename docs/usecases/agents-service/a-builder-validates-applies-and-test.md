@@ -1,6 +1,6 @@
 # A builder validates, applies and test-runs the three-node workflow
 
-Status: current. Id: `uc-623`. Service: `agents-service`. Layers: sdk, cli. Card: an earlier change (R2).
+Status: current. Id: `uc-623`. Service: `agents-service`. Layers: sdk, cli.
 
 A builder copies `examples/workflows/01-normalize-a-request`, validates and applies the same YAML, and test-runs a
 support request through Python, TypeScript, and `ops workflows`. A request missing `customerEmail` is refused with

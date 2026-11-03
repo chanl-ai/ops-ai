@@ -35,7 +35,7 @@ await withUiStack(async (consoleUrl) => {
     // Only what works: chat is the one channel, the tool-call cap the one guardrail setting, and no evals.
     const channels = await page.locator('#ag-channels [role="radio"], #ag-channels button').allInnerTexts();
     check('Can talk on offers Chat alone', JSON.stringify(channels.map((c) => c.trim())) === '["Chat"]', channels);
-    // Masking is enforced since an earlier change, so its switch shows; When unsure is not enforced, so it does not.
+    // Masking is enforced, so its switch shows; When unsure is not enforced, so it does not.
     check('only enforced guardrail settings are shown', (await page.locator('#g-pii').count()) === 1 && (await page.locator('#g-unsure').count()) === 0 && (await page.locator('#g-max').count()) === 1);
     check('no Evals tab is offered', (await page.getByTestId('agent-evals-tab-trigger').count()) === 0);
     const runs = (await api(`/v1/agents/${created.id}/runs`)).data ?? [];

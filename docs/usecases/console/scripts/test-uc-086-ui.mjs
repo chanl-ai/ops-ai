@@ -71,7 +71,7 @@ async function tryOperation(page, consoleUrl, moduleId, op, fields) {
   return { status: res?.status(), sent: JSON.parse(res?.request().postData() ?? '{}'), data: res ? ((await res.json().catch(() => ({}))).data ?? {}) : {} };
 }
 
-/** The bank's own record of the account, read through the gateway as the maintainers' test call does. */
+/** The bank's own record of the account, read through the gateway as the test call does. */
 async function holdsOn(moduleId, contextId) {
   const res = await fetch(`${tools}/v1/tool-modules/${moduleId}/test`, { method: 'POST', headers: await headers(JAMES), body: JSON.stringify({ operation: 'get_account', contextId, target: 'sandbox', input: { account_id: ACCOUNT } }) });
   const out = (await res.json()).data?.output;
@@ -157,7 +157,7 @@ await withUiStack(
       // Nadia reviews from her own team, where James's module page reads as not found; the task opens from Human Tasks.
       const waiting = (await get(`/v1/tool-modules/${moduleId}`)).versions.find((v) => v.status === 'in_review');
       await nadia.goto(`${consoleUrl}/reviews?review=${encodeURIComponent(waiting?.reviewId ?? '')}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      // an earlier change: before deciding, the review shows what it approves: its operations, the host they reach, and a link
+      // Before deciding, the review shows what it approves: its operations, the host they reach, and a link
       // to the module itself.
       const panel = nadia.getByTestId('tool-module-review');
       await panel.waitFor({ timeout: 120_000 });
@@ -186,7 +186,7 @@ await withUiStack(
       await dialog.locator('#spec-url').fill(`https://${stack.bank.host}/openapi.json`);
       await dialog.getByRole('button', { name: 'Next' }).click();
       await dialog.getByLabel('Access for get_statement').waitFor({ timeout: 60_000 });
-      // Operations the module already has are listed as in it, never selected or counted (an earlier change T007); the new read
+      // Operations the module already has are listed as in it, never selected or counted; the new read
       // starts selected.
       const inModule = await dialog.getByTestId('op-in-module-get_account').getByText('Already here').count();
       const ownTicked = await dialog.locator('#op-get_account').getAttribute('data-state');
@@ -277,7 +277,7 @@ await withUiStack(
       before = await holdsOn(moduleId, ownerContext);
       await chat(james, consoleUrl, `call place_hold {"account_id": "${ACCOUNT}", "amount": 25, "reason": "uc-086 suspected fraud"}`);
       thread = /\/chat\/([^/?#]+)/.exec(james.url())?.[1];
-      // The card waits on a reviewer; James asked for the write, so he is offered no Approve on it (an earlier change canDecide).
+      // The card waits on a reviewer; James asked for the write, so he is offered no Approve on it (canDecide).
       const card = await james.getByTestId('approval-waiting-on').last().waitFor({ timeout: 60_000 }).then(() => true, () => false);
       const selfApprove = await james.getByRole('button', { name: /^Approve/ }).count();
       const sent = ((await get(`/v1/tool-modules/${moduleId}/activity`))?.recent ?? []).filter((c) => c.target === 'place_hold');

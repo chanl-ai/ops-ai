@@ -1,6 +1,6 @@
 # A builder tests an agent on a real chat thread the server marks test
 
-Status: passing. Id: `uc-247`. Service: `agents-service`. Layers: api, ui. Card: an earlier change; ui layer an earlier change.
+Status: passing. Id: `uc-247`. Service: `agents-service`. Layers: api, ui.
 
 ## Stories
 

@@ -1,6 +1,6 @@
 # A bank's server mints a widget session, and the chat's approval is decided through Reviews
 
-Status: current. Id: `uc-117`. Service: `agents-service`. Layers: api. Card: an earlier change.
+Status: current. Id: `uc-117`. Service: `agents-service`. Layers: api.
 
 The bank's server mints a 15-minute session for the signed-in person with the deployment's own mint key; a team API
 key, another deployment's key and a revoked key mint nothing. The embed app's server reads the deployment's public

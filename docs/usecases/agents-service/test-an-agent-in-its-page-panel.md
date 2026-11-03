@@ -1,9 +1,8 @@
 # A builder tests an agent in the right panel of its page, with the chat page's components
 
-Status: passing. Id: `uc-253`. Service: `agents-service`. Layers: ui. Card: an earlier change.
+Status: passing. Id: `uc-253`. Service: `agents-service`. Layers: ui.
 
-The agent page's right column is a panel with four tabs. Test is a real chat on a thread the server marks test
-(an earlier change), drawn with the chat page's own message list, composer and cards (`components/chat/thread-messages.tsx`).
+The agent page's right column is a panel with four tabs. Test is a real chat on a thread the server marks test, drawn with the chat page's own message list, composer and cards (`components/chat/thread-messages.tsx`).
 Why explains the selected reply. Versions and Used in hold what the right column showed before. Run as is gone.
 
 ## Preconditions

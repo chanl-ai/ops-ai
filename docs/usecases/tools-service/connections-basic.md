@@ -1,6 +1,6 @@
 # A tool signs in with a username and password from its connection, by environment
 
-Status: passing. Id: `uc-391`. Service: `tools-service`. Layers: api, ui. Card: an earlier change.
+Status: passing. Id: `uc-391`. Service: `tools-service`. Layers: api, ui.
 
 The basic strategy sends `Authorization: Basic` with the connection's username for the environment and its password,
 a secret part written once and never shown. A change against a revision someone else already changed is refused.

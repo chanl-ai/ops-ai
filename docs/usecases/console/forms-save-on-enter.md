@@ -2,7 +2,7 @@
 
 Status: current. Id: `uc-097`. Service: `console`. Layers: ui.
 
-Card an earlier change: `DialogShell` and `SettingsSection` take `onSubmit` and render a `<form>`, so Enter in a field saves the
+`DialogShell` and `SettingsSection` take `onSubmit` and render a `<form>`, so Enter in a field saves the
 way the save button does, and every other button in them is `type="button"` so it never submits.
 
 ## Preconditions

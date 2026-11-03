@@ -57,7 +57,7 @@ TEAM_OF = dict.fromkeys(("admin", "builder", "approver", "viewer"), "team_ops") 
 
 
 def target(task: str) -> str:
-    """The detail of a check whose behaviour waits on a task of an earlier change's list."""
+    """The detail of a check whose behaviour waits on work not built yet."""
     return f"target: waits on {task}"
 
 

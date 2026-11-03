@@ -1,6 +1,6 @@
 # A developer calls any API as a standard dev user
 
-Status: passing. Id: `uc-614`. Service: `platform-service`. Layers: api. Card: an earlier change.
+Status: passing. Id: `uc-614`. Service: `platform-service`. Layers: api.
 
 A developer runs `make api <METHOD> <PATH> AS=<role>` or `make sdk-call CALL='…' AS=<role>` as one of the standard
 dev users in `services/platform-service/seed/dev-roles.json` (admin, builder, approver, viewer, security, platform).

@@ -79,7 +79,7 @@ await withUiStack(
         };
         // A field without a schema title is named in words, never by its camelCase key.
         const labels = (await dialog.locator('label').allInnerTexts()).map((t) => t.trim()).filter(Boolean);
-        // an earlier change's screen evidence: the run form with its Files field at 1280 and 400.
+        // Screen evidence: the run form with its Files field at 1280 and 400.
         mkdirSync(evidenceDir('273', 'screens'), { recursive: true });
         // At the review widths once the dialog has settled, then the same input as JSON.
         for (const width of [1280, 400]) {

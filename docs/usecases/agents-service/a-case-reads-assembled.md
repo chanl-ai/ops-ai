@@ -1,6 +1,6 @@
 # A case reads assembled
 
-Status: passing (2026-10-19). Id: `uc-251`. Service: `agents-service`. Layers: api, ui. Card: an earlier change; ui layer an earlier change.
+Status: passing (2026-10-19). Id: `uc-251`. Service: `agents-service`. Layers: api, ui.
 
 ## Stories
 
@@ -52,4 +52,4 @@ unit test `tests/api/test_case_page.py::test_the_case_says_what_it_waits_on_unti
 ## What this does not cover
 
 Whether the fee is waived after approval: the gateway's binding of `cardAccount` to the case is the tool's own check,
-covered by tools-service. The case page in the console is an earlier change.
+covered by tools-service. The case page in the console has its own use case.

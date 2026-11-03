@@ -1,6 +1,6 @@
 # Documents emailed to a team mailbox become cases, and the sender gets a reply
 
-Status: current. Id: `uc-223`. Service: `agents-service` (the worker), `tools-service` (IMAP, the reply), `files-service`. Layers: api. Card: an earlier change.
+Status: current. Id: `uc-223`. Service: `agents-service` (the worker), `tools-service` (IMAP, the reply), `files-service`. Layers: api.
 
 A notice PDF and a CSV of debtors emailed to a team's IMAP mailbox each become a child run (`mail_document`) that
 reads every debtor (Extract from file, Several records) and opens a court order case per debtor. Attachments files-service

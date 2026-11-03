@@ -1,5 +1,5 @@
-"""uc-611, sdk layer: docs/usecases/tools-service/a-developer-builds-a-rest-tool.md, story S8 (step 14), group F of
-an earlier change. The Apps stack (docs/usecases/lib/apps_walk.py) and its fake system's Bearer endpoint: a builder signed in
+"""uc-611, sdk layer: docs/usecases/tools-service/a-developer-builds-a-rest-tool.md, story S8 (step 14).
+The Apps stack (docs/usecases/lib/apps_walk.py) and its fake system's Bearer endpoint: a builder signed in
 through the Python SDK adds a custom REST app holding the base address and the token, adds a tool addressed by its path
 alone, and runs it Real. Apps and tools come from the SDK's layer in the screen's words (K1),
 over today's connection routes and the tool page's run route (P1). No model call."""

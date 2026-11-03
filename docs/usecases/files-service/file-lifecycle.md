@@ -1,6 +1,6 @@
 # A member stores a file once and it is downloaded, held and deleted under its rules
 
-Status: passing. Id: `uc-093`. Service: `files-service`. Layers: api. Card: an earlier change.
+Status: passing. Id: `uc-093`. Service: `files-service`. Layers: api.
 
 ## Preconditions
 

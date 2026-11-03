@@ -1,6 +1,6 @@
 # A person corrects a document read in Human Tasks and sees the reply and cases
 
-Status: passing. Id: `uc-224`. Service: `agents-service`. Layers: ui. Card: an earlier change.
+Status: passing. Id: `uc-224`. Service: `agents-service`. Layers: ui.
 
 A mailed document is read into fields; a field below the floor stops the read at Check the read in Human Tasks. The
 reviewer sees the file, each field's confidence and the page and quote it came from, corrects a misread value and

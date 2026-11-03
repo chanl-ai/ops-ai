@@ -141,7 +141,7 @@ with (
         started == [READ] and "found" in text and len(reads) == 1,
         {"events": [e.get("type") for e in events], "started": started, "received": len(reads)},
     )
-    # an earlier change T004: the bank's answer is one flat object, so it streams as a record part and is kept on reload.
+    # The bank's answer is one flat object, so it streams as a record part and is kept on reload.
     parts = [e["part"] for e in events if e.get("type") == "part"]
     kept = [p for m in data(api.get(f"/chat/threads/{thread}", headers=TEAM))["messages"] for p in m.get("parts") or []]
     check(

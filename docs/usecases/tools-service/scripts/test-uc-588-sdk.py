@@ -1,4 +1,4 @@
-"""uc-588, sdk layer: docs/usecases/tools-service/plugin-sign-in-methods.md, story S11 (step 34), group C of an earlier change.
+"""uc-588, sdk layer: docs/usecases/tools-service/plugin-sign-in-methods.md, story S11 (step 34).
 The Apps stack (docs/usecases/lib/apps_walk.py); the person-key desk is on for person sign-in, and Maya gives, reads
 and removes her own key through the SDK's layer in the screen's words (K1), over today's
 /v1/me/connections routes.

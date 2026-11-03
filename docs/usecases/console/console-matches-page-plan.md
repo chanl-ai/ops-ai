@@ -1,6 +1,6 @@
 # The console matches the page plan
 
-Status: current. Id: `uc-100`. Service: `console`. Layers: ui. Card: an earlier change.
+Status: current. Id: `uc-100`. Service: `console`. Layers: ui.
 
 The Overview shows only what waits on a person: the Reviews count and the Cases "Needs a person" view. Agents has no
 Templates tab or "Start from template" until templates have an API. Chat reaches Conversations from the sidebar. The

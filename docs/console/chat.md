@@ -83,4 +83,4 @@ none of the existing renderers gives, and add it to the registry, not to a page.
 | Every shape with sample data | `/dev/widgets` (dev server only), parts in `apps/console/src/lib/widgets/sample-parts.json`; uc-073 |
 | Widgets through a real chat | uc-061 (fake bank's insights spec, scripted model) |
 | The thread blocks, citations, remote images | uc-074 |
-| Ask, cite, approve and reject in a thread | uc-072 (approval waits on platform step-up, an earlier change T022) |
+| Ask, cite, approve and reject in a thread | uc-072 (approval waits on platform step-up) |

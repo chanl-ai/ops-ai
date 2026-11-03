@@ -13,7 +13,7 @@ search index, and a tenant policy on every tenant-scoped table.
 | S1 | A DBA installs the latest release on an empty SQL Server database and it matches the code | api | 1, 2 | 2 |
 | S2 | A DBA upgrades an install of an earlier release to the latest and it matches the code | api | 3, 4, 5 | 5 |
 
-S2 waits. SQL Server upgrades start from the first release whose bundle installs, the release cut after an earlier change, because
+S2 waits. SQL Server upgrades start from the first release whose bundle installs, because
 no SQL Server install of an earlier release exists. Until a migration lands after that release, the walk runs S1 only
 and prints `WAIT 3-5` in place of S2's checks.
 
@@ -43,6 +43,6 @@ and prints `WAIT 3-5` in place of S2's checks.
 
 ## Non-vacuous check
 
-S1 was watched red on the real server before an earlier change: the bundle had no checkpointer tables and no memory full-text
+S1 was watched red on the real server before the fix: the bundle had no checkpointer tables and no memory full-text
 index, refused `ON DELETE RESTRICT`, and declared foreign keys in an order that did not match their target key. S2 has
 not been seen red, since it cannot run yet; its first run needs the same check.

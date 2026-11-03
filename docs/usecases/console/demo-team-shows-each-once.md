@@ -1,6 +1,6 @@
 # The demo team shows each case and workflow once, and its bank data matches its stories
 
-Status: current. Id: `uc-450`. Service: `console`, `agents-service` and the bank stand-in. Layers: ui. Card: an earlier change.
+Status: current. Id: `uc-450`. Service: `console`, `agents-service` and the bank stand-in. Layers: ui.
 
 A walk of staging found each court order notice case open two and three times, two copies of each court order workflow in the run
 picker, and Dispute Desk unable to find a credit card charge the seeded dispute names, because the bank stand-in held

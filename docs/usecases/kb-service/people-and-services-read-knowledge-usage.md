@@ -1,11 +1,11 @@
 # People and services read knowledge usage, refs, search and workflow refs on one route each
 
-Status: passing. Id: `uc-399`. Service: `kb-service`. Layers: api. Card: an earlier change.
+Status: passing. Id: `uc-399`. Service: `kb-service`. Layers: api.
 
 Knowledge usage, knowledge-base refs, knowledge search and workflow refs were routes only another service could call.
 Each now takes a person with the matching cell (agents.view, knowledge.view, workflows.view), who gets their team's
 records, and a service holding the matching scope, which keeps the tenant-wide answer it checks against grants itself.
-The tool module review import, a copy from a store an earlier change retired, is gone.
+The tool module review import, a copy from a retired store, is gone.
 
 ## Preconditions
 

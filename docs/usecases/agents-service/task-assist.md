@@ -1,6 +1,6 @@
 # A typed task opens with task assist when the team turns it on
 
-Status: current. Id: `uc-263`. Service: `agents-service`. Layers: api, ui. Card: an earlier change; ui layer an earlier change.
+Status: current. Id: `uc-263`. Service: `agents-service`. Layers: api, ui.
 
 ## Stories
 

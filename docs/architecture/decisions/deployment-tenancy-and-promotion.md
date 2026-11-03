@@ -65,7 +65,7 @@ approval covers every minor and patch release within the approved major version,
 re-runs the suite and needs no new approval. A major version is one that adds an operation,
 widens an operation's access, widens a subject-binding input, or changes egress hosts (`03` 4.1); it
 needs a new approval for every workflow that moves to it. For emergencies
-the maintainers can **revoke** a module version: the data gateway then refuses calls to it, and affected
+a module version can be **revoked**: the data gateway then refuses calls to it, and affected
 runs fall into their human step (see failure modes). This gives the problem statement's "independent module
 rollback" without silently changing what a running workflow calls, a failure seen in an earlier
 internal product that attached tools at runtime (design lessons, "Tools, MCP and scoping").

@@ -101,11 +101,11 @@ start. Change it, then restart the services (`./install.sh` on a running install
 OPS_FLAGS=mcp_gateway
 ```
 
-| Flag | Turns on | Owner |
-|---|---|---|
-| `mcp_gateway` | The address outside assistants (Claude, Cursor, Copilot) use to reach a team's tools, `/mcp/{env}/{team}`, and the console's MCP channel. Off, `/mcp` answers 404 `feature_off` | an earlier change |
-| `tool_search` | Agents with more tools than `OPS_TOOL_SEARCH_ABOVE` search for the one they need | an earlier change |
-| `several_accounts` | A team connects several named accounts of one app (a second Salesforce org), and a tool or step names the one it uses. Off, each app has one account and naming one is refused | an earlier change |
+| Flag | Turns on |
+|---|---|
+| `mcp_gateway` | The address outside assistants (Claude, Cursor, Copilot) use to reach a team's tools, `/mcp/{env}/{team}`, and the console's MCP channel. Off, `/mcp` answers 404 `feature_off` |
+| `tool_search` | Agents with more tools than `OPS_TOOL_SEARCH_ABOVE` search for the one they need |
+| `several_accounts` | A team connects several named accounts of one app (a second Salesforce org), and a tool or step names the one it uses. Off, each app has one account and naming one is refused |
 
 The list above is a copy for reading; the registry is `packages/ops_service_kit/src/ops_service_kit/flags.py`, and
 `docker compose`, the Kubernetes overlay (`ops-origin`) and Fly (`[env]`) each pass `OPS_FLAGS` to every service. A name

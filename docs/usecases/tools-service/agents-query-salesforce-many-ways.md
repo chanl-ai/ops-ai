@@ -1,7 +1,7 @@
 # An agent queries Salesforce seven ways, a page at a time, and nothing it types changes a query
 
 Status: current on main behind the `OPS_PLUGINS` switch, which every layer turns on for its own services. Id: `uc-581`.
-Service: `tools-service` with platform-service, kb-service and agents-service. Layers: api, ui, cli. Card: an earlier change.
+Service: `tools-service` with platform-service, kb-service and agents-service. Layers: api, ui, cli.
 Design: `docs/guide/plugins.md`, Paging and queries.
 
 ## Stories

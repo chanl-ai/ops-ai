@@ -82,7 +82,7 @@ reading its reply need its password, which is held only in Secrets.
 
 | What | State |
 |---|---|
-| Mailbox | The Ethereal test account is connected in Security (Channels > Email, "Demo intake"), its password the secret `DEMO_MAILBOX_PASSWORD`; Test connection passes. A workspace connects an address once and a mailbox cannot be removed or moved to another team yet (proposed an earlier change), so the test account stays in Security |
+| Mailbox | The Ethereal test account is connected in Security (Channels > Email, "Demo intake"), its password the secret `DEMO_MAILBOX_PASSWORD`; Test connection passes. A workspace connects an address once and a mailbox cannot be removed or moved to another team yet, so the test account stays in Security |
 | Workflows | Security: `mail_intake` (Mailed documents) v2 live on the test mailbox, starting `mail_document` per attachment, which starts `levy_case` per debtor |
 | Demo team | Harbor & Pine Operations (`team_a0877a1d8907`): the garnishment notice type and the court order workflows `levy_document_a0877a1d` (`Levy notice: read the document`) and `levy_debtor_a0877a1d` (`Levy notice: one debtor`), live, made by `mailbox_demo.py levy` from `scripts/demo/team.json`. Workflow and document type ids are one per workspace, so a team's copies end in its id's first eight characters. No mailbox yet, so the email intake `levy_mail_intake_a0877a1d` is made when one is connected |
 | Model | The read uses alias `extract`, or `default` when there is none. Staging has no `extract`, so `default` serves it: gpt-4.1-mini on OpenAI, key `OPENAI_API_KEY` in Secrets, through models-service key `purpose:documents` (cap 5 USD). One real model call per notice |

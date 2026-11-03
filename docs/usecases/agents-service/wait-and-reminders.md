@@ -1,6 +1,6 @@
 # A workflow waits for a time or date and reminds a person
 
-Status: passing (2026-10-19). Id: `uc-403`. Service: `agents-service`. Layers: api, ui. Card: an earlier change.
+Status: passing (2026-10-19). Id: `uc-403`. Service: `agents-service`. Layers: api, ui.
 
 A court order notice gives the bank a date to respond by. The workflow keeps that date itself: a Wait step pauses the run for
 a duration or until a date read from an earlier step, and goes on by `out` when the time has passed. A date already

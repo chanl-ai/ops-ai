@@ -294,6 +294,6 @@ limit to Stripe in test mode.
 | Per-person access lists | Stored on the binding, not enforced |
 | Adding a plugin knowledge source from the console | kb-service API only; the source page syncs and shows it |
 | Plugins running out of process | Python tools run inside tools-service |
-| Inbound webhooks a plugin declares | Designed in an earlier change's spec; built in an earlier change |
+| Inbound webhooks a plugin declares | Designed; not built yet |
 | One rate window per connection, Retry-After, and recorded fakes with standard cases | Planned |
 | A signed client assertion and the JWT grant, and knowledge items over 25 MB | Planned; a client certificate on the TLS handshake works today |

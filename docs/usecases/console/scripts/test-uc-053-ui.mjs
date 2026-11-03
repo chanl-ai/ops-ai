@@ -46,7 +46,7 @@ await withUiStack(
       const errors = [];
       const row = (page) => page.getByRole('row', { name: new RegExp(wf.name) });
 
-      // an earlier change: the request runs as the tool_access_request system workflow; the module's Access tab links to the run's
+      // The request runs as the tool_access_request system workflow; the module's Access tab links to the run's
       // review by its run key and decides nothing itself.
       check('1 the request names its workflow run', approval.reviewId === `tool_access.requested:${approval.id}`, approval);
       const P = as(await tokenFor('p.shah@harborpine.example'), 'team_ops');
@@ -71,7 +71,7 @@ await withUiStack(
       await row(pp).getByRole('link', { name: 'Decide in Human Tasks' }).click();
       const sheet = pp.getByTestId('review-sheet');
       await sheet.waitFor({ state: 'visible', timeout: 60_000 });
-      check('3 Human Tasks opens the request for another person in the maintainers team', (await sheet.innerText()).includes(`Let ${wf.name} use Statements ${TAG}?`));
+      check('3 Human Tasks opens the request for another person in the owning team', (await sheet.innerText()).includes(`Let ${wf.name} use Statements ${TAG}?`));
       const decided = armed(pp.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/decision'), { timeout: 60_000 }));
       // A workflow step decides by its options; Approve authorises the run's grant (Reject asks for a reason).
       await pp.getByTestId('option-decision-form').getByTestId('decide-approve').click();

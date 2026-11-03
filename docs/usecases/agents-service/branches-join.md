@@ -1,6 +1,6 @@
 # A workflow's branches join before the next step
 
-Status: passing (2026-10-19). Id: `uc-400`. Service: `agents-service`. Layers: api, ui. Cards: an earlier change, an earlier change.
+Status: passing (2026-10-19). Id: `uc-400`. Service: `agents-service`. Layers: api, ui.
 
 A builder runs two checks at once, a limits check and a payee screening, and decides once both are back. One step
 connects to both branches, and a Join waits for them: the decision step after it runs once, with each branch's last

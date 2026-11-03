@@ -1,6 +1,6 @@
 # An agent reads a team's file and a document's fields by its type, and never another team's
 
-Status: api passing, ui failing. Id: `uc-613`. Service: `tools-service`. Layers: api, ui. Card: an earlier change.
+Status: api passing, ui failing. Id: `uc-613`. Service: `tools-service`. Layers: api, ui.
 
 The Platform tools module of every install holds `read_file` (a team file's full text, found by id
 or name) and `read_document` (a document's fields with one of the team's document types). Both are documents-service's

@@ -127,7 +127,7 @@ try {
       const person = await call(tools, 'PUT', '/v1/plugins/test.person/team', priya, { enabled: true, signIn: 'person', clientId: 'multi-app', clientSecret: fake.info.clients['multi-app'] });
       const keyed = await call(tools, 'PUT', '/v1/plugins/test.header-key/team', priya, { enabled: true, credentials: { key: fake.info.secrets.key } });
       await call(tools, 'POST', `/v1/connections/${keyed.data?.connectionId}/test`, priya, { environment: 'production' });
-      // an earlier change: each person brings their own key to this one; the team gives none.
+      // Each person brings their own key to this one; the team gives none.
       const ownKeyed = await call(tools, 'PUT', '/v1/plugins/test.person-key/team', priya, { enabled: true, signIn: 'person' });
       const agent = (await call(agents, 'POST', '/v1/agents', priya, { name: 'Ticket desk', role: 'Reads tickets from Person desk' })).data ?? {};
       // agents-service keeps the grantable tools for 30 s, so the plugin's operation is offered within that.

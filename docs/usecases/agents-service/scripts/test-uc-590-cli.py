@@ -1,4 +1,4 @@
-"""uc-590, cli layer: docs/usecases/agents-service/plugin-templates.md, story S7 (step 23), group E of an earlier change.
+"""uc-590, cli layer: docs/usecases/agents-service/plugin-templates.md, story S7 (step 23).
 The sdk layer's stack: platform-service, tools-service with the test plugin, agents-service reading tools-service.
 A team admin lists the app's resources and adds the agent with `ops resources`, signed in as their dev role the way
 `make api` signs in (task L2). No model call."""

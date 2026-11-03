@@ -1,6 +1,6 @@
 # A workflow's tool step reaches its error and timeout ports on mock answers
 
-Status: passing. Id: `uc-397`. Service: `tools-service`. Layers: api. Card: an earlier change.
+Status: passing. Id: `uc-397`. Service: `tools-service`. Layers: api.
 
 A builder sets an operation's mock answers in test: a status and body, a timeout or a delay, each optionally matching
 input values, one the default. The one executor answers a call that says `environment: test` from the first mock that

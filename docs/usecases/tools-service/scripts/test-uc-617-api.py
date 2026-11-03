@@ -1,5 +1,5 @@
-"""uc-617, api layer: docs/usecases/tools-service/an-app-that-fails-says-why.md, stories S1-S3 (steps 1-4c), group J of
-an earlier change. The Apps stack (docs/usecases/lib/apps_walk.py). Every step waits on a task of an earlier change (D2, S12, S13) and names
+"""uc-617, api layer: docs/usecases/tools-service/an-app-that-fails-says-why.md, stories S1-S3 (steps 1-4c).
+The Apps stack (docs/usecases/lib/apps_walk.py). Every step waits on work not built yet and names
 it. No model call."""
 
 from __future__ import annotations

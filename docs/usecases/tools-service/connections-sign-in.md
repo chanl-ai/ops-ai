@@ -1,6 +1,6 @@
 # A person signs a connection in once with the team's account
 
-Status: passing. Id: `uc-394`. Service: `tools-service`. Layers: api, ui. Card: an earlier change.
+Status: passing. Id: `uc-394`. Service: `tools-service`. Layers: api, ui.
 
 A connection that signs in with an account uses the OAuth authorization code flow with PKCE (S256). Someone who
 manages connections starts the sign-in; the browser goes to the system and comes back to the console's return page,

@@ -1,6 +1,6 @@
 # A new team's assistant answers from its knowledge and files
 
-Status: passing. Id: `uc-619`. Service: `agents-service`. Layers: api. Card: an earlier change (PV3).
+Status: passing. Id: `uc-619`. Service: `agents-service`. Layers: api.
 
 A team made after install gets its built-in apps (Knowledge, Files, Document types, Mailboxes) and its Ops Assistant
 from the `team.created` event, with no dev seed. Its assistant then answers from the team's knowledge and files.

@@ -1,6 +1,6 @@
 # A team's mailbox runs end to end
 
-Status: passing (2026-10-19). Id: `uc-245`. Service: `agents-service`. Layers: ui. Card an earlier change, epic an earlier change.
+Status: passing (2026-10-19). Id: `uc-245`. Service: `agents-service`. Layers: ui.
 
 A team connects its mailbox in the console, binds the court order workflows to it through publish review, and from then on
 every email is run once, read, checked by a person when the read is doubtful, turned into a case, and answered from

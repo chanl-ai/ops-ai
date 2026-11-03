@@ -1,4 +1,4 @@
-"""uc-607, cli layer: docs/usecases/console/connect-apps.md, story S12 (steps 25-26), group A of an earlier change.
+"""uc-607, cli layer: docs/usecases/console/connect-apps.md, story S12 (steps 25-26).
 
 The api layer's stack (docs/usecases/lib/apps_walk.py). A team admin and a viewer run `ops apps` from the repo,
 signed in as their dev role the way `make api` signs in (task L1: the ops command over the SDK). No model call."""

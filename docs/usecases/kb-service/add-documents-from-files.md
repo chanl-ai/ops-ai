@@ -1,6 +1,6 @@
 # A builder adds documents to a knowledge base by uploading them or picking them from Files
 
-Status: passing. Id: `uc-129`. Service: `kb-service`. Layers: ui. Card: an earlier change.
+Status: passing. Id: `uc-129`. Service: `kb-service`. Layers: ui.
 
 ## Preconditions
 
@@ -27,5 +27,5 @@ Status: passing. Id: `uc-129`. Service: `kb-service`. Layers: ui. Card: an earli
 
 ## Non-vacuous check
 
-With the console's files-service client as it was before an earlier change, step 2 failed: no upload reached files-service
+With the console's files-service client as it was before the fix, step 2 failed: no upload reached files-service
 (`/v1/files/uploads` not called within 60 seconds), because uploads went to the in-browser API.

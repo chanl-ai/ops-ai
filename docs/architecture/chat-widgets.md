@@ -1,6 +1,6 @@
 # Chat widgets
 
-Status: current, 2026-10-17. This is the design for card an earlier change, "A builder gives an agent widgets it can show in chat". The maintainers answered the card's five interview questions on 2026-10-17 (listed under Open questions). Phases P1 to P4 are built, and code is cited at commit `cd14ec5`. Use cases uc-089 and uc-095 prove the path. Planned items are marked. Sources: [chat](../console/chat.md) and the override model decision.
+Status: current, 2026-10-17. This is the design for "A builder gives an agent widgets it can show in chat". Its five design questions are answered under Open questions. Phases P1 to P4 are built, and code is cited at commit `cd14ec5`. Use cases uc-089 and uc-095 prove the path. Planned items are marked. Sources: [chat](../console/chat.md) and the override model decision.
 
 A chat widget is a shaped answer drawn in the thread. A builder lays out a named widget from a fixed catalogue of primitives, binds it to JSON Pointer paths in a JSON Schema for its data, and publishes it after a second person approves it. An agent pins the widgets it may show and may be allowed to compose its own layouts from the same catalogue.
 
@@ -26,7 +26,7 @@ Why: a bank wants an answer about a held payment to look like its own hold revie
 | AI SDK generative UI | Each tool maps to a developer-owned React component | | A builder adds a widget without a console release |
 | A2UI | The model composes a flat tree from a pre-approved catalogue | A2UI streams the tree as it is built; we check the whole tree before drawing it | Composition is per agent, can be switched off per run, and each tree passes closed-field and size checks (`packages/ops_agent_kernel/src/ops_agent_kernel/layout.py:20-27`) |
 
-Why this comparison: ChatKit's model (templates the model fills) and A2UI's model (composition from a catalogue) are both built, as the maintainers chose (Q2). MCP Apps iframes need governance of their own and stay last.
+Why this comparison: ChatKit's model (templates the model fills) and A2UI's model (composition from a catalogue) are both built (question 2 below). MCP Apps iframes need governance of their own and stay last.
 
 ## Generic kinds
 
@@ -102,13 +102,12 @@ Why: each phase was usable alone. The one later item, display-only data, changes
 
 | Item | Source | Status |
 |---|---|---|
-| Owner request for richer widgets, authoring, a per-agent list and proof that chat generates them | `research.md` (2026-10-17) | built |
-| an earlier change widget architecture: shape parts | `docs/console/chat.md` | built |
+| Richer widgets, authoring, a per-agent list and proof that chat generates them | — | built |
+| Widget architecture: shape parts | `docs/console/chat.md` | built |
 | Caller overrides narrow widgets | Commit f92a54a; override model | built |
-| Buttons that require a tool | Agreed by the maintainers on 2026-10-17, after the live demo looped on a "Release hold" button that had no tool behind it | built |
-| Interview Q1 to Q5 | `interview.md` | answered; see Open questions |
+| Buttons that require a tool | Agreed after the live demo looped on a "Release hold" button that had no tool behind it | built |
 
-Why: each rule below traces to an owner answer or a decision, so a change to it is a change to a decision.
+Why: each rule below traces to a decision, so a change to it is a change to a decision.
 
 ## Domain model
 
@@ -296,9 +295,9 @@ Why: uc-095 drives the real seam from the agent page through chat to the tool ca
 
 ## Open questions
 
-The interview questions, all answered by the maintainers on 2026-10-17:
+The design questions, all answered:
 
-| # | Question | Owner answer |
+| # | Question | Answer |
 |---|---|---|
 | Q1 | Who may define a widget? | Builders author named widgets from the catalogue; a widget goes live after a second person approves it |
 | Q2 | May the model invent UI? | It may compose from the catalogue now, as well as fill named widgets. MCP-app HTML stays last |

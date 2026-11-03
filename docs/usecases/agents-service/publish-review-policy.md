@@ -1,6 +1,6 @@
 # An admin decides which publishes need a review: never publishes at once, always opens a review, a builder cannot change it
 
-Status: passing. Id: `uc-114`. Service: `agents-service`. Layers: ui. Card: an earlier change (T008).
+Status: passing. Id: `uc-114`. Service: `agents-service`. Layers: ui.
 
 ## Preconditions
 
@@ -14,7 +14,7 @@ Status: passing. Id: `uc-114`. Service: `agents-service`. Layers: ui. Card: an e
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | James opens Govern > Policies > Publish reviews | every area shows "Review major changes", Tool modules included (tools-service obeys it since an earlier change), and the selects are disabled; `PUT /v1/policies/publishReview` as James answers 403 |
+| 1 | James opens Govern > Policies > Publish reviews | every area shows "Review major changes", Tool modules included (tools-service obeys it), and the selects are disabled; `PUT /v1/policies/publishReview` as James answers 403 |
 | 2 | As James, change an agent's role (a minor field) and request a publish | approved at once; the request records `policy: major`, `majorChange: false` |
 | 3 | Priya sets Agents to Publish at once and saves | "Saved publish reviews"; the page shows it (a team admin cannot read policies, so it shows what the save returned) and the server holds `never` for team_ops |
 | 4 | James changes the agent's instructions (a major field) and requests a publish | approved at once with `policy: never`, `majorChange: true` |

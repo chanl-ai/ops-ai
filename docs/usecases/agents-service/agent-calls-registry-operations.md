@@ -1,6 +1,6 @@
 # An agent is granted and calls a published tools-service operation
 
-Status: passing. Id: `uc-048`. Service: `agents-service`. Layers: api. Card: an earlier change (G1).
+Status: passing. Id: `uc-048`. Service: `agents-service`. Layers: api.
 
 ## Preconditions
 

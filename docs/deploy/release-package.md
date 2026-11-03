@@ -3,7 +3,7 @@
 Status: current. Proven end to end; not yet installed on a client's machines. The guide inside the package is the
 [install guide](install-guide.md).
 
-<!-- Built by an earlier change; the proof is deploy/release/proof.sh. -->
+<!-- The proof is deploy/release/proof.sh. -->
 
 A client team runs Ops AI on its own Linux machines with Docker, often with no internet access from those machines, and
 its DBA applies every schema change. The release package carries everything that needs: prebuilt images, compose files,
@@ -48,7 +48,7 @@ stay.
 |---|---|
 | Azure's PostgreSQL server admin is not a superuser; only a role holding BYPASSRLS may create one, and Azure gives its admin that on PostgreSQL 16 and newer | The guide requires PostgreSQL 16+ on Azure. On 15 and older, `roles.sql` stops at `ops_runtime_system` |
 | `CREATE DATABASE ... OWNER ops_migrator` needs the admin to be able to SET ROLE to it | The DBA runs `GRANT ops_migrator TO <admin>` first |
-| The tables with tenant policies are FORCEd, so the maintainers meets row-level security | `pg_dump` as `ops_migrator` fails; back up as the server admin (BYPASSRLS and a member of `ops_migrator`) |
+| The tables with tenant policies are FORCEd, so the table owner meets row-level security | `pg_dump` as `ops_migrator` fails; back up as the server admin (BYPASSRLS and a member of `ops_migrator`) |
 | A `docker save` bundle has no registry digest | `images.txt` records each image id, which `docker load` keeps; a digest exists once the images are pushed |
 | The services take `?ssl=require` in their DSNs | Proven against the TLS server above |
 
@@ -72,5 +72,5 @@ the bundle and push it to their own registry, then set `OPS_IMAGE_PREFIX` in the
 | The sign-in screens name the demo bank | `components/auth/auth-form-wrapper.tsx`, `login-form.tsx` and `signup/page.tsx` write "Harbor & Pine Bank" and "Harbor & Pine Ops AI" into the console, so every install shows them; the brand needs to come from a setting |
 | A real Azure Database for PostgreSQL server | The proof stands in for it with the admin's documented attributes; not yet run against one |
 | The bundle's proxy and opa images on this proof host | Not exercised: the proof host is arm64, where Go amd64 binaries abort under QEMU (`fatal error: taggedPointerPack`), so the proof runs those two as native builds of the same Dockerfile stages at the package's commit and gives health checks 60 s. The other eight images ran from the bundle. An amd64 VM runs the bundle's files unchanged |
-| The migrate job without a DBA after `first_admin.sh` was split out of `migrate.sh` | Not rerun by an earlier change; the DBA path ran `first_admin.sh` alone. Fly's `release.sh` and the Kubernetes Job call `migrate.sh` |
+| The migrate job without a DBA after `first_admin.sh` was split out of `migrate.sh` | Not rerun; the DBA path ran `first_admin.sh` alone. Fly's `release.sh` and the Kubernetes Job call `migrate.sh` |
 | INSTALL.md's first line | Carries the repo's status line, which names the proof script and the card; a client-facing first line is still to come |
