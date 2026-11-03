@@ -314,3 +314,24 @@ async def test_a_follow_up_acts_on_what_an_earlier_message_asked() -> None:
     assert went.tool_calls and json.loads(went.tool_calls[0]["function"]["arguments"]) == {"customer_id": "00044818"}
     alone = await mod.answer(s, "default", {"messages": [user("I connected X. Please go ahead.")], "tools": TOOLS})
     assert not alone.tool_calls
+
+
+async def test_call_with_json_sends_those_arguments() -> None:
+    """A new plugin's tool has no rule in the stack's script, so `call <tool> {json}` is how a developer has the fake
+    call it in chat; with the arguments dropped the gateway refused the call for its required inputs."""
+    mod = fake()
+    s = mod.Script([], ["default"])
+    said = 'call get_customer {"customer_id": "CUS-1002", "fields": ["name"]}'
+    went = await mod.answer(s, "default", {"messages": [user(said)], "tools": TOOLS})
+    assert went.tool_calls and went.tool_calls[0]["function"]["name"] == "get_customer"
+    assert json.loads(went.tool_calls[0]["function"]["arguments"]) == {"customer_id": "CUS-1002", "fields": ["name"]}
+    bare = await mod.answer(s, "default", {"messages": [user("call get_customer")], "tools": TOOLS})
+    assert bare.tool_calls and json.loads(bare.tool_calls[0]["function"]["arguments"]) == {}
+
+
+async def test_call_with_broken_json_says_so_instead_of_calling() -> None:
+    mod = fake()
+    s = mod.Script([], ["default"])
+    for said in ('call get_customer {"customer_id": CUS-1002}', "call get_customer [1, 2]"):
+        went = await mod.answer(s, "default", {"messages": [user(said)], "tools": TOOLS})
+        assert not went.tool_calls and "JSON object" in (went.text or ""), said
