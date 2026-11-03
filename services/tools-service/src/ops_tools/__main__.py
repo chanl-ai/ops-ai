@@ -231,7 +231,7 @@ def main() -> None:
     )
     app = create_gateway_app(
         opa=OpaClient(httpx.AsyncClient(base_url=settings.opa_url, timeout=5)),
-        registry=ToolRegistry(catalog, store, plugins),
+        registry=ToolRegistry(catalog, store, plugins, connection_store),
         plugins=plugins,
         # A tool page's Real run goes through this gateway's checks (c-616).
         modules=modules,

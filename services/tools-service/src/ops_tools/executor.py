@@ -320,7 +320,7 @@ class _Secrets:
         self,
         module: dict[str, Any],
         op: dict[str, Any],
-        environment: str | None,
+        environment: str,
         actor: str,
         *,
         trial: Trial | None = None,
@@ -424,7 +424,7 @@ class HttpExecutor(_Secrets):
         actor: str = "gateway",
         secret_values: dict[str, str] | None = None,
         trial: Trial | None = None,
-        environment: str | None = None,
+        environment: str = "test",
         acting_for: ActingForPerson | None = None,
         on_answer: Callable[[Any, Mapping[str, str]], Any] | None = None,
     ) -> ToolOutcome:
@@ -596,7 +596,7 @@ class McpExecutor(_Secrets):
         actor: str = "gateway",
         secret_values: dict[str, str] | None = None,
         trial: Trial | None = None,
-        environment: str | None = None,
+        environment: str = "test",
     ) -> ToolOutcome:
         if not module.get("endpoint"):
             return _failure("CONNECTION_NOT_SET", NO_ADDRESS)
@@ -716,9 +716,10 @@ class Executor:
         secret_values: dict[str, str] | None = None,
     ) -> ToolOutcome:
         """`caller` is the verified caller the gateway decided for: every executor path acts for it alone.
-        `environment` is the run's (test or production; test when None), which picks a connection's settings. A tool
-        page's Real run passes `trial` and its typed `secret_values` through to the http and MCP executors, which fill
-        the request it shows."""
+        `environment` is the run's (test or production; test when None), which picks mock answers and the code runner's
+        mode. The environment a call signs in with is the module's own `environment`, set where the registry resolved
+        it. A tool page's Real run passes `trial` and its typed `secret_values` through to the http and MCP executors,
+        which fill the request it shows."""
         op, module = resolved.operation, resolved.module
         if module is not None and module["tenant_id"] != caller.tenant_id:
             raise ValueError("A module is run only for its own tenant.")
@@ -739,29 +740,30 @@ class Executor:
             )
         # A plugin's address is rendered from its manifest by the plugin host (instance plus API path); the connection
         # holds only the instance's origin, so only every other module takes its connection's address.
+        signs_in = str(module["environment"])
         if resolved.executor in ("http", "mcp") and self.http.auth is not None and plugin_id_of(module) is None:
-            # A module's address is its connection's for the run's environment (c-616), the only home it has.
-            module = await self.http.auth.addressed(module, environment)
+            # A module's address is its connection's for the environment it signs in with (c-616), its only home.
+            module = await self.http.auth.addressed(module, signs_in)
         if self.mocks is not None and (
             mock := await self.mocks.for_call(caller.tenant_id, str(module["id"]), op["name"], args, environment)
         ):
             return await self._mocked(module, op, mock)
         if resolved.executor == "mcp":
             return await self.mcp.run(
-                module, op, args, actor=actor, environment=environment, trial=trial, secret_values=secret_values
+                module, op, args, actor=actor, environment=signs_in, trial=trial, secret_values=secret_values
             )
         if resolved.executor == "plugin":
             if self.plugins is None:
                 return _failure("PLUGIN_DISABLED", "This gateway runs no plugins.")
             return await self.plugins.run(
-                module, op, args, actor=actor, environment=environment, acting_for=caller.acting_for, trial=trial
+                module, op, args, actor=actor, environment=signs_in, acting_for=caller.acting_for, trial=trial
             )
         return await self.http.run(
             module,
             op,
             args,
             actor=actor,
-            environment=environment,
+            environment=signs_in,
             acting_for=caller.acting_for,
             trial=trial,
             secret_values=secret_values,

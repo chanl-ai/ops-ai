@@ -186,7 +186,7 @@ async def test_a_python_tool_reaches_only_the_plugins_hosts(
 ) -> None:
     seen: list[str] = []
     out = await plugin_executor(engine, store, seen).run(
-        module_for(tenant), {"name": "desk_reach_out"}, {}, actor="t", environment=None, acting_for=None
+        module_for(tenant), {"name": "desk_reach_out"}, {}, actor="t", environment="test", acting_for=None
     )
     assert not out.ok and out.output["error"]["code"] == "EGRESS_DENIED", out
     assert seen == []
@@ -198,13 +198,13 @@ async def test_a_listing_cursor_is_sealed_and_a_forged_one_refused(
     seen: list[str] = []
     ex = plugin_executor(engine, store, seen)
     m, op = module_for(tenant), {"name": "desk_list_things"}
-    first = await ex.run(m, op, {}, actor="t", environment=None, acting_for=None)
+    first = await ex.run(m, op, {}, actor="t", environment="test", acting_for=None)
     sealed = first.output["next_cursor"]
     assert first.ok and sealed != "/things?page=2" and "page=2" not in sealed
-    second = await ex.run(m, op, {"cursor": sealed}, actor="t", environment=None, acting_for=None)
+    second = await ex.run(m, op, {"cursor": sealed}, actor="t", environment="test", acting_for=None)
     assert second.ok and second.output["items"][0]["id"] == "t2"
     forged = CursorSeal(b"k" * 32, tenant, "con_b", "desk_list_things").close("/things?page=2")
-    refused = await ex.run(m, op, {"cursor": forged}, actor="t", environment=None, acting_for=None)
+    refused = await ex.run(m, op, {"cursor": forged}, actor="t", environment="test", acting_for=None)
     assert not refused.ok and refused.output["error"]["code"] == "INVALID_INPUT", refused
     assert len(seen) == 2
 
@@ -292,7 +292,7 @@ async def test_another_teams_connection_never_serves_a_teams_call(
     client = httpx.AsyncClient(transport=httpx.MockTransport(answer))
     h = host(engine, store)
     ex = PluginExecutor(h, HttpExecutor(client, AllowAll(), None, auth), b"k" * 32)  # type: ignore[arg-type]
-    m = await h.for_call(tenant, "team_b", {**module_for(tenant), "team_id": None})
+    m = await h.for_call(tenant, "team_b", {**module_for(tenant), "team_id": None}, "test")
     lee = ActingForPerson(sub="usr_lee", email="lee@bank.example", name="Lee", team_id="team_b")
     out = await ex.run(m, {"name": "desk_list_things"}, {}, actor="t", environment="test", acting_for=lee)
     assert not out.ok and heard == [], (out, heard)
@@ -324,9 +324,13 @@ async def test_a_plugin_tools_call_keeps_the_plugins_address_not_the_connections
     conn = await connection(connections, tenant, "team")
     await tokens.store_answer(tenant, conn, "test", {"access_token": "at-team", "expires_in": 3600}, SHARED)
     await bind(engine, tenant, TEAM, "https://crm.bank.test", conn)
+    # The instance the test environment signed in to, kept on that environment as a sign-in keeps it (c-580).
+    await connections.set_plugin_settings(tenant, conn, "test", {"instance_url": "https://crm.bank.test"})
     h = host(engine, store)
     h.connections = connections
-    resolved = await ToolRegistry(local_catalog, store, h).resolve("desk_get_case", tenant_id=tenant, team_id=TEAM)
+    resolved = await ToolRegistry(local_catalog, store, h).resolve(
+        "desk_get_case", tenant_id=tenant, team_id=TEAM, run="test"
+    )
     assert resolved is not None
     heard: list[str] = []
 

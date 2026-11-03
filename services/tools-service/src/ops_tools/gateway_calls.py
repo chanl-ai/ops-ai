@@ -21,7 +21,7 @@ from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
 
 from .auth import SIGNED_WITH
-from .environments import TEST
+from .environments import PRODUCTION, TEST
 from .executor import Executor, Trial, invalid_fields
 from .limits import amount_refusal
 from .modules.review_events import SYSTEM_TOOLS
@@ -251,13 +251,14 @@ class GatewayCalls:
         def elapsed() -> int:
             return round((time.monotonic() - started) * 1000)
 
-        # The call's environment, live or test, picks a plugin's instance before anything runs (c-580).
-        environment = str(req.run_context.get("environment") or TEST)
+        # The run the call is made in, live (production) or test; the registry picks the environment its account
+        # signs in with from it (connections.records.slot_for).
+        run = str(req.run_context.get("environment") or TEST)
         resolved = await self.registry.resolve(
             req.tool,
             tenant_id=caller.tenant_id,
             team_id=caller.team_id,
-            environment=environment,
+            run=run,
             account=req.run_context.get("account"),
             person=req.acting_for.sub if req.acting_for else None,
         )
@@ -282,7 +283,8 @@ class GatewayCalls:
             "created_at": now_iso(),
             "module_id": resolved.module["id"] if resolved and resolved.module else None,
             "approval_token_id": _token_ref(req.approval_token),
-            "environment": ctx.get("environment") or TEST,
+            # The environment the call's account signs in with, which a test run may take from production.
+            "environment": (resolved.module or {}).get("environment", run) if resolved else run,
             "connection_id": resolved.module.get("connection_id") if resolved and resolved.module else None,
             "channel": channel,
             "client_name": client_name,
@@ -348,6 +350,9 @@ class GatewayCalls:
                 self.app_writes_wait is not None
                 and await self.app_writes_wait(caller.tenant_id, caller.team_id, module)
             )
+            # A test run whose app has no test account signs in with the production one (connections.records
+            # slot_for); its writes then wait for a person, so testing never changes live data unseen.
+            or (run == TEST and (module or {}).get("environment") == PRODUCTION)
         )
         # When approval is on, roles decide (owner, 2026-11-01): a person holding the approver role in the team is not
         # asked, and the log names them as the write's approver; anyone else needs an approval token.

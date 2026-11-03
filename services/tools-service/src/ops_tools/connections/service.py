@@ -47,7 +47,7 @@ from ..modules.service import Caller
 from ..secrets import SecretResolver
 from ..store.connections import SHARED, ConnectionInUse, ConnectionStore, StaleConnection, verifier_context
 from .account_events import connected_event
-from .records import status_of
+from .records import deciding_environment, status_of
 
 # Where the identity provider sends the browser back: a console page, which hands the code and state to
 # `complete_sign_in` under the person's own token.
@@ -1140,7 +1140,7 @@ class ConnectionService:
                 status = ("error", str(health["message"]))
         # The deciding environment is production once it is set, else test (c-580): only its result moves the
         # connection's health and status, so a failing sandbox leaves a working production as it was.
-        decides = environment == ("production" if "production" in conn["environments"] else "test")
+        decides = environment == deciding_environment(conn)
         await self.store.set_health(who.tenant_id, connection_id, health, status if decides else None, decides=decides)
         # Also on the tested account's own row, so one person's test never reads as the team's or another's.
         outcome = {"status": health["status"], "message": health.get("message"), "at": health["at"]}

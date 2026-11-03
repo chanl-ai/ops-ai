@@ -308,7 +308,7 @@ def build_app(
     )
     return create_gateway_app(
         opa=OpaClient(opa or httpx.AsyncClient(base_url="http://opa.invalid")),
-        registry=ToolRegistry(catalog, store),
+        registry=ToolRegistry(catalog, store, None, connections),
         log=calls,
         runner=LocalToolRunner(catalog, MemorySender(), cases=cases, decisions=service),
         review_key=REVIEW_KEY,

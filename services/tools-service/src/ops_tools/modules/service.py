@@ -2296,7 +2296,7 @@ class ModuleService:
                     args,
                     secret_values=i.get("secret_values"),
                     trial=trial,
-                    environment=str(i.get("environment") or await self._run_environment(who, m)),
+                    environment=str(i.get("environment") or TEST),
                 )
             )
         elif answer is not None:
@@ -2325,16 +2325,6 @@ class ModuleService:
             out["request"] = trial.request
         out["log"] = [{"atMs": at, "message": message} for at, message in trial.log]
         return out
-
-    async def _run_environment(self, who: Caller, m: Aggregate) -> str:
-        """The environment a Real run uses when the person names none, as the SDK picks it: test when the app's
-        account is set for it, else production when that is, so an app set up only for production runs there."""
-        conn_id = m.get("connection_id")
-        if not conn_id and self.team_connections is not None:
-            conn_id = await self.team_connections(who.tenant_id, who.team.id, m)
-        conn = await self.connections.get(who.tenant_id, str(conn_id)) if conn_id else None
-        envs = cast(dict[str, Any], (conn or {}).get("environments") or {})
-        return "production" if "production" in envs and TEST not in envs else TEST
 
     async def _real_call(
         self,

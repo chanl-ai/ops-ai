@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-03",
+  "title": "Testing works after one Connect",
+  "description": "An app connected once can be tested at once: a test run uses the app's test account when it has one and otherwise its live account, and a write from such a test waits for a person so live data never changes unseen.",
+  "tag": "improved"
+}

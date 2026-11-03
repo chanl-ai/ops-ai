@@ -71,7 +71,7 @@ class PluginExecutor:
         args: dict[str, Any],
         *,
         actor: str,
-        environment: str | None,
+        environment: str,
         acting_for: ActingForPerson | None,
         trial: Trial | None = None,
     ) -> ToolOutcome:
@@ -192,7 +192,7 @@ class PluginExecutor:
         args: dict[str, Any],
         *,
         actor: str,
-        environment: str | None,
+        environment: str,
         acting_for: ActingForPerson | None,
         trial: Trial | None = None,
     ) -> ToolOutcome:

@@ -27,6 +27,7 @@ from ops_plugin_sdk.versions import declarations, digest, tools_of
 from ops_plugin_sdk.versions import headers_of as declared_headers
 from ops_service_kit.settings import Settings
 
+from ..connections.records import slot_for, slots_for
 from ..egress import EgressDenied, EgressPolicy, for_tenant
 from ..modules.seed import blank
 from ..store.connections import ConnectionStore
@@ -535,32 +536,33 @@ class PluginHost:
         found = await self.connections.accounts(tenant_id, team_id, plugin.manifest.id)
         return next((a for a in found if str(a.get("account_name") or "").casefold() == wanted), None)
 
-    async def person_default(
-        self, tenant_id: str, team_id: str, plugin: Plugin, person: str, environment: str
-    ) -> str | None:
-        """A person's default account of the app (c-608): their pinned sign-in, else their newest one the system has
-        not refused; None when they hold none."""
+    async def person_default(self, tenant_id: str, team_id: str, plugin: Plugin, person: str, run: str) -> str | None:
+        """A person's default account of the app (c-608) for a call made in `run`: their pinned sign-in, else their
+        newest one the system has not refused, in the environments that run may use; None when they hold none."""
         if self.connections is None:
             return None
         ids = [str(a["id"]) for a in await self.connections.accounts(tenant_id, team_id, plugin.manifest.id)]
-        mine = await self.connections.own_sign_ins(tenant_id, person, ids, environment)
-        live = [t for t in mine if t["refused_at"] is None]
-        pinned = next((t for t in live if t["pinned"]), None)
-        pick = pinned or (live[0] if live else None)
-        return str(pick["connection_id"]) if pick else None
+        for environment in slots_for(run):
+            mine = await self.connections.own_sign_ins(tenant_id, person, ids, environment)
+            live = [t for t in mine if t["refused_at"] is None]
+            pick = next((t for t in live if t["pinned"]), None) or (live[0] if live else None)
+            if pick is not None:
+                return str(pick["connection_id"])
+        return None
 
     async def for_call(
         self,
         tenant_id: str,
         team_id: str | None,
         module: Aggregate,
-        environment: str = "production",
+        run: str,
         *,
         account: str | None = None,
         person: str | None = None,
     ) -> Aggregate:
-        """The module as this team's call sees it: the team's connection, the endpoint and egress hosts rendered with
-        the team's settings, and the merged settings for the transform and a Python tool. A plugin that is off for
+        """The module as this team's call made in `run` (test or production) sees it: the team's connection, the
+        environment it signs in with (`environment`, from slot_for), the endpoint and egress hosts rendered with that
+        environment's settings, and the merged settings for the transform and a Python tool. A plugin that is off for
         the team, or not loaded, is marked so the gateway refuses the call before anything else."""
         plugin = self.by_module(module)
         if plugin is None:
@@ -588,7 +590,7 @@ class PluginHost:
         elif person and self.accounts:
             # A call naming no account, for a person signed in to several (c-608): the one they pinned, else their
             # newest live sign-in; with none of their own, the team's default.
-            chosen = await self.person_default(tenant_id, team_id, plugin, person, environment)
+            chosen = await self.person_default(tenant_id, team_id, plugin, person, run)
             if chosen is not None:
                 b = {**b, "connection_id": chosen}
         # The team's own plugin version (c-609), attached before the instance and header checks, so a team that is on
@@ -598,7 +600,15 @@ class PluginHost:
             decl = cast(dict[str, Any], b["declarations"])
             team = {"plugin_tools": tools_of(decl), "plugin_headers": declared_headers(decl)}
         module = {**module, **team}
-        # The call's environment picks the instance and hosts (c-580), so a test call cannot reach production's.
+        # The environment the call signs in with picks the instance and hosts (c-580), so a call never mixes one
+        # environment's sign-in with another's address.
+        conn = (
+            await self.connections.get(tenant_id, str(b["connection_id"]))
+            if self.connections and b.get("connection_id")
+            else None
+        )
+        environment = slot_for((conn or {}).get("environments") or {}, run) or run
+        module = {**module, "environment": environment}
         own = (await self.own_settings(tenant_id, b.get("connection_id"))).get(environment)
         settings = await self.settings(tenant_id, plugin, dict(b.get("settings") or {}), environment, own)
         endpoint = render(plugin.manifest.endpoint, settings)
@@ -620,11 +630,8 @@ class PluginHost:
             # No instance yet is not the plugin being off (c-616). On an app each person signs in to, the team
             # account is not required first: this person signs in for this environment. A team account names the
             # environment, so a Real run in test does not read as "the plugin is disabled".
-            sign_in = "team"
             connection_id = b.get("connection_id")
-            if self.connections is not None and connection_id:
-                conn = await self.connections.get(tenant_id, str(connection_id))
-                sign_in = str((conn or {}).get("sign_in") or "team")
+            sign_in = str((conn or {}).get("sign_in") or "team")
             if sign_in != "team":
                 return {
                     **module,

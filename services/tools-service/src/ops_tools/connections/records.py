@@ -7,6 +7,7 @@ headers apply as before until someone sets the connection up.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime, timedelta
 from typing import Any, cast
 
@@ -47,9 +48,22 @@ def status_of(conn: dict[str, Any], now: datetime) -> str:
 CONNECTED, NOT_SIGNED_IN, EXPIRED, REFUSED, REVOKED = "connected", "not_signed_in", "expired", "refused", "revoked"
 
 
+def slots_for(run: str) -> tuple[str, ...]:
+    """The environments a call made in `run` may sign in with, in order. A live run (production) uses only the
+    production account. A test run uses the test account, else the production one, so an app connected once can be
+    tested at once; the gateway holds a test run's write on a production account for a person (gateway_calls)."""
+    return ("production",) if run == "production" else ("test", "production")
+
+
+def slot_for(environments: Mapping[str, Any], run: str) -> str | None:
+    """The environment a call made in `run` signs in with on a connection set for `environments`; None when none
+    fits. Every choice of a call's environment is made here."""
+    return next((e for e in slots_for(run) if e in environments), None)
+
+
 def deciding_environment(conn: dict[str, Any]) -> str:
-    """The environment whose sign-in stands for the connection: production once it is set, else test (c-580)."""
-    return "production" if "production" in (conn.get("environments") or {}) else "test"
+    """The environment whose sign-in stands for the connection on screens: production once it is set, else test."""
+    return slot_for(conn.get("environments") or {}, "production") or "test"
 
 
 def connection_base(conn: dict[str, Any]) -> str:

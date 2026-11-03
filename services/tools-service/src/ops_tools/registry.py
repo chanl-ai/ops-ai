@@ -14,9 +14,11 @@ from typing import TYPE_CHECKING, Any, cast
 from ops_agents.activities.catalog import Catalog
 from ops_store.team_scope import acting_team
 
+from .connections.records import slot_for
 from .defaults import ensure_defaults
 from .modules.seed import PLATFORM_TOOLS, READ_TOOLS, SENDS, ensure_platform_tools
 from .modules.seed import WORKFLOW_TOOLS as PLATFORM_MODULE_TOOLS
+from .store.connections import ConnectionStore
 from .store.modules import Aggregate, ModuleStore, served_operations
 from .store.team_defaults import TeamDefaults
 
@@ -90,11 +92,19 @@ class Resolved:
 
 
 class ToolRegistry:
-    def __init__(self, catalog: Catalog, modules: ModuleStore | None = None, plugins: PluginHost | None = None) -> None:
+    def __init__(
+        self,
+        catalog: Catalog,
+        modules: ModuleStore | None = None,
+        plugins: PluginHost | None = None,
+        connections: ConnectionStore | None = None,
+    ) -> None:
         """Serves every tenant: each lookup names the tenant of the caller it is for. The Platform tools module the
-        registry writes for a tenant that has none belongs to no team (c-433)."""
+        registry writes for a tenant that has none belongs to no team (c-433). `connections` is read for the
+        environment a module's call signs in with."""
         self.catalog = catalog
         self.modules = modules
+        self.connections = connections
         # The installed plugins (c-564): each one's module, seen and called through the calling team's binding.
         self.plugins = plugins
         # Teams whose platform tools this process has made sure of, by tenant; a restart checks again, which writes
@@ -173,7 +183,7 @@ class ToolRegistry:
                 and self.plugins.versions
                 and str(module.get("template_id") or "").startswith("plugin:")
             ):
-                view = await self.plugins.for_call(tenant_id, acting_team(), module)
+                view = await self.plugins.for_call(tenant_id, acting_team(), module, "production")
             for served in served_operations(module):
                 op = self.plugins.operation(view, served) if view is not module and self.plugins is not None else served
                 if not op["enabled"] or (module["team_id"] is None and op["name"] in own):
@@ -289,13 +299,15 @@ class ToolRegistry:
         *,
         tenant_id: str,
         team_id: str | None = None,
-        environment: str = "production",
+        run: str = "production",
         account: str | None = None,
         person: str | None = None,
     ) -> Resolved | None:
-        """`environment` picks a plugin module's instance and hosts for a call (c-580); a listing or an access check,
-        which shows the same tools either way, takes production's. `account` names one of the team's accounts of the
-        plugin's app for the call (c-608); none uses `person`'s default account, else the team's."""
+        """`run` is the kind of run the call is made in (test or production). The module comes back with the
+        environment its call signs in with (`environment`, from connections.records.slot_for), which picks its address,
+        instance and hosts; a listing or an access check, which shows the same tools either way, takes production's.
+        `account` names one of the team's accounts of the plugin's app for the call (c-608); none uses `person`'s
+        default account, else the team's."""
         if self.modules is None:
             access = self.access(tool)
             return None if access == "unknown" else Resolved(access, "local")
@@ -319,6 +331,13 @@ class ToolRegistry:
             # One binding lookup per call (c-564): the team's connection, endpoint and egress hosts, and a rate window
             # of the team's own, since windows are kept per tenant and operation.
             team = team_id if team_id is not None else acting_team()
-            module = await self.plugins.for_call(tenant_id, team, module, environment, account=account, person=person)
+            module = await self.plugins.for_call(tenant_id, team, module, run, account=account, person=person)
             op = {**self.plugins.operation(module, op), "rate_key": f"{op['name']}@{team}"}
+        else:
+            conn = (
+                await self.connections.get(tenant_id, str(module["connection_id"]))
+                if self.connections is not None and module.get("connection_id")
+                else None
+            )
+            module = {**module, "environment": slot_for((conn or {}).get("environments") or {}, run) or run}
         return Resolved(op["access"], op["executor"], module, op)

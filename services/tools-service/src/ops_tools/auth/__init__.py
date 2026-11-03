@@ -26,7 +26,6 @@ from ops_identity import ActingForPerson
 
 from ..connections.account_events import CONNECTED, connected_key, needs_reconnect_event
 from ..connections.records import EXPIRED, REFUSED
-from ..environments import TEST
 from ..secrets import SecretMissing, SecretResolver
 from ..store.connections import SHARED, ConnectionStore
 from .assertion import SigningError, read_certificate
@@ -210,19 +209,19 @@ class Authenticator:
         # Makes the link a call hands back when the person it acts for has not signed in (c-558).
         self.links = links
 
-    async def addressed(self, module: dict[str, Any], environment: str | None) -> dict[str, Any]:
+    async def addressed(self, module: dict[str, Any], environment: str) -> dict[str, Any]:
         """The module as a call reaches it: its address is its connection's for the run's environment (c-616), the only
         home an address has. Empty with no connection, or one not set for the environment, and `prepare` says why."""
         connection_id = module.get("connection_id")
         conn = await self.connections.get(str(module["tenant_id"]), str(connection_id)) if connection_id else None
         envs: dict[str, dict[str, Any]] = (conn or {}).get("environments") or {}
-        settings: dict[str, Any] = (envs.get(environment or TEST) or {}).get("settings") or {}
+        settings: dict[str, Any] = (envs.get(environment) or {}).get("settings") or {}
         return {**module, "endpoint": str(settings.get("baseUrl") or "")}
 
     async def prepare(
         self,
         module: dict[str, Any],
-        environment: str | None,
+        environment: str,
         *,
         tool: str,
         actor: str,
@@ -232,7 +231,7 @@ class Authenticator:
         needs_person: bool = False,
         scopes: Sequence[str] = (),
     ) -> Prepared | None:
-        """What the module's connection adds to a call in `environment` (test when None); None for a module with no
+        """What the module's connection adds to a call signed in with `environment`; None for a module with no
         connection or one whose record has no environment set. Raises AuthFailed when the call cannot be signed in.
         `acting_for` is the verified person the call acts for; on a connection each person signs in to, their own
         sign-in signs the call, and a person who has none gets CONNECTION_NOT_LINKED with a link made for them.
@@ -244,7 +243,7 @@ class Authenticator:
         if not connection_id:
             return None
         tenant_id = str(module["tenant_id"])
-        env = environment or TEST
+        env = environment
         conn = await self.connections.get(tenant_id, str(connection_id))
         if conn is None:
             raise AuthFailed("CONNECTION_MISSING", "This module's connection no longer exists.")

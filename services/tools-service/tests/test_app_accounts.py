@@ -151,10 +151,8 @@ async def test_a_sign_in_on_the_second_account_settles_its_own_instance_and_a_ca
     second = (await another(world, tenant, "EU org")).json()["data"]["id"]
     await signed(world, tenant, first, "https://us.my.desk.test")
     await signed(world, tenant, second, "https://eu.my.desk.test")
-    default = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, environment="production")
-    named = await world.registry.resolve(
-        TOOL, tenant_id=tenant, team_id=TEAM, environment="production", account="EU org"
-    )
+    default = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, run="production")
+    named = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, run="production", account="EU org")
     assert default is not None and default.module is not None and named is not None and named.module is not None
     assert (default.module["connection_id"], default.module["endpoint"]) == (first, "https://us.my.desk.test/api/v1")
     assert (named.module["connection_id"], named.module["endpoint"]) == (second, "https://eu.my.desk.test/api/v1")
@@ -167,7 +165,7 @@ async def test_a_call_naming_an_account_the_team_does_not_hold_is_refused_not_de
     await connected(world, tenant, OTHER)
     assert (await another(world, tenant, "Cards org", OTHER)).status_code == 201
     for name in ("No such org", "Cards org"):
-        r = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, environment="production", account=name)
+        r = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, run="production", account=name)
         assert r is not None and r.module is not None
         assert r.module.get("account_missing") and r.module["connection_id"] is None, (name, r.module)
 
@@ -181,9 +179,7 @@ async def test_a_persons_call_uses_the_account_they_pinned_else_their_newest_sig
     await signed(world, tenant, second, "https://eu.my.desk.test", "usr_priya")
 
     async def used() -> str:
-        r = await world.registry.resolve(
-            TOOL, tenant_id=tenant, team_id=TEAM, environment="production", person="usr_priya"
-        )
+        r = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, run="production", person="usr_priya")
         assert r is not None and r.module is not None
         return str(r.module["connection_id"])
 
@@ -203,7 +199,7 @@ async def test_with_several_accounts_off_a_second_account_cannot_be_made_or_name
     await connected(world, tenant)
     made = await another(world, tenant, "EU org")
     assert (made.status_code, made.json()["error"]["code"]) == (404, "feature_off"), made.text
-    r = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, environment="production", account="Desk")
+    r = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, run="production", account="Desk")
     assert r is not None and r.module is not None
     assert r.module.get("account_missing"), r.module
 
