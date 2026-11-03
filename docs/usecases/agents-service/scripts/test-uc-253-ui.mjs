@@ -4,12 +4,11 @@
 // Versions and Used in hold the page's old right column, Run as is gone, and at 400 px Test brings the panel into view.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const QUESTION = 'UC229 FUND QUESTION: what should my client know about the Harbor & Pine fund?';
 const CORRECTED = "I can't give investment advice. A licensed adviser can talk your client through the fund.";
-// Screenshots are kept with the card's evidence; UC253_SHOTS points them anywhere else.
-const SHOTS = process.env.UC253_SHOTS ?? join(process.cwd(), '.codeloop', 'evidence', '253');
+const SHOTS = evidenceDir('uc-253');
 
 await withUiStack(
   async (consoleUrl) => {

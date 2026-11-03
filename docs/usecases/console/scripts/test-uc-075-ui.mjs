@@ -7,10 +7,10 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, FILES_PORT, KB_PORT, PLATFORM_PORT, ROOT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, FILES_PORT, KB_PORT, PLATFORM_PORT, ROOT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
-// A failing check leaves a screenshot beside the card's other evidence.
-const EVIDENCE = join(ROOT, '.codeloop', 'evidence', '072');
+// A failing check leaves a screenshot to look at.
+const EVIDENCE = evidenceDir('uc-075');
 mkdirSync(EVIDENCE, { recursive: true });
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
