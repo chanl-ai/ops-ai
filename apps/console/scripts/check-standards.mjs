@@ -38,7 +38,7 @@ const counts = {};
 const SELF_WORDED = /(?<![=\w$])\{\s*[\w.?]+\.(?:nodeId|operation|tool)\s*\}|<OperationBadge\b/g;
 const SELF_WORDED_OK = new Set([
   'components/workflows/run-journal/step-sheet.tsx',
-  'app/tools/calls/page.tsx',
+  'components/tools/tool-calls-view.tsx',
   'components/logs/tool-call-sheet.tsx',
   'components/tools/executions-table.tsx',
   'components/tools/versions-panel.tsx',

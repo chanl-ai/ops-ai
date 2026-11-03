@@ -20,6 +20,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RunCanvas } from '@/components/workflows/run-canvas';
+import { RunConnectTask, connectTaskId } from '@/components/workflows/run-connect-task';
 import { RunStoryView } from '@/components/workflows/run-story';
 import { StoryFeed } from '@/components/workflows/story-feed';
 import { StartedBy } from '@/components/workflows/started-by';
@@ -184,7 +185,8 @@ export default function EngineRunPage() {
                 </div>
               </Section>
             )}
-            {run.waiting && (
+            {run.waiting && connectTaskId(run) && <RunConnectTask taskId={connectTaskId(run)!} />}
+            {run.waiting && !connectTaskId(run) && (
               <Alert data-testid="run-waiting">
                 <AlertTitle>Waiting at {nodeName(run.waiting.node)}</AlertTitle>
                 <AlertDescription className="flex flex-wrap items-center gap-2">

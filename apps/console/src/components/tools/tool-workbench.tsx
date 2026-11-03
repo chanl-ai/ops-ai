@@ -72,6 +72,8 @@ export function patchOf(op: ModuleOperation, appBase: string, d: WorkbenchDraft)
 
 export interface ToolWorkbenchProps extends ToolRunProps {
   moduleId: string;
+  /** The tool page's tabs (General, Logs), in the page header's tab slot. */
+  tabs?: React.ReactNode;
   moduleName: string;
   /** The app's base address (baseOfApp): the request's address starts with it. */
   base: string;
@@ -132,6 +134,7 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
         </span>
       }
       backHref={`/tools/${p.moduleId}`}
+      tabs={p.tabs}
       badge={<AccessBadge access={op.access} />}
       actions={
         <>

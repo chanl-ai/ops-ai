@@ -1,193 +1,19 @@
 'use client';
 
-import * as React from 'react';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import type { ColumnDef } from '@tanstack/react-table';
-import { AlertCircle, Ban, Clock, ScrollText, UserCheck } from 'lucide-react';
+import { ScrollText } from 'lucide-react';
 
-import { DataTableColumnHeader } from '@/components/data-table-column-header';
-import { DataTableWithViews } from '@/components/data-table-with-views';
-import { APPROVAL_LABEL, ApprovalCell, cad, CALL_STATUS_LABEL, CallStatusText, GATEWAY_LABEL, GatewayIcon, OPERATION_LABEL, OperationBadge, options } from '@/components/logs/log-meta';
 import { AppsTabs } from '@/components/connections/apps-tabs';
-import { ToolCallSheet } from '@/components/logs/tool-call-sheet';
 import { PageLayout } from '@/components/page-layout';
-import { StopRowClick } from '@/components/shared/form-field';
-import { PageSkeleton } from '@/components/shared/page-skeleton';
-import { ListEmpty, QueryError } from '@/components/shared/query-states';
-import { StatCard, StatCardGrid } from '@/components/shared/stat-card';
-import { idColumn } from '@/components/shared/id-column';
-import { selectColumn } from '@/components/shared/select-column';
-import { useToolCall, useToolCalls } from '@/hooks/governance-queries';
-import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
-import { count, dateTime, ms, pct, relativeTime } from '@/lib/format';
-import type { ToolCallFilters, ToolCallRow } from '@/lib/types/governance';
-import { serverPagination } from '@/components/shared/server-pagination';
-
-type Row = ToolCallRow & { onRowClick: (r: ToolCallRow) => void };
-
-const link = 'underline-offset-4 hover:underline';
-
-const columns: ColumnDef<Row>[] = [
-  selectColumn<Row>((r) => r.id),
-  idColumn<Row>((r) => r.id),
-  {
-    accessorKey: 'at',
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Time" />,
-    cell: ({ row }) => (
-      <span className="whitespace-nowrap text-muted-foreground tabular-nums" title={dateTime(row.original.at)}>
-        {relativeTime(row.original.at)}
-      </span>
-    ),
-  },
-  {
-    // Holds every searched field so the table's own filter keeps the rows the server matched.
-    id: 'target',
-    accessorFn: (r) => `${r.target} ${r.system} ${r.workflowName} ${r.agentName} ${r.runId} ${r.caseId ?? ''} ${r.record ?? ''}`,
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Tool or model" />,
-    cell: ({ row }) => (
-      <div className="flex max-w-72 min-w-48 items-start gap-2">
-        <GatewayIcon gateway={row.original.gateway} className="mt-0.5" />
-        <div className="min-w-0">
-          <code className="block truncate font-mono text-[13px] font-medium" title={row.original.target}>
-            {row.original.target}
-          </code>
-          <div className="truncate text-xs text-muted-foreground">{row.original.system}</div>
-        </div>
-      </div>
-    ),
-    enableHiding: false,
-  },
-  { accessorKey: 'gateway', header: () => null, cell: () => null, filterFn: facetFilterFn, enableHiding: false },
-  { accessorKey: 'workflowId', header: () => null, cell: () => null, filterFn: facetFilterFn, enableHiding: false },
-  // The run a Cases sheet linked here with (`?run=`); hidden, it only carries the filter.
-  { accessorKey: 'runId', header: () => null, cell: () => null, filterFn: facetFilterFn, enableHiding: false },
-  {
-    accessorKey: 'workflowName',
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Workflow" />,
-    cell: ({ row }) => (
-      <div className="max-w-56 min-w-36">
-        <div className="truncate text-sm" title={row.original.workflowName}>
-          {row.original.workflowName}
-        </div>
-        <div className="truncate text-xs text-muted-foreground" title={row.original.agentName}>
-          {row.original.agentName}
-        </div>
-      </div>
-    ),
-  },
-  {
-    id: 'run',
-    header: 'Run or case',
-    cell: ({ row }) => (
-      <StopRowClick align="start">
-        <div className="flex flex-col font-mono text-xs whitespace-nowrap">
-          <Link href={`/workflows/${row.original.workflowId}?tab=runs`} className={link}>
-            {row.original.runId}
-          </Link>
-          {row.original.caseId && (
-            <Link href={`/cases/${row.original.caseId}`} className={`${link} text-muted-foreground`}>
-              {row.original.caseId}
-            </Link>
-          )}
-        </div>
-      </StopRowClick>
-    ),
-  },
-  { accessorKey: 'operation', header: ({ column }) => <DataTableColumnHeader column={column} title="Operation" />, cell: ({ row }) => <OperationBadge operation={row.original.operation} />, filterFn: facetFilterFn },
-  { accessorKey: 'record', header: ({ column }) => <DataTableColumnHeader column={column} title="Bound record" />, cell: ({ row }) => <span className="text-xs whitespace-nowrap">{row.original.record ?? '—'}</span> },
-  { id: 'approval', accessorFn: (r) => r.approval.kind, header: ({ column }) => <DataTableColumnHeader column={column} title="Approval" />, cell: ({ row }) => <ApprovalCell approval={row.original.approval} />, filterFn: facetFilterFn },
-  { accessorKey: 'status', header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />, cell: ({ row }) => <CallStatusText status={row.original.status} replayOf={row.original.replayOf} />, filterFn: facetFilterFn },
-  { accessorKey: 'latencyMs', header: ({ column }) => <DataTableColumnHeader column={column} title="Latency" />, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground tabular-nums">{ms(row.original.latencyMs)}</span> },
-  { accessorKey: 'cost', header: ({ column }) => <DataTableColumnHeader column={column} title="Cost" />, cell: ({ row }) => <span className="whitespace-nowrap tabular-nums">{row.original.cost != null ? cad(row.original.cost) : '—'}</span> },
-];
+import { ToolCallsView } from '@/components/tools/tool-calls-view';
 
 export default function ToolCallsPage() {
-  const list = useListParams<ToolCallFilters>('target', 20);
   const search = useSearchParams();
   const q = search.get('q');
   const run = search.get('run');
-  const query = useToolCalls(list.params);
-  const [activeId, setActiveId] = React.useState<string | null>(null);
-  const detail = useToolCall(activeId);
-
-  const calls = query.data?.data ?? [];
-  const index = calls.findIndex((c) => c.id === activeId);
-  const active = index >= 0 ? calls[index] : null;
-  const rows: Row[] = React.useMemo(() => calls.map((c) => ({ ...c, onRowClick: (x: ToolCallRow) => setActiveId(x.id) })), [calls]);
-
-  const stats = query.data?.stats;
-  const facets = query.data?.facets ?? {};
-  const withCounts = (column: string, opts: { label: string; value: string }[]) => opts.map((o) => ({ ...o, count: facets[column]?.[o.value] ?? 0 }));
-  const workflowOptions = React.useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const c of calls) seen.set(c.workflowId, c.workflowName);
-    for (const id of Object.keys(facets.workflowId ?? {})) if (!seen.has(id)) seen.set(id, id);
-    return [...seen].map(([value, label]) => ({ value, label }));
-  }, [calls, facets.workflowId]);
-
   return (
     <PageLayout switcher icon={ScrollText} tabs={<AppsTabs />} title="Tool calls" description={run ? `Every gateway call behind run ${run}, with its approval and policy` : 'Every tool and model call through the data and AI gateways, with its approval and policy'}>
-      {query.isPending ? (
-        <PageSkeleton statCards={4} tableRows={10} />
-      ) : query.isError && !query.data ? (
-        <QueryError what="tool calls" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
-      ) : (
-        <div className="flex flex-col gap-4">
-          {/* tools-service's /executions serves no totals yet; without them the cards would wait forever. */}
-          {!stats ? (
-            <p className="text-sm text-muted-foreground" data-testid="tool-calls-no-totals">
-              Totals are not served yet. The list below holds every call.
-            </p>
-          ) : (
-          <StatCardGrid columns={4}>
-            <StatCard label="Failed" value={count(stats.failed)} icon={AlertCircle} footer={{ text: `${pct(stats.errorRate ?? 0)} of calls · p95 ${ms(stats.p95Ms ?? 0)}`, subtext: 'Errors returned by the app' }} />
-            <StatCard label="Denied" value={count(stats.denied)} icon={Ban} footer={{ text: 'Refused at the gateway', subtext: 'No grant, or an expired one' }} />
-            <StatCard label="Writes approved by a person" value={count(stats.writesApprovedByPerson)} icon={UserCheck} footer={{ text: 'Approval token checked at the gateway', subtext: 'Policy approvals counted separately' }} />
-            <StatCard label="Awaiting approval" value={count(stats.awaitingApproval)} icon={Clock} footer={{ text: 'Paused until someone decides', subtext: 'Open in Reviews' }} />
-          </StatCardGrid>
-          )}
-
-          <DataTableWithViews
-            columns={columns}
-            data={rows}
-            getRowId={(r) => r.id}
-            searchColumn="target"
-            initialColumnFilters={[...(q ? [{ id: 'target', value: q }] : []), ...(run ? [{ id: 'runId', value: [run] }] : [])]}
-            searchPlaceholder="Search tools, models, runs or cases…"
-            initialColumnVisibility={{ record: false, cost: false, run: false }}
-            filters={[
-              { column: 'gateway', title: 'Gateway', options: withCounts('gateway', options(GATEWAY_LABEL)) },
-              { column: 'workflowId', title: 'Workflow', options: withCounts('workflowId', workflowOptions) },
-              { column: 'operation', title: 'Operation', options: withCounts('operation', options(OPERATION_LABEL)) },
-              { column: 'approval', title: 'Approval', options: withCounts('approval', options(APPROVAL_LABEL)) },
-              { column: 'status', title: 'Status', options: withCounts('status', options(CALL_STATUS_LABEL)) },
-            ]}
-            onColumnFiltersChange={list.onColumnFiltersChange}
-            serverPagination={serverPagination(list, query)}
-            emptyState={<ListEmpty icon={ScrollText} noun="calls" filtered={list.isFiltered} description={run ? `No gateway call ran for ${run} yet.` : 'Calls appear here as soon as a workflow in this team runs.'} />}
-          />
-        </div>
-      )}
-
-      <ToolCallSheet
-        row={active}
-        call={detail.data}
-        isPending={detail.isPending}
-        isError={detail.isError}
-        onRetry={() => detail.refetch()}
-        onOpenChange={(o) => !o && setActiveId(null)}
-        navigation={
-          active
-            ? {
-                currentIndex: index,
-                totalCount: calls.length,
-                onPrev: index > 0 ? () => setActiveId(calls[index - 1].id) : undefined,
-                onNext: index < calls.length - 1 ? () => setActiveId(calls[index + 1].id) : undefined,
-              }
-            : undefined
-        }
-      />
+      <ToolCallsView run={run} q={q} />
     </PageLayout>
   );
 }

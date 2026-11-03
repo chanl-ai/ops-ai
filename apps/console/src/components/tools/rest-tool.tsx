@@ -47,6 +47,8 @@ const MODE_BADGE: Record<Mode, React.ReactNode> = {
 
 export interface RestToolProps extends ToolRunProps {
   moduleId: string;
+  /** The tool page's tabs (General, Logs), in the page header's tab slot. */
+  tabs?: React.ReactNode;
   moduleName: string;
   /** The app's base address (baseOfApp): the request's address starts with it. */
   base: string;
@@ -155,6 +157,7 @@ export function RestTool(p: RestToolProps) {
         </span>
       }
       backHref={`/tools/${p.moduleId}`}
+      tabs={p.tabs}
       badge={<AccessBadge access={op.access} />}
       actions={
         <>

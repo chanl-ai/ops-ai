@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { QueryError } from '@/components/shared/query-states';
 import { RecordSkeleton } from '@/components/shared/record-skeleton';
 import { OperationSheet } from '@/components/tools/operation-sheet';
+import { ToolTabs } from '@/components/tools/tool-tabs';
 import { RestTool } from '@/components/tools/rest-tool';
 import { baseOfApp, draftOf, patchOf, ToolWorkbench, type WorkbenchDraft } from '@/components/tools/tool-workbench';
 import { Button } from '@/components/ui/button';
@@ -94,6 +95,7 @@ export default function OperationWorkbenchPage() {
     <>
       {op.executor === 'http' ? (
         <RestTool
+          tabs={<ToolTabs moduleId={m.id} operation={op.name} />}
           moduleId={m.id}
           moduleName={m.displayName}
           base={base}
@@ -122,6 +124,7 @@ export default function OperationWorkbenchPage() {
         />
       ) : (
       <ToolWorkbench
+        tabs={<ToolTabs moduleId={m.id} operation={op.name} />}
         moduleId={m.id}
         moduleName={m.displayName}
         base={base}

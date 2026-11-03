@@ -353,7 +353,7 @@ try {
           check('6 James presses Connect my account, allows access as himself, and the page reads Connected as james.person', /Connected as james\.person/.test(said), { said });
         }, james);
 
-        await step('7 a tool the agent calls runs with James’s account, and Usage lists it by its title', async () => {
+        await step('7 a tool the agent calls runs with James’s account, and the app’s Logs list it by its title', async () => {
           const toolIds = ['person_get_record'];
           const patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds });
           const asked = await call(agents, 'POST', `/v1/agents/${agent.id}/publish-requests`, priya, { version: patched.data?.version, note: 'uc-607' });
@@ -369,15 +369,34 @@ try {
           await james.getByText('Person desk answered to james.person').waitFor({ timeout: 90_000 });
           const reads = (await fakeState()).calls.slice(before).filter((c) => c.method === 'person' && c.accepted).map((c) => c.as);
           await james.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          await james.getByTestId('app-tab-usage').click();
-          const usage = james.getByTestId('app-usage');
+          await james.getByTestId('app-tab-logs').click();
+          const usage = james.getByTestId('app-logs');
           await usage.getByText('Read a record').first().waitFor({ timeout: 60_000 });
           const rows = (await usage.innerText()).replace(/\s+/g, ' ');
           await shoot(james, 'app-usage');
           check(
-            '7 a tool the agent calls runs with James’s account, and Usage lists it by its title',
+            '7 a tool the agent calls runs with James’s account, and the app’s Logs list it by its title',
             patched.status === 200 && live.status < 300 && reads.length >= 1 && reads.every((w) => w === 'james.person') && /Read a record/.test(rows) && /\bAs\b/.test(rows) && /j\.richardson@harborpine\.example/.test(rows) && /Succeeded/.test(rows),
             { patched: patched.text, live: live.status, reads, rows: rows.slice(0, 300) },
+          );
+        }, james);
+
+        // The tool's own page has the same log as a Logs tab, fixed to this tool.
+        await step('33 the tool’s page has General and Logs tabs, and Logs lists its calls with whom each ran as', async () => {
+          const card = ((await call(tools, 'GET', '/v1/systems', priya)).data ?? []).find((c) => c.id === APP);
+          const moduleId = card?.moduleIds?.[0] ?? '';
+          await james.goto(`${consoleUrl}/tools/${encodeURIComponent(moduleId)}/operations/person_get_record`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await james.getByTestId('tool-tab-logs').click();
+          await james.waitForURL((u) => u.pathname.endsWith('/operations/person_get_record/logs'), { timeout: 60_000 });
+          const log = james.getByTestId('tool-calls');
+          await log.getByText('Read a record').first().waitFor({ timeout: 60_000 });
+          const rows = ((await log.innerText()) ?? '').replace(/\s+/g, ' ');
+          const tabs = (await james.getByTestId(/^tool-tab-/).allInnerTexts()).map((t) => t.trim());
+          await shoot(james, 'tool-logs');
+          check(
+            '33 the tool’s page has General and Logs tabs, and Logs lists its calls with whom each ran as',
+            tabs.join() === 'General,Logs' && /Read a record/.test(rows) && /j\.richardson@harborpine\.example/.test(rows) && /Succeeded/.test(rows),
+            { tabs, moduleId, rows: rows.slice(0, 300) },
           );
         }, james);
 
@@ -542,7 +561,7 @@ try {
           const html = await page.content();
           check(
             '9 the app page has the frame’s Accounts and tabs; Tools by title, Secrets with no secret, Settings with the switch and each environment',
-            tabs.join() === 'Tools,Resources,Secrets,Usage,Settings' && /Calls use the default account unless a step names another/.test(head) && !/\bPlugin\b/.test(head) &&
+            tabs.join() === 'Tools,Resources,Secrets,Logs,Settings' && /Calls use the default account unless a step names another/.test(head) && !/\bPlugin\b/.test(head) &&
               /harbor\.ops/.test(secrets) && /App credential/.test(secrets) && everyone === 'true' && /Production/.test(envs) && /Test/.test(envs) && !html.includes(fake.info.clients['multi-app']),
             { tabs, secrets, everyone, envs },
           );
@@ -673,6 +692,13 @@ try {
           const runNow = async () => (await call(agents, 'GET', `/v1/runs/${runId}`, priya)).data ?? {};
           let run = await runNow();
           for (let i = 0; i < 60 && !['waiting', 'succeeded', 'failed'].includes(run.status); i++) await new Promise((r) => setTimeout(r, 1000)), (run = await runNow());
+          // The run's own page shows the task it waits on, with the same two actions.
+          await page.goto(`${consoleUrl}/workflows/runs/${encodeURIComponent(runId)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          const onRun = await page.getByTestId('run-connect-task').waitFor({ timeout: 60_000 }).then(() => true, () => false);
+          const runSays = onRun ? ((await page.getByTestId('run-connect-task').innerText()) ?? '').replace(/\s+/g, ' ') : '';
+          const runBoth = onRun && (await page.getByTestId('run-connect-task').getByTestId('connect-wait-me').isVisible()) && (await page.getByTestId('run-connect-task').getByTestId('connect-wait-team').isVisible());
+          await shoot(page, 'run-person-run-page');
+          check('34 the run page shows the task it waits on, with Connect my account and Run as the team account', onRun && runBoth && /Person desk/.test(runSays), { onRun, runBoth, runSays: runSays.slice(0, 200) });
           const listed = (await call(agents, 'GET', '/reviews?pageSize=100', priya)).data;
           const task = ((Array.isArray(listed) ? listed : listed?.data) ?? []).find((r) => r.runId === runId) ?? {};
           await page.goto(`${consoleUrl}/reviews?review=${encodeURIComponent(task.id ?? '')}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
