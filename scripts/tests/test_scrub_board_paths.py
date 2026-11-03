@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
+# A made-up login, set before the module reads it.
+os.environ["OPS_SCRUB_LOGIN"] = "probelogin"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scrub_board_paths import LOGIN, LOGIN_TOKEN, apply_file, leaks, rewrite
 

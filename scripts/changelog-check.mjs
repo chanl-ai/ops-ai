@@ -241,7 +241,7 @@ function selfTest() {
   expect('a roadmap item passes', roadmapProblems({ title: 'Cases from chat', line: 'Start a case from any conversation.' }).length === 0);
   expect('refused: a roadmap line with a path', roadmapProblems({ title: 'Cases', line: 'Edits in services/agents-service land.' }).length > 0);
 
-  // The hook on a scratch repository: codeloop's commit-msg hook still adds Feature:, and ours refuses or passes.
+  // The hook on a scratch repository refuses or passes.
   const dir = mkdtempSync(join(tmpdir(), 'changelog-gate-'));
   const sh = (cmd, env = {}) => spawnSync('sh', ['-c', cmd], { cwd: dir, encoding: 'utf8', env: { ...process.env, ...env } });
   try {
@@ -258,20 +258,13 @@ function selfTest() {
     mkdirSync(join(dir, 'apps'));
     writeFileSync(join(dir, 'apps/a.ts'), '1\n');
     sh('git add apps && git commit -q -m "feat(x): older work" -m "Card: c-800"');
-    // codeloop's hook, as `codeloop init --hooks` installs it.
-    writeFileSync(join(dir, '.git/hooks/commit-msg'), readFileSync(join(HERE, 'tests/codeloop-commit-msg.sh'), 'utf8'));
-    chmodSync(join(dir, '.git/hooks/commit-msg'), 0o755);
     sh('sh scripts/install-hooks.sh');
-    expect("the installer keeps codeloop's hook", existsSync(join(dir, '.git/hooks/commit-msg.codeloop')));
     sh('git add .githooks scripts && git commit -q -m "chore: the changelog gate"');
     const commit = (subject, trailer = '') => {
       writeFileSync(join(dir, 'apps/a.ts'), `${Math.random()}\n`);
       sh('git add apps');
       return sh(`git commit -q -m "${subject}"${trailer ? ` -m "${trailer}"` : ''}`).status === 0;
     };
-    expect('refused: feat with no entry (Feature: from the branch)', !commit('feat(x): a thing'));
-    commit('docs(x): notes');
-    expect("codeloop's hook still adds Feature:", sh('git log -1 --format=%B').stdout.includes('Feature: c-900'));
     sh('git checkout -q -b plain');
     expect('refused: feat with no trailer at all', !commit('feat(x): a thing'));
     expect('passes: docs with no entry', commit('docs(x): a note'));

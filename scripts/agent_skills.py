@@ -8,7 +8,7 @@
 A page has a title, a Status line, `skill:`, `description:` and `targets:` lines, its sections, and one fenced
 `bash proof` block that `make skills-proof` runs. A skill is named `ops-<name>`, or one of UNPREFIXED, whose name
 people already type (`/usecase`). A written file is known by its "Generated from" note, so an unprefixed skill is told
-apart from a codeloop process skill. The standard library only.
+apart from a local skill installed beside it. The standard library only.
 """
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ def generated(path: Path) -> bool:
 
 
 def process_skills() -> set[str]:
-    """The codeloop process skills already beside the generated ones, which a developer skill may not shadow."""
+    """Local skills already beside the generated ones, which a developer skill may not shadow."""
     if not CLAUDE_SKILLS.exists():
         return set()
     return {p.name for p in CLAUDE_SKILLS.iterdir() if p.is_dir() and not generated(p / "SKILL.md")}
