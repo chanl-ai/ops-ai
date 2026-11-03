@@ -1,0 +1,49 @@
+# The full `make verify`, every suite, on a GitHub-hosted runner: nightly on main, on every release tag, by hand, and
+# from ci.yml when a pull request changes uv.lock, pyproject.toml or the Makefiles.
+name: verify-full
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  OPS_INFRA: external
+  OPS_DATABASE_URL: postgresql+asyncpg://ops:ops@localhost:5477/ops_runtime
+  OPS_TEST_DATABASE_URL: postgresql+asyncpg://ops:ops@localhost:5477/ops_test
+  OPS_OPA_URL: http://127.0.0.1:8181
+  OPS_SMTP_HOST: 127.0.0.1
+  OPS_GREENMAIL_HOST: 127.0.0.1
+  OPS_MAILPIT_HOST: 127.0.0.1
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env: { POSTGRES_USER: ops, POSTGRES_PASSWORD: ops, POSTGRES_DB: ops_runtime }
+        ports: ["5477:5432"]
+        options: --health-cmd "pg_isready -U ops -d ops_runtime" --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The trailer checks read the commits that added baseline and exception lines.
+          fetch-depth: 0
+      - uses: actions/cache@v4
+        with:
+          path: .data/runner
+          key: runner-wasm-${{ hashFiles('packages/ops_service_kit/src/ops_service_kit/settings.py') }}
+      - uses: ./.github/actions/setup
+        with:
+          node: "true"
+          browser: "true"
+          infra: "true"
+      - run: make verify

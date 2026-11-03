@@ -1,0 +1,183 @@
+# Pull request checks, on GitHub-hosted runners only: a fork's pull request runs its own code, and on a hosted runner
+# that code never reaches a machine of ours. Only the areas a change touches run (scripts/ci-plan.sh, which reads
+# scripts/verify-changed.sh's plan); a change to uv.lock, pyproject.toml or the Makefiles runs the full suite
+# (verify-full.yml), as it does nightly on main.
+name: ci
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  # Side containers instead of `make db-up`'s compose stack, reached on localhost.
+  OPS_INFRA: external
+  OPS_DATABASE_URL: postgresql+asyncpg://ops:ops@localhost:5477/ops_runtime
+  OPS_TEST_DATABASE_URL: postgresql+asyncpg://ops:ops@localhost:5477/ops_test
+  OPS_OPA_URL: http://127.0.0.1:8181
+  OPS_SMTP_HOST: 127.0.0.1
+  OPS_GREENMAIL_HOST: 127.0.0.1
+  OPS_MAILPIT_HOST: 127.0.0.1
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      full: ${{ steps.plan.outputs.full }}
+      services: ${{ steps.plan.outputs.services }}
+      packages: ${{ steps.plan.outputs.packages }}
+      console: ${{ steps.plan.outputs.console }}
+      docs: ${{ steps.plan.outputs.docs }}
+      scripts: ${{ steps.plan.outputs.scripts }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - id: plan
+        run: |
+          base=$(git merge-base "${{ github.event.pull_request.base.sha }}" HEAD)
+          scripts/ci-plan.sh "$base" | tee -a "$GITHUB_OUTPUT"
+
+  checks:
+    # The fast checks every change gets, as scripts/verify-changed.sh runs them: lint and format of the changed Python,
+    # types of the packages, generated files current, import layers, the portable store and What's new entries.
+    needs: plan
+    if: needs.plan.outputs.full != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env: { POSTGRES_USER: ops, POSTGRES_PASSWORD: ops, POSTGRES_DB: ops_runtime }
+        ports: ["5477:5432"]
+        options: --health-cmd "pg_isready -U ops -d ops_runtime" --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: Lint and format the changed Python
+        run: |
+          base=$(git merge-base "${{ github.event.pull_request.base.sha }}" HEAD)
+          mapfile -t files < <(git diff --name-only --diff-filter=ACMR "$base" HEAD -- '*.py')
+          if [ "${#files[@]}" -gt 0 ]; then uv run ruff format --check "${files[@]}" && uv run ruff check "${files[@]}"; fi
+      - name: Types of the packages
+        run: |
+          base=$(git merge-base "${{ github.event.pull_request.base.sha }}" HEAD)
+          if git diff --name-only "$base" HEAD | grep -q '^packages/'; then uv run pyright packages; fi
+      - run: uv run python scripts/store_inventory.py --check
+      - run: uv run python scripts/roles_matrix.py --check
+      - run: uv run python deploy/k8s/generate.py --check
+      - run: uv run lint-imports --no-logo
+      - run: uv run python scripts/check_portable_store.py --strict
+      - run: node scripts/changelog-check.mjs --entries
+      - name: Script tests
+        if: needs.plan.outputs.scripts == 'true'
+        run: uv run pytest -q scripts/tests
+
+  service:
+    needs: plan
+    if: needs.plan.outputs.full != 'true' && needs.plan.outputs.services != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.plan.outputs.services) }}
+    name: verify ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env: { POSTGRES_USER: ops, POSTGRES_PASSWORD: ops, POSTGRES_DB: ops_runtime }
+        ports: ["5477:5432"]
+        options: --health-cmd "pg_isready -U ops -d ops_runtime" --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - if: matrix.service == 'runner-service'
+        uses: actions/cache@v4
+        with:
+          path: .data/runner
+          key: runner-wasm-${{ hashFiles('packages/ops_service_kit/src/ops_service_kit/settings.py') }}
+      - uses: ./.github/actions/setup
+        with:
+          node: ${{ matrix.service == 'agents-service' }}
+          browser: ${{ matrix.service == 'agents-service' }}
+          infra: "true"
+      - run: make -C services/${{ matrix.service }} verify
+
+  package:
+    needs: plan
+    if: needs.plan.outputs.full != 'true' && needs.plan.outputs.packages != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.plan.outputs.packages) }}
+    name: test ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env: { POSTGRES_USER: ops, POSTGRES_PASSWORD: ops, POSTGRES_DB: ops_runtime }
+        ports: ["5477:5432"]
+        options: --health-cmd "pg_isready -U ops -d ops_runtime" --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          infra: "true"
+      - run: |
+          uv run python scripts/test_db.py "$OPS_TEST_DATABASE_URL"
+          cd packages/${{ matrix.package }} && OPS_DATABASE_URL=$OPS_TEST_DATABASE_URL uv run pytest -q
+
+  console:
+    needs: plan
+    if: needs.plan.outputs.full != 'true' && needs.plan.outputs.console == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          python: "false"
+          node: "true"
+      - run: pnpm verify
+
+  docs:
+    needs: plan
+    if: needs.plan.outputs.full != 'true' && needs.plan.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: make -s docs-verify
+
+  full:
+    needs: plan
+    if: needs.plan.outputs.full == 'true'
+    uses: ./.github/workflows/verify-full.yml
+
+  result:
+    # One status for branch protection: green when every job that ran passed (a job the plan skipped counts as passed).
+    if: always()
+    needs: [plan, checks, service, package, console, docs, full]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          if grep -qE '"result": "(failure|cancelled)"' <<<"$NEEDS"; then echo "$NEEDS"; exit 1; fi
+          echo "every check that ran passed"

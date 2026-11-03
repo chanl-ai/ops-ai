@@ -44,7 +44,11 @@ clean: ## Remove caches
 	rm -rf .pytest_cache .ruff_cache
 
 db-up: ## PostgreSQL and OPA in compose (same as the root db-up)
+ifeq ($(OPS_INFRA),external)
+	@echo "OPS_INFRA=external: postgres and opa are side containers"
+else
 	$(COMPOSE) up -d --wait --no-recreate postgres opa  # never recreate the shared containers (make/db.mk)
+endif
 
 db-down: ## Stop compose
 	$(COMPOSE) down
