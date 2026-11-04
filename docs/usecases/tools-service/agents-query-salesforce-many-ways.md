@@ -67,5 +67,5 @@ raises that card.
 | Layer | Script | Result |
 |---|---|---|
 | api | `tools-service/scripts/test-uc-581-api.py` | passing (2026-10-30), 14 checks |
-| ui | `tools-service/scripts/test-uc-581-ui.mjs` | passing (2026-10-30), 9 checks |
+| ui | `tools-service/scripts/test-uc-581-ui.mjs` | failing at steps 16-17 (2026-11-03), 7 of 10: the agent page throws `tools.filter is not a function` (`apps/console/src/app/agents/[id]/_parts/instructions-assist.tsx:46`), since agents-service's `GET /v1/tools` answers a paged list (commit ba9f12c, 3 Nov) where the console's `grantableTools` reads an array |
 | cli | `tools-service/scripts/test-uc-581-cli.py` | passing (2026-10-30), 5 checks |

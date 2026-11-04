@@ -1,4 +1,4 @@
-import type { Tool } from '@/lib/types/domain';
+import type { GrantableTool, Tool } from '@/lib/types/domain';
 import type { ListParams } from '@/lib/types/query';
 
 import { optionsQs } from './options';
@@ -246,7 +246,9 @@ export function createHttpApi(baseUrl: string): OpsApi {
       requestPublish: (id, version, note) => send('POST', `/agents/${id}/publish-requests`, { version, note }),
       publishPreview: (id, version) => get(`/agents/${id}/publish-preview?version=${version}`),
       setPaused: (id, paused) => send('POST', `/agents/${id}/paused`, { paused }),
-      grantableTools: () => get('/tools'),
+      // GET /tools answers one page of the Tools page's rows (each a grantable tool with its app and users): the agent
+      // page reads the largest page the route serves.
+      grantableTools: () => get<{ data: GrantableTool[] }>('/tools?pageSize=200').then((r) => r.data),
       toolOptions: (p) => get(`/tools/options?${optionsQs(p)}`),
       modelAliases: () => get('/model-aliases'),
       bulkUpdate: (ids, patch) => send('POST', '/agents/bulk-update', { ids, patch }),

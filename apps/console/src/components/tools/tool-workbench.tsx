@@ -32,13 +32,10 @@ export interface WorkbenchDraft {
 
 const baseOf = (base: string) => base.replace(/\/+$/, '');
 /**
- * The address every operation's path hangs off: the app's base address from its connection (production first, then
- * test), never the module's own. Before an app is picked there is none, and the address field takes a path.
+ * The address every operation's path hangs off: the app's base address from its account, never the module's own.
+ * Before an app is picked there is none, and the address field takes a path.
  */
-export const baseOfApp = (connection: ConnectionRef | null | undefined): string => {
-  const urls = connection?.baseUrls ?? {};
-  return urls.production ?? urls.test ?? Object.values(urls)[0] ?? '';
-};
+export const baseOfApp = (connection: ConnectionRef | null | undefined): string => connection?.baseUrl ?? '';
 
 export const draftOf = (op: ModuleOperation, base: string): WorkbenchDraft => ({
   http: { name: op.name, description: op.description, access: op.access, method: op.method ?? 'GET', url: `${baseOf(base)}${op.path ?? ''}`, headers: op.headers.map((h) => ({ ...h })), body: op.body ?? '', bodyEncoding: op.bodyEncoding },

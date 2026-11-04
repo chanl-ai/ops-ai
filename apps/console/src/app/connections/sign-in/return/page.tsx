@@ -21,14 +21,14 @@ function SignInReturnPage() {
   const state = params.get('state') ?? '';
   const code = params.get('code') ?? '';
   const denied = params.get('error');
-  const [connectionId] = React.useState(() => (state ? signInFor(state) : null));
+  const [account] = React.useState(() => (state ? signInFor(state) : null));
   // Test with my account comes back here too: it finishes as a test of the app credential and keeps no sign-in.
   const [check] = React.useState(() => (state ? signInIsCheck(state) : false));
-  const complete = useCompleteSignIn(connectionId ?? '');
-  const finish = useFinishCredentialCheck(connectionId ?? '');
+  const complete = useCompleteSignIn(account);
+  const finish = useFinishCredentialCheck(account);
   const started = React.useRef(false);
   React.useEffect(() => {
-    if (started.current || denied || !connectionId || !code) return;
+    if (started.current || denied || !account || !code) return;
     started.current = true;
     if (check) {
       finish.mutate(
@@ -38,7 +38,7 @@ function SignInReturnPage() {
             forgetSignIn(state);
             const opener = window.opener as Window | null;
             if (res.health.status !== 'ok' || !opener || opener.closed) return;
-            const said: ConnectedMessage = { type: CONNECTED_MESSAGE, connectionId, connection: 'the app credential', account: res.health.account };
+            const said: ConnectedMessage = { type: CONNECTED_MESSAGE, connectionId: account.accountId, connection: 'the app credential', account: res.health.account };
             opener.postMessage(said, window.location.origin);
             window.close();
           },
@@ -59,12 +59,12 @@ function SignInReturnPage() {
         },
       },
     );
-  }, [check, code, complete, connectionId, denied, finish, state]);
+  }, [account, check, code, complete, denied, finish, state]);
 
   // The page that opened this window learns of a refusal or a failure too, so its Connect window stops waiting.
   const failure = denied
     ? `Access to the app was not given${denied === 'access_denied' ? '' : ` (${denied})`}.`
-    : !connectionId || !code
+    : !account || !code
       ? 'This sign-in has expired or was already used.'
       : complete.isError
         ? complete.error.message
@@ -107,7 +107,7 @@ function SignInReturnPage() {
   );
   if (denied)
     return <SignInCard testId="sign-in-denied" title="Access was not given" description="You chose not to allow access on the app’s own page, so nothing was connected." footer={again} />;
-  if (!connectionId || !code)
+  if (!account || !code)
     return <SignInCard testId="sign-in-lost" title="This sign-in has expired or was already used" description="Start it again from the chat or from the app’s page." footer={back} />;
   if (complete.isError) return <SignInCard testId="sign-in-failed" title="The sign-in did not finish" description={complete.error.message} footer={again} />;
   if (check && (finish.isError || finish.data?.health.status === 'failed'))

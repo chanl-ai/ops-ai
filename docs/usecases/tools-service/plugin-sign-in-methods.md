@@ -13,7 +13,7 @@ Service: `tools-service` with platform-service. Layers: api, sdk, cli, ui. Guide
 | S4 | A team gives a client certificate beside the sign-in; Test connection and the call present it | api | 10 | 10 |
 | S5 | A wrong key, client secret or missing certificate fails clearly, and no secret appears in any answer, call log or log line, even from a plugin tool that echoes what it sent | api | 11-13 | 13 |
 | S6 | A developer validates each plugin; validate accepts person sign-in on an API key, and refuses it on a method that holds no person's credential and an API key it does not say how to send | cli | 14-15 | 15 |
-| S7 | In chat, a person asked to connect their own account signs in from the card and the agent reads as them; each plugin connection's page shows how it signs in and no key | ui | 16-18 | 17 |
+| S7 | In chat, a person asked to connect their own account signs in from the card and the agent reads as them; each plugin app's page opens with no key on it | ui | 16-18 | 17 |
 | S8 | Each person connects an API-key app with their own key: each one's calls act as them, a call with nobody behind it uses nobody's key, a wrong key fails for its person alone, and Disconnect asks again | api | 20-21 | 20 |
 | S9 | In chat, a person asked for their own key types it into the card and the agent reads as them, with the key shown nowhere | ui | 22 | 22 |
 | S10 | A person connects their own account from the app page, and My accounts reads Connected as them | api | 30 | 30 |
@@ -47,7 +47,7 @@ Service: `tools-service` with platform-service. Layers: api, sdk, cli, ui. Guide
 | 15 | `ops plugin validate` on copies offering person sign-in with only an API key, with only client credentials, and listing `api_key` without saying how it is sent | The API key copy validates OK; the other two are refused, naming `connection.sign_in` or `connection.api_key` |
 | 16 | James asks the agent holding the person plugin's read tool for record rec-1042 in chat | A Connect card; the system received no read |
 | 17 | He connects through the pop-up as james.person | The chat goes on and answers with the record, read as james.person |
-| 18 | Priya opens the header-key and person plugins' connection pages | Each opens with its name and sign-in method, the header-key one tested and working; neither key nor client secret is on either page |
+| 18 | Priya opens the header-key and person plugins' app pages | Each opens with its name; the header-key one's Keys row says Working, 200, with the team account; the person one offers her own account; neither key nor client secret is on either page |
 | 20 | Priya turns on the person-key plugin for person sign-in with no key; James lists Your connections with every app; James and Maya each save their own key and test the connection; a run with nobody behind it calls the tool | The app is listed not connected, asking for a key; each save 200; each test reaches the system as that person; the call answers `CONNECTION_NOT_LINKED`; Your connections names the method, never the key |
 | 21 | James saves a wrong key and tests; Maya tests; James disconnects and tests again | James's test fails naming the 401, Maya's passes, the connection stays healthy; after Disconnect his test answers `CONNECTION_NOT_LINKED` |
 | 30 | Ravi (viewer) connects his own account on the person desk from the app page (`POST /v1/connections/{id}/sign-in`, then `…/sign-in/complete`) and reads `GET /v1/me/connections` | 200; his row reads connected, account ravi.person |
@@ -64,7 +64,7 @@ Service: `tools-service` with platform-service. Layers: api, sdk, cli, ui. Guide
 | api | `tools-service/scripts/test-uc-588-api.py` | draft; steps 30-31 pass on today's routes |
 | sdk | `tools-service/scripts/test-uc-588-sdk.py` | target: waits on K1 |
 | cli | `tools-service/scripts/test-uc-588-cli.py` | draft; step 35 target: waits on L2 |
-| ui | `tools-service/scripts/test-uc-588-ui.mjs` | draft |
+| ui | `tools-service/scripts/test-uc-588-ui.mjs` | passing, `make usecase-test UC=uc-588 LAYER=ui` (2026-11-03) |
 
 Evidence only, not in the nightly run: `tools-service/scripts/evidence-uc-588-stripe.py` runs the bearer plugin against
 Stripe's API in test mode with a test key read from the secrets store.

@@ -14,6 +14,7 @@ import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 
 import { AGENTS_PORT, KB_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { writeApprovalsOn } from '../../lib/workflow_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -131,11 +132,11 @@ try {
       for (const host of sf.info.hosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-564' });
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: sf.info.range, note: 'uc-564' });
       const login = sf.info.authorize_url.replace(/\/authorize$/, '');
-      const on = await call(tools, 'PUT', `/v1/plugins/${PLUGIN}/team`, priya, { enabled: true, settings: { login_url: login }, clientId: 'ops-ai-acme', clientSecret: 'acme-connected-app-secret' });
+      const on = await call(tools, 'PUT', `/v1/apps/plugin:${PLUGIN}/team`, priya, { enabled: true, settings: { login_url: login }, clientId: 'ops-ai-acme', clientSecret: 'acme-connected-app-secret' });
       const connectionId = on.data?.connectionId;
-      const started = await call(tools, 'POST', `/v1/connections/${connectionId}/sign-in`, priya, { environment: 'production' });
+      const started = await call(tools, 'POST', `/v1/apps/plugin:${PLUGIN}/accounts/${connectionId}/sign-in`, priya, { account: 'team' });
       const back = started.data?.authorizeUrl ? await signInAt(started.data.authorizeUrl, 'acme.integration') : {};
-      const signed = await call(tools, 'POST', `/v1/connections/${connectionId}/sign-in/complete`, priya, { state: back.state ?? '', code: back.code ?? '' });
+      const signed = await call(tools, 'POST', `/v1/apps/plugin:${PLUGIN}/accounts/${connectionId}/sign-in/complete`, priya, { state: back.state ?? '', code: back.code ?? '' });
 
       // The knowledge base the source fills, and the case helper holding the plugin's case tools and that base.
       const made = await call(kb, 'POST', '/v1/knowledge-bases', priya, { name: 'Salesforce articles', owner: 'p.shah@harborpine.example' });
@@ -196,6 +197,8 @@ try {
 
         let reviewId;
         await step('14 asked to escalate it, the card names the tool by its title and shows the field it changes; the change waits and Salesforce is unchanged', async () => {
+          // Approvals are off unless a team turns them on (2026-11-01); this team holds its tool writes for a person.
+          await writeApprovalsOn('team_ops');
           await send('Escalate case 00044818.');
           const card = page.locator('section').filter({ hasText: /salesforce_update_record|Update record|Escalated/ }).last();
           await card.waitFor({ timeout: 90_000 });

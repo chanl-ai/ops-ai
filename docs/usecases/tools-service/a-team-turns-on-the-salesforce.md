@@ -83,7 +83,7 @@ Service: `tools-service` with platform-service, kb-service and agents-service. L
 | Layer | Script | State |
 |---|---|---|
 | api | `tools-service/scripts/test-uc-564-api.py` | passing, with the Salesforce plugin at ops-ai-plugins main (the instance from UserInfo) |
-| ui | `tools-service/scripts/test-uc-564-ui.mjs` | passing |
+| ui | `tools-service/scripts/test-uc-564-ui.mjs` | failing at steps 14-15 (2026-11-03), 9 of 11: the escalate write runs before anyone approves (the fake records the edit early). Chat calls carry no run kind, so tools-service treats them as test runs (`gateway_calls.py:256`); a test run's write on the live account should wait (`gateway_calls.py:355`) and did not |
 | sdk | `tools-service/scripts/test-uc-564-sdk.py` | target: waits on P1 and K1 |
 | cli | `tools-service/scripts/test-uc-564-cli.py` | passing to step 29; 44 target: waits on L2 |
 

@@ -53,8 +53,8 @@ function counts(tools: ToolChange[]): string {
     .join(', ');
 }
 
-export function PluginUpdatePanel({ pluginId, name }: { pluginId: string; name: string }) {
-  const update = usePluginUpdate(pluginId);
+export function PluginUpdatePanel({ appId, name }: { appId: string; name: string }) {
+  const update = usePluginUpdate(appId);
   const [open, setOpen] = React.useState(false);
   const status = (update.error as { status?: number } | null)?.status;
   // 404: the install has plugin_updates off, or the team has not turned the app on; nothing to show either way.
@@ -78,16 +78,16 @@ export function PluginUpdatePanel({ pluginId, name }: { pluginId: string; name: 
           </Button>
         </AlertDescription>
       </Alert>
-      {open && <UpdateReview pluginId={pluginId} name={name} tools={u.tools} to={u.installed.version} digest={u.installed.digest} />}
+      {open && <UpdateReview appId={appId} name={name} tools={u.tools} to={u.installed.version} digest={u.installed.digest} />}
     </div>
   );
 }
 
-function UpdateReview({ pluginId, name, tools, to, digest }: { pluginId: string; name: string; tools: ToolChange[]; to: string; digest: string }) {
+function UpdateReview({ appId, name, tools, to, digest }: { appId: string; name: string; tools: ToolChange[]; to: string; digest: string }) {
   const touched = tools.filter((t) => t.change !== 'new').map((t) => t.name);
   const uses = useToolUses(touched);
-  const copies = usePluginTemplates(`plugin:${pluginId}`);
-  const take = useTakePluginUpdate(pluginId);
+  const copies = usePluginTemplates(appId);
+  const take = useTakePluginUpdate(appId);
   const usedBy = (tool: string) => (uses.data?.[tool] ?? []).map((u) => `${u.name} (${u.kind})`);
   const held = (copies.data ?? []).filter((c) => c.installed.copies > 0);
   return (

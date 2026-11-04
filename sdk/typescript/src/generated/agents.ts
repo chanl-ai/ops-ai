@@ -4456,6 +4456,8 @@ export interface components {
         ConnectWait: {
             /** App */
             app: string;
+            /** Appid */
+            appId?: string | null;
             /** Connectionid */
             connectionId?: string | null;
             /** Person */

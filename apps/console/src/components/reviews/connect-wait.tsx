@@ -38,16 +38,14 @@ export function ConnectWait({ review }: { review: Review }) {
   if (!c) return null;
   // Only the person it waits for can connect their own account; anyone else sees whom it waits for.
   const mine = !!c.person && c.person === session?.user.email;
+  // Starting the person's own sign-in needs the account and its app.
+  const account = c.connectionId && c.appId ? { appId: c.appId, accountId: c.connectionId } : null;
   const connect = () => {
-    if (!c.connectionId) return;
-    const id = c.connectionId;
+    if (!account) return;
     // Opened in the click, before the call that starts the sign-in, so a pop-up blocker lets it through.
     const w = signIn.open(c.app);
     if (!w) return;
-    start.mutate(
-      { connectionId: id, environment: 'production', account: 'self' },
-      { onSuccess: (s) => w.go(s, id), onError: (e) => w.fail(e.message) },
-    );
+    start.mutate({ ...account, account: 'self' }, { onSuccess: (s) => w.go(s, account), onError: (e) => w.fail(e.message) });
   };
   return (
     <div className="flex flex-col gap-3 p-4" data-testid="connect-wait">
@@ -55,7 +53,7 @@ export function ConnectWait({ review }: { review: Review }) {
         {review.workflowName || 'A run'} uses {c.app} as {mine ? 'you' : (c.person ?? 'the person who started it')}. {mine ? 'Connect once; the run goes on by itself.' : 'It goes on by itself once they connect.'}
       </p>
       <div className="flex flex-wrap gap-2">
-        {mine && c.connectionId && (
+        {mine && account && (
           <LoadingButton size="sm" isLoading={start.isPending} onClick={connect} data-testid="connect-wait-me">
             <ExternalLink /> Connect my account
           </LoadingButton>

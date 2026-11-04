@@ -12,7 +12,6 @@ export interface HealthView {
   latencyMs?: number | null;
   at: string;
   account?: string;
-  environment?: string;
 }
 
 /** What a failed test's code means, in the words a person reads; a code not listed reads as its own words. */
@@ -62,7 +61,6 @@ export function HealthLine({ health, testId = 'health', who = true }: { health: 
       <p className="text-xs text-muted-foreground">
         {relativeTime(health.at)}
         {who && health.account && `, ${health.account === 'team' ? 'with the team account' : 'with your own account'}`}
-        {who && health.environment && `, ${health.environment}`}
       </p>
     </div>
   );

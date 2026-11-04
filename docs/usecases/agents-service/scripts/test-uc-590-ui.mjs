@@ -27,7 +27,7 @@ const call = async (base, method, path, headers, body) => {
 await withUiStack(
   async (consoleUrl) => {
     const priya = as(await tokenFor('p.shah@harborpine.example'), 'team_ops');
-    const team = await call(tools, 'PUT', `/v1/plugins/${PLUGIN}/team`, priya, { enabled: true, environment: 'production' });
+    const team = await call(tools, 'PUT', `/v1/apps/${encodeURIComponent(APP)}/team`, priya, { enabled: true });
     check('0 set-up: the templates desk is on for Operations', team.status === 200, { team: team.text });
 
     const browser = await chromium.launch();

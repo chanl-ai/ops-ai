@@ -1,6 +1,10 @@
-/** A connected system's sign-in, as tools-service serves it under /v1/connections (c-558). */
+/** An app's account and its sign-ins, as tools-service serves them under /v1/apps and /v1/me/accounts. */
 
-export type ConnectionEnvironment = 'test' | 'production';
+/** One app's account, as every account route addresses it: the app's id (`plugin:<id>`, or a custom app's) and its own. */
+export interface AccountRef {
+  appId: string;
+  accountId: string;
+}
 
 /** Whose account a connection's calls sign in with: the team's, each person's own, or theirs with the team's as backup. */
 export type SignInSetting = 'team' | 'person' | 'person_or_team';
@@ -14,7 +18,6 @@ export type SignInAccount = 'self' | 'team';
 export interface ConnectionHealth {
   status: 'ok' | 'failed';
   account: 'own' | 'team';
-  environment: ConnectionEnvironment;
   at: string;
   by: string;
   code?: string | null;
@@ -30,41 +33,15 @@ export interface SignedIn {
   expiresAt?: string | null;
 }
 
-export interface ConnectionEnvironmentState {
-  set: boolean;
-  settings: Record<string, string>;
-  secrets: Record<string, { set: boolean; setAt?: string | null; setBy?: string | null }>;
-  signedIn?: SignedIn | null;
-}
-
-export interface ConnectionDetail {
+/** What finishing a sign-in answers: the account it signed in. */
+export interface SignedInAccount {
   id: string;
+  appId: string;
   name: string;
-  teamId: string;
-  authKind: string;
-  kindLabel: string;
-  status: ConnectionStatus;
-  statusDetail?: string | null;
-  /** Absent on a kind that never signs in. */
-  signIn?: SignInSetting;
-  /** With `person_or_team`: a run with nobody behind it may use the team's account. */
-  teamBackup?: boolean;
-  health?: ConnectionHealth | null;
-  mayManage: boolean;
-  revision: number;
-  environments: Record<string, ConnectionEnvironmentState>;
-  environmentsSet: string[];
-  usedBy: { id: string; name: string }[];
-  /** Each person's own sign-in: an admin sees everyone's, anyone else their own. */
-  people?: PersonSignedIn[];
-  availableTo: string[];
-  redirectUri?: string | null;
-  updatedAt?: string | null;
 }
 
 export interface PersonSignedIn {
   personId: string;
-  environment: ConnectionEnvironment;
   account?: string | null;
   scopes: string[];
   since?: string | null;
@@ -79,9 +56,12 @@ export interface MyConnection {
   /** The person's own account's last test after they signed in; null before any. */
   test?: { status: 'ok' | 'failed'; message?: string | null; at?: string } | null;
   connectionId: string;
+  /** The account's app, which starting its sign-in needs. */
+  appId?: string | null;
   connection: string;
   connectionStatus: ConnectionStatus;
-  environment: ConnectionEnvironment;
+  /** The app's sandbox account, which only test runs use. */
+  sandbox: boolean;
   /** How the person signs in: the kind's label, such as "API key". */
   method: string;
   authKind: string;
@@ -105,6 +85,8 @@ export interface SignInStart {
   authorizeUrl: string;
   redirectUri: string;
   connectionId?: string | null;
+  /** The account's app, which finishing the sign-in needs. */
+  appId?: string | null;
   expiresAt?: string | null;
 }
 
@@ -139,8 +121,6 @@ export interface ConnectionRequired {
   connectionId: string;
   connection: string;
   reason: ConnectionRequiredReason;
-  /** The environment the refused call ran in, where the person's own key belongs. */
-  environment?: ConnectionEnvironment;
   /** The connection's kind and what each person gives for it (c-595): a key kind is asked for in a form, not a sign-in. */
   authKind?: string;
   personFields?: string[];
@@ -170,10 +150,11 @@ export interface AppCredentialInput {
   clientSecret: string;
   /** Among the app's own; left out, all of them. */
   scopes?: string[];
-  environment?: ConnectionEnvironment;
+  /** The app's account to set it on; left out, the app's default account. */
+  account?: string;
 }
 
 /** Test with my account: whether signing in through the app credential worked, and as whom. */
 export interface CredentialCheck {
-  health: { status: 'ok' | 'failed'; account?: string | null; message?: string | null; environment: ConnectionEnvironment; at: string; by: string };
+  health: { status: 'ok' | 'failed'; account?: string | null; message?: string | null; at: string; by: string };
 }

@@ -160,7 +160,7 @@ function OwnClientForm({ card, kinds, onBack, onDone }: { card: SystemCard; kind
   const save = async () => {
     if (made.current) return made.current;
     const v = form.getValues();
-    made.current = await create.mutateAsync({ app: card.id, clientId: v.clientId.trim(), clientSecret: v.clientSecret, scopes, environment: 'production' });
+    made.current = await create.mutateAsync({ app: card.id, clientId: v.clientId.trim(), clientSecret: v.clientSecret, scopes });
     return made.current;
   };
 
@@ -184,8 +184,9 @@ function OwnClientForm({ card, kinds, onBack, onDone }: { card: SystemCard; kind
     setTesting(true);
     try {
       const row = await save();
-      const s = await startCheck.mutateAsync({ id: row.id, environment: 'production' });
-      w.go(s, row.id, { check: true });
+      const account = { appId: row.app, accountId: row.id };
+      const s = await startCheck.mutateAsync(account);
+      w.go(s, account, { check: true });
     } catch (e) {
       w.fail(message(e));
       setTesting(false);

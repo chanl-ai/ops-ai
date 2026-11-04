@@ -41,14 +41,14 @@ export const startableWorkflowOptions = workflowsWhere('workflow-options:startab
 /** Workflows a file can start: an email trigger, or a form with a file field; never one only other workflows start. */
 export const fileWorkflowOptions = workflowsWhere('workflow-options:files', { startable: ['true'], takesFiles: ['true'] });
 /**
- * The team's apps by the id the Apps page shows (plugin:<id>, a connection's id, module:<id>), from GET /v1/systems.
+ * The team's apps by the id the Apps page shows (plugin:<id>, a connection's id, module:<id>), from GET /v1/apps.
  * That route lists every card at once and takes no search, so the search narrows the one list it returns.
  */
 export const appOptions: OptionSource = {
   key: 'app-options',
   fetch: async ({ search, ids }) => {
     // The built-in apps stay pickable here (a mailbox reply is the write teams most often approve), off the Apps grid.
-    const cards = await sdk((ops) => ops.raw.tools.connections_list_systems({ query: { include: 'builtin' } }));
+    const cards = await sdk((ops) => ops.raw.tools.apps_list_apps({ query: { include: 'builtin' } }));
     const words = (search ?? '').trim().toLowerCase();
     const rows = ids?.length ? cards.filter((c) => ids.includes(c.id)) : cards.filter((c) => !words || `${c.name} ${c.category ?? ''}`.toLowerCase().includes(words));
     return { data: rows.map((c) => ({ id: c.id, label: c.name, hint: c.category ?? null })), nextCursor: null };

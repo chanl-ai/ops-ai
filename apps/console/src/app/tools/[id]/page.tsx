@@ -370,7 +370,7 @@ export default function ModulePage() {
               </p>
               <ConnectionSelect
                 value={m.connection}
-                options={connections.data?.data.map((c) => ({ id: c.id, name: c.name, status: c.status as IntegrationStatus }))}
+                options={connections.data?.map((c) => ({ id: c.id, name: c.name, status: c.status as IntegrationStatus }))}
                 loading={connections.isPending}
                 disabled={setConnection.isPending}
                 onChange={(v) =>

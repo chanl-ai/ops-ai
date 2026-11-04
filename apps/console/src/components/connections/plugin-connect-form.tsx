@@ -4,7 +4,7 @@ import * as React from 'react';
 import { Copy } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { EnvSection } from '@/components/connections/env-section';
+import { AccountFields } from '@/components/connections/account-fields';
 import { WhoSignsIn, type SignIn } from '@/components/connections/who-signs-in';
 import { useSignInWindow, type SignInWindow } from '@/components/connections/sign-in';
 import { DialogShell } from '@/components/shared/dialog-shell';
@@ -16,54 +16,54 @@ import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  type ConnectionDetail,
+  type AccountBody,
+  type AccountDetail,
   type SystemCard,
-  type TeamPluginBody,
-  useDeleteConnection,
-  useSetTeamPlugin,
+  type TeamAppBody,
+  useAddAccount,
+  useDeleteAccount,
+  useSetTeamApp,
   useStartSignIn,
-  useTestEnvironment,
+  useTestAccount,
 } from '@/hooks/systems-queries';
 import {
   complete,
   draftFor,
   initialState,
-  keyed,
-  leading,
-  ordered,
+  newAccountBody,
   pluginGroups,
   reduce,
-  toSave,
   turnOnBody,
   type App,
-  type EnvDraft,
-  type Environment,
-  type FieldGroups,
   type Kind,
   type Kinds,
-  type SavedEnvironment,
+  type SavedAccount,
 } from '@/lib/connect-plan';
+import type { AccountRef } from '@/lib/types/connections';
 import { cn } from '@/lib/utils';
 
 type PluginInfo = NonNullable<SystemCard['plugin']>;
 
 const message = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong');
 
-/** The connect dialog's form for a plugin (c-580): its sign-in kind, the platform's app or the team's own, and each environment. */
+/**
+ * The connect dialog's form for a plugin's app: its sign-in kind, the platform's app or the team's own, and the
+ * account's keys. `sandbox` adds the app's sandbox account, which test runs use, with the same keys asked.
+ */
 export function PluginConnectForm({
   open,
   card,
   kinds,
   detail,
-  first,
+  sandbox = false,
   onClose,
 }: {
   open: boolean;
   card: SystemCard;
   kinds: Kinds;
-  /** The app's connection when it has one: its saved settings fill the fields, its sealed secrets read as set. */
-  detail?: ConnectionDetail | null;
-  first?: Environment;
+  /** The app's default account when it has one: its saved settings fill the fields, its sealed secrets read as set. */
+  detail?: AccountDetail | null;
+  sandbox?: boolean;
   onClose: () => void;
 }) {
   const plugin = card.plugin as PluginInfo;
@@ -71,171 +71,176 @@ export function PluginConnectForm({
   const [kindId, setKindId] = React.useState(card.authKind ?? plugin.kinds[0]);
   const kind = offered.find((k) => k.id === kindId) ?? offered[0];
   const [app, setApp] = React.useState<App>(plugin.platformApp ? 'platform' : 'own');
-  // Whose account calls use, asked only before the team's connection exists and when the plugin offers a choice.
+  const [accountName, setAccountName] = React.useState(`${card.name} sandbox`);
+  // Whose account calls use, asked only before the team's default account exists and when the plugin offers a choice.
   const offeredWho = plugin.signIn ?? ['team'];
   const [who, setWho] = React.useState<SignIn>((offeredWho[0] as SignIn | undefined) ?? 'team');
-  const asksWho = kind.perPerson && offeredWho.length > 1 && !card.connectionId;
-  const savedEnv = (env: Environment) => Boolean(card.environments[env]?.set);
-  const groupsFor = (env: Environment, k: Kind, a: App) => pluginGroups(k, kinds, plugin, a, savedEnv(env));
-  // What the connection saved per environment: the plugin's settings with the connection's own, and which secrets are set.
-  const savedOf = (env: Environment): SavedEnvironment | null => {
-    const e = (detail?.environments as Record<string, { set?: boolean; settings?: Record<string, unknown>; pluginSettings?: Record<string, unknown>; pluginSecrets?: Record<string, boolean> }> | undefined)?.[env];
-    if (!e) return null;
-    return { set: Boolean(e.set), settings: { ...(e.settings ?? {}), ...(e.pluginSettings ?? {}) }, secrets: Object.fromEntries(Object.entries(e.pluginSecrets ?? {}).map(([k, v]) => [k, { set: v }])) };
-  };
-  const teamFields = plugin.settings.filter((s) => !s.perEnvironment && !s.locked);
-  const savedTeam = savedOf(keyed(kinds).find((e) => e.production)?.id ?? 'production')?.settings ?? {};
-  // The team's settings start as saved; one the connection does not send back starts blank and keeps its value.
-  const [team, setTeam] = React.useState<Record<string, string>>(() =>
+  const asksWho = !sandbox && kind.perPerson && offeredWho.length > 1 && !card.connectionId;
+  // Editing the default account: its keys are saved, and a blank field keeps its value. A new sandbox has none yet.
+  const editing = !sandbox && Boolean(card.connectionId);
+  const groupsFor = (k: Kind, a: App) => pluginGroups(k, kinds, plugin, a, editing);
+  // What the account saved: its own settings and which of the plugin's secrets are set. The plugin's settings it keeps
+  // its own (a sign-in address) start blank, and a blank one keeps its value.
+  const saved: SavedAccount | null =
+    editing && detail ? { settings: detail.settings, secrets: Object.fromEntries(Object.entries(detail.pluginSecrets ?? {}).map(([k, v]) => [k, { set: v }])) } : null;
+  // A sandbox is one more account of the app; the team's settings stay the app's.
+  const teamFields = sandbox ? [] : plugin.settings.filter((s) => !s.perAccount && !s.locked);
+  const savedTeam = plugin.values ?? {};
+  // The team's settings start as saved; one the app does not send back starts blank and keeps its value.
+  const [first] = React.useState<Record<string, string>>(() =>
     Object.fromEntries(teamFields.map((s) => [s.name, savedTeam[s.name] != null ? String(savedTeam[s.name]) : card.connectionId ? '' : (s.default ?? '')])),
   );
-  const sectionsOf = (k: Kind, a: App) => Object.fromEntries(keyed(kinds).map((e) => [e.id, draftFor(e.id, groupsFor(e.id, k, a), savedOf(e.id))]));
-  const setOnConnection = keyed(kinds)
-    .map((e) => e.id)
-    .filter((id) => card.environments[id]?.set);
-  const [state, dispatch] = React.useReducer(reduce, initialState(sectionsOf(kind, app), card.connectionId ?? null, setOnConnection));
-  // The sign-in window open, the environment it signs in, and whether Save opened it, so the dialog closes once it works.
-  const opened = React.useRef<{ environment: Environment; closes: boolean } | null>(null);
+  const [team, setTeam] = React.useState(first);
+  const [state, dispatch] = React.useReducer(reduce, initialState(draftFor(groupsFor(kind, app), saved), editing ? (card.connectionId ?? null) : null, editing));
+  // The sign-in window open, and whether Save opened it, so the dialog closes once it works.
+  const opened = React.useRef<{ closes: boolean } | null>(null);
   const turnedOn = React.useRef(plugin.teamOn);
+  // Whether keys were typed since the sandbox account was made.
+  const typedSince = React.useRef(false);
 
   const name = card.name;
   const close = React.useRef(onClose);
   React.useEffect(() => {
     close.current = onClose;
   }, [onClose]);
-  const setTeamPlugin = useSetTeamPlugin();
-  const test = useTestEnvironment();
+  const setTeamApp = useSetTeamApp();
+  const addAccount = useAddAccount();
+  const test = useTestAccount();
   const signIn = useStartSignIn();
-  const remove = useDeleteConnection();
+  const remove = useDeleteAccount();
 
-  // One environment in the Connect window (c-617); the other is set up from the app page's Settings.
-  const envs = ordered(kinds, first).slice(0, 1);
-  const groups = groupsFor(envs[0].id, kind, app);
-  const ready = envs.map((e) => e.id).filter((id) => complete(state.sections[id], groups));
+  const groups = groupsFor(kind, app);
+  const ready = complete(state.draft, groups) && (!sandbox || Boolean(accountName.trim()));
+  const ref = (accountId: string): AccountRef => ({ appId: card.id, accountId });
 
-  const reshape = (nextKind: Kind, nextApp: App) =>
-    dispatch({ type: 'reset', sections: sectionsOf(nextKind, nextApp), connectionId: state.connectionId });
+  const reshape = (nextKind: Kind, nextApp: App) => {
+    typedSince.current = true;
+    dispatch({ type: 'reset', draft: draftFor(groupsFor(nextKind, nextApp), saved), connectionId: state.connectionId });
+  };
 
   const runTest = React.useCallback(
-    async (connectionId: string, env: Environment): Promise<boolean> => {
-      const tested = await test.mutateAsync({ connectionId, environment: env });
-      const envs = tested.environments as Record<string, { health?: EnvDraft['health'] }>;
-      const health = envs[env]?.health ?? tested.health ?? null;
-      dispatch({ type: 'tested', environment: env, health });
+    async (accountId: string): Promise<boolean> => {
+      const tested = await test.mutateAsync({ appId: card.id, accountId });
+      const health = tested.health ?? null;
+      dispatch({ type: 'tested', health });
       return health?.status === 'ok';
     },
-    [test],
+    [card.id, test],
   );
 
   const signInWindow = useSignInWindow({
     onFailed: (why) => {
       const waiting = opened.current;
       opened.current = null;
-      if (waiting) dispatch({ type: 'failed', environment: waiting.environment, message: why });
+      if (waiting) dispatch({ type: 'failed', message: why });
     },
     onConnected: (m) => {
       const waiting = opened.current;
       if (!waiting) return;
       opened.current = null;
-      dispatch({ type: 'signed-in', environment: waiting.environment });
+      dispatch({ type: 'signed-in' });
       if (waiting.closes) {
         // Save closes once access is allowed; the test runs after, and a failure shows on the account's row.
         dispatch({ type: 'done' });
-        toast.success(`${name} is on for the team`);
-        void test.mutateAsync({ connectionId: m.connectionId, environment: waiting.environment }).catch(() => undefined);
+        toast.success(sandbox ? `${accountName.trim()} is connected` : `${name} is on for the team`);
+        void test.mutateAsync(ref(m.connectionId)).catch(() => undefined);
         close.current();
         return;
       }
-      dispatch({ type: 'start', environment: waiting.environment, status: 'testing' });
-      runTest(m.connectionId, waiting.environment).catch((err) => dispatch({ type: 'failed', environment: waiting.environment, message: message(err) }));
+      dispatch({ type: 'start', status: 'testing' });
+      runTest(m.connectionId).catch((err) => dispatch({ type: 'failed', message: message(err) }));
     },
   });
 
-  /** Turns the plugin on for one environment with its section's values; the answer names its connection. */
-  const turnOn = async (env: Environment): Promise<string> => {
-    const draft = state.sections[env];
-    const view = await setTeamPlugin.mutateAsync({
-      path: { plugin_id: card.pluginId ?? '' },
-      body: turnOnBody(kind, plugin, app, draft, team, !state.connectionId, asksWho ? who : undefined) as TeamPluginBody,
-    });
-    const id = String(view.connectionId ?? '');
-    if (!state.connectionId) dispatch({ type: 'created', connectionId: id, made: !turnedOn.current });
-    dispatch({
-      type: 'saved',
-      environment: env,
-      secretSet: Object.fromEntries(Object.entries(draft.secrets).map(([k, v]) => [k, Boolean(v) || draft.secretSet[k]])),
-    });
+  /**
+   * Saves the account's keys: the team's default account through the app's turn-on, or a new sandbox account of the
+   * app, made once and then kept. Answers the account's id.
+   */
+  const write = async (): Promise<string> => {
+    const draft = state.draft;
+    let id: string;
+    if (sandbox) {
+      // An account's plugin settings and app are given when it is made, so keys typed after are a new account; the
+      // typed values stay in the draft for that.
+      if (state.connectionId && !typedSince.current) return state.connectionId;
+      if (state.connectionId) await remove.mutateAsync(ref(state.connectionId));
+      const made = await addAccount.mutateAsync({ appId: card.id, body: newAccountBody(kind, plugin, app, draft, accountName.trim(), true) as AccountBody });
+      typedSince.current = false;
+      dispatch({ type: 'created', connectionId: made.id });
+      return made.id;
+    } else {
+      const view = await setTeamApp.mutateAsync({
+        appId: card.id,
+        body: turnOnBody(kind, plugin, app, draft, team, !state.connectionId, asksWho ? who : undefined) as TeamAppBody,
+      });
+      id = String(view.connectionId ?? '');
+      if (!state.connectionId) dispatch({ type: 'created', connectionId: id, made: !turnedOn.current });
+    }
+    dispatch({ type: 'saved', secretSet: Object.fromEntries(Object.entries(draft.secrets).map(([k, v]) => [k, Boolean(v) || draft.secretSet[k]])) });
     return id;
   };
 
-  const startSignIn = async (w: SignInWindow, id: string, env: Environment, closes = false): Promise<void> => {
+  const startSignIn = async (w: SignInWindow, id: string, closes = false): Promise<void> => {
     // Try again in the window starts the same sign-in again, on the account already made.
     w.retry(() =>
-      void startSignIn(w, id, env, closes).catch((e: unknown) => {
+      void startSignIn(w, id, closes).catch((e: unknown) => {
         w.fail(message(e));
-        dispatch({ type: 'failed', environment: env, message: message(e) });
+        dispatch({ type: 'failed', message: message(e) });
       }),
     );
-    const start = await signIn.mutateAsync({ connectionId: id, environment: env, account: 'team' });
-    opened.current = { environment: env, closes };
-    w.go(start, id);
+    const start = await signIn.mutateAsync({ ...ref(id), account: 'team' });
+    opened.current = { closes };
+    w.go(start, ref(id));
     dispatch({ type: 'signing-in' });
   };
 
-  const sectionTest = async (env: Environment) => {
+  const sectionTest = async () => {
     if (state.busy) return;
     // A sign-in window opens in the click, before any call, so a pop-up blocker lets it through.
     const w = kind.signsIn ? signInWindow.open(card.name, card.logo) : null;
     if (kind.signsIn && !w) return;
-    dispatch({ type: 'start', environment: env, status: 'testing' });
+    dispatch({ type: 'start', status: 'testing' });
     try {
-      const id = await turnOn(env);
-      if (w) await startSignIn(w, id, env);
-      else await runTest(id, env);
-
+      const id = await write();
+      if (w) await startSignIn(w, id);
+      else await runTest(id);
     } catch (e) {
       w?.fail(message(e));
-      dispatch({ type: 'failed', environment: env, message: message(e) });
+      dispatch({ type: 'failed', message: message(e) });
     }
   };
 
   const finish = async () => {
     if (state.busy) return;
-    // Save completes one environment, production when it is ready, and signs in for that same one.
-    const env = leading(kinds, ready) ?? envs[0].id;
-    // A team setting typed on an app already made is saved with the environment being completed.
-    const teamTyped = Boolean(card.connectionId) && Object.values(team).some((v) => v.trim() !== '');
-    const saving = teamTyped ? [...new Set([env, ...toSave(state, ready, env)])] : toSave(state, ready, env);
-    // A signed-in environment saved with nothing typed keeps its sign-in; an account signed in through this dialog
+    // A team setting typed on an app already made is saved with the account.
+    const teamTyped = Boolean(card.connectionId) && Object.entries(team).some(([k, v]) => v.trim() !== '' && v !== first[k]);
+    const saving = teamTyped || state.draft.status === 'dirty' || !state.saved || !state.connectionId;
+    // A signed-in account saved with nothing typed keeps its sign-in; an account signed in through this dialog
     // already does too. Anything else signs in again, as its app or address may have changed.
-    const signs = kind.signsIn && !state.signedIn.includes(env) && (saving.length > 0 || !state.saved.includes(env));
+    const signs = kind.signsIn && !state.signedIn && saving;
     const w = signs ? signInWindow.open(card.name, card.logo) : null;
     if (signs && !w) return;
-    dispatch({ type: 'start', environment: env, status: 'saving' });
+    dispatch({ type: 'start', status: 'saving' });
     try {
-      let id = state.connectionId ?? '';
-      for (const e of saving) id = await turnOn(e);
-      if (w) return void (await startSignIn(w, id, env, true));
+      const id = saving ? await write() : (state.connectionId ?? '');
+      if (w) return void (await startSignIn(w, id, true));
       dispatch({ type: 'done' });
-      toast.success(`${card.name} is on for the team`);
+      toast.success(sandbox ? `${accountName.trim()} is saved` : `${card.name} is on for the team`);
       onClose();
     } catch (e) {
       w?.fail(message(e));
-      dispatch({ type: 'failed', environment: env, message: message(e) });
+      dispatch({ type: 'failed', message: message(e) });
     }
   };
 
-  /** Cancel removes what this dialog made: the connection, then the team's switch, which forgets the removed connection. */
+  /** Cancel removes what this dialog made: the account, then for a first turn-on the team's switch. */
   const cancel = async () => {
     signInWindow.close();
     opened.current = null;
     if (state.created && state.connectionId) {
       try {
-        await remove.mutateAsync(state.connectionId);
-        await setTeamPlugin.mutateAsync({
-          path: { plugin_id: card.pluginId ?? '' },
-          body: { enabled: false, environment: envs[0].id as TeamPluginBody['environment'] },
-        });
+        await remove.mutateAsync(ref(state.connectionId));
+        if (!sandbox) await setTeamApp.mutateAsync({ appId: card.id, body: { enabled: false, sandbox: false } });
       } catch (e) {
         toast.error(`Couldn’t remove what was made for ${card.name}`, { description: message(e) });
       }
@@ -248,7 +253,7 @@ export function PluginConnectForm({
       open={open}
       onOpenChange={(o) => !o && void cancel()}
       size="sm"
-      title={`Connect ${card.name}`}
+      title={sandbox ? `Add a ${card.name} sandbox account` : `Connect ${card.name}`}
       description={card.description ?? 'It is tested before it is called working.'}
       data-testid="connect-dialog"
       footer={
@@ -259,18 +264,23 @@ export function PluginConnectForm({
           <LoadingButton
             type="button"
             onClick={() => void finish()}
-            isLoading={state.busy && !Object.values(state.sections).some((d) => d.status === 'testing')}
-            disabled={!ready.length || state.busy}
+            isLoading={state.busy && state.draft.status !== 'testing'}
+            disabled={!ready || state.busy}
             data-testid="connect-submit"
           >
-            {kind.signsIn ? 'Save and connect the team account' : 'Save'}
+            {kind.signsIn ? (sandbox ? 'Save and connect the sandbox account' : 'Save and connect the team account') : 'Save'}
           </LoadingButton>
         </>
       }
     >
       <div className="flex min-w-0 flex-col gap-5">
         <div className="grid gap-4 sm:grid-cols-2">
-          {offered.length > 1 && (
+          {sandbox && (
+            <FormField id="plugin-account-name" label="Account name" hint="Steps and tools pick an account by this name.">
+              <Input id="plugin-account-name" value={accountName} onChange={(e) => setAccountName(e.target.value)} disabled={Boolean(state.connectionId)} data-testid="plugin-account-name" />
+            </FormField>
+          )}
+          {offered.length > 1 && !sandbox && (
             <FormField id="plugin-kind" label="How it signs in">
               <Select
                 value={kind.id}
@@ -364,21 +374,16 @@ export function PluginConnectForm({
           </div>
         )}
 
-        {envs.map(({ id: env, label }) => (
-          <EnvSection
-            key={env}
-            env={env}
-            label={label}
-            draft={state.sections[env]}
-            groups={groups}
-            busy={state.busy}
-            canTest={complete(state.sections[env], groups)}
-            testLabel={kind.signsIn ? 'Sign in and test' : 'Run test'}
-            onSetting={(n, v) => dispatch({ type: 'setting', environment: env, name: n, value: v })}
-            onSecret={(n, v) => dispatch({ type: 'secret', environment: env, name: n, value: v })}
-            onTest={() => void sectionTest(env)}
-          />
-        ))}
+        <AccountFields
+          draft={state.draft}
+          groups={groups}
+          busy={state.busy}
+          canTest={ready}
+          testLabel={kind.signsIn ? 'Sign in and test' : 'Run test'}
+          onSetting={(n, v) => ((typedSince.current = true), dispatch({ type: 'setting', name: n, value: v }))}
+          onSecret={(n, v) => ((typedSince.current = true), dispatch({ type: 'secret', name: n, value: v }))}
+          onTest={() => void sectionTest()}
+        />
 
         {state.phase === 'signing-in' && (
           <p className="rounded-md border p-3 text-sm" data-testid="connect-signing-in">

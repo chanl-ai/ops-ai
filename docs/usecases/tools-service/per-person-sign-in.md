@@ -61,7 +61,7 @@ the request body.
 | Layer | Script | State |
 |---|---|---|
 | api | `tools-service/scripts/test-uc-558-api.py` | passing (2026-10-29) |
-| ui | `tools-service/scripts/test-uc-558-ui.mjs` | passing (2026-10-29) |
+| ui | `tools-service/scripts/test-uc-558-ui.mjs` | passing (2026-11-03), 11 checks |
 
 ## Non-vacuous check
 

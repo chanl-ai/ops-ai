@@ -30,7 +30,7 @@ role named in the console. Without platform-service the page draws sample polici
 
 | Layer | Script | State |
 |---|---|---|
-| ui | `console/scripts/test-uc-170-ui.mjs` | passing (5/5) |
+| ui | `console/scripts/test-uc-170-ui.mjs` | failing one check (2026-11-03), 9 of 10: the apps card shows no "No app listed" line (the names card never draws `defaultLabel`, `apps/console/src/app/settings/policies/page.tsx:55`), and after a reload the picked app reads as its id, `builtin:document-types`; the picker's `GET /v1/apps` read answers 200 |
 
 ## Non-vacuous check
 

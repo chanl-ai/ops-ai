@@ -113,7 +113,7 @@ export default function OperationWorkbenchPage() {
           dirty={Object.keys(patch).length > 0}
           saveProblems={saveProblems}
           connection={m.connection}
-          connections={connections.data?.data.map((c) => ({ id: c.id, name: c.name, status: c.status as IntegrationStatus }))}
+          connections={connections.data?.map((c) => ({ id: c.id, name: c.name, status: c.status as IntegrationStatus }))}
           connectionsLoading={connections.isPending}
           settingConnection={setConnection.isPending}
           onConnectionChange={(connectionId) =>

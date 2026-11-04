@@ -158,7 +158,7 @@ function Section({ title, systems, onConnect, testId }: { title: string; systems
 
 /**
  * The apps catalog: the team's connected apps first, then the ones it may connect; one search, a
- * category filter, and Connected only and Available only. Read from GET /v1/systems, each card already joined.
+ * category filter, and Connected only and Available only. Read from GET /v1/apps, each card already joined.
  */
 export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, mode: ConnectMode) => void; onNew: () => void }) {
   const systems = useSystems();

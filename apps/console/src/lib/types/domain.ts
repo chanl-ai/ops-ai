@@ -445,7 +445,7 @@ export interface Review {
    * A run waiting for a person's own account of an app (kind connect_account, c-616 S12): the app, its connection, whom
    * it waits for, and whether a team account can stand in.
    */
-  connect?: { app: string; connectionId?: string | null; person?: string | null; teamAccount: boolean } | null;
+  connect?: { app: string; connectionId?: string | null; appId?: string | null; person?: string | null; teamAccount: boolean } | null;
   /**
    * An app's first address on a host the tenant has not listed (kind egress_host, c-616 S13): the host, the app and
    * who set the address. The Security team decides; approving lists the host.

@@ -9,10 +9,10 @@ import { ConnectWindow, connectsInWindow } from './connect-window';
 import { ConnectSystemDialog, type ConnectMode, type ConnectTarget } from './connect-system-dialog';
 import { SystemsGrid } from './systems-grid';
 
-/** What a card's Connect opens the dialog on: the card's connection, its module with none yet, or a new system. */
+/** What a card's Connect opens the dialog on: the card's default account, its module with none yet, or a new app. */
 function targetOf(system: SystemCard | null): ConnectTarget | null {
   if (!system) return { kind: 'new' };
-  if (system.connectionId) return { kind: 'connection', connectionId: system.connectionId };
+  if (system.connectionId) return { kind: 'account', account: { appId: system.id, accountId: system.connectionId } };
   if (system.kind === 'plugin' && system.plugin) return { kind: 'plugin', card: system };
   if (system.kind === 'module' && system.moduleIds[0]) return { kind: 'module', moduleId: system.moduleIds[0], name: system.name };
   return null;

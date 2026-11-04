@@ -46,7 +46,7 @@ await withUiStack(
     const J = await as(JAMES);
     const base = `https://${stack.bank.host}`;
     // A team admin makes connections; Priya holds Admin in Operations.
-    const conn = await connection(await as(PRIYA), `Bank key ${RUN}`, 'bearer', { test: { secretValues: { token: 'test-bearer-token' } } }, { baseUrl: base, testPath: '/auth/bearer' });
+    const conn = await connection(await as(PRIYA), `Bank key ${RUN}`, 'bearer', { sandbox: { secretValues: { token: 'test-bearer-token' } } }, { baseUrl: base, testPath: '/auth/bearer' });
     const mod = await send('POST', '/blank', J, { displayName: `Payments ${RUN}`, name: `uc611-${RUN}`, type: 'http' });
     await send('POST', `/${mod.id}/operations`, J, {
       name: 'create_customer', description: 'Creates a customer with an email.', access: 'write', method: 'POST',

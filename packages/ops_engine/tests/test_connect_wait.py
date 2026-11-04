@@ -16,12 +16,12 @@ from ops_engine.ports import AS_TEAM_ACCOUNT, ToolResult
 
 from .test_compiler import PAYLOAD, FakeTools, build, config
 
-KEY = "con_crm:production:usr_james"
+KEY = "con_crm:usr_james"
 
 
 def not_linked(reason: str = "not_connected") -> dict[str, Any]:
     """The gateway's refusal for a person with no account of their own (tools-service auth._not_linked)."""
-    details: dict[str, Any] = {"connectionId": "con_crm", "connection": "CRM", "reason": reason}
+    details: dict[str, Any] = {"connectionId": "con_crm", "appId": "con_crm", "connection": "CRM", "reason": reason}
     if reason not in ("needs_person", "no_person"):
         details["connectedEvent"] = {"name": "app_account.connected", "key": KEY}
         details["teamAccount"] = True
@@ -55,6 +55,8 @@ async def test_the_run_waits_for_its_person_to_connect_and_then_sends_the_call()
     wait = paused.value
     assert (wait["kind"], wait["event"], wait["key"]) == ("external", "app_account.connected", KEY), wait
     assert wait["title"] == "Connect your CRM account to continue" and wait["app"] == "CRM", wait
+    # The console opens the account under its app to connect it.
+    assert (wait["connectionId"], wait["appId"]) == ("con_crm", "con_crm"), wait
     assert wait["timeoutSeconds"] == 0, "a run waiting for a person is never failed by a time limit"
     await g.ainvoke(Command(resume={"event": {"connectionId": "con_crm"}}), config("c1"), durability="sync")
     state = await g.aget_state(config("c1"))

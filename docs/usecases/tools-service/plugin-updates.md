@@ -54,4 +54,4 @@ api, ui. Guide: `docs/guide/plugins.md`, Plugin updates.
 | Layer | Script | Result |
 |---|---|---|
 | api | `tools-service/scripts/test-uc-609-api.py` | passing (2026-11-01), 8 checks |
-| ui | `tools-service/scripts/test-uc-609-ui.mjs` | passing (2026-11-01), 6 checks |
+| ui | `tools-service/scripts/test-uc-609-ui.mjs` | passing (2026-11-03), 6 checks |

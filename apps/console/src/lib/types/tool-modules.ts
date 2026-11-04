@@ -274,7 +274,7 @@ export interface ModuleTestInput {
   operation: string;
   contextId: string;
   /** `stub` (Mock) answers from the operation's mock and sends nothing; `sandbox` (Real) makes the call, a write
-   * included, on the published module through its connection's test sign-in (c-591). */
+   * included, on the published module as a test run, which signs in with the app's sandbox account if it has one. */
   target: 'stub' | 'sandbox';
   input: Record<string, unknown>;
   /** Test only: the gateway issues a test approval token for this exact input instead of waiting for a person. */

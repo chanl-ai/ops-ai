@@ -399,6 +399,7 @@ class Clock(TypedDict, closed=True):
 
 class ConnectWait(TypedDict, closed=True):
     app: str
+    appId: NotRequired[str | None]
     connectionId: NotRequired[str | None]
     person: NotRequired[str | None]
     teamAccount: NotRequired[bool]

@@ -28,7 +28,10 @@ function LinkConnect({ link }: { link: string }) {
   React.useEffect(() => {
     if (started.current || !link) return;
     started.current = true;
-    open.mutate(link, { onSuccess: (s) => goSignIn(s, s.connectionId ?? '') });
+    open.mutate(link, {
+      // Finishing needs the account's app, which the link's answer names; without it the return page says to start again.
+      onSuccess: (s) => goSignIn(s, { appId: s.appId ?? '', accountId: s.connectionId ?? '' }),
+    });
   }, [link, open]);
 
   const code = open.error instanceof ApiError ? open.error.code : undefined;
@@ -59,7 +62,7 @@ function OpenedConnect({ app, logo }: { app: string; logo: string | null }) {
     const opener = window.opener as Window | null;
     const onMessage = (e: MessageEvent<WindowMessage>) => {
       if (e.origin !== window.location.origin || e.source !== opener) return;
-      if (e.data?.type === START_MESSAGE) goSignIn(e.data.start, e.data.connectionId, { check: e.data.check });
+      if (e.data?.type === START_MESSAGE) goSignIn(e.data.start, e.data.account, { check: e.data.check });
       else if (e.data?.type === STOP_MESSAGE) setFailed(e.data.message);
     };
     window.addEventListener('message', onMessage);

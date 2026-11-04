@@ -5,8 +5,7 @@
 // hosts, the person plugin turned on for each person's own sign-in and the header-key plugin with its
 // key, and an agent holding the person plugin's read tool. James asks the agent for a record in chat; the call is
 // refused with a Connect card, he signs in through the pop-up with his own account, and the chat goes on with the
-// record the system answered to his account. The Connections page then lists both plugin connections with no key on
-// it. Maya then asks for a record on the API-key desk each person connects with their own key: the card asks
+// record the system answered to his account. Each plugin app's page then opens with no key on it. Maya then asks for a record on the API-key desk each person connects with their own key: the card asks
 // for her key in place, she types it, and the chat goes on with the record read as her. Screenshots go to
 // evidenceDir('588', 'uc').
 import { execFileSync, spawn } from 'node:child_process';
@@ -121,11 +120,11 @@ try {
       // Set-up through the API, as the api layer's steps 1-8 do.
       for (const host of fake.info.hosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-588' });
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: fake.info.range, note: 'uc-588' });
-      const person = await call(tools, 'PUT', '/v1/plugins/test.person/team', priya, { enabled: true, signIn: 'person', clientId: 'multi-app', clientSecret: fake.info.clients['multi-app'] });
-      const keyed = await call(tools, 'PUT', '/v1/plugins/test.header-key/team', priya, { enabled: true, credentials: { key: fake.info.secrets.key } });
-      await call(tools, 'POST', `/v1/connections/${keyed.data?.connectionId}/test`, priya, { environment: 'production' });
+      const person = await call(tools, 'PUT', '/v1/apps/plugin:test.person/team', priya, { enabled: true, signIn: 'person', clientId: 'multi-app', clientSecret: fake.info.clients['multi-app'] });
+      const keyed = await call(tools, 'PUT', '/v1/apps/plugin:test.header-key/team', priya, { enabled: true, credentials: { key: fake.info.secrets.key } });
+      await call(tools, 'POST', `/v1/apps/plugin:test.header-key/accounts/${keyed.data?.connectionId}/test`, priya, { account: 'team' });
       // Each person brings their own key to this one; the team gives none.
-      const ownKeyed = await call(tools, 'PUT', '/v1/plugins/test.person-key/team', priya, { enabled: true, signIn: 'person' });
+      const ownKeyed = await call(tools, 'PUT', '/v1/apps/plugin:test.person-key/team', priya, { enabled: true, signIn: 'person' });
       const agent = (await call(agents, 'POST', '/v1/agents', priya, { name: 'Ticket desk', role: 'Reads tickets from Person desk' })).data ?? {};
       // agents-service keeps the grantable tools for 30 s, so the plugin's operation is offered within that.
       const toolIds = ['person_get_record', 'person_key_get_record'];
@@ -185,7 +184,7 @@ try {
           check('17 he signs in through the pop-up with his own account and the chat answers with the record read as him', reads.length >= 1 && reads.every((w) => w === 'james.person'), reads);
         }, page);
 
-        await step('18 each plugin connection opens on its page, the header-key one tested and working, and no key or client secret', async () => {
+        await step('18 each plugin app opens on its page, the header-key one tested and working, and no key or client secret', async () => {
           const admin = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
           admin.on('pageerror', (e) => errors.push(`admin: ${e.message}`));
           await admin.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -195,18 +194,22 @@ try {
           await admin.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
           let html = '';
           const shown = {};
-          for (const [id, name] of [[keyed.data?.connectionId, 'Header key desk'], [person.data?.connectionId, 'Person desk']]) {
-            await admin.goto(`${consoleUrl}/tools/connections/${id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          for (const [app, name] of [['plugin:test.header-key', 'Header key desk'], ['plugin:test.person', 'Person desk']]) {
+            await admin.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(app)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
             await admin.getByText(name).first().waitFor({ timeout: 90_000 });
-            // The health line loads after the page's title; the header-key connection was tested in set-up.
-            if (name === 'Header key desk') await admin.getByText('Working').first().waitFor({ timeout: 60_000 });
+            // The header-key app's account was tested in set-up; its Keys row in Settings says how that went.
+            if (name === 'Header key desk') {
+              await admin.getByTestId('app-tab-settings').click();
+              await admin.getByTestId('health').waitFor({ timeout: 60_000 });
+            }
             await admin.screenshot({ path: join(SHOTS, `connection-${name.split(' ')[0].toLowerCase()}-1280.png`) });
             html += await admin.content();
             shown[name] = (await admin.locator('main').textContent()) ?? '';
           }
-          const keyPage = /API key, production/i.test(shown['Header key desk']) && /Working\s*200/.test(shown['Header key desk']);
-          const personPage = /Sign in with an account/.test(shown['Person desk']);
-          check('18 each plugin connection opens on its page, the header-key one tested and working, and no key or client secret', keyPage && personPage && !html.includes(fake.info.secrets.key) && !html.includes(fake.info.clients['multi-app']), { keyPage, personPage, key: html.includes(fake.info.secrets.key), shown: shown['Header key desk'].replace(/\s+/g, ' ').slice(0, 400) });
+          const keyPage = /Working\s*200/.test(shown['Header key desk']) && /with the team account/.test(shown['Header key desk']);
+          // Each person signs in to Person desk with their own account, so the page offers hers.
+          const personPage = /Your account/.test(shown['Person desk']);
+          check('18 each plugin app opens on its page, the header-key one tested and working, and no key or client secret', keyPage && personPage && !html.includes(fake.info.secrets.key) && !html.includes(fake.info.clients['multi-app']), { keyPage, personPage, key: html.includes(fake.info.secrets.key), shown: shown['Header key desk'].replace(/\s+/g, ' ').slice(0, 400) });
         }, page);
 
         await step('22 Maya asks for a record on the key desk, types her own key into the card, and the chat answers with the record read as her', async () => {

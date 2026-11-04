@@ -1044,6 +1044,8 @@ class ConnectWait(Out):
 
     app: str
     connection_id: str | None = None
+    # The account's app, under which Connect my account opens it.
+    app_id: str | None = None
     # The person whose account the run waits for: the run's starter.
     person: str | None = None
     team_account: bool = False

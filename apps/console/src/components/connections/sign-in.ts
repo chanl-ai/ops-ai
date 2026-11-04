@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { toast } from 'sonner';
 
-import type { SignInStart } from '@/lib/types/connections';
+import type { AccountRef, SignInStart } from '@/lib/types/connections';
 
 /** The message the sign-in window posts to the chat that opened it once the person is connected. */
 export const CONNECTED_MESSAGE = 'ops:connection-signed-in';
@@ -17,29 +17,29 @@ const key = (state: string) => `ops-sign-in:${state}`;
 
 /**
  * Sends the window to the system's sign-in. The system returns to one fixed page with only a code and a state, while
- * finishing needs the connection's id, so the id is kept in this window's session under the state it goes out with.
+ * finishing needs the account and its app, so both are kept in this window's session under the state it goes out with.
  */
-export function goSignIn(start: SignInStart, connectionId: string, opts: { check?: boolean } = {}): void {
-  remember(start, connectionId, Boolean(opts.check));
+export function goSignIn(start: SignInStart, account: AccountRef, opts: { check?: boolean } = {}): void {
+  remember(start, account, Boolean(opts.check));
   window.location.assign(start.authorizeUrl);
 }
 
 /** `check` marks Test with my account, which the return page finishes as a test of the app credential, not a sign-in. */
-function remember(start: SignInStart, connectionId: string, check: boolean): void {
+function remember(start: SignInStart, account: AccountRef, check: boolean): void {
   const state = new URL(start.authorizeUrl).searchParams.get('state') ?? '';
   try {
-    sessionStorage.setItem(key(state), JSON.stringify({ connectionId, check }));
+    sessionStorage.setItem(key(state), JSON.stringify({ ...account, check }));
   } catch {
     // Without session storage the return page asks the person to start again.
   }
 }
 
-function remembered(state: string): { connectionId: string; check: boolean } | null {
+function remembered(state: string): (AccountRef & { check: boolean }) | null {
   try {
     const raw = sessionStorage.getItem(key(state));
     if (!raw) return null;
-    const v = JSON.parse(raw) as { connectionId?: string; check?: boolean };
-    return v.connectionId ? { connectionId: v.connectionId, check: Boolean(v.check) } : null;
+    const v = JSON.parse(raw) as Partial<AccountRef> & { check?: boolean };
+    return v.appId && v.accountId ? { appId: v.appId, accountId: v.accountId, check: Boolean(v.check) } : null;
   } catch {
     return null;
   }
@@ -58,13 +58,13 @@ export const READY_MESSAGE = 'ops:sign-in-window-ready';
 export const START_MESSAGE = 'ops:sign-in-start';
 export const STOP_MESSAGE = 'ops:sign-in-stop';
 
-export type WindowMessage = { type: typeof START_MESSAGE; start: SignInStart; connectionId: string; check?: boolean } | { type: typeof STOP_MESSAGE; message: string };
+export type WindowMessage = { type: typeof START_MESSAGE; start: SignInStart; account: AccountRef; check?: boolean } | { type: typeof STOP_MESSAGE; message: string };
 
 /** A sign-in window opened on the click, before the system's address is known. */
 export interface SignInWindow {
   window: Window;
   /** Sends the window on to the system's sign-in; `check` makes it Test with my account. */
-  go(start: SignInStart, connectionId: string, opts?: { check?: boolean }): void;
+  go(start: SignInStart, account: AccountRef, opts?: { check?: boolean }): void;
   /** Shows the window's failure card with this reason; the person tries again or closes it. */
   fail(message: string): void;
   /** What Try again on the failure card runs: the same sign-in started again, sent on to this window. */
@@ -74,7 +74,7 @@ export interface SignInWindow {
 /**
  * Opens the connect page in a window of its own, synchronously in the click, so a pop-up blocker lets it through;
  * starting the sign-in takes calls first, and a window opened after an await is blocked. The page waits for `go`,
- * which it receives once it says it is ready, and keeps the connection's id in its own session. Null, with a toast,
+ * which it receives once it says it is ready, and keeps the account's ids in its own session. Null, with a toast,
  * when the browser blocked it.
  */
 export function openSignInWindow(app: string, logo?: string | null): SignInWindow | null {
@@ -111,7 +111,7 @@ export function openSignInWindow(app: string, logo?: string | null): SignInWindo
   window.addEventListener('message', onReady);
   return {
     window: w,
-    go: (start, connectionId, opts) => ((pending = { type: START_MESSAGE, start, connectionId, check: opts?.check }), send()),
+    go: (start, account, opts) => ((pending = { type: START_MESSAGE, start, account, check: opts?.check }), send()),
     fail: (message) => ((failed = true), (pending = { type: STOP_MESSAGE, message }), send()),
     retry: (run) => void (again = run),
   };
@@ -172,9 +172,10 @@ export function retrySignInHref(): string {
   return `/connections/connect?${q}`;
 }
 
-/** The connection a returning state was sent out for. */
-export function signInFor(state: string): string | null {
-  return remembered(state)?.connectionId ?? null;
+/** The account a returning state was sent out for. */
+export function signInFor(state: string): AccountRef | null {
+  const r = remembered(state);
+  return r ? { appId: r.appId, accountId: r.accountId } : null;
 }
 
 /** Whether a returning state was Test with my account. */

@@ -4784,6 +4784,17 @@
             "title": "App",
             "type": "string"
           },
+          "appId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appid"
+          },
           "connectionId": {
             "anyOf": [
               {

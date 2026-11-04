@@ -22,15 +22,16 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTeam } from '@/hooks/use-team';
 import {
+  type AccountBody,
   type SystemCard,
-  type TeamPluginBody,
+  type TeamAppBody,
   useAddAccount,
-  useDeleteConnection,
-  useSetTeamPlugin,
+  useDeleteAccount,
+  useSetTeamApp,
   useStartSignIn,
-  useTestEnvironment,
+  useTestAccount,
 } from '@/hooks/systems-queries';
-import { draftFor, keyed, pluginGroups, turnOnBody, type KindField, type Kinds } from '@/lib/connect-plan';
+import { draftFor, newAccountBody, pluginGroups, turnOnBody, type KindField, type Kinds } from '@/lib/connect-plan';
 import { fieldErrors, schemaForFields } from '@/lib/field-schema';
 
 type App = 'platform' | 'own';
@@ -47,32 +48,50 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
  * The one Connect window for an app that signs in with an account: which app credential (Ops AI's app or
  * the team's own client, reused when the app already has one), the access it asks for, then Authorize. The sign-in
  * window opens on the click and closes once access is allowed; the account's first test then runs in the background.
- * `another` adds a second named account of an app the team has connected. Cancel removes what the window made.
+ * `another` adds a second named account of an app the team has connected; `sandbox` adds its sandbox account, which
+ * test runs use, asking what the first connect asked. Cancel removes what the window made.
  */
-export function ConnectWindow({ card, kinds, another = false, open, onOpenChange }: { card: SystemCard; kinds: Kinds; another?: boolean; open: boolean; onOpenChange: (open: boolean) => void }) {
+export function ConnectWindow({
+  card,
+  kinds,
+  another = false,
+  sandbox = false,
+  open,
+  onOpenChange,
+}: {
+  card: SystemCard;
+  kinds: Kinds;
+  another?: boolean;
+  sandbox?: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const router = useRouter();
-  const setTeamPlugin = useSetTeamPlugin();
+  const setTeamApp = useSetTeamApp();
   const addAccount = useAddAccount();
   const start = useStartSignIn();
-  const remove = useDeleteConnection();
-  const test = useTestEnvironment();
+  const remove = useDeleteAccount();
+  const test = useTestAccount();
   const { team: current } = useTeam();
   const plugin = card.plugin;
   const kind = kinds.kinds.find((k) => k.id === (card.authKind ?? plugin?.kinds[0]));
-  const environment = keyed(kinds).find((e) => e.production)?.id ?? 'production';
+  // Another account of the app: added beside the default one, never through the app's turn-on.
+  const adding = another || sandbox;
 
   // The app credential the team's connection already signs in with, as the app's card names it.
   const existing = card.connectionId ? card.credential : null;
   const [newClient, setNewClient] = React.useState(false);
-  const reusing = Boolean(card.connectionId) && !newClient;
+  // A sandbox signs in elsewhere, so it asks for its app credential as the first connect did.
+  const reusing = Boolean(card.connectionId) && !newClient && !sandbox;
   // Ops AI's own client exists only where the install set it up; without it the team's own is the one way to sign in.
   const managed = card.managedClient ?? Boolean(plugin?.platformApp);
   const [app, setApp] = React.useState<App>(managed ? 'platform' : 'own');
   const chosen: App = reusing ? (existing?.type === 'own' ? 'own' : 'platform') : newClient ? 'own' : app;
   const typing = !reusing && chosen === 'own';
   // The fields this window asks, as the API describes them: the team's own client when it brings one, and the plugin's
-  // own settings (Salesforce's sign-in address) when the app is first connected; kept after.
-  const asked = reusing ? [] : (plugin?.settings ?? []).filter((x) => !x.locked);
+  // own settings (Salesforce's sign-in address) when the app is first connected; kept after. A sandbox asks the ones
+  // each account keeps its own, as the team's settings stay the app's.
+  const asked = reusing ? [] : (plugin?.settings ?? []).filter((x) => !x.locked && (!sandbox || x.perAccount));
   const fields: KindField[] = [
     ...(plugin && kind ? pluginGroups(kind, kinds, plugin, typing ? 'own' : 'platform').main.filter((f) => f.name === 'clientId' || f.name === 'clientSecret') : []),
     ...asked.map((x) => ({ name: x.name, label: x.label, secret: x.secret, required: !x.default, advanced: Boolean(x.default), default: x.default })),
@@ -85,10 +104,10 @@ export function ConnectWindow({ card, kinds, another = false, open, onOpenChange
   const needed = fields.filter((f) => f.name !== 'clientId' && f.name !== 'clientSecret' && !f.advanced);
   const tuned = fields.filter((f) => f.advanced);
 
-  // Whose account it is and its name sit under More options; a second account opens with them showing.
-  const [more, setMore] = React.useState(another);
+  // Whose account it is and its name sit under More options; another account or a sandbox opens with them showing.
+  const [more, setMore] = React.useState(another || sandbox);
   const [team, setTeam] = React.useState(true);
-  const suggested = another ? `${card.name} · second account` : `${card.name} · ${current?.name ?? 'Team'}`;
+  const suggested = sandbox ? `${card.name} sandbox` : another ? `${card.name} · second account` : `${card.name} · ${current?.name ?? 'Team'}`;
 
   const [waiting, setWaiting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -102,7 +121,7 @@ export function ConnectWindow({ card, kinds, another = false, open, onOpenChange
       toast.success(`${card.name} is connected`, { description: m.account ? `Signed in as ${m.account}.` : undefined });
       onOpenChange(false);
       // Connected once access is allowed; the first test runs after, and a failure shows on the account's row.
-      test.mutate({ connectionId: m.connectionId, environment });
+      test.mutate({ appId: card.id, accountId: m.connectionId });
       router.push(appHref(card));
     },
     onFailed: (why) => {
@@ -118,8 +137,8 @@ export function ConnectWindow({ card, kinds, another = false, open, onOpenChange
     made.current = null;
     if (!m) return;
     try {
-      if (m.id) await remove.mutateAsync(m.id);
-      if (m.turnedOn) await setTeamPlugin.mutateAsync({ path: { plugin_id: card.pluginId ?? '' }, body: { enabled: false, environment } as TeamPluginBody });
+      if (m.id) await remove.mutateAsync({ appId: card.id, accountId: m.id });
+      if (m.turnedOn) await setTeamApp.mutateAsync({ appId: card.id, body: { enabled: false, sandbox: false } });
     } catch (e) {
       toast.error(`Couldn’t remove what was made for ${card.name}`, { description: message(e) });
     }
@@ -155,32 +174,31 @@ export function ConnectWindow({ card, kinds, another = false, open, onOpenChange
     setError(null);
     setWaiting(true);
     try {
-      const draft = draftFor(environment, pluginGroups(kind, kinds, plugin, typing ? 'own' : 'platform'));
+      const app = typing ? 'own' : 'platform';
+      const draft = draftFor(pluginGroups(kind, kinds, plugin, app));
       if (typing) {
         draft.settings.clientId = values.clientId.trim();
         draft.secrets.clientSecret = values.clientSecret;
       }
-      for (const x of asked.filter((a) => a.perEnvironment)) draft.settings[x.name] = values[x.name] ?? '';
-      const teamSettings = Object.fromEntries(asked.filter((a) => !a.perEnvironment).map((a) => [a.name, values[a.name] ?? '']));
-      const accountName = (values.accountName ?? '').trim();
+      for (const x of asked.filter((a) => a.perAccount)) draft.settings[x.name] = values[x.name] ?? '';
+      const teamSettings = Object.fromEntries(asked.filter((a) => !a.perAccount).map((a) => [a.name, values[a.name] ?? '']));
+      const accountName = (values.accountName ?? '').trim() || suggested;
       const offered = team ? (plugin.signIn.includes('person_or_team') ? 'person_or_team' : undefined) : plugin.signIn.includes('person') ? 'person' : undefined;
-      const body = {
-        // A later turn-on that names no client keeps the app credential the team's connection already has.
-        ...turnOnBody(kind, plugin, typing ? 'own' : 'platform', draft, teamSettings, !card.connectionId || another, offered),
-        ...(another ? { name: accountName || suggested } : { accountName: accountName || suggested }),
-      } as TeamPluginBody;
       let id: string;
-      if (another) {
-        const account = await addAccount.mutateAsync({ path: { plugin_id: card.pluginId ?? '' }, body: body as never });
-        id = String(account.id);
+      if (adding) {
+        const body = newAccountBody(kind, plugin, app, draft, accountName, sandbox, offered) as AccountBody;
+        const account = await addAccount.mutateAsync({ appId: card.id, body });
+        id = account.id;
         made.current = { id, turnedOn: false };
       } else {
-        const view = await setTeamPlugin.mutateAsync({ path: { plugin_id: card.pluginId ?? '' }, body });
+        // A later turn-on that names no client keeps the app credential the team's default account already has.
+        const body = { ...turnOnBody(kind, plugin, app, draft, teamSettings, !card.connectionId, offered), accountName } as TeamAppBody;
+        const view = await setTeamApp.mutateAsync({ appId: card.id, body });
         id = String(view.connectionId ?? card.connectionId ?? '');
         made.current = { id: card.connectionId ? null : id, turnedOn: true };
       }
-      const s = await start.mutateAsync({ connectionId: id, environment, account: team ? 'team' : 'self' });
-      w.go(s, id);
+      const s = await start.mutateAsync({ appId: card.id, accountId: id, account: team ? 'team' : 'self' });
+      w.go(s, { appId: card.id, accountId: id });
     } catch (e) {
       w.fail(message(e));
       setError(message(e));
@@ -200,7 +218,7 @@ export function ConnectWindow({ card, kinds, another = false, open, onOpenChange
       onOpenChange={(o) => (o ? onOpenChange(o) : void cancel())}
       // Wider than the default: the client fields sit side by side, and the return address reads in full.
       size="md"
-      title={another ? `Connect another ${card.name} account` : `Connect ${card.name}`}
+      title={sandbox ? `Add a ${card.name} sandbox account` : another ? `Connect another ${card.name} account` : `Connect ${card.name}`}
       description={`Choose how Ops AI signs in to ${card.name}, then allow access.`}
       data-testid="connect-window"
       footer={

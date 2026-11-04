@@ -1,25 +1,10 @@
 /**
- * What the one connect dialog shows and does for a system (c-580), as data: its plan, each environment's fields and
- * draft, and one reducer so a save, a test and a sign-in cannot overlap.
+ * What the one connect dialog shows and does for an app's account, as data: its plan, the account's fields and draft,
+ * and one reducer so a save, a test and a sign-in cannot overlap.
  *
  * The plan reads a kind's flags from `GET /v1/connection-kinds`, never its id, so a kind tools-service adds later (a
  * signed JWT, a private-key client) gets the right form with no change here. Only `none` is named: it has no fields.
  */
-
-/** An environment's id, as `GET /v1/connection-kinds` lists them; never a fixed set, so teams may name their own. */
-export type Environment = string;
-
-export interface EnvironmentOption {
-  id: Environment;
-  label: string;
-  /** The one environment live runs call. */
-  production: boolean;
-  /** Whether a connection holds keys for it; only those get a section. */
-  keys: boolean;
-}
-
-/** The environments a connection holds keys for, in the service's order. */
-export const keyed = (kinds: Kinds): EnvironmentOption[] => kinds.environments.filter((e) => e.keys);
 
 /** A field as `GET /v1/connection-kinds` describes it. */
 export interface KindField {
@@ -64,7 +49,6 @@ export interface Kind {
 
 export interface Kinds {
   kinds: Kind[];
-  environments: EnvironmentOption[];
   common: KindField[];
   certificate: KindField[];
   redirectUri?: string | null;
@@ -78,29 +62,6 @@ export function planFor(kind: Kind): Plan {
   return kind.signsIn ? { kind: 'account', authKind: kind } : { kind: 'keys', authKind: kind };
 }
 
-/** The environments in the order a dialog shows them: the one asked for first, then the service's order. */
-export function ordered(kinds: Kinds, first?: Environment): EnvironmentOption[] {
-  const all = keyed(kinds);
-  const lead = all.find((e) => e.id === first);
-  return lead ? [lead, ...all.filter((e) => e !== lead)] : all;
-}
-
-/** The environment a sign-in or Save starts from: production when it is among `ids`, else the first of them. */
-export function leading(kinds: Kinds, ids: Environment[]): Environment | undefined {
-  const all = keyed(kinds);
-  return all.find((e) => e.production && ids.includes(e.id))?.id ?? all.find((e) => ids.includes(e.id))?.id;
-}
-
-/**
- * The environments Save writes, the one it completes first: that one when it is not on the connection yet, and every
- * other only when its section was typed in. A section ready on its defaults alone is not turned on beside it.
- */
-export function toSave(s: DialogState, ready: Environment[], completes: Environment): Environment[] {
-  const typed = ready.filter((e) => s.sections[e]?.status === 'dirty');
-  const first = typed.includes(completes) || !s.saved.includes(completes) || !s.connectionId ? [completes] : [];
-  return [...first, ...typed.filter((e) => e !== completes)];
-}
-
 export interface FieldGroups {
   /** The system's address and test path, then the kind's own fields, as a form shows them. */
   main: KindField[];
@@ -108,7 +69,7 @@ export interface FieldGroups {
   more: KindField[];
 }
 
-/** One environment's fields for a kind: the common ones, the kind's, and the certificate's under More settings. */
+/** An account's fields for a kind: the common ones, the kind's, and the certificate's under More settings. */
 export function fieldsFor(kind: Kind, kinds: Kinds): FieldGroups {
   const all = [...kinds.common, ...kind.fields];
   return {
@@ -128,9 +89,8 @@ export interface Health {
   at: string;
 }
 
-/** One environment's section of the dialog. A saved secret is only ever `secretSet`; its value is never read back. */
-export interface EnvDraft {
-  environment: Environment;
+/** The account's draft in the dialog. A saved secret is only ever `secretSet`; its value is never read back. */
+export interface Draft {
   settings: Record<string, string>;
   secrets: Record<string, string>;
   secretSet: Record<string, boolean>;
@@ -138,9 +98,8 @@ export interface EnvDraft {
   health?: Health | null;
 }
 
-/** A saved environment as a connection's detail answers it. */
-export interface SavedEnvironment {
-  set: boolean;
+/** A saved account as its detail answers it. */
+export interface SavedAccount {
   settings: Record<string, unknown>;
   secrets: Record<string, { set?: boolean } | unknown>;
   health?: Health | null;
@@ -148,8 +107,8 @@ export interface SavedEnvironment {
 
 const text = (v: unknown): string => (v == null ? '' : typeof v === 'string' ? v : String(v));
 
-/** A section's starting draft: the saved values, else each field's default; typed secrets start empty. */
-export function draftFor(environment: Environment, groups: FieldGroups, saved?: SavedEnvironment | null): EnvDraft {
+/** The draft a dialog starts from: the saved values, else each field's default; typed secrets start empty. */
+export function draftFor(groups: FieldGroups, saved?: SavedAccount | null): Draft {
   const settings: Record<string, string> = {};
   const secretSet: Record<string, boolean> = {};
   for (const f of [...groups.main, ...groups.more]) {
@@ -162,21 +121,21 @@ export function draftFor(environment: Environment, groups: FieldGroups, saved?: 
     }
   }
   const status: SectionStatus = saved?.health ? (saved.health.status === 'ok' ? 'working' : 'failed') : 'empty';
-  return { environment, settings, secrets: {}, secretSet, status, health: saved?.health ?? null };
+  return { settings, secrets: {}, secretSet, status, health: saved?.health ?? null };
 }
 
-/** Whether a section has what its required fields need: a value typed, or a secret already sealed. */
-export function complete(draft: EnvDraft, groups: FieldGroups): boolean {
+/** Whether a draft has what its required fields need: a value typed, or a secret already sealed. */
+export function complete(draft: Draft, groups: FieldGroups): boolean {
   return [...groups.main, ...groups.more]
     .filter((f) => isRequired(f, draft.settings))
     .every((f) => (f.secret ? Boolean(draft.secrets[f.name]) || draft.secretSet[f.name] : Boolean(draft.settings[f.name]?.trim())));
 }
 
 /**
- * The body `PUT /v1/connections/{id}/environments/{env}` takes for a section: settings with blanks left out, and only
+ * The keys `PATCH /v1/apps/{app_id}/accounts/{account_id}` takes for a draft: settings with blanks left out, and only
  * the secrets typed this time, so a sealed one left blank keeps its value.
  */
-export function environmentBody(draft: EnvDraft, revision: number) {
+export function accountBody(draft: Draft, revision: number) {
   const settings = Object.fromEntries(Object.entries(draft.settings).filter(([, v]) => v.trim() !== ''));
   const secretValues = Object.fromEntries(Object.entries(draft.secrets).filter(([, v]) => v !== ''));
   return { revision, settings, secretValues };
@@ -186,78 +145,71 @@ export type Phase = 'form' | 'signing-in' | 'done';
 
 export interface DialogState {
   phase: Phase;
-  sections: Record<Environment, EnvDraft>;
-  /** The connection the dialog made or opened; a new system has none until its first save. */
+  draft: Draft;
+  /** The account the dialog made or opened; a new app has none until its first save. */
   connectionId: string | null;
-  /** Whether this dialog made the connection, so Cancel deletes it. */
+  /** Whether this dialog made the account, so Cancel deletes it. */
   created: boolean;
   /** Whether a call is under way; every button that starts another waits. */
   busy: boolean;
   error: string | null;
-  /** The environments saved on the connection, at its opening or by this dialog: Save saves an unsaved one it completes. */
-  saved: Environment[];
-  /** The environments whose account was signed in through this dialog, so Save does not open a second sign-in. */
-  signedIn: Environment[];
+  /** Whether the account holds keys, at its opening or by this dialog's save. */
+  saved: boolean;
+  /** Whether the account was signed in through this dialog, so Save does not open a second sign-in. */
+  signedIn: boolean;
 }
 
 export type Action =
-  | { type: 'reset'; sections: Record<Environment, EnvDraft>; connectionId: string | null }
-  | { type: 'setting'; environment: Environment; name: string; value: string }
-  | { type: 'secret'; environment: Environment; name: string; value: string }
-  /** `made`: this dialog made the connection, so Cancel removes it; false when it opened one already there. */
+  | { type: 'reset'; draft: Draft; connectionId: string | null }
+  | { type: 'setting'; name: string; value: string }
+  | { type: 'secret'; name: string; value: string }
+  /** `made`: this dialog made the account, so Cancel removes it; false when it opened one already there. */
   | { type: 'created'; connectionId: string; made?: boolean }
-  | { type: 'start'; environment: Environment; status: 'saving' | 'testing' }
-  | { type: 'saved'; environment: Environment; secretSet: Record<string, boolean> }
-  | { type: 'tested'; environment: Environment; health: Health | null }
-  | { type: 'failed'; environment?: Environment; message: string }
+  | { type: 'start'; status: 'saving' | 'testing' }
+  | { type: 'saved'; secretSet: Record<string, boolean> }
+  | { type: 'tested'; health: Health | null }
+  | { type: 'failed'; message: string }
   | { type: 'signing-in' }
-  | { type: 'signed-in'; environment?: Environment }
+  | { type: 'signed-in' }
   | { type: 'done' };
 
-export const initialState = (sections: Record<Environment, EnvDraft>, connectionId: string | null, saved: Environment[] = []): DialogState => ({
+export const initialState = (draft: Draft, connectionId: string | null, saved = false): DialogState => ({
   phase: 'form',
-  sections,
+  draft,
   connectionId,
   created: false,
   busy: false,
   error: null,
   saved,
-  signedIn: [],
+  signedIn: false,
 });
 
-const plus = (list: Environment[], env?: Environment) => (env === undefined || list.includes(env) ? list : [...list, env]);
-
-const edit = (s: DialogState, env: Environment, patch: Partial<EnvDraft>): DialogState => ({
-  ...s,
-  sections: { ...s.sections, [env]: { ...s.sections[env], ...patch } },
-});
+const edit = (s: DialogState, patch: Partial<Draft>): DialogState => ({ ...s, draft: { ...s.draft, ...patch } });
 
 export function reduce(s: DialogState, a: Action): DialogState {
   switch (a.type) {
     case 'reset':
-      return { ...initialState(a.sections, a.connectionId, s.saved), created: s.created };
+      return { ...initialState(a.draft, a.connectionId, s.saved), created: s.created };
     case 'setting':
-      return edit(s, a.environment, { settings: { ...s.sections[a.environment].settings, [a.name]: a.value }, status: 'dirty' });
+      return edit(s, { settings: { ...s.draft.settings, [a.name]: a.value }, status: 'dirty' });
     case 'secret':
-      return edit(s, a.environment, { secrets: { ...s.sections[a.environment].secrets, [a.name]: a.value }, status: 'dirty' });
+      return edit(s, { secrets: { ...s.draft.secrets, [a.name]: a.value }, status: 'dirty' });
     case 'created':
       return { ...s, connectionId: a.connectionId, created: a.made ?? true };
     case 'start':
       if (s.busy) return s;
-      return { ...edit(s, a.environment, { status: a.status }), busy: true, error: null };
-    case 'saved': {
+      return { ...edit(s, { status: a.status }), busy: true, error: null };
+    case 'saved':
       // A save is one step of a test or of Save: the dialog stays busy until that ends, so nothing starts beside it.
-      const sec = s.sections[a.environment];
-      return { ...edit(s, a.environment, { secrets: {}, secretSet: { ...sec.secretSet, ...a.secretSet } }), saved: plus(s.saved, a.environment) };
-    }
+      return { ...edit(s, { secrets: {}, secretSet: { ...s.draft.secretSet, ...a.secretSet } }), saved: true };
     case 'tested':
-      return { ...edit(s, a.environment, { health: a.health, status: a.health?.status === 'ok' ? 'working' : 'failed' }), busy: false };
+      return { ...edit(s, { health: a.health, status: a.health?.status === 'ok' ? 'working' : 'failed' }), busy: false };
     case 'failed':
-      return { ...(a.environment ? edit(s, a.environment, { status: 'dirty' }) : s), busy: false, error: a.message };
+      return { ...edit(s, { status: 'dirty' }), busy: false, error: a.message };
     case 'signing-in':
       return { ...s, phase: 'signing-in', busy: false };
     case 'signed-in':
-      return { ...s, phase: 'form', signedIn: plus(s.signedIn, a.environment) };
+      return { ...s, phase: 'form', signedIn: true };
     case 'done':
       return { ...s, phase: 'done', busy: false, created: false };
   }
@@ -266,9 +218,9 @@ export function reduce(s: DialogState, a: Action): DialogState {
 /** Which app a plugin that signs in uses: the platform's, set up once by an account admin, or the team's own. */
 export type App = 'platform' | 'own';
 
-/** What the connect dialog reads from a plugin's system card (`GET /v1/systems`). */
+/** What the connect dialog reads from a plugin's app card (`GET /v1/apps`). */
 export interface PluginSpec {
-  settings: { name: string; label: string; default?: string | null; secret: boolean; perEnvironment: boolean; locked: boolean }[];
+  settings: { name: string; label: string; default?: string | null; secret: boolean; perAccount: boolean; locked: boolean }[];
   /** The kind's fields the plugin fixes itself. */
   fixed: string[];
   /** Whose account the plugin lets calls sign in with: team, person, person_or_team. */
@@ -279,54 +231,68 @@ const CLIENT_ID: KindField = { name: 'clientId', label: 'Client ID', secret: fal
 const CLIENT_SECRET: KindField = { name: 'clientSecret', label: 'Client secret', secret: true, required: true, advanced: false };
 
 /**
- * A plugin's groups of fields per environment. A kind that signs in asks for the team's own app (client ID and secret)
- * unless the platform's app is chosen, plus the settings each environment keeps its own (a sandbox's sign-in address);
- * any other kind asks for its own fields, which the plugin keeps as the connection's credentials. The system's address
- * and test address come from the plugin, so they are never asked.
+ * A plugin account's groups of fields. A kind that signs in asks for the team's own app (client ID and secret) unless
+ * the platform's app is chosen, plus the settings each account keeps its own (a sandbox's sign-in address); any other
+ * kind asks for its own fields, which the plugin keeps as the account's credentials. The system's address and test
+ * address come from the plugin, so they are never asked.
  */
 export function pluginGroups(kind: Kind, kinds: Kinds, plugin: PluginSpec, app: App, saved = false): FieldGroups {
-  // An environment already set keeps its saved values, which the connection does not send back: its fields start blank
-  // and a blank one is left out of the save, so saving without retyping never resets a value to its default.
-  const perEnv: KindField[] = plugin.settings
-    .filter((s) => s.perEnvironment && !s.locked)
+  // An account already set keeps its saved values, which it does not send back: its fields start blank and a blank
+  // one is left out of the save, so saving without retyping never resets a value to its default.
+  const perAccount: KindField[] = plugin.settings
+    .filter((s) => s.perAccount && !s.locked)
     .map((s) =>
       saved
         ? { name: s.name, label: s.label, secret: s.secret, required: false, advanced: false, default: null, help: 'Blank keeps the saved value.' }
         : { name: s.name, label: s.label, secret: s.secret, required: !s.default, advanced: false, default: s.default },
     );
   const client = saved ? [CLIENT_ID, CLIENT_SECRET].map((f) => ({ ...f, required: false, help: 'Blank keeps the saved value.' })) : [CLIENT_ID, CLIENT_SECRET];
-  if (kind.signsIn) return { main: [...(app === 'own' ? client : []), ...perEnv], more: [] };
+  if (kind.signsIn) return { main: [...(app === 'own' ? client : []), ...perAccount], more: [] };
   // A field the plugin fixes (how its key is sent) is never asked: what a team typed would replace it.
   const asked = kind.fields.filter((f) => !plugin.fixed.includes(f.name));
-  return { main: [...asked.filter((f) => !f.advanced), ...perEnv], more: [...asked.filter((f) => f.advanced), ...kinds.certificate] };
+  return { main: [...asked.filter((f) => !f.advanced), ...perAccount], more: [...asked.filter((f) => f.advanced), ...kinds.certificate] };
 }
 
-/** The `PUT /v1/plugins/{id}/team` body that turns the plugin on for one environment with that section's values. */
+const filled = (o: Record<string, string>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v.trim() !== ''));
+
+/**
+ * One plugin account's own keys from a draft: the settings it keeps its own, the team's app when its own is chosen,
+ * and for a kind that does not sign in the kind's fields as credentials.
+ */
+export function pluginKeys(kind: Kind, plugin: PluginSpec, app: App, draft: Draft): Record<string, unknown> {
+  const own = new Set(plugin.settings.filter((s) => s.perAccount).map((s) => s.name));
+  const keys: Record<string, unknown> = { settings: filled(Object.fromEntries(Object.entries(draft.settings).filter(([k]) => own.has(k)))) };
+  if (kind.signsIn) {
+    if (app === 'own')
+      Object.assign(keys, { clientId: draft.settings.clientId, ...(draft.secrets.clientSecret ? { clientSecret: draft.secrets.clientSecret } : {}) });
+  } else {
+    keys.credentials = filled({ ...Object.fromEntries(Object.entries(draft.settings).filter(([k]) => !own.has(k))), ...draft.secrets });
+  }
+  return keys;
+}
+
+/** The `PUT /v1/apps/plugin:{id}/team` body that turns the plugin on with its default account's draft. */
 export function turnOnBody(
   kind: Kind,
   plugin: PluginSpec,
   app: App,
-  draft: EnvDraft,
+  draft: Draft,
   team: Record<string, string>,
   first: boolean,
   signIn?: string,
 ): Record<string, unknown> {
-  const own = new Set(plugin.settings.filter((s) => s.perEnvironment).map((s) => s.name));
-  const filled = (o: Record<string, string>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v.trim() !== ''));
-  const settings = filled({ ...team, ...Object.fromEntries(Object.entries(draft.settings).filter(([k]) => own.has(k))) });
-  // The kind and whose account calls use are chosen at the first turn-on, when the team's connection is made.
-  const body: Record<string, unknown> = {
+  const keys = pluginKeys(kind, plugin, app, draft);
+  // The kind and whose account calls use are chosen at the first turn-on, when the team's default account is made.
+  return {
     enabled: true,
-    environment: draft.environment,
-    settings,
+    sandbox: false,
+    ...keys,
+    settings: { ...filled(team), ...(keys.settings as Record<string, string>) },
     ...(first ? { kind: kind.id, ...(signIn ? { signIn } : {}) } : {}),
   };
-  if (kind.signsIn) {
-    if (app === 'own')
-      Object.assign(body, { clientId: draft.settings.clientId, ...(draft.secrets.clientSecret ? { clientSecret: draft.secrets.clientSecret } : {}) });
-  } else {
-    const credentials = filled({ ...Object.fromEntries(Object.entries(draft.settings).filter(([k]) => !own.has(k))), ...draft.secrets });
-    body.credentials = credentials;
-  }
-  return body;
+}
+
+/** The `POST /v1/apps/plugin:{id}/accounts` body for another account of the plugin's app, a sandbox or a named one. */
+export function newAccountBody(kind: Kind, plugin: PluginSpec, app: App, draft: Draft, name: string, sandbox: boolean, signIn?: string): Record<string, unknown> {
+  return { name, sandbox, kind: kind.id, ...(signIn ? { signIn } : {}), ...pluginKeys(kind, plugin, app, draft) };
 }

@@ -104,13 +104,13 @@ try {
       const sam = as(await tokenFor('s.adeyemi@harborpine.example'), 'team_security');
       const nadia = as(await tokenFor('n.petrov@harborpine.example'), 'team_security');
 
-      // Set-up through the API, as uc-558's api layer does: the hosts, the connection, the module and an agent.
+      // Set-up through the API, as uc-558's api layer does: the hosts, the app and its account, the module and an agent.
       for (const host of sf.info.hosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-558' });
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: sf.info.range, note: 'uc-558' });
-      const made = await call(tools, 'POST', '/v1/connections', priya, { name: 'Salesforce', authKind: 'oauth2_auth_code', signIn: 'person' });
+      const made = await call(tools, 'POST', '/v1/apps', priya, { name: 'Salesforce', authKind: 'oauth2_auth_code', signIn: 'person', sandbox: false });
       const conn = made.data ?? {};
       const settings = { baseUrl: sf.info.api_base, authorizeUrl: sf.info.authorize_url, tokenUrl: sf.info.token_url, revokeUrl: sf.info.revoke_url, clientId: 'ops-ai-kestrel', scopes: 'openid api refresh_token', testPath: '/services/oauth2/userinfo' };
-      const put = await call(tools, 'PUT', `/v1/connections/${conn.id}/environments/production`, priya, { revision: conn.revision, settings, secretValues: { clientSecret: 'kestrel-connected-app-secret' } });
+      const put = await call(tools, 'PATCH', `/v1/apps/${conn.appId}/accounts/${conn.id}`, priya, { revision: conn.revision, settings, secretValues: { clientSecret: 'kestrel-connected-app-secret' } });
       const http = { name: 'uc558_update_case', description: "Update a Salesforce case's status", access: 'write', method: 'PATCH', url: sf.info.case_url, body: '{"Status": {{status}}}' };
       const mod = (await call(tools, 'POST', '/v1/tool-modules', priya, { name: 'uc558-update-case', displayName: 'Salesforce cases', system: 'Salesforce', type: 'http', endpoint: '', connectionId: conn.id, signIn: 'person', http })).data ?? {};
       const op = (mod.operations ?? [])[0] ?? {};
@@ -173,7 +173,7 @@ try {
         const page = await signIn('j.richardson@harborpine.example');
         const answers = [];
         page.on('response', async (r) => {
-          if (r.url().includes('/v1/me/connections') && r.request().method() === 'GET') answers.push(`${r.status()} ${(await r.text().catch(() => '')).slice(0, 160)} team=${r.request().headers()['x-team-id']}`);
+          if (r.url().includes('/v1/me/accounts') && r.request().method() === 'GET') answers.push(`${r.status()} ${(await r.text().catch(() => '')).slice(0, 160)} team=${r.request().headers()['x-team-id']}`);
         });
         // The conversation's own address, to open it again at 375 px.
         let thread = `${consoleUrl}/chat`;
@@ -235,7 +235,7 @@ try {
           await page.getByTestId(`disconnect-${conn.id}`).click();
           await page.getByTestId('delete-my-connection-confirm-btn').click();
           await page.getByTestId(`connect-${conn.id}`).waitFor({ timeout: 60_000 });
-          const left = (await call(tools, 'GET', '/v1/me/connections', james)).data ?? null;
+          const left = (await call(tools, 'GET', '/v1/me/accounts', james)).data ?? null;
           check('16 Disconnect removes his sign-in, and the system is asked to end it', Array.isArray(left) && left.length === 0, left);
         }, page);
 
@@ -251,7 +251,7 @@ try {
           const everyone = admin.getByTestId('app-everyone');
           await everyone.waitFor({ timeout: 90_000 });
           const first = await everyone.getAttribute('data-state');
-          const read = async () => (await call(tools, 'GET', `/v1/connections/${conn.id}`, priya)).data ?? {};
+          const read = async () => (await call(tools, 'GET', `/v1/apps/${conn.appId}/accounts/${conn.id}`, priya)).data ?? {};
           const until = async (want) => {
             let now = await read();
             for (let i = 0; i < 20 && now.signIn !== want; i++) await admin.waitForTimeout(500), (now = await read());
@@ -279,7 +279,7 @@ try {
           await me.getByText(/Connected as/).waitFor({ timeout: 60_000 }).catch(() => {});
           const text = ((await me.innerText()) ?? '').replace(/\s+/g, ' ');
           await admin.screenshot({ path: join(SHOTS, 'app-own-account-1280.png') });
-          const mine = (await call(tools, 'GET', '/v1/me/connections', priya)).data ?? [];
+          const mine = (await call(tools, 'GET', '/v1/me/accounts', priya)).data ?? [];
           check('18 she connects her own account on the app’s page, which the old connection address opens', /Connected as lead@kestrel\.example/.test(text) && mine.some((c) => c.account === 'lead@kestrel.example'), { text, mine });
         }, admin);
 
