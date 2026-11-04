@@ -29,9 +29,9 @@ export function waitReason(read: Extraction | null | undefined): string | null {
  * The header's line for a read that saved nothing on the file: a proposed read (no type yet, so nothing is recorded)
  * or a full-text read. Null when the file has its own Read as, or was never read.
  */
-export function readBadge(data: FileData | null | undefined, latest: Extraction | null | undefined): string | null {
-  if (data || !latest || latest.status !== 'done') return null;
-  if (latest.proposal) return 'Fields proposed · not saved as a type';
-  if (typeof latest.text === 'string') return 'Read as full text';
+export function readBadge(data: FileData | null | undefined, latest: Extraction | null | undefined, textRead = false): string | null {
+  if (data) return null;
+  if (latest?.status === 'done' && latest.proposal) return 'Fields proposed · not saved as a type';
+  if ((latest?.status === 'done' && typeof latest.text === 'string') || textRead) return 'Read as full text';
   return null;
 }

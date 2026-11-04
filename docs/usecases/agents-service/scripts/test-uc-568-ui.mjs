@@ -197,6 +197,16 @@ try {
           const order = texts.map((t) => (/Page (\d+) of 12/.exec(t) ?? [])[1]).map(Number);
           const marks = await page.locator('[data-testid="file-text-page"] mark[data-confidence]').evaluateAll((els) => els.map((e) => Number(e.getAttribute('data-confidence'))));
           await page.screenshot({ path: join(SHOTS, 'text-tab-1280.png'), fullPage: true });
+          // Full text records no read, so the header learns from the saved text that the file was read, here and
+          // after a reload.
+          const header = page.getByTestId('read-as').first();
+          await until(async () => /Read as full text/.test(await header.innerText()), 30_000);
+          const shown = await header.innerText();
+          await page.reload();
+          await page.getByTestId('file-text-page').first().waitFor({ timeout: 120_000 });
+          await until(async () => /Read as full text/.test(await header.innerText()), 30_000);
+          const reloaded = await header.innerText();
+          check('32c after Full text the header says the file was read as full text, and still does after a reload', /Read as full text/.test(shown) && /Read as full text/.test(reloaded), { shown, reloaded });
           await page.setViewportSize({ width: 375, height: 800 });
           await page.waitForTimeout(500);
           narrow.text = await sideways(page);

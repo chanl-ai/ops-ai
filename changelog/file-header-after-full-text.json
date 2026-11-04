@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-03",
+  "title": "A file read as full text says so",
+  "description": "After Full text, a file's header reads \"Read as full text\" instead of \"Not read\", and still does after the page reloads.",
+  "tag": "fix"
+}

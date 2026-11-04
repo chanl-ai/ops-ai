@@ -17,7 +17,7 @@ import { RouteTabs } from '@/components/shared/route-tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useCan } from '@/hooks/me-queries';
-import { useFileExtractions } from '@/hooks/extraction-queries';
+import { useFileExtractions, useFileTextRead } from '@/hooks/extraction-queries';
 import { useFile } from '@/hooks/file-queries';
 import { readBadge, waitReason } from '@/lib/read-state';
 import type { Extraction } from '@/lib/types/extractions';
@@ -44,6 +44,7 @@ export function FilePage({ children }: { children: (ctx: FilePageContext) => Rea
   const router = useRouter();
   const file = useFile(id);
   const extractions = useFileExtractions(id);
+  const textRead = useFileTextRead(id);
   // The read runs on documents-service and is recorded on the file: both cells, as the two services check them.
   const canRead = useCan('documents', 'run');
   const canRecord = useCan('files', 'create');
@@ -79,7 +80,7 @@ export function FilePage({ children }: { children: (ctx: FilePageContext) => Rea
       icon={fileIcon(f.name)}
       backHref="/files"
       title={f.name}
-      badge={readBadge(f.data, latest) ? <span className="text-xs text-muted-foreground" data-testid="read-as">{readBadge(f.data, latest)}</span> : <ReadAs data={f.data} compact />}
+      badge={readBadge(f.data, latest, textRead.data) ? <span className="text-xs text-muted-foreground" data-testid="read-as">{readBadge(f.data, latest, textRead.data)}</span> : <ReadAs data={f.data} compact />}
       tabs={
         <RouteTabs
           tabs={[
