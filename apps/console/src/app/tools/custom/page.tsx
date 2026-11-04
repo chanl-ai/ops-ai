@@ -11,7 +11,6 @@ import { toast } from 'sonner';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableRowActions } from '@/components/data-table-row-actions';
 import { DataTableWithViews } from '@/components/data-table-with-views';
-import { AppsTabs } from '@/components/connections/apps-tabs';
 import { PageLayout } from '@/components/page-layout';
 import { SelectedList, toastBulk } from '@/components/shared/bulk';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
@@ -25,7 +24,6 @@ import { StatCard, StatCardGrid } from '@/components/shared/stat-card';
 import { ConnectionChip } from '@/components/integrations/integration-meta';
 import { AddModuleDialog } from '@/components/tools/add-module-dialog';
 import { NewModuleDialog } from '@/components/tools/new-module-dialog';
-import { ToolsTabs } from '@/components/tools/tools-tabs';
 import { WorkflowToolsTable } from '@/components/tools/workflow-tools-table';
 import { AccessClasses, APPROVAL_STATE_LABEL, ApprovalStateBadge, errorTone, ExpiryText, ModuleMark, ownerText, pctText } from '@/components/tools/module-meta';
 import { Button } from '@/components/ui/button';
@@ -210,7 +208,6 @@ export default function CustomToolsPage() {
       icon={Wrench}
       title="Tools"
       description="The tool sets your team built or imported, the app each calls, and which workflows may call them"
-      tabs={<AppsTabs />}
       actions={
         <div className="flex items-center gap-2">
           {canBuild && (
@@ -232,7 +229,6 @@ export default function CustomToolsPage() {
         <QueryError what="the tools" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />
       ) : (
         <div className="flex flex-col gap-4">
-          <ToolsTabs />
           <StatCardGrid columns={3}>
             <StatCard label="Tools" value={stats?.operations} icon={Boxes} footer={{ text: `${plural(stats?.modules ?? 0, 'set')} of tools`, subtext: 'Everything you can see' }} />
             <StatCard label="Calls · 24h" value={stats ? count(stats.calls24h) : undefined} icon={Activity} footer={{ text: `${pctText(stats?.errorRate ?? 0)} failed`, subtext: 'Through the data gateway' }} />

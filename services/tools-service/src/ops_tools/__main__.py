@@ -188,6 +188,7 @@ def main() -> None:
     modules.titles = plugins.title_of if plugins else None
     # A plugin tool's page names the team's own account of the app (c-616).
     modules.team_connections = plugins.team_connection if plugins else None
+    modules.awaits_sign_in = plugins.awaits_sign_in if plugins else None
     # send_reply naming a mailbox (c-200): the mailbox is read from agents-service as the call's team, its secret is
     # looked up for that team, and its host is dialled at the allow-listed address.
     # Microsoft 365 mailboxes (c-228): Graph and its token endpoint, dialled through each tenant's allow-list.
@@ -219,6 +220,7 @@ def main() -> None:
         on_token=plugins.on_token if plugins else None,
         plugin_settings=plugins.account_settings if plugins else None,
     )
+    connection_service.app_display = plugins.display_of if plugins else None
     tool_users = AgentsToolUsers(client("agents", agents_url, ["agents:view"]))
     apps = Apps(connection_service, store, plugins, modules, tool_users)
     app = create_gateway_app(

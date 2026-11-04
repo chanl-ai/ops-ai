@@ -3251,6 +3251,8 @@ export interface components {
         MyAccount: {
             /** Account */
             account?: string | null;
+            /** App */
+            app: string;
             /** Appid */
             appId: string;
             /** Authkind */
@@ -3267,6 +3269,8 @@ export interface components {
             docsUrl?: string | null;
             /** Expiresat */
             expiresAt?: string | null;
+            /** Logo */
+            logo?: string | null;
             /** Method */
             method: string;
             /** Personfields */
@@ -3911,6 +3915,11 @@ export interface components {
         /** SystemCard */
         SystemCard: {
             /**
+             * Accountscount
+             * @default 0
+             */
+            accountsCount: number;
+            /**
              * Appstate
              * @enum {string}
              */
@@ -4298,7 +4307,7 @@ export interface components {
             /** Drift */
             drift: boolean;
             /** Endpoint */
-            endpoint: string;
+            endpoint: string | null;
             /** Errorrate */
             errorRate: number;
             /** Id */
@@ -4391,7 +4400,7 @@ export interface components {
             /** Egresshosts */
             egressHosts: string[];
             /** Endpoint */
-            endpoint: string;
+            endpoint: string | null;
             /** Errorrate */
             errorRate: number;
             /** Id */

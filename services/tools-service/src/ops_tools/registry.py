@@ -16,7 +16,7 @@ from ops_store.team_scope import acting_team
 
 from .connections.records import account_for
 from .defaults import ensure_defaults
-from .modules.seed import PLATFORM_TOOLS, READ_TOOLS, SENDS, ensure_platform_tools
+from .modules.seed import PLATFORM_TOOLS, READ_TOOLS, SENDS, ensure_platform_tools, tool_title
 from .modules.seed import WORKFLOW_TOOLS as PLATFORM_MODULE_TOOLS
 from .store.connections import ConnectionStore
 from .store.modules import Aggregate, ModuleStore, served_operations
@@ -191,8 +191,8 @@ class ToolRegistry:
                 rows.append(
                     {
                         "name": op["name"],
-                        # What people see in place of the name; a plugin's manifest gives it (c-581), others have none.
-                        "title": self.plugins.title_of(module, op["name"]) if self.plugins is not None else None,
+                        # What people see in place of the name, a built-in or plugin tool's; a team's own has none.
+                        "title": tool_title(module, op["name"], self.plugins.title_of if self.plugins else None),
                         "description": op["description"],
                         "access": op["access"],
                         "input_schema": input_schema(op["input"]),

@@ -120,7 +120,7 @@ function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onDelete: 
 
 /**
  * The team's secrets (c-178): the values tool calls send, such as API keys, with Add, Rotate and Delete for the Security
- * team's admins, and the storage credentials files-service keeps. Shown on Apps › Credentials (c-617).
+ * team's admins. Shown on Apps › Credentials (c-617); storage credentials are on the Storage settings page.
  */
 export function SecretsPanel() {
   const list = useListParams('name');
@@ -138,7 +138,7 @@ export function SecretsPanel() {
     <div className="flex flex-col gap-4" data-testid="secrets-panel">
       <div className="flex flex-wrap items-center gap-3">
         <p className="min-w-0 flex-1 text-sm text-muted-foreground">
-          {`Credentials ${team ? `${team.name}'s` : 'this team’s'} tool calls send, such as API keys. A value is encrypted, never shown again, and scrubbed from whatever a system answers.`}
+          {`Values the tools in ${team?.name ?? 'this team'} send, such as API keys. A value is encrypted, never shown again, and scrubbed from whatever a system answers.`}
         </p>
         {canEdit && (
           <Button size="sm" onClick={() => setDialog({ rotating: null })} data-testid="secrets-add">
@@ -167,8 +167,6 @@ export function SecretsPanel() {
         />
       )}
 
-      {canEdit && <StorageCredentials />}
-
       <SecretDialog open={!!dialog} rotating={dialog?.rotating ?? null} onOpenChange={(o) => !o && setDialog(null)} />
       <DeleteDialog
         open={!!deleting}
@@ -189,49 +187,5 @@ export function SecretsPanel() {
         }}
       />
     </div>
-  );
-}
-
-/** The storage credentials files-service keeps (c-100), listed here so every credential is in one place. Each stays in
- * the service that uses it; they are added and changed on the Storage page, where each target names its credential. */
-function StorageCredentials() {
-  const creds = useStorageCredentials();
-  return (
-    <Section
-      title="Storage credentials"
-      description="Kept by files-service for the storage it writes to. Values are never shown."
-      actions={
-        <Button asChild variant="outline" size="sm">
-          <Link href="/settings/workspace/storage">
-            <HardDrive className="size-4" /> Storage settings
-          </Link>
-        </Button>
-      }
-      flush
-    >
-      {creds.isPending ? (
-        <div className="flex flex-col gap-2 p-4" data-testid="storage-credentials-loading">
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-full" />
-        </div>
-      ) : creds.isError ? (
-        <div className="p-4">
-          <QueryError what="storage credentials" onRetry={() => creds.refetch()} error={creds.error} retrying={creds.isFetching} />
-        </div>
-      ) : !creds.data?.length ? (
-        <p className="p-4 text-sm text-muted-foreground">No storage credentials. Uploads use the storage the platform was set up with.</p>
-      ) : (
-        <Rows testId="storage-credentials">
-          {creds.data.map((c) => (
-            <Row
-              key={c.name}
-              leading={<HardDrive className="size-4 text-muted-foreground" />}
-              title={<code className="font-mono text-sm">{c.name}</code>}
-              description={`${CREDENTIAL_KIND_LABEL[c.kind]} · set by ${c.setBy} ${relativeTime(c.setAt)}`}
-            />
-          ))}
-        </Rows>
-      )}
-    </Section>
   );
 }

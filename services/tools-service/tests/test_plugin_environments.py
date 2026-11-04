@@ -142,3 +142,33 @@ async def test_a_new_account_never_calls_the_instance_a_removed_one_signed_in_to
     await host.on_token(tenant, str(again.json()["data"]["connectionId"]), {"instance_url": "https://new.my.desk.test"})
     seen = await host.for_call(tenant, TEAM, module, "production")
     assert str(seen["endpoint"]).startswith("https://new.my.desk.test"), seen["endpoint"]
+
+
+async def test_a_plugin_tools_address_is_none_until_the_sign_in_names_its_instance(
+    engine: AsyncEngine,
+    tenant: str,
+    rig: Rig,  # noqa: F811
+) -> None:
+    """Turned on, the account holds the sign-in host, where its credentials go. Shown as the tools' address, a tool page
+    read login.desk.test as where the tools run."""
+    client, connections, _ = rig
+    admin = team_admin(tenant)
+    host = desk_host(engine)
+    await host.ensure(tenant, datetime.now(UTC))
+    on = await client.put(f"/v1/apps/{APP}/team", json={"enabled": True, "clientId": "prod-app"}, headers=admin)
+    live_id = str(on.json()["data"]["connectionId"])
+    path = f"/v1/tool-modules/{module_id_of(desk.manifest)}"
+    before = (await client.get(path, headers=admin)).json()["data"]
+    assert before["connection"] is not None and before["connection"]["id"] == live_id, before["connection"]
+    assert before["endpoint"] is None and before["connection"]["baseUrl"] is None, (
+        before["endpoint"],
+        before["connection"],
+    )
+    # The sign-in saves the instance on the account and its origin as the account's address (connections.service).
+    await host.on_token(tenant, live_id, {"instance_url": LIVE})
+    await connections.store.set_base(tenant, live_id, LIVE, actor="test", at=datetime.now(UTC))
+    after = (await client.get(path, headers=admin)).json()["data"]
+    assert after["endpoint"] == LIVE and after["connection"]["baseUrl"] == LIVE, (
+        after["endpoint"],
+        after["connection"],
+    )

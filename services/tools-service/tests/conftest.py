@@ -329,6 +329,11 @@ def build_app(
         plugin_settings=plugins.account_settings if plugins else None,
     )
     tokens.plugin_hosts = plugins.connection_hosts if plugins else None
+    accounts.app_display = plugins.display_of if plugins else None
+    # As the service wires them (__main__): a plugin tool's title, its team's account and whether its address waits.
+    service.titles = plugins.title_of if plugins else None
+    service.team_connections = plugins.team_connection if plugins else None
+    service.awaits_sign_in = plugins.awaits_sign_in if plugins else None
     apps = Apps(accounts, store, plugins, service, users)
     plugin_routes = [plugins_router(apps.plugin_accounts, directory, users=users)] if apps.plugin_accounts else []
     return create_gateway_app(

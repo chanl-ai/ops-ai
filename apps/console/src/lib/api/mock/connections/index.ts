@@ -47,7 +47,7 @@ export function createConnectionsMock(deps: { me: string }): ConnectionsApi {
   };
   const own = (row: MockAccount): MyConnection => {
     const kind = KINDS.find((k) => k.id === row.authKind);
-    return { connectionId: row.id, appId: row.appId, connection: row.name, connectionStatus: row.status, sandbox: row.sandbox, method: kind?.label ?? row.kindLabel, authKind: row.authKind, personFields: kind?.personFields ?? [], connected: true, docsUrl: null, scopes: [], since: new Date().toISOString() };
+    return { connectionId: row.id, appId: row.appId, app: row.name, connection: row.name, connectionStatus: row.status, sandbox: row.sandbox, method: kind?.label ?? row.kindLabel, authKind: row.authKind, personFields: kind?.personFields ?? [], connected: true, docsUrl: null, scopes: [], since: new Date().toISOString() };
   };
   const credentials: AppCredentialRow[] = [];
   const signIn = (row: MockAccount) => ({

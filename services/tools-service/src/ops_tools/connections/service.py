@@ -183,6 +183,9 @@ class ConnectionService:
         # A plugin's settings on an account as a person may read them (PluginHost.account_settings); without it an
         # account's page shows none.
         self.plugin_settings = plugin_settings
+        # A plugin app's title and logo by its app id (PluginHost.display_of), for My accounts; set once the plugin
+        # host is up.
+        self.app_display: Callable[[str], tuple[str, str | None] | None] | None = None
         # Tests that run after a sign-in, held so the event loop keeps them until they finish.
         self._after_sign_in: set[asyncio.Task[None]] = set()
 
@@ -895,12 +898,18 @@ class ConnectionService:
         else:
             rows = await self.store.mine(who.tenant_id, who.team.id, mine)
         out: list[dict[str, Any]] = []
+        apps: dict[str, tuple[str, str | None]] = {}
         for r in rows:
             kind = kind_of(str(r["auth_kind"]))
+            app_id = str(r["app_id"])
+            if app_id not in apps:
+                apps[app_id] = await self._app_display(who, app_id, r)
             out.append(
                 {
                     "connectionId": str(r["connection_id"]),
-                    "appId": str(r["app_id"]),
+                    "appId": app_id,
+                    "app": apps[app_id][0],
+                    "logo": apps[app_id][1],
                     "connection": str(r["name"]),
                     "connectionStatus": str(r["status"]),
                     "sandbox": bool(r.get("sandbox")),
@@ -920,6 +929,17 @@ class ConnectionService:
                 }
             )
         return out
+
+    async def _app_display(self, who: Caller, app_id: str, row: dict[str, Any]) -> tuple[str, str | None]:
+        """An account's app as people know it: a plugin's title and logo, or a custom app's name, which its first
+        account carries. The account's own name ("GitHub · Operations") names the account, not the app."""
+        shown = self.app_display(app_id) if self.app_display is not None else None
+        if shown is not None:
+            return shown
+        if str(row["connection_id"]) == app_id:
+            return str(row["name"]), None
+        first = await self.store.get(who.tenant_id, app_id)
+        return str((first or row)["name"]), None
 
     async def give_own(self, who: Caller, connection_id: str, given: dict[str, str]) -> dict[str, Any]:
         """A person's own key, password or token (c-595), sealed in their own row: only on a connection each person

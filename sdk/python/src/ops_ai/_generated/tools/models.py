@@ -601,6 +601,7 @@ class ModuleViewCounts(TypedDict, closed=True):
 
 class MyAccount(TypedDict, closed=True):
     account: NotRequired[str | None]
+    app: str
     appId: str
     authKind: str
     connected: bool
@@ -609,6 +610,7 @@ class MyAccount(TypedDict, closed=True):
     connectionStatus: str
     docsUrl: NotRequired[str | None]
     expiresAt: NotRequired[str | None]
+    logo: NotRequired[str | None]
     method: str
     personFields: list[str]
     refused: NotRequired[bool]
@@ -1042,7 +1044,7 @@ class ToolModule(TypedDict, closed=True):
     description: str
     displayName: str
     drift: bool
-    endpoint: str
+    endpoint: str | None
     errorRate: float
     id: str
     major: int
@@ -1583,6 +1585,7 @@ class SecretMeta(TypedDict, closed=True):
 
 
 class SystemCard(TypedDict, closed=True):
+    accountsCount: NotRequired[int]
     appState: Literal["connected", "test_failed", "needs_sign_in", "not_installed", "removed"]
     appStateReason: NotRequired[str | None]
     authKind: NotRequired[str | None]
@@ -1632,7 +1635,7 @@ class ToolModuleDetail(TypedDict, closed=True):
     displayName: str
     drift: bool
     egressHosts: list[str]
-    endpoint: str
+    endpoint: str | None
     errorRate: float
     id: str
     major: int

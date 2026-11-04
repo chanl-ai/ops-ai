@@ -16,7 +16,7 @@ import copy
 import json
 import re
 import time
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -60,7 +60,7 @@ from .executions import call_row
 from .policy import PublishPolicy, RequesterMayDecide, ToolsMode
 from .review_events import ACCESS_REQUESTED, access_event
 from .reviews import ReviewOpener
-from .seed import blank, kind_of, major_of, open_connection
+from .seed import blank, kind_of, major_of, open_connection, tool_title
 from .workflows import StaticWorkflows, WorkflowDirectory
 
 Traffic = dict[tuple[str, str | None], dict[str, Any]]
@@ -318,9 +318,12 @@ def sign_in_fits(module_sign_in: str, conn: dict[str, Any]) -> None:
 
 class ModuleService:
     # A plugin tool's display name, set once the plugin host is up (`PluginHost.title_of`); other modules have none.
-    titles: Callable[[dict[str, Any], str], str | None] | None = None
+    titles: Callable[[Mapping[str, Any], str], str | None] | None = None
     # The team's connection for a plugin's module (`PluginHost.team_connection`), set once the plugin host is up.
     team_connections: Callable[[str, str, Aggregate], Awaitable[str | None]] | None = None
+    # Whether a plugin tool's address waits for its account's sign-in (`PluginHost.awaits_sign_in`), set once the
+    # plugin host is up: the account then holds the sign-in host, which is not the tool's address.
+    awaits_sign_in: Callable[[Aggregate, dict[str, Any]], bool] | None = None
     # A tool page's Real run (`GatewayCalls.console_run`), set by create_gateway_app: Real goes through the gateway's
     # checks, never a path of its own (c-616).
     real_runs: Callable[..., Awaitable[dict[str, Any]]] | None = None
@@ -462,6 +465,7 @@ class ModuleService:
             state = "approved"
         workflows = {a["workflow_id"]: {"id": a["workflow_id"], "name": a["workflow_name"]} for a in active}
         status = status_of(conn, now) if conn else ""
+        waiting = conn is not None and self.awaits_sign_in is not None and self.awaits_sign_in(m, conn)
         row: dict[str, Any] = {
             "id": m["id"],
             "name": m["name"],
@@ -473,7 +477,7 @@ class ModuleService:
             "version": m["version"],
             "major": major_of(m["version"]),
             "ownerTeam": m["owner_team"],
-            "endpoint": connection_base(conn) if conn else "",
+            "endpoint": None if waiting else connection_base(conn) if conn else "",
             "operationCount": len(ops),
             "accessClasses": [acc for acc in ACCESS_ORDER if any(o["access"] == acc for o in ops)],
             "approvalState": state,
@@ -483,7 +487,7 @@ class ModuleService:
             # A connection that is revoked, expired or failing makes the system unreachable from the gateway.
             "reachable": m["reachable"] and status not in ("revoked", "needs_reconnect", "error"),
             "drift": m["drift"],
-            "connection": ref_of(conn, now) if conn else None,
+            "connection": ({**ref_of(conn, now), "baseUrl": None} if waiting else ref_of(conn, now)) if conn else None,
             "signIn": sign_in_of(m.get("sign_in")),
             "updatedAt": _iso(m["updated_at"]),
         }
@@ -535,7 +539,7 @@ class ModuleService:
                 seen[a["workflow_id"]] = a
         owner: dict[str, Any] = {
             "id": OWNER_CONTEXT,
-            "label": "Module owner, no case",
+            "label": "Owner, no case",
             "workflowId": "",
             "workflowName": "",
             "caseId": SAMPLE_CASE,
@@ -904,7 +908,7 @@ class ModuleService:
         }
 
     def _title(self, module: dict[str, Any] | None, tool: str) -> str | None:
-        return self.titles(module, tool) if self.titles is not None and module is not None else None
+        return tool_title(module, tool, self.titles) if module is not None else None
 
     async def executions(
         self,

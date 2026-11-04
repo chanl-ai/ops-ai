@@ -9,6 +9,7 @@ part of the plugin's card, so no app shows twice. Every read is the caller's tea
 
 # No `from __future__ import annotations`: FastAPI resolves the `Depends(caller)` annotations at import.
 
+from collections import Counter
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, cast
 
@@ -31,7 +32,7 @@ from .defaults import ensure_defaults
 from .modules.directory import Directory
 from .modules.routes import ERRORS
 from .modules.schemas import In, ToolCallRow
-from .modules.seed import BUILT_IN, TOOL_ORIGIN, template_of
+from .modules.seed import BUILT_IN, TOOL_ORIGIN, template_of, tool_title
 from .modules.service import Caller, ModuleService
 from .modules.tool_users import ToolUsers
 from .plugins.host import PluginHost, fixed_fields, module_id_of, per_account, plugin_id_of
@@ -94,6 +95,8 @@ class SystemCard(Out):
     description: str | None = None
     docs_url: str | None = None
     tools_count: int
+    # The team's accounts of the app (its team account, sandbox and named ones), counted here for the card.
+    accounts_count: int = 0
     auth_kind: str | None = None
     kind_label: str | None = None
     # The app's default account: the one a live call signs in with unless it names another.
@@ -312,6 +315,7 @@ class Apps:
         may = self.connections.may_manage(who)
         by_id = {str(c["id"]): c for c in conns}
         sandboxes: dict[str, str] = {}
+        accounts = Counter(str(c["app_id"]) for c in conns)
         for c in conns:
             if c.get("sandbox"):
                 sandboxes.setdefault(str(c["app_id"]), str(c["id"]))
@@ -353,6 +357,7 @@ class Apps:
                         "description": m.display.description,
                         "docsUrl": m.display.docs_url,
                         "toolsCount": len(m.tools),
+                        "accountsCount": accounts[plugin_app(pid)],
                         "authKind": m.connection.kinds[0],
                         "kindLabel": BY_ID[m.connection.kinds[0]].label if m.connection.kinds[0] in BY_ID else None,
                         "connectionId": conn["id"] if conn else None,
@@ -421,6 +426,7 @@ class Apps:
                     "description": conn.get("description"),
                     "docsUrl": conn.get("docs_url"),
                     "toolsCount": sum(ops.get(u, 0) for u in used),
+                    "accountsCount": accounts[str(conn["id"])],
                     "authKind": conn["auth_kind"],
                     "kindLabel": kind.label if kind else None,
                     "connectionId": conn["id"],
@@ -719,7 +725,7 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
             name = str(op["name"])
             if mine_ops is not None and name not in mine_ops:
                 continue
-            title = apps.plugins.title_of(module, name) if apps.plugins else None
+            title = tool_title(module, name, apps.plugins.title_of if apps.plugins else None)
             tools.append({"name": name, "title": title or name, "access": str(op["access"])})
     if apps.users is not None and tools:
         try:

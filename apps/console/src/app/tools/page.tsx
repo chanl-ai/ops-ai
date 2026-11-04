@@ -2,11 +2,10 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
 import { ArrowRight, Wrench } from 'lucide-react';
 
-import { AppsTabs } from '@/components/connections/apps-tabs';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableRowActions } from '@/components/data-table-row-actions';
 import { DataTableWithViews } from '@/components/data-table-with-views';
@@ -43,7 +42,7 @@ const columns: ColumnDef<Row>[] = [
     cell: ({ row }) => (
       <div className="flex max-w-72 min-w-44 flex-col" data-testid={`tool-row-${row.original.name}`}>
         <span className="truncate font-medium">{row.original.title ?? row.original.name}</span>
-        {row.original.title && <code className="truncate font-mono text-xs text-muted-foreground">{row.original.name}</code>}
+        {row.original.title && row.original.title !== row.original.name && <code className="truncate font-mono text-xs text-muted-foreground">{row.original.name}</code>}
       </div>
     ),
     enableHiding: false,
@@ -98,11 +97,20 @@ const columns: ColumnDef<Row>[] = [
   },
 ];
 
-/** Every tool the team can use, one row each: its app, kind, access, status and who uses it, read joined from the API. */
+/**
+ * Every tool the team can use, one row each: its app, kind, access, status and who uses it, read joined from the API.
+ * The tabs filter by kind (`?kind=app`, `?kind=custom`); a new tab starts its search and filters fresh.
+ */
 export default function ToolsPage() {
+  const kind = useSearchParams().get('kind');
+  return <ToolsList key={kind ?? 'all'} kind={kind === 'app' || kind === 'custom' ? kind : null} />;
+}
+
+function ToolsList({ kind }: { kind: ToolKind | null }) {
   const router = useRouter();
   const list = useListParams<ToolRowFilters>('name');
-  const query = useToolDirectory(list.params);
+  // The tab's kind is the URL's, kept beside the table's own filters, which never hold it.
+  const query = useToolDirectory({ ...list.params, filters: { ...list.params.filters, kind: kind ? [kind] : undefined } });
   const [filterResetKey, setFilterResetKey] = React.useState(0);
   const tools = query.data?.data ?? [];
   const facets = query.data?.facets ?? {};
@@ -122,7 +130,6 @@ export default function ToolsPage() {
       icon={Wrench}
       title="Tools"
       description="Every tool your team can use, the app it calls and who uses it"
-      tabs={<AppsTabs />}
       actions={
         <div className="flex items-center gap-2">
           <ToolSetActions />
@@ -145,7 +152,6 @@ export default function ToolsPage() {
             searchColumn="name"
             searchPlaceholder="Search tools or apps…"
             filters={[
-              { column: 'kind', title: 'Kind', options: withCounts('kind', KIND) },
               { column: 'status', title: 'Status', options: withCounts('status', Object.fromEntries(Object.entries(STATUS).map(([k, v]) => [k, v.label])) as Record<ToolStatus, string>) },
             ]}
             onColumnFiltersChange={list.onColumnFiltersChange}

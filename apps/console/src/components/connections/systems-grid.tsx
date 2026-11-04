@@ -2,21 +2,24 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { ArrowRight, CircleCheck, CircleAlert, Plug, Plus, Search, TriangleAlert } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import type { ColumnDef } from '@tanstack/react-table';
+import { ArrowRight, CircleCheck, CircleAlert, Plug, Plus, TriangleAlert } from 'lucide-react';
 
+import { DataTableColumnHeader } from '@/components/data-table-column-header';
+import { DataTableWithViews } from '@/components/data-table-with-views';
 import { PageLayout } from '@/components/page-layout';
+import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
+import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
 import { type AppState, type SystemCard, useSystems } from '@/hooks/systems-queries';
+import { facetFilterFn } from '@/hooks/use-list-params';
 import { plural } from '@/lib/format';
-import { cn } from '@/lib/utils';
 
-import { AppsTabs } from './apps-tabs';
 import type { ConnectMode } from './connect-system-dialog';
 
 export type { ConnectMode };
@@ -31,14 +34,14 @@ const STATE: Record<AppState, { label: string; className: string; icon?: typeof 
 };
 
 /** The app's state as a badge, worded the same on its card and its page. */
-export function AppStateBadge({ card, testId, withTools }: { card: SystemCard; testId?: string; withTools?: boolean }) {
+export function AppStateBadge({ card, testId }: { card: SystemCard; testId?: string }) {
   if (!card.appState) return null;
   const shown = STATE[card.appState];
   const Icon = shown.icon;
   return (
     <Badge variant="outline" className={shown.className} data-testid={testId}>
       {Icon && <Icon />}
-      {card.appState === 'connected' && withTools && card.kind !== 'builtin' ? `Connected · ${plural(card.toolsCount, 'tool')}` : shown.label}
+      {shown.label}
     </Badge>
   );
 }
@@ -56,16 +59,23 @@ const initials = (name: string) =>
 export const appHref = (s: Pick<SystemCard, 'id' | 'href'>) => s.href ?? `/integrations/apps/${encodeURIComponent(s.id)}`;
 
 /**
- * One app's card: logo, name, tools and how it signs in, one line, its category, its state and one
- * action. The whole card opens the app's page; Connect sits above that link.
+ * Connected holds the apps that are signed in and work, or signed in with a failed test (a warning, still connected),
+ * and a removed app, whose card says why its tools stopped. Turned on but not signed in is Needs sign-in, under
+ * Available with the apps not turned on: the API's appState decides which.
+ */
+const CONNECTED: ReadonlySet<AppState> = new Set<AppState>(['connected', 'test_failed', 'removed']);
+const isConnected = (card: SystemCard) => CONNECTED.has(card.appState);
+
+/**
+ * One app's card: logo, name, tools and how it signs in, one line, its category, its state and at most one action.
+ * The whole card opens the app's page; Connect or Reconnect sits above that link. A connected card has no button and
+ * names its accounts; a second account is added on the app's page.
  */
 function AppCard({ system, onConnect }: { system: SystemCard; onConnect: (s: SystemCard, mode: ConnectMode) => void }) {
   const state = system.appState;
   const failure = state === 'test_failed' ? (system.appStateReason ?? 'no reason given') : null;
-  // A removed app has nothing to connect; its page says why its tools stopped.
-  const opens = state === 'connected' || state === 'test_failed' || state === 'removed';
   return (
-    <Card className="relative min-h-40 gap-3 transition-all hover:border-primary/40 hover:shadow-md" data-testid={`system-${system.id}`} data-state={state}>
+    <Card className="relative h-full min-h-40 gap-3 transition-all hover:border-primary/40 hover:shadow-md" data-testid={`system-${system.id}`} data-state={state}>
       <CardHeader className="flex flex-row items-center gap-2.5 px-4">
         <Avatar className="size-9 rounded-md">
           {system.logo && <AvatarImage src={system.logo} alt="" />}
@@ -83,15 +93,10 @@ function AppCard({ system, onConnect }: { system: SystemCard; onConnect: (s: Sys
             {system.kindLabel ? ` · ${system.kindLabel}` : ''}
           </p>
         </div>
-        {system.kind === 'builtin' && (
-          <Badge variant="outline" className="ml-auto shrink-0">
-            Built in
-          </Badge>
-        )}
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-3 px-4">
         {system.description && <CardDescription className="line-clamp-1">{system.description}</CardDescription>}
-        {system.category && system.kind !== 'builtin' && (
+        {system.category && (
           <div>
             <Badge variant="secondary">{system.category}</Badge>
           </div>
@@ -107,21 +112,27 @@ function AppCard({ system, onConnect }: { system: SystemCard; onConnect: (s: Sys
           </p>
         )}
         <div className="mt-auto flex items-center justify-between gap-2">
-          <AppStateBadge card={system} withTools testId={`system-${system.id}-state`} />
-          {opens ? (
-            <span className="inline-flex items-center gap-1 text-sm font-medium" data-testid={`open-${system.id}`} data-href={appHref(system)}>
-              Open
-              <ArrowRight className="size-4" />
-            </span>
-          ) : system.mayManage ? (
-            <Button size="sm" variant="outline" className="relative z-10" onClick={() => onConnect(system, 'connect')} data-testid={`connect-${system.id}`}>
-              Connect
-            </Button>
+          {state === 'connected' ? (
+            <Badge variant="outline" className={STATE.connected.className} data-testid={`system-${system.id}-state`}>
+              <CircleCheck />
+              Connected · {plural(system.accountsCount, 'account')}
+            </Badge>
           ) : (
+            <AppStateBadge card={system} testId={`system-${system.id}-state`} />
+          )}
+          {state === 'connected' || state === 'removed' ? null : !system.mayManage ? (
             // Only a team admin connects an app; anyone else is told why rather than shown a dead button.
             <span className="text-xs text-muted-foreground" data-testid={`connect-${system.id}-why`}>
               A team admin connects it
             </span>
+          ) : state === 'test_failed' ? (
+            <Button size="sm" variant="outline" className="relative z-10" onClick={() => onConnect(system, 'reconnect')} data-testid={`reconnect-${system.id}`}>
+              Reconnect
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" className="relative z-10" onClick={() => onConnect(system, 'connect')} data-testid={`connect-${system.id}`}>
+              Connect
+            </Button>
           )}
         </div>
       </CardContent>
@@ -129,60 +140,86 @@ function AppCard({ system, onConnect }: { system: SystemCard; onConnect: (s: Sys
   );
 }
 
-/** A filter drawn as a badge that toggles. */
-function FilterBadge({ on, onClick, children, testId }: { on: boolean; onClick: () => void; children: React.ReactNode; testId?: string }) {
-  return (
-    <button type="button" onClick={onClick} aria-pressed={on} data-testid={testId}>
-      <Badge variant={on ? 'default' : 'outline'} className={cn('cursor-pointer', !on && 'hover:border-primary/30 hover:bg-primary/10 hover:text-primary')}>
-        {children}
-      </Badge>
-    </button>
-  );
-}
+type Row = SystemCard & { onRowClick: (s: SystemCard) => void; href: string };
 
-function Section({ title, systems, onConnect, testId }: { title: string; systems: SystemCard[]; onConnect: (s: SystemCard, mode: ConnectMode) => void; testId: string }) {
-  if (!systems.length) return null;
-  return (
-    <section className="flex flex-col gap-2" data-testid={testId}>
-      <h2 className="text-sm font-semibold text-muted-foreground">
-        {title} · {systems.length}
-      </h2>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {systems.map((s) => (
-          <AppCard key={s.id} system={s} onConnect={onConnect} />
-        ))}
+const STATE_OPTIONS = (Object.keys(STATE) as AppState[]).map((value) => ({ label: STATE[value].label, value }));
+
+const columns = (onConnect: (s: SystemCard, mode: ConnectMode) => void): ColumnDef<Row>[] => [
+  {
+    // Holds every searched field, so the table's search matches an app by its name, line or category.
+    id: 'name',
+    accessorFn: (s) => `${s.name} ${s.description ?? ''} ${s.category ?? ''}`,
+    header: ({ column }) => <DataTableColumnHeader column={column} title="App" />,
+    cell: ({ row }) => (
+      <div className="flex min-w-56 items-center gap-3" data-testid={`app-row-${row.original.id}`}>
+        <Avatar className="size-8 rounded-md">
+          {row.original.logo && <AvatarImage src={row.original.logo} alt="" />}
+          <AvatarFallback className="rounded-md text-xs font-semibold">{initials(row.original.name)}</AvatarFallback>
+        </Avatar>
+        <div className="min-w-0">
+          <div className="truncate font-medium">{row.original.name}</div>
+          {row.original.description && <div className="max-w-md truncate text-xs text-muted-foreground">{row.original.description}</div>}
+        </div>
       </div>
-    </section>
-  );
-}
+    ),
+    enableHiding: false,
+  },
+  { accessorKey: 'category', header: ({ column }) => <DataTableColumnHeader column={column} title="Category" />, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{row.original.category}</span>, filterFn: facetFilterFn },
+  {
+    accessorKey: 'appState',
+    header: ({ column }) => <DataTableColumnHeader column={column} title="State" />,
+    cell: ({ row }) =>
+      row.original.appState === 'connected' ? (
+        <span className="whitespace-nowrap text-sm">Connected · {plural(row.original.accountsCount, 'account')}</span>
+      ) : (
+        <AppStateBadge card={row.original} />
+      ),
+    filterFn: facetFilterFn,
+  },
+  { accessorKey: 'toolsCount', header: ({ column }) => <DataTableColumnHeader column={column} title="Tools" />, cell: ({ row }) => <span className="tabular-nums">{row.original.toolsCount}</span> },
+  {
+    id: 'actions',
+    meta: { className: 'w-28 text-right' },
+    cell: ({ row }) => {
+      const s = row.original;
+      if (!s.mayManage || s.appState === 'connected' || s.appState === 'removed') return null;
+      const mode: ConnectMode = s.appState === 'test_failed' ? 'reconnect' : 'connect';
+      return (
+        <Button size="sm" variant="outline" onClick={(e) => (e.stopPropagation(), onConnect(s, mode))}>
+          {mode === 'reconnect' ? 'Reconnect' : 'Connect'}
+        </Button>
+      );
+    },
+    enableHiding: false,
+  },
+];
 
 /**
- * The apps catalog: the team's connected apps first, then the ones it may connect; one search, a
- * category filter, and Connected only and Available only. Read from GET /v1/apps, each card already joined.
+ * The apps catalog on the console's standard list: search, Category and State filters, the Connected and Available
+ * views, and a grid of cards or a table. Read from GET /v1/apps, each card already joined; the list is one team's apps,
+ * so the table filters the rows it holds.
  */
 export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, mode: ConnectMode) => void; onNew: () => void }) {
+  const router = useRouter();
   const systems = useSystems();
   const [view, setView] = React.useState<View>('all');
-  const [category, setCategory] = React.useState<string | null>(null);
-  const [q, setQ] = React.useState('');
-  const all = [...(systems.data ?? [])].sort((a, b) => Number(b.kind === 'plugin') - Number(a.kind === 'plugin'));
-  const categories = [...new Set(all.map((s) => s.category).filter((c): c is string => Boolean(c)))].sort();
-  // Connected lists the apps the team turned on, whatever their account's state; the API decides which those are.
-  const isOn = (card: SystemCard) => Boolean(card.appState) && card.appState !== 'not_installed';
-  const shown = all.filter(
-    (s) =>
-      (view === 'all' || (view === 'connected') === isOn(s)) &&
-      (!category || s.category === category) &&
-      (!q || `${s.name} ${s.description ?? ''} ${s.category ?? ''}`.toLowerCase().includes(q.toLowerCase())),
+  const [filterResetKey, setFilterResetKey] = React.useState(0);
+  const cols = React.useMemo(() => columns(onConnect), [onConnect]);
+  const rows: Row[] = React.useMemo(
+    () =>
+      [...(systems.data ?? [])]
+        .filter((s) => view === 'all' || (view === 'connected') === isConnected(s))
+        // Connected apps first, then the installed plugins, then the apps a person added.
+        .sort((a, b) => Number(isConnected(b)) - Number(isConnected(a)) || Number(b.kind === 'plugin') - Number(a.kind === 'plugin'))
+        .map((app) => ({ ...app, href: appHref(app), onRowClick: (x: SystemCard) => router.push(appHref(x)) })),
+    [systems.data, view, router],
   );
-  const filtered = Boolean(q) || view !== 'all' || Boolean(category);
-  const toggle = (v: View) => setView((cur) => (cur === v ? 'all' : v));
+  const categories = [...new Set((systems.data ?? []).map((s) => s.category).filter((c): c is string => Boolean(c)))].sort();
   return (
     <PageLayout
       icon={Plug}
       title="Apps"
       description="Browse and connect the apps your agents and workflows use."
-      tabs={<AppsTabs />}
       contentClassName="flex flex-col gap-4"
       actions={
         <div className="flex flex-wrap items-center gap-2">
@@ -197,59 +234,58 @@ export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, m
         </div>
       }
     >
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-3">
-          <div className="relative w-full max-w-sm">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search apps" className="pl-9" aria-label="Search apps" />
-          </div>
-          {systems.data && (
-            <span className="shrink-0 text-sm text-muted-foreground" data-testid="apps-count">
-              {shown.length} of {all.length}
-            </span>
-          )}
-        </div>
-        {systems.data && (
-          <div className="flex flex-wrap items-center gap-1.5" data-testid="apps-tags">
-            <FilterBadge on={view === 'connected'} onClick={() => toggle('connected')} testId="filter-connected">
-              Connected only
-            </FilterBadge>
-            <FilterBadge on={view === 'available'} onClick={() => toggle('available')} testId="filter-available">
-              Available only
-            </FilterBadge>
-            {categories.length > 0 && <span className="mx-1 h-5 w-px bg-border" aria-hidden />}
-            {categories.map((c) => (
-              <FilterBadge key={c} on={category === c} onClick={() => setCategory((cur) => (cur === c ? null : c))} testId={`filter-category-${c}`}>
-                {c}
-              </FilterBadge>
-            ))}
-          </div>
-        )}
-      </div>
       {/* A first answer that failed shows the error with Retry at once, not a skeleton while the retries run. */}
       {!systems.data && (systems.isError || systems.failureCount > 0) ? (
         <QueryError what="your apps" error={systems.error ?? systems.failureReason} onRetry={() => systems.refetch()} retrying={systems.isFetching} />
       ) : systems.isPending ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 6 }, (_, i) => (
-            <Skeleton key={i} className="h-44 rounded-xl" />
-          ))}
-        </div>
-      ) : !shown.length ? (
-        <ListEmpty
-          icon={Plug}
-          noun="apps"
-          filtered={filtered && all.length > 0}
-          onClear={() => (setQ(''), setView('all'), setCategory(null))}
-          createLabel="Add custom app"
-          onCreate={onNew}
-          description="Your platform admin installs apps; you can add your own app now."
-        />
+        <PageSkeleton statCards={0} tableRows={6} />
       ) : (
-        <div className="flex flex-col gap-6" data-testid="systems-grid">
-          <Section title="Connected" systems={shown.filter(isOn)} onConnect={onConnect} testId="apps-connected" />
-          <Section title="Available" systems={shown.filter((app) => !isOn(app))} onConnect={onConnect} testId="apps-available" />
-        </div>
+        <>
+          <SavedViewTabs
+            ariaLabel="App views"
+            presets={[
+              { id: 'all', label: 'All apps' },
+              { id: 'connected', label: 'Connected' },
+              { id: 'available', label: 'Available' },
+            ]}
+            savedViews={[]}
+            activePresetId={view}
+            activeSavedViewId={null}
+            onSelectPreset={(id) => setView(id as View)}
+            onSelectSavedView={() => undefined}
+            onSaveView={() => undefined}
+            onDeleteView={() => undefined}
+            canSave={false}
+          />
+          <div data-testid="systems-grid" data-view={view}>
+            <DataTableWithViews
+              columns={cols}
+              data={rows}
+              getRowId={(r) => r.id}
+              defaultView="grid"
+              gridClassName="grid grid-cols-1 gap-4 @3xl/main:grid-cols-2 @6xl/main:grid-cols-3"
+              renderGridItem={(s) => <AppCard system={s} onConnect={onConnect} />}
+              searchColumn="name"
+              searchPlaceholder="Search apps"
+              filters={[
+                { column: 'category', title: 'Category', options: categories.map((c) => ({ label: c, value: c })) },
+                { column: 'appState', title: 'State', options: STATE_OPTIONS },
+              ]}
+              filterResetKey={filterResetKey}
+              emptyState={
+                <ListEmpty
+                  icon={Plug}
+                  noun="apps"
+                  filtered={view !== 'all' || rows.length > 0}
+                  onClear={() => (setView('all'), setFilterResetKey((k) => k + 1))}
+                  createLabel="Add custom app"
+                  onCreate={onNew}
+                  description="Your platform admin installs apps; you can add your own app now."
+                />
+              }
+            />
+          </div>
+        </>
       )}
     </PageLayout>
   );

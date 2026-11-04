@@ -2,13 +2,14 @@
 
 import { RouteTabs } from '@/components/shared/route-tabs';
 
-/** The Tools page's own tabs: every tool one row each, the tool sets a team built, and every call they made. */
+/** The Tools page's tabs: every tool, then the same list filtered to app tools or to the team's own, and every call. */
 export function ToolsTabs() {
   return (
     <RouteTabs
       tabs={[
         { href: '/tools', label: 'All tools', testId: 'tools-tab-all' },
-        { href: '/tools/custom', label: 'Custom tools', testId: 'tools-tab-custom' },
+        { href: '/tools?kind=app', label: 'App tools', testId: 'tools-tab-app' },
+        { href: '/tools?kind=custom', label: 'Custom tools', testId: 'tools-tab-custom' },
         { href: '/tools/calls', label: 'Logs', testId: 'tools-tab-logs' },
       ]}
     />

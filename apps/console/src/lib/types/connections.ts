@@ -58,6 +58,9 @@ export interface MyConnection {
   connectionId: string;
   /** The account's app, which starting its sign-in needs. */
   appId?: string | null;
+  /** The app's name and logo, as the Apps grid shows them; `connection` names the account. */
+  app: string;
+  logo?: string | null;
   connection: string;
   connectionStatus: ConnectionStatus;
   /** The app's sandbox account, which only test runs use. */

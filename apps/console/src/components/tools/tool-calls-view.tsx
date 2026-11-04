@@ -58,9 +58,9 @@ const columns: ColumnDef<Row>[] = [
     ),
     enableHiding: false,
   },
+  // These three only carry a filter (the run a Cases sheet linked here with, `?run=`), so they are never drawn.
   { accessorKey: 'gateway', header: () => null, cell: () => null, filterFn: facetFilterFn, enableHiding: false },
   { accessorKey: 'workflowId', header: () => null, cell: () => null, filterFn: facetFilterFn, enableHiding: false },
-  // The run a Cases sheet linked here with (`?run=`); hidden, it only carries the filter.
   { accessorKey: 'runId', header: () => null, cell: () => null, filterFn: facetFilterFn, enableHiding: false },
   {
     accessorKey: 'workflowName',
@@ -149,12 +149,8 @@ export function ToolCallsView({ fixed, run, q, totals = true, emptyText }: { fix
         <QueryError what="tool calls" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
         <div className="flex flex-col gap-4" data-testid="tool-calls">
-          {/* tools-service's /executions serves no totals yet; without them the cards would wait forever. */}
-          {!totals ? null : !stats ? (
-            <p className="text-sm text-muted-foreground" data-testid="tool-calls-no-totals">
-              Totals are not served yet. The list below holds every call.
-            </p>
-          ) : (
+          {/* The cards show only when the answer carries totals; tools-service's /executions serves none yet. */}
+          {!totals || !stats ? null : (
           <StatCardGrid columns={4}>
             <StatCard label="Failed" value={count(stats.failed)} icon={AlertCircle} footer={{ text: `${pct(stats.errorRate ?? 0)} of calls · p95 ${ms(stats.p95Ms ?? 0)}`, subtext: 'Errors returned by the app' }} />
             <StatCard label="Denied" value={count(stats.denied)} icon={Ban} footer={{ text: 'Refused at the gateway', subtext: 'No grant, or an expired one' }} />
@@ -171,7 +167,7 @@ export function ToolCallsView({ fixed, run, q, totals = true, emptyText }: { fix
             initialColumnFilters={[...(q ? [{ id: 'target', value: q }] : []), ...(run ? [{ id: 'runId', value: [run] }] : [])]}
             searchPlaceholder="Search tools, models, runs or cases…"
             // Whom each call ran as and how it ended always show, as the log's frame draws them (Tool, App, As, Status, When).
-            initialColumnVisibility={{ record: false, cost: false, run: false, as: true, status: true }}
+            initialColumnVisibility={{ gateway: false, workflowId: false, runId: false, record: false, cost: false, run: false, as: true, status: true }}
             filters={[
               { column: 'gateway', title: 'Gateway', options: withCounts('gateway', options(GATEWAY_LABEL)) },
               { column: 'workflowId', title: 'Workflow', options: withCounts('workflowId', workflowOptions) },

@@ -15,7 +15,7 @@ import { BodyEditor, hasBody, HeadersEditor, RequestLine } from '@/components/to
 import { InputSchemaEditor, schemaOf } from '@/components/tools/input-schema-editor';
 import { MockAnswers } from '@/components/tools/mock-answers';
 import { ResultBody, RunInputFields, useRunValues, type ResultTab } from '@/components/tools/test-console';
-import { urlProblem, type WorkbenchDraft } from '@/components/tools/tool-workbench';
+import { ToolAppLink, urlProblem, type WorkbenchDraft } from '@/components/tools/tool-workbench';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -47,6 +47,12 @@ const MODE_BADGE: Record<Mode, React.ReactNode> = {
 
 export interface RestToolProps extends ToolRunProps {
   moduleId: string;
+  /** The tool's title when it has one, else its name. */
+  title: string;
+  /** The tool's app, named and linked on the first line. */
+  app?: { id: string; name: string } | null;
+  /** Where the tool runs (ToolAddress), the header's second line. */
+  address: React.ReactNode;
   /** The tool page's tabs (General, Logs), in the page header's tab slot. */
   tabs?: React.ReactNode;
   /** Shown below the tool's call: who uses the tool. */
@@ -149,12 +155,19 @@ export function RestTool(p: RestToolProps) {
   return (
     <PageLayout
       icon={Wrench}
-      title={op.name}
+      title={p.title}
       description={
         <span className="flex flex-col gap-0.5">
           <span>
-            {op.description || `${p.moduleName} operation`} · {p.moduleName}
+            {op.description || `${p.moduleName} operation`}
+            {p.app && (
+              <>
+                {' · '}
+                <ToolAppLink app={p.app} />
+              </>
+            )}
           </span>
+          {p.address}
           {p.stagedCall && <span className="text-xs text-warning-text">Saved; Real runs the published call until you publish.</span>}
         </span>
       }

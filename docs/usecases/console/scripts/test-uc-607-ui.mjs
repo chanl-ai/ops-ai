@@ -512,12 +512,15 @@ try {
           await james.getByTestId('systems-grid').waitFor({ timeout: 60_000 });
           const cards = (await call(tools, 'GET', '/v1/apps', priya)).data ?? [];
           out.disagree = [];
+          // The grid pages its cards, so each app is found as a person finds it: by search.
           for (const c of cards.filter((x) => x.kind !== 'builtin')) {
+            await james.getByPlaceholder('Search apps').fill(c.name);
             const shown = await james.getByTestId(`system-${c.id}`).getAttribute('data-state');
             // The card's state is the API's one word for the app, which the app page reads too.
             const want = c.appState;
             if (shown !== want) out.disagree.push({ id: c.id, state: c.state, shown, want });
           }
+          await james.getByPlaceholder('Search apps').fill('');
           // A non-admin gets no dead Connect button: each card they may not connect says why instead.
           out.connectOff = await james.locator('main button[data-testid^="connect-"]:disabled').count();
           out.connectWhy = await james.locator('main [data-testid^="connect-"][data-testid$="-why"]').count();

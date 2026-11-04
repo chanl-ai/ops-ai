@@ -9,10 +9,10 @@ import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { EmptyState } from '@/components/shared/empty-state';
 import { QueryError } from '@/components/shared/query-states';
 import { Row, Rows, Section } from '@/components/shared/surface';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AppsTabs } from '@/components/connections/apps-tabs';
 import { OwnCredentialsForm } from '@/components/connections/own-credentials-form';
 import { useSignInWindow } from '@/components/connections/sign-in';
 import { DialogShell } from '@/components/shared/dialog-shell';
@@ -111,12 +111,13 @@ function describe(c: MyConnection): string {
 }
 
 /**
- * My accounts (c-558, c-595; in the Apps menu since c-617): every app of the current team that this person may connect
- * as themselves, each with its state and the control its method takes; the list and each state come from the service.
+ * My accounts (c-558, c-595; in the Apps menu since c-617): the apps this person connected with their own login, each
+ * with its logo, when, its state and the control its method takes; the list and each state come from the service.
+ * An app they have not connected is connected from its page or from a chat that asks for it.
  */
 function MyAccountsPage() {
   const { team } = useTeam();
-  const mine = useMyConnections(true);
+  const mine = useMyConnections();
   const disconnect = useDisconnect();
   const [ending, setEnding] = React.useState<MyConnection | null>(null);
   const [giving, setGiving] = React.useState<MyConnection | null>(null);
@@ -133,17 +134,28 @@ function MyAccountsPage() {
   ) : mine.isError ? (
     <QueryError what="your accounts" onRetry={() => void mine.refetch()} retrying={mine.isFetching} error={mine.error} testId="my-connections-error" />
   ) : !mine.data.length ? (
-    <EmptyState icon={Plug} title="You haven’t connected any apps yet" description="Connect my account on an app’s page, or from a chat that asks for it." testId="my-connections-empty" />
+    <EmptyState
+      icon={Plug}
+      title="None yet"
+      description="Connect my account on an app’s page, or from a chat that asks for it."
+      action={{ label: 'Go to Apps', href: '/integrations' }}
+      testId="my-connections-empty"
+    />
   ) : (
     <Rows testId="my-connections">
       {mine.data.map((c) => (
         <Row
           key={c.connectionId}
           wrap
-          leading={<Plug className="size-4 text-muted-foreground" />}
+          leading={
+            <Avatar className="size-8 rounded-md">
+              {c.logo && <AvatarImage src={c.logo} alt="" />}
+              <AvatarFallback className="rounded-md text-xs font-semibold">{c.app.slice(0, 2).toUpperCase()}</AvatarFallback>
+            </Avatar>
+          }
           title={
             <span className="flex flex-wrap items-center gap-2">
-              {c.connection}
+              {c.app}
               {c.sandbox && <Badge variant="outline">Sandbox</Badge>}
             </span>
           }
@@ -159,7 +171,6 @@ function MyAccountsPage() {
       icon={UserRound}
       title="My accounts"
       description={`The apps you connected with your own account in ${team?.name ?? 'this team'}. Tools you run, and agents acting for you, use them.`}
-      tabs={<AppsTabs />}
     >
       <Section flush>{body}</Section>
       <DialogShell

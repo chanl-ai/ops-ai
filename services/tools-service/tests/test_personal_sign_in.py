@@ -370,7 +370,7 @@ async def test_a_person_lists_only_their_own_sign_ins(client: httpx.AsyncClient,
     mine = await client.get("/v1/me/accounts", headers=person(tenant, *JAMES_P))
     assert mine.status_code == 200, mine.text
     rows = mine.json()["data"]
-    assert [(r["connectionId"], r["connection"]) for r in rows] == [(conn, "CRM")], rows
+    assert [(r["connectionId"], r["connection"], r["app"]) for r in rows] == [(conn, "CRM", "CRM")], rows
     assert rows[0]["scopes"] == ["openid", "api"]
 
 

@@ -10,6 +10,7 @@ agents-service's Reviews.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta
 from typing import Any, Literal, cast
 
@@ -320,6 +321,7 @@ BUILT_IN: list[dict[str, Any]] = [
         "name": "Knowledge bases",
         "module": "knowledge-search",
         "operations": ["search_knowledge"],
+        "titles": {"search_knowledge": "Search knowledge"},
         "description": "Searches the team's knowledge bases and answers with citations.",
         "href": "/knowledge",
     },
@@ -328,6 +330,7 @@ BUILT_IN: list[dict[str, Any]] = [
         "name": "Mailboxes",
         "module": "platform-tools",
         "operations": ["send_reply", "send_acknowledgement"],
+        "titles": {"send_reply": "Send a reply", "send_acknowledgement": "Send an acknowledgement"},
         "description": "Sends replies and acknowledgements from the team's mailboxes.",
         "href": "/channels/email",
     },
@@ -337,6 +340,7 @@ BUILT_IN: list[dict[str, Any]] = [
         "name": "Files",
         "module": "platform-tools",
         "operations": ["read_file"],
+        "titles": {"read_file": "Read a file"},
         "description": "Reads the text of files the team uploaded.",
         "href": "/files",
     },
@@ -345,10 +349,26 @@ BUILT_IN: list[dict[str, Any]] = [
         "name": "Document types",
         "module": "platform-tools",
         "operations": ["read_document"],
+        "titles": {"read_document": "Read a document"},
         "description": "Reads a document's fields with one of the team's document types.",
         "href": "/files/document-types",
     },
 ]
+
+
+_BUILT_IN_TITLES: dict[str, str] = {op: t for app in BUILT_IN for op, t in app["titles"].items()}
+_BUILT_IN_MODULES = {str(app["module"]) for app in BUILT_IN}
+
+
+def tool_title(
+    module: Mapping[str, Any], operation: str, plugin_title: Callable[[Mapping[str, Any], str], str | None] | None
+) -> str | None:
+    """What people see in place of a tool's name: a built-in app's title from BUILT_IN, a plugin tool's from its
+    manifest (`plugin_title`, the plugin host's), and none for a team's own tool."""
+    built_in = str(module.get("template_id") or "").startswith("builtin:") or module.get("name") in _BUILT_IN_MODULES
+    if built_in and (title := _BUILT_IN_TITLES.get(operation)):
+        return title
+    return plugin_title(module, operation) if plugin_title is not None else None
 
 
 def template_of(app: dict[str, Any]) -> str:

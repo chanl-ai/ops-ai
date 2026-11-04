@@ -6134,6 +6134,10 @@
             ],
             "title": "Account"
           },
+          "app": {
+            "title": "App",
+            "type": "string"
+          },
           "appId": {
             "title": "Appid",
             "type": "string"
@@ -6179,6 +6183,17 @@
               }
             ],
             "title": "Expiresat"
+          },
+          "logo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo"
           },
           "method": {
             "title": "Method",
@@ -6254,6 +6269,7 @@
         "required": [
           "connectionId",
           "appId",
+          "app",
           "connection",
           "connectionStatus",
           "sandbox",
@@ -8267,6 +8283,11 @@
       "SystemCard": {
         "additionalProperties": false,
         "properties": {
+          "accountsCount": {
+            "default": 0,
+            "title": "Accountscount",
+            "type": "integer"
+          },
           "appState": {
             "enum": [
               "connected",
@@ -9586,8 +9607,15 @@
             "type": "boolean"
           },
           "endpoint": {
-            "title": "Endpoint",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
           },
           "errorRate": {
             "title": "Errorrate",
@@ -9878,8 +9906,15 @@
             "type": "array"
           },
           "endpoint": {
-            "title": "Endpoint",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
           },
           "errorRate": {
             "title": "Errorrate",

@@ -100,7 +100,8 @@ class ToolModule(Out):
     version: str
     major: int
     owner_team: str
-    endpoint: str
+    # Where the tools run; null while a plugin's account waits for the sign-in that names its instance.
+    endpoint: str | None
     operation_count: int
     access_classes: list[Access]
     approval_state: Literal["draft", "approved", "needs_approval", "expiring", "expired"]

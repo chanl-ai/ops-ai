@@ -11,7 +11,7 @@ import { SignInHeaderNotice } from '@/components/shared/sign-in-header-notice';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Row, Rows, Section } from '@/components/shared/surface';
-import { HttpOperationBuilder } from '@/components/tools/http-operation-builder';
+import { HttpOperationBuilder, RequestView } from '@/components/tools/http-operation-builder';
 import { MockAnswers } from '@/components/tools/mock-answers';
 import { fieldDrafts, InputSchemaEditor, schemaOf, type FieldDraft } from '@/components/tools/input-schema-editor';
 import { unusedInputs } from '@/components/tools/operation-sheet';
@@ -21,7 +21,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import type { ConnectionRef } from '@/lib/types/integrations';
-import type { HttpOperationInput, ModuleOperation, OperationPatch, RunContextOption, ToolRunProps } from '@/lib/types/tool-modules';
+import type { HttpOperationInput, ModuleOperation, OperationPatch, RunContextOption, ToolModule, ToolRunProps } from '@/lib/types/tool-modules';
 import { SplitView } from '@/components/shared/setting/split-view';
 
 export interface WorkbenchDraft {
@@ -42,6 +42,48 @@ export const draftOf = (op: ModuleOperation, base: string): WorkbenchDraft => ({
   input: fieldDrafts(op.input),
   transform: op.responseTransform ?? '',
 });
+
+/**
+ * Where a tool runs, as its page's address line: inside Ops AI for a built-in tool, nowhere yet while a plugin's account
+ * waits for the sign-in that names its address, or nowhere for a tool with no app; else its method and address, which
+ * breaks between path segments on a phone, never inside one.
+ */
+export function ToolAddress({ op, module, base }: { op: ModuleOperation; module: Pick<ToolModule, 'endpoint' | 'connection'>; base: string }) {
+  const line = (text: string) => (
+    <span className="text-xs text-muted-foreground" data-testid="op-call">
+      {text}
+    </span>
+  );
+  if (op.executor === 'local' || op.executor === 'code') return line('Runs inside Ops AI');
+  if (module.endpoint === null) return line('Set when the app is signed in');
+  if (!module.connection || !op.method) return line('No address yet');
+  const parts = `${baseOf(base)}${op.path ?? ''}`.split('/');
+  return (
+    <span className="font-mono text-xs break-normal text-muted-foreground [overflow-wrap:normal]" data-testid="op-call">
+      {`${op.method} `}
+      {parts.map((p, i) => (
+        <React.Fragment key={i}>
+          {i > 0 && (
+            <>
+              /<wbr />
+            </>
+          )}
+          {p}
+        </React.Fragment>
+      ))}
+    </span>
+  );
+}
+
+/** The tool's app, linked to its page, for the tool page's first line. */
+export function ToolAppLink({ app }: { app: { id: string; name: string } | null | undefined }) {
+  if (!app) return null;
+  return (
+    <Link href={`/integrations/apps/${encodeURIComponent(app.id)}`} className="text-foreground underline-offset-4 hover:underline" data-testid="tool-app-link">
+      {app.name}
+    </Link>
+  );
+}
 
 /** A URL off the app's address: another system is another app, so it cannot be saved. */
 export function urlProblem(d: WorkbenchDraft, appBase: string): string | undefined {
@@ -69,6 +111,14 @@ export function patchOf(op: ModuleOperation, appBase: string, d: WorkbenchDraft)
 
 export interface ToolWorkbenchProps extends ToolRunProps {
   moduleId: string;
+  /** The tool's title (a built-in or plugin tool's), else its name. */
+  title: string;
+  /** The tool's app, named and linked on the first line. */
+  app?: { id: string; name: string } | null;
+  /** Where the tool runs (ToolAddress), the header's second line. */
+  address: React.ReactNode;
+  /** A plugin's tool changes only with its plugin: its call shows as sent, with nothing to edit or stage. */
+  readOnly?: boolean;
   /** The tool page's tabs (General, Logs), in the page header's tab slot. */
   tabs?: React.ReactNode;
   /** Shown below the tool's call: who uses the tool. */
@@ -116,20 +166,25 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
     wasRunning.current = p.running;
   }, [p.running]);
   const urlError = urlProblem(d, p.base);
-  const unused = unusedInputs({ ...op, input: schemaOf(d.input).filter((f) => f.name) }, d.http);
+  // A plugin's code fills what its call does not show (a page cursor), so an input its address never names is expected.
+  const unused = p.readOnly ? [] : unusedInputs({ ...op, input: schemaOf(d.input).filter((f) => f.name) }, d.http);
   return (
     <PageLayout
       icon={Wrench}
-      title={op.name}
+      title={p.title}
       description={
         <span className="flex flex-col gap-0.5">
-          <span>{op.description || `${p.moduleName} operation`}</span>
-          {op.method && (
-            <span className="font-mono text-xs text-muted-foreground" data-testid="op-call">
-              {`${op.method} ${op.path}`}
-              {p.stagedCall && <span className="font-sans text-warning-text"> · staged; calls run the published call until you publish</span>}
-            </span>
-          )}
+          <span>
+            {op.description || `${p.moduleName} operation`}
+            {p.app && (
+              <>
+                {' · '}
+                <ToolAppLink app={p.app} />
+              </>
+            )}
+          </span>
+          {p.address}
+          {p.stagedCall && <span className="text-xs text-warning-text">Staged; calls run the published call until you publish.</span>}
         </span>
       }
       backHref={`/tools/${p.moduleId}`}
@@ -138,11 +193,13 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
       actions={
         <>
           {p.extraActions}
-          <BuilderOnly>
-            <LoadingButton isLoading={p.staging} loadingText="Staging…" onClick={p.onStage} disabled={!p.dirty || !!urlError} data-testid="workbench-stage">
-              Stage changes
-            </LoadingButton>
-          </BuilderOnly>
+          {!p.readOnly && (
+            <BuilderOnly>
+              <LoadingButton isLoading={p.staging} loadingText="Staging…" onClick={p.onStage} disabled={!p.dirty || !!urlError} data-testid="workbench-stage">
+                Stage changes
+              </LoadingButton>
+            </BuilderOnly>
+          )}
         </>
       }
     >
@@ -161,9 +218,9 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
       <BuilderFieldset>
       <div data-testid="tool-workbench"><SplitView id="tool-workbench" defaultLeft={60} leftMin="35" rightMin="25" bare left={
 <div id="wb-panel-definition" role="tabpanel" aria-labelledby="wb-tab-definition" className={cn('flex min-w-0 flex-col gap-4', view !== 'definition' && 'max-lg:hidden')}>
-          <Section title="Request" description="What the gateway sends. Path, query and headers may read {{SECRET}} and {{field}} values.">
+          <Section title="Request" description={p.readOnly ? 'What the gateway sends. The app’s plugin sets it; it changes when the plugin is updated.' : 'What the gateway sends. Path, query and headers may read {{SECRET}} and {{field}} values.'}>
             <div className="flex flex-col gap-4" data-testid="op-http">
-              <HttpOperationBuilder value={d.http} onChange={(http) => set({ http })} callOnly errors={{ url: urlError }} />
+              {p.readOnly ? <RequestView value={d.http} address={p.address} /> : <HttpOperationBuilder value={d.http} onChange={(http) => set({ http })} callOnly errors={{ url: urlError }} />}
               {unused.length > 0 && (
                 <p className="flex items-start gap-1.5 text-xs text-warning-text" data-testid="op-unused-inputs">
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
@@ -175,7 +232,9 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
             </div>
           </Section>
           <Section title="Inputs" description="What an agent may send.">
-            <InputSchemaEditor value={d.input} onChange={(input) => set({ input })} boundArg={op.binding?.arg} errors={p.inputErrors} />
+            <fieldset disabled={p.readOnly} className="contents">
+              <InputSchemaEditor value={d.input} onChange={(input) => set({ input })} boundArg={op.binding?.arg} errors={p.inputErrors} />
+            </fieldset>
           </Section>
           <Section title="Secrets" description="Read from the tenant's secrets. A value typed here is used for this run only and never stored." flush>
             {(op.secrets?.length ?? 0) === 0 ? (
@@ -203,11 +262,13 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
             )}
           </Section>
           <MockAnswers moduleId={p.moduleId} opId={op.id} />
-          <Section title="Transform" description="A Jinja2 template over the response as data. The run applies it as typed.">
-            <FormField id="wb-transform" label="Template" optional error={p.result?.transformError}>
-              <Textarea id="wb-transform" rows={5} value={d.transform} onChange={(e) => set({ transform: e.target.value })} className="font-mono text-xs" placeholder={'{"balance": {{ data.balance }}}'} aria-invalid={!!p.result?.transformError} />
-            </FormField>
-          </Section>
+          {!p.readOnly && (
+            <Section title="Transform" description="A Jinja2 template over the response as data. The run applies it as typed.">
+              <FormField id="wb-transform" label="Template" optional error={p.result?.transformError}>
+                <Textarea id="wb-transform" rows={5} value={d.transform} onChange={(e) => set({ transform: e.target.value })} className="font-mono text-xs" placeholder={'{"balance": {{ data.balance }}}'} aria-invalid={!!p.result?.transformError} />
+              </FormField>
+            </Section>
+          )}
         </div>
 } right={
 /* The module's test console, fixed to this operation: run as a workflow's case or the owner, against the mock or

@@ -378,6 +378,24 @@ class PluginHost:
         tool = plugin.manifest.tool(operation.removeprefix(f"{plugin.manifest.short}_"))
         return (tool.title or None) if tool else None
 
+    def display_of(self, app_id: str) -> tuple[str, str | None] | None:
+        """A plugin app's title and logo from its manifest; None for any other app."""
+        pid = plugin_of({"app_id": app_id})
+        plugin = self.plugins.get(pid) if pid else None
+        return (plugin.manifest.title, plugin.manifest.display.logo) if plugin else None
+
+    def awaits_sign_in(self, module: Mapping[str, Any], conn: Mapping[str, Any]) -> bool:
+        """Whether a plugin tool's address waits for its account's sign-in: the endpoint names a setting the token or
+        the lookup after sign-in fills (Salesforce's instance), and the account holds none yet. Until then the
+        account's address is the sign-in host, where its credentials go, not where its tools run."""
+        plugin = self.by_module(module)
+        if plugin is None:
+            return False
+        c = plugin.manifest.connection
+        filled = set(c.from_token) | ({c.after_sign_in.setting} if c.after_sign_in else set[str]())
+        held = dict(conn.get("plugin_settings") or {})
+        return any(n in filled and held.get(n) in (None, "") for n in PLACE.findall(plugin.manifest.endpoint))
+
     async def ensure(self, tenant_id: str, at: datetime) -> None:
         """Writes each loaded plugin's module for the tenant once per process; a second process finds it written."""
         if tenant_id in self._written:

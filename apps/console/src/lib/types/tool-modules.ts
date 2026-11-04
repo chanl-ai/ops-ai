@@ -35,8 +35,10 @@ export interface ToolModule {
   major: number;
   /** Team that owns the system and decides approvals. */
   ownerTeam: string;
-  /** Base URL, MCP server URL or spec URL. */
-  endpoint: string;
+  /** Base URL, MCP server URL or spec URL; null while a plugin's account waits for the sign-in that names its address. */
+  endpoint: string | null;
+  /** `plugin:<id>` for a plugin's tools, which change only with the plugin; `builtin:<app>` for a built-in app's. */
+  templateId?: string | null;
   operationCount: number;
   accessClasses: ToolAccess[];
   approvalState: ModuleApprovalState;

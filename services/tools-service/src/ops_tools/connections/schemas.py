@@ -238,6 +238,9 @@ class MyAccount(Out):
     connection_id: str
     # The account's app, under which its sign-in is started.
     app_id: str
+    # The app's name and logo, as the Apps grid shows them; `connection` names the account.
+    app: str
+    logo: str | None = None
     connection: str
     # The connection's own status; the person's sign-in is held while it is listed.
     connection_status: str
