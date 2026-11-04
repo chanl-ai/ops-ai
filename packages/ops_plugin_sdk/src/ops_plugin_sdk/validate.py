@@ -289,6 +289,52 @@ def _sign_in_steps(manifest: Manifest) -> list[Problem]:
     return out
 
 
+# A choice's value must be of its setting's type; bool is checked before int, which it would otherwise pass as.
+_TYPES: dict[str, tuple[type, ...]] = {"string": (str,), "number": (int, float), "integer": (int,), "boolean": (bool,)}
+
+
+def _of_type(value: Any, kind: str) -> bool:
+    if isinstance(value, bool):
+        return kind == "boolean"
+    return isinstance(value, _TYPES[kind])
+
+
+def _offered(manifest: Manifest) -> list[Problem]:
+    """A setting's choices and its typed host, a refused sign-in's messages, and the settings an app credential holds:
+    what tools-service checks a team's value against and says when a sign-in is refused."""
+    out: list[Problem] = []
+    for name, s in manifest.settings.items():
+        where = f"settings.{name}"
+        for c in s.choices or []:
+            if not _of_type(c.value, s.type):
+                out.append(Problem(where, f"the choice {c.value!r} is not a {s.type}, the setting's type"))
+        if s.other is None:
+            continue
+        if s.type != "string":
+            out.append(Problem(where, "other is a typed host, so its setting is a string"))
+        if s.other.value.count("{host}") != 1:
+            out.append(Problem(where, "other.value names {host} once, where the typed host goes"))
+        if not s.other.hosts:
+            out.append(Problem(where, "other names the host suffixes a typed host must end in (hosts)"))
+        for suffix in (*s.other.hosts, *s.other.test_account_hosts):
+            if not suffix.startswith(".") or len(suffix) < 3:
+                out.append(Problem(where, f"the host suffix {suffix} starts with a dot, so it matches whole labels"))
+    c = manifest.connection
+    for i, e in enumerate(c.sign_in_errors):
+        where = f"connection.sign_in_errors[{i}]"
+        if not (e.say or "").strip():
+            out.append(Problem(where, f"{e.error} says nothing; say is the sentence a person reads"))
+        if e.who is None:
+            out.append(Problem(where, f"{e.error} names nobody to act; who is person or admin"))
+    for name in c.credential_settings:
+        setting = manifest.settings.get(name)
+        if setting is None:
+            out.append(Problem("connection.credential_settings", f"{name} names no setting"))
+        elif setting.at_sign_in:
+            out.append(Problem("connection.credential_settings", f"{name} is filled at sign-in, not by an app"))
+    return out
+
+
 def _function(root: Path, path: str) -> tuple[Any, str | None]:
     module, _, name = path.partition(":")
     added = str(root.parent)
@@ -336,6 +382,7 @@ def check(manifest: Manifest, root: Path) -> list[Problem]:
     out += _placeholders(manifest, manifest.endpoint, "endpoint")
     out += _headers(manifest, manifest.headers, "headers")
     out += _sign_in_steps(manifest)
+    out += _offered(manifest)
     seen: set[str] = set()
     for t in manifest.tools:
         where = f"tools.{t.name}"

@@ -96,6 +96,23 @@ class AfterSignIn(Strict):
     setting: str
 
 
+class SignInError(Strict):
+    """What a refused sign-in says, by the system's `error` code (and, when one code covers several causes, a phrase of
+    its `error_description`), whether the refusal came back on the sign-in redirect or the token exchange. `say` is one
+    plain sentence, `{app}` and `{credential}` filled in; `who` is who acts on it: the person signing in, or an admin
+    of the team or of the system."""
+
+    error: str = Field(min_length=1, max_length=200)
+    description_contains: str | None = Field(default=None, min_length=1, max_length=200)
+    say: str | None = Field(default=None, max_length=300)
+    who: Literal["person", "admin"] | None = None
+
+    def matches(self, error: str, description: str | None) -> bool:
+        if self.error != error:
+            return False
+        return self.description_contains is None or self.description_contains.lower() in (description or "").lower()
+
+
 class Connection(Strict):
     kinds: list[str] = Field(min_length=1)
     authorize_url: str | None = None
@@ -115,6 +132,39 @@ class Connection(Strict):
     # How the OAuth client is sent on the token call: in the form, as basic auth (Zoom), or as a signed assertion.
     client_auth: Literal["body", "basic", "private_key_jwt"] | None = None
     after_sign_in: AfterSignIn | None = None
+    # A refused sign-in's message by the system's error code; the first entry that matches is said (SignInError).
+    sign_in_errors: list[SignInError] = Field(default_factory=list[SignInError])
+    # The settings that belong to the OAuth app's registration (a Microsoft tenant, an Okta domain), not to one account:
+    # a team's app credential holds them, and every account signing in with that credential reads them from it.
+    credential_settings: list[str] = Field(default_factory=list[str])
+
+    def sign_in_error(self, error: str, description: str | None) -> SignInError | None:
+        """The first `sign_in_errors` entry for this error code and description; None when none matches."""
+        return next((e for e in self.sign_in_errors if e.matches(error, description)), None)
+
+
+class Choice(Strict):
+    """One value a setting may take, as the Connect window offers it: a label in the system's own words, a hint under
+    it, and whether choosing it makes the account a test account (one only test runs use)."""
+
+    value: str | int | float | bool
+    label: str = Field(min_length=1, max_length=120)
+    hint: str = Field(default="", max_length=200)
+    test_account: bool = False
+
+
+class Other(Strict):
+    """A value outside the choices, typed as a host (a company's own sign-in address): `value` is the setting's value
+    with `{host}` in place of what the person types, and the host must end in one of `hosts` (each starting with a
+    dot), so a typed address never sends a sign-in outside the system. A host ending in one of `test_account_hosts`
+    makes the account a test account."""
+
+    label: str = Field(min_length=1, max_length=120)
+    hint: str = Field(default="", max_length=200)
+    placeholder: str = Field(default="", max_length=200)
+    value: str = Field(min_length=1, max_length=500)
+    hosts: list[str] = Field(default_factory=list[str])
+    test_account_hosts: list[str] = Field(default_factory=list[str])
 
 
 class Setting(Strict):
@@ -130,6 +180,9 @@ class Setting(Strict):
     secret: bool = False
     # Filled by the lookup after sign-in (Connection.after_sign_in), never typed by a person.
     after_sign_in: bool = False
+    # The values it may take, and a host typed in place of one: tools-service refuses any other value before a sign-in.
+    choices: list[Choice] | None = None
+    other: Other | None = None
 
     @property
     def at_sign_in(self) -> bool:
