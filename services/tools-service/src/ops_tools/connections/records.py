@@ -94,6 +94,17 @@ def account_state(conn: dict[str, Any], team_token: dict[str, Any] | None, now: 
     return CONNECTED if health.get("status") == "ok" and health.get("account") != "own" else NOT_SIGNED_IN
 
 
+def person_state(token: dict[str, Any], now: datetime) -> str:
+    """A person's own sign-in's state from their token row: refused once the system refused it, expired once it ended
+    with no way to renew, else connected."""
+    if token.get("refused_at") is not None:
+        return REFUSED
+    expires: datetime | None = token.get("expires_at")
+    if expires is not None and expires < now and not token.get("renews"):
+        return EXPIRED
+    return CONNECTED
+
+
 def team_test(conn: dict[str, Any], team_token: dict[str, Any] | None) -> dict[str, Any] | None:
     """The team account's last test: kept on its token row after a sign-in, else (a key or password, which has no
     token) the account's last test made as the team."""

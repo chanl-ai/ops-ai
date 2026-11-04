@@ -47,3 +47,26 @@ async def test_no_answer_from_agents_service_is_not_nobody(world: World, tenant:
     world.users.of = down  # type: ignore[method-assign]
     r = await world.client.get(URL, headers=admin(tenant))
     assert r.status_code == 503, r.text
+
+
+async def test_the_app_pages_tools_carry_who_uses_each_and_a_missing_answer_is_not_nobody(
+    world: World,  # noqa: F811
+    tenant: str,
+) -> None:
+    """The app page's Tools tab: each tool's agents and workflows, joined in the answer; agents-service down leaves
+    Used by unknown instead of empty, and the page still answers."""
+    await connected(world, tenant)
+    assert isinstance(world.users, StaticToolUsers)
+    world.users.uses = {"desk_get_case": [{"kind": "agent", "id": "agt_1", "name": "Records helper"}]}
+    page = await world.client.get(f"/v1/apps/plugin:{ID}", headers=admin(tenant))
+    assert page.status_code == 200, page.text
+    tools = {t["name"]: t for t in page.json()["data"]["tools"]}
+    assert tools["desk_get_case"]["usedBy"] == {"agents": [{"id": "agt_1", "name": "Records helper"}], "workflows": []}
+
+    async def down(*_: object) -> dict[str, list[dict[str, str]]]:
+        raise ServiceUnavailable("agents-service is down", code="tool_users_unavailable")
+
+    world.users.of = down  # type: ignore[method-assign]
+    again = await world.client.get(f"/v1/apps/plugin:{ID}", headers=admin(tenant))
+    assert again.status_code == 200, again.text
+    assert all(t.get("usedBy") is None for t in again.json()["data"]["tools"])

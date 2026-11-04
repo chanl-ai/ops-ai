@@ -1021,6 +1021,13 @@
           "me": {
             "$ref": "#/components/schemas/AppMe"
           },
+          "people": {
+            "items": {
+              "$ref": "#/components/schemas/AppPerson"
+            },
+            "title": "People",
+            "type": "array"
+          },
           "peopleCount": {
             "title": "Peoplecount",
             "type": "integer"
@@ -1056,6 +1063,79 @@
           "usage"
         ],
         "title": "AppPage",
+        "type": "object"
+      },
+      "AppPerson": {
+        "additionalProperties": false,
+        "description": "One person's own sign-in on one of the app's accounts, for the app page's People tab: a team admin reads\neveryone's, anyone else their own.",
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account"
+          },
+          "accountId": {
+            "title": "Accountid",
+            "type": "string"
+          },
+          "accountName": {
+            "title": "Accountname",
+            "type": "string"
+          },
+          "mine": {
+            "title": "Mine",
+            "type": "boolean"
+          },
+          "personId": {
+            "title": "Personid",
+            "type": "string"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "state": {
+            "enum": [
+              "connected",
+              "expired",
+              "refused"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "testFailed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Testfailed"
+          }
+        },
+        "required": [
+          "personId",
+          "mine",
+          "accountId",
+          "accountName",
+          "state"
+        ],
+        "title": "AppPerson",
         "type": "object"
       },
       "AppSkill": {
@@ -1096,6 +1176,16 @@
           "title": {
             "title": "Title",
             "type": "string"
+          },
+          "usedBy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolUsedBy"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -10218,6 +10308,50 @@
           "mocked"
         ],
         "title": "ToolRunResult",
+        "type": "object"
+      },
+      "ToolUsedBy": {
+        "additionalProperties": false,
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUser"
+            },
+            "title": "Agents",
+            "type": "array"
+          },
+          "workflows": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUser"
+            },
+            "title": "Workflows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "agents",
+          "workflows"
+        ],
+        "title": "ToolUsedBy",
+        "type": "object"
+      },
+      "ToolUser": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "ToolUser",
         "type": "object"
       },
       "ValidationError": {

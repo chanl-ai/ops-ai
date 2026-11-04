@@ -23,7 +23,7 @@ const KINDS = join(ROOT, 'services/tools-service/tests/plugin_kinds');
 const FOLDERS = readdirSync(KINDS).filter((n) => n.startsWith('kinds_')).map((n) => join(KINDS, n));
 process.env.OPS_PLUGINS = 'true';
 // Several named accounts of one app are behind their install flag; this walk turns it on.
-process.env.OPS_FLAGS = 'several_accounts';
+process.env.OPS_FLAGS = 'several_accounts,sandbox_accounts';
 process.env.OPS_PLUGIN_PATHS = JSON.stringify(FOLDERS);
 
 // The fake model: the request asks for Person desk's read tool, and the answer names the account the record was read as.
@@ -118,13 +118,6 @@ async function step(name, body, page) {
 async function shoot(page, name) {
   // At 1280 and at 375, light and dark, for the built-beside-mock page: output matches the design.
   const wide = page.viewportSize() ?? { width: 1280, height: 900 };
-  // An Apps menu page draws its tabs once the route has rendered; a shot taken before shows an empty tab row.
-  // A page left behind by client navigation stays in the DOM hidden, so only a visible tab of this page counts.
-  if (/^\/(integrations|tools)(\/|$)/.test(new URL(page.url()).pathname)) {
-    const t0 = Date.now();
-    const seen = await page.locator('[data-testid^="apps-tab-"]:visible').first().waitFor({ timeout: 10_000 }).then(() => true, () => false);
-    if (Date.now() - t0 > 1500 || !seen) console.log(`menu tabs on ${new URL(page.url()).pathname} after ${Date.now() - t0} ms, seen ${seen}`);
-  }
   for (const width of [1280, 375]) {
     await page.setViewportSize({ width, height: width === 375 ? 812 : wide.height });
     for (const scheme of ['light', 'dark']) {
@@ -210,12 +203,12 @@ try {
           const lists = [...new Set(page.lists)];
           await page.getByPlaceholder('Search apps').fill('person');
           await page.waitForTimeout(400);
-          const shown = await page.locator('[data-testid^="system-"]:not([data-testid$="-status"])').count();
-          const count = (await page.getByTestId('apps-count').innerText()).trim();
+          const shown = await page.locator('[data-testid^="system-"][data-state]').count();
+          const kept = await page.getByTestId(`system-${APP}`).count();
           check(
             '2 the catalog shows Person desk once with its tools and Connect, read in one call, and search finds it',
-            /Person desk/.test(text) && /\b1 tool\b/.test(text) && !/Plugin/.test(text) && (await page.getByRole('heading', { name: 'Apps', exact: true }).count()) > 0 && (await page.getByTestId(`connect-${APP}`).isVisible()) && lists.join() === '/v1/apps' && shown >= 1 && /^\d+ of \d+$/.test(count),
-            { text, lists, shown, count },
+            /Person desk/.test(text) && /\b1 tool\b/.test(text) && !/Plugin/.test(text) && (await page.getByRole('heading', { name: 'Apps', exact: true }).count()) > 0 && (await page.getByTestId(`connect-${APP}`).isVisible()) && lists.join() === '/v1/apps' && shown >= 1 && kept === 1,
+            { text, lists, shown, kept },
           );
           await page.getByPlaceholder('Search apps').fill('');
         }, page);
@@ -225,6 +218,7 @@ try {
           const win = page.getByTestId('connect-window');
           await win.waitFor({ timeout: 30_000 });
           const said = (await win.innerText()).replace(/\s+/g, ' ');
+          const button = ((await page.getByTestId('connect-window-authorize').innerText()) ?? '').trim();
           // The window's default path: the app credential and the access asked for, then Authorize; the account's name and
           // whose account it is wait under More options.
           const folded = !(await page.getByTestId('connect-window-name').isVisible());
@@ -252,10 +246,10 @@ try {
           await first.close();
           check(
             '3 one Connect window: Ops AI’s app or your own, the access asked for and Authorize; the sign-in window opens at once on the console’s connect page; a refusal shows in both windows and Authorize works again',
-            /Ops AI’s app/.test(said) && /Your own app/.test(said) && /gets access to/.test(said) && /Authorize with Person desk/.test(said) && /More options/.test(said) && folded &&
+            /Ops AI’s app/.test(said) && /Your own app/.test(said) && /gets access to/.test(said) && button === 'Connect' && !/Authorize with/.test(said) && /More options/.test(said) && folded &&
               new URL(openedAt).pathname === '/connections/connect' && new URL(openedAt).searchParams.get('app') === 'Person desk' &&
               deniedShown && closeOffered && /not given/.test(told) && again,
-            { said, folded, openedAt, deniedShown, closeOffered, told, again },
+            { said, button, folded, openedAt, deniedShown, closeOffered, told, again },
           );
           // The account's name, which later steps pick it by; left empty it would be the app and the team.
           await page.getByTestId('connect-window-more').click();
@@ -321,51 +315,67 @@ try {
             open.onerror = () => done(null);
           }));
           await page.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          await page.getByTestId('apps-connected').waitFor({ timeout: 60_000 });
-          await page.getByTestId('apps-available').waitFor({ timeout: 60_000 });
-          const connectedHas = (await page.getByTestId('apps-connected').getByTestId(`system-${APP}`).count()) === 1;
+          await page.getByTestId('systems-grid').waitFor({ timeout: 60_000 });
+          // The Connected view holds the app that is signed in, with no button and its accounts named.
+          await page.getByTestId('view-tab-connected').click();
           const ours = page.getByTestId(`system-${APP}`);
+          await ours.waitFor({ timeout: 60_000 });
+          const connectedHas = (await page.locator('[data-testid^="system-"][data-state]').evaluateAll((els) => els.map((e) => e.getAttribute('data-state')))).every((st) => ['connected', 'test_failed', 'removed'].includes(st));
           const ourState = await ours.getAttribute('data-state');
           const ourText = ((await ours.innerText()) ?? '').replace(/\s+/g, ' ');
-          const oneAction = (await ours.getByTestId(`open-${APP}`).count()) === 1 && (await ours.getByTestId(`connect-${APP}`).count()) === 0;
-          const available = page.getByTestId('apps-available');
-          const others = await available.locator('[data-testid^="system-"][data-state]').evaluateAll((els) => els.map((e) => [e.getAttribute('data-testid'), e.getAttribute('data-state')]));
-          const othersConnect = await available.locator('button[data-testid^="connect-"]').count();
-          const heads = (await page.locator('main section h2').allInnerTexts()).map((t) => t.trim());
-          await shoot(page, 'catalog-sections');
-          const total = (await page.getByTestId('apps-count').innerText()).trim();
-          await page.getByTestId('filter-category-Service desk').click();
-          const narrowed = (await page.getByTestId('apps-count').innerText()).trim();
+          const oneAction = (await ours.locator('button').count()) === 0;
+          await shoot(page, 'catalog-connected');
+          // The Available view holds the rest, each with Connect.
+          await page.getByTestId('view-tab-available').click();
+          await page.waitForTimeout(300);
+          const others = await page.locator('[data-testid^="system-"][data-state]').evaluateAll((els) => els.map((e) => [e.getAttribute('data-testid'), e.getAttribute('data-state')]));
+          const othersConnect = await page.locator('main button[data-testid^="connect-"]').count();
+          await shoot(page, 'catalog-available');
+          // The Category filter narrows the whole list to one app.
+          await page.getByTestId('view-tab-all').click();
+          await page.getByRole('button', { name: 'Category' }).click();
+          await page.getByTestId('facet-option-Service desk').click();
+          await page.getByTestId('facet-apply').click();
+          await page.waitForTimeout(300);
           const narrowedCards = await page.locator('[data-testid^="system-"][data-state]').count();
           await shoot(page, 'catalog-category');
-          await page.getByTestId('filter-category-Service desk').click();
+          await page.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await ours.waitFor({ timeout: 60_000 });
           const href = await page.getByTestId(`card-link-${APP}`).getAttribute('href');
           // A click anywhere on the card, away from its name, opens the app's page.
           await ours.click({ position: { x: 24, y: 110 } });
           const opened = await page.waitForURL((u) => u.pathname === `/integrations/apps/${encodeURIComponent(APP)}` || u.pathname === `/integrations/apps/${APP}`, { timeout: 30_000 }).then(() => true, () => false);
           check(
             '42 Apps lists Connected then Available, each card with its state and one action; a category narrows it; the card opens the app’s page',
-            heads[0]?.startsWith('Connected') && heads[1]?.startsWith('Available') && connectedHas && ourState === 'connected' && /Connected · 1 tool/.test(ourText) && oneAction &&
+            connectedHas && ourState === 'connected' && /Connected · \d+ accounts?/.test(ourText) && oneAction &&
               others.length >= 1 && others.every(([, st]) => st === 'not_installed' || st === 'needs_sign_in') && othersConnect >= 1 &&
-              narrowedCards === 1 && /^1 of \d+$/.test(narrowed) && href === `/integrations/apps/${encodeURIComponent(APP)}` && opened,
-            { heads, connectedHas, ourState, ourText, oneAction, others, othersConnect, total, narrowed, narrowedCards, href, opened },
+              narrowedCards === 1 && href === `/integrations/apps/${encodeURIComponent(APP)}` && opened,
+            { connectedHas, ourState, ourText, oneAction, others, othersConnect, narrowedCards, href, opened },
           );
         }, page);
 
         const james = await signedIn(browser, consoleUrl, 'j.richardson@harborpine.example', errors);
         await step('6 James presses Connect my account, allows access as himself, and the page reads Connected as james.person', async () => {
           await james.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          // A builder's header says a team admin connects the app only while the team account is not signed in.
+          await james.getByTestId('app-connected-as').waitFor({ timeout: 90_000 });
+          await james.getByTestId('app-tab-people').click();
           const button = james.getByTestId('app-connect-me');
           await button.waitFor({ timeout: 90_000 });
           await shoot(james, 'app-connect-my-account');
           const [popup] = await Promise.all([james.waitForEvent('popup', { timeout: 60_000 }), button.click()]);
           await allow(popup, 'james.person');
-          // The person's own row is always drawn; it reads Connected as them once the page refetches after the sign-in.
+          // The person's own line is always drawn; it reads Connected as them once the page refetches after the sign-in.
           const me = james.getByTestId('app-me-state');
           await me.getByText(/Connected as/).waitFor({ timeout: 60_000 }).catch(() => {});
           const said = (await me.innerText()).replace(/\s+/g, ' ');
+          const listed = ((await james.getByTestId('app-people').innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ');
           await shoot(james, 'app-connected-as');
-          check('6 James presses Connect my account, allows access as himself, and the page reads Connected as james.person', /Connected as james\.person/.test(said), { said });
+          check(
+            '6 James presses Connect my account, allows access as himself, and the page reads Connected as james.person',
+            /Connected as james\.person/.test(said) && /james\.person/.test(listed) && /You/.test(listed) && /Connected/.test(listed),
+            { said, listed },
+          );
         }, james);
 
         await step('7 a tool the agent calls runs with James’s account, and the app’s Logs list it by its title', async () => {
@@ -414,7 +424,7 @@ try {
           const usedBy = await james.locator('#tool-used-by').getByText('Ticket desk').first().waitFor({ timeout: 60_000 }).catch(() => {}).then(async () => ((await james.locator('#tool-used-by').innerText()) ?? '').replace(/\s+/g, ' '), () => '');
           check(
             '46 Tools lists Read a record as one row with its app, kind, status and Used by Ticket desk; its page says the same',
-            tabs.join() === 'All tools,Custom tools,Logs' && /Read a record/.test(line) && /Person desk/.test(line) && /App tool/.test(line) && /Ready/.test(line) && /Ticket desk/.test(line) && /Ticket desk/.test(usedBy),
+            tabs.join() === 'All tools,App tools,Custom tools,Logs' && /Read a record/.test(line) && /Person desk/.test(line) && /App tool/.test(line) && /Ready/.test(line) && /Ticket desk/.test(line) && /Ticket desk/.test(usedBy),
             { tabs, line, usedBy },
           );
         }, james);
@@ -438,16 +448,20 @@ try {
           );
         }, james);
 
-        await step('7b the Apps menu: tabs Apps, Credentials, My accounts and Tools; the old My connections, Secrets and call log addresses land in it', async () => {
+        await step('7b the Apps menu: Apps, Credentials, My accounts and Tools in the sidebar, no tab row; the old My connections, Secrets and call log addresses land in it', async () => {
           await james.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await james.getByTestId('systems-grid').waitFor({ timeout: 60_000 });
-          const tabs = (await james.getByTestId(/^apps-tab-/).allInnerTexts()).map((t) => t.trim());
-          const menu = await james.getByRole('link', { name: 'Apps', exact: true }).count();
-          const chips = (await james.getByTestId('apps-tags').innerText()).replace(/\s+/g, ' ');
+          // The four places are sidebar items under Data Hub, side by side; no page repeats them as a tab row.
+          const sidebar = (await james.locator('[data-sidebar="menu-button"]').allInnerTexts()).map((t) => t.trim());
+          const at = sidebar.indexOf('Apps');
+          const menu = sidebar.slice(at, at + 4).join();
+          const tabRows = () => james.locator('[data-testid^="apps-tab-"]').count();
+          const tabsOnApps = await tabRows();
+          const views = (await james.getByRole('tablist', { name: 'App views' }).innerText()).replace(/\s+/g, ' ');
           await shoot(james, 'catalog');
-          await james.getByTestId('filter-available').click();
+          await james.getByTestId('view-tab-available').click();
           await shoot(james, 'catalog-available');
-          await james.getByTestId('filter-available').click();
+          await james.getByTestId('view-tab-all').click();
           await james.goto(`${consoleUrl}/settings/account/connections`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await james.waitForURL((u) => u.pathname === '/integrations/my-accounts', { timeout: 60_000 });
           await james.getByTestId('my-connections').waitFor({ timeout: 60_000 });
@@ -461,20 +475,12 @@ try {
           // The old call log address keeps its filter: a link that searched for a tool lands on the same search.
           await james.goto(`${consoleUrl}/logs/tool-calls?q=person_get_record`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           const moved = await james.waitForURL((u) => u.pathname === '/tools/calls' && u.searchParams.get('q') === 'person_get_record', { timeout: 60_000 }).then(() => true, () => false);
-          const callTabs = (await james.getByTestId(/^apps-tab-/).allInnerTexts().catch(() => [])).map((t) => t.trim());
+          const tabsOnCalls = await tabRows();
           await shoot(james, 'itools-logs');
           await james.goto(`${consoleUrl}/tools`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await james.getByTestId('tools-tab-logs').waitFor({ timeout: 60_000 });
           await shoot(james, 'itools');
-          // The Apps menu tabs show on Tools and Credentials for a builder too, as on every Apps page. A tab counts only
-          // when nothing covers it: on a page taller than the window the tab row once collapsed under the content.
-          const shownTabs = () => james.evaluate(() => [...document.querySelectorAll('[data-testid^=apps-tab-]')].filter((e) => {
-            if (!e.checkVisibility()) return false;
-            const r = e.getBoundingClientRect();
-            return e.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
-          }).length);
-          const menuOnTools = await shownTabs();
-          const toolsHeader = menuOnTools ? '' : ((await james.locator('main').innerHTML().catch(() => '')) ?? '').slice(0, 1500);
+          const tabsOnTools = await tabRows();
           // Credentials: App credentials draws its list, its empty state or its error, never a blank; the old Secrets
           // address opens the Secrets tab with its list.
           await james.goto(`${consoleUrl}/integrations/credentials`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -486,14 +492,14 @@ try {
           await james.goto(`${consoleUrl}/settings/security/secrets`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           const secretsMoved = await james.waitForURL((u) => u.pathname === '/integrations/credentials' && u.searchParams.get('tab') === 'secrets', { timeout: 60_000 }).then(() => true, () => false);
           const secretsShown = await james.getByTestId('secrets-panel').waitFor({ timeout: 60_000 }).then(() => true, () => false);
-          const menuOnCredentials = await shownTabs();
+          const tabsOnCredentials = await tabRows();
           await shoot(james, 'creds-secrets');
           check(
-            '7b the Apps menu: tabs Apps, Credentials, My accounts and Tools; the old My connections, Secrets and call log addresses land in it',
-            tabs.join() === 'Apps,Credentials,My accounts,Tools' && menu >= 1 && /Connected only/.test(chips) && /Available only/.test(chips) &&
-              /My accounts/.test(mine) && /Person desk/.test(mine) && !/Settings \/ My accounts/.test(mine) && !/sample data/.test(mine) && moved && callTabs.join() === tabs.join() &&
-              credsState !== 'blank' && secretsMoved && secretsShown && menuOnTools === 4 && menuOnCredentials === 4,
-            { tabs, menu, chips, mine: mine.slice(0, 400), moved, callTabs, credsState, secretsMoved, secretsShown, menuOnTools, menuOnCredentials, toolsHeader },
+            '7b the Apps menu: Apps, Credentials, My accounts and Tools in the sidebar, no tab row; the old My connections, Secrets and call log addresses land in it',
+            menu === 'Apps,Credentials,My accounts,Tools' && /Connected/.test(views) && /Available/.test(views) &&
+              /My accounts/.test(mine) && /Person desk/.test(mine) && !/Settings \/ My accounts/.test(mine) && !/sample data/.test(mine) && moved &&
+              credsState !== 'blank' && secretsMoved && secretsShown && tabsOnApps + tabsOnCalls + tabsOnTools + tabsOnCredentials === 0,
+            { sidebar, menu, views, mine: mine.slice(0, 400), moved, credsState, secretsMoved, secretsShown, tabsOnApps, tabsOnCalls, tabsOnTools, tabsOnCredentials },
           );
         }, james);
 
@@ -535,13 +541,19 @@ try {
           const seen = (r) => r.status() === 404 && r.url().includes('/team/update') && notFound.push(r.url());
           james.on('response', seen);
           await james.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await james.getByTestId('app-tab-tools').click({ timeout: 60_000 });
           await james.getByTestId('app-tools').waitFor({ timeout: 60_000 });
           await james.waitForTimeout(1500);
           james.off('response', seen);
           out.updateNotFound = notFound.length;
           // At 375 the app page's tab row scrolls rather than clipping Settings.
           await james.setViewportSize({ width: 375, height: 812 });
-          out.tabsScroll = await james.getByTestId('app-tabs-row').evaluate((e) => getComputedStyle(e).overflowX !== 'visible' && e.scrollWidth >= e.clientWidth);
+          out.tabsScroll = await james.getByTestId('app-tabs-row').evaluate((e) => {
+            const box = e.getBoundingClientRect();
+            const list = e.querySelector('[role="tablist"]')?.getBoundingClientRect();
+            return box.right <= window.innerWidth && Boolean(list) && list.width > box.width && document.documentElement.scrollWidth <= window.innerWidth;
+          });
+          await james.getByTestId('app-tab-settings').scrollIntoViewIfNeeded();
           await james.getByTestId('app-tab-settings').click();
           out.settingsReached = await james.getByTestId('app-tab-settings').getAttribute('data-state');
           await james.setViewportSize({ width: 1280, height: 900 });
@@ -579,16 +591,20 @@ try {
 
         await step('9 the app page has the frame’s Accounts and tabs; Tools by title, Secrets with no secret, Settings with the switch and the default account’s keys', async () => {
           await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await page.getByTestId('app-accounts').waitFor({ timeout: 60_000 });
+          const head = ((await page.locator('main').innerText()) ?? '').replace(/\s+/g, ' ');
+          await page.getByTestId('app-tab-tools').click();
           await page.getByTestId('app-tools').getByText('Read a record').waitFor({ timeout: 60_000 });
           await shoot(page, 'app-tools');
           // The frame's words (Apps (final) group 4): the tabs in order, the Accounts line, and no kind tag on the page.
           const tabs = (await page.getByTestId(/^app-tab-/).allInnerTexts()).map((t) => t.trim());
-          const head = ((await page.locator('main').innerText()) ?? '').replace(/\s+/g, ' ');
+          const usedBy = ((await page.getByTestId('app-tool-used-by-person_get_record').innerText().catch(() => '')) ?? '').trim();
           await page.getByTestId('app-tab-resources').click();
           await page.getByTestId('app-skills-none').waitFor({ timeout: 30_000 });
           await shoot(page, 'app-resources');
           await page.getByTestId('app-tab-secrets').click();
           const secrets = (await page.getByTestId('app-secrets').innerText()).replace(/\s+/g, ' ');
+          const credentialLink = await page.getByTestId('app-credential-link').getAttribute('href').catch(() => null);
           await shoot(page, 'app-secrets');
           await page.getByTestId('app-tab-settings').click();
           await page.getByTestId('app-keys').waitFor({ timeout: 30_000 });
@@ -600,9 +616,9 @@ try {
           const html = await page.content();
           check(
             '9 the app page has the frame’s Accounts and tabs; Tools by title, Secrets with no secret, Settings with the switch and the default account’s keys',
-            tabs.join() === 'Tools,Resources,Secrets,Logs,Settings' && /Calls use the default account unless a step names another/.test(head) && !/\bPlugin\b/.test(head) &&
-              /harbor\.ops/.test(secrets) && /App credential/.test(secrets) && everyone === 'true' && /Person desk/.test(keys) && /Working/.test(keys) && !/Production/.test(keys) && !html.includes(fake.info.clients['multi-app']),
-            { tabs, secrets, everyone, keys },
+            tabs.join() === 'Accounts,People,Tools,Resources,Secrets,Logs,Settings' && /Calls use the default account unless a step names another/.test(head) && !/\bPlugin\b/.test(head) &&
+              /Ticket desk/.test(usedBy) && /harbor\.ops/.test(secrets) && /App credential · Ops AI’s app/.test(secrets) && credentialLink === '/integrations/credentials' && everyone === 'true' && /Person desk/.test(keys) && /Working/.test(keys) && !/Production/.test(keys) && !html.includes(fake.info.clients['multi-app']),
+            { tabs, usedBy, secrets, credentialLink, everyone, keys },
           );
         }, page);
 

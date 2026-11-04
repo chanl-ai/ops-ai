@@ -19,12 +19,12 @@ from pydantic import Field
 from ops_identity import ActingPerson
 from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.versions import tools_of
-from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
+from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import Envelope, Out, ok
 
 from .auth.kinds import BY_ID, kind_of
 from .callers import caller_in
-from .connections.records import CONNECTED, account_state, shown_status, state_reason, team_test
+from .connections.records import CONNECTED, account_state, person_state, shown_status, state_reason, team_test
 from .connections.schemas import AccountDetail, AccountIn, AccountTest, ConnectionHealth, NewAppIn
 from .connections.service import ConnectionService, own_key
 from .defaults import ensure_defaults
@@ -33,6 +33,7 @@ from .modules.routes import ERRORS
 from .modules.schemas import In, ToolCallRow
 from .modules.seed import BUILT_IN, TOOL_ORIGIN, template_of
 from .modules.service import Caller, ModuleService
+from .modules.tool_users import ToolUsers
 from .plugins.host import PluginHost, fixed_fields, module_id_of, per_account, plugin_id_of
 from .plugins.routes import PluginAccounts, TeamPluginIn
 from .plugins.templates import view_of
@@ -164,10 +165,23 @@ class CredentialSecretIn(In):
     client_secret: str = Field(min_length=1, max_length=2000)
 
 
+class ToolUser(Out):
+    id: str
+    name: str
+
+
+class ToolUsedBy(Out):
+    agents: list[ToolUser]
+    workflows: list[ToolUser]
+
+
 class AppTool(Out):
     name: str
     title: str
     access: str
+    # The team's agents granted it and workflows with a step that calls it, from agents-service; none when this
+    # service cannot ask (no agents-service wired) or agents-service did not answer.
+    used_by: ToolUsedBy | None = None
 
 
 class AppSkill(Out):
@@ -208,6 +222,24 @@ class AppAccount(Out):
     health: ConnectionHealth | None = None
 
 
+class AppPerson(Out):
+    """One person's own sign-in on one of the app's accounts, for the app page's People tab: a team admin reads
+    everyone's, anyone else their own."""
+
+    person_id: str
+    # Whether it is the caller's own.
+    mine: bool
+    # Who the system says signed in, when it says.
+    account: str | None = None
+    # The team account it is on, by its id and name.
+    account_id: str
+    account_name: str
+    since: str | None = None
+    state: Literal["connected", "expired", "refused"]
+    # The test run right after the sign-in failed: the system's words. The sign-in stays connected.
+    test_failed: str | None = None
+
+
 class AppPage(Out):
     """One app's page (c-607), joined here: its card, its default account, the caller's own sign-in, how many people
     signed in, its accounts, its tools, the plugin's skills and the latest runs of its tools."""
@@ -218,6 +250,8 @@ class AppPage(Out):
     people_count: int
     # The team's accounts of the app, the default first.
     accounts: list[AppAccount] = Field(default_factory=list[AppAccount])
+    # Each person's own sign-in on the app's accounts, newest first.
+    people: list[AppPerson] = Field(default_factory=list[AppPerson])
     tools: list[AppTool]
     skills: list[AppSkill]
     usage: list[ToolCallRow]
@@ -237,8 +271,11 @@ class Apps:
         modules: ModuleStore,
         plugins: PluginHost | None = None,
         calls: ModuleService | None = None,
+        users: ToolUsers | None = None,
     ) -> None:
         self.connections = connections
+        # Who uses each of an app's tools (agents-service), for the app page's Tools tab.
+        self.users = users
         self.modules = modules
         self.plugins = plugins
         # A plugin's turn-on and accounts, when the install has plugins.
@@ -684,6 +721,19 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
                 continue
             title = apps.plugins.title_of(module, name) if apps.plugins else None
             tools.append({"name": name, "title": title or name, "access": str(op["access"])})
+    if apps.users is not None and tools:
+        try:
+            uses = await apps.users.of(who.tenant_id, who.team.id, [t["name"] for t in tools])
+        except ServiceUnavailable:
+            # The page still answers; each tool's Used by then reads as not known, never as nobody.
+            uses = None
+        if uses is not None:
+            for t in tools:
+                found = uses.get(t["name"], [])
+                t["usedBy"] = {
+                    k: [{"id": u["id"], "name": u["name"]} for u in found if u["kind"] == kind]
+                    for k, kind in (("agents", "agent"), ("workflows", "workflow"))
+                }
     if apps.calls is not None and card["moduleIds"]:
         ran = await apps.calls.executions(
             who, page=1, page_size=20, tool=None, module_ids=list(card["moduleIds"]), thread_id=None, decision=None
@@ -693,16 +743,45 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
     plugin = _plugin(apps, card)
     if plugin is not None:
         skills = [{"kind": t.kind, "id": t.id, "title": view_of(plugin, t)["title"]} for t in plugin.manifest.templates]
+    accounts = await _accounts(apps, who, card)
     return {
         "card": card,
         "connection": detail,
         "me": {"connected": bool(signed), "account": signed[0].get("account") if signed else None},
         "peopleCount": len(people),
-        "accounts": await _accounts(apps, who, card),
+        "accounts": accounts,
+        "people": await _people(apps, who, accounts),
         "tools": tools,
         "skills": skills,
         "usage": usage,
     }
+
+
+async def _people(apps: Apps, who: Caller, accounts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Each person's own sign-in on the app's accounts, joined to the account it is on, with its state."""
+    names = {str(a["id"]): str(a["name"]) for a in accounts}
+    mine = own_key(who)
+    everyone = apps.connections.may_manage(who)
+    now = apps.connections.clock()
+    out: list[dict[str, Any]] = []
+    for t in await apps.connections.store.sign_ins(who.tenant_id, list(names)):
+        if not everyone and t["person_id"] != mine:
+            continue
+        test = cast(dict[str, Any], t.get("test") or {})
+        at = t.get("refreshed_at")
+        out.append(
+            {
+                "personId": str(t["person_id"]),
+                "mine": t["person_id"] == mine,
+                "account": t.get("account"),
+                "accountId": str(t["connection_id"]),
+                "accountName": names[str(t["connection_id"])],
+                "since": at.isoformat() if at else None,
+                "state": person_state(t, now),
+                "testFailed": str(test.get("message") or "no reason given") if test.get("status") == "failed" else None,
+            }
+        )
+    return out
 
 
 async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[str, Any]]:

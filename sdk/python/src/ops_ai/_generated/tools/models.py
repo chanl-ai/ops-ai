@@ -101,15 +101,20 @@ class AppMe(TypedDict, closed=True):
     connected: bool
 
 
+class AppPerson(TypedDict, closed=True):
+    account: NotRequired[str | None]
+    accountId: str
+    accountName: str
+    mine: bool
+    personId: str
+    since: NotRequired[str | None]
+    state: Literal["connected", "expired", "refused"]
+    testFailed: NotRequired[str | None]
+
+
 class AppSkill(TypedDict, closed=True):
     id: str
     kind: str
-    title: str
-
-
-class AppTool(TypedDict, closed=True):
-    access: str
-    name: str
     title: str
 
 
@@ -1090,6 +1095,11 @@ class ToolRunResult(TypedDict, closed=True):
     wouldPause: bool
 
 
+class ToolUser(TypedDict, closed=True):
+    id: str
+    name: str
+
+
 class ValidationError(TypedDict):
     ctx: NotRequired[dict[str, Any]]
     input: NotRequired[Any]
@@ -1652,20 +1662,16 @@ class ToolModuleDetail(TypedDict, closed=True):
     workflows: list[ModuleRef]
 
 
-class AppPage(TypedDict, closed=True):
-    accounts: NotRequired[list[AppAccount]]
-    card: SystemCard
-    connection: NotRequired[AccountDetail | None]
-    me: AppMe
-    peopleCount: int
-    skills: list[AppSkill]
-    tools: list[AppTool]
-    usage: list[ToolCallRow]
+class ToolUsedBy(TypedDict, closed=True):
+    agents: list[ToolUser]
+    workflows: list[ToolUser]
 
 
-class EnvelopeAppPage(TypedDict, closed=True):
-    data: AppPage
-    success: Literal[True]
+class AppTool(TypedDict, closed=True):
+    access: str
+    name: str
+    title: str
+    usedBy: NotRequired[ToolUsedBy | None]
 
 
 class EnvelopeExecutionList(TypedDict, closed=True):
@@ -1732,6 +1738,23 @@ class SecretList(TypedDict, closed=True):
     data: list[SecretMeta]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
+
+
+class AppPage(TypedDict, closed=True):
+    accounts: NotRequired[list[AppAccount]]
+    card: SystemCard
+    connection: NotRequired[AccountDetail | None]
+    me: AppMe
+    people: NotRequired[list[AppPerson]]
+    peopleCount: int
+    skills: list[AppSkill]
+    tools: list[AppTool]
+    usage: list[ToolCallRow]
+
+
+class EnvelopeAppPage(TypedDict, closed=True):
+    data: AppPage
+    success: Literal[True]
 
 
 class EnvelopeUnionListSecretMetaSecretList(TypedDict, closed=True):

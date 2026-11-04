@@ -219,7 +219,8 @@ def main() -> None:
         on_token=plugins.on_token if plugins else None,
         plugin_settings=plugins.account_settings if plugins else None,
     )
-    apps = Apps(connection_service, store, plugins, modules)
+    tool_users = AgentsToolUsers(client("agents", agents_url, ["agents:view"]))
+    apps = Apps(connection_service, store, plugins, modules, tool_users)
     app = create_gateway_app(
         opa=OpaClient(httpx.AsyncClient(base_url=settings.opa_url, timeout=5)),
         registry=ToolRegistry(catalog, store, plugins, connection_store),
@@ -307,7 +308,7 @@ def main() -> None:
                     plugins_router(
                         apps.plugin_accounts,
                         directory,
-                        users=AgentsToolUsers(client("agents", agents_url, ["agents:view"])),
+                        users=tool_users,
                     )
                 ]
                 if apps.plugin_accounts

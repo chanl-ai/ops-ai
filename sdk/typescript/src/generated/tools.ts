@@ -1480,6 +1480,8 @@ export interface components {
             card: components["schemas"]["SystemCard"];
             connection?: components["schemas"]["AccountDetail"] | null;
             me: components["schemas"]["AppMe"];
+            /** People */
+            people?: components["schemas"]["AppPerson"][];
             /** Peoplecount */
             peopleCount: number;
             /** Skills */
@@ -1488,6 +1490,32 @@ export interface components {
             tools: components["schemas"]["AppTool"][];
             /** Usage */
             usage: components["schemas"]["ToolCallRow"][];
+        };
+        /**
+         * AppPerson
+         * @description One person's own sign-in on one of the app's accounts, for the app page's People tab: a team admin reads
+         *     everyone's, anyone else their own.
+         */
+        AppPerson: {
+            /** Account */
+            account?: string | null;
+            /** Accountid */
+            accountId: string;
+            /** Accountname */
+            accountName: string;
+            /** Mine */
+            mine: boolean;
+            /** Personid */
+            personId: string;
+            /** Since */
+            since?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "connected" | "expired" | "refused";
+            /** Testfailed */
+            testFailed?: string | null;
         };
         /** AppSkill */
         AppSkill: {
@@ -1506,6 +1534,7 @@ export interface components {
             name: string;
             /** Title */
             title: string;
+            usedBy?: components["schemas"]["ToolUsedBy"] | null;
         };
         /** AppUser */
         AppUser: {
@@ -4492,6 +4521,20 @@ export interface components {
             transformError?: string | null;
             /** Wouldpause */
             wouldPause: boolean;
+        };
+        /** ToolUsedBy */
+        ToolUsedBy: {
+            /** Agents */
+            agents: components["schemas"]["ToolUser"][];
+            /** Workflows */
+            workflows: components["schemas"]["ToolUser"][];
+        };
+        /** ToolUser */
+        ToolUser: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
         };
         /** ValidationError */
         ValidationError: {

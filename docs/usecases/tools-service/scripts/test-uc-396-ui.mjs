@@ -49,9 +49,9 @@ await withUiStack(
       const [popup] = await Promise.all([page.waitForEvent('popup', { timeout: 30_000 }), own.click()]);
       popup.on('pageerror', (e) => errors.push(`popup: ${e.message}`));
       const closed = await popup.waitForEvent('close', { timeout: 60_000 }).then(() => true, () => false);
-      const mine = page.getByTestId('app-me-state');
+      const mine = page.getByTestId('app-connected-as');
       const state = await page
-        .waitForFunction(() => /Connected as/.test(document.querySelector('[data-testid=app-me-state]')?.textContent ?? ''), null, { timeout: 30_000 })
+        .waitForFunction(() => /Connected as/.test(document.querySelector('[data-testid=app-connected-as]')?.textContent ?? ''), null, { timeout: 30_000 })
         .then(async () => (await mine.innerText()).replace(/\s+/g, ' '), async () => (await mine.innerText().catch(() => '')).replace(/\s+/g, ' '));
       check('7 she signs in once through the pop-up, and her row says whom she is connected as', closed && /Connected as/.test(state), { closed, state });
 

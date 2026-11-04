@@ -275,7 +275,7 @@ try {
           });
           const [popup] = await Promise.all([admin.waitForEvent('popup', { timeout: 60_000 }), button.click()]);
           await throughPopup(popup, 'lead@kestrel.example');
-          const me = admin.getByTestId('app-me-state');
+          const me = admin.getByTestId('app-connected-as');
           await me.getByText(/Connected as/).waitFor({ timeout: 60_000 }).catch(() => {});
           const text = ((await me.innerText()) ?? '').replace(/\s+/g, ' ');
           await admin.screenshot({ path: join(SHOTS, 'app-own-account-1280.png') });

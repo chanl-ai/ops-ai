@@ -854,6 +854,34 @@ class ConnectionStore:
         async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
+    async def sign_ins(self, tenant_id: str, connection_ids: list[str]) -> list[Row]:
+        """Every person's own sign-in on these connections (an app's accounts), newest first, with what its state is
+        read from: whether the system refused it, and whether it can renew once it ends. The team's row is not one."""
+        if not connection_ids:
+            return []
+        t = connection_tokens.c
+        q = (
+            sa.select(
+                t.connection_id,
+                t.person_id,
+                t.account,
+                t.refreshed_at,
+                t.expires_at,
+                t.refused_at,
+                t.test,
+                t.refresh_ct.is_not(None).label("renews"),
+            )
+            .where(
+                t.tenant_id == tenant_id,
+                t.connection_id.in_(connection_ids),
+                t.person_id != SHARED,
+                team_visible(connection_tokens),
+            )
+            .order_by(t.refreshed_at.desc(), t.person_id)
+        )
+        async with self._tx() as c:
+            return [dict(r) for r in (await c.execute(q)).mappings()]
+
     async def operation_scopes(self, tenant_id: str, connection_id: str) -> list[str]:
         """Every scope an operation of a module on this connection needs (c-558), in a stable order: what the team's
         account asks for when it signs in, since the calls it signs have nobody to ask for more."""

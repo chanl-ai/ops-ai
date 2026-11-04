@@ -228,7 +228,7 @@ export function ConnectWindow({
           </Button>
           <LoadingButton isLoading={waiting} onClick={() => void authorize()} data-testid="connect-window-authorize">
             <ExternalLink />
-            {waiting ? 'Connecting…' : `Authorize with ${card.name}`}
+            {waiting ? 'Connecting…' : 'Connect'}
           </LoadingButton>
         </>
       }

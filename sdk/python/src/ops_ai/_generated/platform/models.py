@@ -97,7 +97,13 @@ class ErrorEnvelope(TypedDict, closed=True):
 
 class FlagOut(TypedDict, closed=True):
     description: str
-    name: Literal["mcp_gateway", "tool_search", "plugin_updates", "several_accounts"]
+    name: Literal[
+        "mcp_gateway",
+        "tool_search",
+        "plugin_updates",
+        "several_accounts",
+        "sandbox_accounts",
+    ]
     on: bool
 
 

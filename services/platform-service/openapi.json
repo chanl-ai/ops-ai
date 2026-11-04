@@ -1631,7 +1631,8 @@
               "mcp_gateway",
               "tool_search",
               "plugin_updates",
-              "several_accounts"
+              "several_accounts",
+              "sandbox_accounts"
             ],
             "title": "Name",
             "type": "string"
