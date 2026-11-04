@@ -52,7 +52,8 @@ runs:
         key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
     - if: inputs.browser == 'true'
       shell: bash
-      run: pnpm --filter @ops-ai/usecase-runner exec playwright install --with-deps chromium
+      # The runner image already has the libraries Chrome needs; installing them again with --with-deps took 8 minutes.
+      run: pnpm --filter @ops-ai/usecase-runner exec playwright install chromium
     - if: inputs.infra == 'true'
       shell: bash
       run: |

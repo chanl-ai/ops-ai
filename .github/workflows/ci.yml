@@ -61,6 +61,9 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
+        with:
+          # The script tests drive the commit hooks, which run pnpm.
+          node: ${{ needs.plan.outputs.scripts }}
       - name: Lint and format the changed Python
         run: |
           base=$(git merge-base "${{ github.event.pull_request.base.sha }}" HEAD)
@@ -107,7 +110,8 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           node: ${{ matrix.service == 'agents-service' }}
-          browser: ${{ matrix.service == 'agents-service' }}
+          # Only the checks run the chat loader in a browser; installing one took most of a test shard's time.
+          browser: ${{ matrix.service == 'agents-service' && !startsWith(matrix.part, 'test') }}
           infra: "true"
       - env:
           SERVICE: ${{ matrix.service }}
