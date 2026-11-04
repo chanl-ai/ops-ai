@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 from ops_plugin_sdk import Plugin
+from ops_plugin_sdk.manifest import Setting
 from ops_plugin_sdk.versions import declarations, diff, digest, tools_of
 from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import Envelope, ok
@@ -30,7 +31,7 @@ from ..modules.routes import ERRORS
 from ..modules.service import Caller
 from ..modules.tool_users import ToolUsers
 from ..store.connections import PLUGIN_APP
-from .host import PluginHost, fixed_fields, per_account, readable, render, sign_in_fixed
+from .host import PluginHost, fixed_fields, offered, per_account, readable, render, sign_in_fixed
 
 # The OAuth app's own fields: an app credential's, made under Credentials, never typed into an account.
 CLIENT_FIELDS = ("clientId", "clientSecret")
@@ -139,6 +140,16 @@ def _split(plugin: Plugin, given: dict[str, Any]) -> tuple[dict[str, Any], dict[
     return {k: v for k, v in given.items() if k not in own}, {k: v for k, v in given.items() if k in own}
 
 
+def _not_offered(title: str, setting: Setting, value: Any) -> str:
+    """The plain refusal of a value outside a setting's choices: what was given, and what may be."""
+    places = [c.label for c in setting.choices or []]
+    other = setting.other
+    if other is not None:
+        places.append(f"{other.label.lower()} ending in {' or '.join(other.hosts)}")
+    said = places[0] if len(places) == 1 else f"{', '.join(places[:-1])} or {places[-1]}"
+    return f"{title} cannot use {value} there. Choose {said}."
+
+
 class PluginAccounts:
     """A plugin's app for one team: turning it on, its accounts, and the sign-in settings each account takes from the
     plugin's connection definition."""
@@ -173,7 +184,7 @@ class PluginAccounts:
     def _checked_settings(self, plugin: Plugin, given: dict[str, Any]) -> None:
         m = plugin.manifest
         locked = self.host.locked_settings(m.id)
-        for k in given:
+        for k, value in given.items():
             setting = m.settings.get(k)
             if setting is None:
                 raise ValidationFailed(f"{k} is not a setting of {m.title}.", details={"field": k})
@@ -181,6 +192,11 @@ class PluginAccounts:
                 raise ValidationFailed(f"{k} is set by the platform admin for every team.", code="setting_locked")
             if setting.at_sign_in:
                 raise ValidationFailed(f"{k} is read from the sign-in, not typed.", code="setting_from_token")
+            # An empty value unsets it, so the plugin's default (one of its choices) applies.
+            if value not in (None, "") and not offered(setting, value):
+                raise ValidationFailed(
+                    _not_offered(m.title, setting, value), code="setting_not_offered", details={"field": k}
+                )
 
     async def switch(self, who: Caller, app_id: str, body: TeamPluginIn) -> None:
         """Turns the plugin on or off for the team and saves the team's settings: a team admin's alone. The first

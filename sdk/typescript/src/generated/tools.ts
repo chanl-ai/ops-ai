@@ -3590,6 +3590,13 @@ export interface components {
         };
         /** PluginSetting */
         PluginSetting: {
+            /** Choices */
+            choices?: components["schemas"]["SettingChoice"][] | null;
+            /**
+             * Credential
+             * @default false
+             */
+            credential: boolean;
             /** Default */
             default?: string | null;
             /** Label */
@@ -3601,6 +3608,7 @@ export interface components {
             locked: boolean;
             /** Name */
             name: string;
+            other?: components["schemas"]["SettingOther"] | null;
             /**
              * Peraccount
              * @default false
@@ -3909,6 +3917,51 @@ export interface components {
             text: string;
             /** Version */
             version: number;
+        };
+        /**
+         * SettingChoice
+         * @description One value the setting takes, in the system's words; `test_account` starts the Test account switch on.
+         */
+        SettingChoice: {
+            /**
+             * Hint
+             * @default
+             */
+            hint: string;
+            /** Label */
+            label: string;
+            /**
+             * Testaccount
+             * @default false
+             */
+            testAccount: boolean;
+            /** Value */
+            value: boolean | number | string;
+        };
+        /**
+         * SettingOther
+         * @description A host typed in place of a choice: the value is `value` with `{host}` replaced, and the host must end in one of
+         *     `hosts`; a host ending in one of `test_account_hosts` starts the Test account switch on.
+         */
+        SettingOther: {
+            /**
+             * Hint
+             * @default
+             */
+            hint: string;
+            /** Hosts */
+            hosts: string[];
+            /** Label */
+            label: string;
+            /**
+             * Placeholder
+             * @default
+             */
+            placeholder: string;
+            /** Testaccounthosts */
+            testAccountHosts?: string[];
+            /** Value */
+            value: string;
         };
         /** SignInCompleteIn */
         SignInCompleteIn: {

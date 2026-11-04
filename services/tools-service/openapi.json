@@ -7264,6 +7264,25 @@
       "PluginSetting": {
         "additionalProperties": false,
         "properties": {
+          "choices": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SettingChoice"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choices"
+          },
+          "credential": {
+            "default": false,
+            "title": "Credential",
+            "type": "boolean"
+          },
           "default": {
             "anyOf": [
               {
@@ -7287,6 +7306,16 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "other": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SettingOther"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "perAccount": {
             "default": false,
@@ -8266,6 +8295,94 @@
           "savedAt"
         ],
         "title": "SendPolicyView",
+        "type": "object"
+      },
+      "SettingChoice": {
+        "additionalProperties": false,
+        "description": "One value the setting takes, in the system's words; `test_account` starts the Test account switch on.",
+        "properties": {
+          "hint": {
+            "default": "",
+            "title": "Hint",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "testAccount": {
+            "default": false,
+            "title": "Testaccount",
+            "type": "boolean"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "SettingChoice",
+        "type": "object"
+      },
+      "SettingOther": {
+        "additionalProperties": false,
+        "description": "A host typed in place of a choice: the value is `value` with `{host}` replaced, and the host must end in one of\n`hosts`; a host ending in one of `test_account_hosts` starts the Test account switch on.",
+        "properties": {
+          "hint": {
+            "default": "",
+            "title": "Hint",
+            "type": "string"
+          },
+          "hosts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Hosts",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "placeholder": {
+            "default": "",
+            "title": "Placeholder",
+            "type": "string"
+          },
+          "testAccountHosts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Testaccounthosts",
+            "type": "array"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value",
+          "hosts"
+        ],
+        "title": "SettingOther",
         "type": "object"
       },
       "SignInCompleteIn": {

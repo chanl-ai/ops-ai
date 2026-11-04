@@ -20,7 +20,7 @@ import httpx
 
 from ops_plugin_sdk import Manifest, Plugin
 from ops_plugin_sdk.loader import Loaded, discover
-from ops_plugin_sdk.manifest import AfterSignIn, InputField, Tool
+from ops_plugin_sdk.manifest import AfterSignIn, InputField, Other, Setting, Tool
 from ops_plugin_sdk.paging import at
 from ops_plugin_sdk.paging import headers as request_headers
 from ops_plugin_sdk.versions import declarations, digest, tools_of
@@ -46,6 +46,9 @@ UNSENDABLE = re.compile(r"\{\{|[\r\n]")
 # endpoint's path), so it may hold nothing that adds a path segment or a query.
 PLAIN_VALUE = re.compile(r"^[A-Za-z0-9._:-]+$")
 LOOKUP_TIMEOUT_S = 10.0
+# A host a person types in place of a choice: lower-case labels of letters, digits and inner hyphens, two or more, so
+# no port, path, user or second address rides in with it.
+HOSTNAME = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 
 
 class SignInRefused(ValueError):
@@ -71,6 +74,31 @@ def settle_at_sign_in(held: Mapping[str, Any], read: Mapping[str, Any], *, own: 
                 "another_site",
             )
     return dict(read)
+
+
+def typed_host(other: Other, value: object) -> str | None:
+    """The host a value was made from by `other.value` (`https://{host}/services/oauth2`), when it ends in one of
+    `other.hosts` with a label of its own before the suffix; None for any other value."""
+    if not isinstance(value, str):
+        return None
+    before, _, after = other.value.partition("{host}")
+    if len(value) <= len(before) + len(after) or not (value.startswith(before) and value.endswith(after)):
+        return None
+    host = value[len(before) : len(value) - len(after)].lower()
+    if not HOSTNAME.match(host):
+        return None
+    return host if any(host.endswith(s.lower()) and len(host) > len(s) for s in other.hosts) else None
+
+
+def offered(setting: Setting, value: object) -> bool:
+    """Whether a team's value is one the setting offers: one of its choices, or a host typed for its `other`. A setting
+    that declares neither takes any value."""
+    if not setting.choices and setting.other is None:
+        return True
+    same = [
+        c for c in setting.choices or [] if c.value == value and isinstance(c.value, bool) == isinstance(value, bool)
+    ]
+    return bool(same) or (setting.other is not None and typed_host(setting.other, value) is not None)
 
 
 def readable(manifest: Manifest, settings: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, bool]]:

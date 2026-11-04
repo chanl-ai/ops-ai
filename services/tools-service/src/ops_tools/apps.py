@@ -20,6 +20,7 @@ from pydantic import Field
 
 from ops_identity import ActingPerson
 from ops_plugin_sdk import Plugin
+from ops_plugin_sdk.manifest import Setting
 from ops_plugin_sdk.versions import tools_of
 from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import Envelope, Out, ok
@@ -54,6 +55,28 @@ from .store.team_defaults import TeamDefaults
 AccountState = Literal["connected", "not_signed_in", "expired", "refused", "revoked"]
 
 
+class SettingChoice(Out):
+    """One value the setting takes, in the system's words; `test_account` starts the Test account switch on."""
+
+    # As the manifest types it, so the value sent back is the one the check compares.
+    value: bool | int | float | str
+    label: str
+    hint: str = ""
+    test_account: bool = False
+
+
+class SettingOther(Out):
+    """A host typed in place of a choice: the value is `value` with `{host}` replaced, and the host must end in one of
+    `hosts`; a host ending in one of `test_account_hosts` starts the Test account switch on."""
+
+    label: str
+    hint: str = ""
+    placeholder: str = ""
+    value: str
+    hosts: list[str]
+    test_account_hosts: list[str] = Field(default_factory=list[str])
+
+
 class PluginSetting(Out):
     name: str
     label: str
@@ -63,6 +86,11 @@ class PluginSetting(Out):
     per_account: bool = False
     # Fixed by the install for every team (plugin_locked); shown, never typed.
     locked: bool = False
+    # The only values it takes, and a host typed in place of one; none for a setting that takes any value.
+    choices: list[SettingChoice] | None = None
+    other: SettingOther | None = None
+    # Held by the app credential the account signs in with (the app registration's), not by the account.
+    credential: bool = False
 
 
 class SystemPlugin(Out):
@@ -295,6 +323,22 @@ class AppPage(Out):
     usage: list[ToolCallRow]
 
 
+def setting_offer(s: Setting) -> dict[str, Any]:
+    """A setting's choices and typed host as the Connect window draws them; empty for one that takes any value."""
+    out: dict[str, Any] = {}
+    if s.choices:
+        out["choices"] = [
+            {"value": c.value, "label": c.label, "hint": c.hint, "testAccount": c.test_account} for c in s.choices
+        ]
+    if s.other is not None:
+        o = s.other
+        out["other"] = {
+            "label": o.label, "hint": o.hint, "placeholder": o.placeholder, "value": o.value, "hosts": list(o.hosts),
+            "testAccountHosts": list(o.test_account_hosts),
+        }  # fmt: skip
+    return out
+
+
 def _built_in(app: dict[str, Any], module: dict[str, Any]) -> list[str]:
     """The app's operations the module holds: all of them, or the ones the app names."""
     held = [str(o["name"]) for o in cast(list[dict[str, Any]], module.get("operations") or [])]
@@ -377,6 +421,8 @@ class Apps:
                         "secret": s.secret,
                         "perAccount": k in own,
                         "locked": k in locked,
+                        **setting_offer(s),
+                        "credential": k in m.connection.credential_settings,
                     }
                     for k, s in m.settings.items()
                     if not s.at_sign_in

@@ -719,15 +719,6 @@ class PluginRef(TypedDict):
     version: str
 
 
-class PluginSetting(TypedDict, closed=True):
-    default: NotRequired[str | None]
-    label: str
-    locked: NotRequired[bool]
-    name: str
-    perAccount: NotRequired[bool]
-    secret: NotRequired[bool]
-
-
 class Reachability(TypedDict, closed=True):
     checkedAt: str
     environment: Literal["dev", "test", "production"]
@@ -840,6 +831,22 @@ class SendPolicyView(TypedDict, closed=True):
     version: int
 
 
+class SettingChoice(TypedDict, closed=True):
+    hint: NotRequired[str]
+    label: str
+    testAccount: NotRequired[bool]
+    value: bool | int | float | str
+
+
+class SettingOther(TypedDict, closed=True):
+    hint: NotRequired[str]
+    hosts: list[str]
+    label: str
+    placeholder: NotRequired[str]
+    testAccountHosts: NotRequired[list[str]]
+    value: str
+
+
 class SignInCompleteIn(TypedDict, closed=True):
     code: str
     state: str
@@ -900,20 +907,6 @@ class SubjectBindingIn(TypedDict, closed=True):
     ]
     mode: Literal["equals", "within"]
     required: bool
-
-
-class SystemPlugin(TypedDict, closed=True):
-    fixed: list[str]
-    kinds: list[str]
-    platformApp: bool
-    scopes: list[str]
-    settings: list[PluginSetting]
-    signIn: list[str]
-    teamOn: bool
-    teamVersion: NotRequired[str | None]
-    tools: NotRequired[list[str]]
-    updateAvailable: NotRequired[bool]
-    values: NotRequired[dict[str, Any]]
 
 
 class TakeUpdateIn(TypedDict, closed=True):
@@ -1577,6 +1570,18 @@ class OperationPatchIn(TypedDict, closed=True):
     timeoutMs: NotRequired[int | None]
 
 
+class PluginSetting(TypedDict, closed=True):
+    choices: NotRequired[list[SettingChoice] | None]
+    credential: NotRequired[bool]
+    default: NotRequired[str | None]
+    label: str
+    locked: NotRequired[bool]
+    name: str
+    other: NotRequired[SettingOther | None]
+    perAccount: NotRequired[bool]
+    secret: NotRequired[bool]
+
+
 class PluginTemplate(TypedDict):
     body: NotRequired[dict[str, Any]]
     digest: str
@@ -1614,32 +1619,18 @@ class SecretMeta(TypedDict, closed=True):
     version: int
 
 
-class SystemCard(TypedDict, closed=True):
-    accountsCount: NotRequired[int]
-    appState: Literal["connected", "test_failed", "needs_sign_in", "not_installed", "removed"]
-    appStateReason: NotRequired[str | None]
-    authKind: NotRequired[str | None]
-    category: NotRequired[str | None]
-    connectionId: NotRequired[str | None]
-    credential: NotRequired[CardCredential | None]
-    description: NotRequired[str | None]
-    docsUrl: NotRequired[str | None]
-    href: NotRequired[str | None]
-    id: str
-    kind: Literal["plugin", "connection", "module", "builtin"]
-    kindLabel: NotRequired[str | None]
-    logo: NotRequired[str | None]
-    managedClient: NotRequired[bool]
-    mayManage: bool
-    moduleIds: list[str]
-    name: str
-    plugin: NotRequired[SystemPlugin | None]
-    pluginId: NotRequired[str | None]
-    sandboxId: NotRequired[str | None]
-    signIn: NotRequired[Literal["team", "person", "person_or_team"] | None]
-    state: NotRequired[Literal["connected", "not_signed_in", "expired", "refused", "revoked"] | None]
-    status: NotRequired[str | None]
-    toolsCount: int
+class SystemPlugin(TypedDict, closed=True):
+    fixed: list[str]
+    kinds: list[str]
+    platformApp: bool
+    scopes: list[str]
+    settings: list[PluginSetting]
+    signIn: list[str]
+    teamOn: bool
+    teamVersion: NotRequired[str | None]
+    tools: NotRequired[list[str]]
+    updateAvailable: NotRequired[bool]
+    values: NotRequired[dict[str, Any]]
 
 
 class TestOut(TypedDict):
@@ -1742,11 +1733,6 @@ class EnvelopeSecretMeta(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeSystemCard(TypedDict, closed=True):
-    data: SystemCard
-    success: Literal[True]
-
-
 class EnvelopeTestOut(TypedDict, closed=True):
     data: TestOut
     success: Literal[True]
@@ -1762,15 +1748,38 @@ class EnvelopeListPluginTemplate(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListSystemCard(TypedDict, closed=True):
-    data: list[SystemCard]
-    success: Literal[True]
-
-
 class SecretList(TypedDict, closed=True):
     data: list[SecretMeta]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
+
+
+class SystemCard(TypedDict, closed=True):
+    accountsCount: NotRequired[int]
+    appState: Literal["connected", "test_failed", "needs_sign_in", "not_installed", "removed"]
+    appStateReason: NotRequired[str | None]
+    authKind: NotRequired[str | None]
+    category: NotRequired[str | None]
+    connectionId: NotRequired[str | None]
+    credential: NotRequired[CardCredential | None]
+    description: NotRequired[str | None]
+    docsUrl: NotRequired[str | None]
+    href: NotRequired[str | None]
+    id: str
+    kind: Literal["plugin", "connection", "module", "builtin"]
+    kindLabel: NotRequired[str | None]
+    logo: NotRequired[str | None]
+    managedClient: NotRequired[bool]
+    mayManage: bool
+    moduleIds: list[str]
+    name: str
+    plugin: NotRequired[SystemPlugin | None]
+    pluginId: NotRequired[str | None]
+    sandboxId: NotRequired[str | None]
+    signIn: NotRequired[Literal["team", "person", "person_or_team"] | None]
+    state: NotRequired[Literal["connected", "not_signed_in", "expired", "refused", "revoked"] | None]
+    status: NotRequired[str | None]
+    toolsCount: int
 
 
 class AppPage(TypedDict, closed=True):
@@ -1790,6 +1799,16 @@ class EnvelopeAppPage(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeSystemCard(TypedDict, closed=True):
+    data: SystemCard
+    success: Literal[True]
+
+
 class EnvelopeUnionListSecretMetaSecretList(TypedDict, closed=True):
     data: list[SecretMeta] | SecretList
+    success: Literal[True]
+
+
+class EnvelopeListSystemCard(TypedDict, closed=True):
+    data: list[SystemCard]
     success: Literal[True]
