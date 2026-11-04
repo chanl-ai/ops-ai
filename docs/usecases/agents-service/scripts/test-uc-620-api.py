@@ -39,10 +39,13 @@ from usecase_harness import (
     models,
     pg_url,
     put_in_files,
+    sse,
 )
 
-RULES = AGENTS_DIR / "tests" / "fixtures" / "levy-extraction-fake-openai"
+RULES = AGENTS_DIR.parent / "models-service" / "seed" / "demo-fake-openai"
 NOTICE = (AGENTS_DIR / "tests" / "fixtures" / "mailbox" / "levy_notice.pdf").read_bytes()
+# An image-only scan with no text layer: documents-service reads no text from it without OCR.
+SCAN = (AGENTS_DIR.parent / "documents-service/tests/fixtures/restraining/TEST010.pdf").read_bytes()
 SEED = AGENTS_DIR / "seed" / "engine_workflows.json"
 OPS = {"X-Team-Id": "team_ops"}
 RUN = uuid.uuid4().hex[:6]
@@ -310,6 +313,69 @@ def form_notice_finishes(api: httpx.Client) -> None:
     )  # fmt: skip
 
 
+def attach(files: httpx.Client, name: str, body: bytes) -> dict[str, Any]:
+    """The console's chat attach: an upload ticket for a chat attachment, the bytes, complete."""
+    meta = {"name": name, "size": len(body), "mime": "application/pdf", "purpose": "chat_attachment"}
+    ticket = got(files.post("/v1/files/uploads", json=meta)) or {}
+    files.put(str(ticket.get("uploadUrl")), headers=ticket.get("headers") or {}, content=body)
+    done = (got(files.post(f"/v1/files/uploads/{ticket.get('fileId')}/complete")) or {}).get("file") or {}
+    return {"fileId": done.get("id"), "name": name, "size": len(body)}
+
+
+def ask(api: httpx.Client, tid: str, question: str, attached: list[dict[str, Any]]) -> tuple[httpx.Response, Any]:
+    res = api.post(
+        f"/chat/threads/{tid}/messages",
+        json={"content": question, "attachments": attached},
+        headers={**OPS, "Accept": "text/event-stream"},
+        timeout=120,
+    )
+    done = next((e for e in sse(res.text) if e.get("type") == "done"), {}) if res.status_code == 200 else {}
+    return res, done.get("message") or {}
+
+
+def chat_reads_an_attached_pdf(api: httpx.Client, files: httpx.Client) -> None:
+    # 6. A person attaches the notice in chat and asks about it; the agent answers from its text and cites it.
+    notice = attach(files, f"notice-{RUN}.pdf", NOTICE + f"\n% uc-620 chat {RUN}\n".encode())
+    # An agent of the team's own with no knowledge bases, so the answer can come only from the attachment.
+    made = got(
+        api.post("/v1/agents", json={"name": f"Notice Desk {RUN}", "role": "Answers about notices"}, headers=OPS)
+    )
+    aid, version = (made or {}).get("id"), (made or {}).get("version")
+    api.post(f"/v1/agents/{aid}/publish-requests", json={"version": version, "note": "uc-620"}, headers=OPS)
+    tid = str((got(api.post("/chat/threads", json={"agentId": aid, "kbIds": []}, headers=OPS)) or {}).get("id"))
+    res, reply = ask(api, tid, "uc620 who is the first debtor in this notice?", [notice])
+    cited = reply.get("citations") or [{}]
+    check(
+        "6 a PDF attached in chat is read for the agent, which answers from it on the fake model and cites the file",
+        res.status_code == 200
+        and "Marcus Bell" in str(reply.get("content"))
+        and "3,250.00" in str(reply.get("content"))
+        and (cited[0].get("documentId"), cited[0].get("page")) == (notice["fileId"], 1),
+        {"file": notice, "status": res.status_code, "reply": str(reply.get("content"))[:300], "cited": cited[:1]},
+    )  # fmt: skip
+
+    # 7. Files lists it as a chat attachment, used by the conversation.
+    listed = (got(files.get("/v1/files", params={"purpose": "chat_attachment", "pageSize": 100})) or {}).get("data")
+    row = next((f for f in listed or [] if f.get("id") == notice["fileId"]), {})
+    detail = got(files.get(f"/v1/files/{notice['fileId']}")) or {}
+    refs = [(r.get("type"), r.get("id")) for r in detail.get("references") or []]
+    check(
+        "7 Files lists the attached PDF as a chat attachment, used by the conversation",
+        row.get("purpose") == "chat_attachment" and ("chat", tid) in refs,
+        {"row": {k: row.get(k) for k in ("id", "name", "purpose")}, "references": refs},
+    )
+
+    # 8. A scan with no text layer is told plainly to the person and the agent, not answered as if read.
+    scan = attach(files, f"scan-{RUN}.pdf", SCAN + f"\n% uc-620 scan {RUN}\n".encode())
+    res, reply = ask(api, tid, "What does the scan say?", [scan])
+    check(
+        "8 a scan with no text says in the reply that it could not be read and why",
+        res.status_code == 200
+        and f"scan-{RUN}.pdf could not be read: it has no text to read" in str(reply.get("content")),
+        {"file": scan, "status": res.status_code, "reply": str(reply.get("content"))[-300:]},
+    )
+
+
 def main() -> None:
     agents_url = f"http://127.0.0.1:{AGENTS_PORT}"
     with (
@@ -333,6 +399,8 @@ def main() -> None:
             )
         if wanted("S2"):
             story("3 a notice from a form finishes", lambda: form_notice_finishes(api))
+        if wanted("S3"):
+            story("6 chat reads an attached PDF", lambda: chat_reads_an_attached_pdf(api, files))
     finish()
 
 

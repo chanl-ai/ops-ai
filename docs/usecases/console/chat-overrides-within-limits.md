@@ -4,8 +4,8 @@ Status: current. Id: `uc-091`. Service: `console`. Layers: ui.
 
 A banker opens a chat's settings and sees only what the agent's owner allows: a temperature range, added instructions
 and the tools that may be switched off. Switching a tool off means the model is not offered it; every turn records the
-settings it ran on; a value outside the limits is refused naming the field. A PDF attached to a message is parsed once
-and the answer cites it by page. Design: [chat](../../console/chat.md), decision:
+settings it ran on; a value outside the limits is refused naming the field. A PDF attached to a message is uploaded to
+Files, read for the turn, and the answer cites it by page. Design: [chat](../../console/chat.md), decision:
 [override model](../agents-service/agent-limits-published.md).
 
 ## Preconditions
@@ -27,7 +27,7 @@ the API; no model key is needed.
 | 3 | Switch lookup_account off, add an instruction, Save | PATCH answers 200 |
 | 4 | Ask again | No lookup_account call; the reply's settings name the tool off and the added instruction |
 | 5 | PATCH a temperature of 1.5 through the API | 422 with field `overrides.thread.temperature` |
-| 6 | Attach fee-schedule-v2.pdf, ask what a replacement debit card costs | Citation 1 is the file, at "Card fees · p.3" |
+| 6 | Attach fee-schedule-v2.pdf, ask what a replacement debit card costs | The upload goes to Files; citation 1 is the file, at "fee-schedule-v2.pdf · p.3" |
 
 ## Acceptance layers
 
