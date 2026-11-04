@@ -58,28 +58,12 @@ promotes a release.
 One branch is one concern. A name says what changed, never who asked or which ticket. `git stash`, `git push --force`
 and pushes straight to `main` are refused by the hooks.
 
-### Working on several changes at once: lanes
+### Reviewing a branch
 
-Instead of a second clone, make a lane: a git worktree of this repo beside it, with its own branch, ports and
-database. Lanes share one `.git` and the dependency caches, so a new lane is ready in about a minute.
-
-| Command | What it does |
-|---|---|
-| `make lane NAME=backend N=1` | `../ops-ai-lane-backend` on a fresh branch from `origin/main`, every port +1000, its own database |
-| `make lanes` | Lists the main checkout and every lane: branch, stack up or down, last commit, PR |
-| `make lane-next BRANCH=fix/x` | Inside a lane: start the next change from `origin/main`, migrating the lane's database. Refuses while work is uncommitted or unpushed |
-| `make lane-rm NAME=backend` | Removes a lane whose work is pushed |
-
-Every `make` target run inside a lane (`make up`, `make api`, `make usecase-test`) acts on that lane's own stack. The
-main checkout keeps its stack on the usual ports (console :3016).
-
-A lane's stack starts with dev sign-in and without the worker, models-service, the fake model or the fake bank.
-`OPS_STACK_FAKES=1 make up AUTH=platform DEMO_MODEL=fake` starts all of them and signs in through platform-service,
-whose **Sign in as a demo person** list has every seeded person, the admins included; dev sign-in offers three. Give
-`make restart` the same `AUTH=platform`: a lane's restart falls back to dev sign-in, and the console's calls to that
-service then answer 401. When
-`make up` stops at `port is already allocated`, another lane holds that port: set the one it names, such as
-`OPS_MAILPIT_SMTP_PORT=16025 OPS_MAILPIT_HTTP_PORT=16026`, on the same command.
+There is one checkout and one stack (console :3016). To try someone's branch, run `make review BRANCH=<name>`: it
+checks the branch out from `origin`, then restarts every service on it, migrating each database first. It refuses
+while you have uncommitted changes. Use cases run on a stack of their own (`ISOLATED=1`, every port +1000), so they
+never touch the one you are reviewing on.
 
 ## Commit messages
 

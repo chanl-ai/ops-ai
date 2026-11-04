@@ -18,15 +18,8 @@ export $(shell sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' $(ROOT)/.devcontainer/.e
 # checksum of this checkout's path: with one name for every checkout, `make db-down ISOLATED=1` in one removed the
 # stack a run in another was using. Two checkouts' isolated stacks still use the same ports, so a second one's `up`
 # fails on a taken port rather than joining the first.
-#
-# A lane worktree (scripts/lane.sh) carries its number in .lane, so every make target run there acts on that lane's own
-# stack: ports +number×1000, its own compose project and database. ISOLATED=1 from the main checkout is lane 1's ports.
-OPS_LANE := $(shell sed -n 's/^number=//p' '$(ROOT)/.lane' 2>/dev/null)
-ifneq ($(filter-out 0,$(OPS_LANE)),)
-  ISOLATED := 1
-endif
 ifeq ($(ISOLATED),1)
-  OPS_PORT_OFFSET := $(if $(filter-out 0,$(OPS_LANE)),$(OPS_LANE)000,1000)
+  OPS_PORT_OFFSET := 1000
   OPS_STACK := isolated
   OPS_COMPOSE_PROJECT := ops-runtime-isolated-$(shell printf '%s' '$(ROOT)' | cksum | cut -d' ' -f1)
 else
@@ -44,12 +37,12 @@ OPS_SHARED_ROOT_FILE ?= $(HOME)/.config/ops-ai/shared-root
 STACK_GOALS := up down restart migrate reset-db db-down db-reset sample-team demo demo-walk demo-model
 ifeq ($(OPS_STACK),shared)
   ifneq ($(filter $(STACK_GOALS),$(MAKECMDGOALS)),)
-    # A test, or a worktree that lost its .lane file, must never stop, migrate or reset the shared stack.
+    # A test, or a worktree, must never stop, migrate or reset the shared stack.
     ifdef PYTEST_CURRENT_TEST
       $(error refused: a test may not run $(filter $(STACK_GOALS),$(MAKECMDGOALS)) on the shared stack; add ISOLATED=1)
     endif
     ifeq ($(shell cd '$(ROOT)' && d=$$(git rev-parse --absolute-git-dir 2>/dev/null) && c=$$(cd "$$(git rev-parse --git-common-dir)" && pwd -P) && [ "$$d" != "$$c" ] && echo worktree),worktree)
-      $(error refused: $(ROOT) is a git worktree without a lane number, so it would act on the shared stack; add ISOLATED=1)
+      $(error refused: $(ROOT) is a git worktree, so it would act on the shared stack; add ISOLATED=1, or review a branch with make review BRANCH=<name> in the main checkout)
     endif
     SHARED_ROOT := $(shell cat '$(OPS_SHARED_ROOT_FILE)' 2>/dev/null)
     ifeq ($(SHARED_ROOT),)
@@ -88,7 +81,7 @@ OPS_PLATFORM_INTERNAL_PORT ?= $(call port,8711)
 OPS_OPA_PORT ?= $(call port,8181)
 OPS_PG_PORT ?= $(call port,5477)
 # The test mail servers in compose: GreenMail takes mail in (SMTP) and serves it (IMAP); Mailpit catches sent mail.
-# Their bases differ by multiples of 1000, so they step by 100 per stack; by 1000, lane 5 took lane 3's and the main stack's.
+# Their bases differ by multiples of 1000, so they step by 100 per stack; by 1000, the isolated stack's would take others'.
 mail_port = $(shell echo $$(( $(1) + $(OPS_PORT_OFFSET) / 10 )))
 OPS_GREENMAIL_SMTP_PORT ?= $(call mail_port,3025)
 OPS_GREENMAIL_IMAP_PORT ?= $(call mail_port,3143)
