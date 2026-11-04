@@ -254,7 +254,9 @@ export interface paths {
         put?: never;
         /**
          * Complete Sign In
-         * @description The console hands back the code and state; only the person who started may finish, once.
+         * @description The console hands back the state with the code, or with the error the system refused the sign-in with;
+         *     only the person who started may finish, once. A refusal, there or at the token exchange, answers 422
+         *     sign_in_refused with details {message, who, providerCode} and marks the account refused.
          */
         post: operations["apps_complete_sign_in"];
         delete?: never;
@@ -3963,10 +3965,18 @@ export interface components {
             /** Value */
             value: string;
         };
-        /** SignInCompleteIn */
+        /**
+         * SignInCompleteIn
+         * @description What the sign-in page was handed back: the `code` of a sign-in the system allowed, or the `error` and
+         *     `errorDescription` of one it refused, with the `state` either way.
+         */
         SignInCompleteIn: {
             /** Code */
-            code: string;
+            code?: string | null;
+            /** Error */
+            error?: string | null;
+            /** Errordescription */
+            errorDescription?: string | null;
             /** State */
             state: string;
         };

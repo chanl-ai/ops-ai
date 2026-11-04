@@ -76,8 +76,13 @@ def accounts_router(service: ConnectionService, directory: Directory) -> APIRout
     async def complete_sign_in(  # pyright: ignore[reportUnusedFunction]
         app_id: str, account_id: str, body: SignInCompleteIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
-        """The console hands back the code and state; only the person who started may finish, once."""
+        """The console hands back the state with the code, or with the error the system refused the sign-in with;
+        only the person who started may finish, once. A refusal, there or at the token exchange, answers 422
+        sign_in_refused with details {message, who, providerCode} and marks the account refused."""
         account = await _of(who, app_id, account_id)
+        if body.error is not None:
+            await service.refuse_sign_in(who, account, body.state, body.error, body.error_description)
+        assert body.code is not None
         return ok(await service.complete_sign_in(who, account, body.state, body.code))
 
     @r.post(f"{ACCOUNT}/test-credential", response_model=Envelope[SignInStart | CredentialCheck])

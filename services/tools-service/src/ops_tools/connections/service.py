@@ -19,16 +19,16 @@ import secrets as random
 import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any, NoReturn, cast
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
 import httpx
 
 from ops_access import Access
 from ops_identity import ActingForPerson, Principal
-from ops_plugin_sdk.manifest import PLATFORM_AUTHORIZE_PARAMS
+from ops_plugin_sdk.manifest import PLATFORM_AUTHORIZE_PARAMS, SignInError
 from ops_policy import CredentialStore
-from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, ValidationFailed
+from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unprocessable, ValidationFailed
 from ops_service_kit.ids import new_id
 from ops_service_kit.logging import get_logger
 
@@ -73,6 +73,11 @@ OWN = "own"
 OnToken = Callable[[str, str, dict[str, Any], bool], Awaitable[dict[str, Any] | None]]
 # tenant, account -> the plugin's settings on it as a person may read them.
 PluginSettings = Callable[[str, str], Awaitable[dict[str, Any]]]
+# tenant, account, the system's error code and description -> what the plugin behind the account says of that refusal,
+# or None for an account no plugin serves or a code its plugin does not name.
+SignInErrors = Callable[[str, str, str, str | None], Awaitable[SignInError | None]]
+# The codes a token exchange answers when the client's secret is wrong: RFC 6749's, and GitHub's own.
+WRONG_SECRET = ("invalid_client", "incorrect_client_credentials")
 TOKEN_SETTINGS = (
     "tokenUrl", "clientId", "scopes", "audience", "resource", "authorizeUrl", "clientAuth", "signingCertificate",
     "subject", "scopeIn",
@@ -160,6 +165,7 @@ class ConnectionService:
         http: httpx.AsyncClient | None = None,
         on_token: OnToken | None = None,
         plugin_settings: PluginSettings | None = None,
+        sign_in_errors: SignInErrors | None = None,
     ) -> None:
         """`console_url` is where a sign-in returns (`SIGN_IN_RETURN_PATH` on it); without it no sign-in starts.
         `discovery` finds an MCP server's sign-in; without it no MCP connection is made from an address.
@@ -183,6 +189,8 @@ class ConnectionService:
         # A plugin's settings on an account as a person may read them (PluginHost.account_settings); without it an
         # account's page shows none.
         self.plugin_settings = plugin_settings
+        # What a plugin says of a refused sign-in (PluginHost.sign_in_error); without it the platform's words are said.
+        self.sign_in_errors = sign_in_errors
         # A plugin app's title and logo by its app id (PluginHost.display_of), for My accounts; set once the plugin
         # host is up.
         self.app_display: Callable[[str], tuple[str, str | None] | None] | None = None
@@ -838,6 +846,11 @@ class ConnectionService:
         try:
             answer = await self._code_answer(who, taken, conn, code)
         except AuthFailed as e:
+            if e.provider_error is not None:
+                # The system refused the code (a wrong client secret, a code already spent): said as a refusal on the
+                # redirect is, by the same table.
+                refusal = (e.provider_error, e.provider_description)
+                raise await self._refused(who, conn, taken, *refusal, token_exchange=True) from e
             await self.store.note(who.tenant_id, connection_id, self._event(who, "sign_in_failed", {"code": e.code}))
             raise ValidationFailed(f"{conn['name']} did not finish the sign-in: {e}", code="sign_in_failed") from e
         extra: dict[str, Any] = {}
@@ -875,6 +888,82 @@ class ConnectionService:
             self._after_sign_in.add(task)
             task.add_done_callback(self._after_sign_in.discard)
         return await self.detail(who, connection_id)
+
+    async def refuse_sign_in(
+        self, who: Caller, connection_id: str, state: str, error: str, description: str | None
+    ) -> NoReturn:
+        """The system refused the sign-in on its redirect back (`error`, `error_description`): the state is used up as
+        a code's would be, so the same refusal cannot be handed back twice, and the refusal is answered and recorded
+        as `_refused` says. An unknown, used or another person's state is refused as a code's is."""
+        taken, conn = await self._taken(who, connection_id, state, check=False)
+        # No code will be exchanged, so the verifier is dropped here; left, it would stay in the vault for good.
+        await self.credentials.delete(
+            str(taken["verifier_ct"]), context=verifier_context(who.tenant_id, str(taken["state_hash"]))
+        )
+        raise await self._refused(who, conn, taken, error, description, token_exchange=False)
+
+    async def _refused(
+        self,
+        who: Caller,
+        conn: dict[str, Any],
+        taken: dict[str, Any],
+        error: str,
+        description: str | None,
+        *,
+        token_exchange: bool,
+    ) -> Unprocessable:
+        """A refused sign-in: what it means in one plain sentence and who acts on it, recorded on the account (its
+        health, and the account read as refused: the team's status, or the person's own sign-in when they hold one)
+        and answered as 422 sign_in_refused."""
+        message, whose = await self._refusal_words(who, conn, error, description, token_exchange=token_exchange)
+        token_for = str(taken.get("token_for") or SHARED)
+        own = token_for != SHARED
+        now = self.clock()
+        health = {
+            "status": "failed",
+            "account": "own" if own else "team",
+            "at": _iso(now),
+            "by": who.name,
+            "code": "SIGN_IN_REFUSED",
+            "message": message,
+        }
+        connection_id = str(conn["id"])
+        await self.store.set_health(who.tenant_id, connection_id, health, None if own else ("needs_reconnect", message))
+        if own:
+            await self.store.mark_refused(who.tenant_id, connection_id, token_for, reason=message, at=now)
+        detail = {"code": error, "who": whose, **({"own": True} if own else {})}
+        await self.store.note(who.tenant_id, connection_id, self._event(who, "sign_in_refused", detail))
+        return Unprocessable(
+            message, code="sign_in_refused", details={"message": message, "who": whose, "providerCode": error}
+        )
+
+    async def _refusal_words(
+        self, who: Caller, conn: dict[str, Any], error: str, description: str | None, *, token_exchange: bool
+    ) -> tuple[str, str]:
+        """The plugin's sentence for this code (its first sign_in_errors entry that matches), else the platform's:
+        access not given, a wrong client secret at the token exchange, or the system's own words."""
+        app = (await self._app_display(who, str(conn["app_id"]), {**conn, "connection_id": conn["id"]}))[0]
+        credential = await self._credential_name(who, conn)
+        said = (
+            await self.sign_in_errors(who.tenant_id, str(conn["id"]), error, description)
+            if self.sign_in_errors is not None
+            else None
+        )
+        if said is not None and said.say and said.who:
+            return said.say.replace("{app}", app).replace("{credential}", credential), said.who
+        if error == "access_denied":
+            return f"{app} access was not given. Connect again to retry.", "person"
+        if token_exchange and error in WRONG_SECRET:
+            return f"The client secret for {credential} is wrong. Replace it on its Credentials page.", "admin"
+        return f"{app} refused the sign-in: {description or error}", "person"
+
+    async def _credential_name(self, who: Caller, conn: dict[str, Any]) -> str:
+        """The OAuth app the account signs in with, as the Credentials page names it."""
+        if conn.get("credential_id"):
+            found = await self.store.credential(who.tenant_id, str(conn["credential_id"]))
+            if found is not None:
+                return str(found["name"])
+        return "Ops AI's app" if conn.get("platform_app") else "the app credential"
 
     async def _test_after_sign_in(self, who: Caller, connection_id: str, account: str) -> None:
         try:

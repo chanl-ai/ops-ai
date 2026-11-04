@@ -8387,12 +8387,45 @@
       },
       "SignInCompleteIn": {
         "additionalProperties": false,
+        "description": "What the sign-in page was handed back: the `code` of a sign-in the system allowed, or the `error` and\n`errorDescription` of one it refused, with the `state` either way.",
         "properties": {
           "code": {
-            "maxLength": 2000,
-            "minLength": 1,
-            "title": "Code",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "errorDescription": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errordescription"
           },
           "state": {
             "maxLength": 200,
@@ -8402,8 +8435,7 @@
           }
         },
         "required": [
-          "state",
-          "code"
+          "state"
         ],
         "title": "SignInCompleteIn",
         "type": "object"
@@ -13614,7 +13646,7 @@
     },
     "/v1/apps/{app_id}/accounts/{account_id}/sign-in/complete": {
       "post": {
-        "description": "The console hands back the code and state; only the person who started may finish, once.",
+        "description": "The console hands back the state with the code, or with the error the system refused the sign-in with;\nonly the person who started may finish, once. A refusal, there or at the token exchange, answers 422\nsign_in_refused with details {message, who, providerCode} and marks the account refused.",
         "operationId": "apps_complete_sign_in",
         "parameters": [
           {

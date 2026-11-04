@@ -20,7 +20,7 @@ import httpx
 
 from ops_plugin_sdk import Manifest, Plugin
 from ops_plugin_sdk.loader import Loaded, discover
-from ops_plugin_sdk.manifest import AfterSignIn, InputField, Other, Setting, Tool
+from ops_plugin_sdk.manifest import AfterSignIn, InputField, Other, Setting, SignInError, Tool
 from ops_plugin_sdk.paging import at
 from ops_plugin_sdk.paging import headers as request_headers
 from ops_plugin_sdk.versions import declarations, digest, tools_of
@@ -516,6 +516,15 @@ class PluginHost:
         own = await self.own_settings(tenant_id, connection_id)
         plain, secrets = readable(plugin.manifest, self.settings(plugin, dict(b.get("settings") or {}), own))
         return {"pluginSettings": plain, "pluginSecrets": secrets}
+
+    async def sign_in_error(
+        self, tenant_id: str, connection_id: str, error: str, description: str | None
+    ) -> SignInError | None:
+        """What the plugin serving an account says of a refused sign-in: its first sign_in_errors entry for the code
+        and description; None for an account no plugin serves, or a code the plugin does not name."""
+        b = await self.binding_of(tenant_id, connection_id)
+        plugin = self.plugins.get(str(b["plugin_id"])) if b else None
+        return plugin.manifest.connection.sign_in_error(error, description) if plugin else None
 
     async def connection_hosts(self, tenant_id: str, connection_id: str) -> list[str]:
         """The hosts the plugin serving an account declares, rendered with the account's settings: what its sign-in,

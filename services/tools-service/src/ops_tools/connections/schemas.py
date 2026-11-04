@@ -114,8 +114,19 @@ class ConnectLinkIn(_In):
 
 
 class SignInCompleteIn(_In):
+    """What the sign-in page was handed back: the `code` of a sign-in the system allowed, or the `error` and
+    `errorDescription` of one it refused, with the `state` either way."""
+
     state: str = Field(min_length=16, max_length=200)
-    code: str = Field(min_length=1, max_length=2000)
+    code: str | None = Field(default=None, min_length=1, max_length=2000)
+    error: str | None = Field(default=None, min_length=1, max_length=200)
+    error_description: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _code_or_error(self) -> SignInCompleteIn:
+        if (self.code is None) == (self.error is None):
+            raise ValueError("Hand back the sign-in's code, or the error it was refused with.")
+        return self
 
 
 class CredentialCheckIn(_In):

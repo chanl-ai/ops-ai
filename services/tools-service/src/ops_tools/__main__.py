@@ -219,6 +219,8 @@ def main() -> None:
         # A plugin's connection takes its instance from the token answer.
         on_token=plugins.on_token if plugins else None,
         plugin_settings=plugins.account_settings if plugins else None,
+        # A refused sign-in says what the plugin's sign_in_errors say of its code.
+        sign_in_errors=plugins.sign_in_error if plugins else None,
     )
     connection_service.app_display = plugins.display_of if plugins else None
     tool_users = AgentsToolUsers(client("agents", agents_url, ["agents:view"]))

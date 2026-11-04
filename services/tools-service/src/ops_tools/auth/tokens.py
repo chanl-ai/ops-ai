@@ -49,6 +49,10 @@ class AuthFailed(Exception):
         self.code, self.side, self.status = code, side, status
         # What the caller acts on: a connect link and the connection it is for (CONNECTION_NOT_LINKED).
         self.details = details or {}
+        # The system's own `error` and `error_description` when its token answer named them (RFC 6749 5.2): what a
+        # refused sign-in's message is chosen by, and how the keep-alive tells an ended grant from a passing fault.
+        self.provider_error: str | None = None
+        self.provider_description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -215,11 +219,19 @@ class Tokens:
             or not isinstance(answer, dict)
             or not cast(dict[str, Any], answer).get("access_token")
         ):
-            error = cast(dict[str, Any], answer).get("error") if isinstance(answer, dict) else None
-            reason = str(error) if isinstance(error, str) and error.isidentifier() else f"status {res.status_code}"
-            raise AuthFailed(
-                "AUTH_FAILED", f"{host} refused the sign-in ({reason}).", side="upstream", status=res.status_code
+            said = cast(dict[str, Any], answer) if isinstance(answer, dict) else {}
+            error, description = said.get("error"), said.get("error_description")
+            # Only an error code made of word characters is named back: it reaches a message a person reads.
+            code = str(error) if isinstance(error, str) and error.isidentifier() else None
+            failed = AuthFailed(
+                "AUTH_FAILED",
+                f"{host} refused the sign-in ({code or f'status {res.status_code}'}).",
+                side="upstream",
+                status=res.status_code,
             )
+            failed.provider_error = code
+            failed.provider_description = str(description)[:500] if isinstance(description, str) else None
+            raise failed
         return cast(dict[str, Any], answer)
 
     async def _row(

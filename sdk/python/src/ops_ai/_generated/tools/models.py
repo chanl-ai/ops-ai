@@ -848,7 +848,9 @@ class SettingOther(TypedDict, closed=True):
 
 
 class SignInCompleteIn(TypedDict, closed=True):
-    code: str
+    code: NotRequired[str | None]
+    error: NotRequired[str | None]
+    errorDescription: NotRequired[str | None]
     state: str
 
 
