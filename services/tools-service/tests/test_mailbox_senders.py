@@ -143,7 +143,7 @@ async def test_another_teams_mailbox_or_one_without_a_sender_sends_nothing(env: 
 async def test_a_host_off_the_allow_list_is_not_dialled(env: Env) -> None:
     env.agents.mailbox["smtpHost"] = "smtp.elsewhere.test"
     sender = await env.senders.sender(env.tenant, TEAM, env.agents.mailbox["address"])
-    with pytest.raises(MailboxSendRefused, match="allow-list"):
+    with pytest.raises(MailboxSendRefused, match=r"smtp\.elsewhere\.test is not an allowed address yet"):
         await sender.send(message("refused"))
 
 
