@@ -1,7 +1,7 @@
 """GET /v1/tools, the Tools page's list (one row per tool), by failure mode: a tool shows no app, or the wrong one; an
 app tool reads ready while its app is not connected for the person asking; the agents and workflows that use a tool
-are missing; the facets count only the page; a filter or search is left to the browser; and one tool cannot be read on
-its own."""
+are missing; the facets count only the page, or name an app by its id alone; a filter or search is left to the
+browser; and one tool cannot be read on its own."""
 
 from __future__ import annotations
 
@@ -88,6 +88,8 @@ async def test_paging_facets_filters_and_search_are_the_servers(tmp_path: Path) 
         assert len(first["data"]) == 2 and first["pagination"]["total"] == len(every["data"]) > 2
         assert first["facets"]["kind"]["app"] == 3 and first["facets"]["kind"]["custom"] == 1, first["facets"]
         assert first["facets"]["app"]["plugin:crm"] == 2 and first["facets"]["status"]["needs_your_sign_in"] == 1
+        # Every app the facet counts is named, the page's two rows' apps or not.
+        assert first["appNames"] == {"plugin:crm": "CRM", "plugin:pay": "Payments", "module:mod_rates": "Rates"}
         only = _data(await c.get("/v1/tools", params={"kind": "custom", "pageSize": 200}))
         assert [r["id"] for r in only["data"]] == ["rates_read"]
         crm = _data(await c.get("/v1/tools", params={"app": "plugin:crm", "status": "ready", "pageSize": 200}))

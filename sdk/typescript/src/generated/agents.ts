@@ -2325,7 +2325,8 @@ export interface paths {
         /**
          * List Tools
          * @description The Tools page: one row per tool with its app, kind, status and users, searched, filtered (`app`, `kind`,
-         *     `status`, each repeatable) and paged here. Facets count every row the search matches, before the filters.
+         *     `status`, each repeatable) and paged here. Facets count every row the search matches, before the filters, and
+         *     `appNames` names each app the app facet counts.
          */
         get: operations["agents_list_tools"];
         put?: never;
@@ -9295,6 +9296,10 @@ export interface components {
         };
         /** ToolList */
         ToolList: {
+            /** Appnames */
+            appNames: {
+                [key: string]: string;
+            };
             /** Data */
             data: components["schemas"]["ToolRow"][];
             /** Facets */

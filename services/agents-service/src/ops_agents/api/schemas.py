@@ -384,7 +384,8 @@ class ToolRow(Tool):
 
 
 class ToolList(ListResult[ToolRow]):
-    pass
+    # The name of each app `facets.app` counts, by its id, so the App filter reads names the API joined.
+    app_names: dict[str, str]
 
 
 class ModelAlias(Out):

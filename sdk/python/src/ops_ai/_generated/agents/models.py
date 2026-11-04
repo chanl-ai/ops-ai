@@ -3729,6 +3729,7 @@ class RunStory(TypedDict, closed=True):
 
 
 class ToolList(TypedDict, closed=True):
+    appNames: dict[str, str]
     data: list[ToolRow]
     facets: dict[str, dict[str, int]]
     pagination: Pagination

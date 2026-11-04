@@ -1236,14 +1236,13 @@ export function createMockApi(): OpsApi {
     tools: {
       // The directory the API joins: each tool's app, kind, status and the team's agents granted it.
       directory: (p) =>
-        respond((m) =>
-          list(
-            tools.filter(toolInTeam).map(toolRow),
-            p,
-            { text: (t) => `${t.title ?? ''} ${t.name} ${t.app?.name ?? ''}`, value: (t, k) => (k === 'app' ? (t.app?.id ?? '') : field(t, k)), facetKeys: ['app', 'kind', 'status'] },
-            m,
-          ),
-        ),
+        respond((m) => {
+          const rows = tools.filter(toolInTeam).map(toolRow);
+          return {
+            ...list(rows, p, { text: (t) => `${t.title ?? ''} ${t.name} ${t.app?.name ?? ''}`, value: (t, k) => (k === 'app' ? (t.app?.id ?? '') : field(t, k)), facetKeys: ['app', 'kind', 'status'] }, m),
+            appNames: Object.fromEntries(rows.flatMap((t) => (t.app ? [[t.app.id, t.app.name]] : []))),
+          };
+        }),
       one: (tid) => respond(() => toolRow(tools.find((t) => t.name === tid || t.id === tid) ?? notFound('Tool'))),
       list: (p) =>
         respond((m) => {

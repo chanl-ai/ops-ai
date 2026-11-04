@@ -18696,6 +18696,13 @@
       "ToolList": {
         "additionalProperties": false,
         "properties": {
+          "appNames": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Appnames",
+            "type": "object"
+          },
           "data": {
             "items": {
               "$ref": "#/components/schemas/ToolRow"
@@ -18720,7 +18727,8 @@
         "required": [
           "data",
           "pagination",
-          "facets"
+          "facets",
+          "appNames"
         ],
         "title": "ToolList",
         "type": "object"
@@ -48383,7 +48391,7 @@
     },
     "/v1/tools": {
       "get": {
-        "description": "The Tools page: one row per tool with its app, kind, status and users, searched, filtered (`app`, `kind`,\n`status`, each repeatable) and paged here. Facets count every row the search matches, before the filters.",
+        "description": "The Tools page: one row per tool with its app, kind, status and users, searched, filtered (`app`, `kind`,\n`status`, each repeatable) and paged here. Facets count every row the search matches, before the filters, and\n`appNames` names each app the app facet counts.",
         "operationId": "agents_list_tools",
         "parameters": [
           {

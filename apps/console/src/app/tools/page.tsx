@@ -50,6 +50,8 @@ const columns: ColumnDef<Row>[] = [
   {
     id: 'app',
     accessorFn: (t) => t.app?.name ?? '',
+    // Filtered by the app's id, as the server filters and its facet counts; the column shows the name.
+    filterFn: (row, _id, value: string[]) => !value?.length || value.includes(row.original.app?.id ?? ''),
     header: ({ column }) => <DataTableColumnHeader column={column} title="App" />,
     cell: ({ row }) =>
       row.original.app ? (
@@ -124,6 +126,8 @@ function ToolsList({ kind }: { kind: ToolKind | null }) {
   );
   const withCounts = <K extends string>(column: string, labels: Record<K, string>) =>
     (Object.keys(labels) as K[]).map((value) => ({ label: labels[value], value, count: facets[column]?.[value] ?? 0 }));
+  // The apps the facet counts, each by the name the API sends beside it.
+  const appNames = query.data?.appNames ?? {};
   return (
     <PageLayout
       switcher
@@ -152,6 +156,7 @@ function ToolsList({ kind }: { kind: ToolKind | null }) {
             searchColumn="name"
             searchPlaceholder="Search tools or apps…"
             filters={[
+              { column: 'app', title: 'App', options: withCounts('app', appNames) },
               { column: 'status', title: 'Status', options: withCounts('status', Object.fromEntries(Object.entries(STATUS).map(([k, v]) => [k, v.label])) as Record<ToolStatus, string>) },
             ]}
             onColumnFiltersChange={list.onColumnFiltersChange}

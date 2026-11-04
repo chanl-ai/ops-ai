@@ -1,3 +1,5 @@
+import type { ListResult } from './query';
+
 /** What a tool is: an app's tool, a team's own (custom) tool, a workflow called as a tool, or another agent. */
 export type ToolKind = 'app' | 'custom' | 'workflow' | 'agent';
 
@@ -29,3 +31,8 @@ export interface ToolRow {
 }
 
 export type ToolRowFilters = { app?: string[]; kind?: string[]; status?: string[] };
+
+/** GET /v1/tools: a page of rows with its facets, and the name of each app the app facet counts, by its id. */
+export interface ToolDirectory extends ListResult<ToolRow> {
+  appNames: Record<string, string>;
+}

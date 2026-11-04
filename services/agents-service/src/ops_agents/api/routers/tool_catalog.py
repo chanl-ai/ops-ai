@@ -183,7 +183,8 @@ async def list_tools(
     search: Annotated[str, Query(max_length=200)] = "",
 ) -> JSONResponse:
     """The Tools page: one row per tool with its app, kind, status and users, searched, filtered (`app`, `kind`,
-    `status`, each repeatable) and paged here. Facets count every row the search matches, before the filters."""
+    `status`, each repeatable) and paged here. Facets count every row the search matches, before the filters, and
+    `appNames` names each app the app facet counts."""
     rows = await tool_rows(rt, _person(p), p.team_id)
     q = search.strip().lower()
     if q:
@@ -191,16 +192,23 @@ async def list_tools(
             r for r in rows if q in f"{r['title']} {r['name']} {_app(r).get('name', '')} {r['description']}".lower()
         ]
     facets: dict[str, dict[str, int]] = {c: {} for c in FACETS}
+    names: dict[str, str] = {}
     for r in rows:
         for c in FACETS:
             if (value := _facet(r, c)) is not None:
                 facets[c][value] = facets[c].get(value, 0) + 1
+        if app := _app(r):
+            names[app["id"]] = app["name"]
     for c in FACETS:
         if wanted := request.query_params.getlist(c):
             rows = [r for r in rows if _facet(r, c) in wanted]
     rows.sort(key=lambda r: (_app(r).get("name") or "~", str(r["title"]).lower()))
     page_no, start = page_window(len(rows), page_no, page_size)
-    return ok({**paged(rows[start : start + page_size], len(rows), page_no, page_size), "facets": facets})
+    # By name, the order the App filter lists them in.
+    names = dict(sorted(names.items(), key=lambda kv: kv[1].lower()))
+    return ok(
+        {**paged(rows[start : start + page_size], len(rows), page_no, page_size), "facets": facets, "appNames": names}
+    )
 
 
 @router.get("/options", response_model=Envelope[OptionsPage])

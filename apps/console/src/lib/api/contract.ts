@@ -20,7 +20,7 @@ import type { WorkspaceTeamsApi } from './workspace-teams-contract';
 import type { EvalsApi } from './evals-contract';
 import type { ModelRiskApi } from './model-risk-contract';
 import type { ToolModulesApi } from './tool-modules-contract';
-import type { ToolRow, ToolRowFilters } from '@/lib/types/tool-directory';
+import type { ToolDirectory, ToolRow, ToolRowFilters } from '@/lib/types/tool-directory';
 import type { EgressApi } from './egress-contract';
 import type { SecretsApi } from './secrets-contract';
 import type { ConnectionsApi } from './connections-contract';
@@ -238,7 +238,7 @@ export interface OpsApi {
     bulkUpdate(ids: string[], patch: { enabled?: boolean; requiresReview?: boolean }): Promise<BulkResult>;
     bulkRemove(ids: string[]): Promise<BulkResult>;
     /** Every tool the team can use, one row each, joined with its app, kind, status and who uses it; paged with facets. */
-    directory(params: ListParams<ToolRowFilters>): Promise<ListResult<ToolRow>>;
+    directory(params: ListParams<ToolRowFilters>): Promise<ToolDirectory>;
     /** One tool's row, for its page's Used by. */
     one(id: string): Promise<ToolRow>;
   };
