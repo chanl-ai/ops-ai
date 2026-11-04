@@ -294,7 +294,7 @@ function Block({ root, path, fields, onChange }: { root: TemplateNode; path: Nod
   const children = (node.children ?? []) as TemplateNode[];
   const set = (patch: Record<string, unknown>) => onChange(updateAt(root, path, (n) => Object.fromEntries(Object.entries({ ...n, ...patch }).filter(([, x]) => x !== undefined)) as TemplateNode));
   return (
-    <Card className="gap-3 py-3 shadow-none" data-testid="layout-block" data-path={path.join('.')}>
+    <Card className="gap-3 shadow-none" data-testid="layout-block" data-path={path.join('.')}>
       <CardHeader className="flex flex-row flex-wrap items-center gap-2 px-3">
         <span className="text-xs text-muted-foreground">{name}</span>
         <TypeSelect value={String(node.type)} label={`${name} type`} onChange={(t) => onChange(updateAt(root, path, (n) => retype(n, t)))} />

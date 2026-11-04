@@ -65,7 +65,7 @@ function AppCard({ system, onConnect }: { system: SystemCard; onConnect: (s: Sys
   // A removed app has nothing to connect; its page says why its tools stopped.
   const opens = state === 'connected' || state === 'test_failed' || state === 'removed';
   return (
-    <Card className="relative min-h-40 gap-3 py-4 transition-all hover:border-primary/40 hover:shadow-md" data-testid={`system-${system.id}`} data-state={state}>
+    <Card className="relative min-h-40 gap-3 transition-all hover:border-primary/40 hover:shadow-md" data-testid={`system-${system.id}`} data-state={state}>
       <CardHeader className="flex flex-row items-center gap-2.5 px-4">
         <Avatar className="size-9 rounded-md">
           {system.logo && <AvatarImage src={system.logo} alt="" />}

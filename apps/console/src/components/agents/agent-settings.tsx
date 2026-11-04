@@ -502,7 +502,7 @@ export function LimitsSection({ draft, set, models, tools }: { draft: AgentDraft
 /** Rail card: the agent's newest chats and runs, from agents-service. */
 export function RecentRunsCard({ runs, loading }: { runs?: AgentRun[]; loading: boolean }) {
   return (
-    <Card className="gap-3 py-4" data-testid="recent-runs-card">
+    <Card className="gap-3" data-testid="recent-runs-card">
       <CardHeader className="px-4">
         <CardTitle className="text-sm">Recent runs</CardTitle>
       </CardHeader>
@@ -534,7 +534,7 @@ export function UsedInCard({ agent }: { agent: Agent }) {
   // Its own one-step workflow publishes with the agent, so it is never behind.
   const behind = agent.usedIn.filter((u) => !u.own && u.pinnedVersion < agent.version);
   return (
-    <Card className="gap-3 py-4" data-testid="used-in-card">
+    <Card className="gap-3" data-testid="used-in-card">
       <CardHeader className="px-4">
         <CardTitle className="text-sm">Used in workflows</CardTitle>
       </CardHeader>
@@ -570,7 +570,7 @@ export function UsedInCard({ agent }: { agent: Agent }) {
 
 export function HistoryCard({ versions, loading, onOpen }: { versions?: AgentVersion[]; loading: boolean; onOpen: () => void }) {
   return (
-    <Card className="gap-3 py-4">
+    <Card className="gap-3">
       <CardHeader className="px-4">
         <CardTitle className="text-sm">History</CardTitle>
         <CardAction>
