@@ -155,7 +155,9 @@ class Postgres:
         docker_host = "host.docker.internal" if host in ("localhost", "127.0.0.1") else host
         netloc = f"{parts.username}@{docker_host}:{parts.port or 5432}"
         target = urlunsplit((parts.scheme, netloc, parts.path, "", ""))
-        cmd = ["docker", "run", "--rm", "-e", "PGPASSWORD", f"postgres:{major}-alpine", "pg_dump", *args, target]
+        # Linux's Docker has no host.docker.internal unless it is mapped to the host's gateway; Docker Desktop has it.
+        cmd = ["docker", "run", "--rm", "--add-host=host.docker.internal:host-gateway", "-e", "PGPASSWORD"]
+        cmd += [f"postgres:{major}-alpine", "pg_dump", *args, target]
         env = {**os.environ, "PGPASSWORD": parts.password or ""}
         return subprocess.run(cmd, capture_output=True, text=True, check=True, env=env).stdout
 

@@ -173,7 +173,7 @@ async def _count(url: URL, login: str, role: str | None, *, tenant: str, team: s
 
 
 def test_every_credential_table_is_held_to_its_team_or_tenant_by_the_database(scratch: URL) -> None:
-    assert len(TOOLS) + len(MODELS_LOCKED) + len(MODELS_INSTALL) == 13
+    assert len(TOOLS) + len(MODELS_LOCKED) + len(MODELS_INSTALL) == 12
     unmarked = [t.name for t in (*TOOLS, *MODELS_LOCKED) if isolation_kind(t) not in ("team", "tenant")]
     assert unmarked == [], f"not held by the database: {unmarked}"
     tenant, elsewhere = f"t_{uuid.uuid4().hex[:8]}", f"t_{uuid.uuid4().hex[:8]}"
