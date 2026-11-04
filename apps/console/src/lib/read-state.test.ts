@@ -31,6 +31,9 @@ test('the header names the newest read when nothing was saved on the file', () =
   assert.equal(readBadge(null, read({ outcome: 'ok', proposal: { name: 'Tax levy notice', fields: [] } })), 'Fields proposed · not saved as a type');
   assert.equal(readBadge(null, read({ outcome: 'ok', text: 'NOTICE', pages: [] })), 'Read as full text');
   assert.equal(readBadge(null, null), null);
+  // Full text records no read: the saved text alone names it, after a reload as well.
+  assert.equal(readBadge(null, null, true), 'Read as full text');
+  assert.equal(readBadge(null, read({ outcome: 'ok', proposal: { name: 'Levy', fields: [] } }), true), 'Fields proposed · not saved as a type');
   // A read saved on the file is shown as Read as shows it.
   assert.equal(readBadge({ typeId: 't', version: 1, path: 'model', fieldsToCheck: 0, extractionId: 'e', readAt: '' }, read({})), null);
 });

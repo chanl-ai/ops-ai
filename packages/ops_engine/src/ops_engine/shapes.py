@@ -1,4 +1,4 @@
-"""What each step's output holds, by the port it leaves by, before the workflow has run (c-353).
+"""What each step's output holds, by the port it leaves by, before the workflow has run.
 
 A shape is JSON Schema for the step's `out`. A closed shape lists every key the executor can write
 (`additionalProperties: false`) and requires the ones it always writes; an open shape lists what is known and lets more
@@ -180,10 +180,10 @@ async def _extract(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
     read = opened(("extractionId",), props={"fields": opened(props=fields)})
     kind = node.parameters.get("read")
     if kind == "text":
-        # The full text and each page's text and tables (c-535): no fields.
+        # The full text and each page's text and tables: no fields.
         read = closed(("extractionId", "fileId", "text", "pages"), ("readPages", "partial"))
     elif kind == "propose":
-        # The keys of a proposed read are known only when the run reads the file, so `fields` stays open (c-535).
+        # The keys of a proposed read are known only when the run reads the file, so `fields` stays open.
         read = opened(("extractionId", "proposal"), props={"fields": opened(), "proposal": opened()})
     others = {
         "error": closed(("error", "code"), ("details",)),
@@ -302,7 +302,7 @@ def _field_of(path: str) -> tuple[str, str] | None:
 
 async def unknown_fields(d: WorkflowDefinition, registry: TypeRegistry, lookups: Lookups) -> list[dict[str, Any]]:
     """`unknown_output_field` warnings: a mapping reads a field no port of the step it names can output, every one of
-    that step's shapes being closed. A field an open shape may carry is never warned (c-353 Q3)."""
+    that step's shapes being closed. A field an open shape may carry is never warned."""
     found = await shapes(d, registry, lookups)
     out: list[dict[str, Any]] = []
     for n in d.nodes:

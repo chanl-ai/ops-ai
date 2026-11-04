@@ -1,4 +1,4 @@
-"""A loop a service starts and nobody listed (c-516): it runs unseen, so a stuck one shows up nowhere. Every function
+"""A loop a service starts and nobody listed: it runs unseen, so a stuck one shows up nowhere. Every function
 in a service or package that waits in a loop must be the listed runner, a listed process's own loop, or named in
 `EXEMPT` with a reason. Tests are not scanned."""
 

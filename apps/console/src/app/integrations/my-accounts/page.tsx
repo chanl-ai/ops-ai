@@ -59,7 +59,7 @@ function ConnectButton({ c, label = 'Connect' }: { c: MyConnection; label?: stri
   );
 }
 
-/** The row's controls by method and state (c-595): a sign-in connects or disconnects; a key adds, replaces or goes. */
+/** The row's controls by method and state: a sign-in connects or disconnects; a key adds, replaces or goes. */
 function Controls({ c, onEnd, onGive }: { c: MyConnection; onEnd: () => void; onGive: () => void }) {
   const noun = useNoun(c);
   const keyed = c.personFields.length > 0;
@@ -111,7 +111,7 @@ function describe(c: MyConnection): string {
 }
 
 /**
- * My accounts (c-558, c-595; in the Apps menu since c-617): the apps this person connected with their own login, each
+ * My accounts (in the Apps menu): the apps this person connected with their own login, each
  * with its logo, when, its state and the control its method takes; the list and each state come from the service.
  * An app they have not connected is connected from its page or from a chat that asks for it.
  */

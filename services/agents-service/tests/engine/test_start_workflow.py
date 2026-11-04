@@ -1,4 +1,4 @@
-"""Start workflow's host (c-209) on the real database under tenant RLS, by failure mode: a parent's children start in
+"""Start workflow's host on the real database under tenant RLS, by failure mode: a parent's children start in
 another team, in live mode from a test run, on a version that is not live or while paused, more than once for a key,
 without end when a workflow starts itself, or for a run with no team. The first test drives a parent run through the
 real worker into the host. The last two are the run's status: a parent reads succeeded while a child still waits on a

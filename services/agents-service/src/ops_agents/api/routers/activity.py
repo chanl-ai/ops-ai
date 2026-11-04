@@ -1,4 +1,4 @@
-"""GET /v1/activity (c-201): everything that happened in the caller's teams on one list, filtered by kind, team,
+"""GET /v1/activity: everything that happened in the caller's teams on one list, filtered by kind, team,
 status and source, with counts per kind and status for the "View activity" buttons on the channel, agent and workflow
 pages. The rows are joined by the store (store/activity.py); this router decides which teams each kind is read in."""
 
@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from ops_access import can
 from ops_service_kit.errors import Forbidden, NotFound, Unprocessable
-from ops_service_kit.http import Envelope, ListResult, paged
+from ops_service_kit.http import Envelope, ListResult, Out, paged
 
 from ...case_wording import entry
 from ...store.activity import Activity, Filters, Scope
@@ -25,7 +25,6 @@ from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..review_text import describe_calls
 from ..run_story import words
-from ..schemas import Out
 
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(caller_in("workflows"))]  # noqa: UP040
@@ -56,9 +55,9 @@ AREA = {
     "case": "cases",
     # A shipped system workflow belongs to no team: read where the caller may view workflows in a team asked about.
     "system_workflow": "workflows",
-    # A reminder on a waiting review (c-277): read where the caller may view the run team's reviews.
+    # A reminder on a waiting review: read where the caller may view the run team's reviews.
     "reminder": "reviews",
-    # A background process's job for the team (c-516): read where the caller may view workflows.
+    # A background process's job for the team: read where the caller may view workflows.
     "background": "workflows",
 }
 SOURCE_TYPES = ("workflow", "agent", "channel", "case")
@@ -73,7 +72,7 @@ class Source(Out):
 class Ref(Out):
     # run: a workflow run; thread: an agent run; chat: a chat thread; review: a Human Task; email: a received email
     # that started no run; case: a case; workflow: a workflow definition.
-    # process: a background process's job, which opens nothing (c-516).
+    # process: a background process's job, which opens nothing.
     kind: Literal["run", "thread", "chat", "review", "email", "case", "workflow", "process"]
     id: str
 
@@ -86,7 +85,7 @@ class ActivityRow(Out):
     status: StatusName
     # The source's own word: succeeded, cancelled, duplicate, filtered, daily_cap, approved, rejected...
     outcome: str | None
-    # The outcome as people read it ("Daily cap"), run_story.words over `outcome` (c-508); `outcome` stays the key.
+    # The outcome as people read it ("Daily cap"), run_story.words over `outcome`; `outcome` stays the key.
     outcome_text: str | None = None
     # Why, in a sentence, when the row has a reason of its own: an email skipped, set aside or over its cap.
     detail: str | None = None
@@ -106,7 +105,7 @@ class ActivityQuery(BaseModel):
     team: str | None = None
     since: str | None = None
     until: str | None = None
-    # One case: its own entries and everything about the runs and chats linked to it (c-341).
+    # One case: its own entries and everything about the runs and chats linked to it.
     case: str | None = None
     page: int = Field(default=1, ge=1)
     pageSize: int = Field(default=25, ge=1, le=100)  # noqa: N815 - the console's query parameter
@@ -205,7 +204,7 @@ def row_view(
 
 
 async def call_titles(rt: Runtime, rows: list[dict[str, Any]]) -> dict[str, str]:
-    """Each tool-call row's title as the run page words the same call (c-508): the calls read in two queries and
+    """Each tool-call row's title as the run page words the same call: the calls read in two queries and
     described with one tool directory read, never the tool's own name."""
     calls = await Activity(rt.db).calls(rows)
     told = await describe_calls(rt, calls)

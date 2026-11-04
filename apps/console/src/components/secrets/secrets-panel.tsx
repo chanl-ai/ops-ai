@@ -119,8 +119,8 @@ function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onDelete: 
 }
 
 /**
- * The team's secrets (c-178): the values tool calls send, such as API keys, with Add, Rotate and Delete for the Security
- * team's admins. Shown on Apps › Credentials (c-617); storage credentials are on the Storage settings page.
+ * The team's secrets: the values tool calls send, such as API keys, with Add, Rotate and Delete for the Security
+ * team's admins. Shown on Apps › Credentials; storage credentials are on the Storage settings page.
  */
 export function SecretsPanel() {
   const list = useListParams('name');

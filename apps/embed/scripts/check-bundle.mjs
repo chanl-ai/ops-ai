@@ -1,4 +1,4 @@
-// The embed app's bundle carries none of the console's API client (c-158): `@/lib/api` must resolve to the widget
+// The embed app's bundle carries none of the console's API client: `@/lib/api` must resolve to the widget
 // client, or the embedded chat would call console routes. Builds the app, then looks for strings only the console's
 // client and its mock hold. Run: pnpm --filter @ops-ai/embed check:bundle
 import { execFileSync } from 'node:child_process';

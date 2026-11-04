@@ -27,12 +27,12 @@ ROOT = Path(__file__).resolve().parents[3]
 SRC_ROOTS = sorted([*ROOT.glob("packages/*/src"), *ROOT.glob("services/*-service/src")])
 ORDER = [
     "ops_contracts",
-    # What a plugin is built with (c-565): imports no other ops package, so every service may import it.
+    # What a plugin is built with: imports no other ops package, so every service may import it.
     "ops_plugin_sdk",
     "ops_pii",
     "ops_policy",
     "ops_service_kit",
-    # Below ops_identity, which enters each request's isolation context (ops_store.isolation, c-409).
+    # Below ops_identity, which enters each request's isolation context (ops_store.isolation).
     "ops_store",
     "ops_identity",
     "ops_access",
@@ -46,7 +46,7 @@ ORDER = [
     "ops_documents",
     "ops_email",
     "ops_signin",
-    # Code tools' runner (c-531): the kit and identity below it, reached by tools-service over HTTP only.
+    # Code tools' runner: the kit and identity below it, reached by tools-service over HTTP only.
     "ops_runner",
     "ops_agent_kernel",
     "ops_checkpointer",
@@ -66,7 +66,7 @@ ORDER = [
 KIT = ROOT / "packages" / "ops_service_kit" / "src" / "ops_service_kit"
 SETTINGS = KIT / "settings.py"
 LOGGING = KIT / "logging.py"
-# /widget/v1.js answers 410 Gone (retired by c-224); /embed/v1.js is the loader a page loads: no key, no data.
+# /widget/v1.js answers 410 Gone (retired); /embed/v1.js is the loader a page loads: no key, no data.
 PUBLIC_ROUTES = {
     "/health",
     "/health/background",
@@ -78,9 +78,9 @@ PUBLIC_ROUTES = {
     "/redoc",
     "/widget/v1.js",
     "/embed/v1.js",
-    # The embed app's pre-session read: agent name, pause and the origins for frame-ancestors (c-131).
+    # The embed app's pre-session read: agent name, pause and the origins for frame-ancestors.
     "/v1/widget/{deployment_id}/config",
-    # A hosted form's link (c-535): the signed token in `t` names the tenant, team and form and is checked against the
+    # A hosted form's link: the signed token in `t` names the tenant, team and form and is checked against the
     # form's hash; a person outside the console has no sign-in to show.
     "/v1/forms/public/{slug}",
     "/v1/forms/public/{slug}/submit",
@@ -230,11 +230,11 @@ def check_routes(out: list[str]) -> int:
             continue
         checked += 1
         # A user route depends on principal; an internal route (a scheduler's timer fire) on service_principal; a widget
-        # page route on widget_caller (the X-Widget-Session the page was minted, c-117); the bank server's mint on
-        # mint_key_caller (the deployment's mint key, c-131). A route a person or a service may call (c-180) reaches
+        # page route on widget_caller (the X-Widget-Session the page was minted); the bank server's mint on
+        # mint_key_caller (the deployment's mint key). A route a person or a service may call reaches
         # ops_identity's current_caller, and a service-only one its current_service, through whatever wraps them; one a
         # person or any service of the tenant may call, whether or not its token names a team, current_tenant_caller.
-        # An outside system resuming a parked workflow step holds that step's signed token, resume_caller (c-525).
+        # An outside system resuming a parked workflow step holds that step's signed token, resume_caller.
         authenticated = {principal, service_principal, widget_caller, mint_key_caller, resume_caller}
         identity = {current_caller, current_principal, current_service, current_tenant_caller}
         if not deps(route.dependant) & (authenticated | identity):

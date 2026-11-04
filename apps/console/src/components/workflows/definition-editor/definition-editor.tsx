@@ -56,7 +56,7 @@ export interface DefinitionEditorProps {
   publishing: boolean;
   /** Starts a live run on the live version, or a test run of the latest saved one; the page navigates to it. */
   startRun: (input: Record<string, unknown>, mode: RunMode) => Promise<void>;
-  /** Starts a run from the start form the saved trigger declares (c-466); the page navigates to it. */
+  /** Starts a run from the start form the saved trigger declares; the page navigates to it. */
   startByHand?: (values: Record<string, unknown>, mode: RunMode) => Promise<void>;
   /** Where the saved versions stand: the latest one's stage, the live version, an open publish request. */
   lifecycle: Lifecycle;
@@ -417,9 +417,9 @@ function EditorBody({ definition: initial, types, validate, publish, publishing,
   const actions = (
     <div className="flex flex-wrap items-center justify-end gap-2">
       {!readOnly && <LifecycleActions lifecycle={lifecycle} dirty={dirty} onPublish={() => setPublishOpen(true)} onSetPaused={setPaused} pausing={pausing} canPublish={canPublish !== false} />}
-      {/* Someone who may only read a draft still sees that it waits on a publish, and why they cannot start it (c-150). */}
+      {/* Someone who may only read a draft still sees that it waits on a publish, and why they cannot start it. */}
       {readOnly && canPublish === false && lifecycle.stage === 'draft' && !lifecycle.review && <LockedReason area="workflows" action="publish" label="Publish…" />}
-      {/* Starting any run is a builder's or admin's step (runs/start, c-122); the server refuses the rest, so the
+      {/* Starting any run is a builder's or admin's step (runs/start); the server refuses the rest, so the
           button shows only to them. */}
       {!readOnly && (
         <Button type="button" variant="outline" onClick={() => setRunOpen(true)} data-testid="definition-start-run">

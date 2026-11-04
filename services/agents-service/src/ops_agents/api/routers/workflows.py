@@ -172,8 +172,8 @@ async def list_workflows(
 ) -> JSONResponse:
     """The team's workflows of both engines, a page at a time. `startable` keeps those a person starts by hand (Start
     run), `takesFiles` those whose start form takes a file (Files' "Start a workflow with this file"); each row's
-    `start` says how it starts (c-466). `engine=current` leaves out the earlier engine's workflows before the page,
-    the total and the status counts are taken, since the console no longer shows them (c-562)."""
+    `start` says how it starts. `engine=current` leaves out the earlier engine's workflows before the page,
+    the total and the status counts are taken, since the console no longer shows them."""
     counts = await counts_24h(rt)
     # A graph workflow of the earlier engine starts from its input form, with no file field.
     rows: list[dict[str, Any]] = (
@@ -190,7 +190,7 @@ async def list_workflows(
     facets: dict[str, dict[str, int]] = {"status": {}}
     for w in rows:
         facets["status"][w["status"]] = facets["status"].get(w["status"], 0) + 1
-    # startable: what Start run offers; takesFiles: what Files offers to start with a file (c-466).
+    # startable: what Start run offers; takesFiles: what Files offers to start with a file.
     if startable:
         rows = [w for w in rows if w["start"]["byHand"]]
     if takes_files:
@@ -466,14 +466,14 @@ async def list_runs(
 @refs_router.get("", response_model=Envelope[list[WorkflowRef]])
 async def workflow_refs(rt: Rt, caller: CurrentTenantCaller) -> JSONResponse:
     """Workflows by id, name and owning team: every one for a service holding `workflows:view` that governs calls on
-    their behalf (c-168), the team's for a person with workflows.view (c-222). The registry is not yet partitioned by
+    their behalf, the team's for a person with workflows.view. The registry is not yet partitioned by
     tenant (identity-and-tenancy.md); the route still requires a tenant, so callers key what they keep by it."""
     team = None if caller.kind == "service" else caller.team_id
     can(caller, "workflows", "view", team=team, what="the workflow list")
     reg = registry(rt)
     rows = await reg.refs_every_team() if team is None else [r for r in await reg.rows() if r["team_id"] == team]
     refs = [{"id": r["id"], "name": r["name"], "teamId": r["team_id"], "status": r["status"]} for r in rows]
-    # Workflow definitions (v2) are grantable too (c-433): each one a version has been approved for, with its team; one
+    # Workflow definitions (v2) are grantable too: each one a version has been approved for, with its team; one
     # no team owns is listed with an empty team, and a grant for it is refused.
     for d in await engine_lifecycle.definitions(rt).summaries(team=team):
         if d["current_stage"] is None or (team is not None and d["team_id"] != team):

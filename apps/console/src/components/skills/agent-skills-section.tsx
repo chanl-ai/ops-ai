@@ -59,7 +59,7 @@ export function AgentSkillsSection({
   onAttachChange: (next: AttachFilter | null) => void;
 }) {
   const [detaching, setDetaching] = React.useState<AgentSkillPin | null>(null);
-  // The picker lists skills the agent can attach, searched on the server (c-136); the instructions toolbar opens it on always-on.
+  // The picker lists skills the agent can attach, searched on the server; the instructions toolbar opens it on always-on.
   const source = skillOptionsFor(data?.agentId ?? '', attach === 'always' ? 'always' : undefined);
   const attachSkill = async (ids: string[]) => {
     const id = ids[0];

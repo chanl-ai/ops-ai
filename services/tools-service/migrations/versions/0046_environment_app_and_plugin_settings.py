@@ -1,5 +1,5 @@
 """environment_app_and_plugin_settings: the app an environment signs in with, and a plugin's settings per environment,
-as columns of the connection's environment (c-580)
+as columns of the connection's environment
 
 The platform's app was a `platformApp` key inside an environment's settings JSON, so a save that rewrote the settings
 from the fields a person sees (Edit keys) dropped it and the sign-in lost its client secret. A plugin's per-environment

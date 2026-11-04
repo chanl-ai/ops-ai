@@ -1,4 +1,4 @@
-"""Adding files already in Files to a source by id (c-159): the console uploads to files-service first, then adds the
+"""Adding files already in Files to a source by id: the console uploads to files-service first, then adds the
 file id here, so this is the one way a file reaches a base. Against the files-service fake (tests/files_fake.py)."""
 
 from __future__ import annotations
@@ -121,7 +121,7 @@ async def test_a_refused_batch_releases_the_references_it_took_for_the_files_bef
     engine: AsyncEngine, tenant: str
 ) -> None:
     """A batch refused on its second id leaves the first file deletable in Files, not held by a source that never
-    added it (c-159)."""
+    added it."""
     fake = FakeFilesService()
     files = fake.client()
     async with kb_client(engine, tenant, files=FilesServiceIntake(files)) as client:
@@ -140,7 +140,7 @@ async def test_a_refused_batch_releases_the_references_it_took_for_the_files_bef
 async def test_add_documents_finds_the_bases_documents_source_by_id_after_a_rename(
     engine: AsyncEngine, tenant: str
 ) -> None:
-    """Found by its display name, a renamed base got a second documents source on its next Add documents (c-159)."""
+    """Found by its display name, a renamed base got a second documents source on its next Add documents."""
     fake = FakeFilesService()
     files = fake.client()
     async with kb_client(engine, tenant, files=FilesServiceIntake(files)) as client:

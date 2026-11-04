@@ -15,7 +15,7 @@ registered if input.run_context.sub in data.ops.identities
 # token issued for the MCP URL), so it needs no service registration; the gateway sets the channel, never the caller.
 registered if input.channel == "mcp"
 
-# A person's Real run from a tool page (c-616): tools-service verified the person and found the module in their team
+# A person's Real run from a tool page: tools-service verified the person and found the module in their team
 # before calling, so it needs no service registration either; the gateway sets the channel, never the caller.
 registered if input.channel == "console"
 

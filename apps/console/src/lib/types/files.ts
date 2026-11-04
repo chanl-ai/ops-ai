@@ -92,7 +92,7 @@ export interface FileRecord {
   versionCount: number;
   /** Admins only. */
   storage?: StorageLocation;
-  /** How the file was last read (files-service `data`, c-250): null until an extraction is recorded on it. */
+  /** How the file was last read (files-service `data`): null until an extraction is recorded on it. */
   data?: FileData | null;
 }
 
@@ -113,7 +113,7 @@ export interface FileData {
 export type FileDataInput = FileData;
 
 /**
- * A request to read a file with a document type (files-service, c-250): it raises the file's read event, which starts
+ * A request to read a file with a document type (files-service): it raises the file's read event, which starts
  * the system extract workflow as the person; `runId` is set once the run is started.
  */
 export interface ReadRequest {
@@ -151,7 +151,7 @@ export type FilePreview =
   | { kind: 'none'; reason: string };
 
 export interface FileDetail extends FileRecord {
-  /** What the caller may do with it, from the same check its write routes run (c-216); on the detail only. */
+  /** What the caller may do with it, from the same check its write routes run; on the detail only. */
   canEdit?: boolean;
   canDelete?: boolean;
   canPublish?: boolean;
@@ -247,7 +247,7 @@ export interface RetentionClass {
 /** Where storage settings send bytes: files-service's development backend, S3 or Azure Blob (no GCS). */
 export type StorageBackendName = 'local' | 's3' | 'azure_blob';
 
-/** Where one upload purpose stores its bytes (files-service `/v1/settings/storage`, c-100). `default` covers every
+/** Where one upload purpose stores its bytes (files-service `/v1/settings/storage`). `default` covers every
  * purpose without its own target. */
 export interface StorageTarget {
   purpose: FilePurpose | 'default';

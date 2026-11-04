@@ -30,7 +30,7 @@ export type DefinitionNodeData = {
   layoutHeight?: number;
   /** One or two lines for the title, as the layout counted them (layout/node-size.ts `titleLines`). */
   titleLines?: 1 | 2;
-  /** On a run's canvas (c-097): what this node's step did; absent in the editor. */
+  /** On a run's canvas: what this node's step did; absent in the editor. */
   run?: RunMark;
 };
 

@@ -1,4 +1,4 @@
-"""Every memory audit row names its team (c-557)
+"""Every memory audit row names its team
 
 Revision ID: 0084_memory_audit_team_required
 Revises: 0083_memory_history

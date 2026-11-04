@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""Extraction (c-235, moved to documents-service in c-256): a clean file and a schema in, every field back with its
+"""Extraction (moved to documents-service): a clean file and a schema in, every field back with its
 value, confidence, page, quote and whether a person must check it. The workflow step, agents and outside callers all
 ask here, so they get one answer.
 
@@ -82,7 +82,7 @@ class Usage:
 
     input_tokens: int = 0
     output_tokens: int = 0
-    # Every call that carried a page image (c-295): {step, pages, images, alias}, kept on the read.
+    # Every call that carried a page image: {step, pages, images, alias}, kept on the read.
     image_calls: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
     # Why an image was not sent though the read allowed it: the alias is not cleared for images.
     image_refused: str | None = None
@@ -109,11 +109,11 @@ class Floors(Protocol):
 
 class PageImagePolicy(Protocol):
     async def allowed(self, tenant: str, team: str) -> bool:
-        """Whether the team's pageImages policy lets its reads show the model page images (c-295)."""
+        """Whether the team's pageImages policy lets its reads show the model page images."""
         ...
 
 
-# How a read was made: from a layout template's zones (c-253) or by the model.
+# How a read was made: from a layout template's zones or by the model.
 PATH_TEMPLATE = "template"
 PATH_MODEL = "model"
 
@@ -123,11 +123,11 @@ CORRECTED_EVENT = "extraction.corrected"
 
 class TypeResolver(Protocol):
     async def resolve(self, who: Who, type_id: str, version: int | None) -> dict[str, Any]:
-        """{id, name, version, fields, many, reviewBelow} of a team's document type version (c-236)."""
+        """{id, name, version, fields, many, reviewBelow} of a team's document type version."""
         ...
 
     async def list(self, who: Who) -> list[dict[str, Any]]:
-        """The team's document types: {id, name, description, latestVersion} (c-249 classifies over them)."""
+        """The team's document types: {id, name, description, latestVersion}, which classification reads."""
         ...
 
     async def name(self, who: Who, type_id: str) -> str | None:
@@ -135,7 +135,7 @@ class TypeResolver(Protocol):
         ...
 
     async def examples(self, tenant: str, team: str, type_id: str, keys: list[str]) -> list[dict[str, Any]]:
-        """The type's recent examples for the fields a read asks (c-297): field, printed line and value."""
+        """The type's recent examples for the fields a read asks: field, printed line and value."""
         ...
 
 
@@ -165,7 +165,7 @@ class ModelsService:
         for name in dict.fromkeys((self.alias, FALLBACK_ALIAS)):
             r = await self._post(system, user, schema, name=name, run=run, step=step, tenant=tenant, images=images)
             if images and r.status_code == 403 and "images_not_cleared" in r.text:
-                # The alias may not receive page images: the read goes on with the text alone, and says why (c-295).
+                # The alias may not receive page images: the read goes on with the text alone, and says why.
                 if usage is not None:
                     usage.image_refused = f"The model alias {name} is not cleared for page images."
                 images = ()
@@ -207,7 +207,7 @@ class ModelsService:
         try:
             return await self.http.post(
                 "/v1/models/chat/completions",
-                # The tenant spends from its own share of this key, so one tenant cannot drain the others (c-251).
+                # The tenant spends from its own share of this key, so one tenant cannot drain the others.
                 headers={
                     "Authorization": f"Bearer {self.key}",
                     "X-Run-Id": run,
@@ -237,7 +237,7 @@ class PlatformFloors:
 
 
 PAGE_IMAGES_POLICY = "pageImages"
-# The team's switch for personal data in what people see from AI, which covers document examples too (c-297).
+# The team's switch for personal data in what people see from AI, which covers document examples too.
 MASKING_POLICY = "aiStepsMaskPersonalData"
 
 
@@ -264,7 +264,7 @@ class PlatformMasking:
 
 @dataclass
 class PlatformPageImages:
-    """The team's pageImages policy, read live from platform-service on each read that could send an image (c-295). A
+    """The team's pageImages policy, read live from platform-service on each read that could send an image. A
     policy that cannot be read counts as off: a failed read must never send a page."""
 
     client: Callable[[str, str], ServiceClient]
@@ -324,19 +324,19 @@ class Pictures:
         return out
 
 
-# Why a field read below its threshold is read again with its crop (c-295), as a re-read is told.
+# Why a field read below its threshold is read again with its crop, as a re-read is told.
 LOW_CONFIDENCE = "was read with too little confidence to trust"
 
 
 def fingerprint_of(out: dict[str, Any], layout: dict[str, Any]) -> str:
-    """A single-record read's layout without its values, from the boxes its fields were found in (c-254)."""
+    """A single-record read's layout without its values, from the boxes its fields were found in."""
     fields = cast(dict[str, dict[str, Any]], out.get("fields") or {})
     found = {k: cast(list[dict[str, Any]], f.get("boxes") or []) for k, f in fields.items()}
     return templates.fingerprint(templates.Read(layout, found))
 
 
 def _recorded(out: dict[str, Any], usage: Usage) -> None:
-    """Every call that carried a page image, and why one was not sent, on the read (c-295)."""
+    """Every call that carried a page image, and why one was not sent, on the read."""
     if usage.image_calls:
         out["imageCalls"] = usage.image_calls
     if usage.image_refused:
@@ -348,7 +348,7 @@ def _sha(text: str) -> str:
 
 
 def _check_rules(field: dict[str, Any]) -> None:
-    """A field's own rules (c-247, c-287) are refused when saved, not when a value meets them: a pattern that does not
+    """A field's own rules are refused when saved, not when a value meets them: a pattern that does not
     compile, emptyWhen that is not a short list of phrases, or a cleanup rule that is not one of CLEAN_RULES."""
     pattern = field.get("pattern")
     if pattern is not None:
@@ -388,7 +388,7 @@ def _key_hash(who: Who, key: str) -> str:
 
 def request_of(body: dict[str, Any]) -> dict[str, Any]:
     """The extraction asked for, checked: fields with a key and a known type, and the options that change the answer.
-    A full-text or proposed read (c-535) names no fields."""
+    A full-text or proposed read names no fields."""
     read = body.get("read") or "fields"
     if read not in READS:
         raise InvalidRequestError(f"read is one of {', '.join(READS)}")
@@ -422,13 +422,13 @@ def request_of(body: dict[str, Any]) -> dict[str, Any]:
     if body.get("classification"):
         request["classification"] = body["classification"]
     if body.get("templates"):
-        # The type version's layout templates (c-253), tried before the model.
+        # The type version's layout templates, tried before the model.
         request["templates"] = body["templates"]
     if body.get("checks"):
-        # The type version's checks across fields (c-296), run after scoring.
+        # The type version's checks across fields, run after scoring.
         request["checks"] = body["checks"]
     if body.get("pageImages"):
-        # The type version lets reads show the model page images (c-295), still under the team's policy and the alias.
+        # The type version lets reads show the model page images, still under the team's policy and the alias.
         request["pageImages"] = True
     if read != "fields":
         request["read"] = read
@@ -467,11 +467,11 @@ class Extractor:
     floors: Floors | None
     alias: str = ALIAS
     types: TypeResolver | None = None
-    # The cached layouts extraction reads (c-247); without them each extraction reads the file's layout itself.
+    # The cached layouts extraction reads; without them each extraction reads the file's layout itself.
     layouts: Layouts | None = None
-    # The team's pageImages policy (c-295); without it no read sends a page image.
+    # The team's pageImages policy; without it no read sends a page image.
     page_image_policy: PageImagePolicy | None = None
-    # The team's masking of personal data in what people see (c-297); without it, masked.
+    # The team's masking of personal data in what people see; without it, masked.
     masking: MaskingPolicy | None = None
     clock: Callable[[], datetime] = lambda: datetime.now(UTC)
     _tasks: set[asyncio.Task[None]] = field(default_factory=set[asyncio.Task[None]])
@@ -488,7 +488,7 @@ class Extractor:
         """(200, the answer) when it ran now or had already finished, (202, its id and status) when it runs later.
         `inline` runs it now whatever the file's size (a document type's test, already running as a task). A request
         naming `documentTypeId` reads with that type's version (the newest when `version` is not given); one asking
-        `detect` classifies the file over the team's types first (c-249), and reads with the kind it found, or
+        `detect` classifies the file over the team's types first, and reads with the kind it found, or
         answers outcome unknown, for a person, when no kind fits or the model is less sure than the floor."""
         if body.get("detect") and not body.get("documentTypeId") and not body.get("fields"):
             if idempotency_key is not None:
@@ -512,7 +512,7 @@ class Extractor:
                 "many": t["many"],
                 "ocr": body.get("ocr"),
                 "reviewBelow": below if below is not None else t["reviewBelow"],
-                # The name travels with the read, so a workflow's Extract step records it on the file (c-378).
+                # The name travels with the read, so a workflow's Extract step records it on the file.
                 "documentType": {
                     "id": t["id"],
                     "version": t["version"],
@@ -564,7 +564,7 @@ class Extractor:
         return 200, answer_of(await self._run(held, row, pages))
 
     async def classify(self, who: Who, file: FileInfo, *, ocr: bool) -> dict[str, Any]:
-        """Which of the team's document types the file is (c-249, the model's answer over each type's name and
+        """Which of the team's document types the file is (the model's answer over each type's name and
         description): {typeId, name, confidence, reason, needsReview, floor}; typeId null when none fits."""
         if self.types is None:
             raise InvalidRequestError("document types are not served here")
@@ -634,7 +634,7 @@ class Extractor:
         return answer_of(row) | {"corrections": await self.store.corrections(extraction_id)}
 
     async def for_file(self, who: Who, file_id: str, *, page: int, page_size: int) -> tuple[list[dict[str, Any]], int]:
-        """One page of the team's extractions of a file it can see, newest first (c-250: the file page's Fields tab)."""
+        """One page of the team's extractions of a file it can see, newest first (the file page's Fields tab)."""
         await self.files.readable(who, file_id)
         rows, total = await self.store.for_file(who.team, file_id, offset=(page - 1) * page_size, limit=page_size)
         return [answer_of(r) for r in rows], total
@@ -692,7 +692,7 @@ class Extractor:
     def _example(
         self, who: Who, row: ExtractionRow, key: str, original: dict[str, Any], value: Any, *, record: int | None
     ) -> dict[str, Any] | None:
-        """What a correction of a typed read teaches its type (c-297): the field, the line its value was printed on
+        """What a correction of a typed read teaches its type: the field, the line its value was printed on
         (the read's quote for it) and the corrected value, for the read's tenant and team. A read with fields of its
         own and no type teaches nothing, and neither does a correction whose quote does not show the corrected value:
         a wrong read often cites the wrong line (a banner every document carries), and that line paired with the right
@@ -720,7 +720,7 @@ class Extractor:
         }
 
     async def _examples(self, row: ExtractionRow, fields: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """The recent examples of the read's type for the fields it asks (c-297); none for a read with no type."""
+        """The recent examples of the read's type for the fields it asks; none for a read with no type."""
         doc_type = cast(dict[str, Any] | None, row.request.get("documentType"))
         if not doc_type or self.types is None:
             return []
@@ -728,7 +728,7 @@ class Extractor:
         return await self.types.examples(row.tenant_id, row.team, str(doc_type["id"]), keys)
 
     async def masks(self, who: Who) -> bool:
-        """Whether the caller's team sees personal data masked (c-297)."""
+        """Whether the caller's team sees personal data masked."""
         return True if self.masking is None else await self.masking.masks(who.tenant_id, who.team)
 
     async def _corrected_event(
@@ -793,7 +793,7 @@ class Extractor:
 
     async def _pages(self, who: Who, file: FileInfo, request: dict[str, Any]) -> Pages:
         """The text the model reads, from the file's layout: titles, headings and each table cell on lines of their
-        own, and each OCR'd word's confidence (c-247)."""
+        own, and each OCR'd word's confidence."""
         layouts = self.layouts or Layouts(self.files)
         return page_text(await layouts.of(who, file, ocr=bool(request["ocr"])))
 
@@ -850,7 +850,7 @@ class Extractor:
         schema = prompt.schema_for(fields, many=many)
         user = prompt.user_prompt(fields, pages.texts, many=many, examples=await self._examples(row, fields))
         try:
-            # A page read through OCR goes with its image when the read may show it (c-295); a text page never does.
+            # A page read through OCR goes with its image when the read may show it; a text page never does.
             shown = await pictures.whole(sorted(pages.ocr)) if pictures is not None else []
             answer = await self.models.structured(
                 prompt.SYSTEM, user, schema, run=eid, step="extract", tenant=tenant, usage=usage, images=shown
@@ -907,9 +907,9 @@ class Extractor:
     async def _by_template(
         self, row: ExtractionRow, layouts: list[dict[str, Any]], pages: Pages, pictures: Pictures | None
     ) -> tuple[ExtractionRow | None, dict[str, Any] | None]:
-        """The read from the first template the file matches, with no model call, or None and the best miss (c-253).
+        """The read from the first template the file matches, with no model call, or None and the best miss.
         A matched template whose required zone reads nothing is a miss too (likely the wrong form), so the model reads
-        the file rather than a part being saved; a zone that reads an invalid value is re-read alone (c-296)."""
+        the file rather than a part being saved; a zone that reads an invalid value is re-read alone."""
         assert pages.layout is not None
         fields = cast(list[dict[str, Any]], row.request["fields"])
         floor = await self.floors.floor(row.tenant_id, row.team) if self.floors is not None else DEFAULT_FLOOR
@@ -961,10 +961,10 @@ class Extractor:
         *,
         pictures: Pictures | None = None,
     ) -> tuple[result.Status, dict[str, Any]]:
-        """The read after its checks (c-296): every field a rule rejected (its type, pattern, emptyWhen or a check
+        """The read after its checks: every field a rule rejected (its type, pattern, emptyWhen or a check
         across fields) is asked again in one model call naming only those fields and why; a value that now passes
         every rule replaces the first, and one that still fails goes to review with the rule named. When the read may
-        show page images (c-295), a field read below its review threshold joins the re-read too, and each field
+        show page images, a field read below its review threshold joins the re-read too, and each field
         whose words were found goes with a crop of the page around them."""
         checks = cast(list[dict[str, Any]], row.request.get("checks") or [])
         fields = cast(dict[str, dict[str, Any]], out["fields"])
@@ -1008,7 +1008,7 @@ class Extractor:
         floor: float,
         pictures: Pictures | None,
     ) -> dict[str, page_images.PageImage]:
-        """The crops a re-read shows (c-295): each field that failed a rule or was read below its threshold, where its
+        """The crops a re-read shows: each field that failed a rule or was read below its threshold, where its
         words were found on the page. A doubtful field with no words found adds nothing an image could show."""
         if pictures is None or pages.layout is None or self.models is None:
             return {}
@@ -1034,7 +1034,7 @@ class Extractor:
         return await pictures.crops(boxed)
 
     def _pictures(self, row: ExtractionRow, file: FileInfo) -> Pictures | None:
-        """The read's page images when its document type version allows them (c-295), still under the team's policy,
+        """The read's page images when its document type version allows them, still under the team's policy,
         read on first use, and the alias, which models-service checks."""
         if not row.request.get("pageImages") or self.page_image_policy is None:
             return None

@@ -1,4 +1,4 @@
-"""Background processes (c-516): work that runs without a person asking, one list of it, and a heartbeat per process.
+"""Background processes: work that runs without a person asking, one list of it, and a heartbeat per process.
 
 A background process is central and the work it does is in a team: one copy runs for the account, finds its next job
 across teams, and does that job inside the job's own team. Every process is on `PROCESSES`; a loop starts only through
@@ -52,7 +52,7 @@ class Process:
 
 @cache
 def plugins_on() -> bool:
-    """Whether the install has any plugin (Settings.plugins), read once per process (c-565)."""
+    """Whether the install has any plugin (Settings.plugins), read once per process."""
     return Settings().plugins
 
 
@@ -158,7 +158,7 @@ PROCESSES: tuple[Process, ...] = (
         "knowledge_schedule",
         "kb",
         "Knowledge schedule",
-        "Syncs each knowledge source read through a plugin's tools when its schedule is due (c-565).",
+        "Syncs each knowledge source read through a plugin's tools when its schedule is due.",
         60.0,
         "Every team's tool sources are checked for being due; each syncs in its own team.",
         only_if=plugins_on,

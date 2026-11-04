@@ -1,10 +1,10 @@
-"""Files a banker attaches to one chat message (c-071): the bytes in an ops_storage object store under a retention
+"""Files a banker attaches to one chat message: the bytes in an ops_storage object store under a retention
 date, the text parsed once at upload by ops_ingest and kept, capped, as chat_attachments metadata. A turn cites an
 attachment like a knowledge passage, page by page.
 
 `ChatFileStore` is the one place bytes are written: agents-service may not use another service's internals (the
 service boundary test), so it holds only ops_storage's public protocol, and it is what switches to the files-service
-client once that service runs (c-087; wiki concepts/chat.md).
+client once that service runs (wiki concepts/chat.md).
 """
 
 from __future__ import annotations
@@ -112,9 +112,8 @@ def read(data: bytes, *, name: str, mime: str) -> Parsed:
 class ChatFileStore:
     """Writes an attachment's bytes through an ops_storage object store: a presigned PUT, then a retention date.
 
-    Interim (orch ruling, 2026-10-17): ops_storage is a shared library agents-service may use; ops_files is the files
-    service's domain and no service imports it. c-087 replaces this adapter with the files-service client and migrates
-    the `fl_` ids it issued."""
+    Interim: ops_storage is a shared library agents-service may use; ops_files is the files service's domain and no
+    service imports it. The files-service client is to replace this adapter and migrate the `fl_` ids it issued."""
 
     def __init__(self, store: ObjectStore) -> None:
         self._store = store

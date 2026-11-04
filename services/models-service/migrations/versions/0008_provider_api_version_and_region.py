@@ -1,4 +1,4 @@
-"""a provider connection names its api-version and region, and records the region its provider answered from (c-605)
+"""a provider connection names its api-version and region, and records the region its provider answered from
 
 Revision ID: models_0008
 Revises: models_0007

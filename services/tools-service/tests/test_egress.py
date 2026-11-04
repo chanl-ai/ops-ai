@@ -41,7 +41,7 @@ async def test_a_module_names_only_listed_hosts(api: Api) -> None:
     assert r.status_code == 200, r.text
     assert r.json()["data"]["egressHosts"] == ["statements.example.com"]
     # A host not yet listed is listed by a caller who holds the Security role (the dev caller holds every role), and
-    # held for Security otherwise (c-616 S13, tests/test_held_hosts.py): a module never names an unlisted one.
+    # held for Security otherwise (tests/test_held_hosts.py): a module never names an unlisted one.
     blank = await api.call("POST", "/blank", json={"displayName": "Receipts", "name": "receipts", "type": "http"})
     other = {**OP, "name": "get_receipt", "url": "https://receipts.example.com/v1/receipt"}
     r = await api.call("POST", f"/{blank.json()['data']['id']}/operations", json=other)

@@ -1,4 +1,4 @@
-"""Each person's own sign-in on a connection (c-558), by failure mode: two people's calls carry each other's token or
+"""Each person's own sign-in on a connection, by failure mode: two people's calls carry each other's token or
 the team's, a person with no sign-in is quietly given the team's, a call with nobody behind it uses a token nobody
 allowed, one person's refused refresh stops everyone, a connect link is opened by someone else, reused or kept past its
 time, starting your own sign-in needs the right to manage the connection, an operation's scopes are not asked for or a
@@ -156,7 +156,7 @@ async def test_one_persons_refused_refresh_leaves_the_connection_and_everyone_el
         await bearer(auth, tenant, conn, JAMES)
     found = await store.get(tenant, conn)
     assert found is not None and found["status"] == "healthy"
-    # Kept and marked refused (c-595), so Your connections says it expired; James's next call asks him to connect.
+    # Kept and marked refused, so Your connections says it expired; James's next call asks him to connect.
     held = await store.token(tenant, conn, JAMES.sub)
     assert held is not None and held["refused_at"] is not None
     with pytest.raises(AuthFailed) as again:

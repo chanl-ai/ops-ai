@@ -15,7 +15,7 @@ import { useCheckAccess, useRole } from '@/hooks/me-queries';
 import type { AccessCheck } from '@/lib/types/settings';
 
 /**
- * Check one action for one person in the team the console acts in (c-150): the services' own check with the
+ * Check one action for one person in the team the console acts in: the services' own check with the
  * workspace's policies, so a separation-of-duties refusal reads as that, not as the grid's yes. Each check is audited.
  */
 export function CheckAccessDialog({ open, onOpenChange, personId, personName, teamName }: { open: boolean; onOpenChange: (o: boolean) => void; personId: string; personName: string; teamName: string }) {

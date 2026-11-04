@@ -27,7 +27,7 @@ class Team:
 @dataclass(frozen=True)
 class Directory:
     """Teams from the dev seed. Workflows are agents-service's (`workflows.WorkflowDirectory`); connections are
-    tools-service's own records (`store.connections`, c-330)."""
+    tools-service's own records (`store.connections`)."""
 
     teams: tuple[Team, ...]
 
@@ -37,7 +37,7 @@ class Directory:
 
     @property
     def wide_teams(self) -> frozenset[str]:
-        """The all-scope teams: they see every team's records, and their connections serve every team (c-330)."""
+        """The all-scope teams: they see every team's records, and their connections serve every team."""
         return frozenset(t.id for t in self.teams if t.scope == "all")
 
     @property
@@ -45,7 +45,7 @@ class Directory:
         return next(t for t in self.teams if t.scope == "all")
 
     def team(self, team_id: str | None) -> Team:
-        """The caller's team: a seeded one, or the platform team the token names, owning no group here (c-423), so a
+        """The caller's team: a seeded one, or the platform team the token names, owning no group here, so a
         module made in it is stored under its real id. Only a caller with no team falls to the all-scope team."""
         if not team_id:
             return self.everyone
@@ -59,7 +59,7 @@ class Directory:
 
     def owners(self, m: Mapping[str, Any]) -> list[str | None]:
         """A module's owner group and those of the teams owning the workflows it is approved for, as each approval
-        recorded them when it was requested (the workflow's team comes from agents-service, c-039)."""
+        recorded them when it was requested (the workflow's team comes from agents-service)."""
         groups: list[str | None] = [m["owner_team"]]
         for a in m["approvals"]:
             team = self.team_by_id(a.get("workflow_team_id"))
@@ -68,7 +68,7 @@ class Directory:
 
     def sees_module(self, team: Team, m: Mapping[str, Any]) -> bool:
         """A team reads its own modules, workspace-level ones (no team) and those approved for one of its workflows,
-        which is the explicit grant across teams (c-423). No scope reaches another team's modules otherwise."""
+        which is the explicit grant across teams. No scope reaches another team's modules otherwise."""
         if m.get("team_id") in (team.id, None):
             return True
         return any(a.get("workflow_team_id") == team.id and a.get("status") == "approved" for a in m["approvals"])

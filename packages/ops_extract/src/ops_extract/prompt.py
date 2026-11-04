@@ -1,4 +1,4 @@
-"""What the model is asked and how its answer is checked against the schema, the same for every caller (c-235)."""
+"""What the model is asked and how its answer is checked against the schema, the same for every caller."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ PROPOSE_SYSTEM = (
     "its type and a one-line description, and a short name for the kind of document. Propose fields, not values. "
     "Answer only with JSON for the schema."
 )
-# A proposal in the shape a document type's fields take (c-535), so it can be saved as one with no change.
+# A proposal in the shape a document type's fields take, so it can be saved as one with no change.
 PROPOSAL_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["name", "fields"],
@@ -65,7 +65,7 @@ def user_prompt(
     examples: list[dict[str, Any]] | None = None,
 ) -> str:
     """The fields wanted, each with its type and description, the corrections people made on earlier documents of
-    the kind (c-297), then the document page by page."""
+    the kind, then the document page by page."""
     wanted = "\n".join(
         f"- {f['key']} ({f.get('type') or 'text'}{', required' if f.get('required') else ''})"
         f"{': ' + str(f['description']) if f.get('description') else ''}"
@@ -97,7 +97,7 @@ def reread(
     failures: dict[str, tuple[Any, str]],
     examples: list[dict[str, Any]] | None = None,
 ) -> str:
-    """The one targeted re-read (c-296): only the fields that failed a rule, each with what was read and why it
+    """The one targeted re-read: only the fields that failed a rule, each with what was read and why it
     failed, then the document again."""
     why = "\n".join(f"- {key}: {said!r} {reason}" for key, (said, reason) in failures.items())
     return (

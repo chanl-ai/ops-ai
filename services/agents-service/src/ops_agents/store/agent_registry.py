@@ -33,7 +33,7 @@ registry_agents = sa.Table(
     sa.Column("paused", sa.Boolean, nullable=False, default=False),
     sa.Column("created_at", sa.String(32), nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
-    # The template the provisioning service made it from, and how the platform protects it (c-180): `system` cannot be
+    # The template the provisioning service made it from, and how the platform protects it: `system` cannot be
     # changed by a person, `managed` can, and the template's fields come back on the next provisioning run.
     sa.Column("template_id", sa.String(120), index=True),
     sa.Column("protection", sa.String(16)),
@@ -60,7 +60,7 @@ registry_agent_versions = sa.Table(
 publish_requests = sa.Table(
     "registry_publish_requests",
     metadata,
-    # Per tenant (c-333 phase A, migration 0067): a request id is unique within its tenant, and RLS shows a tenant only
+    # Per tenant (migration 0067): a request id is unique within its tenant, and RLS shows a tenant only
     # its own. The records a request publishes (agents, guardrails, skills, widgets) are not per tenant yet (phase B).
     sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant, server_default=LOCAL_TENANT),
     sa.Column("id", sa.String(64), primary_key=True),
@@ -143,8 +143,8 @@ def changes_between(old: dict[str, Any] | None, new: dict[str, Any]) -> list[str
 
 
 def _mine() -> sa.ColumnElement[bool]:
-    """The current tenant's requests, named in every query as well as enforced by RLS (c-333): a database without RLS
-    (SQL Server until c-349) still answers only for the tenant."""
+    """The current tenant's requests, named in every query as well as enforced by RLS: a database without RLS
+    (SQL Server, for now) still answers only for the tenant."""
     return publish_requests.c.tenant_id == current_tenant()
 
 
@@ -162,7 +162,7 @@ class AgentRegistry:
         self.engine = engine
 
     async def set_template(self, agent_id: str, *, template_id: str | None, protection: str | None) -> None:
-        """Sets what the provisioning service owns on the row (c-180); a None leaves that column as it is."""
+        """Sets what the provisioning service owns on the row; a None leaves that column as it is."""
         values = {k: v for k, v in {"template_id": template_id, "protection": protection}.items() if v is not None}
         if values:
             async with self.engine.begin() as c:
@@ -221,7 +221,7 @@ class AgentRegistry:
 
     async def named_versions(self, keys: set[tuple[str, int]]) -> dict[tuple[str, int], tuple[str, str]]:
         """Each (agent, version) of `keys` the acting team sees, as that version's name and the agent's slug, in one
-        query; a key the team does not see is left out. A list of publish requests reads its agents this way (c-451)."""
+        query; a key the team does not see is left out. A list of publish requests reads its agents this way."""
         if not keys:
             return {}
         v, a = registry_agent_versions, registry_agents
@@ -237,7 +237,7 @@ class AgentRegistry:
 
     async def published_spec(self, agent_id: str, version: int) -> dict[str, Any] | None:
         """A version's spec when it was published at some point, so a deployment pinned to it keeps serving it after a
-        newer version goes live (c-117); None for a draft or an unknown version. Chat and widgets read pins here."""
+        newer version goes live; None for a draft or an unknown version. Chat and widgets read pins here."""
         q = sa.select(registry_agent_versions.c.spec, registry_agent_versions.c.published_at).where(
             registry_agent_versions.c.agent_id == agent_id,
             registry_agent_versions.c.version == version,
@@ -275,7 +275,7 @@ class AgentRegistry:
         return slug
 
     async def create_if_absent(self, spec: dict[str, Any], *, by: str, team_id: str, agent_id: str) -> bool:
-        """`create` for an agent whose id is fixed (a team's Ops Assistant, c-469): False when a row of that id, or one
+        """`create` for an agent whose id is fixed (a team's Ops Assistant): False when a row of that id, or one
         racing it for the same slug, is already there, so two first chats at once leave one agent."""
         try:
             await self.create(spec, by=by, team_id=team_id, agent_id=agent_id, published=True)
@@ -330,14 +330,14 @@ class AgentRegistry:
         return aid
 
     async def save(self, agent_id: str, spec: dict[str, Any], *, by: str, note: str = "") -> int:
-        """Saves `spec` as the agent's one draft (c-172): it rewrites the newest version while that version is
+        """Saves `spec` as the agent's one draft: it rewrites the newest version while that version is
         unpublished and no publish request has named it; otherwise it opens the next version as the draft, so neither
         what runs nor what a reviewer saw ever changes. The published pointer does not move."""
         at = now_iso()
         v = registry_agent_versions
         async with self.engine.begin() as c:
             # The publish-request check below reads a table under RLS: name the tenant for its policy in this
-            # transaction, which runs as the owner because the agent tables are not per tenant yet (phase B, c-334).
+            # transaction, which runs as the owner because the agent tables are not per tenant yet (phase B).
             await _name_tenant(c)
             # Locked so two saves at once (two tabs, or autosave racing a slow save) take turns: unlocked, both read the
             # same newest version, both open the next one, and the second fails on the version key.
@@ -440,7 +440,7 @@ class AgentRegistry:
         replaces_older: bool = False,
     ) -> dict[str, Any]:
         """Records a publish request; 409 when one is already pending for the subject. With `replaces_older`, a pending
-        request for an older version is returned to its author instead (c-616 S7): only the newest draft may publish, so
+        request for an older version is returned to its author instead: only the newest draft may publish, so
         the older one could only ever put a version live that lacks what was saved since."""
         for attempt in range(3):
             try:

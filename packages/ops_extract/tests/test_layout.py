@@ -1,4 +1,4 @@
-"""A file's layout and the text an extraction reads from it (c-247), by failure mode: a table row reaching the model as
+"""A file's layout and the text an extraction reads from it, by failure mode: a table row reaching the model as
 one `label | value` line it copies whole into the value, or a wider record split from its row (F4); two columns side
 by side merged into one line (F4); OCR boxes left in image pixels, so a highlight lands elsewhere on the page (F3);
 an OCR'd field scored by one flat factor whatever Tesseract's confidence (US3); a masked value or a placeholder used
@@ -93,7 +93,7 @@ def test_a_masked_value_and_a_placeholder_are_emptied_and_marked() -> None:
 
 
 def test_a_pattern_that_backtracks_badly_gives_up_in_time() -> None:
-    """A team's pattern meets the model's text: on `re`, (a|aa)+$ against 40 a's and a ! takes minutes (c-247)."""
+    """A team's pattern meets the model's text: on `re`, (a|aa)+$ against 40 a's and a ! takes minutes."""
     field = {"key": "ref", "type": "text", "pattern": r"(a|aa)+$"}
     said = "a" * 40 + "!"
     started = time.monotonic()

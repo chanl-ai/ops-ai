@@ -1,4 +1,4 @@
-"""Run workflow waiting for its children (c-263) on an in-memory checkpointer and journal, by failure mode: the
+"""Run workflow waiting for its children on an in-memory checkpointer and journal, by failure mode: the
 children's results never reach the parent; a failed child fails the parent or drops out of the list; a batch size is
 ignored and every child starts at once; a parent waits for ever on a child that never ends; a resume after the worker
 died starts children again or loses the step's attempt."""

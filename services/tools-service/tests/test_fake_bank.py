@@ -1,4 +1,4 @@
-"""The fake bank's levy operations (c-057 T003), on its app in process: a person found by address or last-four SSN,
+"""The fake bank's levy operations, on its app in process: a person found by address or last-four SSN,
 an SSN fragment that is not the whole last four finding nobody, a note landing on the customer, and a hold over the
 available balance refused with 422."""
 

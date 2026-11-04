@@ -1,4 +1,4 @@
-"""Which writes wait for approval at the gateway (c-219), by failure mode: open_case, declared to run at once, still
+"""Which writes wait for approval at the gateway, by failure mode: open_case, declared to run at once, still
 refused without a token; a write that waits let through without one; a caller saying in its request that its write
 needs no approval; and a team that has every write wait (toolWritesNeedApproval) letting open_case through. Decided by
 the real Rego in OPA, on a seeded tenant's registry."""

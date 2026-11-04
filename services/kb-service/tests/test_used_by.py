@@ -1,4 +1,4 @@
-"""A knowledge base's "used by" (c-072 T007), by failure mode: the list or detail naming no agent while agents cite it,
+"""A knowledge base's "used by", by failure mode: the list or detail naming no agent while agents cite it,
 and an unreachable agents-service read as "no agent uses it", which would let a base in use be deleted without the
 console's typed confirmation."""
 
@@ -63,7 +63,7 @@ async def test_agents_of_other_teams_are_counted_not_named(engine: AsyncEngine, 
         row = {"kbId": kb["id"], "agents": [{"id": "ag_1", "name": "Branch Policy"}], "elsewhere": 2}
         return httpx.Response(200, json={"success": True, "data": [row]})
 
-    # The team is signed into the token (c-168), never sent as a query parameter.
+    # The team is signed into the token, never sent as a query parameter.
     agents = AgentsUsage(agents_client(answer))
     async with kb_client(engine, tenant, agents=agents) as c:
         detail = data(await c.get(f"/v1/knowledge-bases/{kb['id']}"))

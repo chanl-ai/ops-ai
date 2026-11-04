@@ -1,4 +1,4 @@
-"""Where each polled source stands (c-187): one row per binding, today the Email received trigger of one workflow.
+"""Where each polled source stands: one row per binding, today the Email received trigger of one workflow.
 The cursor moves only after a poll handled every item up to it, so a poll that dies starts again from the row.
 
 The row also keeps the mailbox and folder the cursor belongs to: a new live version that watches another folder must

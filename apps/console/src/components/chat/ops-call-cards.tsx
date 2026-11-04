@@ -21,7 +21,7 @@ export function opsCards(call: ToolCall): OpsCardRef[] | null {
 }
 
 /**
- * An Ops tool call drawn as what it found (c-469): its cards, then the call itself, collapsed, for whoever wants to see
+ * An Ops tool call drawn as what it found: its cards, then the call itself, collapsed, for whoever wants to see
  * what the agent asked. After a press the thread is read again, so every card redraws from its record's new state.
  */
 export function OpsCallCards({ call, cards, readOnly }: { call: ToolCall; cards: OpsCardRef[]; readOnly?: boolean }) {

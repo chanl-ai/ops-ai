@@ -1,4 +1,4 @@
-"""What agents remember about each person (c-124, c-557), by failure mode: another person's or tenant's memory loaded
+"""What agents remember about each person, by failure mode: another person's or tenant's memory loaded
 or listed; a memory written from a tool result, the agent's reply or pasted text; a forgotten memory still loaded or
 found, or the forget not recorded; memory off or a switched-off kind still saved; a corrected fact still loading its old
 value; a low-confidence guess saved, or an unsure one used before the person agreed; a short turn read; a hung
@@ -78,7 +78,7 @@ async def test_a_memory_follows_its_person_in_the_team(stack: Stack) -> None:  #
     assert [(m["key"], m["value"]) for m in await mine(c, VIEWER, "ag_branch")] == [("timezone", "Eastern")]
     assert "timezone: Eastern" in await profile(rt), "the next chat with the agent knows it"
     assert await mine(c, BUILDER) == [] and await mine(c, OUTSIDER) == [], "no one else sees it"
-    # One memory for every agent in the team (c-557, owner decision): the person need not repeat it to each.
+    # One memory for every agent in the team: the person need not repeat it to each.
     assert "timezone: Eastern" in await profile(rt, "ag_dispute"), "another agent in the team uses it too"
     found = await say(c, await chat(c, VIEWER), 'call search_memory {"query": "timezone"}', VIEWER)
     assert "Eastern" in tool_outputs(found), found
@@ -152,7 +152,7 @@ async def test_a_guess_is_not_saved(stack: Stack) -> None:  # noqa: F811
 
 
 async def test_corrections_and_forgets_ask_memory_edit_and_reads_chat_view(stack: Stack, monkeypatch: Any) -> None:  # noqa: F811
-    """memory.edit is its own cell (c-206), so a policy can tighten memory edits without touching chat."""
+    """memory.edit is its own cell, so a policy can tighten memory edits without touching chat."""
     from ops_access import can as real  # noqa: PLC0415
     from ops_agents.api.routers import memories as routes  # noqa: PLC0415
 

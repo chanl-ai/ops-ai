@@ -24,7 +24,7 @@ from ops_agents.api.app import create_app
 from ops_agents.api.deps import Runtime
 from ops_agents.api.runs import config
 from ops_agents.api.sweeper import sweep_once
-from ops_agents.store.graphs import metadata
+from ops_agents.store.base import metadata
 from ops_agents.store.leases import thread_leases
 from ops_service_kit.ids import now_iso
 from ops_service_kit.settings import Settings

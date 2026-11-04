@@ -1,4 +1,4 @@
-"""Teams as a workspace admin manages them (c-198): create with a first admin, rename, archive and restore, and every
+"""Teams as a workspace admin manages them: create with a first admin, rename, archive and restore, and every
 team of the workspace with its counts.
 
 A create writes the team, its first admin's membership and the role assignments that mirror it in one transaction, so a
@@ -76,7 +76,7 @@ class TeamAdminStore:
             .outerjoin(counts, counts.c.team_id == teams.c.id)
             .order_by(teams.c.status, teams.c.name_key, teams.c.id)
         )
-        # A deleted team (c-529) keeps its row for its audit entries and is out of every list.
+        # A deleted team keeps its row for its audit entries and is out of every list.
         where: list[sa.ColumnElement[bool]] = [teams.c.status != "deleted"]
         if statuses:
             where.append(teams.c.status.in_(statuses))
@@ -163,7 +163,7 @@ class TeamAdminStore:
                     granted_by=by,
                     at=at,
                 )
-                # Each service writes the new team's defaults when it hears this (c-616 PV2): in the transaction that
+                # Each service writes the new team's defaults when it hears this: in the transaction that
                 # makes the team, so neither commits without the other, and relayed until heard.
                 await add_event(
                     c,

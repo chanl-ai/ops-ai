@@ -79,7 +79,7 @@ export function KbChips({ kbs, value, onChange, disabled, agentName }: { kbs: Kb
 // What chat reads (agents-service activities/attachments.py); the server refuses anything else with 422.
 const CHAT_FILE_TYPES = ['pdf', 'txt', 'md', 'csv', 'docx'];
 
-/** An agent the person can hand the chat to by typing @ (c-174). */
+/** An agent the person can hand the chat to by typing @. */
 export interface MentionOption {
   id: string;
   name: string;
@@ -89,7 +89,7 @@ export interface MentionOption {
 // "@" at the start or after a space, then the name typed so far, at the end of the text.
 const MENTION = /(^|\s)@([\w-]*)$/;
 
-// A chat's unsent draft, kept in this tab only, so signing in again after the session ends brings it back (c-552).
+// A chat's unsent draft, kept in this tab only, so signing in again after the session ends brings it back.
 const DRAFT = 'ops.chat.draft.';
 const readDraft = (key?: string) => {
   if (!key) return '';
@@ -139,7 +139,7 @@ export function Composer({
   placeholder: string;
   footer?: React.ReactNode;
   autoFocus?: boolean;
-  /** False where attachments have no route, as in the embedded chat (c-158). */
+  /** False where attachments have no route, as in the embedded chat. */
   canAttach?: boolean;
   /** Agents offered after @; choosing one calls `onMention` and removes the @name from the text. */
   mentions?: MentionOption[];

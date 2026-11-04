@@ -1,4 +1,4 @@
-"""Chat thread search on plain columns (c-069; portability rule D5): each chat thread's title, agent name, last reply
+"""Chat thread search on plain columns (portability rule D5): each chat thread's title, agent name, last reply
 and every question asked, kept in `chat_search` and rewritten when the thread is created, renamed or answered. Search
 is a case-insensitive LIKE on those columns, so it runs the same on PostgreSQL, SQLite, MySQL and Azure SQL; nothing
 is read out of JSON.

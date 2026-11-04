@@ -44,11 +44,11 @@ const KIND_OPTIONS = Object.entries(KIND_LABEL).map(([value, label]) => ({ label
 const decidable = (rows: Review[]) => rows.filter((r) => r.canDecide !== false);
 
 /**
- * All tasks (c-460): every Human Tasks view as a table, with its filters, stats, bulk decide and export, and a quick view
+ * All tasks: every Human Tasks view as a table, with its filters, stats, bulk decide and export, and a quick view
  * that decides through the same forms as the queue. The queue and task page is /reviews; a row opens its task there.
  */
 export default function AllTasksPage() {
-  // Tool module reviews are publish requests in this one queue (c-163), not a tab of their own.
+  // Tool module reviews are publish requests in this one queue, not a tab of their own.
   const [view, setView] = React.useState<ReviewView>('open');
   const list = useListParams<ReviewFilters>('title');
   const query = useReviews({ ...list.params, view });
@@ -70,7 +70,7 @@ export default function AllTasksPage() {
     (id: string | null) => router.replace(id ? `${pathname}?review=${id}` : pathname, { scroll: false }),
     [router, pathname],
   );
-  // A service links to a system workflow's review by its run key before the run has a step (c-257); once found, the
+  // A service links to a system workflow's review by its run key before the run has a step; once found, the
   // address names the review itself.
   const byKey = useReviewByRunKey(activeId ? null : searchParams.get('runKey'));
   React.useEffect(() => {
@@ -98,7 +98,7 @@ export default function AllTasksPage() {
     setActiveId(null);
   }, [missing, setActiveId]);
   const options = active?.options ?? undefined;
-  // The same regions and words as the task's own page (c-289); a type with none keeps today's body.
+  // The same regions and words as the task's own page; a type with none keeps today's body.
   const task = React.useMemo(() => (active ? taskView(active) : null), [active]);
   // A reviewer's corrections to the open review's document read; another review starts with none.
   const [edits, setEdits] = React.useState<ReadEdits>({});

@@ -418,7 +418,7 @@
       },
       "AccountIn": {
         "additionalProperties": false,
-        "description": "Another account of an app the team has (c-608): a sandbox, or a second org of the same system. On a plugin's\napp it takes the first account's contract (the kind, whose account calls use, the OAuth app and the credentials);\non a custom app it signs in with the app's kind, with the kind's fields given in `credentials`.",
+        "description": "Another account of an app the team has: a sandbox, or a second org of the same system. On a plugin's\napp it takes the first account's contract (the kind, whose account calls use, the OAuth app and the credentials);\non a custom app it signs in with the app's kind, with the kind's fields given in `credentials`.",
         "properties": {
           "credentialId": {
             "anyOf": [
@@ -729,7 +729,7 @@
       },
       "AppAccount": {
         "additionalProperties": false,
-        "description": "One of the team's accounts of the app (c-608): the default is the one live calls use unless they name another,\nand a sandbox one is what test runs use.",
+        "description": "One of the team's accounts of the app: the default is the one live calls use unless they name another,\nand a sandbox one is what test runs use.",
         "properties": {
           "account": {
             "anyOf": [
@@ -1146,7 +1146,7 @@
       },
       "AppPage": {
         "additionalProperties": false,
-        "description": "One app's page (c-607), joined here: its card, its default account, the caller's own sign-in, how many people\nsigned in, its accounts, its tools, the plugin's skills and the latest runs of its tools.",
+        "description": "One app's page, joined here: its card, its default account, the caller's own sign-in, how many people\nsigned in, its accounts, its tools, the plugin's skills and the latest runs of its tools.",
         "properties": {
           "accounts": {
             "items": {
@@ -1386,7 +1386,7 @@
       },
       "AppUsers": {
         "additionalProperties": false,
-        "description": "Who uses an app's tools in the team, read before turning it off (c-616).",
+        "description": "Who uses an app's tools in the team, read before turning it off.",
         "properties": {
           "agents": {
             "items": {
@@ -2188,7 +2188,7 @@
       },
       "CodeSettings": {
         "additionalProperties": false,
-        "description": "A code operation's function (c-531): what runs, the tools it may call and the secrets it may hand them.",
+        "description": "A code operation's function: what runs, the tools it may call and the secrets it may hand them.",
         "properties": {
           "bindings": {
             "items": {
@@ -2685,7 +2685,7 @@
       },
       "CredentialCheckIn": {
         "additionalProperties": false,
-        "description": "Test with my account (c-616): an empty body starts it; the `state` and `code` the sign-in page was handed back\nfinish it, on the same route.",
+        "description": "Test with my account: an empty body starts it; the `state` and `code` the sign-in page was handed back\nfinish it, on the same route.",
         "properties": {
           "code": {
             "anyOf": [
@@ -6367,7 +6367,7 @@
       },
       "MyAccount": {
         "additionalProperties": false,
-        "description": "One of the caller's own sign-ins (c-558), as Your connections lists it.",
+        "description": "One of the caller's own sign-ins, as Your connections lists it.",
         "properties": {
           "account": {
             "anyOf": [
@@ -6530,7 +6530,7 @@
       },
       "NewAppIn": {
         "additionalProperties": false,
-        "description": "A custom app a builder adds, as its first account: by name with a sign-in kind, or an MCP server by its address,\nwhose sign-in is found from the server (c-331).",
+        "description": "A custom app a builder adds, as its first account: by name with a sign-in kind, or an MCP server by its address,\nwhose sign-in is found from the server.",
         "properties": {
           "authKind": {
             "anyOf": [
@@ -7099,7 +7099,7 @@
       },
       "PersonCredentialsIn": {
         "additionalProperties": false,
-        "description": "A person's own key, password or token on an account each person signs in to (c-595): the kind's person\nfields, each a value of at most 2,000 characters.",
+        "description": "A person's own key, password or token on an account each person signs in to: the kind's person\nfields, each a value of at most 2,000 characters.",
         "properties": {
           "credentials": {
             "additionalProperties": {
@@ -7365,7 +7365,7 @@
       },
       "PluginUpdateView": {
         "additionalProperties": false,
-        "description": "What taking the installed version would change for the team (c-609): empty `tools` when it runs it already.",
+        "description": "What taking the installed version would change for the team: empty `tools` when it runs it already.",
         "properties": {
           "available": {
             "title": "Available",
@@ -7498,7 +7498,7 @@
       },
       "ReviewDecisionIn": {
         "additionalProperties": false,
-        "description": "A decision made in Reviews, sent by agents-service (c-163).",
+        "description": "A decision made in Reviews, sent by agents-service.",
         "properties": {
           "by": {
             "anyOf": [
@@ -9007,7 +9007,7 @@
       },
       "TestDraftIn": {
         "additionalProperties": false,
-        "description": "The workbench's unsaved transform and mock, tried by one test without staging them (c-088). A key left out\nuses the operation's own; `responseTransform: null` runs with no transform.",
+        "description": "The workbench's unsaved transform and mock, tried by one test without staging them. A key left out\nuses the operation's own; `responseTransform: null` runs with no transform.",
         "properties": {
           "responseTransform": {
             "anyOf": [
@@ -9545,7 +9545,7 @@
       },
       "ToolChange": {
         "additionalProperties": false,
-        "description": "One tool an update adds, changes or removes, by its operation name (c-609).",
+        "description": "One tool an update adds, changes or removes, by its operation name.",
         "properties": {
           "access": {
             "title": "Access",
@@ -9597,7 +9597,7 @@
       },
       "ToolGrant": {
         "additionalProperties": false,
-        "description": "A workflow's access to one module, as the Access tab lists it across modules (c-144).",
+        "description": "A workflow's access to one module, as the Access tab lists it across modules.",
         "properties": {
           "constraints": {
             "anyOf": [
@@ -10379,7 +10379,7 @@
       },
       "ToolRunIn": {
         "additionalProperties": false,
-        "description": "One run of one tool from its page (c-616): Mock answers from its mock and reaches nothing, Real is the gateway\ncall, with every check, in the environment picked.",
+        "description": "One run of one tool from its page: Mock answers from its mock and reaches nothing, Real is the gateway\ncall, with every check, in the environment picked.",
         "properties": {
           "environment": {
             "anyOf": [
@@ -11639,7 +11639,7 @@
     },
     "/v1/apps": {
       "get": {
-        "description": "The team's apps for the Apps grid (c-580): its plugins and the apps a person added. `include=builtin` adds\nthe built-in apps, for the approval policy's app picker. A service asking for a person (X-Acting-For) reads\neach card's state as that person's.",
+        "description": "The team's apps for the Apps grid: its plugins and the apps a person added. `include=builtin` adds\nthe built-in apps, for the approval policy's app picker. A service asking for a person (X-Acting-For) reads\neach card's state as that person's.",
         "operationId": "apps_list_apps",
         "parameters": [
           {
@@ -11869,7 +11869,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "A custom app, as its first account, which the answer is (its id is the app's): by name with a sign-in kind,\nor an MCP server by its address, whose sign-in is found from the server (c-331).",
+        "description": "A custom app, as its first account, which the answer is (its id is the app's): by name with a sign-in kind,\nor an MCP server by its address, whose sign-in is found from the server.",
         "operationId": "apps_add_app",
         "parameters": [
           {
@@ -12078,7 +12078,7 @@
     },
     "/v1/apps/{app_id}": {
       "get": {
-        "description": "One app's page (c-607): its card, accounts, the caller's own sign-in, tools, skills and latest runs.",
+        "description": "One app's page: its card, accounts, the caller's own sign-in, tools, skills and latest runs.",
         "operationId": "apps_get_app",
         "parameters": [
           {
@@ -12286,7 +12286,7 @@
     },
     "/v1/apps/{app_id}/accounts": {
       "post": {
-        "description": "Another account of one of the team's apps: a sandbox, which test runs use, or another named account (c-608,\nwith several_accounts on). The first stays the default.",
+        "description": "Another account of one of the team's apps: a sandbox, which test runs use, or another named account\n(with several_accounts on). The first stays the default.",
         "operationId": "apps_add_account",
         "parameters": [
           {
@@ -13093,7 +13093,7 @@
     },
     "/v1/apps/{app_id}/accounts/{account_id}/default": {
       "put": {
-        "description": "Makes this account the caller's default of its app (c-608): their calls that name no account use it.",
+        "description": "Makes this account the caller's default of its app: their calls that name no account use it.",
         "operationId": "apps_pin_default",
         "parameters": [
           {
@@ -13901,7 +13901,7 @@
     },
     "/v1/apps/{app_id}/accounts/{account_id}/test": {
       "post": {
-        "description": "Reads the account's test address signed in with the caller's own sign-in or the team's, and stores the\nresult as the account's `health` (c-558). A failed test answers 200 with the failure in `health`.",
+        "description": "Reads the account's test address signed in with the caller's own sign-in or the team's, and stores the\nresult as the account's `health`. A failed test answers 200 with the failure in `health`.",
         "operationId": "apps_test_account",
         "parameters": [
           {
@@ -15478,7 +15478,7 @@
     },
     "/v1/code-runs/calls": {
       "post": {
-        "description": "Internal: one `ops.call` from a running code operation (c-531), sent by runner-service with the run's call\ntoken. Only a tool the operation binds is called, decided as the run's caller's own gateway call.",
+        "description": "Internal: one `ops.call` from a running code operation, sent by runner-service with the run's call\ntoken. Only a tool the operation binds is called, decided as the run's caller's own gateway call.",
         "operationId": "gateway_code_run_call",
         "parameters": [
           {
@@ -15635,7 +15635,7 @@
     },
     "/v1/connect-links/sign-in": {
       "post": {
-        "description": "Starts the sign-in a connect link asks for, for the one person it was made for (c-558).",
+        "description": "Starts the sign-in a connect link asks for, for the one person it was made for.",
         "operationId": "apps_open_connect_link",
         "parameters": [
           {
@@ -16181,7 +16181,7 @@
     },
     "/v1/egress/held-hosts/decisions": {
       "post": {
-        "description": "A Security admin's decision on a held host (c-616 S13), sent by agents-service with its own token: a person\ndecides in Human Tasks, never here. Approved lists the host, in the name of whoever approved it. The token must\nhold secrets_egress:manage, which only agents-service's scope cap allows (Settings.service_scopes).",
+        "description": "A Security admin's decision on a held host, sent by agents-service with its own token: a person\ndecides in Human Tasks, never here. Approved lists the host, in the name of whoever approved it. The token must\nhold secrets_egress:manage, which only agents-service's scope cap allows (Settings.service_scopes).",
         "operationId": "egress_decide_held_host",
         "parameters": [
           {
@@ -16322,7 +16322,7 @@
     },
     "/v1/egress/hosts": {
       "get": {
-        "description": "The hosts, by name, a page at a time; `search` matches the host or its note, `templateId` the template slot\na provisioned host fills (c-180). The page and its count are queried, not sliced.",
+        "description": "The hosts, by name, a page at a time; `search` matches the host or its note, `templateId` the template slot\na provisioned host fills. The page and its count are queried, not sliced.",
         "operationId": "egress_list_hosts",
         "parameters": [
           {
@@ -17607,7 +17607,7 @@
     },
     "/v1/executions/{call_id}": {
       "get": {
-        "description": "One call by its id, as the list shows it, so an Activity row opens to its call (c-057 T013).",
+        "description": "One call by its id, as the list shows it, so an Activity row opens to its call.",
         "operationId": "executions_get_execution",
         "parameters": [
           {
@@ -18062,7 +18062,7 @@
     },
     "/v1/grantable-operations": {
       "get": {
-        "description": "The operations an agent of the caller's tenant may be granted, for a service holding `tools:view` (c-168).\nagents-service lists, grants and hands a run its tools from here; it keeps no catalogue of its own.",
+        "description": "The operations an agent of the caller's tenant may be granted, for a service holding `tools:view`.\nagents-service lists, grants and hands a run its tools from here; it keeps no catalogue of its own.",
         "operationId": "gateway_grantable_operations",
         "parameters": [
           {
@@ -18575,7 +18575,7 @@
     },
     "/v1/me/accounts": {
       "get": {
-        "description": "The caller's own sign-ins on their team's accounts (c-558): Your connections in the person menu. With\n`every`, also each account of the team they can connect themselves and have not (c-595).",
+        "description": "The caller's own sign-ins on their team's accounts: Your connections in the person menu. With\n`every`, also each account of the team they can connect themselves and have not.",
         "operationId": "apps_my_accounts",
         "parameters": [
           {
@@ -18945,7 +18945,7 @@
     },
     "/v1/me/accounts/{account_id}/credentials": {
       "put": {
-        "description": "The caller's own key, password or token on an account each person signs in to (c-595), replacing any they\ngave before; answers their row in Your connections, never the values.",
+        "description": "The caller's own key, password or token on an account each person signs in to, replacing any they\ngave before; answers their row in Your connections, never the values.",
         "operationId": "apps_give_own_credentials",
         "parameters": [
           {
@@ -21963,7 +21963,7 @@
     },
     "/v1/tool-modules/grants": {
       "get": {
-        "description": "Every workflow's access to the modules the team sees (c-144): a page of one view, with each view's count.",
+        "description": "Every workflow's access to the modules the team sees: a page of one view, with each view's count.",
         "operationId": "tool_modules_list_grants",
         "parameters": [
           {
@@ -23916,7 +23916,7 @@
     },
     "/v1/tool-modules/{module_id}/functions": {
       "post": {
-        "description": "Adds a Python function to a code module (c-531); it runs on runner-service when called.",
+        "description": "Adds a Python function to a code module; it runs on runner-service when called.",
         "operationId": "tool_modules_add_function",
         "parameters": [
           {
@@ -26145,7 +26145,7 @@
     },
     "/v1/tool-modules/{module_id}/review-decisions": {
       "post": {
-        "description": "A decision made in agents-service's Reviews (c-163). Only agents-service sends it, with its own token: a\nperson decides in Reviews, never here.",
+        "description": "A decision made in agents-service's Reviews. Only agents-service sends it, with its own token: a\nperson decides in Reviews, never here.",
         "operationId": "tool_modules_apply_review_decision",
         "parameters": [
           {

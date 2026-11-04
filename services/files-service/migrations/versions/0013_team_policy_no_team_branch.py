@@ -1,4 +1,4 @@
-"""No team policy reads a row with no team (c-507)
+"""No team policy reads a row with no team
 
 Revision ID: files_0013
 Revises: files_0012

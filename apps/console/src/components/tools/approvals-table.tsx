@@ -12,11 +12,11 @@ import { cn } from '@/lib/utils';
 
 import { ApprovalStatusBadge, ENV_LABEL, ExpiryText } from './module-meta';
 
-/** A request made before it ran as a workflow names its review (TAR-…); one since names its run's key (c-257). */
+/** A request made before it ran as a workflow names its review (TAR-…); one since names its run's key. */
 const reviewHref = (id: string) => (id.startsWith('TAR-') ? `/reviews?review=${id}` : `/reviews?runKey=${encodeURIComponent(id)}`);
 
-/** Workflow approvals for one module: which operations each may call, until when. A request is decided in Human Tasks
- * (c-166); only one made before then is decided inline. */
+/** Workflow approvals for one module: which operations each may call, until when. A request is decided in Human Tasks;
+ * only one made before then is decided inline. */
 export function ApprovalsTable({
   approvals,
   operations,

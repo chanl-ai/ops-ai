@@ -1,4 +1,4 @@
-"""A member removed from a team is reported to the services that hold their records there (c-616 S14), by failure mode:
+"""A member removed from a team is reported to the services that hold their records there, by failure mode:
 the removal reports nothing, so tools-service keeps their own accounts on the team's apps; the report is written apart
 from the removal, so one can commit without the other; and the relay sends it to a service that does not act on it, or
 to none, or under another tenant or team than the removal's."""
@@ -72,7 +72,7 @@ async def created(rig: SignInRig) -> set[str]:
 
 
 async def test_a_new_team_reports_team_created_in_the_transaction_that_makes_it(signin: SignInRig) -> None:
-    # PV2 (c-616): each service writes the new team's defaults when it hears this; the relay sends it to tools-service
+    # PV2: each service writes the new team's defaults when it hears this; the relay sends it to tools-service
     # and agents-service.
     before = await created(signin)
     lead = f"lead@{signin.zone}"

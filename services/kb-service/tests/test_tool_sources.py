@@ -1,4 +1,4 @@
-"""Knowledge read through a connection's tools (c-564), by failure mode: every article fetched on every sync; a changed
+"""Knowledge read through a connection's tools, by failure mode: every article fetched on every sync; a changed
 one missed or a removed one kept; an attachment that outlives its article; a rate limit that restarts the sync from the
 first page or loses the pages read; a refused sign-in retried every schedule; a source made on a connection that signs
 in each person, which a sync with nobody behind it cannot use; and two syncs of one source at once."""

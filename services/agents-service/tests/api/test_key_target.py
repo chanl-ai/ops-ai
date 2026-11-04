@@ -1,4 +1,4 @@
-"""An API key scoped to one agent or workflow (c-246), by failure mode: the key starts something other than its target,
+"""An API key scoped to one agent or workflow, by failure mode: the key starts something other than its target,
 by a run or a thread; a pinned key runs another version; a key's runs are recorded under its creator, so its traffic
 cannot be counted and it cannot cancel what it started."""
 

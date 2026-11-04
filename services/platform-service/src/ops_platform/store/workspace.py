@@ -1,4 +1,4 @@
-"""A workspace's own teams (c-202): which team is its security team and which one people join when nothing else names
+"""A workspace's own teams: which team is its security team and which one people join when nothing else names
 one. Null columns keep the deployment's defaults: the security team from settings and no default team.
 
 Every reader calls `security_team_in` on the connection of the transaction it decides in, so a change of security team

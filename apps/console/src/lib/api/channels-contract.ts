@@ -1,7 +1,7 @@
 import type { ChannelFilters, ChannelKindSummary, ChannelPatch, ChannelRow, LivePlaces, Mailbox, MailboxInput, MailboxPatch, MailboxTest } from '../types/channels';
 import type { ListResult } from '../types/query';
 
-/** Channels on agents-service: every channel as one record (c-242), and the mailboxes' own settings. */
+/** Channels on agents-service: every channel as one record, and the mailboxes' own settings. */
 export interface ChannelsApi {
   /** The team's channels, filtered and counted on the server; `kinds` is one summary per kind for the gallery and tabs. */
   list(params: { page: number; pageSize: number } & ChannelFilters): Promise<ListResult<ChannelRow> & { kinds: ChannelKindSummary[] }>;

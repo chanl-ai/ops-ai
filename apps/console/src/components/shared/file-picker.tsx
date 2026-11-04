@@ -6,7 +6,7 @@ import { EntityPicker } from '@/components/shared/entity-picker';
 import { fileOptions } from '@/hooks/options-queries';
 
 /**
- * Pick files already in Files (c-159): an `EntityPicker` over files-service's `/v1/files/options`, so search runs on the
+ * Pick files already in Files: an `EntityPicker` over files-service's `/v1/files/options`, so search runs on the
  * server and chips are labelled by id. A file not scanned clean is listed but cannot be picked. Pair it with
  * `FileUpload` when a page also takes new files; `AddDocumentsDialog` does both.
  */

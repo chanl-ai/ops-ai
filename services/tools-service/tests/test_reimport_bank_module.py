@@ -1,5 +1,5 @@
-"""scripts/reimport_bank_module.py against tools-service in process, with the scripts' fake bank as the upstream
-(c-057 T003): a module imported before the levy operations existed gains them, the hold's policy becomes one approver
+"""scripts/reimport_bank_module.py against tools-service in process, with the scripts' fake bank as the upstream: a
+module imported before the levy operations existed gains them, the hold's policy becomes one approver
 from the operations team with no self-approval, and running it again changes nothing."""
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ async def gw(
 
 
 async def imported_before_levy(gw: Api) -> str:
-    """The module as c-048 imported it: the document's operations before search_customers matched addresses and
+    """The module as first imported: the document's operations before search_customers matched addresses and
     add_customer_note existed."""
     found = (await gw.call("POST", "/discover", json=SOURCE)).json()["data"]
     old = [o for o in found["operations"] if o["name"] not in ("search_customers", "add_customer_note")]
@@ -87,7 +87,7 @@ async def served(gw: Api) -> dict[str, dict[str, Any]]:
 
 
 class AsNadia:
-    """Security's approver in Reviews (c-163): approving `/v1/publish-requests/{id}/decision` there is what tells
+    """Security's approver in Reviews: approving `/v1/publish-requests/{id}/decision` there is what tells
     tools-service, so here it applies the decision as agents-service would."""
 
     def __init__(self, gw: Api, module_id: str) -> None:

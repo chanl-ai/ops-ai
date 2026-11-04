@@ -1,4 +1,4 @@
-"""A person's memories are searched by the database's full-text search (c-563)
+"""A person's memories are searched by the database's full-text search
 
 Revision ID: 0085_memory_full_text
 Revises: 0084_memory_audit_team_required

@@ -1,4 +1,4 @@
-"""The person who asked a chat agent decides its action unless the tenant switched requesterMayDecide off (c-186), by
+"""The person who asked a chat agent decides its action unless the tenant switched requesterMayDecide off, by
 failure mode: the asker refused while the policy is open, the asker deciding once it is off, and a namesake taken for
 the asker."""
 
@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from ops_agents.api.app import create_app
-from ops_agents.store.graphs import metadata
+from ops_agents.store.base import metadata
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, sse_events, step_up
 

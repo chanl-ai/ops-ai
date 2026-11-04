@@ -1,4 +1,4 @@
-// A stand-in bank intranet on its own origin, for trying the embedded chat with the person's SSO (c-118, c-224) and for
+// A stand-in bank intranet on its own origin, for trying the embedded chat with the person's SSO and for
 // use case uc-109. OPS_WIDGET_SNIPPET is the `/embed/v1.js` tag plus an `OpsChat.init` whose getSession is
 // `opsSessionFrom(<agents url>, <deployment>)`:
 //   OPS_WIDGET_SNIPPET='<script …>' PLATFORM_URL=http://127.0.0.1:8810 node serve.mjs 4610

@@ -1,4 +1,4 @@
-/* Ops AI embedded chat loader (c-131). The page loads it with one script tag and calls OpsChat.init once.
+/* Ops AI embedded chat loader. The page loads it with one script tag and calls OpsChat.init once.
  *
  * The chat runs in a cross-origin iframe served by the embed app; this script draws only the launcher and the frame,
  * and passes the session the bank's server minted. The host page never receives message text.

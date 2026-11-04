@@ -1,5 +1,5 @@
 /**
- * The one card agents show in chat (c-469): a record's type and title, one status, a body of facts or steps, and at
+ * The one card agents show in chat: a record's type and title, one status, a body of facts or steps, and at
  * most two actions plus More, with Open to the record's own page. Ops tools answer with references; the thread read
  * fills each one in from the record as the reader sees it (agents-service api/ops_tools.py `fill_cards`).
  */

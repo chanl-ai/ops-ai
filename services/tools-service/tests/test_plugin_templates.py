@@ -1,4 +1,4 @@
-"""A plugin's templates as a team sees them (c-590), through the real route, by failure mode: a team whose plugin is off
+"""A plugin's templates as a team sees them, through the real route, by failure mode: a team whose plugin is off
 sees its templates anyway, so it could install copies that use tools it cannot call; a team sees another plugin's or
 nothing at all once its plugin is on; a template's body is missing, so agents-service and documents-service have
 nothing to make the copy from; a required tool is named as the plugin's short name, not the operation the team's

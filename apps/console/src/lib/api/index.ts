@@ -54,9 +54,9 @@ function createApi(): OpsApi {
   }
   // The tool list is the registry's directory; tool writes have no route there and stay on the mock (createRegistryToolsList).
   if (registryUrl) api = { ...api, ...createRegistryOnlyHttp(registryUrl), tools: { ...api.tools, list: createRegistryToolsList(registryUrl), ...createRegistryToolsDirectory(registryUrl) } };
-  // The chat loader and the iframe it opens are served by the embed app (c-224).
+  // The chat loader and the iframe it opens are served by the embed app.
   if (embedUrl) api = { ...api, widgetDeployments: { ...api.widgetDeployments, scriptUrl: () => `${embedUrl.replace(/\/$/, '')}/embed/v1.js` } };
-  // A link form's page is the embed app's too (c-535).
+  // A link form's page is the embed app's too.
   if (embedUrl) api = { ...api, forms: { ...api.forms, pageUrl: (form) => `${embedUrl.replace(/\/$/, '')}${form.url}` } };
   if (toolsUrl) {
     // Activity (the tool-call log) is the gateway's own executions log; the audit log stays where it was.
@@ -72,7 +72,7 @@ function createApi(): OpsApi {
   // Signed in through platform-service, the team switcher lists the person's own teams from it.
   if (onPlatform) {
     api = { ...api, teams: createPlatformTeamsHttp(platformUrl!), workspacePolicies: createPlatformPoliciesHttp(platformUrl!), workspaceTeams: createPlatformWorkspaceTeamsHttp(platformUrl!), signInProviders: createPlatformSignInProvidersHttp(platformUrl!) };
-    // Members, invitations and the audit log are platform-service's (c-077); accepting signs the person in there.
+    // Members, invitations and the audit log are platform-service's; accepting signs the person in there.
     const access = createPlatformAccessHttp(
       platformUrl!,
       (token, name, password) => {
@@ -97,11 +97,11 @@ export const api: OpsApi = createApi();
 const AREAS: { prefix: string; served: boolean }[] = [
   { prefix: '/agents', served: Boolean(registryUrl) },
   { prefix: '/workflows', served: Boolean(registryUrl) },
-  // A members-only hosted form reads agents-service's /v1/forms/{slug}/members (c-535).
+  // A members-only hosted form reads agents-service's /v1/forms/{slug}/members.
   { prefix: '/forms', served: Boolean(registryUrl) },
-  // The run list (moved from Cases by c-220) reads the runs service.
+  // The run list (moved from Cases) reads the runs service.
   { prefix: '/workflows/runs', served: Boolean(casesUrl) },
-  // Cases are agents-service's /v1/cases (c-220).
+  // Cases are agents-service's /v1/cases.
   { prefix: '/cases', served: Boolean(registryUrl) },
   { prefix: '/channels', served: Boolean(registryUrl) },
   { prefix: '/skills', served: Boolean(registryUrl) },
@@ -109,7 +109,7 @@ const AREAS: { prefix: string; served: boolean }[] = [
   { prefix: '/widgets', served: Boolean(registryUrl) },
   // Activity is agents-service's one list (/v1/activity).
   { prefix: '/activity', served: Boolean(registryUrl) },
-  // Background processes are agents-service's /v1/background (c-516).
+  // Background processes are agents-service's /v1/background.
   { prefix: '/logs/background', served: Boolean(registryUrl) },
   { prefix: '/tools', served: Boolean(toolsUrl) },
   { prefix: '/settings/egress', served: Boolean(toolsUrl) },
@@ -130,17 +130,17 @@ const AREAS: { prefix: string; served: boolean }[] = [
   { prefix: '/files', served: Boolean(filesUrl) },
   { prefix: '/document-types', served: Boolean(documentsUrl) },
   { prefix: '/access', served: onPlatform },
-  // Tool access lists tools-service's grants (c-144).
+  // Tool access lists tools-service's grants.
   { prefix: '/access/tool-access', served: Boolean(toolsUrl) },
   { prefix: '/logs/audit', served: onPlatform },
   { prefix: '/settings/account/memory', served: Boolean(chatUrl) },
-  // A person's own sign-ins, a connection's sign-in setting and the sign-in pages are tools-service's (c-558).
+  // A person's own sign-ins, a connection's sign-in setting and the sign-in pages are tools-service's.
   { prefix: '/integrations/my-accounts', served: Boolean(toolsUrl) },
   { prefix: '/connections', served: Boolean(toolsUrl) },
   { prefix: '/settings/members', served: onPlatform },
   { prefix: '/settings/policies', served: onPlatform },
   { prefix: '/settings/security/sign-in', served: onPlatform },
-  // The home page's counts are agents-service's /v1/overview (c-129); matched exactly, so it marks no other page.
+  // The home page's counts are agents-service's /v1/overview; matched exactly, so it marks no other page.
   { prefix: '/', served: Boolean(registryUrl) },
   // No service owns these yet.
   { prefix: '/deployments', served: false },
@@ -162,13 +162,13 @@ export const knowledgeOnService = Boolean(knowledgeUrl || baseUrl);
 export const filesOnService = Boolean(filesUrl) && !baseUrl;
 /** A signed form link opens on the embed app; without its origin Share as a form is members-only. */
 export const publicFormPage = Boolean(embedUrl);
-/** What's new and Coming next as the build read them (next.config.ts, c-510); lib/changelog.ts parses them. */
+/** What's new and Coming next as the build read them (next.config.ts); lib/changelog.ts parses them. */
 export const changelogSource = process.env.OPS_CHANGELOG ?? '[]';
 export const roadmapSource = process.env.OPS_ROADMAP ?? '[]';
 // The commit this console was built from and its release tag, if it has one (next.config.ts; lib/version.ts words them).
 export const buildTag = process.env.NEXT_PUBLIC_OPS_VERSION;
 export const buildCommit = process.env.NEXT_PUBLIC_OPS_COMMIT;
-/** NEXT_PUBLIC_OPS_CACHE=off: the console saves nothing to the browser (c-560, lib/query-cache.ts). */
+/** NEXT_PUBLIC_OPS_CACHE=off: the console saves nothing to the browser (lib/query-cache.ts). */
 export const cacheSetting = process.env.NEXT_PUBLIC_OPS_CACHE;
 /** Every console call is answered for a team, so its queries wait for one (hooks/team-query.ts); the embed has none. */
 export const queriesNeedTeam = true;
@@ -177,7 +177,7 @@ export const invitesToCurrentTeam = onPlatform;
 
 export function isPreviewPath(pathname: string): boolean {
   if (baseUrl || !onRealService) return false;
-  // The Connections catalog and each app's page read tools-service (c-580, c-607); a connection's older pages under it
+  // The Connections catalog and each app's page read tools-service; a connection's older pages under it
   // stay sample data until they move.
   if (pathname === '/integrations' || pathname.startsWith('/integrations/apps/')) return false;
   const under = (prefix: string) => (prefix === '/' ? pathname === '/' : pathname === prefix || pathname.startsWith(`${prefix}/`));
@@ -230,9 +230,9 @@ export const brand = {
   logo: process.env.NEXT_PUBLIC_BRAND_LOGO || undefined,
 };
 
-/** The Feedback button in development (c-504): `1` when `make up` found the ui-feedback collector running. */
+/** The Feedback button in development: `1` when `make up` found the ui-feedback collector running. */
 export const uiFeedback = process.env.NEXT_PUBLIC_UI_FEEDBACK;
-/** Each service's address as the console is told it, for the generated SDK client (lib/api/ops-sdk.ts, c-580). */
+/** Each service's address as the console is told it, for the generated SDK client (lib/api/ops-sdk.ts). */
 export const serviceUrls = {
   platform: platformUrl,
   agents: registryUrl,
@@ -245,6 +245,6 @@ export const serviceUrls = {
 /**
  * The release switches a changelog entry may name (lib/changelog.ts): an entry for a feature behind one shows in What's
  * new only while it is on. Each is read by its full name, as Next inlines only a literal `process.env.NEXT_PUBLIC_*`
- * reference; scripts/changelog-check.mjs keeps the same names. Empty: a shipped feature has no switch (owner, 10-31).
+ * reference; scripts/changelog-check.mjs keeps the same names. Empty: a shipped feature has no switch.
  */
 export const releaseSwitches: Readonly<Record<string, boolean>> = {};

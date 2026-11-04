@@ -1,4 +1,4 @@
-"""The workspace floor for extracted fields (c-157): platform-service's `extractionFloor` policy (Govern > Policies),
+"""The workspace floor for extracted fields: platform-service's `extractionFloor` policy (Govern > Policies),
 which no extraction goes below. The caller reads it per extraction with its own service token for the tenant, so a
 change applies to the next extraction. A floor that cannot be read stops the step rather than falling back to
 the default: a failed read must never lower the bar a field has to clear."""

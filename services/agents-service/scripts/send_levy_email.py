@@ -1,5 +1,5 @@
 """Emails the levy notice (tests/fixtures/mailbox/levy_notice.json, with its PDF) to the levy mailbox on GreenMail, so
-the workflow worker reads it over IMAP like any team mailbox and levy_intake opens a levy_case per debtor (c-229).
+the workflow worker reads it over IMAP like any team mailbox and levy_intake opens a levy_case per debtor.
 
     uv run python scripts/send_levy_email.py
     uv run python scripts/send_levy_email.py --key-suffix ref-2   # a new message, not a redelivery

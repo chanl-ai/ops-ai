@@ -1,4 +1,4 @@
-"""plugin_bindings: each team's part of a plugin, its switch, connection and settings (c-564)
+"""plugin_bindings: each team's part of a plugin, its switch, connection and settings
 
 A plugin's tools are one workspace-level module, which holds one connection, endpoint and egress list for every team,
 so team A's calls would use team B's. The gateway reads those from the calling team's row here instead.

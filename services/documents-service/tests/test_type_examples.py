@@ -1,4 +1,4 @@
-"""Corrections teach later reads of their document type (c-297), through the extraction and document-type APIs, by
+"""Corrections teach later reads of their document type, through the extraction and document-type APIs, by
 failure mode: a correction in one team teaching another team's reads; a wrong correction still taught after removal;
 prompts growing without bound as corrections pile up; a person reading a full SSN in the examples list, in its line or
 its corrected value; the same field corrected twice teaching both values; stored examples growing without bound; a

@@ -27,7 +27,7 @@ SIGN_IN_KINDS = (
 )
 SIGN_IN_SETTINGS = ("team", "person", "person_or_team")
 # The kinds that hold each person's own credential, so each person may sign in (tools-service auth/kinds.py,
-# per_person): their own key, password or token, or their own OAuth sign-in (c-595).
+# per_person): their own key, password or token, or their own OAuth sign-in.
 PER_PERSON_KINDS = ("api_key", "basic", "bearer", "oauth2_auth_code")
 # An operation's name in tools-service is `<plugin>_<tool>` and must match this (modules/schemas.py).
 OPERATION_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -206,7 +206,7 @@ class Tool(Strict):
     knowledge: Literal["list_items", "get_item", "list_deleted"] | None = None
     rate_limit_per_min: int = Field(default=60, ge=1, le=10_000)
     # A write waits for a person's approval only when the plugin says so, or a team's policy turns approval on:
-    # approvals are off by default (owner, 2026-11-01).
+    # approvals are off by default.
     requires_approval: bool | None = None
     needs_person: bool = False
     scopes: list[str] = Field(default_factory=list[str])
@@ -264,7 +264,7 @@ class Template(Strict):
 
 
 class Display(Strict):
-    """What the console's Connections card shows for the plugin's system (c-580): a logo, a category, one line of
+    """What the console's Connections card shows for the plugin's system: a logo, a category, one line of
     what it is, and where an admin reads how to set up its app or get its key."""
 
     logo: str | None = None

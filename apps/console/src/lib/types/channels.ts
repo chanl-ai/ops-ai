@@ -1,4 +1,4 @@
-// Team mailboxes connected on Channels > Email (agents-service /v1/channels/mailboxes, c-199). A workflow's Email
+// Team mailboxes connected on Channels > Email (agents-service /v1/channels/mailboxes). A workflow's Email
 // received trigger names a mailbox by address; a password is the name of a secret on the Secrets page, never its value.
 
 /** gmail and imap are read over IMAP by tools-service; graph is not read yet. */
@@ -87,7 +87,7 @@ export type ChannelHealth = 'ok' | 'warn' | 'error' | 'idle';
 
 /**
  * What a channel reaches: a workflow or an agent, at the latest published version or a pinned one. Null for an API key,
- * which may run anything its team may (c-246 binds a key to one target).
+ * which may run anything its team may.
  */
 export interface ChannelServes {
   kind: 'workflow' | 'agent';
@@ -99,7 +99,7 @@ export interface ChannelServes {
   behind: number;
 }
 
-/** One row of GET /v1/channels (c-242): a mailbox, an embed or an API key as one channel record. */
+/** One row of GET /v1/channels: a mailbox, an embed or an API key as one channel record. */
 export interface ChannelRow {
   /** The type's own record id, kept: mbx_ (mailbox), wd_ (embed), key_ (API key). */
   id: string;

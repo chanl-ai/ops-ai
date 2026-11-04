@@ -1,7 +1,7 @@
-"""Accounts: create, change their settings and secret parts, sign in and out (c-330). An account is one connection.
+"""Accounts: create, change their settings and secret parts, sign in and out. An account is one connection.
 
 Who may: reading needs `connections.view`, every change and every sign-in `connections.manage`, which admins hold by
-default (owner, 2026-10-19); `can()` decides, and a service token holds neither unless its scopes list them. A
+default; `can()` decides, and a service token holds neither unless its scopes list them. A
 connection belongs to the team it was created in; a team sees its own, an all-scope team sees every one, and a record
 outside the caller's team answers 404.
 
@@ -60,15 +60,15 @@ from .records import status_of
 # `complete_sign_in` under the person's own token.
 SIGN_IN_RETURN_PATH = "/connections/sign-in/return"
 SIGN_IN_TTL = timedelta(minutes=10)
-# Whose token a sign-in's state is for when it is an admin's credential check (c-616): nobody's, so none is kept. Not a
+# Whose token a sign-in's state is for when it is an admin's credential check: nobody's, so none is kept. Not a
 # person id or SHARED, so a check's state can never finish as a sign-in.
 CHECK = "check"
 # How long Test connection waits for the system's answer.
 TEST_TIMEOUT_S = 10.0
-# The right to sign in your own account on a connection each person signs in to (c-558); see ConnectionService._can.
+# The right to sign in your own account on a connection each person signs in to; see ConnectionService._can.
 OWN = "own"
 # Settings changes that make a held token wrong for the system: it is dropped, so the next call signs in again.
-# tenant, account, the token answer, and whether it is a person's own sign-in (c-584), which may not change what the
+# tenant, account, the token answer, and whether it is a person's own sign-in, which may not change what the
 # team's sign-in set -> account settings to add, or None. A ValueError with a `code` names why for the event.
 OnToken = Callable[[str, str, dict[str, Any], bool], Awaitable[dict[str, Any] | None]]
 # tenant, account -> the plugin's settings on it as a person may read them.
@@ -81,7 +81,7 @@ _NOT_UPPER = re.compile(r"[^A-Z0-9]+")
 
 
 def _details(i: dict[str, Any]) -> dict[str, Any]:
-    """A connection's card details as given (c-580), blanks stored as none."""
+    """A connection's card details as given, blanks stored as none."""
     return {
         "category": (str(i.get("category") or "").strip() or None),
         "description": (str(i.get("description") or "").strip() or None),
@@ -125,7 +125,7 @@ def _not_found(what: str, code: str) -> NotFound:
 
 
 def own_key(who: Caller) -> str:
-    """The id a person's own sign-in is kept under (c-558), as the acting-for token names them, so the call that acts
+    """The id a person's own sign-in is kept under, as the acting-for token names them, so the call that acts
     for them finds the row: their verified subject, or `dev:<email>` for the dev header caller (dev mode, no roles),
     whose subject every dev person shares. A platform session from the dev sign-in also says `dev` but holds roles,
     and is keyed by its subject."""
@@ -162,8 +162,8 @@ class ConnectionService:
         plugin_settings: PluginSettings | None = None,
     ) -> None:
         """`console_url` is where a sign-in returns (`SIGN_IN_RETURN_PATH` on it); without it no sign-in starts.
-        `discovery` finds an MCP server's sign-in (c-331); without it no MCP connection is made from an address.
-        `auth` and `http` (the egress client) run Test connection, signed in as a call is (c-558); without them none
+        `discovery` finds an MCP server's sign-in; without it no MCP connection is made from an address.
+        `auth` and `http` (the egress client) run Test connection, signed in as a call is; without them none
         runs."""
         self.store = store
         self.secrets = secrets
@@ -178,7 +178,7 @@ class ConnectionService:
         self.discovery = discovery
         self.auth = auth
         self.http = http
-        # A plugin's connection reads settings from the token answer (Salesforce's instance_url, c-564).
+        # A plugin's connection reads settings from the token answer (Salesforce's instance_url).
         self.on_token = on_token
         # A plugin's settings on an account as a person may read them (PluginHost.account_settings); without it an
         # account's page shows none.
@@ -216,7 +216,7 @@ class ConnectionService:
         }
 
     def _sees(self, who: Caller, conn: dict[str, Any]) -> bool:
-        """A team reads its own connections only (c-509), an all-scope team included."""
+        """A team reads its own connections only, an all-scope team included."""
         return conn["team_id"] == who.team.id
 
     async def _get(self, who: Caller, connection_id: str) -> dict[str, Any]:
@@ -336,7 +336,7 @@ class ConnectionService:
         return await self._view(who, await self._get(who, connection_id), detail=True)
 
     async def team_rows(self, who: Caller) -> list[dict[str, Any]]:
-        """The caller's team's accounts as stored, with the modules that use them, for the Apps grid to join (c-580);
+        """The caller's team's accounts as stored, with the modules that use them, for the Apps grid to join;
         secrets stay names, never values."""
         self._can(who, "view")
         teams = [who.team.id]
@@ -366,7 +366,7 @@ class ConnectionService:
             app = await self._get(who, str(app_id))
             if plugin_of(app) is not None or app["app_id"] != app["id"]:
                 raise ValidationFailed(f"{app['name']} is not a custom app.", code="not_a_custom_app")
-        # An app's account (c-608) is a connected account, `ca_`; a custom app's first account keeps `con_`.
+        # An app's account is a connected account, `ca_`; a custom app's first account keeps `con_`.
         connection_id = new_id("ca" if plugin_id or app_id else "con")
         row: dict[str, Any] = {
             "tenant_id": who.tenant_id,
@@ -453,7 +453,7 @@ class ConnectionService:
         now = self.clock()
         team = str(conn["team_id"])
         for name, v in sealed.items():
-            # A secret part belongs to the connection's team, as the connection does (c-509).
+            # A secret part belongs to the connection's team, as the connection does.
             if not await self.secrets.create(
                 who.tenant_id, team, name, v, actor=who.name, at=now, connection_id=str(conn["id"])
             ):
@@ -499,7 +499,7 @@ class ConnectionService:
         await self._pair_checked(who, conn, settings, values)
         names |= {k: names.get(k) or secret_name(str(conn["id"]), k) for k in values}
         row: dict[str, Any] = {"settings": settings, "secrets": names}
-        # The platform's app stays through a save of the fields it shows (Edit keys, c-580); the team's own client
+        # The platform's app stays through a save of the fields it shows (Edit keys); the team's own client
         # secret, or another client id, puts the account on the team's own app.
         own_app = "clientSecret" in values or stored.get("clientId") != settings.get("clientId")
         if conn.get("platform_app") and own_app:
@@ -626,7 +626,7 @@ class ConnectionService:
             await self.secrets.delete(who.tenant_id, str(conn["team_id"]), name, actor=who.name, at=self.clock())
 
     async def connect_mcp(self, who: Caller, i: dict[str, Any]) -> dict[str, Any]:
-        """A connection for an MCP server, its sign-in found from the server (c-331): `oauth2_auth_code` with the
+        """A connection for an MCP server, its sign-in found from the server: `oauth2_auth_code` with the
         server as `resource`. The bank's registered client when given; else one registered
         with the server when its metadata offers registration; else refused naming what is missing."""
         self._can(who, "manage")
@@ -667,7 +667,7 @@ class ConnectionService:
             },
         )
         settings = {
-            # The server's own address, path included: an MCP module's calls go to it (c-616), and its sign-in is
+            # The server's own address, path included: an MCP module's calls go to it, and its sign-in is
             # sent only to its origin.
             "baseUrl": url.rstrip("/"),
             "authorizeUrl": found.authorize_url,
@@ -713,7 +713,7 @@ class ConnectionService:
         console never sends a person somewhere the tenant has not allowed. On a connection each person signs in to,
         the caller signs in their own account (OWN); the team's account needs connections.manage.
         `scopes` are asked for beside the connection's, and `hint` is the email the system's sign-in starts with.
-        `check`: an admin's Test with my account of the app credential (c-616), which keeps no token."""
+        `check`: an admin's Test with my account of the app credential, which keeps no token."""
         found = await self._get(who, connection_id)
         personal = (found.get("sign_in") or "team") != "team" and account == "self" and not check
         conn = await self._signs_in(who, connection_id, right=OWN if personal else "manage")
@@ -765,7 +765,7 @@ class ConnectionService:
             query["login_hint"] = hint
         if settings.get("resource"):
             query["resource"] = str(settings["resource"])
-        # A system's own sign-in parameters (Atlassian's audience and prompt, c-584); never one the platform sets.
+        # A system's own sign-in parameters (Atlassian's audience and prompt); never one the platform sets.
         extra = parse_qsl(str(settings.get("authorizeParams") or ""), keep_blank_values=True)
         query = {**{k: v for k, v in extra if k.lower() not in PLATFORM_AUTHORIZE_PARAMS}, **query}
         sep = "&" if urlsplit(url).query else "?"
@@ -816,7 +816,7 @@ class ConnectionService:
         return await self.tokens.post(who.tenant_id, str(settings["tokenUrl"]), form, settings, proof, hosts=hosts)
 
     async def check_credential(self, who: Caller, connection_id: str, state: str, code: str) -> dict[str, Any]:
-        """Finishes an admin's Test with my account (c-616): the code is exchanged through the account's app, and
+        """Finishes an admin's Test with my account: the code is exchanged through the account's app, and
         the answer says whether it worked and as whom. No token is kept and the team account is not touched, so a
         check never changes what calls sign in with. A refused exchange is a failed check, answered 200."""
         taken, conn = await self._taken(who, connection_id, state, check=True)
@@ -891,7 +891,7 @@ class ConnectionService:
         *,
         plugin_settings: dict[str, Any] | None = None,
     ) -> None:
-        """Puts a plugin's account on Ops AI's own OAuth app (c-565): the account's settings, and its
+        """Puts a plugin's account on Ops AI's own OAuth app: the account's settings, and its
         `platform_app` naming the plugin, whose token exchange uses the install's client (plugin_clients), with no
         client secret of the team's. Only a plugin's team switch calls this: the public settings route has no way to
         name Ops AI's app, so no team points a connection at it by hand."""
@@ -937,8 +937,8 @@ class ConnectionService:
         return {p: found[n] for p, n in names.items() if n in found}
 
     async def mine(self, who: Caller, *, every: bool = False) -> list[dict[str, Any]]:
-        """The caller's own sign-ins on their team's connections (c-558): Your connections, each with how the person
-        signs in and never a value. `every` (c-595): also each account of the team a person signs in to that the
+        """The caller's own sign-ins on their team's connections: Your connections, each with how the person
+        signs in and never a value. `every`: also each account of the team a person signs in to that the
         caller has not connected yet, so the page offers its key form or sign-in."""
         self._can(who, OWN)
         mine = own_key(who)
@@ -992,7 +992,7 @@ class ConnectionService:
         return str((first or row)["name"]), None
 
     async def give_own(self, who: Caller, connection_id: str, given: dict[str, str]) -> dict[str, Any]:
-        """A person's own key, password or token (c-595), sealed in their own row: only on a connection each person
+        """A person's own key, password or token, sealed in their own row: only on a connection each person
         signs in to, with a kind that takes them, every person field given and no other."""
         self._can(who, OWN)
         conn = await self._get(who, connection_id)
@@ -1024,7 +1024,7 @@ class ConnectionService:
         return next(r for r in rows if r["connectionId"] == str(conn["id"]))
 
     async def disconnect(self, who: Caller, connection_id: str) -> None:
-        """Disconnect (c-558): deletes the caller's own sign-in, so their next call asks them to connect again, after
+        """Disconnect: deletes the caller's own sign-in, so their next call asks them to connect again, after
         ending it at the system's revocation address when the connection has one. A system that refuses or cannot be
         reached does not keep the row; the activity notes whether it was revoked there."""
         self._can(who, OWN)
@@ -1043,7 +1043,7 @@ class ConnectionService:
         await self.store.note(who.tenant_id, str(conn["id"]), self._event(who, "disconnected", detail))
 
     async def open_link(self, who: Caller, link: str) -> dict[str, Any]:
-        """Starts the sign-in a connect link asks for (c-558): only the person it was made for, in its team, once and
+        """Starts the sign-in a connect link asks for: only the person it was made for, in its team, once and
         within fifteen minutes; another person's attempt neither starts a sign-in nor spends the link."""
         found = await self.store.link(who.tenant_id, _hash(link))
         if found is None:
@@ -1065,7 +1065,7 @@ class ConnectionService:
         )
 
     async def test(self, who: Caller, connection_id: str, account: str = "self") -> dict[str, Any]:
-        """Test connection (c-558): reads the account's `testPath` signed in as a call would be, with the caller's
+        """Test connection: reads the account's `testPath` signed in as a call would be, with the caller's
         own sign-in (OWN) on a connection each person signs in to, else the team's (connections.manage), and stores
         the result on the connection. Only the team's sign-in decides the connection's status: one person's missing
         or refused sign-in is theirs alone."""
@@ -1077,7 +1077,7 @@ class ConnectionService:
         settings: dict[str, Any] = dict(conn["settings"] or {})
         path = str(settings.get("testPath") or "")
         if not path.startswith("/") and plugin_of(conn):
-            # A plugin's test address comes with its sign-in, which names the instance (c-616): nobody types one.
+            # A plugin's test address comes with its sign-in, which names the instance: nobody types one.
             raise ValidationFailed(
                 f"Sign {conn['name']} in first: its test reads the system its sign-in names.", code="not_signed_in"
             )
@@ -1145,7 +1145,7 @@ class ConnectionService:
                 message = f"{urlsplit(url).hostname} answered {res.status_code} to the test address."
                 health |= {"status": "failed", "code": "UPSTREAM_STATUS", "message": message}
                 if res.status_code == 401 and person is not None and prepared is not None and prepared.person:
-                    # The person's own key, refused: marked on their row as a call's refusal is (c-595).
+                    # The person's own key, refused: marked on their row as a call's refusal is.
                     await self.auth.refused(probe, prepared, person, message)
         status: tuple[str, str | None] | None = None
         if not own and conn["status"] != "revoked":
@@ -1177,7 +1177,7 @@ class ConnectionService:
         )
 
     async def pin_default(self, who: Caller, connection_id: str) -> dict[str, Any]:
-        """Makes the caller's own sign-in on this account their default among the app's accounts (c-608): a call
+        """Makes the caller's own sign-in on this account their default among the app's accounts: a call
         naming no account uses it. Refused on an account they have not signed in to."""
         conn = await self._get(who, connection_id)
         accounts = await self.store.accounts(who.tenant_id, str(conn["team_id"]), str(conn["app_id"]))

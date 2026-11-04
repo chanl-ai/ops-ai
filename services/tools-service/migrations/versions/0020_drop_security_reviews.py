@@ -1,4 +1,4 @@
-"""tool module reviews live in agents-service's Reviews; the old table goes (c-163)
+"""tool module reviews live in agents-service's Reviews; the old table goes
 
 Revision ID: tools_0020_drop_security_reviews
 Revises: tools_0019_version_reviews

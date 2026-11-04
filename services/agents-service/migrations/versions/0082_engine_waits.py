@@ -1,4 +1,4 @@
-"""engine_waits: a workflow step parked on work another service finishes (c-525)
+"""engine_waits: a workflow step parked on work another service finishes
 
 Revision ID: 0082_engine_waits
 Revises: 0081_background_jobs_at_text

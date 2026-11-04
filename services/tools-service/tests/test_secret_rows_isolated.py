@@ -1,4 +1,4 @@
-"""Sealed secret values are held by the database (c-616 C1, proved across every locked table in C5), by failure mode:
+"""Sealed secret values are held by the database (proved across every locked table in C5), by failure mode:
 another team reads a team's tool secrets or their audit through the store; another team reads or changes them, or a
 team's own app credential, with SQL that names no team, which only the database policy can stop.
 Runs on the compose PostgreSQL as `ops_tools_tenant`, the role every store transaction runs as, since the database

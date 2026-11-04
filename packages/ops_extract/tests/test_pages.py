@@ -1,4 +1,4 @@
-"""Page text (c-260): a title or a heading, which ops_ingest keeps apart from the blocks under it, left out of the page
+"""Page text: a title or a heading, which ops_ingest keeps apart from the blocks under it, left out of the page
 text, so the model never sees it and a true quote from it scores 0."""
 
 from __future__ import annotations

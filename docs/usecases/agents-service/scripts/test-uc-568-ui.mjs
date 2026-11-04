@@ -5,7 +5,7 @@
 // Extract from file step reads, shares a workflow as a form that a person outside the console fills in the embed app,
 // opens a members-only form in the console, and runs a workflow once per row of a CSV from the Start run dialog.
 //
-// The data-testid contract T002, T004 and T006 implement:
+// The data-testid contract the page implements:
 //   file-read-full-text   Read dialog (extract-dialog.tsx): the Full text choice
 //   file-read-propose     Read dialog: "Let the model propose the fields"
 //   file-text-tab         the file page's Text tab
@@ -152,7 +152,7 @@ try {
       const H = { ...J, 'Content-Type': 'application/json' };
       for (const flow of [READ_FLOW, FORM_FLOW, BATCH_FLOW]) {
         const saved = await fetch(`${agents}/v1/workflows/definitions`, { method: 'POST', headers: H, body: JSON.stringify({ definition: flow }) });
-        // The read flow names `read`, which T001 adds; until then it is refused, and step 34 says so.
+        // The read flow names `read`, which a later change adds; until then it is refused, and step 34 says so.
         if (saved.status !== 201 && flow !== READ_FLOW) throw new Error(`setup: ${flow.id} answered ${saved.status}: ${await saved.text()}`);
         if (flow !== READ_FLOW) await fetch(`${agents}/v1/workflows/definitions/${flow.id}/publish-requests`, { method: 'POST', headers: H, body: '{}' });
       }
@@ -197,6 +197,16 @@ try {
           const order = texts.map((t) => (/Page (\d+) of 12/.exec(t) ?? [])[1]).map(Number);
           const marks = await page.locator('[data-testid="file-text-page"] mark[data-confidence]').evaluateAll((els) => els.map((e) => Number(e.getAttribute('data-confidence'))));
           await page.screenshot({ path: join(SHOTS, 'text-tab-1280.png'), fullPage: true });
+          // Full text records no read, so the header learns from the saved text that the file was read, here and
+          // after a reload.
+          const header = page.getByTestId('read-as').first();
+          await until(async () => /Read as full text/.test(await header.innerText()), 30_000);
+          const shown = await header.innerText();
+          await page.reload();
+          await page.getByTestId('file-text-page').first().waitFor({ timeout: 120_000 });
+          await until(async () => /Read as full text/.test(await header.innerText()), 30_000);
+          const reloaded = await header.innerText();
+          check('32c after Full text the header says the file was read as full text, and still does after a reload', /Read as full text/.test(shown) && /Read as full text/.test(reloaded), { shown, reloaded });
           await page.setViewportSize({ width: 375, height: 800 });
           await page.waitForTimeout(500);
           narrow.text = await sideways(page);

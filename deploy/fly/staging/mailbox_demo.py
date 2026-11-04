@@ -339,7 +339,7 @@ class Demo:
                     False, "mailbox", f"{mailbox} is not connected in {self.ops}: connect it on Channels > Email first"
                 )
                 mailbox = None
-        # The reply workflows (c-532) are files that name the team's per-person workflow, document type and Levy Desk
+        # The reply workflows are files that name the team's per-person workflow, document type and Levy Desk
         # agent by placeholder; the agent and its handbook are the demo team's own.
         names = {f"workflow:{w['key']}": w["id"] for w in levy}
         names |= {f"documentType:{k['id']}": own(k["id"]) for k in spec["documentTypes"]}
@@ -351,7 +351,7 @@ class Demo:
             made = demo_seed.ensure_agents(builder, approver, agents, knowledge, "default")
             names |= {f"agent:{k}": v for k, v in made.items()}
         if spec.get("codeModules"):
-            # The levy code tool (c-531) is the team's own module; its publish is Security's decision.
+            # The levy code tool is the team's own module; its publish is Security's decision.
             known = read_env(self.people_file)
             security = person(service_urls(self.origin), known["APPROVER_EMAIL"], known["APPROVER_PASSWORD"], SECURITY)
             demo_seed.ensure_code_modules(builder, security, spec["codeModules"])
@@ -403,8 +403,8 @@ class Demo:
         return str(starts[0]["parameters"]["workflow"]) if starts else None
 
     def mailbox_secret(self, name: str, value: str | None) -> bool:
-        """Settings > Secrets, as a Security admin: `name` holds the mailbox password, as the demo team's own secret
-        (c-509). An existing secret keeps its value."""
+        """Settings > Secrets, as a Security admin: `name` holds the mailbox password, as the demo team's own secret. An
+        existing secret keeps its value."""
         h = self.as_admin(SECURITY)
         mine = {"teamId": self.ops}
         listed = data(httpx.get(self.url("tools", "/v1/secrets"), params=mine, headers=h, timeout=30))
@@ -798,7 +798,7 @@ def imap_reply(a: argparse.Namespace, sender: str, suffix: str) -> str | None:
 
 
 def replies(demo: Demo, a: argparse.Namespace) -> int:
-    """The email-to-reply walk (c-532): the levy notice emailed to the team's mailbox, read (in the background with
+    """The email-to-reply walk: the levy notice emailed to the team's mailbox, read (in the background with
     --long), the sender thanked at once with no approval, and each person it names answered: a person decides the hold
     and each reply in Human Tasks, as the team's people would. PASS or FAIL per step; the exit status counts FAILs."""
     admin, approver = demo.as_admin(), demo.person("approver")

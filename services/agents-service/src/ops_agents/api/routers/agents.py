@@ -66,7 +66,7 @@ from ..widgets import published as published_widget
 from ..workflow_registry import registry as workflow_registry
 from .tool_catalog import known_tools
 
-# The provisioning service reaches list, read, create, change and delete with a team-scoped token (c-180); every other
+# The provisioning service reaches list, read, create, change and delete with a team-scoped token; every other
 # route takes a person or an API key (`Me`).
 router = APIRouter(prefix="/v1/agents", dependencies=[Depends(caller_in("agents"))])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
@@ -82,7 +82,7 @@ class Guardrails(WireModel):
     max_tool_calls_per_turn: int | None = Field(default=None, ge=1)
     # Empty here means the platform default of 50 model calls, never unlimited.
     max_model_calls_per_turn: int | None = Field(default=None, ge=1)
-    # Per conversation (c-103): empty means the platform default (200 model calls, 5.00 cost), never unlimited.
+    # Per conversation: empty means the platform default (200 model calls, 5.00 cost), never unlimited.
     max_model_calls_per_conversation: int | None = Field(default=None, ge=1)
     max_cost_per_conversation: float | None = Field(default=None, gt=0)
     when_unsure: Literal["handoff", "ask", "decline"] = "handoff"
@@ -96,7 +96,7 @@ class AgentInput(WireModel):
     model: str = ""
     channels: list[Channel] = Field(default_factory=lambda: ["chat"])
     instructions: str | None = None
-    # Set by the provisioning service only (c-180); a person sending either is refused.
+    # Set by the provisioning service only; a person sending either is refused.
     template_id: str | None = Field(default=None, min_length=1, max_length=120)
     protection: Literal["system", "managed"] | None = None
 
@@ -123,18 +123,18 @@ class AgentPatch(WireModel):
     tool_ids: list[str] | None = None
     collections: list[str] | None = None
     guardrails: Guardrails | None = None
-    # Guardrails attached by version (c-063): [{guardrailId, version}]; each saved with its version's rule.
+    # Guardrails attached by version: [{guardrailId, version}]; each saved with its version's rule.
     guardrail_pins: list[GuardrailPinInput] | None = None
-    # What callers may override (c-068). Saved with the version and published through its review.
+    # What callers may override. Saved with the version and published through its review.
     limits: AgentLimits | None = None
-    # Widgets by template (c-082): [{widgetId, version?}], each snapshotted from the library; version None takes the
+    # Widgets by template: [{widgetId, version?}], each snapshotted from the library; version None takes the
     # latest published. Saved with the version and published through its review.
     widget_pins: list[WidgetPinInput] | None = None
     widgets: WidgetSettings | None = None
-    # On or off, and which kinds (c-124).
+    # On or off, and which kinds.
     memory: MemorySettings | None = None
     note: str | None = None
-    # Set by the provisioning service only (c-180).
+    # Set by the provisioning service only.
     template_id: str | None = Field(default=None, min_length=1, max_length=120)
     protection: Literal["system", "managed"] | None = None
 
@@ -149,7 +149,7 @@ class PausedInput(WireModel):
 
 
 class TestInput(WireModel):
-    # No run-as: a test runs as the person testing (Run as was removed with c-285), so a field naming someone else
+    # No run-as: a test runs as the person testing (there is no Run as), so a field naming someone else
     # would be accepted and ignored.
     message: str = Field(min_length=1)
 
@@ -293,7 +293,7 @@ async def _view(
 
 async def _checked_tools(rt: Runtime, tool_ids: list[str], granted: list[str]) -> list[str]:
     """The grants to save: a newly added id the directory does not offer is refused; one already granted that is no
-    longer offered (stale) is dropped, so a stale grant never blocks saving the rest (c-048 T010)."""
+    longer offered (stale) is dropped, so a stale grant never blocks saving the rest."""
     known = {t["id"] for t in await known_tools(rt)}
     # A plugin turned on moments ago is not in the list kept for 30 s: ask tools-service once more before refusing.
     if any(t not in known and t not in granted and not t.startswith(("workflow:", "agent:")) for t in tool_ids):
@@ -389,7 +389,7 @@ async def changeable(rt: Runtime, me: Principal, agent_id: str, action: str) -> 
 @router.post("", response_model=Envelope[Agent], status_code=201)
 async def create_agent(rt: Rt, me: Cl, body: AgentInput) -> JSONResponse:
     if not me.team_id:
-        # A dev session naming no team acts across teams; an agent belongs to exactly one (c-602).
+        # A dev session naming no team acts across teams; an agent belongs to exactly one.
         raise ValidationFailed(
             "Choose a team with the X-Team-Id header; an agent belongs to one team.", code="team_required"
         )
@@ -477,7 +477,7 @@ async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONR
 async def _check_knowledge(rt: Runtime, wanted: list[str], held: list[str]) -> None:
     """Each knowledge value a save adds is a knowledge base id kb-service knows (422 naming the rest): the runtime
     reads these as ids, so a name saved here would leave the agent citing nothing. Values the version already holds
-    are kept even when their base is gone, so an agent stays saveable and the page shows them to remove (c-141).
+    are kept even when their base is gone, so an agent stays saveable and the page shows them to remove.
     While kb-service cannot answer, a save that adds knowledge is refused (503) rather than accepted unchecked."""
     added = [k for k in wanted if k not in held]
     if not added:
@@ -541,7 +541,7 @@ async def list_versions(rt: Rt, agent_id: str) -> JSONResponse:
     out: list[dict[str, Any]] = []
     for v in await reg.versions(agent_id):
         n = int(v["version"])
-        # History is what was published or put to a reviewer, plus the one draft (c-172); saves the per-save model
+        # History is what was published or put to a reviewer, plus the one draft; saves the per-save model
         # left behind are not listed.
         if not (v["published_at"] or n == row["version"] or n in asked):
             continue
@@ -634,7 +634,7 @@ async def request_publish(rt: Rt, me: Me, agent_id: str, body: PublishRequestInp
         **decision.record(),
     }
     # Asking for the newest draft replaces a request still waiting on an older version (a seed change, a colleague's),
-    # so the version that goes live is the one holding the newest grants (c-616 S7).
+    # so the version that goes live is the one holding the newest grants.
     req = await reg.open_request(
         "agent",
         agent_id,
@@ -673,8 +673,8 @@ async def set_paused(rt: Rt, me: Me, agent_id: str, body: PausedInput) -> JSONRe
 async def test_agent(rt: Rt, me: Me, agent_id: str, body: TestInput) -> JSONResponse:
     """One kernel turn on the newest version, draft or not, with no thread kept: the single-turn harness API scripts
     and use cases drive. A write tool stops at its gate, so the reply says where production would pause instead of
-    acting. The console tests on a real thread instead (POST /chat/threads with test: true, c-284 and c-285); this
-    route goes once the use cases that call it move there (follow-up to c-285)."""
+    acting. The console tests on a real thread instead (POST /chat/threads with test: true); this
+    route goes once the use cases that call it move there."""
     row = await changeable(rt, me, agent_id, "test")
     return ok(await one_test_turn(rt, agent_id, body.message, row=row))
 

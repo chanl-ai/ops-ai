@@ -1,4 +1,4 @@
-"""One list of environments (c-580), by failure mode: a route accepts an environment the list does not have, or the
+"""One list of environments, by failure mode: a route accepts an environment the list does not have, or the
 list has one no route accepts."""
 
 from __future__ import annotations

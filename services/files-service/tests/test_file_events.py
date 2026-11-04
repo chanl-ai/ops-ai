@@ -1,4 +1,4 @@
-"""files-service's service events (c-250), by failure mode: a deletion whose file.deleted is lost, so documents-service
+"""files-service's service events, by failure mode: a deletion whose file.deleted is lost, so documents-service
 keeps what it read from a file that is gone (F4, F5); an event for a deletion that did not happen (F4); a read request
 started twice by a repeated click, run by someone who may not change files, or whose run the console cannot follow
 (F2)."""
@@ -91,7 +91,7 @@ async def test_a_read_request_is_one_request_per_key_and_names_its_run_once_deli
 async def test_a_read_request_with_no_type_asks_for_detect_and_a_read_with_no_type_is_saved_as_not_recognised(
     client: Client, engine: AsyncEngine
 ) -> None:
-    """c-335: the Files page reads a file without choosing its type; the request and its event carry no type, and what
+    """The Files page reads a file without choosing its type; the request and its event carry no type, and what
     a Detect read that found none of the team's types saves has no type or version."""
     async with client() as c:
         ticket = await _upload(c)

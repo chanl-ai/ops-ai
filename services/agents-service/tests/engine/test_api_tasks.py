@@ -1,4 +1,4 @@
-"""A task an API caller posts (c-288), through the route functions on PostgreSQL with the real worker, by failure mode:
+"""A task an API caller posts, through the route functions on PostgreSQL with the real worker, by failure mode:
 the caller cannot read the decision a person made; a missing required value refuses the task instead of warning; a
 value of the wrong kind is accepted and drawn as garbage; the task opens on whatever version is newest when someone
 looks, not the one it was posted with."""
@@ -88,7 +88,7 @@ async def test_a_value_of_the_wrong_kind_is_refused_naming_the_field(engine: Asy
 
 
 async def test_a_retried_post_with_its_key_opens_one_task(engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch) -> None:
-    """tick 30: a client retrying after a timeout opened a second task for one decision."""
+    """A client retrying after a timeout opened a second task for one decision."""
     monkeypatch.setattr(tasks_route, "OPEN_WAIT_SECONDS", 0.1)
     rt: Any = SimpleNamespace(db=engine, event_workflows=EVENT_WORKFLOWS, event_workflows_seen=set())
     body = TaskIn(type="generic_decision", params={"title": "Open it?", "facts": FACTS})

@@ -1,6 +1,6 @@
-"""Whether this install may hold a tenant (c-418). `tenancy_mode` is the only difference between a single-tenant and a
+"""Whether this install may hold a tenant. `tenancy_mode` is the only difference between a single-tenant and a
 multi-tenant install: in `single` every tenant but the install's own is refused where tenants are created (the dev seed
-today, the provisioner's create-tenant route in c-272), with 409 `single_tenant`. Nothing else reads the mode, which
+today, the provisioner's create-tenant route), with 409 `single_tenant`. Nothing else reads the mode, which
 `tests/test_tenancy_mode.py` holds."""
 
 from __future__ import annotations

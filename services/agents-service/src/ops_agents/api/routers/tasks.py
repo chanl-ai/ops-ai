@@ -1,11 +1,11 @@
-"""`/v1/tasks`: a Human Task an API caller posts with a task type and its values (c-288).
+"""`/v1/tasks`: a Human Task an API caller posts with a task type and its values.
 
 A posted task is recorded as a `task.requested` event of this service and runs as the api_task system workflow, so it
 lists, times out, is assigned and is audited as every other task, with no second queue. The task id is that run's id.
 Posting one starts a run (`workflows.run` in the acting team); the caller reads the decision back from the task.
 
 A missing required value is accepted with a warning and the screen shows its fallback; a value of the wrong kind is
-refused with 422 naming the field, since no fallback can show it (owner, 2026-10-18)."""
+refused with 422 naming the field, since no fallback can show it."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from ops_contracts.chat import WireModel
 from ops_engine.compiler import DEFAULT_OPTIONS
 from ops_engine.store import RunStore
 from ops_service_kit.errors import Unprocessable
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, Out
 from ops_service_kit.ids import new_id
 
 from ... import task_types as tt
@@ -31,7 +31,7 @@ from .. import engine_reviews, service_events
 from ..auth import Principal, caller_in, caller_of, started_by
 from ..deps import Runtime, runtime
 from ..envelope import ok
-from ..schemas import Out, TaskWarning
+from ..schemas import TaskWarning
 from ..task_type_seeds import task_type_store
 
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases

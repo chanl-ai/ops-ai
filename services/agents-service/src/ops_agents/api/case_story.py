@@ -1,4 +1,4 @@
-"""A case told for people (c-500): how its work began and everything that happened to it. Everything is read in the
+"""A case told for people: how its work began and everything that happened to it. Everything is read in the
 case's team only; a run of another team does not exist for the case page (identity-and-tenancy.md, "The team is the
 workspace")."""
 

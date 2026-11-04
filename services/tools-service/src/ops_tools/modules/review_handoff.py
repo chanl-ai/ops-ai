@@ -1,4 +1,4 @@
-"""Hands what tools-service holds for review to where it is decided, at start-up (c-163, c-222, c-257). A module
+"""Hands what tools-service holds for review to where it is decided, at start-up. A module
 version its seed left waiting for review is opened in agents-service's Reviews through the publish-request route a
 person's submit uses, with this service's token scoped to the module's team and naming who published it; Reviews
 records that tools-service opened it on their behalf. An open tool access request is reported once as its system
@@ -45,7 +45,7 @@ async def hand_over(store: ReviewHandoffs, agents: ServiceClient) -> int:
             continue
         await store.opened(v, str(opened["id"]))
         sent += 1
-    # Open workflow requests for a module's operations run as the tool_access_request system workflow (c-257): each
+    # Open workflow requests for a module's operations run as the tool_access_request system workflow: each
     # is reported once as its event, for the module's team unless the request already named its deciding team.
     for a in await store.open_access():
         m = modules.get((a["tenant_id"], a["module_id"]))

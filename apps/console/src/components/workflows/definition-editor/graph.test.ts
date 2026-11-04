@@ -26,7 +26,7 @@ test('a review that does not expire has no timeout port', () => {
   assert.deepEqual(names(undefined), ['approve', 'reject']);
 });
 
-// ops.action.workflow (c-263): waiting for the runs swaps `started` for `done`, and any timeout adds `timeout`.
+// ops.action.workflow: waiting for the runs swaps `started` for `done`, and any timeout adds `timeout`.
 const runWorkflow = {
   id: 'ops.action.workflow',
   outputs: [{ name: 'started' }, { name: 'error' }],
@@ -47,7 +47,7 @@ test('a Run workflow step that waits ends at done instead of started, and gets t
   assert.deepEqual(runPorts({ wait: false, timeoutHours: '' }), ['started', 'error']);
 });
 
-// ops.flow.wait (c-277): the error port exists only when waiting until a mapped time.
+// ops.flow.wait: the error port exists only when waiting until a mapped time.
 const wait = { id: 'ops.flow.wait', outputs: [{ name: 'out' }], outputsFrom: null, optionalOutputs: [{ parameter: 'mode', value: 'until', port: 'error' }] } as unknown as EngineNodeType;
 
 test('a Wait step has an error port only when it waits until a time', () => {

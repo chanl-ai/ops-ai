@@ -1,4 +1,4 @@
-"""Check one action for one person (c-150), by failure mode: the answer disagrees with the services' own can() (a
+"""Check one action for one person, by failure mode: the answer disagrees with the services' own can() (a
 grant missed, or a refusal the grid would allow), a policy refusal reads as the grid's yes, someone without access.view
 checks a colleague, a refusal speaks to the admin instead of about the person, and a check leaves no trace in the
 audit log or one that does not say whose access was checked."""

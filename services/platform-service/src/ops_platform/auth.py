@@ -74,11 +74,11 @@ class Auth:
     token_ttl_s: int = 900
     session_ttl_s: int = 8 * 3600
     step_up_ttl_s: int = STEP_UP_TTL_S
-    # The workspace's security team for the token (c-202); unset in tests that build Auth by hand.
+    # The workspace's security team for the token; unset in tests that build Auth by hand.
     workspace: WorkspaceStore | None = None
 
     async def sign_in(self, email: str, password: str, *, request_id: str) -> Issued:
-        # Wrong passwords are counted per address before anything says whether it has an account (c-196), so an
+        # Wrong passwords are counted per address before anything says whether it has an account, so an
         # unknown address gets the same 401s and then the same 429 as a known one.
         await self.passwords.screen_email(email, password)
         found = await self.store.users_by_email(email)
@@ -99,7 +99,7 @@ class Auth:
     ) -> Issued:
         """A new session and its first token, for sign-in, an SSO sign-in and an accepted invite. `method` is how
         the person proved who they are (dev, password, oidc, saml); every token of the session carries it. A closed
-        workspace lets only its owner in (c-529), and only after they have proved who they are, so the refusal says
+        workspace lets only its owner in, and only after they have proved who they are, so the refusal says
         nothing to someone who has not."""
         match await self.store.workspace_open_to(user.tenant_id, user.id):
             case "closed":
@@ -203,7 +203,7 @@ class Auth:
             "name": user.name,
             "tenant_id": user.tenant_id,
             "team_ids": await self.store.acting_teams(user.tenant_id, user.id, now=_iso(now)),
-            # Which team holds the Security-team actions in this workspace (c-202), for ops_access.
+            # Which team holds the Security-team actions in this workspace, for ops_access.
             **({"security_team": await self.workspace.security_team(user.tenant_id)} if self.workspace else {}),
             "roles": roles,
             "perm_version": version,
@@ -291,7 +291,7 @@ def principal_from_claims(claims: dict[str, Any]) -> dict[str, Any]:
         scopes=[],
         auth_method=str(claims.get("auth_method", "")),
     ) | {
-        # The token's teams, which for a workspace admin include teams they hold no membership in (c-208).
+        # The token's teams, which for a workspace admin include teams they hold no membership in.
         "teamIds": teams,
         "policies": dict(claims.get("policies") or {}),
     }

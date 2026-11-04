@@ -1,4 +1,4 @@
-"""The workspace's access policies as the API serves them (c-186): every policy in the catalogue with its value, its
+"""The workspace's access policies as the API serves them: every policy in the catalogue with its value, its
 open default, the grid cell a change needs and its effect. Every member reads them; a change goes through `can()` on
 the policy's cell, in the team the request acts in, as the sign-in settings do."""
 
@@ -22,7 +22,7 @@ class Policies:
 
     async def list(self, actor: Actor) -> list[dict[str, Any]]:
         """Every member of the workspace reads every policy: they are not secret, and a person who may change one
-        must see it (owner, 2026-10-18). Changing stays on each policy's cell."""
+        must see it. Changing stays on each policy's cell."""
         return await self.for_tenant(actor.tenant_id)
 
     async def for_tenant(self, tenant_id: str) -> list[dict[str, Any]]:
@@ -52,7 +52,7 @@ class Policies:
                 "default": p.default,
                 "changedBy": ".".join(p.changed_by),
                 "effect": p.effect,
-                # How the Policies page draws it and names it (c-224), so a new policy needs no console change.
+                # How the Policies page draws it and names it, so a new policy needs no console change.
                 "kind": p.kind,
                 "title": p.title,
                 **(

@@ -2882,7 +2882,7 @@
       },
       "CaseOrigin": {
         "additionalProperties": false,
-        "description": "How the case's work began (c-500): email, request (a form or an API call), event, other, or person (opened by\nhand, with no run).",
+        "description": "How the case's work began: email, request (a form or an API call), event, other, or person (opened by\nhand, with no run).",
         "properties": {
           "href": {
             "anyOf": [
@@ -4778,7 +4778,7 @@
       },
       "ConnectWait": {
         "additionalProperties": false,
-        "description": "What a run waiting for a person's own account of an app needs (c-616 S12): Connect my account, or Run as the\nteam account where the app has one.",
+        "description": "What a run waiting for a person's own account of an app needs: Connect my account, or Run as the\nteam account where the app has one.",
         "properties": {
           "app": {
             "title": "App",
@@ -5671,7 +5671,7 @@
       },
       "DocumentRead": {
         "additionalProperties": false,
-        "description": "A document read a review asks a person to check (c-169): the file, the floor, and each record's fields. Editable\nwhen the step takes a correction (`inputs.edited`); `corrected` holds the values a decided review was approved\nwith, None when no correction was sent.",
+        "description": "A document read a review asks a person to check: the file, the floor, and each record's fields. Editable\nwhen the step takes a correction (`inputs.edited`); `corrected` holds the values a decided review was approved\nwith, None when no correction was sent.",
         "properties": {
           "corrected": {
             "anyOf": [
@@ -5858,7 +5858,7 @@
       },
       "EgressHostRef": {
         "additionalProperties": false,
-        "description": "An app's address on a host nobody listed (c-616 S13): the host, the app, who set it and their team.",
+        "description": "An app's address on a host nobody listed: the host, the app, who set it and their team.",
         "properties": {
           "app": {
             "title": "App",
@@ -9225,7 +9225,7 @@
       },
       "Guardrail": {
         "additionalProperties": false,
-        "description": "A guardrail an agent pins by version (c-063); kind blocked_topics today.",
+        "description": "A guardrail an agent pins by version; kind blocked_topics today.",
         "properties": {
           "config": {
             "$ref": "#/components/schemas/GuardrailConfig"
@@ -9929,7 +9929,7 @@
       },
       "HeldTool": {
         "additionalProperties": false,
-        "description": "A tool the tested agent holds (c-170), and whether calling it pauses for a review, at which gate, for whom.",
+        "description": "A tool the tested agent holds, and whether calling it pauses for a review, at which gate, for whom.",
         "properties": {
           "access": {
             "title": "Access",
@@ -11522,7 +11522,7 @@
       },
       "MemorySettings": {
         "additionalProperties": false,
-        "description": "What the agent remembers about each person (c-124): on by default (owner, 2026-10-17), and which kinds: facts\n(timezone, preferred account), preferences (how they like answers) and episodes (a line about each chat).",
+        "description": "What the agent remembers about each person: on by default, and which kinds: facts\n(timezone, preferred account), preferences (how they like answers) and episodes (a line about each chat).",
         "properties": {
           "enabled": {
             "default": true,
@@ -11547,7 +11547,7 @@
       },
       "MemoryView": {
         "additionalProperties": false,
-        "description": "One thing an agent remembers about the caller (c-124).",
+        "description": "One thing an agent remembers about the caller.",
         "properties": {
           "agentId": {
             "title": "Agentid",
@@ -12620,7 +12620,7 @@
       },
       "PublishDecisionFields": {
         "additionalProperties": false,
-        "description": "What the team's publish policy said when the request was made (c-086); absent on requests made before it.",
+        "description": "What the team's publish policy said when the request was made; absent on requests made before it.",
         "properties": {
           "majorChange": {
             "anyOf": [
@@ -13126,7 +13126,7 @@
       },
       "ReadBox": {
         "additionalProperties": false,
-        "description": "Where a value sits on a page, as fractions of the page from its top left (documents-service, c-252).",
+        "description": "Where a value sits on a page, as fractions of the page from its top left (documents-service).",
         "properties": {
           "h": {
             "title": "H",
@@ -13343,7 +13343,7 @@
       },
       "ReplyPreview": {
         "additionalProperties": false,
-        "description": "The reply a review approves, as it will leave: to the sender, from the team's mailbox, with the cases the\ndocument opened (c-169).",
+        "description": "The reply a review approves, as it will leave: to the sender, from the team's mailbox, with the cases the\ndocument opened.",
         "properties": {
           "body": {
             "title": "Body",
@@ -13672,7 +13672,7 @@
       },
       "ReviewOption": {
         "additionalProperties": false,
-        "description": "One way to decide a step with options (c-057: a levy case's hold or flag): its call and the inputs the\nreviewer may set on it. A form renders from `inputs`; decide validates against them.",
+        "description": "One way to decide a step with options (a levy case's hold or flag): its call and the inputs the\nreviewer may set on it. A form renders from `inputs`; decide validates against them.",
         "properties": {
           "call": {
             "anyOf": [
@@ -16872,7 +16872,7 @@
       },
       "StoryLine": {
         "additionalProperties": false,
-        "description": "One thing a run did, as a sentence a person reads (c-500); the case feed is made of the same lines.",
+        "description": "One thing a run did, as a sentence a person reads; the case feed is made of the same lines.",
         "properties": {
           "actor": {
             "title": "Actor",
@@ -18735,7 +18735,7 @@
       },
       "ToolModuleDiff": {
         "additionalProperties": false,
-        "description": "What a tool module review approves since the published version (c-204), as tools-service sent it when the\nreview opened.",
+        "description": "What a tool module review approves since the published version, as tools-service sent it when the\nreview opened.",
         "properties": {
           "added": {
             "items": {
@@ -18778,7 +18778,7 @@
       },
       "ToolModuleDiffInput": {
         "additionalProperties": false,
-        "description": "What tools-service computed the version changes since the published one (c-204).",
+        "description": "What tools-service computed the version changes since the published one.",
         "properties": {
           "added": {
             "items": {
@@ -19225,7 +19225,7 @@
       },
       "TypedTask": {
         "additionalProperties": false,
-        "description": "A review drawn from its task type (c-288): the type at the version the step pinned, its regions and actions\nbound to the step's params, and what is missing or of the wrong kind.",
+        "description": "A review drawn from its task type: the type at the version the step pinned, its regions and actions\nbound to the step's params, and what is missing or of the wrong kind.",
         "properties": {
           "actions": {
             "items": {
@@ -19760,7 +19760,7 @@
       },
       "WidgetTemplateOut": {
         "additionalProperties": false,
-        "description": "A published widget template version (c-082): its catalogue tree, its data schema and a sample to preview.",
+        "description": "A published widget template version: its catalogue tree, its data schema and a sample to preview.",
         "properties": {
           "canDelete": {
             "anyOf": [
@@ -21780,7 +21780,7 @@
     },
     "/reviews/assign": {
       "post": {
-        "description": "Assigns each open review to `assignee`, the caller when left out (c-074). Only someone who may decide a review\nassigns it; assigning routes the review and changes nothing about who may decide it. A result per id.",
+        "description": "Assigns each open review to `assignee`, the caller when left out. Only someone who may decide a review\nassigns it; assigning routes the review and changes nothing about who may decide it. A result per id.",
         "operationId": "reviews_assign",
         "parameters": [
           {
@@ -22157,7 +22157,7 @@
     },
     "/reviews/by-run-key/{run_key}": {
       "get": {
-        "description": "The review of the run a service event started in its handler (c-257), by its run key `<event>:<key>`: the step\nit waits on, else its latest decision. A service links to it before the run exists, so it names the key, not the\nstep; a team that cannot see the run gets not found, as for the step itself.",
+        "description": "The review of the run a service event started in its handler, by its run key `<event>:<key>`: the step\nit waits on, else its latest decision. A service links to it before the run exists, so it names the key, not the\nstep; a team that cannot see the run gets not found, as for the step itself.",
         "operationId": "reviews_get_review_by_run_key",
         "parameters": [
           {
@@ -22345,7 +22345,7 @@
     },
     "/reviews/{review_id}/place": {
       "get": {
-        "description": "Where the review sits in a Human Tasks view (open by default): position, total and the reviews either side;\n`group=case` in the order the queue grouped by case lists them (c-460).",
+        "description": "Where the review sits in a Human Tasks view (open by default): position, total and the reviews either side;\n`group=case` in the order the queue grouped by case lists them.",
         "operationId": "reviews_get_queue_place",
         "parameters": [
           {
@@ -22943,7 +22943,7 @@
     },
     "/reviews/{thread_id}/team-account": {
       "post": {
-        "description": "Run as the team account: a run waiting for a person's own account of an app goes on with the app's team account\n(c-616 S12), for a person who may use it (connections.run), on an app that has one.",
+        "description": "Run as the team account: a run waiting for a person's own account of an app goes on with the app's team account,\nfor a person who may use it (connections.run), on an app that has one.",
         "operationId": "reviews_run_as_team_account",
         "parameters": [
           {
@@ -26486,7 +26486,7 @@
     },
     "/v1/agents/{agent_id}/skills/options": {
       "get": {
-        "description": "The agent page's skill picker (c-136): published, live skills the agent does not hold, searched and limited in\nthe query; one that needs a tool or knowledge base the agent lacks is offered disabled with the reason. `loading`\nkeeps always-on or on-match skills, also in the query (the published version's mode is kept on the row).",
+        "description": "The agent page's skill picker: published, live skills the agent does not hold, searched and limited in\nthe query; one that needs a tool or knowledge base the agent lacks is offered disabled with the reason. `loading`\nkeeps always-on or on-match skills, also in the query (the published version's mode is kept on the row).",
         "operationId": "agents_agent_skill_options",
         "parameters": [
           {
@@ -27152,7 +27152,7 @@
     },
     "/v1/agents/{agent_id}/test": {
       "post": {
-        "description": "One kernel turn on the newest version, draft or not, with no thread kept: the single-turn harness API scripts\nand use cases drive. A write tool stops at its gate, so the reply says where production would pause instead of\nacting. The console tests on a real thread instead (POST /chat/threads with test: true, c-284 and c-285); this\nroute goes once the use cases that call it move there (follow-up to c-285).",
+        "description": "One kernel turn on the newest version, draft or not, with no thread kept: the single-turn harness API scripts\nand use cases drive. A write tool stops at its gate, so the reply says where production would pause instead of\nacting. The console tests on a real thread instead (POST /chat/threads with test: true); this\nroute goes once the use cases that call it move there.",
         "operationId": "agents_test_agent",
         "parameters": [
           {
@@ -30495,7 +30495,7 @@
     },
     "/v1/cases/{case_id}": {
       "get": {
-        "description": "The case assembled for its page (c-291): its timeline, oldest entry first, and who owns it, its clocks, what\nit waits on and the actions drafted there, its fields in its case type's order, what it links to, its newest\nactivity and what the caller may do.",
+        "description": "The case assembled for its page: its timeline, oldest entry first, and who owns it, its clocks, what\nit waits on and the actions drafted there, its fields in its case type's order, what it links to, its newest\nactivity and what the caller may do.",
         "operationId": "cases_get_case",
         "parameters": [
           {
@@ -33119,7 +33119,7 @@
     },
     "/v1/channels/{channel_id}/retire": {
       "post": {
-        "description": "Retires a chat channel for good (c-130): the embed answers no page again and cannot be changed. An email channel\nis removed on its mailbox's page, and an API channel is a key revoked in Settings.",
+        "description": "Retires a chat channel for good: the embed answers no page again and cannot be changed. An email channel\nis removed on its mailbox's page, and an API channel is a key revoked in Settings.",
         "operationId": "channels_retire_channel",
         "parameters": [
           {
@@ -35591,7 +35591,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "Stores the definition as the graph's next version and points new threads at it, with no review. A builder or\nadmin of the team that owns the graph's registry workflow publishes (the acting team for a graph the registry does\nnot hold). A registry workflow goes live through its review (POST /v1/workflows/{id}/publish-requests), so outside\nthe team's publish policy (c-086) this route refuses one with 409 `review_required`.",
+        "description": "Stores the definition as the graph's next version and points new threads at it, with no review. A builder or\nadmin of the team that owns the graph's registry workflow publishes (the acting team for a graph the registry does\nnot hold). A registry workflow goes live through its review (POST /v1/workflows/{id}/publish-requests), so outside\nthe team's publish policy this route refuses one with 409 `review_required`.",
         "operationId": "graphs_publish_version",
         "parameters": [
           {
@@ -36193,7 +36193,7 @@
     },
     "/v1/guardrails/options": {
       "get": {
-        "description": "The agent page's guardrail picker (c-136): live guardrails with a published version, by name, searched and\nlimited in the query; `ids` labels pins already held, whatever their state.",
+        "description": "The agent page's guardrail picker: live guardrails with a published version, by name, searched and\nlimited in the query; `ids` labels pins already held, whatever their state.",
         "operationId": "agents_guardrail_options",
         "parameters": [
           {
@@ -39574,7 +39574,7 @@
     },
     "/v1/publish-requests": {
       "post": {
-        "description": "A tool module review (c-163). Opened by tools-service for the person publishing: their credentials name who\nasked and the team, and tools-service's token in `X-Service-Authorization` vouches for the version and changes. Or\nopened by tools-service alone with its token scoped to the module's team, naming in `requestedBy` the person who\nasked (its seed, c-222); the review then says tools-service opened it on their behalf.",
+        "description": "A tool module review. Opened by tools-service for the person publishing: their credentials name who\nasked and the team, and tools-service's token in `X-Service-Authorization` vouches for the version and changes. Or\nopened by tools-service alone with its token scoped to the module's team, naming in `requestedBy` the person who\nasked (its seed); the review then says tools-service opened it on their behalf.",
         "operationId": "reviews_open_publish_request",
         "parameters": [
           {
@@ -39779,7 +39779,7 @@
     },
     "/v1/publish-requests/egress-hosts": {
       "post": {
-        "description": "A host held for Security (c-616 S13), opened by tools-service for the person setting an app's address: their\ncredentials name who asked and the team, and tools-service's token in `X-Service-Authorization` vouches for the\nhost. 201 with a new request; 200 with the one still waiting for the host, or with its latest refusal.",
+        "description": "A host held for Security, opened by tools-service for the person setting an app's address: their\ncredentials name who asked and the team, and tools-service's token in `X-Service-Authorization` vouches for the\nhost. 201 with a new request; 200 with the one still waiting for the host, or with its latest refusal.",
         "operationId": "reviews_open_egress_host_request",
         "parameters": [
           {
@@ -40832,7 +40832,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "Writes the run and its start work row in one transaction and returns at once: a worker runs it. With no worker\nrunning the run stays queued. A live run is refused (409) unless it pins the live version: `not_live` before a\nversion is approved or for another version, `workflow_paused` while the workflow is paused. An API key scoped to\none workflow (c-246) starts that one only, on the version it pins when it pins one.",
+        "description": "Writes the run and its start work row in one transaction and returns at once: a worker runs it. With no worker\nrunning the run stays queued. A live run is refused (409) unless it pins the live version: `not_live` before a\nversion is approved or for another version, `workflow_paused` while the workflow is paused. An API key scoped to\none workflow starts that one only, on the version it pins when it pins one.",
         "operationId": "workflows_start_engine_run",
         "parameters": [
           {
@@ -41031,7 +41031,7 @@
     },
     "/v1/runs/set-aside-emails/{event_id}/run": {
       "post": {
-        "description": "Run again on an email the mailbox listener set aside (c-561): its run starts on the workflow's live version under\nthe email's own run key, as the person, and the kept copy of the email is dropped. Who may start the workflow may\nrun it; 404 when there is no such email in the team or it already ran, 503 when Files did not store an attachment\n(the email stays set aside).",
+        "description": "Run again on an email the mailbox listener set aside: its run starts on the workflow's live version under\nthe email's own run key, as the person, and the kept copy of the email is dropped. Who may start the workflow may\nrun it; 404 when there is no such email in the team or it already ran, 503 when Files did not store an attachment\n(the email stays set aside).",
         "operationId": "workflows_run_set_aside_email",
         "parameters": [
           {
@@ -42005,7 +42005,7 @@
     },
     "/v1/runs/{run_id}/retry": {
       "post": {
-        "description": "Queues a Stuck run again from its last recorded step (c-561): recorded steps are not run again and a write\nwith a record at the gateway is never sent again. Who may cancel the run may retry it; a run that is not Stuck is\nrefused (409 run_not_stuck).",
+        "description": "Queues a Stuck run again from its last recorded step: recorded steps are not run again and a write\nwith a record at the gateway is never sent again. Who may cancel the run may retry it; a run that is not Stuck is\nrefused (409 run_not_stuck).",
         "operationId": "workflows_retry_engine_run",
         "parameters": [
           {
@@ -45435,7 +45435,7 @@
     },
     "/v1/templates": {
       "get": {
-        "description": "The agents, skills and workflows the team's plugins bring, each with the copies the team holds of it; `source`\nkeeps one plugin's (a plugin update's review shows the version each copy came from, c-609).",
+        "description": "The agents, skills and workflows the team's plugins bring, each with the copies the team holds of it; `source`\nkeeps one plugin's (a plugin update's review shows the version each copy came from).",
         "operationId": "templates_list_templates",
         "parameters": [
           {
@@ -47019,7 +47019,7 @@
     },
     "/v1/threads/{thread_id}/route-to-people": {
       "post": {
-        "description": "Taking a case from the workflow to people is a decision on it: a reviewer or admin of its team (c-122).",
+        "description": "Taking a case from the workflow to people is a decision on it: a reviewer or admin of its team.",
         "operationId": "threads_route_one",
         "parameters": [
           {
@@ -48012,7 +48012,7 @@
     },
     "/v1/threads:route-to-people": {
       "post": {
-        "description": "Every open case of a version, in the acting team: a reviewer or admin of that team (c-122).",
+        "description": "Every open case of a version, in the acting team: a reviewer or admin of that team.",
         "operationId": "threads_route_version",
         "parameters": [
           {
@@ -49432,7 +49432,7 @@
     },
     "/v1/widgets/options": {
       "get": {
-        "description": "The agent page's widget picker (c-136): the seeded library's matches first, then the caller's teams' published,\nunretired widgets, searched and limited in the query. A widget whose buttons need a tool outside `granted` (the\ndraft's tools) is offered disabled with the reason, as a pin of it is refused.",
+        "description": "The agent page's widget picker: the seeded library's matches first, then the caller's teams' published,\nunretired widgets, searched and limited in the query. A widget whose buttons need a tool outside `granted` (the\ndraft's tools) is offered disabled with the reason, as a pin of it is refused.",
         "operationId": "agents_widget_options",
         "parameters": [
           {
@@ -50466,7 +50466,7 @@
     },
     "/v1/workflow-refs": {
       "get": {
-        "description": "Workflows by id, name and owning team: every one for a service holding `workflows:view` that governs calls on\ntheir behalf (c-168), the team's for a person with workflows.view (c-222). The registry is not yet partitioned by\ntenant (identity-and-tenancy.md); the route still requires a tenant, so callers key what they keep by it.",
+        "description": "Workflows by id, name and owning team: every one for a service holding `workflows:view` that governs calls on\ntheir behalf, the team's for a person with workflows.view. The registry is not yet partitioned by\ntenant (identity-and-tenancy.md); the route still requires a tenant, so callers key what they keep by it.",
         "operationId": "workflows_workflow_refs",
         "parameters": [
           {
@@ -50645,7 +50645,7 @@
     },
     "/v1/workflows": {
       "get": {
-        "description": "The team's workflows of both engines, a page at a time. `startable` keeps those a person starts by hand (Start\nrun), `takesFiles` those whose start form takes a file (Files' \"Start a workflow with this file\"); each row's\n`start` says how it starts (c-466). `engine=current` leaves out the earlier engine's workflows before the page,\nthe total and the status counts are taken, since the console no longer shows them (c-562).",
+        "description": "The team's workflows of both engines, a page at a time. `startable` keeps those a person starts by hand (Start\nrun), `takesFiles` those whose start form takes a file (Files' \"Start a workflow with this file\"); each row's\n`start` says how it starts. `engine=current` leaves out the earlier engine's workflows before the page,\nthe total and the status counts are taken, since the console no longer shows them.",
         "operationId": "workflows_list_workflows",
         "parameters": [
           {
@@ -52130,7 +52130,7 @@
     },
     "/v1/workflows/definitions/{workflow_id}/archive": {
       "post": {
-        "description": "Archives the workflow (c-274): it starts no run of any mode, a trigger no longer serves it, and it leaves the\nlists; its versions and runs are kept. Who may delete the workflow may archive it.",
+        "description": "Archives the workflow: it starts no run of any mode, a trigger no longer serves it, and it leaves the\nlists; its versions and runs are kept. Who may delete the workflow may archive it.",
         "operationId": "workflows_archive_definition",
         "parameters": [
           {
@@ -53080,7 +53080,7 @@
     },
     "/v1/workflows/definitions/{workflow_id}/versions/{version}/shapes": {
       "get": {
-        "description": "What each step of a saved version outputs, by port, before it has run (c-353): fixed by its type, built from\nits settings, or read from its document type or operation. A mapping picker reads it.",
+        "description": "What each step of a saved version outputs, by port, before it has run: fixed by its type, built from\nits settings, or read from its document type or operation. A mapping picker reads it.",
         "operationId": "workflows_definition_shapes",
         "parameters": [
           {

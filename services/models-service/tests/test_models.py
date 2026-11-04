@@ -82,7 +82,7 @@ async def test_an_alias_not_cleared_for_the_data_is_refused(models: Models) -> N
 
 
 async def test_an_image_reaches_only_an_alias_cleared_for_images_and_every_call_counts_them(models: Models) -> None:
-    """A page image carries the whole page (c-295): bank-standard is cleared for confidential data but not images, so
+    """A page image carries the whole page: bank-standard is cleared for confidential data but not images, so
     an image part is refused there and logged; a version cleared for images takes it, and both rows count it."""
     key_id, secret = await models.key(budget="5")
     page = {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgo="}}
@@ -184,7 +184,7 @@ async def test_a_call_carries_the_callers_request_hash_and_is_found_by_thread(mo
 
 
 async def test_one_tenant_spending_its_share_of_a_shared_key_leaves_other_tenants_theirs(models: Models) -> None:
-    """c-251: files-service extracts for every tenant on one key; a tenant that spends its share is refused while the
+    """Files-service extracts for every tenant on one key; a tenant that spends its share is refused while the
     next tenant still reads, and a call that names no tenant is refused rather than charged to the whole key."""
     key_id, secret = await models.key(budget="1")
     async with models.engine.begin() as c:

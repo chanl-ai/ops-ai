@@ -1,4 +1,4 @@
-"""agent_memories: the system role reads the tenant column, for the retention sweep (c-124)
+"""agent_memories: the system role reads the tenant column, for the retention sweep
 
 Revision ID: 0072_memories_system_tenants
 Revises: 0071_hot_query_indexes

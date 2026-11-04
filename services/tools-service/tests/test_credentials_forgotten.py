@@ -1,4 +1,4 @@
-"""A deleted sign-in leaves no value behind in the credential store (c-616 C7 follow-up): with a vault, a row that goes
+"""A deleted sign-in leaves no value behind in the credential store: with a vault, a row that goes
 without telling the store leaves its token in the vault for good. Run on the memory vault, by failure mode: a person
 disconnects, a connection is deleted with sign-ins on it, and a member leaves the team."""
 

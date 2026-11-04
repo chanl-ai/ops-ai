@@ -36,7 +36,7 @@ import type { ListParams, ListResult, OptionsPage, OptionsParams } from '@/lib/t
 export interface KnowledgeApi {
   kbs: {
     list(params: ListParams<KbFilters>): Promise<ListResult<KnowledgeBaseRow>>;
-    /** The knowledge picker: bases searched and paged on the server, storing their ids; `ids` labels stored ones (c-135). */
+    /** The knowledge picker: bases searched and paged on the server, storing their ids; `ids` labels stored ones. */
     options(p: OptionsParams): Promise<OptionsPage>;
     get(id: string): Promise<KnowledgeBaseDetail>;
     create(input: KnowledgeBaseInput): Promise<KnowledgeBase>;

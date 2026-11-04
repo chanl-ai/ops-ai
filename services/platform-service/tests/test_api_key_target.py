@@ -1,4 +1,4 @@
-"""An API key scoped to one agent or workflow (c-246), by failure mode: the target is lost before agents-service sees
+"""An API key scoped to one agent or workflow, by failure mode: the target is lost before agents-service sees
 it; a target the key could never start is accepted; the service list of keys leaks another workspace's keys, a
 secret or the creator, or answers a person."""
 

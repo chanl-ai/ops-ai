@@ -1,4 +1,4 @@
-"""A plugin turned on for a team with each sign-in method (c-588), through the real routes, by failure mode: the turn-on
+"""A plugin turned on for a team with each sign-in method, through the real routes, by failure mode: the turn-on
 makes a connection without its credential, so the plugin cannot be used at all; the credential goes in the wrong
 place, under the wrong name, or not at all; Test connection has nowhere to read; a field the method does not have,
 or a method the plugin does not offer, is taken silently; a second turn-on changes the method under a working
@@ -287,7 +287,7 @@ async def test_a_sign_in_address_the_plugin_fixes_is_refused_rather_than_typed_o
 async def test_a_cancelled_connect_leaves_nothing_and_the_next_turn_on_makes_a_new_connection(
     rig: Rig, tenant: str
 ) -> None:
-    """The connect dialog's Cancel removes the connection it made, then turns the plugin off (c-580 PM test: a
+    """The connect dialog's Cancel removes the connection it made, then turns the plugin off (a
     half-made connection was left, and a binding naming a removed connection could never be turned on again)."""
     first = await turn_on(rig, tenant, "test.bearer", credentials={"token": TOKEN})
     made = str(first.json()["data"]["connectionId"])

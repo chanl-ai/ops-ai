@@ -1,5 +1,5 @@
-"""The database holds memories, their audit and the memories an answer used (c-557), mailboxes, embeds, trigger mail,
-chat search, chat attachments and team defaults to the caller's team (c-507, migration 0077), with raw SQL and no WHERE
+"""The database holds memories, their audit and the memories an answer used, mailboxes, embeds, trigger mail,
+chat search, chat attachments and team defaults to the caller's team (migration 0077), with raw SQL and no WHERE
 clause as ops_runtime_tenant, by failure mode: a team transaction reading or writing another team's row, and a
 tenant-wide one reading another tenant's. On the PostgreSQL test database migrated to head."""
 

@@ -1,4 +1,4 @@
-"""A plugin's OAuth app through the real routes (c-565), by failure mode: a team with no app of its own cannot sign in
+"""A plugin's OAuth app through the real routes, by failure mode: a team with no app of its own cannot sign in
 although the install set one up; Ops AI's app wins over a team's own; Ops AI's secret is copied into a team or shown
 back by any read; a team's own client is kept in more than one place; and a team points its connection at Ops AI's app
 by hand.
@@ -122,7 +122,7 @@ async def test_a_teams_own_app_wins_over_the_platforms(rig: Rig, tenant: str) ->
 
 
 async def test_edit_keys_on_a_platform_app_connection_keeps_the_platforms_app(rig: Rig, tenant: str) -> None:
-    """The connection page's Edit keys sends back the kind's fields it shows, as the dialog does (c-580): the app the
+    """The connection page's Edit keys sends back the kind's fields it shows, as the dialog does: the app the
     account signs in with is not one of them, so a save that rewrites the settings must not drop it."""
     client, connections, _ = rig
     on = await client.put(f"/v1/apps/{APP}/team", json={"enabled": True}, headers=team_admin(tenant))

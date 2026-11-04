@@ -1,4 +1,4 @@
-"""An agent's knowledge holds knowledge base ids only (c-141), by failure mode: a name saved where the runtime reads
+"""An agent's knowledge holds knowledge base ids only, by failure mode: a name saved where the runtime reads
 ids; an agent made unsaveable because a base it already held is gone; a save accepted unchecked while kb-service
 cannot answer."""
 

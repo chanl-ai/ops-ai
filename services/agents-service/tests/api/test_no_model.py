@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from ops_agents.api.app import create_app
-from ops_agents.store.graphs import metadata
+from ops_agents.store.base import metadata
 from ops_engine.store import metadata as engine_metadata
 from ops_service_kit.settings import Settings
 from tests.conftest import fixture_knowledge

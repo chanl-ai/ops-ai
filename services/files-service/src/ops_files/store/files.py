@@ -4,7 +4,7 @@
 
 Portable SQL only (database portability D1, D5, D6): no JSON queried, bounded keys, plain inserts whose unique keys
 carry the guarantees. Every transaction is `ops_store.isolation.isolated_tx` as `ops_files_tenant`, carrying the
-caller's tenant and team from their token, and the database holds each table to them (migration files_0010, c-415):
+caller's tenant and team from their token, and the database holds each table to them (migration files_0010):
 team-owned tables to the team, the workspace's storage settings and upload keys to the tenant. Each read also filters
 by tenant and, through `team_visible`, by team, so it seeks on its index."""
 
@@ -80,7 +80,7 @@ files = sa.Table(
     sa.Column("uploaded_by", sa.String(320), nullable=False),
     sa.Column("uploaded_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("version_count", sa.Integer, nullable=False),
-    # What was read from the file (c-250), recorded by the extract workflow; `read_as` and `read_path` repeat its
+    # What was read from the file, recorded by the extract workflow; `read_as` and `read_path` repeat its
     # type and path as columns so the list filters and counts them in the query.
     sa.Column("data", sa.JSON),
     sa.Column("read_as", sa.String(64)),
@@ -91,7 +91,7 @@ files = sa.Table(
     info={**TENANT_SCOPED, **team_owned("team")},
 )
 
-# Service events files-service reports (c-258's outbox): a deleted file's file.deleted, which starts the system workflow
+# Service events files-service reports (the outbox): a deleted file's file.deleted, which starts the system workflow
 # that purges what documents-service read from it. Files calls no other service for that.
 service_outbox = outbox_table(metadata, "files_outbox", info=TENANT_SCOPED)
 
@@ -578,7 +578,7 @@ class FilesStore:
     async def remove(self, file_id: str, *, event: Mapping[str, Any] | None = None) -> None:
         """Deletes the file's rows; the digest is free again for its team. Hold history stays. `event` (team, actor,
         payload) is written to the outbox in the same transaction, so the deletion and its file.deleted event commit
-        together and a relay delivers it however long agents-service is down (c-250)."""
+        together and a relay delivers it however long agents-service is down."""
         tenant = isolation.tenant()
         async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             if event is not None:

@@ -39,7 +39,7 @@ class RouteWorkflow(WireModel):
 
 @router.post("/v1/threads/{thread_id}/route-to-people", response_model=Envelope[Routed], status_code=202)
 async def route_one(rt: Rt, me: Me, thread_id: str, body: RouteThread) -> JSONResponse:
-    """Taking a case from the workflow to people is a decision on it: a reviewer or admin of its team (c-122)."""
+    """Taking a case from the workflow to people is a decision on it: a reviewer or admin of its team."""
     row = await graph_store(rt).thread(thread_id)
     require_reviews_decide(
         review_teams(me), str((row or {}).get("team_id") or me.team_id), f"routing thread {thread_id}"
@@ -50,7 +50,7 @@ async def route_one(rt: Rt, me: Me, thread_id: str, body: RouteThread) -> JSONRe
 
 @router.post("/v1/threads:route-to-people", response_model=Envelope[RoutedVersion], status_code=202)
 async def route_version(rt: Rt, me: Me, body: RouteWorkflow) -> JSONResponse:
-    """Every open case of a version, in the acting team: a reviewer or admin of that team (c-122)."""
+    """Every open case of a version, in the acting team: a reviewer or admin of that team."""
     require_reviews_decide(review_teams(me), me.team_id, f"routing {body.workflow_id} v{body.version_number}")
     threads = await open_threads(rt, body.workflow_id, body.version_number)
     results = [{"threadId": tid, "status": await route_thread(rt, tid, body.reason, me.email)} for tid in threads]

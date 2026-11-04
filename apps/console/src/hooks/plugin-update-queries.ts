@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * A plugin update's review and take (c-609), on the generated SDK through `sdk()`: what taking the installed version
+ * A plugin update's review and take, on the generated SDK through `sdk()`: what taking the installed version
  * would change for the team, which of the team's agents and workflows use each changed or removed tool, and taking it.
  * The routes answer 404 while the install's plugin_updates flag is off, so the screen shows nothing then.
  */
@@ -43,7 +43,7 @@ export const useToolUses = (tools: string[]) =>
 
 export type TemplateCopy = Awaited<ReturnType<Agents['templates_list_templates']>>[number];
 
-/** The plugin's templates with the version of the team's copy of each (copy provenance, c-590), for the review. */
+/** The plugin's templates with the version of the team's copy of each (copy provenance), for the review. */
 type Documents = OpsAI['raw']['documents'];
 export type DocumentTypeTemplate = Awaited<ReturnType<Documents['templates_list_templates']>>[number];
 /**

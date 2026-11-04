@@ -1,4 +1,4 @@
-"""The egress client keeps no cookies (c-038): one client serves every tenant, workflow and caller, so a cookie an
+"""The egress client keeps no cookies: one client serves every tenant, workflow and caller, so a cookie an
 upstream sets on one call must never ride on another. One test per way a cookie could leak or be lost."""
 
 from __future__ import annotations

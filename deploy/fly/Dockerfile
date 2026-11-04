@@ -36,7 +36,7 @@ RUN corepack enable \
 COPY apps/console/package.json apps/console/
 COPY apps/embed/package.json apps/embed/
 COPY packages/usecase-runner/package.json packages/usecase-runner/
-# The console calls services through the generated SDK (c-580); its `prepare` script builds it during the install.
+# The console calls services through the generated SDK; its `prepare` script builds it during the install.
 COPY sdk/typescript sdk/typescript
 RUN pnpm install --frozen-lockfile --filter @ops-ai/console...
 COPY apps/console apps/console
@@ -120,7 +120,7 @@ COPY services services
 COPY sdk/python sdk/python
 RUN --mount=type=cache,target=/root/.cache/uv ${UV_DEFAULT_INDEX:+env UV_DEFAULT_INDEX=$UV_DEFAULT_INDEX} uv sync --frozen --no-dev
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
-# runner-service's CPython for WASI (c-531), pinned by SHA-256 in settings: fetched at build, so no machine fetches it
+# runner-service's CPython for WASI, pinned by SHA-256 in settings: fetched at build, so no machine fetches it
 # when it starts.
 RUN [ -n "$OPS_RUNNER_WASM_URL" ] || unset OPS_RUNNER_WASM_URL; python -m ops_runner.fetch
 
@@ -176,7 +176,7 @@ EXPOSE 8760
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 CMD ["python", "/app/deploy/images/healthcheck.py", "http://127.0.0.1:8760/health"]
 CMD ["python", "-m", "ops_documents"]
 
-# Code tools' functions (c-531): Python on WASM with no network; tools-service is its only caller.
+# Code tools' functions: Python on WASM with no network; tools-service is its only caller.
 FROM service AS runner
 EXPOSE 8770
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 CMD ["python", "/app/deploy/images/healthcheck.py", "http://127.0.0.1:8770/health"]
@@ -202,7 +202,7 @@ USER ops
 EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 CMD ["wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/api/platform/v1/health"]
 
-# SQL Server tooling (c-345): the workspace with Microsoft's ODBC Driver 18 and sqlcmd, so deploy/database/mssql_live.py
+# SQL Server tooling: the workspace with Microsoft's ODBC Driver 18 and sqlcmd, so deploy/database/mssql_live.py
 # installs and compares the SQL Server bundle from Linux and no driver goes on a laptop.
 FROM python-base AS test-mssql
 RUN apt-get update \

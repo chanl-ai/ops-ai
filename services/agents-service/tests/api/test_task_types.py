@@ -1,4 +1,4 @@
-"""Human Task types (c-288) through `/v1/task-types` and the binder, by failure mode: a builder edits a seeded type
+"""Human Task types through `/v1/task-types` and the binder, by failure mode: a builder edits a seeded type
 every tenant shares, or an admin cannot; publishing a new version changes a task already pinned to the old one; a
 viewer or another team's builder changes a team's type; a type the screen cannot draw is saved; a missing required
 param refuses the task instead of showing its fallback; a wrong-kind param passes; a region with nothing to show is
@@ -47,7 +47,7 @@ async def test_seeded_types_are_listed_and_changed_only_by_an_admin(c: AsyncClie
     res = await c.put("/v1/task-types/write_approval/draft", json=record, headers=BUILDER)
     assert res.status_code == 403 and res.json()["error"]["code"] == "system_record", res.text
     assert seed["teamId"] == "team_ops", "each team holds its own copy of a seeded type"
-    # A system record as any other (register E05, tick 30): admins change it, decided by can(), not by its origin.
+    # A system record as any other (register E05): admins change it, decided by can(), not by its origin.
     ok(await c.put("/v1/task-types/write_approval/draft", json=record, headers=ADMIN))
 
 
@@ -79,7 +79,7 @@ async def test_only_the_owning_team_builder_changes_a_type(c: AsyncClient) -> No
     made = await _copy(c)
     record = made["versions"][0]["record"]
     other = await c.put("/v1/task-types/vendor_bank_change/draft", json=record, headers=OTHER_TEAM)
-    assert other.status_code == 404, "another team's type is not read at all (c-407): " + other.text
+    assert other.status_code == 404, "another team's type is not read at all: " + other.text
 
 
 async def test_a_type_the_screen_cannot_draw_is_refused(c: AsyncClient) -> None:
@@ -116,7 +116,7 @@ def test_a_region_with_nothing_to_show_is_left_out_and_a_whole_template_keeps_it
 
 
 def test_the_document_region_carries_each_fields_boxes_flat() -> None:
-    """The viewer draws a read's boxes from the document region alone (opsai-worker-ui, c-289)."""
+    """The viewer draws a read's boxes from the document region alone."""
     record = next(s for s in tt.seeds() if s["id"] == "document_check")
     fields = [
         {"key": "amount", "check": True, "boxes": [{"page": 1, "x": 0.1, "y": 0.2, "w": 0.3, "h": 0.04}]},
@@ -166,7 +166,7 @@ def _typed_flow(wid: str, task_type: dict[str, Any], params: dict[str, Any]) -> 
 
 
 async def test_a_typed_step_missing_a_param_saves_with_a_warning_never_a_refusal(c: AsyncClient) -> None:
-    """Owner, 2026-10-18: a missing setting warns on save and the task shows its fallback; it never refuses."""
+    """A missing setting warns on save and the task shows its fallback; it never refuses."""
     flow = _typed_flow("typed_warn", {"id": "generic_decision"}, {"facts": "$.input.facts"})
     saved = ok(await c.post("/v1/workflows/definitions", json={"definition": flow}, headers=BUILDER), 201)
     assert [(w["node"], w["field"]) for w in saved["warnings"]] == [("check", "params.title")], saved
@@ -176,7 +176,7 @@ async def test_a_typed_step_missing_a_param_saves_with_a_warning_never_a_refusal
 
 
 def test_dates_and_numbers_read_as_a_person_reads_them() -> None:
-    """A raw ISO date or float never reaches a task's text or facts (uc-234 step 8, opsai-worker-ui)."""
+    """A raw ISO date or float never reaches a task's text or facts (uc-234 step 8)."""
     record = next(s for s in tt.seeds() if s["id"] == "tool_access_request")
     until = "2027-01-17T13:17:27.879526+00:00"
     facts = [{"label": "Until", "value": until}, {"label": "Calls a day", "value": 1200.0}]

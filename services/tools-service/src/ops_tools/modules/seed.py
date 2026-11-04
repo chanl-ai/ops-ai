@@ -23,7 +23,7 @@ from ..store.connections import ConnectionStore
 from ..store.egress import EgressStore
 from ..store.modules import Aggregate, ModuleStore, StaleModuleError
 
-# The dev seed writes every team's connections into one tenant, each in its own team (c-602).
+# The dev seed writes every team's connections into one tenant, each in its own team.
 SEED = "seed"
 
 DOCUMENT_SERVICE = {
@@ -36,13 +36,13 @@ DOCUMENT_SERVICE = {
 REQUESTERS = ("Maya Okafor", "Priya Shah", "Anika Singh")
 # Workflow tools the agents catalogue does not list but the Runtime runs locally; send_reply emails a customer.
 WORKFLOW_TOOLS = ("send_reply", "open_case", "send_acknowledgement", "read_file", "read_document", "search_knowledge")
-# The mail sends: a reply waits for a person; an acknowledgement to the sender of a message leaves at once (c-532).
+# The mail sends: a reply waits for a person; an acknowledgement to the sender of a message leaves at once.
 SENDS = {
     "send_reply": ("Email a reply to a customer.", True),
     "send_acknowledgement": ("Email an automatic acknowledgement to the sender of a message; no approval.", False),
 }
 # Tools of the platform itself, run locally in every tenant's Runtime module, and the one declaration of their access
-# and approval (registry.WORKFLOW_TOOLS reads it). open_case opens a case in the caller's team (c-219): a write, but
+# and approval (registry.WORKFLOW_TOOLS reads it). open_case opens a case in the caller's team: a write, but
 # one that changes only the team's own case list and closes nothing, so it runs without approval unless the team's
 # toolWritesNeedApproval policy is on.
 PLATFORM_TOOLS: list[dict[str, Any]] = [
@@ -63,7 +63,7 @@ PLATFORM_TOOLS: list[dict[str, Any]] = [
             },
         },
     },
-    # Applies a tool access request's decision (c-257). Only the tool_access_request system workflow calls it, after
+    # Applies a tool access request's decision. Only the tool_access_request system workflow calls it, after
     # its review: the gateway refuses it from any other workflow, and it is not an operation an agent can be granted.
     {
         "name": "apply_tool_access",
@@ -83,7 +83,7 @@ PLATFORM_TOOLS: list[dict[str, Any]] = [
         },
     },
 ]
-# The built-in Files and Document types tools (c-613), in the Platform tools module of every install. Reads: no
+# The built-in Files and Document types tools, in the Platform tools module of every install. Reads: no
 # approval, each call in the call log.
 # One call's limit: the gateway's deadline is this and its 5 s margin, inside chat's 30 s gateway client.
 FILE_TOOL_TIMEOUT_MS = 20_000
@@ -118,7 +118,7 @@ FILE_TOOLS: list[dict[str, Any]] = [
     },
 ]
 FILE_TOOL_NAMES = tuple(str(t["name"]) for t in FILE_TOOLS)
-# The built-in Knowledge bases tool (c-616): a read with no approval, each call in the call log.
+# The built-in Knowledge bases tool: a read with no approval, each call in the call log.
 KNOWLEDGE_TOOLS: list[dict[str, Any]] = [
     {
         "name": "search_knowledge",
@@ -184,7 +184,7 @@ def team_of(owner_group: str | None, teams: list[dict[str, Any]]) -> str:
 
 
 def kind_of(module: dict[str, Any]) -> str:
-    """What a module calls, read from its tools (c-616): `mcp` an MCP server, `code` functions on runner-service or the
+    """What a module calls, read from its tools: `mcp` an MCP server, `code` functions on runner-service or the
     platform's own tools, `http` an app's address (also a module with no tools yet). Only http and mcp have an address,
     which lives on their connection."""
     executors = {str(o.get("executor")) for o in cast(list[dict[str, Any]], module.get("operations") or [])}
@@ -193,14 +193,14 @@ def kind_of(module: dict[str, Any]) -> str:
     return "code" if executors & {"code", "local"} and "http" not in executors else "http"
 
 
-# A connection the platform made to hold a custom tool's address (c-616): reached from its tool, not listed in Apps.
+# A connection the platform made to hold a custom tool's address: reached from its tool, not listed in Apps.
 TOOL_ORIGIN = "tool"
 
 
 def open_connection(
     *, tenant_id: str, team_id: str, connection_id: str, name: str, base: str, me: str, at: datetime
 ) -> dict[str, Any]:
-    """The account a custom module with none of its own keeps its address on (c-616): no sign-in, the address its
+    """The account a custom module with none of its own keeps its address on: no sign-in, the address its
     calls go to, none until a first tool names one."""
     return {
         "tenant_id": tenant_id, "id": connection_id, "team_id": team_id, "name": name.strip(), "auth_kind": "none",
@@ -291,8 +291,8 @@ def runtime_module(
             "masked_output": [],
             "binding": None,
             "rate_limit_per_min": 60,
-            # Declared on the tool; a write that declares nothing runs, as approvals are off by default (owner,
-            # 2026-11-01).
+            # Declared on the tool; a write that declares nothing runs, as approvals are off by
+            # default.
             "requires_approval": t["access"] != "read" and t.get("requires_approval") is True,
             "approvers": 1,
             "amount_max": None,
@@ -312,8 +312,8 @@ def runtime_module(
     }
 
 
-# Ops AI's own tools shown as Built in apps (c-607), and the team defaults tools-service provisions for every team
-# (c-616): each app is a module of the team's own holding `operations`, found again by its template id. `module` is the
+# Ops AI's own tools shown as Built in apps, and the team defaults tools-service provisions for every team:
+# each app is a module of the team's own holding `operations`, found again by its template id. `module` is the
 # app's older module name, read where a team has no copy of its own yet.
 BUILT_IN: list[dict[str, Any]] = [
     {
@@ -334,7 +334,7 @@ BUILT_IN: list[dict[str, Any]] = [
         "description": "Sends replies and acknowledgements from the team's mailboxes.",
         "href": "/channels/email",
     },
-    # c-613: the platform's own file reads.
+    # The platform's own file reads.
     {
         "id": "files",
         "name": "Files",
@@ -410,7 +410,7 @@ def _local_op(module_id: str, n: int, name: str) -> dict[str, Any]:
 
 
 def built_in_module(app: dict[str, Any], names: list[str], *, tenant_id: str, team_id: str, at: datetime) -> Aggregate:
-    """A built-in app's module for one team (c-616): the team's own published copy of the app's tools `names`, marked
+    """A built-in app's module for one team: the team's own published copy of the app's tools `names`, marked
     as the platform's (`system`) so a person cannot change it and the next defaults version can."""
     module_id = f"mod_builtin_{app['id']}_{team_id}"[:64]
     m = blank(
@@ -439,7 +439,7 @@ def built_in_module(app: dict[str, Any], names: list[str], *, tenant_id: str, te
 
 def platform_module(names: list[str], *, tenant_id: str, at: datetime) -> Aggregate:
     """The platform tools `names` (of WORKFLOW_TOOLS), as one published module the gateway runs locally. No team owns
-    it (c-433): every team reads and calls it, and a held write is decided by the calling run's team."""
+    it: every team reads and calls it, and a held write is decided by the calling run's team."""
     m = blank(
         module_id=PLATFORM_MODULE,
         tenant_id=tenant_id,
@@ -468,8 +468,8 @@ async def ensure_platform_tools(
 ) -> Literal["present", "written"]:
     """Writes the Platform tools module for the platform tools no module of the tenant holds, so a workflow's reply
     resolves in every install and not only where the dev seed wrote its mail module. A tool declared after the module
-    was written is added to that copy (c-509), so send_acknowledgement reaches a team that already has one. It is a
-    workspace-level record: no team owns it (c-433), and every team reads and calls it. `team_id` is the team the
+    was written is added to that copy, so send_acknowledgement reaches a team that already has one. It is a
+    workspace-level record: no team owns it, and every team reads and calls it. `team_id` is the team the
     lookup is for (the acting team when None): a tool another team holds in its own module is still missing here."""
     taken = await store.names_taken(tenant_id, list(WORKFLOW_TOOLS), team_id)
     missing = [n for n in WORKFLOW_TOOLS if n not in taken]
@@ -561,7 +561,7 @@ def aggregates(
                     "masked_output": o.get("masked") or [],
                     "binding": o.get("binding"),
                     "rate_limit_per_min": o.get("rate") or 60,
-                    # Only a write the seed marks waits: approvals are off by default (owner, 2026-11-01).
+                    # Only a write the seed marks waits: approvals are off by default.
                     "requires_approval": access == "write" and o.get("requiresApproval") is True,
                     "approvers": int(base.get("approvers") or 1),
                     # Who approves a write when not the module's own team (Fraud Operations decides a wire hold).
@@ -598,8 +598,8 @@ def aggregates(
                     else [{"environment": "production", "ok": True, "checkedAt": ago(v["daysAgo"]).isoformat()}],
                 }
             )
-        # A pending review is a publish request in agents-service's Reviews (c-163); the start-up hand-over opens it
-        # there on the publisher's behalf and the version takes the id Reviews names (c-222).
+        # A pending review is a publish request in agents-service's Reviews; the start-up hand-over opens it
+        # there on the publisher's behalf and the version takes the id Reviews names.
         if versions[-1]["status"] == "in_review":
             mj = major_of(last["version"])
             versions[-1].update(review_id=f"TMP-{s['id']}_rev{mj}", requested_at=ago(last["daysAgo"] + 3))
@@ -641,7 +641,7 @@ def aggregates(
                 "status": status,
                 "owner_team": s["ownerTeam"],
                 "owner_contacts": s["ownerContacts"],
-                # Not a column: load() puts it on the module's connection, the only home an address has (c-616).
+                # Not a column: load() puts it on the module's connection, the only home an address has.
                 "endpoint": s["endpoint"],
                 "auth": auth_of({"kind": s["auth"], "header": s.get("authHeader")}),
                 "timeout_ms": s["timeoutMs"],
@@ -676,7 +676,7 @@ def aggregates(
     held = {o["name"] for m in out for o in m["operations"]}
     rest = [t for t in [*(catalog or []), *PLATFORM_TOOLS] if t["name"] not in held and not t.get("system")]
     if rest:
-        # The catalogue's runtime tools are the platform's, like the platform tools module: no team owns them (c-433).
+        # The catalogue's runtime tools are the platform's, like the platform tools module: no team owns them.
         out.append(runtime_module(rest, tenant_id=tenant_id, team_id=None, me=seed["currentUser"], at=ago(30)))
     return out
 
@@ -694,8 +694,8 @@ async def load(
     Runtime module the seed no longer writes is removed. Returns how many it added."""
     added = 0
     mods = aggregates(seed, tenant_id=tenant_id, now=now, catalog=catalog)
-    # The seed's integrations are connection records (c-330), made only in the teams whose seeded modules use them: a
-    # connection serves its own team's modules only (c-509), and one no module uses is an empty card (owner, 10-31). A
+    # The seed's integrations are connection records, made only in the teams whose seeded modules use them: a
+    # connection serves its own team's modules only, and one no module uses is an empty card. A
     # module in the dev caller's team uses the record's own id; each other team gets its copy, `{id}_{team}`. One
     # already there is left as it is, but an unedited seeded one in another team moves to the team the seed gives it.
     connections = ConnectionStore(store.engine)

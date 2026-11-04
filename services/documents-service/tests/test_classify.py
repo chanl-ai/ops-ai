@@ -1,4 +1,4 @@
-"""Classify per file (c-249, model first), by failure mode: a detected file read with the wrong type's fields, or not
+"""Classify per file (model first), by failure mode: a detected file read with the wrong type's fields, or not
 read at all (F1); an unknown or doubtful kind read anyway instead of going to a person (F2); a retried step paying for
 a second classification (F3)."""
 

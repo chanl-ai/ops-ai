@@ -5,7 +5,7 @@ import type { Node } from '@xyflow/react';
 import { createSmartEdge, SmartEdgeProvider } from '@tisoap/react-flow-smart-edge';
 
 /**
- * A workflow line that goes around steps (c-486). It keeps today's smoothstep shape, 8 px corners included, while that
+ * A workflow line that goes around steps. It keeps today's smoothstep shape, 8 px corners included, while that
  * shape is clear of every step but its own two, and is routed around them when it is not. Routes run in a Web Worker
  * (on the main thread when a worker cannot start) and are never stored.
  */

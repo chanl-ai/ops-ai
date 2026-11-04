@@ -122,7 +122,7 @@ export function AppPageView({ appId }: { appId: string }) {
   const [connecting, setConnecting] = React.useState(false);
   const [another, setAnother] = React.useState(false);
   const [sandboxing, setSandboxing] = React.useState(false);
-  // Several named accounts of one app (c-608) and sandbox accounts are behind their install flags; off, neither shows.
+  // Several named accounts of one app and sandbox accounts are behind their install flags; off, neither shows.
   const several = useFlag('several_accounts');
   const sandboxes = useFlag('sandbox_accounts');
 

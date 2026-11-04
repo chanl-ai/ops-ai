@@ -1,7 +1,7 @@
-"""The review service applies each operation's write approval policy (c-048 T005), by failure mode: the person who
-asked approving their own write after the tenant switched requesterMayDecide off (c-186), read from the platform
+"""The review service applies each operation's write approval policy, by failure mode: the person who
+asked approving their own write after the tenant switched requesterMayDecide off, read from the platform
 token, or refused while it is open; the workspace's stepUp policy not asking for a step-up on a write whose operation
-asks for none. Who decides is the thread's team (c-509): test_approval_in_the_runs_team.py. tools-service's
+asks for none. Who decides is the thread's team: test_approval_in_the_runs_team.py. tools-service's
 side (the policy, and OPA counting approvers) is tested there; here the policy is what tools-service would answer."""
 
 from __future__ import annotations
@@ -144,7 +144,7 @@ async def drafted(client: AsyncClient, asker: dict[str, str]) -> str:
 async def test_an_asker_who_decides_reviews_is_not_asked_until_the_tenant_switches_it_off(
     production: AsyncClient,
 ) -> None:
-    """Roles decide (owner, 2026-11-01): James decides Operations' reviews, so his own write is decided as his at once
+    """Roles decide: James decides Operations' reviews, so his own write is decided as his at once
     and the card is no longer waiting; with requesterMayDecide off, Maya decides it."""
     james = person("usr_james", ["team_ops"])
     url = await drafted(production, james)
@@ -193,7 +193,7 @@ async def test_a_person_signed_in_with_the_dev_password_approves_only_in_the_thr
     """A dev stack signs people in through platform-service with the demo password; they keep their teams, unlike the
     dev header caller, so a Fraud Operations approver does not reach Operations' write, and Operations' does."""
     monkeypatch.setattr(hitl_facade, "policy_of", policy())
-    # James builds and does not decide reviews, so his write waits for an approver (owner, 2026-11-01).
+    # James builds and does not decide reviews, so his write waits for an approver.
     url = await drafted(dev_platform, person("usr_james", ["team_ops"], auth_method="dev", role="builder"))
     omar = person("usr_omar", ["team_fraud"], auth_method="dev")
     assert (await dev_platform.post(url, json={"type": "approve"}, headers=omar)).status_code == 404
@@ -206,7 +206,7 @@ async def test_the_workspace_step_up_policy_asks_every_approver_to_step_up() -> 
     dana = {"X-Dev-User": "dana@harborpine.example"}
     async for c in _client(Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED), platform=False):
         # The operation asks for no step-up and the policy is open: the dev asker, who passes every role rule, is not
-        # asked, so the card is decided as theirs (owner, 2026-11-01).
+        # asked, so the card is decided as theirs.
         own = await c.post(await drafted(c, dana), json={"type": "approve"}, headers=dana)
         assert own.status_code == 409, own.text
     strict = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED, dev_policies={"stepUp": True})

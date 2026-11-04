@@ -179,7 +179,7 @@ async def test_a_changed_seed_reaches_untouched_modules_and_spares_edited_ones(
 async def test_a_retired_access_class_is_refused_when_read_and_its_database_rebuilt(seed: dict[str, Any]) -> None:
     """A database built before Read and Write only (tools_0011) and holding a money_movement row: `make up` sees its
     chain behind the code's head and rebuilds it, and migrating it in place (KEEP_DATA=1) fails on the row instead of
-    keeping one the code refuses to read (c-048 T003)."""
+    keeping one the code refuses to read."""
     async with scratch_database("tools_retired_access") as target:
         # A database from before tools_0012, as `make up` meets one: written at head, then the CHECK taken away, one row
         # set back to money_movement, and the tools chain recorded at tools_0011.

@@ -1,4 +1,4 @@
-"""Password sign-in and reset (c-188), by failure mode: a password kept in plain text or the demo password accepted
+"""Password sign-in and reset, by failure mode: a password kept in plain text or the demo password accepted
 for a person who has one (F1); a reset link that works twice or late, or leaves the old password or old sessions alive
 (F2); a password accepted where the workspace turned passwords off (F5); a refresh that turns a password session into
 `dev` (F11); a reset request that tells an unknown email from a known one, or claims to send with no mail set up."""

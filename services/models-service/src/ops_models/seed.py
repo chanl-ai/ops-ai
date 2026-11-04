@@ -1,5 +1,5 @@
 """Development seed: the scripted provider, three bank aliases, a key per seeded agent and agents-service's own key.
-With the install's model connection in settings (OPENAI_API_TYPE or OPENAI_API_BASE, c-605), connection openai-local
+With the install's model connection in settings (OPENAI_API_TYPE or OPENAI_API_BASE), connection openai-local
 is that provider, rewritten from the settings on every start; otherwise, with a fake OpenAI URL, openai-local is at
 that URL. Either way alias `default` (agents-service's default) is on it. Idempotent: rows that exist are left alone,
 so a restart never resets a spent budget, except openai-local, which follows the settings, or the fake's URL until an
@@ -27,11 +27,11 @@ AGENTS = ("ag_fraud", "ag_dispute", "ag_branch")
 # agents-service's own key: every turn it sends through models-service spends from it (OPS_MODELS_KEY).
 RUNTIME_KEY = "agents:dev"
 RUNTIME_SECRET = "mk_dev_agents"
-# files-service's own key for extractions (c-235), on its own budget line so extraction spend shows apart.
+# files-service's own key for extractions, on its own budget line so extraction spend shows apart.
 EXTRACT_KEY = "files:extract"
 EXTRACT_SECRET = "mk_dev_extract"
 EXTRACT_TENANT_BUDGET = Decimal(10)
-# tools-service's own key for checking writes against a team's sending policy (c-300), on its own budget line.
+# tools-service's own key for checking writes against a team's sending policy, on its own budget line.
 TOOLS_CHECK_KEY = "tools:check"
 TOOLS_CHECK_SECRET = "mk_dev_tools_check"
 OPENAI_LOCAL = "openai-local"
@@ -109,6 +109,6 @@ async def seed(db: Database, fake_openai_url: str | None = None, install: dict[s
     for key_id, kind, secret in identities:
         row = {"id": key_id, "kind": kind, "budget": Decimal(50), "spent": Decimal(0), "status": "active"}
         await keys.ensure({**row, "rate_limit_per_minute": 600, "secret_hash": secret_hash(secret)})
-    # files-service extracts for every tenant on one key; each tenant spends from its own share (c-251). Set on a key
+    # files-service extracts for every tenant on one key; each tenant spends from its own share. Set on a key
     # seeded before the column existed, too.
     await keys.set_tenant_budget(EXTRACT_KEY, EXTRACT_TENANT_BUDGET)

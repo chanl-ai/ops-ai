@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from ops_agents.api.app import create_app
 from ops_agents.api.model_aliases import HttpModelAliases, ModelsUnavailable, chat_aliases
-from ops_agents.store.graphs import metadata
+from ops_agents.store.base import metadata
 from ops_engine.store import metadata as engine_metadata
 from ops_identity import ServiceClient, dev_service_signer
 from ops_service_kit.settings import Settings
@@ -142,7 +142,7 @@ async def test_publish_refuses_an_old_version_and_a_second_open_request(tmp_path
         assert (await _agent(client, a["id"]))["availability"] == "not_published"
         second = await _publish(client, a["id"], 1)
         assert second.status_code == 409 and second.json()["error"]["code"] == "review_open"
-        # An edit while v1 is in review opens v2 (c-172); v1 is then no longer the newest draft.
+        # An edit while v1 is in review opens v2; v1 is then no longer the newest draft.
         await client.patch(f"/v1/agents/{a['id']}", json={"role": "Checks payees twice"})
         r = await _publish(client, a["id"], 1)
         assert r.status_code == 422 and r.json()["error"]["code"] == "not_newest_draft", r.text
@@ -171,7 +171,7 @@ async def test_restore_copies_into_a_new_draft_and_delete_takes_the_agent_down(c
     await client.patch(f"/v1/agents/{FRAUD}", json={"instructions": "Changed."})
     r = await client.post(f"/v1/agents/{FRAUD}/versions/7/restore")
     a = r.json()["data"]
-    # The edit and the restore both land in the one draft after the published v7 (c-172).
+    # The edit and the restore both land in the one draft after the published v7.
     assert (a["version"], a["publishedVersion"]) == (8, 7) and a["instructions"].startswith("You are Wire Fraud")
 
     assert (await client.delete(f"/v1/agents/{FRAUD}")).status_code == 204
@@ -245,7 +245,7 @@ async def test_an_agents_model_alias_is_checked_at_publish_and_used_by_its_turns
 
         named = await _create(c, "Named Alias")
         await c.patch(f"/v1/agents/{named['id']}", json={"model": "bank-embed"})
-        # Edits rewrite the one draft (c-172), so it stays v1 until a version is published or put to review.
+        # Edits rewrite the one draft, so it stays v1 until a version is published or put to review.
         refused = await _publish(c, named["id"], 1)
         assert refused.status_code == 422 and refused.json()["error"]["code"] == "unknown_model_alias", refused.text
 

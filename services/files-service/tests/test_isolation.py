@@ -1,4 +1,4 @@
-"""The database holds files-service's tables to the caller's tenant and team (c-415, migration files_0011), with raw
+"""The database holds files-service's tables to the caller's tenant and team (migration files_0011), with raw
 SQL and no WHERE clause as ops_files_tenant, by failure mode: a team transaction reading or writing another team's
 file, blob, version, reference, hold or read request; a transaction reading or changing another tenant's upload keys,
 storage settings or outbox events; a dropped policy that nobody notices; and the relay's system role reaching any

@@ -23,8 +23,8 @@ import { ApiError } from '@/lib/api/contract';
 import type { IntegrationStatus } from '@/lib/types/integrations';
 import type { ModuleTestInput, OperationPatch } from '@/lib/types/tool-modules';
 
-/** One tool operation on its own page (c-088): edit its call, inputs, mock and transform, and try them before staging. A
- * REST operation is laid out as an API client lays out a request (c-591). */
+/** One tool operation on its own page: edit its call, inputs, mock and transform, and try them before staging. A
+ * REST operation is laid out as an API client lays out a request. */
 export default function OperationWorkbenchPage() {
   const params = useParams<{ id: string; op: string }>();
   const name = decodeURIComponent(params.op);
@@ -42,7 +42,7 @@ export default function OperationWorkbenchPage() {
   const op = m?.operations.find((o) => o.name === name);
   const [draft, setDraft] = React.useState<WorkbenchDraft | null>(null);
   // A fresh definition after staging (or another tab's edit) replaces the draft; typing in between is kept.
-  // The address comes from the app's connection, never the module (c-616): its base address per environment.
+  // The address comes from the app's connection, never the module: its base address per environment.
   const base = baseOfApp(m?.connection);
   const loaded = op && m ? JSON.stringify(draftOf(op, base)) : '';
   React.useEffect(() => {

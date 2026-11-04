@@ -1,4 +1,4 @@
-"""Wrong passwords lock sign-in and step-up, and reset mail is capped (c-196), by failure mode: wrong passwords never
+"""Wrong passwords lock sign-in and step-up, and reset mail is capped, by failure mode: wrong passwords never
 lock, or the right one signs in while locked (F1); step-up wrong passwords are not counted with sign-in ones (F2); two
 wrong passwords at once count as one (F3); a reset request floods the inbox or answers differently once capped (F4); a
 reset, the lock's time passing or a right password does not clear it (F5). The rig's limits are the defaults: five
@@ -100,7 +100,7 @@ async def test_a_reset_the_lock_ending_or_a_right_password_clears_it(signin: Sig
 
 
 async def test_an_unknown_email_is_answered_exactly_as_a_known_one(signin: SignInRig) -> None:
-    # F6 (c-196 review): an unknown address answered 401 forever while a known one locked, which told an attacker
+    # F6: an unknown address answered 401 forever while a known one locked, which told an attacker
     # which addresses have accounts. Both now get the same answers, wrong password after wrong password.
     known = f"known@{signin.zone}"
     await signin.person(known)

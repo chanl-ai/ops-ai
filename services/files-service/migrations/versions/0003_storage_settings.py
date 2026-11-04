@@ -1,4 +1,4 @@
-"""storage settings, credentials and their audit (c-100)
+"""storage settings, credentials and their audit
 
 Revision ID: files_0003
 Revises: files_0002

@@ -142,7 +142,7 @@
       },
       "Classification": {
         "additionalProperties": false,
-        "description": "Which of the team's document types a file is (c-249): the model's choice and how sure it is, or none.\n`needsReview` when none fits or the confidence is under the floor.",
+        "description": "Which of the team's document types a file is: the model's choice and how sure it is, or none.\n`needsReview` when none fits or the confidence is under the floor.",
         "properties": {
           "confidence": {
             "anyOf": [
@@ -362,7 +362,7 @@
       },
       "DocumentTypeExample": {
         "additionalProperties": false,
-        "description": "A correction a person made on a read of the type, which later reads of it are given (c-297). `line` is where the\nvalue was printed, masked as the team masks personal data; `record` is the record's position, for several.",
+        "description": "A correction a person made on a read of the type, which later reads of it are given. `line` is where the\nvalue was printed, masked as the team masks personal data; `record` is the record's position, for several.",
         "properties": {
           "correctedBy": {
             "title": "Correctedby",
@@ -1599,7 +1599,7 @@
       },
       "ExtractionRequest": {
         "additionalProperties": false,
-        "description": "`fields` follow the Extract from file step's schema (key, label, type, required, description, enum,\nreviewBelow, alwaysReview); `many` answers one record per thing the document names (c-235).",
+        "description": "`fields` follow the Extract from file step's schema (key, label, type, required, description, enum,\nreviewBelow, alwaysReview); `many` answers one record per thing the document names.",
         "properties": {
           "detect": {
             "default": false,
@@ -1862,7 +1862,7 @@
       },
       "Layout": {
         "additionalProperties": false,
-        "description": "A file's layout (c-247): pages, blocks in reading order with their table cells, and words.",
+        "description": "A file's layout: pages, blocks in reading order with their table cells, and words.",
         "properties": {
           "blocks": {
             "items": {
@@ -2317,7 +2317,7 @@
       },
       "TemplateOffer": {
         "additionalProperties": false,
-        "description": "Checked model reads of the type that share one layout no current template reads (c-254).",
+        "description": "Checked model reads of the type that share one layout no current template reads.",
         "properties": {
           "count": {
             "title": "Count",
@@ -2397,7 +2397,7 @@
       },
       "TemplateSuggestIn": {
         "additionalProperties": false,
-        "description": "The team's finished reads of the type a suggestion is drawn from (c-254).",
+        "description": "The team's finished reads of the type a suggestion is drawn from.",
         "properties": {
           "extractionIds": {
             "items": {
@@ -2489,7 +2489,7 @@
       },
       "TestEstimate": {
         "additionalProperties": false,
-        "description": "What testing a version spends, before it runs (c-236): priced at the type's measured tokens per call, the\ntenant's when the type has none yet, else a fixed guess (c-247); `basis` says which.",
+        "description": "What testing a version spends, before it runs: priced at the type's measured tokens per call, the\ntenant's when the type has none yet, else a fixed guess; `basis` says which.",
         "properties": {
           "alias": {
             "title": "Alias",
@@ -3247,7 +3247,7 @@
     },
     "/v1/document-types/{type_id}/examples": {
       "get": {
-        "description": "The corrections people made on the type's reads, which its later reads are given, newest first (c-297).",
+        "description": "The corrections people made on the type's reads, which its later reads are given, newest first.",
         "operationId": "document_types_list_examples",
         "parameters": [
           {
@@ -4012,7 +4012,7 @@
     },
     "/v1/document-types/{type_id}/template-offers": {
       "get": {
-        "description": "Groups of at least 5 checked model reads of one layout that no current template reads (c-254).",
+        "description": "Groups of at least 5 checked model reads of one layout that no current template reads.",
         "operationId": "document_types_template_offers",
         "parameters": [
           {
@@ -4200,7 +4200,7 @@
     },
     "/v1/document-types/{type_id}/templates/suggest": {
       "post": {
-        "description": "A layout template drafted from the team's finished reads of the type, and how it reads each; nothing is\nsaved until a builder posts it as a new version (c-254).",
+        "description": "A layout template drafted from the team's finished reads of the type, and how it reads each; nothing is\nsaved until a builder posts it as a new version.",
         "operationId": "document_types_suggest_template",
         "parameters": [
           {
@@ -5382,7 +5382,7 @@
     },
     "/v1/documents/classifications": {
       "post": {
-        "description": "Which of the team's document types the file is, by the model over each type's name and description\n(c-249); typeId null and needsReview when none fits or the model is less sure than the floor.",
+        "description": "Which of the team's document types the file is, by the model over each type's name and description; typeId\nnull and needsReview when none fits or the model is less sure than the floor.",
         "operationId": "documents_classify_file",
         "parameters": [
           {
@@ -6393,7 +6393,7 @@
     },
     "/v1/documents/layout": {
       "post": {
-        "description": "The file's layout: pages, blocks in reading order with table cells, and words with confidence, boxes as\nfractions of the page. Read on the first ask and cached by the file's content digest (c-247).",
+        "description": "The file's layout: pages, blocks in reading order with table cells, and words with confidence, boxes as\nfractions of the page. Read on the first ask and cached by the file's content digest.",
         "operationId": "documents_compute_layout",
         "parameters": [
           {

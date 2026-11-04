@@ -1,4 +1,4 @@
-"""A signed client assertion (RFC 7523) and the certificate it names (c-583), by failure mode: the signature does not
+"""A signed client assertion (RFC 7523) and the certificate it names, by failure mode: the signature does not
 verify with the certificate's public key; the header names no algorithm or the wrong thumbprint, so Entra cannot find
 the key; a claim Entra checks is missing, or the lifetime runs past what it accepts; two assertions share an id, so the
 second reads as a replay; a key type the platform cannot sign with is used silently; a certificate's expiry or

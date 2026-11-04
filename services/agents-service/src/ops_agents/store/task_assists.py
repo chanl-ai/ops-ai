@@ -1,4 +1,4 @@
-"""What task assist wrote for a typed task (c-302): one row per review step, written when the step paused, so the
+"""What task assist wrote for a typed task: one row per review step, written when the step paused, so the
 assist is one model call per task however often the task is read."""
 
 from __future__ import annotations

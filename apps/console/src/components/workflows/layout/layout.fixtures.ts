@@ -2,7 +2,7 @@ import type { EngineDefinition } from '@/lib/types/engine';
 
 /**
  * Positions of the six seeds whose trigger sits off the origin, as engine_workflows.json held them at 6c3706a0, before
- * the c-486 bake moved every first step to {0, 0}. The missing-position rule's first clause (a step at {0, 0} with the
+ * the bake moved every first step to {0, 0}. The missing-position rule's first clause (a step at {0, 0} with the
  * trigger elsewhere) only has a real case in these, so the tests apply them to the current seeds.
  */
 export const OFF_ORIGIN_SEEDS: Record<string, Record<string, [number, number]>> = {

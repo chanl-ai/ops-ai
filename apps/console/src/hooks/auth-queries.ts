@@ -61,7 +61,7 @@ export const ssoDomainFor = (email: string, domains: { domain: string; verified:
 };
 
 /** Sign-in calls change who every query runs as, so a finished sign-in or sign-out drops cached data, in memory and
- * saved in the browser for anyone (c-560). */
+ * saved in the browser for anyone. */
 function useAuthWrite<A, R>(fn: (a: A) => Promise<R>, clear = false) {
   const qc = useQueryClient();
   return useMutation({
@@ -76,7 +76,7 @@ function useAuthWrite<A, R>(fn: (a: A) => Promise<R>, clear = false) {
 
 export const useSignInWithPassword = () => useAuthWrite(({ email, password }: { email: string; password: string }) => authProvider.signInWithPassword(email, password), true);
 export const useSignInWithGoogle = () => useAuthWrite(() => authProvider.signInWithGoogle(), true);
-/** The seeded demo people to offer as one-click sign-ins (c-504). A production build never asks, and the sign-in
+/** The seeded demo people to offer as one-click sign-ins. A production build never asks, and the sign-in
  * service answers only in development. */
 export const useDemoPeople = () =>
   useSessionQuery({

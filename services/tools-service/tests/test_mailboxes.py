@@ -1,4 +1,4 @@
-"""IMAP mailboxes read for the Email received trigger and Test connection (c-192, c-199), by failure mode: the
+"""IMAP mailboxes read for the Email received trigger and Test connection, by failure mode: the
 password leaves tools-service; a caller of one team names another team's secret; a host off the egress allow-list is
 dialled; a token without `deployments:run`, or of another tenant, reads a mailbox; plain IMAP is used outside dev; Test
 connection reports Connected when a check failed. GreenMail (compose) is the mailbox, reached on this machine's

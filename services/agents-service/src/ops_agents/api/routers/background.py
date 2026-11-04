@@ -1,10 +1,10 @@
-"""The background processes (c-516). GET /health/background: agents-service's processes and their state, with no
+"""The background processes. GET /health/background: agents-service's processes and their state, with no
 record's data, for `make health` and the staging check. GET /v1/background: every listed process of every service and
 the latest jobs, for an account admin's Govern > Background page; anyone else gets not found.
 
-The page's one call reads agents-service's own heartbeats and jobs, and only reads files', documents' and tools'
-/health/background for theirs; it never acts on another service. A service that does not answer shows its processes
-as not reported."""
+The page's one call reads agents-service's own heartbeats and jobs, and only reads files', documents', tools', kb's
+and platform's /health/background for theirs; it never acts on another service. A service that does not answer shows
+its processes as not reported."""
 
 from __future__ import annotations
 
@@ -77,7 +77,9 @@ def _urls(settings: Settings) -> dict[str, str | None]:
         "files": settings.files_url,
         "documents": settings.documents_url,
         "tools": settings.tools_url or settings.gateway_url,
-        # The workspace purge (c-529).
+        # The knowledge schedule, which runs only where plugins are installed.
+        "kb": settings.kb_url,
+        # The workspace purge.
         "platform": settings.platform_url,
     }
 
@@ -111,7 +113,7 @@ def _not_reported(service: str) -> list[dict[str, Any]]:
             "lastErrorAt": None,
         }
         for p in background.PROCESSES
-        if p.service == service
+        if p.service == service and (p.only_if is None or p.only_if())
     ]
 
 

@@ -1,4 +1,4 @@
-"""The team's publish-review mode for tool modules (c-214): the tenant's `publishReview` policy, read live from
+"""The team's publish-review mode for tool modules: the tenant's `publishReview` policy, read live from
 platform-service on each decision, so a team admin's change applies at once. Read with this service's
 token for the tenant (`settings:view`), never cached and never taken from a caller's token. A policy that cannot be
 read counts as "always", so a failed read never lets a version go live unreviewed."""
@@ -43,7 +43,7 @@ class PublishPolicy:
 
 class WriteApprovals:
     def __init__(self, platform: ServiceClient) -> None:
-        """The team's `toolWritesNeedApproval` (c-219), read live from platform-service on each call with this
+        """The team's `toolWritesNeedApproval`, read live from platform-service on each call with this
         service's `settings:view` token for the tenant, as PublishPolicy reads publishReview."""
         self.platform = platform
 
@@ -57,7 +57,7 @@ class WriteApprovals:
             return True
 
     async def apps(self, tenant_id: str, team_id: str | None) -> list[str] | None:
-        """The apps whose writes `team_id` has wait (appWritesNeedApproval, c-616), by the ids the Apps page shows. None
+        """The apps whose writes `team_id` has wait (appWritesNeedApproval), by the ids the Apps page shows. None
         when the policy cannot be read, which the gateway counts as every app, so a failed read never lets a write
         through unapproved."""
         try:
@@ -68,7 +68,7 @@ class WriteApprovals:
 
 
 def approves_own_writes(access: Access, p: Principal) -> bool:
-    """Whether the caller is their own approver (owner, 2026-11-01): a person holding reviews.decide in the team they
+    """Whether the caller is their own approver: a person holding reviews.decide in the team they
     act in, as one who decides the team's reviews, while the requesterMayDecide policy lets an asker decide (off, the
     four-eyes rule, someone else decides). A service or an API key never is."""
     return p.kind == "person" and access.may(p, "reviews", "decide", requested_by=(p.email,))
@@ -88,7 +88,7 @@ def app_ids(module: dict[str, Any]) -> set[str]:
 
 class CheckBeforeSend:
     def __init__(self, platform: ServiceClient) -> None:
-        """The team's `checkBeforeSend` (c-300), read live from platform-service on each write with this service's
+        """The team's `checkBeforeSend`, read live from platform-service on each write with this service's
         `settings:view` token for the tenant, as WriteApprovals reads toolWritesNeedApproval."""
         self.platform = platform
 
@@ -104,8 +104,8 @@ class CheckBeforeSend:
 
 class RequesterMayDecide:
     def __init__(self, platform: ServiceClient | None, *, dev: dict[str, Any] | None = None) -> None:
-        """The tenant's `requesterMayDecide` (c-186), read live from platform-service, for decisions this service
-        applies on a workflow's behalf (a tool access request, c-257), where the deciding person's token is not here.
+        """The tenant's `requesterMayDecide`, read live from platform-service, for decisions this service
+        applies on a workflow's behalf (a tool access request), where the deciding person's token is not here.
         With no platform-service (dev sign-in) it is the dev policies (OPS_DEV_POLICIES) at their open default, the
         value a dev caller's own identity carries to every other decision."""
         self.platform = platform

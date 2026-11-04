@@ -1,4 +1,4 @@
-"""The Ops tools (c-469): the team's default agent finds the turn's person's cases, Human Tasks, runs and the workflows
+"""The Ops tools: the team's default agent finds the turn's person's cases, Human Tasks, runs and the workflows
 they may start, and answers with cards the console draws from the record itself.
 
 Every tool reads through the facade its route uses, as the turn's person (`TURN_PERSON`), so team scoping and `can()`
@@ -44,10 +44,10 @@ log = get_logger("ops_agents.ops_tools")
 LIMIT = 5
 # Who the registry records as having made a team's Ops Assistant: the platform.
 SYSTEM = "system:ops-assistant"
-# The built-in read tools tools-service provisions in every team (its BUILT_IN apps, c-616): the assistant is granted
+# The built-in read tools tools-service provisions in every team (its BUILT_IN apps): the assistant is granted
 # them like any other tool, through the team's tool gateway.
 BUILT_IN_READS = ("search_knowledge", "read_file", "read_document")
-# The team's Ops Assistant, the team default agents-service provisions (c-616): read tools only, fixed instructions.
+# The team's Ops Assistant, the team default agents-service provisions: read tools only, fixed instructions.
 # `version` rises with any change here; a team's assistant nobody changed takes it at the next start or first chat.
 OPS_ASSISTANT: dict[str, Any] = {
     "name": "Ops Assistant",
@@ -112,7 +112,7 @@ async def follow_declared(rt: Runtime, team_id: str) -> None:
 
 async def ensure_ops_assistant(rt: Runtime, team_id: str) -> AgentDefinition:
     """The team's Ops Assistant, made, published and set as the team's default on its first chat when the team has no
-    default agent (c-469), as the declared one (c-616). Its id comes from the team, so two first chats at once make one:
+    default agent, as the declared one. Its id comes from the team, so two first chats at once make one:
     the second insert meets the first's row and serves it. Setting the default is recorded like a team admin's
     (`TeamDefaults.set_agent`, `by`)."""
     aid = ops_assistant_id(team_id)
@@ -270,7 +270,7 @@ class OpsReads:
     async def _my_human_tasks(self, person: Principal, args: dict[str, Any]) -> ToolOutcome:
         """`mine`: the open tasks assigned to the person; when none is, the open tasks they may decide. `team`: every
         open task of the team; `overdue`: those past their deadline. The answer states the counts Human Tasks shows
-        (Assigned to me, All open), so what the agent says always agrees with that page (c-552)."""
+        (Assigned to me, All open), so what the agent says always agrees with that page."""
         which = str(args.get("which") or "mine")
         names = frozenset(n for n in (person.email, person.name) if n)
         view = {"mine": "open", "team": "open", "overdue": "overdue"}[which]
@@ -370,7 +370,7 @@ async def _filled(rt: Runtime, me: Principal, card: dict[str, Any]) -> dict[str,
 
 async def fill_cards(rt: Runtime, me: Principal, messages: list[ChatMessage]) -> None:
     """Fills each Ops tool call's card references in place as `me`, the person reading the thread, so a card always
-    draws its record's current state and only what the reader may see (c-469). Called on every thread read."""
+    draws its record's current state and only what the reader may see. Called on every thread read."""
     for message in messages:
         for call in message.tool_calls or []:
             raw: object = call.output
@@ -387,7 +387,7 @@ async def fill_cards(rt: Runtime, me: Principal, messages: list[ChatMessage]) ->
 
 
 def team_created_handlers(runtime: Callable[[], Runtime]) -> dict[str, Handler]:
-    """A team platform-service just made gets its Ops Assistant as its default agent (c-616 PV2), unless the team
+    """A team platform-service just made gets its Ops Assistant as its default agent, unless the team
     already has a default (a repeat delivery after a team admin chose another), which is left as it is."""
 
     async def provision(_tenant: str, team_id: str, _payload: dict[str, Any]) -> int:

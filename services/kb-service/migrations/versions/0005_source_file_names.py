@@ -1,4 +1,4 @@
-"""a source keeps the name its uploader gave each file (c-072)
+"""a source keeps the name its uploader gave each file
 
 Revision ID: kb_0005
 Revises: kb_0004

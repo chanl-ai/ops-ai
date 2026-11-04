@@ -1,4 +1,4 @@
-"""Who may put a workflow on a mailbox (c-187), by failure mode: a person whose roles allow publishing but not
+"""Who may put a workflow on a mailbox, by failure mode: a person whose roles allow publishing but not
 `deployments.create` binds a mailbox; a team's workflow binds a mailbox another team owns; a workflow in another tenant
 whose team has the same slug binds it; a workflow no team owns binds one; the mailbox picker offers another team's or
 tenant's mailbox. Every call goes through the publish route with a token minted and
@@ -194,7 +194,7 @@ async def test_the_mailbox_picker_offers_the_acting_teams_mailboxes_only(
 async def test_an_email_trigger_naming_no_mailbox_publishes_and_binds_nothing(
     stack: tuple[AsyncClient, AsyncEngine],
 ) -> None:
-    """c-466: with no mailbox set the trigger reads no mail, so publishing authorises nothing; Start run still sends it
+    """With no mailbox set the trigger reads no mail, so publishing authorises nothing; Start run still sends it
     a test email. One naming a mailbox keeps the rule above."""
     c, _ = stack
     for wid, mailbox in (("notices_no_mail", ""), ("notices_unset", None)):

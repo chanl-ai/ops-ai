@@ -1,4 +1,4 @@
-"""A provider's domains route sign-in only once proven by DNS (c-195), by failure mode: someone without settings.manage
+"""A provider's domains route sign-in only once proven by DNS, by failure mode: someone without settings.manage
 verifies (F1); a listed domain routes sign-in or makes a person before it is verified (F2); verify passes with no record
 or a wrong one (F3); a second workspace takes a domain another has verified (F4); another workspace's pending claim
 blocks the owner (F5); saving the provider again drops a domain's verification (F6)."""

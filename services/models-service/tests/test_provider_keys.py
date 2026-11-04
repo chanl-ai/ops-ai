@@ -1,4 +1,4 @@
-"""An account's model provider keys (owner, 2026-10-27), by failure mode: the provider called without the key an admin
+"""An account's model provider keys, by failure mode: the provider called without the key an admin
 saved, a replaced key that waits out the cache before it is used, a call that reaches the provider with no key at all,
 a value readable back or stored in the clear, a key set by someone who is not an account admin, another account's key
 used for this one's call, a key deleted while a connection still names it, the dev settings key winning over a saved
@@ -67,7 +67,7 @@ def _people(tenant: str) -> Any:
             auth_method="session",
         )
         # As the real dependency does: the request acts in the person's tenant and team, which the database holds
-        # provider keys to (c-616 C3).
+        # provider keys to.
         isolation.enter_caller(p, dev=False)
         return p
 

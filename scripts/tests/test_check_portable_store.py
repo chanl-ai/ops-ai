@@ -1,4 +1,4 @@
-"""The portable-store warning (c-067 T005, T006), by failure mode: a Postgres-only construct in new code not seen, a
+"""The portable-store warning, by failure mode: a Postgres-only construct in new code not seen, a
 docstring that mentions one warned about, a new unbounded key column or overlong name not seen, and code already on
 the baseline warned about again."""
 
@@ -55,7 +55,7 @@ def test_each_postgres_only_construct_in_code_is_found() -> None:
         12: {"advisory lock"},
         13: {"JSONB type"},
         14: {"postgresql_where option"},
-        # 15: a partial index with its SQL Server twin is portable (c-342); a twin for another option is not.
+        # 15: a partial index with its SQL Server twin is portable; a twin for another option is not.
         16: {"postgresql_using option"},
         17: {"database clock"},
         18: {"dialect insert"},

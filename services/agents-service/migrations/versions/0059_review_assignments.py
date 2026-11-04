@@ -1,4 +1,4 @@
-"""review_assignments: who a Human Task is assigned to, one row per assignment (c-074)
+"""review_assignments: who a Human Task is assigned to, one row per assignment
 
 Revision ID: 0059_review_assignments
 Revises: 0058_widget_follows_latest

@@ -57,7 +57,7 @@ class ClientCertificate:
     ca_pem: str | None = None
 
 
-# Whose sign-in signed the call this task is running (person or team), for the gateway's call log (c-558): the
+# Whose sign-in signed the call this task is running (person or team), for the gateway's call log: the
 # executor answers with the operation's outcome only, so the authenticator leaves it here.
 SIGNED_WITH: ContextVar[str | None] = ContextVar("ops_tools_signed_with", default=None)
 
@@ -74,9 +74,9 @@ class Prepared:
     rotation: int | None = None
     # The kind holds a token the gateway can get again: a read refused with 401 is retried once.
     renewable: bool = False
-    # Whose sign-in signed the call, for the call log: person or team; None for a kind that holds no token (c-558).
+    # Whose sign-in signed the call, for the call log: person or team; None for a kind that holds no token.
     credential: str | None = None
-    # The person whose own row signed the call (c-595), so a refusal marks theirs alone; None for the team's.
+    # The person whose own row signed the call, so a refusal marks theirs alone; None for the team's.
     person: str | None = None
 
 
@@ -88,7 +88,7 @@ class StrategyInput:
     secrets: dict[str, str]
     tokens: Tokens
     stale_rotation: int | None
-    # Whose token row a token-holding kind uses: SHARED for the team's, a person's id for their own (c-558).
+    # Whose token row a token-holding kind uses: SHARED for the team's, a person's id for their own.
     person: str = SHARED
 
 
@@ -182,7 +182,7 @@ def certificate_of(settings: dict[str, Any], secrets: dict[str, str]) -> ClientC
 
 
 def may_use(connection: dict[str, Any], team_id: str | None) -> bool:
-    """A connection serves its own team's modules only (c-509): another team that needs the system holds its own
+    """A connection serves its own team's modules only: another team that needs the system holds its own
     connection, with its own sign-in."""
     return team_id is not None and connection["team_id"] == team_id
 
@@ -198,11 +198,11 @@ class Authenticator:
         self.connections = connections
         self.secrets = secrets
         self.tokens = tokens
-        # Makes the link a call hands back when the person it acts for has not signed in (c-558).
+        # Makes the link a call hands back when the person it acts for has not signed in.
         self.links = links
 
     async def addressed(self, module: dict[str, Any]) -> dict[str, Any]:
-        """The module as a call reaches it: its address is its account's (c-616), the only home an address has. Empty
+        """The module as a call reaches it: its address is its account's, the only home an address has. Empty
         with no account, or one naming none, and `prepare` says why."""
         connection_id = module.get("connection_id")
         conn = await self.connections.get(str(module["tenant_id"]), str(connection_id)) if connection_id else None
@@ -271,7 +271,7 @@ class Authenticator:
         prepared = Prepared(str(connection_id), values=list(values.values()))
         kind = kind_of(str(conn["auth_kind"]))
         # Whose sign-in is chosen before the team's parts are checked: a person who gives their own key needs none of
-        # the team's (c-595).
+        # the team's.
         person = SHARED if team_account else self._whose(conn, kind, acting_for, needs_person)
         missing = [
             f.label for f in kind.requires(plain, each_person=person != SHARED) if f.secret and f.name not in values
@@ -313,7 +313,7 @@ class Authenticator:
                 raise stopped from e
             if e.side == "upstream":
                 # The system refused a person's own sign-in: only theirs is spent, everyone else's keeps working. Kept
-                # and marked (c-595), so Your connections says the sign-in expired and offers Reconnect.
+                # and marked, so Your connections says the sign-in expired and offers Reconnect.
                 at = datetime.now(UTC)
                 await self.connections.mark_refused(tenant_id, str(connection_id), person, reason=str(e), at=at)
                 event = {"action": "refresh_failed", "actor": actor, "at": at}
@@ -329,7 +329,7 @@ class Authenticator:
         return prepared
 
     async def _team_account_stopped(self, conn: dict[str, Any], e: AuthFailed, actor: str) -> AuthFailed | None:
-        """A team account the system refused, or whose sign-in ended with no refresh token to renew it (c-616 S12): the
+        """A team account the system refused, or whose sign-in ended with no refresh token to renew it: the
         call says which app needs reconnecting and who does it, and the team's admins are told once per breakage
         through the outbox. None for any other failure, such as a team account nobody has signed in to yet, which is
         setup still to do rather than a breakage."""
@@ -387,7 +387,7 @@ class Authenticator:
     async def refused(
         self, module: dict[str, Any], prepared: Prepared, acting_for: ActingForPerson, reason: str
     ) -> AuthFailed:
-        """The system refused a person's own key with 401 (c-595): their row alone is marked, so their next call asks
+        """The system refused a person's own key with 401: their row alone is marked, so their next call asks
         for a new key, and this call answers CONNECTION_NOT_LINKED with reason `refused` for the card to ask now. The
         connection's status and everyone else's rows are left as they are."""
         tenant_id, connection_id = str(module["tenant_id"]), prepared.connection_id
@@ -423,7 +423,7 @@ class Authenticator:
             "reason": reason,
             "authKind": kind.id,
             "personFields": list(kind.person_fields),
-            # What a run that waits for this person to connect waits on (c-616 S12): their connecting reports it.
+            # What a run that waits for this person to connect waits on: their connecting reports it.
             "connectedEvent": {"name": CONNECTED, "key": connected_key(str(conn["id"]), person.sub)},
             # Whether the team account may stand in for the person (`_whose`): a call acting for nobody uses it.
             "teamAccount": str(conn.get("sign_in") or "team") == "person_or_team" and bool(conn.get("team_backup")),

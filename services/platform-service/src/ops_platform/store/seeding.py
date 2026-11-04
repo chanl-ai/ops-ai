@@ -87,8 +87,8 @@ async def write_seed(
                 .on_conflict_do_nothing(index_elements=[teams.c.id])
             )
             if made.rowcount:
-                # A seeded team, the install's first team included, gets each service's defaults like any new team
-                # (c-616 PV2); a team already there reports nothing again.
+                # A seeded team, the install's first team included, gets each service's defaults like any new team;
+                # a team already there reports nothing again.
                 await add_event(
                     c, platform_outbox, tenant_id=tenant_id, team_id=str(team["id"]), name=TEAM_CREATED,
                     key=str(team["id"]), payload={}, actor="seed",
@@ -137,7 +137,7 @@ async def write_seed(
             )
             every = [*named, *(["admin"] if everyone_admin and "admin" not in named else [])]
             for role_id in every:
-                # A workspace role: the built-in role in every team (`*`); Admin there makes a workspace admin (c-198),
+                # A workspace role: the built-in role in every team (`*`); Admin there makes a workspace admin,
                 # Security admin there holds the Security team's actions wherever that team is.
                 await c.execute(
                     insert(role_assignments)

@@ -1,4 +1,4 @@
-"""How a person starts a workflow by hand, declared by its trigger type (c-466).
+"""How a person starts a workflow by hand, declared by its trigger type.
 
 A trigger type that a person can start declares a `StartSpec`: what the start dialog is called, how audit names a run
 started this way, and the start form as JSON Schema, either fixed (an Email received trigger's test email) or read
@@ -110,7 +110,7 @@ def _empty(value: Any) -> bool:
 
 
 def form_values(schema: Mapping[str, Any], values: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
-    """A filled start form as a run takes it (c-378): each empty field the schema gives a `default` takes it, and the
+    """A filled start form as a run takes it: each empty field the schema gives a `default` takes it, and the
     required fields still empty, by their labels. The console's start dialog and every API start of a form read the
     same rule, so a start the console refuses is refused by the API too."""
     props = cast(Mapping[str, Any], schema.get("properties") or {})

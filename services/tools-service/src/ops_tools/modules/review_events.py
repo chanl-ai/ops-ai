@@ -1,4 +1,4 @@
-"""The service events a tool module's reviews are reported with (c-257, on c-258's outbox): each starts the system
+"""The service events a tool module's reviews are reported with (on the outbox): each starts the system
 workflow that waits for a person in Human Tasks and then applies the decision through the gateway. tools-service
 never opens a review in agents-service itself.
 

@@ -28,7 +28,7 @@ class Field:
     # Required once every setting named holds its value, or no longer required then; pairs, so the field stays hashable.
     required_when: tuple[tuple[str, str], ...] = ()
     optional_when: tuple[tuple[str, str], ...] = ()
-    # PEM text, many lines long: the dialog gives it a multi-line box and a file to read it from (c-580).
+    # PEM text, many lines long: the dialog gives it a multi-line box and a file to read it from.
     pem: bool = False
 
     def required_for(self, settings: dict[str, Any]) -> bool:
@@ -70,9 +70,9 @@ class Kind:
     signs_in: bool = False
     # Holds a token the gateway fetches and refreshes.
     holds_token: bool = False
-    # Each person may sign in with their own account, so a call acts as the person it is for (c-558).
+    # Each person may sign in with their own account, so a call acts as the person it is for.
     per_person: bool = False
-    # The fields each person gives for themselves when the connection signs in as each person (c-595): their own key,
+    # The fields each person gives for themselves when the connection signs in as each person: their own key,
     # password or token; the team gives the rest. Empty for a kind whose person signs in at the system instead.
     person_fields: tuple[str, ...] = ()
 
@@ -81,7 +81,7 @@ class Kind:
 
     def requires(self, settings: dict[str, Any], *, each_person: bool = False) -> list[Field]:
         """The fields this kind needs with these plain settings (defaults applied), secret or not. `each_person`: the
-        fields asked of the team where each person gives their own (`person_fields`) are left out (c-595)."""
+        fields asked of the team where each person gives their own (`person_fields`) are left out."""
         own: set[str] = set(self.person_fields) if each_person else set()
         return [f for f in (*self.fields, *COMMON) if f.required_for(settings) and f.name not in own]
 
@@ -233,7 +233,7 @@ KINDS: tuple[Kind, ...] = (
 ADDRESS = Field(
     "baseUrl", "App address", required=True, help="https address of the app; its credentials go nowhere else."
 )
-# What Test connection reads (c-558): a path on the system address that answers any signed-in account, such as the
+# What Test connection reads: a path on the system address that answers any signed-in account, such as the
 # identity provider's userinfo.
 TEST_PATH = Field(
     "testPath",

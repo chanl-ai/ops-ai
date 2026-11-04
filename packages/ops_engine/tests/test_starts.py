@@ -1,4 +1,4 @@
-"""Starting a workflow by hand (c-466), by failure mode: a Request trigger whose input a file step reads publishes
+"""Starting a workflow by hand, by failure mode: a Request trigger whose input a file step reads publishes
 without marking it a file field, so the start form asks for a file id in a text box; a marked field (string, object or
 list) is refused anyway; the rule keys on a field's or step's name; a trigger declares no start form, or the wrong one
 for its kind; Files offers a form with no file field."""

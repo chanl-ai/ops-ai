@@ -1,4 +1,4 @@
-"""Retry for a Stuck run (c-561), by failure mode: a Stuck run cannot be moved again, so its only way out is Cancel; a
+"""Retry for a Stuck run, by failure mode: a Stuck run cannot be moved again, so its only way out is Cancel; a
 run that is not Stuck is retried and runs twice; and someone who may not cancel the run retries it."""
 
 from __future__ import annotations

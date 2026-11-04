@@ -122,7 +122,7 @@ export default function ModulePage() {
     );
 
   const m = query.data;
-  // The module's own flags (its routes' checks, c-186); the team's permission until they load.
+  // The module's own flags (its routes' checks); the team's permission until they load.
   const canBuild = m.canEdit ?? teamCanBuild;
   const fail = (what: string) => (e: Error) => toast.error(`Couldn’t ${what}`, { description: e.message });
   const major = m.pendingChanges.some((c) => c.major);
@@ -287,7 +287,7 @@ export default function ModulePage() {
                 </p>
                 {m.connection && (
                   <Button size="sm" variant="outline" className="border-destructive/40 text-foreground" asChild>
-                    {/* An app connected by name is its own app page (c-617); the sample connection page is gone. */}
+                    {/* An app connected by name is its own app page; the sample connection page is gone. */}
                     <Link href={`/integrations/apps/${encodeURIComponent(m.connection.id)}`}>Open app</Link>
                   </Button>
                 )}
@@ -465,7 +465,7 @@ export default function ModulePage() {
                   { id: m.id, note },
                   {
                     onSuccess: (x) => {
-                      // The Security review is decided on this page until tool reviews move into Reviews (c-163), so no review link.
+                      // The Security review is decided on this page until tool reviews move into Reviews, so no review link.
                       announcePublish({ name: x.displayName, version: x.version, live: !x.pendingReview, liveNote: 'Workflows take it at their next publish.', decidedBy: 'The Security team', where: 'on this page' });
                       setPublishOpen(false);
                     },

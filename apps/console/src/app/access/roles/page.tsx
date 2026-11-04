@@ -34,7 +34,7 @@ const COLUMNS: ColumnDef<Row>[] = [
   { accessorKey: 'assignmentCount', header: ({ column }) => <DataTableColumnHeader column={column} title="People" />, meta: { kind: 'number' } },
 ];
 
-/** Access › Roles (c-150): every role of the workspace, what it is for and how many hold it; a row opens its grid. */
+/** Access › Roles: every role of the workspace, what it is for and how many hold it; a row opens its grid. */
 export default function RolesPage() {
   const router = useRouter();
   const roles = useRoles();

@@ -64,7 +64,7 @@ CONNECT_KIND = "connect_account"
 
 
 def connect_wait(payload: dict[str, Any]) -> dict[str, Any] | None:
-    """The app a paused step waits for a person to connect (c-616 S12), from its park; None for any other pause."""
+    """The app a paused step waits for a person to connect, from its park; None for any other pause."""
     if payload.get("kind") != "external" or payload.get("event") != CONNECTED:
         return None
     return {
@@ -417,7 +417,7 @@ def review_deadline(payload: dict[str, Any], workspace_hours: float, now: dateti
 
 def as_decided(payload: dict[str, Any], resume: dict[str, Any]) -> dict[str, Any]:
     """The paused step's payload with the call its decision sent in place of the one proposed, so a decided review reads
-    what was done: an approver who changed an input (a hold's amount) sees that value, as the bank was told (c-420).
+    what was done: an approver who changed an input (a hold's amount) sees that value, as the bank was told.
     A new payload; the stored one is left as it is."""
     sent = resume.get("call")
     if not isinstance(sent, dict):
@@ -446,7 +446,7 @@ async def view(
     reads: TaskReads | None = None,
 ) -> dict[str, Any]:
     """A review step of a run as a console `Review`: risk and step-up from the operations its options would call,
-    as v1's review_view reads them. `case_id` is the case the run is on (c-128) and `titles` the workflow's and its
+    as v1's review_view reads them. `case_id` is the case the run is on and `titles` the workflow's and its
     steps' names (titles_of), each looked up when not given; `reads` what a list of typed tasks reads once
     (TaskReads)."""
     if case_id is None:
@@ -467,7 +467,7 @@ async def view(
         # A run waiting for a person to connect has no deadline: the time limit never fails a human wait.
         deadline = deadline | {"minutes": None, "dueAt": None}
     typed = typed_fields(draft, calls)
-    # Each call in words (c-289); typed_fields reads the input named amount as the review's amount, so that input is
+    # Each call in words; typed_fields reads the input named amount as the review's amount, so that input is
     # shown as money in the account's currency.
     money_key = "amount" if typed["amount"] is not None else None
     described = [await describe_call(rt, c, currency=typed["currency"], money_key=money_key) for c in calls]
@@ -573,7 +573,7 @@ async def view(
             "resume": resume,
             "stepUpRef": None,
         }
-    # A review older than typed steps draws through a task type too (tick 31), from the words built above.
+    # A review older than typed steps draws through a task type too, from the words built above.
     if "task" not in out and (
         legacy := await legacy_task(rt, run, payload, out, live=titles.get("live", NOT_READ), reads=reads)
     ):
@@ -603,7 +603,7 @@ def _risk(policies: list[WritePolicy]) -> str:
 
 async def team_runs(rt: Runtime) -> list[dict[str, Any]]:
     """The team's runs a task list reads, newest first: the newest 200, for the decided tasks they hold, and every run
-    waiting for a person however old, so a busy team never loses an open task from the list or its count (c-561)."""
+    waiting for a person however old, so a busy team never loses an open task from the list or its count."""
     store = _runs(rt)
     recent = await store.list(team_id=current_team())
     waiting = await store.list(team_id=current_team(), status="waiting", limit=None)
@@ -616,7 +616,7 @@ async def all_rows(rt: Runtime) -> list[dict[str, Any]]:
     """Each review step of the selected team's runs (the one a run waits on as pending, and every decided one) as a
     row holding what the list counts, filters, facets and pages on: id, status, title, risk, workflow, deadline, case
     and when it opened and was decided. No typed task, wording or reply preview is read; `expand` builds the full
-    review for the rows a page shows, so a count reads no more than its rows (c-451)."""
+    review for the rows a page shows, so a count reads no more than its rows."""
     try:
         runs = await team_runs(rt)
     except DatabaseError as e:  # A database not yet migrated to the runner's tables lists v1 reviews alone.
@@ -638,7 +638,7 @@ async def all_rows(rt: Runtime) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for (run, decided), payload in zip(steps, payloads, strict=True):
         policies = [await policy_of(rt, str(c["tool"])) for c in _calls(payload) if c.get("tool")]
-        # A wait for a person to connect their account has no deadline (c-616 S12).
+        # A wait for a person to connect their account has no deadline.
         timed = decided is None and connect_wait(payload) is None
         row: dict[str, Any] = {
             "id": step_id(run, payload),
@@ -649,7 +649,7 @@ async def all_rows(rt: Runtime) -> list[dict[str, Any]]:
             "risk": _risk(policies),
             "status": "pending" if decided is None else _decided_status(decided),
             "slaMinutes": review_deadline(payload, hours, now)["minutes"] if timed else None,
-            # The deadline a list grouped by case orders on (c-460); the place reads the same from its own rows.
+            # The deadline a list grouped by case orders on; the place reads the same from its own rows.
             "dueAt": review_deadline(payload, hours, now)["dueAt"] if timed else None,
             "createdAt": run["updated_at"],
             # "" says "looked up, on no case", so expand does not ask again per row.
@@ -689,7 +689,7 @@ async def all_places(rt: Runtime) -> list[dict[str, Any]]:
         log.warning("engine_reviews_unavailable", error=type(e).__name__)
         return []
     decisions = await _runs(rt).resumes([str(r["id"]) for r in runs])
-    # The case and the deadline a list grouped by case orders on (c-460): one query and one setting, no review built.
+    # The case and the deadline a list grouped by case orders on: one query and one setting, no review built.
     on_case = await CaseStore(rt.db).cases_of_runs([str(r["id"]) for r in runs])
     hours = await sla_hours(rt)
     now = datetime.now(UTC)
@@ -728,7 +728,7 @@ async def get(rt: Runtime, review_id: str) -> dict[str, Any]:
 
 async def _check_decider(rt: Runtime, approver: Principal, run: dict[str, Any], calls: list[dict[str, Any]]) -> None:
     """Who may decide a run's review: a reviewer or admin of the run's team, whatever the writes it decides (`calls`)
-    are (c-509), and not who started the run or whom the step names in requestedBy while requesterMayDecide is off.
+    are, and not who started the run or whom the step names in requestedBy while requesterMayDecide is off.
     Anyone the step names in notDecidedBy is refused whatever the policy, such as whoever saved the version it
     approves."""
     del calls
@@ -743,7 +743,7 @@ async def _check_decider(rt: Runtime, approver: Principal, run: dict[str, Any], 
 
 
 async def check_decider(rt: Runtime, approver: Principal, review_id: str) -> None:
-    """The decision route's checks on a waiting run's review, without deciding it (c-123's canDecide)."""
+    """The decision route's checks on a waiting run's review, without deciding it (canDecide)."""
     run = await _visible(rt, run_of(review_id))
     waiting: dict[str, Any] = dict(run.get("waiting") or {})
     if not waiting:
@@ -867,7 +867,7 @@ async def decide(
             _check_requirement(str(action["requires"]), paused, confirmed)
             resume["confirmed"] = confirmed
         if call is None and rest:
-            # A typed action's own inputs (a Reject's assignee) travel to the workflow with the decision (c-329).
+            # A typed action's own inputs (a Reject's assignee) travel to the workflow with the decision.
             resume["inputs"] = _action_inputs(action, rest)
     # An approval is checked against the call it sends; a rejection against every write the step holds.
     await _check_decider(rt, approver, run, [call] if call is not None else held_calls(paused))
@@ -902,7 +902,7 @@ async def decide(
     cases = CaseStore(rt.db)
     case_id = (await cases.cases_of_runs([run_id])).get(run_id)
     if case_id is not None:
-        # The decision is on the case's timeline too (c-128): the case reads as the issue's whole history.
+        # The decision is on the case's timeline too: the case reads as the issue's whole history.
         detail = {"decision": resume["decision"], "option": resume.get("option"), "reason": reason}
         await cases.add_event(case_id, "decision", ref=step_id(run, paused), detail=detail, by=approver.email)
     return await view(rt, run, stored, case_id=case_id or "")
@@ -1007,7 +1007,7 @@ def _check_requirement(name: str, paused: dict[str, Any], confirmed: Any) -> Non
 
 
 async def run_as_team_account(rt: Runtime, me: Principal, review_id: str) -> dict[str, Any]:
-    """Run as the team account (c-616 S12): the step waiting for a person's own account goes on with the app's team
+    """Run as the team account: the step waiting for a person's own account goes on with the app's team
     account in its place, for someone the roles grid lets use it, on an app that has one. The run is queued; the view
     of the task is returned as it now stands."""
     run = await _visible(rt, run_of(review_id))

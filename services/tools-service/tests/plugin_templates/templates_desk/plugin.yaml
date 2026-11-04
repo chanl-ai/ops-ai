@@ -1,4 +1,4 @@
-# A plugin that brings one template of each kind a team can install as its own copy (c-590).
+# A plugin that brings one template of each kind a team can install as its own copy.
 schema: ops-ai/plugin@2
 id: test.templates
 title: Case desk

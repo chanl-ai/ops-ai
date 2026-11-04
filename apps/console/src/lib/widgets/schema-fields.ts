@@ -1,4 +1,4 @@
-// A widget's data schema as rows for the fields table (c-110). The table edits name, type, required, description,
+// A widget's data schema as rows for the fields table. The table edits name, type, required, description,
 // allowed values and default; every other keyword a property carries (maxLength, items, minimum, format) is kept per
 // field and written back, so editing in the form never drops a limit set in JSON. Relative imports: the tests run
 // under `node --test`, which does not resolve the `@/` alias.

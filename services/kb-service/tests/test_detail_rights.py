@@ -1,4 +1,4 @@
-"""What a knowledge base's and a source's detail say the caller may do (c-216), by failure mode: a viewer told it may
+"""What a knowledge base's and a source's detail say the caller may do, by failure mode: a viewer told it may
 edit or delete what its write routes refuse; an admin told it may not; anyone told knowledge publishes."""
 
 from __future__ import annotations

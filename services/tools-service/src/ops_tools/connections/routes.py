@@ -1,5 +1,5 @@
 """An app's accounts under `/v1/apps/{app_id}/accounts`, the caller's own under `/v1/me/accounts`, connect links and
-`/v1/connection-kinds` (c-330): the console's Apps pages and the SDK read these. An account is found only under its
+`/v1/connection-kinds`: the console's Apps pages and the SDK read these. An account is found only under its
 own app, so an id moved to another app's address answers 404."""
 
 # No `from __future__ import annotations`: the routes' `caller` dependency is a local of accounts_router, and FastAPI
@@ -97,12 +97,12 @@ def accounts_router(service: ConnectionService, directory: Directory) -> APIRout
         app_id: str, account_id: str, body: AccountTestIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
         """Reads the account's test address signed in with the caller's own sign-in or the team's, and stores the
-        result as the account's `health` (c-558). A failed test answers 200 with the failure in `health`."""
+        result as the account's `health`. A failed test answers 200 with the failure in `health`."""
         return ok(await service.test(who, await _of(who, app_id, account_id), body.account))
 
     @r.put(f"{ACCOUNT}/default", response_model=Envelope[AccountDetail])
     async def pin_default(app_id: str, account_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """Makes this account the caller's default of its app (c-608): their calls that name no account use it."""
+        """Makes this account the caller's default of its app: their calls that name no account use it."""
         return ok(await service.pin_default(who, await _of(who, app_id, account_id)))
 
     @r.post(f"{ACCOUNT}/sign-out", response_model=Envelope[AccountDetail])
@@ -112,15 +112,15 @@ def accounts_router(service: ConnectionService, directory: Directory) -> APIRout
 
     @r.get("/v1/me/accounts", response_model=Envelope[list[MyAccount]])
     async def my_accounts(who: Annotated[Caller, Depends(caller)], every: bool = False) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """The caller's own sign-ins on their team's accounts (c-558): Your connections in the person menu. With
-        `every`, also each account of the team they can connect themselves and have not (c-595)."""
+        """The caller's own sign-ins on their team's accounts: Your connections in the person menu. With
+        `every`, also each account of the team they can connect themselves and have not."""
         return ok(await service.mine(who, every=every))
 
     @r.put("/v1/me/accounts/{account_id}/credentials", response_model=Envelope[MyAccount])
     async def give_own_credentials(  # pyright: ignore[reportUnusedFunction]
         account_id: str, body: PersonCredentialsIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
-        """The caller's own key, password or token on an account each person signs in to (c-595), replacing any they
+        """The caller's own key, password or token on an account each person signs in to, replacing any they
         gave before; answers their row in Your connections, never the values."""
         return ok(await service.give_own(who, account_id, body.credentials))
 
@@ -133,7 +133,7 @@ def accounts_router(service: ConnectionService, directory: Directory) -> APIRout
 
     @r.post("/v1/connect-links/sign-in", response_model=Envelope[SignInStart])
     async def open_connect_link(body: ConnectLinkIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """Starts the sign-in a connect link asks for, for the one person it was made for (c-558)."""
+        """Starts the sign-in a connect link asks for, for the one person it was made for."""
         return ok(await service.open_link(who, body.link))
 
     return r

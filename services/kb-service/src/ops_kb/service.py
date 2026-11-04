@@ -84,7 +84,7 @@ class Who:
     tenant_id: str
     email: str
     team_id: str | None
-    # The verified caller, which `ops_access.can` decides on (c-149). None for the seed, which acts as the system.
+    # The verified caller, which `ops_access.can` decides on. None for the seed, which acts as the system.
     caller: Principal | None = None
 
     def require_builder(
@@ -98,7 +98,7 @@ class Who:
         can(self.caller, "knowledge", step, team=team_id or self.team_id, what=f"to {action}", protection=protection)
 
     def require_provisioner_for(self, body: dict[str, Any]) -> None:
-        """Only the provisioning service sets `templateId` or `protection` (c-180); the seed, with no caller, may."""
+        """Only the provisioning service sets `templateId` or `protection`; the seed, with no caller, may."""
         if self.caller is not None and (body.get("templateId") is not None or body.get("protection") is not None):
             require_provisioner(self.caller, "knowledge")
 
@@ -182,7 +182,7 @@ class KnowledgeService:
         agents: AgentDirectory,
         tools: ToolReader | None = None,
     ) -> None:
-        """`tools` reads "tool" sources through tools-service's gateway (c-564); without it none can be made."""
+        """`tools` reads "tool" sources through tools-service's gateway; without it none can be made."""
         self.store = store
         self.files = files
         self.retriever = retriever
@@ -408,15 +408,15 @@ class KnowledgeService:
         who: Who, team_id: str | None, what: str, step: str = "edit", protection: str | None = None
     ) -> None:
         """Who changes knowledge (bases, sources, items, links): any builder or admin of the team that owns it.
-        Knowledge is shared by the team (owner decision, 2026-10-17); `owner` names who answers for the content, not
-        who may change it. Viewers and reviewers get 403; the decision is `can()`'s (c-149). A system record is
-        changed by the provisioning service only (c-180)."""
+        Knowledge is shared by the team; `owner` names who answers for the content, not
+        who may change it. Viewers and reviewers get 403; the decision is `can()`'s. A system record is
+        changed by the provisioning service only."""
         who.require_builder(
             team_id, f"{'delete' if step == 'delete' else 'change'} {what}", step, protection=protection
         )
 
     def _rights(self, who: Who, team_id: str | None, what: str, protection: str | None) -> dict[str, bool]:
-        """`canEdit`, `canDelete` and `canPublish` for a detail response (c-216), from the check the write routes run,
+        """`canEdit`, `canDelete` and `canPublish` for a detail response, from the check the write routes run,
         so the console never disagrees with them. Knowledge is changed in place, never published."""
         out: dict[str, bool] = {"canPublish": False}
         for step, flag in (("edit", "canEdit"), ("delete", "canDelete")):
@@ -567,7 +567,7 @@ class KnowledgeService:
             "last_run_status": None,
         }
         if kind == "tool":
-            # Read through a connection's tools (c-564): what tools-service declares for the team, checked now.
+            # Read through a connection's tools: what tools-service declares for the team, checked now.
             row["config"] = await source_config(self.tools, who, i)
         # Files named at creation are checked and referenced like any added later, before the source exists.
         names = [await self._use_file(who, row, f) for f in dict.fromkeys(i.get("fileIds") or [])]
@@ -658,7 +658,7 @@ class KnowledgeService:
         return await self._sync(who, s, full=full, retry=retry)
 
     async def sync_tool(self, who: Who, s: dict[str, Any], *, full: bool, trigger: str) -> dict[str, Any]:
-        """A tool source's sync (c-564) under its lease, so a manual sync and the schedule never run it at once."""
+        """A tool source's sync under its lease, so a manual sync and the schedule never run it at once."""
         if self.tools is None:
             raise Conflict("This service reads no tools, so the source cannot sync.", code="tools_unavailable")
         if s["status"] == "paused":
@@ -914,7 +914,7 @@ class KnowledgeService:
 
     async def readable_bases(self, who: Who) -> list[dict[str, Any]]:
         """Every base of the tenant for a service, which checks its callers' grants itself; for a person, those of
-        their team and those no team owns (c-222)."""
+        their team and those no team owns."""
         if who.caller is not None and who.caller.kind == "service":
             return await self.store.bases(who.tenant_id)
         return await self.store.team_bases(who.tenant_id, who.team_id)
@@ -1223,7 +1223,7 @@ class KnowledgeService:
         return self._item(item, found[0])
 
     async def add_documents(self, who: Who, kb_id: str, file_ids: list[str]) -> dict[str, Any]:
-        """Files from Files added to the base (c-159): into its own documents source, made and attached the first
+        """Files from Files added to the base: into its own documents source, made and attached the first
         time, then synced at once, which also activates the source. Returns the source id, the files and the run."""
         b = await self._changeable(who, kb_id)
         by_kb, _ = await self._joined(who.tenant_id)

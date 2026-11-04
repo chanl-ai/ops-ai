@@ -1,4 +1,4 @@
-"""The database holds documents-service's tables to the caller's tenant and team (c-415, migration documents_0011),
+"""The database holds documents-service's tables to the caller's tenant and team (migration documents_0011),
 with raw SQL and no WHERE clause as ops_documents_tenant, by failure mode: a team transaction reading or writing
 another team's document type, version, sample, test, example, extraction or correction; a transaction reading or
 changing another tenant's layouts or outbox events; a dropped policy that nobody notices; and the system role reaching

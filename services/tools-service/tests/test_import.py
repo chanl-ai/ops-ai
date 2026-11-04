@@ -80,7 +80,7 @@ async def test_import_takes_the_document_not_the_caller_and_runs_through_the_gat
     assert (ops["get_account"]["method"], ops["get_account"]["path"]) == ("GET", "/accounts/{accountId}")
     assert [f["name"] for f in ops["get_account"]["input"]] == ["accountId"]
     assert ops["get_account"]["access"] == "read", "the owner confirmed this one as a read"
-    # Approvals are off by default (owner, 2026-11-01): an imported write runs until its switch or a policy is on.
+    # Approvals are off by default: an imported write runs until its switch or a policy is on.
     assert ops["place_hold"]["requiresApproval"] is False
     unknown: dict[str, Any] = {**body, "operations": [{**forged, "name": "drop_tables"}]}
     r = await bank_api.call("POST", "/mod_document_service/operations/import", json=unknown)
@@ -144,7 +144,7 @@ async def test_create_from_a_source_takes_the_document_not_the_caller(bank_api: 
 
 async def test_an_imported_write_answers_from_its_example_response(bank_api: Api, engine: AsyncEngine) -> None:
     """Until the module is connected and published, a write tried from the console answers from the stub; the stub is
-    the document's example response, not a placeholder (c-048 T006)."""
+    the document's example response, not a placeholder."""
     await _listed(bank_api)
     hold: dict[str, Any] = {
         "name": "place_hold",
@@ -168,8 +168,8 @@ async def test_an_imported_write_answers_from_its_example_response(bank_api: Api
 async def test_a_module_is_created_from_its_source_without_a_connection_record(
     bank_api: Api, engine: AsyncEngine
 ) -> None:
-    """The import dialog sends no connection: the module gets one that needs no sign-in, holding its address (c-616),
-    and a named connection that does not exist is still refused (c-048 T006)."""
+    """The import dialog sends no connection: the module gets one that needs no sign-in, holding its address,
+    and a named connection that does not exist is still refused."""
     await _listed(bank_api)
     op: dict[str, Any] = {
         "name": "get_account",

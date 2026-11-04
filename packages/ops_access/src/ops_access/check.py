@@ -14,13 +14,13 @@ A person's action is held in the team the record belongs to, which must be the t
 Security team whatever team the request acts in. Scope `own` passes only for a record whose `owner` is the caller.
 `not_by` names people who may never take the action, such as an earlier approver of a two-person decision (403
 `own_request`); `requested_by` names who asked for it (or saved or started it), refused the same way only while the
-tenant's `requesterMayDecide` policy is off (c-186). Both are separation of duties, not role rules, so they bind the
+tenant's `requesterMayDecide` policy is off. Both are separation of duties, not role rules, so they bind the
 dev header caller too. A token
-without the `access` claim maps `roles` through the membership mapping, which c-147's grid test proved equal.
+without the `access` claim maps `roles` through the membership mapping, which the grid test proved equal.
 
 The grid for a role id comes from `Grids`, cached by (tenant, permission version): the version rises with every role,
 assignment or membership change, so a cached grid is never stale for the token that carries its version. Built-in
-roles answer from code; a custom role (c-151) needs a fetcher.
+roles answer from code; a custom role needs a fetcher.
 """
 
 from __future__ import annotations
@@ -49,8 +49,8 @@ BUILTIN_GRIDS: dict[str, tuple[Grant, ...]] = {r.id: r.grants for r in BUILTIN_R
 BUILTIN_NAMES = {r.id: r.name for r in BUILTIN_ROLES}
 _CELLS = frozenset((a, x) for a in AREAS for x in ACTIONS)
 
-# An API key is a bank system acting for one team (c-122 Q1 and Q2): it starts live runs and cancels the runs it
-# started, and runs the team's tools (owner, 2026-10-19, c-354 Q4: over MCP a key lists and runs read tools; a write
+# An API key is a bank system acting for one team: it starts live runs and cancels the runs it
+# started, and runs the team's tools (over MCP a key lists and runs read tools; a write
 # always waits for a person). It never decides, edits, test-runs or reads another team's records.
 KEY_GRANTS: dict[tuple[str, str], Scope] = {
     ("workflows", "run"): "all",
@@ -98,7 +98,7 @@ class Access:
     grids: Grids = field(default_factory=Grids)
 
     def security_team_of(self, p: Principal) -> str:
-        """The caller's workspace security team, from their token (c-202); the deployment's when the token has none."""
+        """The caller's workspace security team, from their token; the deployment's when the token has none."""
         return p.security_team or self.security_team
 
     def roles_in(self, p: Principal, team: str) -> list[str]:
@@ -148,8 +148,8 @@ class Access:
         """Returns the scope the caller holds, or raises 403. `team` is the team that owns the record (None: the team
         the request acts in, for a create); `owner` is the record's owner or creator (email), for `own` scope.
         `from_any_team` reads the role in `team` whatever team the request acts in: a review is decided by the role in
-        the team that reviews it (c-122). `code` is the error code a role refusal carries, for a route that documented
-        its own before `can` (`not_team_admin`, `builder_only`). `protection` is the record's (c-180): editing or
+        the team that reviews it. `code` is the error code a role refusal carries, for a route that documented
+        its own before `can` (`not_team_admin`, `builder_only`). `protection` is the record's: editing or
         deleting a `system` record also needs `<area>.manage`, which the grid gives admins and not builders; the
         provisioning service needs only its scopes, and its next run puts back the fields the template owns.
         `speaking_of` names the person when someone else asks on their behalf (an admin's Check access): a refusal then
@@ -201,7 +201,7 @@ class Access:
         return scope
 
     def may(self, p: Principal, area: str, action: str, **record: Any) -> bool:
-        """`can` as a yes or no, for a response that tells the caller what they may do with a record (c-186)."""
+        """`can` as a yes or no, for a response that tells the caller what they may do with a record."""
         try:
             self.can(p, area, action, **record)
         except Forbidden:
@@ -242,7 +242,7 @@ def _key(p: Principal, area: str, action: str, *, team: str | None, owner: str |
             details={"area": area, "action": action},
         )
     _same_team(p, team or str(p.team_id), action, what)
-    # A key's runs record `key:<id>` (c-246); older ones its creator's email.
+    # A key's runs record `key:<id>`; older ones its creator's email.
     mine = {p.email.strip().lower(), *([f"key:{p.key_id}".lower()] if p.key_id else [])}
     if scope == "own" and owner is not None and owner.strip().lower() not in mine:
         raise Forbidden(f"An API key may {action} only what it started.", code="role_required")
@@ -288,7 +288,7 @@ PROTECTIONS = ("system", "managed")
 
 
 def require_provisioner(p: Principal, area: str) -> None:
-    """Only the provisioning service sets a record's `templateId` or `protection` (c-180): a service token holding
+    """Only the provisioning service sets a record's `templateId` or `protection`: a service token holding
     `<area>:provision`. A person or an API key sending either field is refused, so nobody locks a record or takes over a
     template's slot."""
     if p.kind != "service" or f"{area}:provision" not in p.scopes:

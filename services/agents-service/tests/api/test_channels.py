@@ -1,4 +1,4 @@
-"""GET /v1/channels (c-245), by failure mode, through the app with platform tokens: another team's channel lists; a
+"""GET /v1/channels, by failure mode, through the app with platform tokens: another team's channel lists; a
 mailbox no one has read for minutes shows green; a pinned chat channel hides that newer versions exist; the gallery
 loses the types not built yet, or a page for one of them fails to load."""
 
@@ -268,7 +268,7 @@ async def test_latest_chosen_through_a_review_stays_latest_when_approved(stack: 
 
 
 class FakeKeys:
-    """platform-service's /v1/api-key-summaries, as agents-service reads it (c-246)."""
+    """platform-service's /v1/api-key-summaries, as agents-service reads it."""
 
     def __init__(self, keys: list[dict[str, Any]]) -> None:
         self.keys = keys

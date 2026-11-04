@@ -1,4 +1,4 @@
-"""A plugin's data tools that page and build their query from checked inputs (c-581), by failure mode: a model's value
+"""A plugin's data tools that page and build their query from checked inputs, by failure mode: a model's value
 reaches the system unchecked or changes the query; an input used in the query is also sent as its own parameter; an
 agent's call follows every page; a cursor is changed, comes from another tool, or names a host outside the plugin; a
 page address from the system's answer names one of the tenant's secrets; and token and offset paging lose the query

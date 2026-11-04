@@ -1,4 +1,4 @@
-"""/v1/skills and agent skill pins (c-063 T009, T011). Failure modes: a skill the model could never choose, or naming
+"""/v1/skills and agent skill pins. Failure modes: a skill the model could never choose, or naming
 a tool nobody offers, saved; a draft or deprecated version attached; a skill attached to an agent lacking a tool or
 knowledge base it names, or the agent later losing one; a published version changed by a later edit; the publish
 decided by its requester; a pinned skill deleted; an attached skill not reaching the served definition; a seed that

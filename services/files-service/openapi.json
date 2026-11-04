@@ -609,7 +609,7 @@
       },
       "FileData": {
         "additionalProperties": false,
-        "description": "What was read from the file, as the extract workflow records it (c-250): the document type and version it was\nread as, whether a template or the model read it, how many fields wait for a person, and the extraction. A file read\nwith Detect whose kind is none of the team's types has no type and no version: it was not recognised (c-335).",
+        "description": "What was read from the file, as the extract workflow records it: the document type and version it was\nread as, whether a template or the model read it, how many fields wait for a person, and the extraction. A file read\nwith Detect whose kind is none of the team's types has no type and no version: it was not recognised.",
         "properties": {
           "extractionId": {
             "maxLength": 64,
@@ -1635,7 +1635,7 @@
       },
       "ReadRequestIn": {
         "additionalProperties": false,
-        "description": "Read the file with a team's document type (c-250), the newest version when none is named; with no type, the file\nis classified over the team's types and read with the one found (Detect, c-335).",
+        "description": "Read the file with a team's document type, the newest version when none is named; with no type, the file\nis classified over the team's types and read with the one found (Detect).",
         "properties": {
           "documentTypeId": {
             "anyOf": [
@@ -5434,7 +5434,7 @@
     },
     "/v1/files/{file_id}/data": {
       "put": {
-        "description": "Records what was read from the file: its document type and version, template or model, how many fields\nwait for a person, and the extraction (c-250). The extract workflow's step writes it; files-service calls no\nother service for it.",
+        "description": "Records what was read from the file: its document type and version, template or model, how many fields\nwait for a person, and the extraction. The extract workflow's step writes it; files-service calls no\nother service for it.",
         "operationId": "files_set_file_data",
         "parameters": [
           {
@@ -5897,7 +5897,7 @@
     },
     "/v1/files/{file_id}/read-requests": {
       "post": {
-        "description": "Asks for the file to be read with a document type (c-250): the system extract workflow runs as the caller,\nstarted by this service's file.read_requested event, and saves what was read on the file. 202 at once; the\nrequest carries the run once the event is delivered. A repeat with the same Idempotency-Key returns the first\nrequest.",
+        "description": "Asks for the file to be read with a document type: the system extract workflow runs as the caller,\nstarted by this service's file.read_requested event, and saves what was read on the file. 202 at once; the\nrequest carries the run once the event is delivered. A repeat with the same Idempotency-Key returns the first\nrequest.",
         "operationId": "files_request_read",
         "parameters": [
           {

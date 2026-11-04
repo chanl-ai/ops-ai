@@ -78,7 +78,7 @@ export interface FilesApi {
   exportAudit(params: ListParams<AuditFilters> & { view: AuditView }): Promise<FileRecord>;
   /** Readable by everyone who can upload. */
   limits(): Promise<UploadLimits>;
-  /** files-service `/v1/settings/storage` (c-100): admins on the Security team only. */
+  /** files-service `/v1/settings/storage`: admins on the Security team only. */
   storage: {
     get(): Promise<StorageSettings>;
     /** 409 when someone saved a newer version; 422 naming the purpose whose target fails its test, saving nothing. */
@@ -93,7 +93,7 @@ export interface FilesApi {
       remove(name: string): Promise<void>;
     };
   };
-  /** files-service `/v1/document-types` (c-236): the team's document types, their versions, samples and tests. */
+  /** files-service `/v1/document-types`: the team's document types, their versions, samples and tests. */
   documentTypes: {
     list(): Promise<DocumentTypeList>;
     get(id: string): Promise<DocumentType>;
@@ -110,7 +110,7 @@ export interface FilesApi {
     startTest(id: string, version: number): Promise<DocumentTypeTestRun>;
     test(id: string, testId: string): Promise<DocumentTypeTestRun>;
   };
-  /** documents-service `/v1/documents/extractions` (c-256): reading a file with a document type. */
+  /** documents-service `/v1/documents/extractions`: reading a file with a document type. */
   extractions: {
     /** 200 with the answer when it ran now, 202 with its id and status when it runs later; a retry with the same key reads the same extraction. */
     start(input: ExtractionInput, idempotencyKey: string): Promise<Extraction>;
@@ -120,10 +120,10 @@ export interface FilesApi {
     /** A person's value for one field; the value as read stays beside it. `record` for a read of several records. */
     correct(id: string, key: string, value: unknown, record?: number): Promise<Extraction>;
   };
-  /** documents-service `/v1/documents/layout` (c-247): a file's pages, blocks and words, read once and cached. No model call. */
+  /** documents-service `/v1/documents/layout`: a file's pages, blocks and words, read once and cached. No model call. */
   layouts: {
-    /** The layout already read; 404 until `read` has read it. A layout read with OCR is cached apart from one without. */
-    get(fileId: string, opts: { ocr: boolean }): Promise<DocumentLayout>;
+    /** The layout already read, or only its `page`; 404 until `read` has read it. A layout read with OCR is cached apart from one without. */
+    get(fileId: string, opts: { ocr: boolean; page?: number }): Promise<DocumentLayout>;
     /** Reads the layout (OCR on a page with no text layer when `ocr`), or returns the cached one. */
     read(fileId: string, opts: { ocr: boolean }): Promise<DocumentLayout>;
   };

@@ -1,4 +1,4 @@
-"""a document type version may show the model the page image (c-295)
+"""a document type version may show the model the page image
 
 Off on every version saved before: a page image carries everything printed on the page to the model provider, so a
 version sends one only when someone who may manage the team's documents turned it on.

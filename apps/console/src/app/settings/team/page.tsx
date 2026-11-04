@@ -22,7 +22,7 @@ const OWNERS = [
 ];
 
 /**
- * Team › General. The default agent is stored (agents-service `/v1/chat/default-agent`, c-174); the team's name and
+ * Team › General. The default agent is stored (agents-service `/v1/chat/default-agent`); the team's name and
  * owner have no service yet, so those cards are sample data and say so.
  */
 export default function GeneralSettingsPage() {

@@ -1,4 +1,4 @@
-"""A shipped event workflow that changed in the seed file (c-288, tick 30), on PostgreSQL, by failure mode: the change
+"""A shipped event workflow that changed in the seed file, on PostgreSQL, by failure mode: the change
 goes live without the workspace's publish review; it never reaches a tenant still on the seed's version, even where no
 review is needed; a second event opens a second request; a tenant whose live version a person published has it
 replaced; nothing records that the shipped version moved."""

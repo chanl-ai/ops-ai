@@ -1,4 +1,4 @@
-"""Which version of tools-service's declared team defaults each team has (c-616 provisioning): a row per team the
+"""Which version of tools-service's declared team defaults each team has: a row per team the
 reconciler brought up to date, so a new version reaches every team on the next start and a team already current is
 not written again."""
 

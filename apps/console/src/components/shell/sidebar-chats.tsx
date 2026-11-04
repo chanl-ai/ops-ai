@@ -17,7 +17,7 @@ const PAGE = 30;
 export const CHAT_GROUPS = ['Pinned', 'Today', 'Yesterday', 'Previous 7 days', 'Older'] as const;
 export type ChatGroup = (typeof CHAT_GROUPS)[number];
 
-/** The heading a chat sits under, by its last message in the viewer's own day (c-552 adds Yesterday). */
+/** The heading a chat sits under, by its last message in the viewer's own day. */
 export function chatGroupOf(t: Pick<ChatThreadRow, 'pinned' | 'lastMessageAt'>, now = new Date()): ChatGroup {
   if (t.pinned) return 'Pinned';
   const at = new Date(t.lastMessageAt).getTime();
@@ -29,7 +29,7 @@ export function chatGroupOf(t: Pick<ChatThreadRow, 'pinned' | 'lastMessageAt'>, 
 }
 
 /**
- * The person's chats inside the app sidebar (c-552), grouped by day with pinned first, each with rename, pin, archive
+ * The person's chats inside the app sidebar, grouped by day with pinned first, each with rename, pin, archive
  * and delete, and an All chats row to the Conversations page. Pages by cursor, so a long history loads on demand and
  * the console's pages below stay in reach. Hidden while the sidebar is folded to icons.
  */

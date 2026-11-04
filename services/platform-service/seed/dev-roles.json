@@ -1,5 +1,5 @@
 {
-  "_about": "The standard dev users (c-614): each role names a seeded person in people.json, whose first team is the team a call acts in. make api, make sdk-call and the use-case harnesses sign in as these people.",
+  "_about": "The standard dev users: each role names a seeded person in people.json, whose first team is the team a call acts in. make api, make sdk-call and the use-case harnesses sign in as these people.",
   "admin": "p.shah@harborpine.example",
   "builder": "j.richardson@harborpine.example",
   "approver": "m.okafor@harborpine.example",

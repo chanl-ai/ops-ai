@@ -137,7 +137,7 @@ class KnowledgeFiles:
     """Files in a directory: each file's bytes under its digest and its record as JSON, so a restart keeps every
     uploaded file readable. One team's identical upload is stored once, under its first name, as files-service does.
 
-    Directories written before c-094 hold the files-service library's layout: a StoredFile record (`id`, `storage.key`)
+    Older directories hold the files-service library's layout: a StoredFile record (`id`, `storage.key`)
     with the bytes at `objects/data/<key>`. Both are read, so a stack that has not moved to files-service keeps its
     files; new uploads use the digest layout."""
 

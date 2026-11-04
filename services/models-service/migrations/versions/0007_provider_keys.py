@@ -1,4 +1,4 @@
-"""an account's model provider keys live in models-service (owner, 2026-10-27; c-509)
+"""an account's model provider keys live in models-service
 
 Revision ID: models_0007
 Revises: models_0006
@@ -6,7 +6,7 @@ Revises: models_0006
 Provider keys were workspace-wide tool secrets read through tools-service. Every tool secret now belongs to one team
 and never leaves for another service, so the account's provider keys get their own table here, sealed with the same
 cipher, set by account admins and read by this service alone. Nothing is copied: a key saved in tools-service's
-Secrets is saved again on Settings > Model providers (all existing data is test data, owner 2026-10-26).
+Secrets is saved again on Settings > Model providers (all existing data is test data).
 """
 
 from __future__ import annotations

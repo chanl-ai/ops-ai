@@ -1,4 +1,4 @@
-"""A paused step's calls in words a reviewer reads (c-289): the question the step asks, what each option does, and
+"""A paused step's calls in words a reviewer reads: the question the step asks, what each option does, and
 the values each call would send, without tool names, raw keys or raw floats. A tool's reviewer card template
 (catalog `approval`) words it when there is one; any other operation is worded from its input schema's titles. The
 same functions word every workflow's review, so nothing here knows one use case."""
@@ -68,7 +68,7 @@ def _object(value: Any) -> bool:
 
 
 def object_rows(label: str, value: Any) -> list[dict[str, str]]:
-    """An object the call sends as rows a person reads (c-565): one row per field, named "Fields · Status", so an
+    """An object the call sends as rows a person reads: one row per field, named "Fields · Status", so an
     approver sees each value the call would change rather than a raw object, or nothing at all. A list of objects is
     one group of rows per item. Nested records recurse the same way, so chat and the run page share this expander."""
     if isinstance(value, list):
@@ -104,7 +104,7 @@ def input_rows(args: Mapping[str, Any]) -> list[dict[str, str]]:
 
 
 # Each operation the tool directory lists, by name: its input schema and description.
-# Each operation's input schema, description and title (a plugin tool's, c-581; None for others).
+# Each operation's input schema, description and title (a plugin tool's; None for others).
 Operations = dict[str, tuple[dict[str, Any], str, str | None]]
 _UNREAD: Any = object()
 
@@ -162,7 +162,7 @@ def _operation(rt: Runtime, tool: str, ops: Operations | None) -> tuple[dict[str
 
 
 async def tool_titles(rt: Runtime) -> dict[str, str]:
-    """Each titled operation's title (a plugin tool's, c-581) for a chat card's wording; none while the directory
+    """Each titled operation's title (a plugin tool's) for a chat card's wording; none while the directory
     cannot be read, so a card then reads by the operation's name rather than failing the reply."""
     try:
         ops = await operations(rt)

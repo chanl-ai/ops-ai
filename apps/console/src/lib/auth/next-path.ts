@@ -2,7 +2,7 @@
 export const AUTH_PATHS = ['/login', '/sso', '/forgot-password', '/reset-password', '/mfa', '/signup', '/invite'];
 export const isAuthPath = (pathname: string) => AUTH_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
-/** Where a person lands after signing in with no page to return to: Chat's home (owner, 2026-10-22, c-469). */
+/** Where a person lands after signing in with no page to return to: Chat's home. */
 export const HOME = '/chat';
 
 /** A `next` value that stays inside the console: a path, never another origin; Chat's home when there is none. */

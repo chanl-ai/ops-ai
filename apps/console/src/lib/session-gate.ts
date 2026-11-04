@@ -1,5 +1,5 @@
 /**
- * What the shell's gate decides before any page loads (c-505), as plain functions so a test can hold them.
+ * What the shell's gate decides before any page loads, as plain functions so a test can hold them.
  */
 
 /**

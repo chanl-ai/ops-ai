@@ -1,4 +1,4 @@
-"""The team's apps, one card each, for the console's Apps grid (c-580), and the `/v1/apps` routes: a plugin the
+"""The team's apps, one card each, for the console's Apps grid, and the `/v1/apps` routes: a plugin the
 install offers, a custom app a builder added, a built-in app, or a tool module with no app yet. Each card is joined here
 (its details, how many tools use it, its account's state) so the console never joins the module, account and plugin
 lists itself.
@@ -81,7 +81,7 @@ class SystemPlugin(Out):
     fixed: list[str]
     # The plugin's tools the team's version has, by operation name.
     tools: list[str] = Field(default_factory=list[str])
-    # The version this team runs (c-609, with plugin_updates on), and whether the installed one differs from it.
+    # The version this team runs (with plugin_updates on), and whether the installed one differs from it.
     team_version: str | None = None
     update_available: bool = False
 
@@ -117,7 +117,7 @@ class SystemCard(Out):
     sandbox_id: str | None = None
     module_ids: list[str]
     status: str | None = None
-    # The default account's state (c-616): connected, not_signed_in, expired, refused or revoked; none for an app the
+    # The default account's state: connected, not_signed_in, expired, refused or revoked; none for an app the
     # team has not turned on and a module with no account.
     state: AccountState | None = None
     may_manage: bool
@@ -235,7 +235,7 @@ class AppMe(Out):
 
 
 class AppAccount(Out):
-    """One of the team's accounts of the app (c-608): the default is the one live calls use unless they name another,
+    """One of the team's accounts of the app: the default is the one live calls use unless they name another,
     and a sandbox one is what test runs use."""
 
     id: str
@@ -244,9 +244,9 @@ class AppAccount(Out):
     sandbox: bool
     status: str
     status_detail: str | None = None
-    # Connected only after a sign-in or a passing test (c-616), as the card's.
+    # Connected only after a sign-in or a passing test, as the card's.
     state: AccountState
-    # Why it is refused or expired (c-616 S12): the system's words, or the day the sign-in ended.
+    # Why it is refused or expired: the system's words, or the day the sign-in ended.
     state_reason: str | None = None
     # Whether the caller has signed in to this account themselves, and as whom.
     mine: bool = False
@@ -279,7 +279,7 @@ class AppPerson(Out):
 
 
 class AppPage(Out):
-    """One app's page (c-607), joined here: its card, its default account, the caller's own sign-in, how many people
+    """One app's page, joined here: its card, its default account, the caller's own sign-in, how many people
     signed in, its accounts, its tools, the plugin's skills and the latest runs of its tools."""
 
     card: SystemCard
@@ -322,7 +322,7 @@ class Apps:
         self.calls = calls
 
     async def states(self, tenant_id: str, conns: list[dict[str, Any]]) -> dict[str, tuple[str, str, str | None]]:
-        """Each account's (state, status, why) from its team account's token, read in one query (c-616)."""
+        """Each account's (state, status, why) from its team account's token, read in one query."""
         tokens = await self.connections.store.team_tokens(tenant_id, [str(c["id"]) for c in conns])
         now = self.connections.clock()
         out: dict[str, tuple[str, str, str | None]] = {}
@@ -341,7 +341,7 @@ class Apps:
         the built-in apps in a listed answer, for a picker where they belong (approvals: a mailbox reply)."""
         if builtins or not listed:
             # A team made before team.created reached this service has no defaults row, so the start-up catch-up never
-            # finds it: listing its built-in apps provisions them, as a first tool lookup does (c-616).
+            # finds it: listing its built-in apps provisions them, as a first tool lookup does.
             await ensure_defaults(
                 self.modules, TeamDefaults(self.modules.engine), tenant_id=who.tenant_id, team_id=who.team.id,
                 at=datetime.now(UTC),
@@ -475,7 +475,7 @@ class Apps:
             )
         built: set[str] = set()
         for app in BUILT_IN:
-            # The team's provisioned copy (c-616) when it has one; else the module of the app's older name. A module
+            # The team's provisioned copy when it has one; else the module of the app's older name. A module
             # bound to an account is that app's: it is served by the system, not by the platform.
             own_modules = [m for m in modules if m.get("template_id") == template_of(app)]
             named = own_modules or [m for m in modules if m["name"] == app["module"] and not m.get("connection_id")]
@@ -551,7 +551,7 @@ class Apps:
         return found
 
     async def add_custom(self, who: Caller, i: NewAppIn) -> dict[str, Any]:
-        """A custom app, as its first account: by name, or an MCP server by its address (c-331)."""
+        """A custom app, as its first account: by name, or an MCP server by its address."""
         if i.server_url is not None:
             return await self.connections.connect_mcp(who, i.model_dump())
         return await self.connections.create(who, i.model_dump())
@@ -978,7 +978,7 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
         acting: ActingPerson,
         include: Annotated[Literal["builtin"] | None, Query()] = None,
     ) -> JSONResponse:
-        """The team's apps for the Apps grid (c-580): its plugins and the apps a person added. `include=builtin` adds
+        """The team's apps for the Apps grid: its plugins and the apps a person added. `include=builtin` adds
         the built-in apps, for the approval policy's app picker. A service asking for a person (X-Acting-For) reads
         each card's state as that person's."""
         person = acting.sub if acting else None
@@ -988,7 +988,7 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
     @r.post("/v1/apps", response_model=Envelope[AccountDetail], status_code=201)
     async def add_app(body: NewAppIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """A custom app, as its first account, which the answer is (its id is the app's): by name with a sign-in kind,
-        or an MCP server by its address, whose sign-in is found from the server (c-331)."""
+        or an MCP server by its address, whose sign-in is found from the server."""
         return ok(await apps.add_custom(who, body), 201)
 
     @r.get("/v1/app-credentials", response_model=Envelope[list[AppCredential]])
@@ -1024,7 +1024,7 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
 
     @r.get("/v1/apps/{app_id}", response_model=Envelope[AppPage])
     async def get_app(app_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """One app's page (c-607): its card, accounts, the caller's own sign-in, tools, skills and latest runs."""
+        """One app's page: its card, accounts, the caller's own sign-in, tools, skills and latest runs."""
         return ok(AppPage(**await app_page(apps, who, app_id)).model_dump(by_alias=True))
 
     @r.put("/v1/apps/{app_id}/team", response_model=Envelope[SystemCard])
@@ -1042,8 +1042,8 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
     async def add_account(  # pyright: ignore[reportUnusedFunction]
         app_id: str, body: AccountIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
-        """Another account of one of the team's apps: a sandbox, which test runs use, or another named account (c-608,
-        with several_accounts on). The first stays the default."""
+        """Another account of one of the team's apps: a sandbox, which test runs use, or another named account
+        (with several_accounts on). The first stays the default."""
         return ok(await apps.add_account(who, app_id, body), 201)
 
     return r

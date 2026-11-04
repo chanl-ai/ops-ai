@@ -1,5 +1,5 @@
 """Which of a team's agents and workflows use each tool. agents-service owns agents and workflows, so tools-service
-asks its `/v1/tool-uses` (c-609) as a service holding `agents:view` for the caller's team, and keeps nothing.
+asks its `/v1/tool-uses` as a service holding `agents:view` for the caller's team, and keeps nothing.
 
 `ToolUsers` is the port; `AgentsToolUsers` is the agents-service adapter and `StaticToolUsers` a fixed answer for
 tests. When agents-service cannot answer the call fails: turning an app off on an empty "used by" would stop agents

@@ -49,7 +49,7 @@ const COLUMNS: ColumnDef<Row>[] = [
   { id: 'decided', header: 'Decided by', cell: ({ row }) => <span className="text-muted-foreground">{row.original.decidedBy ?? '—'}</span> },
 ];
 
-/** Access › Tool access: every workflow's access to the team's tool modules, by view, from tools-service (c-144). */
+/** Access › Tool access: every workflow's access to the team's tool modules, by view, from tools-service. */
 export default function ToolAccessPage() {
   const router = useRouter();
   const [view, setView] = React.useState<GrantView>('active');

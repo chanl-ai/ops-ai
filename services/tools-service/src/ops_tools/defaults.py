@@ -1,4 +1,4 @@
-"""tools-service's team defaults (c-616 provisioning, the API's pattern): what every team gets from this service,
+"""tools-service's team defaults (the API's pattern): what every team gets from this service,
 declared here, and the reconciler that makes it so. The defaults are the built-in apps' modules (modules/seed.py
 BUILT_IN), each the team's own published copy, protected as the platform's.
 

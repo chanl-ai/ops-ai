@@ -1,4 +1,4 @@
-"""Widget deployments (c-117): an agent's chat served to pages on other origins. Each pins the published agent version
+"""Widget deployments: an agent's chat served to pages on other origins. Each pins the published agent version
 it serves and lists the exact origins allowed to use it; the team that owns it is the team its conversations belong
 to. Origins are JSON kept whole and never queried (database portability D5)."""
 
@@ -24,12 +24,12 @@ widget_deployments = sa.Table(
     sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("name", sa.String(200), nullable=False),
     sa.Column("agent_id", sa.String(64), nullable=False),
-    # None: the agent's newest published version, read when a conversation starts (c-245, "Latest").
+    # None: the agent's newest published version, read when a conversation starts ("Latest").
     sa.Column("agent_version", sa.Integer, nullable=True),
     # ["https://intranet.bank.example", ...]: exact scheme://host[:port], no wildcards.
     sa.Column("origins", sa.JSON, nullable=False),
     sa.Column("paused", sa.Boolean, nullable=False, default=False),
-    # Set once and never cleared (c-130): a retired embed answers no page again.
+    # Set once and never cleared: a retired embed answers no page again.
     sa.Column("retired_at", sa.String(32), nullable=True),
     sa.Column("created_by", sa.String(320), nullable=False),
     sa.Column("created_at", sa.String(32), nullable=False),

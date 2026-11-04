@@ -1,4 +1,4 @@
-"""tools-service reads the team's publish-review mode live from platform-service (c-214), by failure mode: the mode
+"""tools-service reads the team's publish-review mode live from platform-service, by failure mode: the mode
 read for the wrong team, a change that waits on a cache, the read made with someone else's credentials, and a failed
 read letting a version go live. platform-service is a fake HTTP endpoint here; its own tests cover the route."""
 

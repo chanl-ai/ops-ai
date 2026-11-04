@@ -1,4 +1,4 @@
-"""Guardrails as versioned attachments (c-063): a rule written once, owned by a team, reviewed at publish, and pinned
+"""Guardrails as versioned attachments: a rule written once, owned by a team, reviewed at publish, and pinned
 on agents by `{guardrailId, version}` like a skill pin. Versions are immutable; a pin names a published version.
 
 Kind `blocked_topics` only today: `config = {topics: [str], message: str}`. The kind column leaves room for others.

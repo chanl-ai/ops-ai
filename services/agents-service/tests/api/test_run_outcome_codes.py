@@ -1,4 +1,4 @@
-"""What the engine reads from each gateway answer to a write (c-561), by failure mode: a write the gateway is still
+"""What the engine reads from each gateway answer to a write, by failure mode: a write the gateway is still
 running (409 write_in_progress) taken as refused, so the step leaves by its refused port while the call may still
 finish; a key the gateway abandoned (call_abandoned) taken as refused instead of known unsent; a pass whose run has a
 newer owner (lease_superseded) carrying on; and a claim the gateway lost read as an ordinary failure."""

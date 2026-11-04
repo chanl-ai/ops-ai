@@ -1,4 +1,4 @@
-"""A plugin version's tool declarations, their digest, and what changed between two versions (c-609).
+"""A plugin version's tool declarations, their digest, and what changed between two versions.
 
 A team runs the plugin version it took: tools-service keeps that version's declarations on the team's binding and
 builds each call from them, so an upgrade changes nothing until the team takes it. The declarations are the plugin-wide

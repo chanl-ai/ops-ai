@@ -888,7 +888,7 @@ off.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Step</th><th>What to do</th></tr></thead>
 <tbody>
-<tr><td>Add a flag</td><td>One entry in <code>FLAGS</code> and its name in <code>FlagName</code> (<code>flags.py</code>): name, a one-line description, the card that owns the feature, and when to remove it. <code>packages/ops_service_kit/tests/test_flags.py</code> fails an entry with no card or removal note. Regenerate <code>services/platform-service/openapi.json</code> and run <code>make sdk</code>, so the console&#39;s types carry the name</td></tr>
+<tr><td>Add a flag</td><td>One entry in <code>FLAGS</code> and its name in <code>FlagName</code> (<code>flags.py</code>): name, a one-line description, and when to remove it. <code>packages/ops_service_kit/tests/test_flags.py</code> fails an entry with no description or removal note. Regenerate <code>services/platform-service/openapi.json</code> and run <code>make sdk</code>, so the console&#39;s types carry the name</td></tr>
 <tr><td>Read it in a service</td><td><code>settings.feature_flags.on(&quot;&lt;name&gt;&quot;)</code>; a name the registry does not hold raises</td></tr>
 <tr><td>Read it in the console</td><td><code>useFlag(&#39;&lt;name&gt;&#39;)</code>, or <code>flag: &#39;&lt;name&gt;&#39;</code> on a list entry filtered by <code>useFlagged</code> (<code>apps/console/src/hooks/flag-queries.ts</code>); both are off while the answer loads</td></tr>
 <tr><td>Remove it</td><td>The release that fully ships the feature deletes the entry, every check that reads it and this table&#39;s row, so an install never sets a flag to get a shipped feature</td></tr>

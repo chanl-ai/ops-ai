@@ -99,7 +99,7 @@ async def test_a_tool_rule_waits_for_its_tool_to_be_offered() -> None:
 
 
 async def test_a_present_rule_scripts_the_built_in_shaped_answer() -> None:
-    """c-055 T021: a rule may call the kernel's present tool when the turn offers it, like any other tool."""
+    """A rule may call the kernel's present tool when the turn offers it, like any other tool."""
     mod = fake()
     rows = [{"product": "Savings Plus", "rate": 3.1}, {"product": "Money Market", "rate": 3.65}]
     s = mod.Script([mod.Rule(when="compare", tool="present", arguments={"shape": "rows", "data": rows})], ["default"])
@@ -127,7 +127,7 @@ def demo_script(mod: ModuleType) -> Any:
 
 
 async def test_a_cited_answer_needs_its_passage_and_quotes_it() -> None:
-    """c-058 T003 (changes requested): a knowledge rule fires only when the passage is in the prompt, and the amounts
+    """A knowledge rule fires only when the passage is in the prompt, and the amounts
     it states come from that passage, not from the rule."""
     mod = fake()
     s = demo_script(mod)
@@ -217,7 +217,7 @@ LEVY_CHECK = (
 
 
 async def test_the_levy_handbook_check_quotes_the_retrieved_passage() -> None:
-    """c-532: the fake model cites the levy handbook only when the retrieved passage is in the prompt."""
+    """The fake model cites the levy handbook only when the retrieved passage is in the prompt."""
     mod = fake()
     s = demo_script(mod)
     fmt = {"type": "json_schema", "json_schema": {"name": "final_result"}}
@@ -231,7 +231,7 @@ async def test_the_levy_handbook_check_quotes_the_retrieved_passage() -> None:
 
 
 async def test_the_atm_limit_presents_the_limits_as_rows_from_the_passage_then_cites_it() -> None:
-    """c-058 T003 (uc-079's rows check): the limits table comes from the passage's figures, then the cited sentence;
+    """uc-079's rows check: the limits table comes from the passage's figures, then the cited sentence;
     without the passage neither appears."""
     mod = fake()
     s = demo_script(mod)

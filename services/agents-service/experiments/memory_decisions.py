@@ -1,6 +1,6 @@
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 # Parts of Pydantic AI are untyped.
-"""Memory decisions (c-557): does the memory extraction prompt make the right call on a real model?
+"""Memory decisions: does the memory extraction prompt make the right call on a real model?
 
   uv run python experiments/memory_decisions.py                       # the scripted model, no tokens
   uv run python experiments/memory_decisions.py --real gpt-5-mini     # one real call per conversation, 8 calls

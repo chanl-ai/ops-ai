@@ -26,7 +26,7 @@ const EMPTY: Record<View, { noun: string; description: string }> = {
 };
 
 /**
- * Cases: the team's customer issues (agents-service /v1/cases, c-220), each with who it is for, who owns it and the
+ * Cases: the team's customer issues (agents-service /v1/cases), each with who it is for, who owns it and the
  * time left to its two deadlines. The server filters and orders them, soonest resolution deadline first. Workflow runs
  * are under Workflows › Runs; an old `/cases?run=` link is sent there.
  */

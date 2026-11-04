@@ -60,7 +60,7 @@ export interface Agent {
   /** Where the agent runs. `own` is its one-step workflow, which publishes with it: never behind, never republished. */
   usedIn: { workflowId: string; workflowName: string; pinnedVersion: number; status: LifecycleStatus; own?: boolean }[];
   limits: AgentLimits;
-  /** Widget templates the agent may fill in chat, by version (c-082); absent in the mock's seeded agents. */
+  /** Widget templates the agent may fill in chat, by version; absent in the mock's seeded agents. */
   widgetPins?: WidgetPin[];
   /** Whether the model may compose layouts, and how many widgets one answer may show. */
   widgets?: WidgetSettings;
@@ -111,7 +111,7 @@ export interface GuardrailVersion {
  * What callers may override on this agent (agents-service `limits`, decision "the agent sets limits; callers
  * override within them"). Saved on the version and published through its review; a value outside them is refused.
  */
-/** What the agent remembers about each person (c-124): on by default, and which kinds it saves. */
+/** What the agent remembers about each person: on by default, and which kinds it saves. */
 export interface MemorySettings {
   enabled: boolean;
   kinds: ('fact' | 'preference' | 'episode')[];
@@ -127,7 +127,7 @@ export interface AgentLimits {
   allowedKnowledgeBaseIds: string[];
   /** Granted tools a caller may switch off; a caller never adds one. */
   switchableToolIds: string[];
-  /** Pinned widgets a caller may switch off (c-082); absent on versions saved before widgets. */
+  /** Pinned widgets a caller may switch off; absent on versions saved before widgets. */
   switchableWidgetIds?: string[];
   callersMayAddInstructions: boolean;
   /** What a public widget key may override. */
@@ -160,7 +160,7 @@ export interface AgentGuardrails {
   maxToolCallsPerTurn: number | null;
   /** Model requests in one turn; null is no cap. Absent in the mock. */
   maxModelCallsPerTurn?: number | null;
-  /** A chat conversation's budget (c-103): empty (null) is the platform default (200 calls, 5.00 cost), never unlimited. */
+  /** A chat conversation's budget: empty (null) is the platform default (200 calls, 5.00 cost), never unlimited. */
   maxModelCallsPerConversation?: number | null;
   maxCostPerConversation?: number | null;
   whenUnsure: 'handoff' | 'ask' | 'decline';
@@ -219,7 +219,7 @@ export interface Workflow {
   wrapsAgentId?: string;
   /** The wrapped agent's name, filled by the API. */
   wrapsAgentName?: string;
-  /** How it starts, read from its trigger (c-466). */
+  /** How it starts, read from its trigger. */
   start?: WorkflowStart;
 }
 
@@ -343,7 +343,7 @@ export interface Evidence {
 export type ReviewOrigin = { kind: 'chat'; threadId: string; agentName: string } | { kind: 'workflow' };
 
 /** One input a reviewer may set when choosing an option, declared by the API from the operation's input schema. */
-/** A typed Human Task (c-288): its type, the regions the server bound from its params, and its actions in order. */
+/** A typed Human Task: its type, the regions the server bound from its params, and its actions in order. */
 export interface TypedTask {
   type: { id: string; version: number; name: string };
   regions: { region: 'header' | 'why_source' | 'document' | 'facts' | 'write_preview' | 'form' | 'message' | 'history' | (string & {}); collapsed?: boolean; data: Record<string, unknown> }[];
@@ -388,10 +388,10 @@ export interface ReviewOption {
   inputs?: OptionInput[];
   call?: { tool: string; input: Record<string, unknown>; step: string } | null;
   stepUp?: boolean;
-  /** What choosing it does, and the values its call sends, worded by the server (c-289). */
+  /** What choosing it does, and the values its call sends, worded by the server. */
   consequence?: string | null;
   fields?: ActionField[];
-  /** A typed task's action (c-288): whether it asks for a reason, and its button's weight. */
+  /** A typed task's action: whether it asks for a reason, and its button's weight. */
   reason?: 'required' | 'optional' | 'none';
   tone?: 'primary' | 'neutral' | 'destructive';
 }
@@ -402,7 +402,7 @@ export interface ActionField {
   value: string;
 }
 
-/** An operation as a tool module review names it (c-204). */
+/** An operation as a tool module review names it. */
 export interface OperationSummary {
   name: string;
   method?: string | null;
@@ -442,12 +442,12 @@ export interface Review {
   /** Display name of the agent behind `agentSlug`, filled by the API. */
   agentName?: string;
   /**
-   * A run waiting for a person's own account of an app (kind connect_account, c-616 S12): the app, its connection, whom
+   * A run waiting for a person's own account of an app (kind connect_account): the app, its connection, whom
    * it waits for, and whether a team account can stand in.
    */
   connect?: { app: string; connectionId?: string | null; appId?: string | null; person?: string | null; teamAccount: boolean } | null;
   /**
-   * An app's first address on a host the tenant has not listed (kind egress_host, c-616 S13): the host, the app and
+   * An app's first address on a host the tenant has not listed (kind egress_host): the host, the app and
    * who set the address. The Security team decides; approving lists the host.
    */
   egressHost?: { host: string; app: string; requestedBy: string; teamId: string; applyPending: boolean } | null;
@@ -499,22 +499,22 @@ export interface Review {
   error?: { tool: string; status?: number | null; code?: string | null; message: string } | null;
   /** The option a decided review was decided with; its status stays approved. */
   option?: string | null;
-  /** The document read a step asks a person to check (c-169); absent on other reviews. */
+  /** The document read a step asks a person to check; absent on other reviews. */
   read?: DocumentRead | null;
-  /** The reply a step approves, as it will be sent, with the cases the document opened (c-169). */
+  /** The reply a step approves, as it will be sent, with the cases the document opened. */
   reply?: ReplyPreview | null;
-  /** The case the review's run is on (agents-service, c-128); null when the run is on no case. */
+  /** The case the review's run is on (agents-service); null when the run is on no case. */
   caseId?: string | null;
-  /** The case's subject on a list grouped by case (c-460); null when the reader's teams do not hold the case. */
+  /** The case's subject on a list grouped by case; null when the reader's teams do not hold the case. */
   caseTitle?: string | null;
-  /** A workflow runner's step: its name and its run, for the sheet's subtitle and link (c-169). */
+  /** A workflow runner's step: its name and its run, for the sheet's subtitle and link. */
   stepName?: string | null;
   runId?: string | null;
-  /** The workflow version the run pinned (c-074). */
+  /** The workflow version the run pinned. */
   workflowVersion?: number | null;
-  /** The one question the step asks, in a reviewer's words (c-289). */
+  /** The one question the step asks, in a reviewer's words. */
   question?: string | null;
-  /** A typed task's bound regions and actions (c-288); absent on a review whose step names no task type. */
+  /** A typed task's bound regions and actions; absent on a review whose step names no task type. */
   task?: TypedTask | null;
   /** The file the decision is about: the first file id in the run's input or the step's summary. */
   sourceFile?: string | null;
@@ -541,13 +541,13 @@ export interface FieldRead {
   confidence: number | null;
   needsReview: boolean;
   citation: { page: number | null; quote: string | null } | null;
-  /** The type rule the model's answer broke (c-247); `value` is then null and `extractedValue` holds what it said. */
+  /** The type rule the model's answer broke; `value` is then null and `extractedValue` holds what it said. */
   rejected?: string | null;
   /** A person corrected it; `value` is theirs and `extractedValue` what was read. */
   corrected?: boolean;
-  /** Where the value was read, one box per printed line, as fractions of the page (c-252); absent when not found. */
+  /** Where the value was read, one box per printed line, as fractions of the page; absent when not found. */
   boxes?: { page: number; x: number; y: number; w: number; h: number }[];
-  /** Each source's value for the field and whether they disagree, when the read was combined with others (c-261). */
+  /** Each source's value for the field and whether they disagree, when the read was combined with others. */
   bySource?: Record<string, unknown>;
   conflict?: boolean;
 }
@@ -559,7 +559,7 @@ export interface DocumentRead {
   floor: number | null;
   schema: ReadField[];
   records: { values: Record<string, unknown>; fields: Record<string, FieldRead> }[];
-  /** The sources a Combine facts step weighed against this read, in order; empty for one source (c-261). */
+  /** The sources a Combine facts step weighed against this read, in order; empty for one source. */
   sources?: string[];
   /** The step takes a correction: Approve may send `inputs.edited`, the whole records list. */
   editable: boolean;
@@ -659,7 +659,7 @@ export interface ToolTestResult {
   output: string;
 }
 
-/** What waits on a person, counted on the server (agents-service `GET /v1/overview`, c-129). */
+/** What waits on a person, counted on the server (agents-service `GET /v1/overview`). */
 export interface Overview {
   openReviews: number;
   overdueReviews: number;
@@ -667,7 +667,7 @@ export interface Overview {
   urgentReviews: Review[];
   /** open: open or waiting on us; breaching: past the resolution deadline and not paused; awaitingApproval: with a review open. */
   cases: { open: number; breaching: number; awaitingApproval: number };
-  /** What the sidebar's Overview row, the Overview widgets and Chat's hints count (c-552): one response, already joined. */
+  /** What the sidebar's Overview row, the Overview widgets and Chat's hints count: one response, already joined. */
   counts: { waitingForMe: number; runsInFlight: number; casesDue: number };
   /** Open Human Tasks assigned to the viewer, the one waiting longest first; at most five. */
   waitingForMe: OverviewTask[];
@@ -806,13 +806,13 @@ export interface WorkflowRun {
 
 export interface AgentTestTurn {
   reply: string;
-  /** `status` says how each call went (c-170): ok, error, or gated (stopped for a review). */
+  /** `status` says how each call went: ok, error, or gated (stopped for a review). */
   toolCalls: { name: string; input: string; output: string; status?: 'ok' | 'error' | 'gated' | 'running'; access?: string }[];
-  /** Each citation's knowledge base, page and the words cited (c-170). */
+  /** Each citation's knowledge base, page and the words cited. */
   citations: { source: string; section: string; kbId?: string; kbName?: string; page?: number; quote?: string }[];
-  /** The knowledge bases the reply could search (c-170). */
+  /** The knowledge bases the reply could search. */
   knowledgeBases?: { id: string; name: string }[];
-  /** The tools the agent holds, and which pause for a review, at which gate, for whom (c-170). */
+  /** The tools the agent holds, and which pause for a review, at which gate, for whom. */
   tools?: { name: string; access: string; pauses: boolean; gate?: string; reviewers?: string }[];
   /** The guardrails the turn checked. */
   guardrails?: { name: string; version?: number }[];

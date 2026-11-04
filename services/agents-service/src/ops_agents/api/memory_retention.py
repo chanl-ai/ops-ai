@@ -1,4 +1,4 @@
-"""The workspace's memory retention and clean-up (c-206, c-557). Each pass, per tenant: forgotten memories whose 30-day
+"""The workspace's memory retention and clean-up. Each pass, per tenant: forgotten memories whose 30-day
 grace has ended are erased with their earlier versions, suggestions nobody answered in SUGGESTION_LIFETIME are erased,
 and memories older than the tenant's `memoryRetentionDays` policy (platform, Govern > Policies) are deleted; each
 deletion is audited and each team whose memories changed gets a background job. No policy, or a policy that cannot be

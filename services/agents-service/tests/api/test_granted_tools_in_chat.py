@@ -1,4 +1,4 @@
-"""An agent's newly granted tool is offered in chat right after its publish is approved (c-616 S7), by failure mode:
+"""An agent's newly granted tool is offered in chat right after its publish is approved, by failure mode:
 a publish request still waiting on an older version refused the request for the newest draft, so the only approval on
 offer put the older version live; and the turn's grants came from a tools list kept for 30 s, read before the tool was
 published, so the granted tool was dropped from the turn without a word."""

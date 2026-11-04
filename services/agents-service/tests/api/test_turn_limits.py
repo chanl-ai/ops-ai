@@ -1,4 +1,4 @@
-"""A chat turn stopped by the step limit (c-058 T003 follow-up), on the stream and in the stored message: the reply
+"""A chat turn stopped by the step limit, on the stream and in the stored message: the reply
 says it was cut short rather than ending on its partial text."""
 
 from __future__ import annotations

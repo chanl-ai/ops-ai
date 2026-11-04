@@ -1,4 +1,4 @@
-"""documents-service's tables are held to the caller's tenant and team by the database (c-415)
+"""documents-service's tables are held to the caller's tenant and team by the database
 
 Revision ID: documents_0011
 Revises: documents_0010

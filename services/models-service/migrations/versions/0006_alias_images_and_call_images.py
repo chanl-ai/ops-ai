@@ -1,4 +1,4 @@
-"""an alias version is cleared for page images, and each call records how many it carried (c-295)
+"""an alias version is cleared for page images, and each call records how many it carried
 
 Revision ID: models_0006
 Revises: models_0005

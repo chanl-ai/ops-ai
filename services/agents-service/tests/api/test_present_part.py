@@ -1,4 +1,4 @@
-"""The built-in present tool on the chat (c-055 T021), by failure mode: the part never reaching the stream, a tool
+"""The built-in present tool on the chat, by failure mode: the part never reaching the stream, a tool
 card shown for a call that ran nothing, and the part lost on reload."""
 
 from __future__ import annotations

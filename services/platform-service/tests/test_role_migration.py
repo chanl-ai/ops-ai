@@ -1,4 +1,4 @@
-"""Migration 0006 keeps every member's access (c-147), by failure mode: an active member left without the built-in role
+"""Migration 0006 keeps every member's access, by failure mode: an active member left without the built-in role
 their membership names, a Security team admin left without Security admin, an invited or removed member given a role,
 and the migration's frozen copy of the grid drifting from `ops_access` (the catalogue). Runs the real chain on the
 test database: down to 0005, members of every role written as the superuser, up to head. Synchronous: Alembic's

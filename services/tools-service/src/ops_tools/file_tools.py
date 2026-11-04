@@ -1,4 +1,4 @@
-"""The built-in Files and Document types tools (c-613, install flag `file_tools`): `read_file` gives an agent the full
+"""The built-in Files and Document types tools (install flag `file_tools`): `read_file` gives an agent the full
 text of a file its team uploaded, and `read_document` reads one of the team's document types' fields from a file. Both
 are documents-service's own reads (the full-text read asks no model; a type's read is an extraction like any other),
 called as the calling run's tenant and team, so another team's file or type is never found. They run behind the tool

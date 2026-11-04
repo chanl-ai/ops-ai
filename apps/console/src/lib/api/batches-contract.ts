@@ -1,7 +1,7 @@
 import type { BatchDryRun, BatchInput, BatchStarted, BatchView } from '@/lib/types/batches';
 
 /**
- * Batches (c-535): a workflow started once per row of a CSV or Excel file, followed on its own page. The file is
+ * Batches: a workflow started once per row of a CSV or Excel file, followed on its own page. The file is
  * uploaded to Files first and passed by id. agents-service's routers/batches.py.
  */
 export interface BatchesApi {

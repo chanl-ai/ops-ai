@@ -46,22 +46,22 @@ kb_bases = sa.Table(
     sa.Column("slug", sa.String(200), nullable=False),
     sa.Column("description", sa.Text, nullable=False),
     sa.Column("color", sa.String(32), nullable=False),
-    # Who answers for what the knowledge base serves; required (c-056), so a cited answer always has someone to ask.
+    # Who answers for what the knowledge base serves; required, so a cited answer always has someone to ask.
     sa.Column("owner", sa.String(200), nullable=False),
     sa.Column("collections", sa.JSON, nullable=False),
     sa.Column("retrieval", sa.JSON, nullable=False),
     sa.Column("created_by", sa.String(200), nullable=False),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("last_refreshed_at", sa.DateTime(timezone=True)),
-    # The template the provisioning service made it from, and how the platform protects it (c-180): `system` cannot be
+    # The template the provisioning service made it from, and how the platform protects it: `system` cannot be
     # changed by a person, `managed` can, and the template's fields come back on the next provisioning run.
     sa.Column("template_id", sa.String(120)),
     sa.Column("protection", sa.String(16)),
-    # The base's own documents source, which Add documents adds files to (c-159); found by id, so renaming the base or
+    # The base's own documents source, which Add documents adds files to; found by id, so renaming the base or
     # the source never makes a second one. Null until the first Add documents.
     sa.Column("documents_source_id", sa.String(64)),
     # Name uniqueness per team: two of a team's knowledge bases with one name make a grant ambiguous to the person
-    # granting it. Another team's names are not seen (c-507).
+    # granting it. Another team's names are not seen.
     sa.UniqueConstraint("tenant_id", "team_id", "name", name="uq_kb_bases_name"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
@@ -88,7 +88,7 @@ kb_sources = sa.Table(
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("last_sync_at", sa.DateTime(timezone=True)),
     sa.Column("last_run_status", sa.String(16)),
-    # A "tool" source's reading (c-564): plugin, source, its two tools, the connection, the schedule, the watermark and
+    # A "tool" source's reading: plugin, source, its two tools, the connection, the schedule, the watermark and
     # saved cursor of the last sync, and why it is paused; null for a file source.
     sa.Column("config", sa.JSON),
     # Held by the sync running now, so the schedule never starts a second one on the same source.
@@ -158,7 +158,7 @@ kb_items = sa.Table(
     sa.Column("verified_at", sa.DateTime(timezone=True)),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("processed_at", sa.DateTime(timezone=True)),
-    # Read through a connection's tools (c-564): the system's change marker, the item this one is attached to, and its
+    # Read through a connection's tools: the system's change marker, the item this one is attached to, and its
     # address in the system for a citation.
     sa.Column("marker", sa.String(120)),
     sa.Column("parent_id", sa.String(64)),
@@ -311,7 +311,7 @@ class KnowledgeStore:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def team_bases(self, tenant: str, team: str | None) -> list[dict[str, Any]]:
-        """The bases a person in `team` reads: the team's and those no team owns, as the picker offers (c-222)."""
+        """The bases a person in `team` reads: the team's and those no team owns, as the picker offers."""
         t = kb_bases.c
         scope = t.team_id.is_(None) if team is None else sa.or_(t.team_id.is_(None), t.team_id == team)
         async with self._tx() as c:
@@ -669,7 +669,7 @@ class KnowledgeStore:
             )
 
     async def remove_items(self, tenant: str, item_ids: list[str]) -> int:
-        """Drops documents a tool source no longer lists (c-564), with their versions and chunks."""
+        """Drops documents a tool source no longer lists, with their versions and chunks."""
         if not item_ids:
             return 0
         async with self._tx() as c:

@@ -1,4 +1,4 @@
-# Import contracts (c-346): database code lives only in each service's store package. Run `uv run lint-imports`;
+# Import contracts: database code lives only in each service's store package. Run `uv run lint-imports`;
 # make python-verify and the commit gate (scripts/verify-staged.sh) run it. Lines under ignore_imports are today's
 # crossings: a line whose import is gone fails the run (unmatched_ignore_imports_alerting = error), so the list only
 # shrinks. Forbidding a parent package (`ops_agents`) does not catch a store importing its own service; `ops_agents.*`

@@ -1,4 +1,4 @@
-"""engine_settings: the workspace floor for extracted fields (c-157)
+"""engine_settings: the workspace floor for extracted fields
 
 Revision ID: 0041_engine_settings
 Revises: 0040_widget_key_expiry_audit

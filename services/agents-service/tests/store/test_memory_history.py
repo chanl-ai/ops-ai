@@ -1,4 +1,4 @@
-"""Memory records with history (c-557, c-563), by failure mode: two chats of one person saving the same key at once
+"""Memory records with history, by failure mode: two chats of one person saving the same key at once
 both stay in use (a thread's lease serialises one thread only, so the store serialises a person's saves itself); an old
 memory is never found because only recent rows are searched; a word matches inside another word. Each runs on the
 migrated PostgreSQL test database and on SQL Server: a scratch database on OPS_MSSQL_SERVER (host,port) with

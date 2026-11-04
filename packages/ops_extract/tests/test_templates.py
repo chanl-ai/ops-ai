@@ -1,4 +1,4 @@
-"""Layout templates (c-253), by failure mode: a file printed from the known form not matched, or read from the wrong
+"""Layout templates, by failure mode: a file printed from the known form not matched, or read from the wrong
 words; a form shifted a little missing, or a tolerance that lets anything match; another layout matched; a required
 anchor missing and the page matched anyway. Forms are printed here from one master with reportlab."""
 
@@ -34,7 +34,7 @@ def form(values: dict[str, str], *, dx: float = 0, dy: float = 0, labels: list[t
 
 
 def template_from(layout: dict[str, Any], values: dict[str, str]) -> dict[str, Any]:
-    """Anchors at the master's labels, zones around its values with a margin, as c-254 will infer them."""
+    """Anchors at the master's labels, zones around its values with a margin, as templates infer them."""
     words = [w for w in layout["words"] if w["page"] == 1]
     anchors: list[dict[str, Any]] = []
     zones: list[dict[str, Any]] = []
@@ -102,7 +102,7 @@ def test_a_required_anchor_missing_misses_even_when_the_share_is_reached() -> No
 
 
 def read_of(pdf: bytes, vals: dict[str, str]) -> Read:
-    """A finished read: the layout and each field's boxes, located from its value as c-252 locates them."""
+    """A finished read: the layout and each field's boxes, located from its value."""
     layout = build_layout(pdf, filename="r.pdf")
     boxes: dict[str, list[dict[str, Any]]] = {}
     for key, value in vals.items():
@@ -112,7 +112,7 @@ def read_of(pdf: bytes, vals: dict[str, str]) -> Read:
 
 
 def test_a_suggestion_from_one_read_reads_another_printing_of_the_form() -> None:
-    """c-254 F1, F2: anchors are the labels, never a value, so the draft matches a file with other values."""
+    """Anchors are the labels, never a value, so the draft matches a file with other values."""
     draft = suggest([read_of(form(MASTER), MASTER)], template_id="tpl_s")
     anchors = [a["text"] for a in draft["pages"][0]["anchors"]]
     assert anchors == [label for label, _ in LABELS], anchors

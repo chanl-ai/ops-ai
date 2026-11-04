@@ -1,4 +1,4 @@
-"""Chat attachments (c-071): metadata and the parsed text, capped, of files a banker attaches to a chat message. The
+"""Chat attachments: metadata and the parsed text, capped, of files a banker attaches to a chat message. The
 bytes are in an ops_storage object store written by the interim `ChatFileStore` (activities/attachments.py); no blob
 is kept here. Each row
 belongs to its owner and team, so another person's file id reads as not found.

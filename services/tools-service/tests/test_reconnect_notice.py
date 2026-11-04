@@ -1,4 +1,4 @@
-"""A team account that stops working (c-616 S12), by failure mode: the call fails with the sign-in server's words
+"""A team account that stops working, by failure mode: the call fails with the sign-in server's words
 only, so a run's reason never says which app needs reconnecting or who does it; nobody is told until a run fails; the
 same refusal tells admins again on every call; and an account whose sign-in ended with nothing to renew it reads as
 never signed in. Rig and fake system: test_plugin_sign_in."""

@@ -23,8 +23,8 @@ from ops_agents.api.app import create_app
 from ops_agents.api.deps import Runtime
 from ops_agents.api.routers.events import team_frames
 from ops_agents.graphs.models import Grade
+from ops_agents.store.base import metadata
 from ops_agents.store.events import thread_events
-from ops_agents.store.graphs import metadata
 from ops_identity.fastapi import DEV_TEAM
 from ops_service_kit.settings import Settings
 from tests.api.test_graphs import EMAILS, run

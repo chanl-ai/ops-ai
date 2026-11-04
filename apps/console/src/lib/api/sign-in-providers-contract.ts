@@ -1,7 +1,7 @@
 import type { SignInProvider, SignInProviderInput } from '@/lib/types/sign-in';
 
 /**
- * A workspace's sign-in providers on platform-service (c-195): Security team admins set an OIDC or SAML provider with
+ * A workspace's sign-in providers on platform-service: Security team admins set an OIDC or SAML provider with
  * its domains, and prove each domain by a DNS TXT record before it routes anyone. Every write is audited there.
  */
 export interface SignInProvidersApi {

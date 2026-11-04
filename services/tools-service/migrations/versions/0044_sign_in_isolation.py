@@ -1,11 +1,11 @@
-"""sign_in_isolation: a person's saved sign-ins are held to their connection's team by the database (c-602)
+"""sign_in_isolation: a person's saved sign-ins are held to their connection's team by the database
 
 connection_tokens, oauth_states and connection_environments were filtered only by the tenant the store was given, and
 connect_links by the store's team clause: nothing in the database stopped a query that left the clause out. Each now
 carries its connection's team and the generated policy (ops_store.schema.isolation_ddl) for ops_tools_tenant, the role
 every connection-store transaction runs as; the service's runtime login becomes a member of it (documents_0012 is why).
 A sign-in in progress whose connection is gone is deleted rather than given no team: a state lives ten minutes.
-connections.available_to, unread since c-509, goes.
+connections.available_to, unread, goes.
 
 Revision ID: tools_0044_sign_in_isolation
 Revises: tools_0043_conn_details_health

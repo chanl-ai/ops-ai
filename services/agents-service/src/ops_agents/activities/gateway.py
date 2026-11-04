@@ -31,12 +31,12 @@ class RunContext:
     act: str | None = None
     # The lease generation of the run making the call; the gateway refuses a write from a superseded owner (E2b).
     generation: int | None = None
-    # Which of a connection's environments the call uses (c-330): live runs and chats production, test runs and test
+    # Which of a connection's environments the call uses: live runs and chats production, test runs and test
     # chats test. None says nothing, and the gateway then uses test.
     environment: str | None = None
-    # The engine run making the call, whose starter the call acts for (c-558); None outside a run.
+    # The engine run making the call, whose starter the call acts for; None outside a run.
     run_id: str | None = None
-    # A call a person chose to run on the team's account in place of their own (c-616 S12): it acts for nobody.
+    # A call a person chose to run on the team's account in place of their own: it acts for nobody.
     team_account: bool = False
 
 
@@ -86,7 +86,7 @@ class GatewayRefused(Exception):
     def __init__(self, message: str, reasons: list[str], code: str | None = None) -> None:
         super().__init__(message)
         self.reasons = reasons
-        # The gateway's refusal code: needs_review is its check before sending (c-300), which waits for a person.
+        # The gateway's refusal code: needs_review is its check before sending, which waits for a person.
         self.code = code
 
 
@@ -115,7 +115,7 @@ class GatewayClient:
         self.tools = tools
         # Set by the agents service once it runs: renews an approval token that expired between decision and call.
         self.renewer: TokenRenewer | None = None
-        # Set by the agents service once it runs: the token naming whom each call acts for (c-558).
+        # Set by the agents service once it runs: the token naming whom each call acts for.
         self.people: ActingForHeaders | None = None
 
     @property
@@ -138,12 +138,12 @@ class GatewayClient:
             raise
 
     async def review_decision(self, module_id: str, decision: dict[str, Any]) -> None:
-        """Applies a tool module review's decision in tools-service (c-163): publish the reviewed version, or return it
+        """Applies a tool module review's decision in tools-service: publish the reviewed version, or return it
         to draft or withdraw it. Raises on any answer but success, so the request stays marked to apply again."""
         await self.tools.post(f"/v1/tool-modules/{module_id}/review-decisions", decision)
 
     async def egress_host_decision(self, decision: dict[str, Any]) -> None:
-        """Applies an approved host in tools-service (c-616 S13): the host joins the tenant's allow-list. Raises on any
+        """Applies an approved host in tools-service: the host joins the tenant's allow-list. Raises on any
         answer but success, so the request stays marked to apply again."""
         # The one call that claims secrets_egress:manage, so no other call of this client carries it.
         listing = replace(self.tools, scopes=[*self.tools.scopes, "secrets_egress:manage"])
@@ -246,7 +246,7 @@ class GatewayToolExecutor:
             data = await self._gateway.call(tool, arguments, key=key, approval_token=approval_token)
         except GatewayRefused as e:
             if e.code == NEEDS_REVIEW_CODE:
-                # Check before sending (c-300): the kernel pauses the turn for a person with the reason.
+                # Check before sending: the kernel pauses the turn for a person with the reason.
                 why = e.reasons[0] if e.reasons else str(e)
                 return ToolOutcome(False, f"This needs a person's approval first: {why}", needs_review=why)
             # Back to the model as information, like any tool error; the gateway has logged the refusal.

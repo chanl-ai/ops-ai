@@ -1,4 +1,4 @@
-"""A module's traffic comes from gateway_calls (c-041): the window, what counts as a call, and the module's own p95."""
+"""A module's traffic comes from gateway_calls: the window, what counts as a call, and the module's own p95."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from ops_tools.store.calls import CallLog
 
 from .conftest import Api
 
-# The dev caller's team (ops_identity DEV_TEAM): the list routes read only the acting team's calls (c-616).
+# The dev caller's team (ops_identity DEV_TEAM): the list routes read only the acting team's calls.
 TEAM = "team_ops"
 NOW = datetime(2026, 10, 12, 12, 0, tzinfo=UTC)
 
@@ -94,7 +94,7 @@ async def test_daily_groups_by_utc_day(engine: AsyncEngine) -> None:
 
 
 async def test_an_activity_row_opens_to_its_call(bank_api: Api, gateway_call: Any) -> None:
-    """c-057 T013: GET /v1/executions/{id} answers the row the list shows, so an Activity row opens to its call, and
+    """GET /v1/executions/{id} answers the row the list shows, so an Activity row opens to its call, and
     404 for an id that is not one. A call refused for a missing secret is still a logged call."""
     from .fake_upstream import ENDPOINT, HOST  # noqa: PLC0415 - the fake bank's names, as test_import reads them
 
@@ -116,7 +116,7 @@ async def test_an_activity_row_opens_to_its_call(bank_api: Api, gateway_call: An
     assert missing.status_code == 404
 
 
-# ── Tenant isolation (c-057 T013, security review): one test per read that another tenant's call is not visible ──
+# ── Tenant isolation (security review): one test per read that another tenant's call is not visible ──
 
 
 async def test_the_executions_list_shows_only_the_callers_tenant(api: Api, engine: AsyncEngine) -> None:

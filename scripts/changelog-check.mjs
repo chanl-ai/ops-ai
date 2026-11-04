@@ -40,7 +40,7 @@ const tryGit = (argv, cwd = repo) => {
 const TAGS = new Set(['new', 'improved', 'fix']);
 // The console's release switches (apps/console/src/lib/api/index.ts releaseSwitches): an entry for a feature behind one
 // names it, and What's new shows the entry only while it is on. A name the console does not read would hide the entry for
-// good. Empty: a shipped feature has no switch (owner, 10-31), so an entry naming any switch is refused.
+// good. Empty: a shipped feature has no switch, so an entry naming any switch is refused.
 const SWITCHES = new Set([]);
 const REFUSED = [
   [/(^|\s)(apps|services|packages|src|docs|scripts)\/\S*/i, 'names a file path'],

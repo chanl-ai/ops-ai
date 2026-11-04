@@ -1,4 +1,4 @@
-"""The test console's Real target (c-038, c-591): a read or a write is the real call the gateway would make, a real
+"""The test console's Real target: a read or a write is the real call the gateway would make, a real
 write is logged under the person who sent it, and Mock sends nothing. One test per way the panel could claim a call it
 did not make, or make a call nobody approved."""
 
@@ -24,7 +24,7 @@ async def g(gateway: Gateway) -> Gateway:  # noqa: F811
 
 SECURITY = {"X-Dev-User": "Nadia Petrov"}
 # The team the console acts in, sent with every request as the console sends it: a Real run is a gateway call made in
-# the person's acting team, which owns the bank module (c-616).
+# the person's acting team, which owns the bank module.
 TEAM = {"X-Team-Id": "team_platform"}
 
 
@@ -35,14 +35,14 @@ async def _context(g: Gateway) -> dict[str, Any]:
         "environment": "production",
         "operations": [g.tool("get_account"), g.tool("place_hold"), g.tool("limited")],
         "expiresInDays": 30,
-        "justification": "c-038 test console",
+        "justification": "Reads for the test console",
     }
     approval = await g.client.post(f"{BASE}/approvals", json=request)
     assert approval.status_code == 201, approval.text
     decided = await apply_access(g.client, g.tenant, {**approval.json()["data"], "moduleId": MODULE})
     assert decided.status_code == 200 and decided.json()["data"]["ok"], decided.text
     contexts: list[dict[str, Any]] = (await g.client.get(BASE)).json()["data"]["runContexts"]
-    # The owner's context is listed first (c-048 T019); the workflow's is the one this asks for.
+    # The owner's context is listed first; the workflow's is the one this asks for.
     return next(c for c in contexts if c["id"] != "owner")
 
 
@@ -96,7 +96,7 @@ async def _as_owner(g: Gateway, base: str, args: dict[str, Any], **headers: str)
 
 
 async def test_the_owner_reads_for_real_without_any_workflow_approval(g: Gateway) -> None:
-    """No workflow holds an approval for the module; its owner still tries it (c-048 T008, G9)."""
+    """No workflow holds an approval for the module; its owner still tries it (G9)."""
     r = await _as_owner(g, "get_account", {"accountId": "CHQ-2219"})
     assert r.status_code == 200, r.text
     out = r.json()["data"]
@@ -105,7 +105,7 @@ async def test_the_owner_reads_for_real_without_any_workflow_approval(g: Gateway
 
 
 async def test_a_real_write_runs_for_an_approver_and_is_logged_from_the_console(g: Gateway) -> None:
-    """c-616: Real is a gateway call. The module holds place_hold for approval, and the dev caller, who passes every
+    """Real is a gateway call. The module holds place_hold for approval, and the dev caller, who passes every
     role rule, holds the approver role (reviews.decide), so it is not asked: the write runs, and the log names it as
     the write's approver under the console channel and the test environment."""
     r = await _as_owner(g, "place_hold", {"accountId": "CHQ-2219", "hours": 24})
@@ -119,13 +119,13 @@ async def test_a_real_write_runs_for_an_approver_and_is_logged_from_the_console(
 
 async def test_a_team_that_does_not_own_the_module_cannot_try_it_as_owner(g: Gateway) -> None:
     r = await _as_owner(g, "get_account", {"accountId": "CHQ-2219"}, **{"X-Team-Id": "team_cards"})
-    assert r.status_code == 404, "another team's module is not read at all (c-423): " + r.text
+    assert r.status_code == 404, "another team's module is not read at all: " + r.text
     assert g.received == []
 
 
 async def test_the_panels_default_context_is_the_owner_even_with_a_workflow_waiting(g: Gateway) -> None:
     """A workflow asked for access but not yet approved lists a run context; the panel's default (the first) must still
-    be the owner's, so the owner's try is not refused as that workflow's no_approval (c-048 T019)."""
+    be the owner's, so the owner's try is not refused as that workflow's no_approval."""
     request = {
         "workflowId": "wf_dispute",
         "environment": "production",
@@ -149,7 +149,7 @@ async def test_the_panels_default_context_is_the_owner_even_with_a_workflow_wait
 async def test_a_real_run_signs_in_with_the_sandbox_account_in_a_test_and_the_live_one_in_a_live_run(
     g: Gateway, engine: AsyncEngine
 ) -> None:
-    """c-616: Real ran on whichever account the page did not pick; a test run now signs in with the app's sandbox
+    """Real ran on whichever account the page did not pick; a test run now signs in with the app's sandbox
     account and a live run with its live account."""
     store = ModuleStore(engine)
     m = await store.get(g.tenant, MODULE)

@@ -89,7 +89,7 @@ export function hasCorrections(read: DocumentRead, edits: ReadEdits): boolean {
   return read.records.some((r, i) => Object.entries(edits[i] ?? {}).some(([k, text]) => text !== asText(byKey.get(k), r.values[k])));
 }
 
-/** Where a field came from: its page and quote. `onOpen` is the slot for opening the document at that spot (c-237); without it the source is text. */
+/** Where a field came from: its page and quote. `onOpen` is the slot for opening the document at that spot; without it the source is text. */
 function SourceCell({ citation, onOpen }: { citation: FieldRead['citation']; onOpen?: () => void }) {
   if (!citation || (citation.page == null && !citation.quote)) return <span className="text-xs text-muted-foreground">—</span>;
   const text = (

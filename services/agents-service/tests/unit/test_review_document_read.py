@@ -1,4 +1,4 @@
-"""Human Tasks shows a document read and the reply a review approves (c-169), by failure mode: the read shown as raw
+"""Human Tasks shows a document read and the reply a review approves, by failure mode: the read shown as raw
 JSON (no typed `read`, the proposal a dumped dict), a correction lost from the decided review, the acknowledgement
 naming cases of runs it did not start or none for a run that has its case, and a review with neither breaking."""
 

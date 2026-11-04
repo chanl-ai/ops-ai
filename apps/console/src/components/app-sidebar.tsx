@@ -69,7 +69,7 @@ function useClosedSections(): [Set<string>, (url: string, open: boolean) => void
   return [closed, toggle];
 }
 
-// Groups a viewer has opened or folded, kept in this browser only (c-552). Chats starts open, the rest folded.
+// Groups a viewer has opened or folded, kept in this browser only. Chats starts open, the rest folded.
 const GROUPS_KEY = 'ops.sidebar.groups';
 const OPEN_AT_FIRST: Record<string, boolean> = { Chats: true };
 // The console's first group (Work) has no heading: its pages are rows at the top of the sidebar.
@@ -231,7 +231,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          {/* The first group's pages (Cases, Human Tasks) sit with New chat and Overview, under no heading (owner, 2026-10-28). */}
+          {/* The first group's pages (Cases, Human Tasks) sit with New chat and Overview, under no heading. */}
           {TOP_GROUP.items.filter((item) => !item.top).map(navRow)}
         </SidebarMenu>
       </SidebarHeader>

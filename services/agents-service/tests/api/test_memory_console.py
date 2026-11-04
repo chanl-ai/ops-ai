@@ -1,4 +1,4 @@
-"""What a person sees of memory in the chat (c-206), by failure mode: a reply that saved a memory says nothing, live or
+"""What a person sees of memory in the chat, by failure mode: a reply that saved a memory says nothing, live or
 after a reload; a reply that saved nothing claims it did."""
 
 from __future__ import annotations

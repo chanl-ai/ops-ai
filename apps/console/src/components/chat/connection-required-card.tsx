@@ -49,7 +49,7 @@ const WHY: Record<ConnectionRequiredReason, (name: string) => string> = {
 const why = (reason: string, name: string) => (WHY[reason as ConnectionRequiredReason] ?? WHY.not_connected)(name);
 
 /**
- * The `connection-required` part (c-558): a tool call that needs the person's own account, with Connect, which opens
+ * The `connection-required` part: a tool call that needs the person's own account, with Connect, which opens
  * the system's sign-in in a window, and Not now. Once the window says the person is connected, the chat sends a
  * follow-up so the agent makes the call again, now as them; the refused call never reached the system, so that call
  * is the first. `onReply` is absent in a read-only conversation, which shows no buttons.

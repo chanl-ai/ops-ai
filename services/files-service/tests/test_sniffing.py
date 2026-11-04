@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""The type completion proves from the bytes (c-234): the sender's declared type and name only choose among the types
+"""The type completion proves from the bytes: the sender's declared type and name only choose among the types
 the bytes allow, and binary bytes with no known signature are refused."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""service_outbox for the connection store's role: a broken team account tells admins in the same transaction (c-616)
+"""service_outbox for the connection store's role: a broken team account tells admins in the same transaction
 
 The gateway marks a team account its system refused, as ops_tools_tenant (tools_0044), and the admins' notice is a
 service event in service_outbox. That role could not read or write the outbox, so the mark and its notice could not

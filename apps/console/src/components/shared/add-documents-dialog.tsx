@@ -15,7 +15,7 @@ import { plural } from '@/lib/format';
 import type { FilePurpose } from '@/lib/types/files';
 
 /**
- * Add documents by uploading new files or picking ones already in Files (c-159). An upload goes to Files first, so
+ * Add documents by uploading new files or picking ones already in Files. An upload goes to Files first, so
  * both ways end as file ids handed to `onSubmit`; the caller adds them to its record. Used by a knowledge base's
  * Sources tab; any page that attaches stored files can use it the same way. Without a `purpose` the person chooses one
  * of the purposes storage settings accept uploads for, and its limits apply; `pick={false}` offers upload only.

@@ -10,7 +10,7 @@ export function readAsText(data: FileData): string {
 }
 
 export function ReadAs({ data, compact }: { data: FileData | null | undefined; compact?: boolean }) {
-  if (!data) return <span className="text-xs text-muted-foreground">Not read</span>;
+  if (!data) return <span className="text-xs text-muted-foreground" data-testid="read-as">Not read</span>;
   return (
     <span className="flex min-w-0 flex-col gap-0.5" data-testid="read-as">
       <span className="truncate text-sm">{readAsText(data)}</span>

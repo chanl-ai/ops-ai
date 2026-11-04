@@ -1,6 +1,6 @@
 'use client';
 
-// The one renderer set for chat widgets (c-176): every generic kind, every shaped tool result (converted to a kind in
+// The one renderer set for chat widgets: every generic kind, every shaped tool result (converted to a kind in
 // lib/widgets/kinds.ts) and every kind placed in a template or composed layout draws here. Composed from AI Elements,
 // shadcn chart and shadcn components on the console's tokens; the industry is only ever in the data.
 

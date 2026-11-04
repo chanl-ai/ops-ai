@@ -1,4 +1,4 @@
-"""Every task and case type belongs to one team, and no team policy reads a row with no team (c-507)
+"""Every task and case type belongs to one team, and no team policy reads a row with no team
 
 Revision ID: 0074_types_per_team
 Revises: 0073_run_tables_team

@@ -1,4 +1,4 @@
-"""The workflows a service event starts by default (c-258). They are ordinary workflow definitions, kept in the
+"""The workflows a service event starts by default. They are ordinary workflow definitions, kept in the
 service's `seed/event_workflows.json`, which ships in every environment (the image holds the services tree): each
 tenant gets them, live and owned by no team, when its first event
 arrives (service_events.ensure_event_workflows), and from then on they are edited, versioned and published through

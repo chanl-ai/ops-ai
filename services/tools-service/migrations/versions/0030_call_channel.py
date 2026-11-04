@@ -1,4 +1,4 @@
-"""gateway_calls.channel and client_name: which route took a call and the client that sent it (c-356)
+"""gateway_calls.channel and client_name: which route took a call and the client that sent it
 
 Every call came through POST /v1/calls from a run. Calls now also arrive over MCP from outside assistants, and the log
 has to say which route took each one and which client sent it (a claim the client makes, shown as one).

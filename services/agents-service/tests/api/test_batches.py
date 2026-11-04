@@ -1,4 +1,4 @@
-"""Starting one run per row of a CSV (c-535), by failure mode: a dry run that starts runs, or maps a column to no input
+"""Starting one run per row of a CSV, by failure mode: a dry run that starts runs, or maps a column to no input
 without saying so; a file over 500 rows, or with a header naming none of the inputs, that starts runs with empty
 inputs; a row started twice when two worker ticks race; Retry failed rows starting a row that succeeded; a batch that
 keeps starting rows after the team's model budget ran out; results that cannot be taken away. Real routes on the app

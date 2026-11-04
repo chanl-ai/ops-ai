@@ -9,7 +9,7 @@ import { useMe } from './me-queries';
 export type FlagState = 'loading' | 'on' | 'off';
 
 /**
- * Whether the install turns a flag on (c-611), from platform-service's /v1/me. Off platform sign-in there is no /v1/me,
+ * Whether the install turns a flag on, from platform-service's /v1/me. Off platform sign-in there is no /v1/me,
  * so every flag is off; a failed read is off too, the safe side for a feature not yet released.
  */
 export function useFlagState(name: FlagName): FlagState {

@@ -17,11 +17,11 @@ from ..environments import ModuleEnvironment, RunKind
 Access = Literal["read", "write"]
 ModuleType = Literal["mcp", "openapi", "http", "code"]
 Method = Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
-# How an operation's body is sent (c-591); none is json.
+# How an operation's body is sent; none is json.
 BodyEncoding = Literal["json", "form", "raw"]
-# Whose account a module's calls may sign in with (c-558); a connection whose sign-in does not fit is refused.
+# Whose account a module's calls may sign in with; a connection whose sign-in does not fit is refused.
 ModuleSignIn = Literal["team", "person", "person_or_team"]
-# `either`, the name before c-591, is still taken on input for one release and stored as person_or_team.
+# `either`, the earlier name, is still taken on input for one release and stored as person_or_team.
 ModuleSignInIn = Literal["team", "person", "person_or_team", "either"]
 Environment = ModuleEnvironment
 BindingSource = Literal["case.account", "case.customerId", "case.id", "case.requesterEmail", "case.queue"]
@@ -68,7 +68,7 @@ class ConnectionRef(Out):
     kind: str
     status: Literal["draft", "healthy", "needs_reconnect", "expiring", "revoked", "error"]
     expires_at: str | None = None
-    # The account's base address, where the module's paths go (c-616).
+    # The account's base address, where the module's paths go.
     base_url: str | None = None
 
 
@@ -121,7 +121,7 @@ class ToolModule(Out):
     pending_review: PendingReview | None = None
     # How many distinct secrets the module's operations read that the tenant has not set.
     unset_secrets: int = 0
-    # Null on a module no template made (c-180).
+    # Null on a module no template made.
     template_id: str | None = None
     protection: Literal["system", "managed"] | None = None
 
@@ -147,7 +147,7 @@ class CodeLimits(Out):
 
 
 class CodeSettings(Out):
-    """A code operation's function (c-531): what runs, the tools it may call and the secrets it may hand them."""
+    """A code operation's function: what runs, the tools it may call and the secrets it may hand them."""
 
     source: str
     entry: str
@@ -169,7 +169,7 @@ class ModuleOperation(Out):
     path: str | None = None
     # Literals or {{NAME}} secret references; a literal credential is refused on save, so no value here is secret.
     headers: list[OperationHeader] = Field(default_factory=list[OperationHeader])
-    # The sign-in header (Authorization, X-Api-Key, Cookie) a tool saved before they were refused still sends (c-616):
+    # The sign-in header (Authorization, X-Api-Key, Cookie) a tool saved before they were refused still sends:
     # its page says to move the key to the app. Null when it sends none.
     sign_in_header: str | None = None
     body: str | None = None
@@ -183,25 +183,25 @@ class ModuleOperation(Out):
     requires_approval: bool
     amount_max: float | None = None
     # The write approval policy: distinct approvers (1 or 2) and the team they come from. Whether the person who asked
-    # may approve is the tenant's requesterMayDecide policy (c-186), not a per-operation setting.
+    # may approve is the tenant's requesterMayDecide policy, not a per-operation setting.
     approvers: int
-    # None on a plugin's module, which no team owns: the run's own team approves (owner, 2026-10-22).
+    # None on a plugin's module, which no team owns: the run's own team approves.
     approver_team: str | None
     # Approving asks the approver for a step-up: set here, or implied by two approvers.
     step_up: bool
     idempotent: bool
-    # Only a person's own sign-in signs its calls: never the team backup (c-558).
+    # Only a person's own sign-in signs its calls: never the team backup.
     needs_person: bool = False
-    # The scopes a person's own sign-in must hold to call it; one lacking any is asked to connect again (c-558).
+    # The scopes a person's own sign-in must hold to call it; one lacking any is asked to connect again.
     scopes: list[str] = Field(default_factory=list)
     calls24h: int = Field(alias="calls24h")
     error_rate: float
     p95_ms: int = Field(alias="p95Ms")
     approved_workflows: int
     secrets: list[SecretNeed] = Field(default_factory=list[SecretNeed])
-    # The mock response (c-088): answers a stub executor and every test against the mock.
+    # The mock response: answers a stub executor and every test against the mock.
     stub: Any = None
-    # Set for a code operation only (c-531).
+    # Set for a code operation only.
     code: CodeSettings | None = None
 
 
@@ -221,14 +221,14 @@ class ModuleApproval(Out):
     status: Literal["requested", "approved", "rejected", "expired", "revoked"]
     expires_at: str | None = None
     reason: str | None = None
-    # The Human Tasks review deciding the request and the team whose reviewers decide it (c-166); absent on requests
+    # The Human Tasks review deciding the request and the team whose reviewers decide it; absent on requests
     # made before they went to Reviews.
     review_id: str | None = None
     decider_team: str | None = None
 
 
 class ToolGrant(ModuleApproval):
-    """A workflow's access to one module, as the Access tab lists it across modules (c-144)."""
+    """A workflow's access to one module, as the Access tab lists it across modules."""
 
     module_id: str
     module_name: str
@@ -255,13 +255,13 @@ class ModuleVersion(Out):
     changes: list[OperationChange]
     pinned_by: list[ModuleRef]
     reachability: list[Reachability]
-    # Its review in agents-service's Reviews (c-163): the request id, when it was asked for, who decided, and the
+    # Its review in agents-service's Reviews: the request id, when it was asked for, who decided, and the
     # reason given for a no.
     review_id: str | None = None
     requested_at: str | None = None
     reviewer: str | None = None
     finding: str | None = None
-    # Whether the publish waited for a review, and the publish-review mode it followed (c-139).
+    # Whether the publish waited for a review, and the publish-review mode it followed.
     review_required: bool | None = None
     policy: Literal["always", "major", "never"] | None = None
 
@@ -294,7 +294,7 @@ class ToolModuleDetail(ToolModule):
     approvals: list[ModuleApproval]
     versions: list[ModuleVersion]
     run_contexts: list[RunContextOption]
-    # What the caller may do with it (c-186); absent on a response to a service.
+    # What the caller may do with it; absent on a response to a service.
     can_edit: bool | None = None
     can_delete: bool | None = None
     can_publish: bool | None = None
@@ -379,10 +379,10 @@ class ModuleTestResult(Out):
     call_id: str
     # Sandbox target: whether the answer came from the stub (a write) or the real system (a read), and which host.
     stubbed: bool | None = None
-    # The mock answer it came from, when the test environment holds one for this input (c-332).
+    # The mock answer it came from, when the test environment holds one for this input.
     mock_id: str | None = None
     reached_host: str | None = None
-    # c-088: what was sent (secret values masked), the answer before the transform, why the transform failed, and the
+    # What was sent (secret values masked), the answer before the transform, why the transform failed, and the
     # gateway's steps in order.
     request: TestRequestOut | None = None
     raw_response: Any = None
@@ -480,10 +480,10 @@ class ModuleIn(In):
     name: str
     display_name: str
     system: str = ""
-    # Optional (c-616): the kind follows its operations (http, a source's kind, or code for a function).
+    # Optional: the kind follows its operations (http, a source's kind, or code for a function).
     type: ModuleType | None = None
     # The system's base address, for a module with no connection. A module on a connection calls its connection's
-    # base address (c-616), so a hand-built operation names a path and an endpoint beside the connection is refused.
+    # base address, so a hand-built operation names a path and an endpoint beside the connection is refused.
     endpoint: str = ""
     # Optional: the app the module's calls sign in through; none means auth kind "none".
     connection_id: str | None = None
@@ -493,10 +493,10 @@ class ModuleIn(In):
     # inputs and headers from there; the caller's copies only pick operations and confirm reads.
     source: ModuleSourceIn | None = None
     http: HttpOperationIn | None = None
-    # A code module's first function (c-531).
+    # A code module's first function.
     function: CodeOperationIn | None = None
     unique_name: bool = False
-    # Set only by the provisioner (c-180): the template slot this record fills and what a person may change of it.
+    # Set only by the provisioner: the template slot this record fills and what a person may change of it.
     template_id: str | None = Field(default=None, min_length=1, max_length=120)
     protection: Literal["system", "managed"] | None = None
 
@@ -504,12 +504,12 @@ class ModuleIn(In):
 class BlankModuleIn(In):
     display_name: str
     name: str
-    # Optional (c-616): the kind follows the operations added; http until then.
+    # Optional: the kind follows the operations added; http until then.
     type: ModuleType | None = None
     description: str | None = None
-    # The app whose base address and sign-in its tools use (c-616).
+    # The app whose base address and sign-in its tools use.
     connection_id: str | None = None
-    # Set only by the provisioner (c-180): the template slot this record fills and what a person may change of it.
+    # Set only by the provisioner: the template slot this record fills and what a person may change of it.
     template_id: str | None = Field(default=None, min_length=1, max_length=120)
     protection: Literal["system", "managed"] | None = None
 
@@ -518,7 +518,7 @@ class ModuleDetailsPatchIn(In):
     display_name: str | None = None
     description: str | None = None
     sign_in: ModuleSignInIn | None = None
-    # Set only by the provisioner (c-180): the template slot this record fills and what a person may change of it.
+    # Set only by the provisioner: the template slot this record fills and what a person may change of it.
     template_id: str | None = Field(default=None, min_length=1, max_length=120)
     protection: Literal["system", "managed"] | None = None
 
@@ -558,9 +558,9 @@ class OperationPatchIn(In):
     access: Access | None = None
     # The whole input schema as it should be; fields left out of the list are removed.
     input: list[SchemaFieldIn] | None = None
-    # The mock response (c-088): what the stub executor and every test write answer; null is back to {"ok": true}.
+    # The mock response: what the stub executor and every test write answer; null is back to {"ok": true}.
     stub: Any = None
-    # A code operation's function, bindings, secrets and limits as they should be (c-531).
+    # A code operation's function, bindings, secrets and limits as they should be.
     code: CodeSettingsIn | None = None
 
 
@@ -587,7 +587,7 @@ class RevokeIn(In):
 
 
 class TestDraftIn(In):
-    """The workbench's unsaved transform and mock, tried by one test without staging them (c-088). A key left out
+    """The workbench's unsaved transform and mock, tried by one test without staging them. A key left out
     uses the operation's own; `responseTransform: null` runs with no transform."""
 
     response_transform: str | None = None
@@ -601,14 +601,14 @@ class ModuleTestIn(In):
     input: dict[str, Any]
     simulate_approval: bool = False
     draft: TestDraftIn | None = None
-    # Values for this one call, by secret name; never stored, logged or returned (c-088).
+    # Values for this one call, by secret name; never stored, logged or returned.
     secret_values: dict[str, str] | None = None
-    # The kind of run a Real run is (c-616); test unless the person picks production.
+    # The kind of run a Real run is; test unless the person picks production.
     environment: RunKind = "test"
 
 
 class ToolRunIn(In):
-    """One run of one tool from its page (c-616): Mock answers from its mock and reaches nothing, Real is the gateway
+    """One run of one tool from its page: Mock answers from its mock and reaches nothing, Real is the gateway
     call, with every check, in the environment picked."""
 
     mode: Literal["mock", "real"]
@@ -620,7 +620,7 @@ class ToolRunIn(In):
 
 class ToolRunResult(ModuleTestResult):
     # True when the answer came from a mock, never the system: every Mock run, and a Real one the test environment's
-    # mock answers for this input (c-332).
+    # mock answers for this input.
     mocked: bool
 
 
@@ -661,7 +661,7 @@ class ToolCallRow(Out):
     case_id: str | None = None
     target: str
     system: str
-    # The tool's display name and its app's (c-607): what a chat, an approval and the log show in place of `target`.
+    # The tool's display name and its app's: what a chat, an approval and the log show in place of `target`.
     title: str | None = None
     app: str | None = None
     operation: Literal["read", "write", "completion"]
@@ -686,10 +686,10 @@ class ToolCallRow(Out):
     outcome: str | None = None
     # The row whose call carries the write's side effect (the claim), as opposed to a refusal or a replay of it.
     effect: bool = False
-    # The kind of run the call was made in and the account that signed it in (c-330); absent on older rows.
+    # The kind of run the call was made in and the account that signed it in; absent on older rows.
     environment: RunKind | None = None
     connection_id: str | None = None
-    # Where the call came in (c-356): POST /v1/calls or the MCP server, and the assistant that sent an MCP call.
+    # Where the call came in: POST /v1/calls or the MCP server, and the assistant that sent an MCP call.
     channel: Literal["api", "mcp", "console"] | None = None
     client_name: str | None = None
     acting_for: str | None = None
@@ -743,7 +743,7 @@ class ImportOperationsIn(In):
 
 
 class ReviewDecisionIn(In):
-    """A decision made in Reviews, sent by agents-service (c-163)."""
+    """A decision made in Reviews, sent by agents-service."""
 
     request_id: str
     version: str

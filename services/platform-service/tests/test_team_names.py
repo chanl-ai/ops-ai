@@ -1,4 +1,4 @@
-"""GET /v1/team-names (c-224): every team's display name in the workspace, so a page showing another team's record
+"""GET /v1/team-names: every team's display name in the workspace, so a page showing another team's record
 names its team rather than its id. By failure mode: a member of one team cannot name another; one workspace's names
 reach another; a service without the settings:view scope reads them."""
 

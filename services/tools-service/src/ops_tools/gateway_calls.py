@@ -1,4 +1,4 @@
-"""The one call path (c-356): every tool call, whichever route took it, is decided and run here. POST /v1/calls and the
+"""The one call path: every tool call, whichever route took it, is decided and run here. POST /v1/calls and the
 MCP adapter build a `CallRequest`, call `GatewayCalls.call` with the verified caller, and map the outcome to their own
 wire form, so a call over MCP meets every rule a REST call meets: the registry decides the access class, the schema and
 limits hold, check before sending judges a write with no approval, OPA checks the approval token, writes are claimed
@@ -38,10 +38,10 @@ from .tools import ToolCaller
 log = get_logger("ops_tools.gateway_calls")
 
 API, MCP = "api", "mcp"
-# A person's Real run from a tool page (c-616): the same checks as any call, logged under that person.
+# A person's Real run from a tool page: the same checks as any call, logged under that person.
 CONSOLE = "console"
 
-# Turns a call's input into what is sent, and names the values to scrub from its answer (code runs, c-531).
+# Turns a call's input into what is sent, and names the values to scrub from its answer (code runs).
 Prepare = Callable[[Resolved | None, dict[str, Any]], Awaitable[tuple[dict[str, Any], list[str]]]]
 
 
@@ -53,7 +53,7 @@ class CallRequest:
     # thread, step, act and environment, as POST /v1/calls' runContext carries them.
     run_context: dict[str, Any] = field(default_factory=dict[str, Any])
     approval_token: str | None = None
-    # The person the call acts for, from a verified acting-for token (c-558); never from `run_context`.
+    # The person the call acts for, from a verified acting-for token; never from `run_context`.
     acting_for: ActingForPerson | None = None
 
 
@@ -99,7 +99,7 @@ def _error_of(outcome: ToolOutcome) -> dict[str, Any] | None:
 
 
 def system_call(token: str | None, workflow: str) -> bool:
-    """Whether a verified approval token was minted for a run of `workflow` while it is a system workflow (c-257)."""
+    """Whether a verified approval token was minted for a run of `workflow` while it is a system workflow."""
     try:
         claims = claims_of(token) if token else {}
     except (IndexError, ValueError):
@@ -125,17 +125,17 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
         return None
     op, module = resolved.operation, resolved.module
     if module.get("sign_in_needed"):
-        # Each person signs in, and the account has no instance yet (c-616): the plugin is on. Refused as a
+        # Each person signs in, and the account has no instance yet: the plugin is on. Refused as a
         # missing sign-in, not as the plugin being off, so the tool page does not say the team admin must sign in.
         return 403, "CONNECTION_NOT_LINKED", str(module["sign_in_needed"]), []
     if module.get("instance_missing"):
         # The team account has not signed in yet. The plugin is on.
         return 403, "NOT_SIGNED_IN", str(module["instance_missing"]), []
     if module.get("plugin_off"):
-        # A plugin off for the install or the team (c-564): refused before approval, so no write waits for a person.
+        # A plugin off for the install or the team: refused before approval, so no write waits for a person.
         return 403, "PLUGIN_DISABLED", str(module["plugin_off"]), []
     if module.get("account_missing"):
-        # The account a call named is not one of the team's accounts of the app (c-608): refused, never defaulted.
+        # The account a call named is not one of the team's accounts of the app: refused, never defaulted.
         return 404, "ACCOUNT_NOT_FOUND", str(module["account_missing"]), []
     if not op["enabled"]:
         why = op.get("hidden_reason") or f"{op['name']} is hidden in {module['display_name']}"
@@ -149,7 +149,7 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
     if problems:
         fields = ", ".join(f"{p['field']} ({p['message']})" for p in problems)
         return 422, "invalid_input", f"input does not match {op['name']}'s schema: {fields}", problems
-    # The amount limit holds before the policy and before any request is built (c-028, shared with the test panel).
+    # The amount limit holds before the policy and before any request is built (shared with the test panel).
     if (over := amount_refusal(op, args)) is not None:
         return over.status, over.code, over.message, []
     return None
@@ -177,9 +177,9 @@ class GatewayCalls:
         self.counters = counters
         self.send_check = send_check
         self.all_writes_wait = all_writes_wait
-        # Whether the team listed the module's app in appWritesNeedApproval (c-616); none listed without it.
+        # Whether the team listed the module's app in appWritesNeedApproval; none listed without it.
         self.app_writes_wait = app_writes_wait
-        # Whether the caller holds the approver role in the team (can() over the roles grid, c-616); nobody without it.
+        # Whether the caller holds the approver role in the team (can() over the roles grid); nobody without it.
         self.approver = approver
         self.clock = clock
 
@@ -204,10 +204,10 @@ class GatewayCalls:
         trial: Trial,
         secret_values: dict[str, str] | None,
     ) -> dict[str, Any]:
-        """A tool page's Real run (c-616) as one gateway call, so it meets every rule an agent's call meets: approvals,
+        """A tool page's Real run as one gateway call, so it meets every rule an agent's call meets: approvals,
         limits, the egress policy, the team's account and the call log. The answer is plain data, so the module
         service needs no gateway types: {callId, ok, output} when it ran, {callId, status, code, reasons} when not."""
-        # The person who pressed Run is whom the call acts for (c-616): their own sign-in signs it on an app each person
+        # The person who pressed Run is whom the call acts for: their own sign-in signs it on an app each person
         # signs in to, and Usage names them.
         person = (
             ActingForPerson(sub=caller.sub, email=caller.email, name=caller.name, team_id=caller.team_id)
@@ -293,7 +293,7 @@ class GatewayCalls:
 
         async def over_rate() -> Refused | None:
             """Spends one of the operation's calls this minute; past the limit the call is refused and logged. Only a
-            call that passed every other check and is about to run spends one (c-028)."""
+            call that passed every other check and is about to run spends one."""
             if resolved is None or resolved.operation is None:
                 return None
             op = resolved.operation
@@ -319,7 +319,7 @@ class GatewayCalls:
             return Refused(call_id, 403, "team_forbidden", [reason])
         args, hide = req.input, list[str]()
         if prepare is not None:
-            # A code run's call (c-531): its secret handles become values here, after the input hash was taken, so
+            # A code run's call: its secret handles become values here, after the input hash was taken, so
             # neither the hash nor the log row holds a value, and the answer is scrubbed of them.
             try:
                 args, hide = await prepare(resolved, req.input)
@@ -338,11 +338,11 @@ class GatewayCalls:
             return Refused(call_id, status, code, [reason], {"invalid": problems} if problems else {})
         policy = await self.registry.policy_for(req.tool, caller.tenant_id, caller.team_id) if resolved else None
         # From the registry and the team's policies, never the caller: whether this write needs an approval token.
-        # Approvals are off by default (owner, 2026-11-01): a write waits only when its tool's switch is on, the team
+        # Approvals are off by default: a write waits only when its tool's switch is on, the team
         # has every write wait, or the team listed its app.
         module = resolved.module if resolved else None
         needs = access in WRITES and (
-            # Over MCP every write waits for a person, whatever the operation declares (owner, c-354 Q4).
+            # Over MCP every write waits for a person, whatever the operation declares.
             channel == MCP
             or await self.registry.requires_approval(req.tool, caller.tenant_id, caller.team_id)
             or await self.all_writes_wait(caller.tenant_id, caller.team_id)
@@ -354,14 +354,14 @@ class GatewayCalls:
             # account_for); its writes then wait for a person, so testing never changes live data unseen.
             or (run == TEST and bool((module or {}).get("connection_id")) and not (module or {}).get("sandbox"))
         )
-        # When approval is on, roles decide (owner, 2026-11-01): a person holding the approver role in the team is not
+        # When approval is on, roles decide: a person holding the approver role in the team is not
         # asked, and the log names them as the write's approver; anyone else needs an approval token.
         self_approved = bool(needs and req.approval_token is None and self.approver and self.approver(caller))
         if self_approved:
             row["approvers"] = [caller.email]
         approval_required = access not in WRITES or (needs and not self_approved)
         if access in WRITES and req.approval_token is None and self.send_check is not None:
-            # Check before sending (c-300): a write the team's sending policy forbids, or one the check could not
+            # Check before sending: a write the team's sending policy forbids, or one the check could not
             # judge, waits for a person; a write that carries an approval was decided by one and is not judged again.
             why = await self.send_check.needs_person(caller.tenant_id, caller.team_id, req.tool, req.input, digest)
             if why is not None:
@@ -473,7 +473,7 @@ class GatewayCalls:
             error=failed,
             credential=credential,
             # Refused at sign-in for a person with no account of their own: nothing was sent, and the run waiting for
-            # them sends this write again under its key once they connect (c-616 S12).
+            # them sends this write again under its key once they connect.
             unsent=(failed or {}).get("code") == NOT_LINKED,
         )
         return Allowed(call_id, outcome.ok, outcome.output, outcome.view)

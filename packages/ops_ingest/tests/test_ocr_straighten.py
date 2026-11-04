@@ -1,4 +1,4 @@
-"""Scans straightened before OCR (c-294), by failure mode: a page scanned a few degrees off read with words split or
+"""Scans straightened before OCR, by failure mode: a page scanned a few degrees off read with words split or
 misread (F1); a page scanned sideways read as noise (F2); a straight, clean page changed (F4). Pages are printed here
 and turned as a scanner would."""
 

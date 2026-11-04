@@ -11,7 +11,7 @@ interface Permission {
   action: string;
 }
 
-/** platform-service's team routes for workspace admins (GET, POST, PATCH /v1/settings/teams, c-198). */
+/** platform-service's team routes for workspace admins (GET, POST, PATCH /v1/settings/teams). */
 export function createWorkspaceTeamsHttp(get: Get, send: Send): WorkspaceTeamsApi {
   return {
     list: (p) => {
@@ -24,7 +24,7 @@ export function createWorkspaceTeamsHttp(get: Get, send: Send): WorkspaceTeamsAp
     rename: (id, name) => send('PATCH', `/settings/teams/${encodeURIComponent(id)}`, { name: name.trim() }),
     archive: (id) => send('POST', `/settings/teams/${encodeURIComponent(id)}/archive`),
     restore: (id) => send('POST', `/settings/teams/${encodeURIComponent(id)}/restore`),
-    // A workspace admin holds the right in every team (`*`), which /me/permissions reports as `workspace` (c-198).
+    // A workspace admin holds the right in every team (`*`), which /me/permissions reports as `workspace`.
     editor: async () => {
       const me = await get<{ workspace: Permission[] }>('/me/permissions');
       const has = (action: string) => me.workspace.some((p) => p.area === 'access' && p.action === action);

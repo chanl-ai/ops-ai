@@ -20,9 +20,9 @@ export interface HeldTool {
 }
 
 /**
- * Why a test reply answered as it did (c-170, read from the stored reply since c-285): the knowledge it searched and
+ * Why a test reply answered as it did (read from the stored reply): the knowledge it searched and
  * cited, the tools it called and how each went, where it paused for a review, the skills it loaded and a guardrail that
- * fired, and what the reply spent (c-286). Each step says so when there was nothing, so a plain reply still shows that
+ * fired, and what the reply spent. Each step says so when there was nothing, so a plain reply still shows that
  * nothing was searched or called.
  */
 export function TestWhy({ message, kbNames, held }: { message: ChatMessage; kbNames: Record<string, string>; held: HeldTool[] }) {

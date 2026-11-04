@@ -149,13 +149,13 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   const valid = !errors.name && !errors.role;
 
   const widgetTemplates = useWidgetTemplates();
-  // The one draft saves itself (c-172): a second after the last valid change, with no dialog and no note per save.
+  // The one draft saves itself: a second after the last valid change, with no dialog and no note per save.
   const [saveError, setSaveError] = React.useState<string | null>(null);
-  // The draft a save failed on: autosave does not send it again until it changes or Retry is pressed (c-172).
+  // The draft a save failed on: autosave does not send it again until it changes or Retry is pressed.
   const [failedDraft, setFailedDraft] = React.useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
-  // The right panel's tab (c-285); Test in the header opens it and brings it into view on a narrow screen.
+  // The right panel's tab; Test in the header opens it and brings it into view on a narrow screen.
   const [testTab, setTestTab] = React.useState<TestTab>(TEST_TABS[0]);
   const [testThreadId, setTestThreadId] = React.useState<string>();
   const chat = useSendMessage();
@@ -249,7 +249,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
         </Tabs>
       }
       actions={
-        // A draft the person may not publish says why and who can, rather than offering nothing (c-150).
+        // A draft the person may not publish says why and who can, rather than offering nothing.
         !canBuild ? (
           newest?.state === 'draft' && agent.canPublish === false ? <LockedReason area="agents" action="publish" label="Request publish" /> : undefined
         ) : (
@@ -335,7 +335,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
       ) : tab === 'channels' ? (
         agent.wrapperWorkflowId ? (
           <div className="flex flex-col gap-4">
-            {/* Where each version is live (c-242), then the embeds' own snippets and keys, which are made here. */}
+            {/* Where each version is live, then the embeds' own snippets and keys, which are made here. */}
             <LivePlacesPanel kind="agent" id={agent.id} name={agent.name} between={<AgentChatChannel agent={agent} />} />
             <WidgetEmbeds agentId={agent.id} publishedVersion={agent.publishedVersion} scriptUrl={widgetScriptUrl} createOpen={deployOpen} onCreateOpenChange={setDeployOpen} canEdit={agent.canEdit} />
           </div>

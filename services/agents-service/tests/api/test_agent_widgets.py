@@ -1,4 +1,4 @@
-"""Widgets an agent shows in chat (c-082), through the real routes, by failure mode: the library not served, a pin
+"""Widgets an agent shows in chat, through the real routes, by failure mode: the library not served, a pin
 to a template that does not exist saved, a draft's widgets reaching what is live before a publish, a pinned widget not
 reaching the turn's present tool, and a template or composed part not reaching the chat stream or lost on reload."""
 

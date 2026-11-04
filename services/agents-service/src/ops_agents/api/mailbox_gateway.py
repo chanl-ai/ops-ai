@@ -1,4 +1,4 @@
-"""A mailbox record as a `MailSource` (c-192, c-199). Gmail and IMAP mailboxes are read through tools-service's
+"""A mailbox record as a `MailSource`. Gmail and IMAP mailboxes are read through tools-service's
 `/v1/mailboxes`: the password is a Secrets-page secret and secret values never leave tools-service, so this process
 sends the connection from the record (host, login, the secret's name) and tools-service reads it with the secret
 scoped to the token's team and the host on the egress allow-list. Each call carries a service token with

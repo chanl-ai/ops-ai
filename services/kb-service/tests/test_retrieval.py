@@ -1,4 +1,4 @@
-"""Questions over indexed knowledge (c-056 T004), by failure mode: the answering passage not ranked first or missing
+"""Questions over indexed knowledge, by failure mode: the answering passage not ranked first or missing
 its page and section, a question nothing answers returning a weak passage that shares a few of its words, a
 never-indexed knowledge base answering as if empty, and agents-service's search reaching another tenant's knowledge
 or a knowledge base that does not exist."""
@@ -100,7 +100,7 @@ async def test_agents_list_the_tokens_tenants_knowledge_bases(client: httpx.Asyn
 async def test_a_person_lists_and_searches_only_their_teams_bases_and_those_no_team_owns(
     client: httpx.AsyncClient,
 ) -> None:
-    """Refs and search were for services only (c-222): a person may call them with knowledge.view, and reads their
+    """Refs and search were for services only: a person may call them with knowledge.view, and reads their
     team's bases and the unowned ones, never another team's, which search refuses as unknown."""
     ops, fraud = {"X-Team-Id": "team_ops"}, {"X-Team-Id": "team_fraud"}
     mine = data(await client.post("/v1/knowledge-bases", json={"name": "Ops", "owner": "a@x.com"}, headers=ops), 201)
@@ -119,7 +119,7 @@ async def test_a_person_lists_and_searches_only_their_teams_bases_and_those_no_t
 async def test_an_agent_citing_a_retired_base_still_answers_from_its_others(
     engine: AsyncEngine, client: httpx.AsyncClient, tenant: str
 ) -> None:
-    """c-094 T007: a deleted base was an unknown id, so every search naming it was refused and the agent lost all its
+    """A deleted base was an unknown id, so every search naming it was refused and the agent lost all its
     knowledge. A retired base is skipped; an id kb-service never had is still refused, as is another tenant's."""
     gone = await indexed_kb(client)
     shared = [x["sourceId"] for x in data(await client.get(f"/v1/knowledge-bases/{gone['id']}"))["sources"]]

@@ -26,7 +26,7 @@ import { SplitView } from '@/components/shared/setting/split-view';
 import { cn } from '@/lib/utils';
 
 /** header (PageLayout) + [rail · main] with a drag handle between them. Rail stacks its cards; below 1024px the columns
- * stack with the main column first, so a phone opens on the record's content (c-500), the rail after it. */
+ * stack with the main column first, so a phone opens on the record's content, the rail after it. */
 export function RecordLayout({
   rail,
   children,

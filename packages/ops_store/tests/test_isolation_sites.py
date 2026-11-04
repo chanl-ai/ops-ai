@@ -1,4 +1,4 @@
-"""Every place source code widens or sets the isolation context, by reason (c-409). A widening with no reason, a new
+"""Every place source code widens or sets the isolation context, by reason. A widening with no reason, a new
 call site, or a service setting its own tenant or team fails here naming the file; each list only changes with the
 card that changes the call. Tests are not scanned: they act for whichever tenant they set up.
 
@@ -27,7 +27,7 @@ WIDENINGS: dict[str, set[str]] = {
     },
     "SESSION_LOOKUP": {"services/platform-service/src/ops_platform/store/identity.py"},
     "WIDGET_LOOKUP": {"services/agents-service/src/ops_agents/api/routers/widget.py"},
-    # c-535: the workflow worker reads every tenant's pending batch rows, then starts each in its own tenant and team.
+    # The workflow worker reads every tenant's pending batch rows, then starts each in its own tenant and team.
     "BATCH_START": {"services/agents-service/src/ops_agents/store/batches.py"},
     "KEY_LOOKUP": {"services/platform-service/src/ops_platform/store/identity.py"},
     "INVITE_LOOKUP": {"services/platform-service/src/ops_platform/store/members.py"},
@@ -38,7 +38,7 @@ WIDENINGS: dict[str, set[str]] = {
     "SEED": {
         "services/agents-service/src/ops_agents/api/app.py",
         "services/agents-service/src/ops_agents/api/engine_seed.py",
-        # c-602: the dev seed writes every team's connections into the dev tenant.
+        # The dev seed writes every team's connections into the dev tenant.
         "services/tools-service/src/ops_tools/modules/seed.py",
     },
     "ENGINE_PASS": {"services/agents-service/src/ops_agents/api/worker.py"},
@@ -53,19 +53,19 @@ WIDENINGS: dict[str, set[str]] = {
     "ASSISTANT_CATCH_UP": {"services/agents-service/src/ops_agents/api/ops_tools.py"},
     "CLAIM_WORK": {"packages/ops_engine/src/ops_engine/store/work.py"},
     "LIVE_WORKFLOWS": {"packages/ops_engine/src/ops_engine/store/definitions.py"},
-    # c-561: the run reconciler reads every tenant's unfinished runs, then marks each in its own tenant.
+    # The run reconciler reads every tenant's unfinished runs, then marks each in its own tenant.
     "RECONCILE_RUNS": {"packages/ops_engine/src/ops_engine/store/reconciler.py"},
     "RUN_RECONCILER": {"services/agents-service/src/ops_agents/api/sweeper.py"},
     "SUITE": {"packages/ops_store/src/ops_store/conformance.py"},
     "STORAGE_TARGETS": {"services/files-service/src/ops_files/store/settings.py"},
-    # c-507: kb's background processes, the dev demo seed and the start-up move between file stores.
+    # Kb's background processes, the dev demo seed and the start-up move between file stores.
     "MOVE_TENANTS": {"services/kb-service/src/ops_kb/store/knowledge.py"},
     "DEMO_SEED": {"services/kb-service/src/ops_kb/__main__.py"},
     "MOVE_FILES": {"services/kb-service/src/ops_kb/__main__.py"},
-    # The knowledge schedule finds each tenant's due tool sources, then syncs each in its own team's scope (c-565).
+    # The knowledge schedule finds each tenant's due tool sources, then syncs each in its own team's scope.
     "FIND_DUE": {"services/kb-service/src/ops_kb/schedule.py"},
     "RELAY": {"packages/ops_store/src/ops_store/outbox.py"},
-    # c-516: heartbeats describe a process, which serves every tenant; the Background page reads every team's jobs.
+    # Heartbeats describe a process, which serves every tenant; the Background page reads every team's jobs.
     "HEARTBEAT": {"packages/ops_store/src/ops_store/background.py"},
     "BACKGROUND_PAGE": {"services/agents-service/src/ops_agents/store/background.py"},
     "RECOVER_PENDING": {
@@ -77,7 +77,7 @@ WIDENINGS: dict[str, set[str]] = {
 ENTRIES: dict[str, set[str]] = {
     "enter_caller": {"packages/ops_identity/src/ops_identity/fastapi.py"},
     "enter": {
-        # c-535: a hosted form's link enters the tenant and team its signed token names; a members-only form, each of
+        # A hosted form's link enters the tenant and team its signed token names; a members-only form, each of
         # the signed-in person's own teams in turn.
         "services/agents-service/src/ops_agents/api/routers/forms.py",
         "services/agents-service/src/ops_agents/api/routers/run_resume.py",
@@ -86,7 +86,7 @@ ENTRIES: dict[str, set[str]] = {
     },
     "scope": {
         "services/agents-service/src/ops_agents/api/batches.py",
-        # c-549: a checkpointer built for one tenant and team (tests, tools) scopes each transaction to them, never to a
+        # A checkpointer built for one tenant and team (tests, tools) scopes each transaction to them, never to a
         # config's; the Runtime's checkpointer acts in the caller's context.
         "packages/ops_checkpointer/src/ops_checkpointer/saver.py",
         "packages/ops_store/src/ops_store/outbox.py",
@@ -94,23 +94,23 @@ ENTRIES: dict[str, set[str]] = {
         "services/documents-service/src/ops_documents/extraction.py",
         "services/agents-service/src/ops_agents/api/publish_reviews.py",
         "services/agents-service/src/ops_agents/api/tenant_tasks.py",
-        # c-549: a run, and a write to a thread's state outside one, act as the thread's team, so every checkpoint is
+        # A run, and a write to a thread's state outside one, act as the thread's team, so every checkpoint is
         # in exactly one team whoever started the run.
         "services/agents-service/src/ops_agents/api/runs.py",
         "services/platform-service/src/ops_platform/store/tenancy.py",
         "services/kb-service/src/ops_kb/schedule.py",
-        # c-616 C1: a Security admin's request on another team's secrets, after the rights check, acts in that team.
+        # A Security admin's request on another team's secrets, after the rights check, acts in that team.
         "services/tools-service/src/ops_tools/secrets/routes.py",
-        # c-616 D3b-2b: the start-up move of sign-in header keys acts on each module in the module's own team.
+        # The start-up move of sign-in header keys acts on each module in the module's own team.
         "services/tools-service/src/ops_tools/header_keys.py",
-        # c-616 C3: a model call reads its tenant's provider key, or the deployment's when it names none.
+        # A model call reads its tenant's provider key, or the deployment's when it names none.
         "services/models-service/src/ops_models/provider_keys.py",
-        # c-616 C4: a per-tenant model key's call spends from the share of the tenant it names (X-Tenant-Id).
+        # A per-tenant model key's call spends from the share of the tenant it names (X-Tenant-Id).
         "services/models-service/src/ops_models/app.py",
     },
 }
-# Names a service once used to set its own context. `set_acting_team` is c-407's filter; kb-service still sets it for
-# a service caller (c-416).
+# Names a service once used to set its own context. `set_acting_team` is the filter; kb-service still sets it for
+# a service caller.
 REFUSED = {"set_tenant", "set_team", "tenant_scope", "enter_tenant"}
 ACTING_TEAM = {"services/kb-service/src/ops_kb/app.py"}
 

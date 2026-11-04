@@ -53,7 +53,7 @@ class KeyStore:
             return [dict(r) for r in (await c.execute(self._listing(team_id))).mappings().all()]
 
     async def every(self, tenant_id: str) -> list[dict[str, Any]]:
-        """Every team's keys in the workspace, for a service's list of API channels (c-246)."""
+        """Every team's keys in the workspace, for a service's list of API channels."""
         async with self.db.tenant_tx(tenant_id) as c:
             return [dict(r) for r in (await c.execute(self._listing(None))).mappings().all()]
 

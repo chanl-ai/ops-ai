@@ -25,14 +25,14 @@ import type { MemoriesApi } from './memories-contract';
 export interface ChatApi {
   /** Live agents the current user may chat with. */
   agents(): Promise<ChatAgent[]>;
-  /** The agent the team's new chats start on (c-174); `set` is a team admin's (403 otherwise). */
+  /** The agent the team's new chats start on; `set` is a team admin's (403 otherwise). */
   defaultAgent: {
     get(): Promise<TeamDefaultAgent>;
     set(agentId: string): Promise<TeamDefaultAgent>;
   };
-  /** A thread's settings within its agent's limits, and message attachments (c-071). */
+  /** A thread's settings within its agent's limits, and message attachments. */
   settings: ChatSettingsApi;
-  /** What agents remember about the caller, which they correct, forget and export (c-206). */
+  /** What agents remember about the caller, which they correct, forget and export. */
   memories: MemoriesApi;
   threads: {
     list(params: ChatThreadListParams): Promise<ChatThreadList>;

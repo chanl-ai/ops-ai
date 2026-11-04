@@ -1,4 +1,4 @@
-"""Agents carry a template id and a protection level (c-180), by failure mode: a provisioned agent not found again by
+"""Agents carry a template id and a protection level, by failure mode: a provisioned agent not found again by
 its template id, a person setting either field, a person changing a system agent, a managed agent losing its template id
 on an edit, and an agent from before reading as protected."""
 
@@ -20,7 +20,7 @@ from ops_identity import Auth, Identity, ServiceAuth, dev_service_signer, mint_s
 from ops_service_kit.settings import Settings
 from tests.engine.test_lifecycle_rights import ADMIN, BUILDER, jwks
 
-# Signed-in people: a builder of team_ops, and its admin, who also holds agents.manage (c-180).
+# Signed-in people: a builder of team_ops, and its admin, who also holds agents.manage.
 PERSON = BUILDER
 SCOPES = ["agents:provision", "agents:create", "agents:edit", "agents:delete", "agents:view"]
 

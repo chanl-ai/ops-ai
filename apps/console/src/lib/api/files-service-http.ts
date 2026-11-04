@@ -8,9 +8,9 @@ import { fetchWithIdentity, identityHeaders } from './request-identity';
 const unavailable = (what: string) => () => Promise.reject(new ApiError(`${what} is not on files-service yet.`, 501));
 
 /**
- * The Files page's calls on files-service (`/v1/files`, c-126): the list with its views, counts and facets, a file
+ * The Files page's calls on files-service (`/v1/files`): the list with its views, counts and facets, a file
  * with its references and versions, download, delete, legal hold, the file picker's options, and every upload.
- * Uploads of every purpose go here (c-466): an upload stored anywhere else gets an id that the list, the picker and
+ * Uploads of every purpose go here: an upload stored anywhere else gets an id that the list, the picker and
  * every service reading files by id cannot find, and files-service is what reuses a team's file with the same bytes.
  * Retention and evidence export are not offered there yet; the page hides those actions.
  */

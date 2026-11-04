@@ -7,7 +7,7 @@ import { PageLayout } from '@/components/page-layout';
 import { RecordSkeleton } from '@/components/shared/record-skeleton';
 
 /**
- * The old address of the call log (c-617): it lives under Apps › Tools now. The query carries through, so a link that
+ * The old address of the call log: it lives under Apps › Tools now. The query carries through, so a link that
  * opened one call (?id=) or a filtered list (?q=, ?run=) opens the same thing there.
  */
 export default function OldToolCallsPage() {

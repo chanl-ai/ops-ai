@@ -227,7 +227,7 @@ class AzureOpenAIProvider(OpenAICompatibleProvider):
     `{endpoint}/openai/v1/chat/completions` with the deployment as `model` when `api_version` is `v1`, else
     `{endpoint}/openai/deployments/{deployment}/chat/completions?api-version=<version>`. The alias's model id is the
     deployment. Every answer's `x-ms-region` header is recorded as `observed_region`; one that is not `region` is named
-    by `region_mismatch` and the call goes through (owner, 2026-10-31: warn only until a real resource confirms the
+    by `region_mismatch` and the call goes through (warn only until a real resource confirms the
     header)."""
 
     def __init__(

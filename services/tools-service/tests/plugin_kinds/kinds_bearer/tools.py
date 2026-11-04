@@ -1,5 +1,5 @@
 """A Python tool that returns what the system says it was sent, credential included: the plugin executor must scrub
-the connection's sign-in from a Python tool's answer as the http executor does (c-588)."""
+the connection's sign-in from a Python tool's answer as the http executor does."""
 
 from typing import Any
 

@@ -1,4 +1,4 @@
-"""Which records a team installed from a template (c-590): one row per copy, in the copy's team, naming the template's
+"""Which records a team installed from a template: one row per copy, in the copy's team, naming the template's
 source (`plugin:<plugin id>`), id and version. The copy itself is an ordinary agent, skill or workflow made through its
 create path; this table is the only place that remembers where it came from, so no record or response changes.
 

@@ -1,4 +1,4 @@
-"""Replies from a mailbox's own sender (c-200), by failure mode: a reply uses another team's mailbox; a mailbox with
+"""Replies from a mailbox's own sender, by failure mode: a reply uses another team's mailbox; a mailbox with
 no sender reports sent; an SMTP host off the egress allow-list is dialled; the sender's secret is read for the wrong
 team; a Resend reply goes out under someone else's key. agents-service's mailbox read is faked at its documented API
 (`GET /v1/channels/mailboxes?address=`); SMTP replies go to Mailpit (compose) as to any outside host."""

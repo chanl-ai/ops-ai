@@ -1,9 +1,9 @@
-"""A provider connection's key, by the name it gives (`key_ref`), from the account's provider keys (owner, 2026-10-27):
+"""A provider connection's key, by the name it gives (`key_ref`), from the account's provider keys:
 models-service's own sealed table, set by account admins on Settings > Model providers. The key of the tenant a call is
 for is used, or the deployment's tenant (`model_keys_tenant`) for a call that names none. A key is kept for a minute so
 a call does not wait on the database, and an admin's save or delete drops it at once.
 
-Dev-only exception (owner, 2026-10-18): the shared dev stack's key may come from settings (`OPS_MODEL_PROVIDER_KEYS`,
+Dev-only exception: the shared dev stack's key may come from settings (`OPS_MODEL_PROVIDER_KEYS`,
 filled from .env by scripts/stack.sh); a key an admin saved wins over it. Outside dev a key in settings stops start-up
 (see __main__)."""
 

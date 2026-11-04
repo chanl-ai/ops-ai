@@ -122,7 +122,7 @@ def main() -> None:
     dev = settings.environment == "dev"
     if dev:
         # Without the agents' fixture catalogue: seeded operations run from their stubs (or their endpoints once
-        # connected), and no "Runtime demo tools" module offers the fixture tools to agents (c-048 G1).
+        # connected), and no "Runtime demo tools" module offers the fixture tools to agents.
         asyncio.run(_seed(settings, seed, None))
     engine = open_database(settings.database_url)
     directory = Directory.from_seed(seed, datetime.now(UTC))
@@ -139,14 +139,14 @@ def main() -> None:
     )
     policy = EgressPolicy(EgressStore(engine), OverrideResolver(settings.egress_resolve), new_hosts)
     ca = str(settings.egress_ca_file) if settings.egress_ca_file else None
-    # Every secret value is put and read through the credential store; rows keep only its reference (c-616 C6).
+    # Every secret value is put and read through the credential store; rows keep only its reference.
     credentials = credential_store(settings)
     secrets = SecretResolver(SecretStore(engine), credentials)
-    # Connections sign calls in (c-330); their token requests go out through the same egress client as calls.
+    # Connections sign calls in; their token requests go out through the same egress client as calls.
     # Ops AI's own OAuth client per plugin comes from the install config; the store hands it to an account on it.
     connection_store = ConnectionStore(engine, settings.plugin_clients)
     tokens = Tokens(connection_store, credentials, egress_client(policy, ca_file=ca), policy)
-    # A call acting for someone who has not signed in hands back a link to the console page that asks them (c-558).
+    # A call acting for someone who has not signed in hands back a link to the console page that asks them.
     links = ConnectLinks(connection_store, settings.console_url) if settings.console_url else None
     authenticator = Authenticator(connection_store, secrets, tokens, links)
     agents_url = settings.agents_url or f"http://127.0.0.1:{settings.port}"
@@ -158,7 +158,7 @@ def main() -> None:
         store,
         PluginBindings(engine),
         connection_store,
-        # The lookup after a plugin's sign-in goes out through the egress client, as any call does (c-584).
+        # The lookup after a plugin's sign-in goes out through the egress client, as any call does.
         http=egress_client(policy, ca_file=ca),
         policy=policy,
     )
@@ -184,14 +184,14 @@ def main() -> None:
     )
     # A plugin's sign-in, token and test requests reach the hosts it declares without the tenant listing them.
     tokens.plugin_hosts = plugins.connection_hosts if plugins else None
-    # The call log names a plugin tool by its manifest title (c-607).
+    # The call log names a plugin tool by its manifest title.
     modules.titles = plugins.title_of if plugins else None
-    # A plugin tool's page names the team's own account of the app (c-616).
+    # A plugin tool's page names the team's own account of the app.
     modules.team_connections = plugins.team_connection if plugins else None
     modules.awaits_sign_in = plugins.awaits_sign_in if plugins else None
-    # send_reply naming a mailbox (c-200): the mailbox is read from agents-service as the call's team, its secret is
+    # send_reply naming a mailbox: the mailbox is read from agents-service as the call's team, its secret is
     # looked up for that team, and its host is dialled at the allow-listed address.
-    # Microsoft 365 mailboxes (c-228): Graph and its token endpoint, dialled through each tenant's allow-list.
+    # Microsoft 365 mailboxes: Graph and its token endpoint, dialled through each tenant's allow-list.
     graph = graph_clients(egress_transport(policy, ca_file=ca), settings.graph_url)
     mailbox_senders = MailboxSenders(
         settings,
@@ -211,12 +211,12 @@ def main() -> None:
         # A sign-in returns to the console's page, which hands the code to this service.
         console_url=settings.console_url,
         security_team=settings.security_team_id,
-        # An MCP server's sign-in is found from the server, through the egress client (c-331).
+        # An MCP server's sign-in is found from the server, through the egress client.
         discovery=Discovery(egress_client(policy, ca_file=ca), policy),
-        # Test connection signs its read in as a call is, through the same egress client (c-558).
+        # Test connection signs its read in as a call is, through the same egress client.
         auth=authenticator,
         http=egress_client(policy, ca_file=ca),
-        # A plugin's connection takes its instance from the token answer (c-564).
+        # A plugin's connection takes its instance from the token answer.
         on_token=plugins.on_token if plugins else None,
         plugin_settings=plugins.account_settings if plugins else None,
     )
@@ -227,10 +227,10 @@ def main() -> None:
         opa=OpaClient(httpx.AsyncClient(base_url=settings.opa_url, timeout=5)),
         registry=ToolRegistry(catalog, store, plugins, connection_store),
         plugins=plugins,
-        # A tool page's Real run goes through this gateway's checks (c-616).
+        # A tool page's Real run goes through this gateway's checks.
         modules=modules,
         cursor_key=cursor_key(settings.secrets_key.get_secret_value()),
-        # /mcp is served only with the mcp_gateway flag on in the install config (c-611).
+        # /mcp is served only with the mcp_gateway flag on in the install config.
         flags=settings.feature_flags,
         log=calls,
         # The mail provider settings pick (OPS_MAIL_PROVIDER); a missing secret stops start-up here. An SMTP password
@@ -241,12 +241,12 @@ def main() -> None:
             mailbox_sender=mailbox_senders.sender,
             cases=client("agents", agents_url, ["cases:view", "cases:create"]),
             decisions=modules,
-            # read_file and read_document (c-613) read through documents-service as the calling team.
+            # read_file and read_document read through documents-service as the calling team.
             file_tools=FileTools(
                 FilesClient.from_settings(settings, service="tools", scopes=["files:view"]),
                 DocumentsClient.from_settings(settings, service="tools", scopes=["documents:view", "documents:run"]),
             ),
-            # search_knowledge (c-616) searches the calling team's knowledge bases through kb-service.
+            # search_knowledge searches the calling team's knowledge bases through kb-service.
             knowledge=KnowledgeSearch(client("kb", settings.kb_url, ["knowledge:view"])) if settings.kb_url else None,
         ),
         review_key=settings.review_key.get_secret_value(),
@@ -255,7 +255,7 @@ def main() -> None:
         write_approvals=WriteApprovals(client("platform", settings.platform_url, ["settings:view"]))
         if settings.platform_url
         else None,
-        # Check before sending (c-300): the team's checkBeforeSend read live, its sending policy here, and the judge on
+        # Check before sending: the team's checkBeforeSend read live, its sending policy here, and the judge on
         # this service's own model key; with no models-service, a team with the setting on has every write wait.
         send_check=SendCheck(
             SendPolicies(engine),
@@ -273,17 +273,17 @@ def main() -> None:
         cors_origins=tuple(settings.cors_origins),
         background=(
             lambda: keep_handing_over(ReviewHandoffs(engine), client("agents", agents_url, ["tools:publish"])),
-            # Tool access requests and module reviews start their system workflows through these events (c-257).
+            # Tool access requests and module reviews start their system workflows through these events.
             lambda: keep_relaying(engine, client("agents", agents_url, ["events:emit"])),
-            # Once at start: every team behind this release's defaults version is brought up to date (c-616).
+            # Once at start: every team behind this release's defaults version is brought up to date.
             lambda: catch_up_at_start(store, TeamDefaults(engine)),
-            # Once at start: a tool's sign-in header saved before they were refused moves to its connection (c-616).
+            # Once at start: a tool's sign-in header saved before they were refused moves to its connection.
             lambda: move_at_start(store, connection_store),
         ),
         secret_resolver=secrets,
         authenticator=authenticator,
         directory=directory,
-        # Code operations run on runner-service (c-531); its calls back are checked with this service's own key.
+        # Code operations run on runner-service; its calls back are checked with this service's own key.
         code=CodeExecutor(
             ServiceClient.for_settings(
                 settings,

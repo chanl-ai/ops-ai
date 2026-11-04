@@ -47,7 +47,7 @@ class AuthFailed(Exception):
     ) -> None:
         super().__init__(message)
         self.code, self.side, self.status = code, side, status
-        # What the caller acts on: a connect link and the connection it is for (CONNECTION_NOT_LINKED, c-558).
+        # What the caller acts on: a connect link and the connection it is for (CONNECTION_NOT_LINKED).
         self.details = details or {}
 
 
@@ -61,8 +61,8 @@ class Token:
 
 @dataclass
 class ClientProof:
-    """How the client proves itself to the system's sign-in: its secret, or an assertion signed with its key (RFC 7523,
-    c-583) when `clientAuth` is `private_key_jwt`. Each assertion signed for a request is kept in `signed`, so the
+    """How the client proves itself to the system's sign-in: its secret, or an assertion signed with its key (RFC 7523)
+    when `clientAuth` is `private_key_jwt`. Each assertion signed for a request is kept in `signed`, so the
     caller adds it to the call's scrub set."""
 
     secret: str | None = None
@@ -97,7 +97,7 @@ def scope_list(value: Any) -> list[str]:
 
 
 def granted_scopes(answer: dict[str, Any], requested: list[str]) -> list[str]:
-    """The scopes a token answer granted (c-558): its `scope`, else the access token's `scope` or `scp` claim, else the
+    """The scopes a token answer granted: its `scope`, else the access token's `scope` or `scp` claim, else the
     scopes asked for, as RFC 6749 5.1 says an answer that omits them granted. Unverified: it only decides whether a
     person is asked to sign in again; the system still refuses what the token was not granted."""
     scope = answer.get("scope")
@@ -426,7 +426,7 @@ class Tokens:
         return res.status_code < 400
 
     async def store_own(self, tenant_id: str, connection_id: str, person: str, values: dict[str, str]) -> None:
-        """A person's own key, password or token for a connection each person signs in to (c-595): their row in
+        """A person's own key, password or token for a connection each person signs in to: their row in
         connection_tokens, the fields sealed together under the person's own context, with no expiry and nothing to
         refresh. The account shown is the username, when the kind has one."""
         if person == SHARED:

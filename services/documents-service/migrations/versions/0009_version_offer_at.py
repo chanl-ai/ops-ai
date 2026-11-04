@@ -1,6 +1,6 @@
-"""a document type version sets how many reads of one layout offer a template (c-254)
+"""a document type version sets how many reads of one layout offer a template
 
-The owner's rule (2026-10-18) is 5, changeable per type; the number was fixed in code. Versions saved before hold
+The offer count is 5, changeable per type; the number was fixed in code. Versions saved before hold
 null, read as 5.
 
 Revision ID: documents_0009

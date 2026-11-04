@@ -2,7 +2,7 @@
 # Copyright 2026 chanl-ai
 """files-service's FastAPI app: uploads, completion, metadata, downloads, delete and legal holds for people
 (`/v1/files`), and, on the same routes, server writes, reads, references and scan results for services holding the
-`files` scope each needs (c-168).
+`files` scope each needs.
 
 Design, API table and rules: docs/services/files-service/overview.md.
 """
@@ -131,7 +131,7 @@ class FileRow(Model):
     version_count: int
     legal_hold: dict[str, Any] | None = None
     storage: dict[str, Any] | None = None
-    # What was read from the file (c-250), so the list's "read as" column needs no call per row.
+    # What was read from the file, so the list's "read as" column needs no call per row.
     data: FileData | None = None
 
 
@@ -208,7 +208,7 @@ def _status(e: FilesError) -> ApiError:
 
 
 def service_scope(action: str, *, services_only: bool = False) -> Any:
-    """Opens a route to services holding `files:<action>` (c-168); every other files route refuses a service token.
+    """Opens a route to services holding `files:<action>`; every other files route refuses a service token.
     `services_only` refuses people. Declared in the route's `dependencies`, which run before `who`."""
 
     def mark(request: Request) -> None:
@@ -238,7 +238,7 @@ async def who(p: CurrentCaller, request: Request) -> Who:
         raise Forbidden("Only a service records this.", code="scope_required")
     if not p.team_id:
         raise Forbidden("Choose a team to work with files in.", code="team_required")
-    # files.manage (legal holds, the storage location) is an admin's in the grid; `can()` decides it (c-149).
+    # files.manage (legal holds, the storage location) is an admin's in the grid; `can()` decides it.
     try:
         can(p, "files", "manage", team=p.team_id, what="files")
         admin_teams = frozenset({p.team_id})
@@ -251,7 +251,7 @@ async def who(p: CurrentCaller, request: Request) -> Who:
         deletes = False
     try:
         # A person records what was read from a file with files.create, the members who upload: the console writes it
-        # until the extract workflow's step does (TODO(c-250)), and no built-in member role holds files.edit.
+        # until the extract workflow's step does (TODO), and no built-in member role holds files.edit.
         can(p, "files", "create", team=p.team_id, what="files")
         edits = True
     except Forbidden:
@@ -289,7 +289,7 @@ def create_files_app(
 ) -> FastAPI:
     """`files` holds the storage backend and tables; `auth` resolves callers through ops_identity, by default from
     Settings for audience "files": platform tokens are verified locally against platform-service's key set.
-    `settings` serves the storage settings routes (c-100); without it they are not mounted."""
+    `settings` serves the storage settings routes; without it they are not mounted."""
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
@@ -377,7 +377,7 @@ def create_files_app(
         done = await files.complete(who, file_id)
         return ok(done.model_dump(mode="json", by_alias=True))
 
-    # Services holding files:view list their token's team's files too: the read_file tool finds a file by name (c-613).
+    # Services holding files:view list their token's team's files too: the read_file tool finds a file by name.
     @public.get("", response_model=Envelope[FileList], dependencies=[service_scope("view")])
     async def list_files(  # pyright: ignore[reportUnusedFunction]
         who: Caller,
@@ -427,7 +427,7 @@ def create_files_app(
     async def request_read(  # pyright: ignore[reportUnusedFunction]
         file_id: str, body: ReadRequestIn, who: Caller, idempotency_key: IdempotencyKey = None
     ) -> JSONResponse:
-        """Asks for the file to be read with a document type (c-250): the system extract workflow runs as the caller,
+        """Asks for the file to be read with a document type: the system extract workflow runs as the caller,
         started by this service's file.read_requested event, and saves what was read on the file. 202 at once; the
         request carries the run once the event is delivered. A repeat with the same Idempotency-Key returns the first
         request."""
@@ -442,7 +442,7 @@ def create_files_app(
     @public.put("/{file_id}/data", response_model=Envelope[FileDetail], dependencies=[service_scope("edit")])
     async def set_file_data(file_id: str, body: FileData, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Records what was read from the file: its document type and version, template or model, how many fields
-        wait for a person, and the extraction (c-250). The extract workflow's step writes it; files-service calls no
+        wait for a person, and the extraction. The extract workflow's step writes it; files-service calls no
         other service for it."""
         stored = await files.set_data(who, file_id, body)
         return ok(stored.model_dump(mode="json", by_alias=True))
@@ -580,7 +580,7 @@ _OLD_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
 
 async def storage_admin(p: CurrentPrincipal, request: Request) -> Who:
-    """settings.manage, held in the Security team (Security admin in the grid, c-149): storage settings decide where
+    """settings.manage, held in the Security team (Security admin in the grid): storage settings decide where
     every team's files are kept."""
     team: str = request.app.state.security_team
     Access(security_team=team).can(p, "settings", "manage", what="storage settings", code="admin_only")

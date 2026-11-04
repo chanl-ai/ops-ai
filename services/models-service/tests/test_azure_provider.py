@@ -1,4 +1,4 @@
-"""Azure OpenAI connections (c-605), by failure mode: the key sent as a bearer token, the deployment URL built wrong,
+"""Azure OpenAI connections, by failure mode: the key sent as a bearer token, the deployment URL built wrong,
 an api-version missing or too old to stream usage, the key echoed back, streamed usage not read or Azure's annotation
 frames passed on, tool calls lost, and a resource answering from another region than the connection names going
 unrecorded. Each runs models-service in process against the fake Azure in scripts/fake_openai, which answers as Azure
@@ -248,7 +248,7 @@ async def test_tool_calls_pass_through(azure: Azure, stream: bool) -> None:
 
 
 async def test_region_mismatch_is_recorded_and_the_call_goes_through(models: Models) -> None:
-    # Warn only (owner, 2026-10-31): the call answers, and the connection and call log say where Azure answered from.
+    # Warn only: the call answers, and the connection and call log say where Azure answered from.
     async for azure in _azure(models, region="East US"):
         pid = await azure.connect(region="swedencentral")
         alias = await azure.alias(pid)

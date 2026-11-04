@@ -1,4 +1,4 @@
-"""Template copies (c-590)
+"""Template copies
 
 Revision ID: 0093_template_copies
 Revises: 0092_run_batches

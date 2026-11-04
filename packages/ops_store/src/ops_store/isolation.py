@@ -1,4 +1,4 @@
-"""The one isolation context every transaction carries (c-409; design: c-408 spec section 1).
+"""The one isolation context every transaction carries.
 
   isolation.enter_caller(principal, dev=...)      # once per request, by ops_identity, from the verified caller
   async with isolation.isolated_tx(engine, role=ROLE) as conn: ...   # every read and write of an isolated table
@@ -18,7 +18,7 @@ one tenant: the dev header caller, a service token with no team, a loop or seed 
 `system_tx` (past the tenant, as a role whose grants limit what it reads). `packages/ops_store/tests/
 test_isolation_sites.py` lists every call site of both, and of `enter` and `scope`, by reason.
 
-The team is also c-407's acting team (`team_scope`), so the query filter and the database read one value: a team
+The team is also the acting team (`team_scope`), so the query filter and the database read one value: a team
 scope acts as its team, and a wider scope as none (every team of the tenant).
 """
 
@@ -196,7 +196,7 @@ async def enter_transaction(conn: AsyncConnection, ctx: Isolation, *, role: str 
     match dialect.dialect_of(conn):
         case "postgresql":
             # The role is set by the same statement as the context: set_config('role', ...) is SET LOCAL ROLE, with the
-            # same membership check, and a transaction's setup is one round trip (c-451).
+            # same membership check, and a transaction's setup is one round trip.
             settings = [*([("role", role)] if role else []), *((SETTINGS[k], v) for k, v in values.items())]
             await conn.execute(sa.select(*(sa.func.set_config(name, v, True) for name, v in settings)))
         case "mssql":
@@ -236,7 +236,7 @@ def _widened(tenant_id: str, kind: str, reason: str, base: Isolation | None) -> 
 def _log_widen(caller: str, **fields: str) -> None:
     """Every widening is logged with its reason. One a request's caller asked for is INFO, the audit trail of who read
     past their team; a loop's (no caller: a relay, a claim, a poll) is DEBUG, since each loop widens on every pass,
-    twice a second, and at INFO that buried the request lines and cost a small host its CPU (c-451)."""
+    twice a second, and at INFO that buried the request lines and cost a small host its CPU."""
     (log.debug if caller == TASK else log.info)("isolation.widen", caller=caller, **fields)
 
 

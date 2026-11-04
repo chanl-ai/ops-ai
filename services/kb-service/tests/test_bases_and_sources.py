@@ -1,4 +1,4 @@
-"""Knowledge bases and file sources (c-056 T002), by failure mode: a knowledge base nobody owns, another tenant's
+"""Knowledge bases and file sources, by failure mode: a knowledge base nobody owns, another tenant's
 knowledge reachable, names the console shows not joined, a source type the slice cannot sync accepted, a list the
 console cannot page or search, and a removed source still listed on its knowledge base."""
 

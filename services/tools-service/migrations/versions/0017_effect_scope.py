@@ -1,4 +1,4 @@
-"""a write acts once by a portable unique index on effect_scope (c-070 review)
+"""a write acts once by a portable unique index on effect_scope
 
 Revision ID: tools_0017_effect_scope
 Revises: tools_0016_threadless_once

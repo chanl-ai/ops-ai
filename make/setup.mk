@@ -1,4 +1,4 @@
-# make setup (c-545): asks what a person has, tests each answer live, and writes settings only for what passed
+# make setup: asks what a person has, tests each answer live, and writes settings only for what passed
 # (scripts/setup/, docs/deploy/install.md "Set up with make setup"). It runs before make install: every check is the
 # standard library except the database driver, so it uses the workspace's Python when there is one and python3 if not.
 .PHONY: setup skills-proof

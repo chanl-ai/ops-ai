@@ -1,7 +1,7 @@
 import type { ProviderKey } from '@/lib/types/provider-keys';
 
 /**
- * The account's model provider keys on models-service (owner, 2026-10-27): account admins (settings.manage, held in
+ * The account's model provider keys on models-service: account admins (settings.manage, held in
  * the Security team) save them; only models-service reads a value, and no team sees one.
  */
 export interface ProviderKeysApi {

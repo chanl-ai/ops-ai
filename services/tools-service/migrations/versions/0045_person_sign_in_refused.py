@@ -1,4 +1,4 @@
-"""person_sign_in_refused: a person's own key or sign-in the system refused is kept and marked (c-595)
+"""person_sign_in_refused: a person's own key or sign-in the system refused is kept and marked
 
 A person's key the system answered 401 to was sent again on every call, and a person's sign-in whose refresh the system
 refused was deleted, so Your connections could not say it had expired. connection_tokens now records when the system

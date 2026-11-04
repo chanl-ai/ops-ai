@@ -62,10 +62,10 @@ class RunContext(_Wire):
     thread: str | None = None
     step: str | None = None
     act: str | None = None
-    # The kind of run the call is made in (c-330): live runs send production, everything else test. Absent is test,
+    # The kind of run the call is made in: live runs send production, everything else test. Absent is test,
     # so a caller that does not say never reaches a live account's write unseen.
     environment: RunKind | None = None
-    # One of the team's accounts of the tool's app, by name (c-608, with several_accounts on); none uses the default.
+    # One of the team's accounts of the tool's app, by name (with several_accounts on); none uses the default.
     account: str | None = Field(default=None, min_length=1, max_length=200)
 
 
@@ -201,12 +201,12 @@ def create_gateway_app(
     `secret_resolver` resolves `{{NAME}}` header references at call time; without it an operation needing a secret
     is refused. `cors_origins` are the browser origins (the console) allowed to call these routes. `auth` resolves
     callers (ops_identity's shared dependency); by default it is built from Settings for audience "tools". `background`
-    runs beside the server from start-up and is cancelled at shutdown (the copy of reviews into Reviews, c-163).
+    runs beside the server from start-up and is cancelled at shutdown (the copy of reviews into Reviews).
     `write_approvals` reads each team's toolWritesNeedApproval live; without it each write follows its registry flag.
-    `authenticator` signs a module's calls in through its connection (c-330); without it a connection adds nothing.
-    `directory` holds the teams the MCP adapter scopes each assistant's tools to (c-356); without it no /mcp.
-    `flags` are the install's feature flags, none on unless given: /mcp is served only with `mcp_gateway` on (c-611).
-    `code` runs code operations on runner-service and checks their calls back (c-531); without it they fail."""
+    `authenticator` signs a module's calls in through its connection; without it a connection adds nothing.
+    `directory` holds the teams the MCP adapter scopes each assistant's tools to; without it no /mcp.
+    `flags` are the install's feature flags, none on unless given: /mcp is served only with `mcp_gateway` on.
+    `code` runs code operations on runner-service and checks their calls back; without it they fail."""
     # Resolved secrets go into the URLs this gateway requests, and httpx logs each URL at INFO; the gateway turns those
     # lines off whether or not its process called configure_logging.
     quiet_request_logs()
@@ -218,7 +218,7 @@ def create_gateway_app(
         http_executor,
         mocks=MockAnswers(MockStore(log.engine)),
         code=code,
-        # A plugin's Python tools run here, with the http executor's sign-in and egress client (c-564).
+        # A plugin's Python tools run here, with the http executor's sign-in and egress client.
         plugins=PluginExecutor(plugins, http_executor, cursor_key) if plugins is not None else None,
     )
     expected = policy_hash(rules)
@@ -252,7 +252,7 @@ def create_gateway_app(
         approver=approver,
     )
     if modules is not None:
-        # A tool page's Real run is this gateway's call, never a path of the registry's own (c-616).
+        # A tool page's Real run is this gateway's call, never a path of the registry's own.
         modules.real_runs = calls.console_run
 
     resolved_auth = auth or Auth.from_settings(Settings(), audience="tools")
@@ -309,7 +309,7 @@ def create_gateway_app(
         return {"processes": background_report(await LOCAL_BEATS.read(), "tools", time.time())}
 
     def team_view(caller: Principal) -> Callable[[Aggregate], bool] | None:
-        """The modules a run of the caller's team may reach (c-433): its own, workspace-level ones, and those approved
+        """The modules a run of the caller's team may reach: its own, workspace-level ones, and those approved
         for one of its workflows, a grant that covers the team's agents too. None for a token naming no team, which
         acts for the whole tenant."""
         if not caller.team_id:
@@ -324,7 +324,7 @@ def create_gateway_app(
         responses=error_responses(),
     )
     async def grantable_operations(caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """The operations an agent of the caller's tenant may be granted, for a service holding `tools:view` (c-168).
+        """The operations an agent of the caller's tenant may be granted, for a service holding `tools:view`.
         agents-service lists, grants and hands a run its tools from here; it keeps no catalogue of its own."""
         can(caller, "tools", "view", what="the grantable operations")
         rows = await registry.grantable(caller.tenant_id, team_view(caller))
@@ -332,7 +332,7 @@ def create_gateway_app(
             # The caller's team has every write wait, so the agents that list these pause before each one.
             rows = [r | {"requires_approval": True} if r["access"] in WRITES else r for r in rows]
         elif write_approvals is not None and any(r["access"] in WRITES for r in rows):
-            # The apps the team listed in appWritesNeedApproval: their writes pause too (c-616).
+            # The apps the team listed in appWritesNeedApproval: their writes pause too.
             listed = await write_approvals.apps(caller.tenant_id, caller.team_id)
             mods = (
                 {str(m["id"]): m for m in await registry.modules.all_teams(caller.tenant_id)}
@@ -364,8 +364,8 @@ def create_gateway_app(
             if policy
             else {"approvers": 1, "approverTeam": None, "stepUp": False}
         )
-        # `output`: what the operation answers (c-353), a step's output fields before it runs; null when unknown.
-        # `deadlineSeconds`: how long the gateway may take over one call, which the engine's step waits out (c-561).
+        # `output`: what the operation answers, a step's output fields before it runs; null when unknown.
+        # `deadlineSeconds`: how long the gateway may take over one call, which the engine's step waits out.
         data = {
             "name": name,
             "access": access,
@@ -417,7 +417,7 @@ def create_gateway_app(
         x_lease_generation: Annotated[int | None, Header()] = None,
         x_acting_for: Annotated[str | None, Header()] = None,
     ) -> JSONResponse:
-        # Whom the call acts for comes only from the token platform-service signed for the calling service (c-558).
+        # Whom the call acts for comes only from the token platform-service signed for the calling service.
         acting = await resolved_auth.identity.acting_for(x_acting_for, caller) if x_acting_for else None
         request = CallRequest(
             tool=body.tool,
@@ -434,7 +434,7 @@ def create_gateway_app(
     async def code_run_call(  # pyright: ignore[reportUnusedFunction]
         body: CodeCallIn, caller: CurrentService, x_code_run: Annotated[str | None, Header()] = None
     ) -> JSONResponse:
-        """Internal: one `ops.call` from a running code operation (c-531), sent by runner-service with the run's call
+        """Internal: one `ops.call` from a running code operation, sent by runner-service with the run's call
         token. Only a tool the operation binds is called, decided as the run's caller's own gateway call."""
         can(caller, "tools", "run", what="a code run's calls")
         if code is None:

@@ -1,4 +1,4 @@
-"""mailboxes: the sender each mailbox's replies go out through (c-200)
+"""mailboxes: the sender each mailbox's replies go out through
 
 Revision ID: 0050_mailbox_sender
 Revises: 0049_mailboxes_no_system_read

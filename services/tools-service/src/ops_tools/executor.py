@@ -14,7 +14,7 @@ at call time, from the secrets store; an operation whose secret is missing is re
 credential, and every resolved value is scrubbed from what the call returns. References are read from the operation's
 own definition only, never from a caller's arguments, which are URL-encoded before they reach the path.
 
-A module with a connection signs in through it (`auth.Authenticator`, c-330): its strategy adds headers, query values
+A module with a connection signs in through it (`auth.Authenticator`): its strategy adds headers, query values
 or a client certificate for the call's environment, after the operation's own, so a connection's credential is never
 replaced by an operation header of the same name. A read the system refuses with 401 is sent once more with a new
 token when the connection holds one; a write is not, since the system may have acted (AUTH_EXPIRED).
@@ -180,9 +180,9 @@ class HttpRequest:
     params: dict[str, Any]
     json_body: Any
     headers: dict[str, str]
-    # A form-encoded body in place of the JSON one (a plugin's form tool, c-584, or a form operation, c-591).
+    # A form-encoded body in place of the JSON one (a plugin's form tool, or a form operation).
     form: dict[str, str] | None = None
-    # A raw body, sent as the text it is with the operation's own Content-Type (c-591).
+    # A raw body, sent as the text it is with the operation's own Content-Type.
     content: str | None = None
 
 
@@ -195,7 +195,7 @@ def _with_auth(req: HttpRequest, prepared: Prepared | None) -> tuple[dict[str, A
 
 @dataclass
 class Trial:
-    """What the test console shows of one call (c-088): the request as sent and the gateway's steps, both with every
+    """What the test console shows of one call: the request as sent and the gateway's steps, both with every
     secret value scrubbed, and the answer before any transform. Filled only for a test; a gateway call passes none."""
 
     request: dict[str, Any] | None = None
@@ -272,7 +272,7 @@ def build_request(
 
 def _sent_headers(req: HttpRequest, prepared: Prepared | None) -> dict[str, str]:
     """The headers as the request left: the operation's and the connection's, and the Content-Type its body encoding
-    set (httpx adds it on the wire), so what a person reads is what the system got (c-591)."""
+    set (httpx adds it on the wire), so what a person reads is what the system got."""
     headers = _with_auth(req, prepared)[1]
     encoded = (
         "application/x-www-form-urlencoded"
@@ -306,7 +306,7 @@ def form_fields(templates: dict[str, str], args: dict[str, Any]) -> dict[str, st
     return out
 
 
-# A call to a module whose account names no address (c-616): nothing is sent.
+# A call to a module whose account names no address: nothing is sent.
 NO_ADDRESS = "This tool's app names no address; set it on the app's account."
 
 
@@ -500,7 +500,7 @@ class HttpExecutor(_Secrets):
                 and self.auth is not None
                 and acting_for is not None
             ):
-                # A person's own key the system refused (c-595): theirs alone is marked, and the card asks for it again.
+                # A person's own key the system refused: theirs alone is marked, and the card asks for it again.
                 return auth_failure(await self.auth.refused(module, prepared, acting_for, f"{host} answered 401."))
         except EgressDenied as e:
             # The policy may name the URL it refused, which now carries resolved secrets.
@@ -530,7 +530,7 @@ class HttpExecutor(_Secrets):
             if plugin_id_of(module) is None:
                 return ToolOutcome(True, output)
         if op.get("response_transform"):
-            # A plugin's transform also reads the team's merged settings (c-564); every other module's sees none.
+            # A plugin's transform also reads the team's merged settings; every other module's sees none.
             shaped, failed = await transform.apply(op["response_transform"], output, module.get("plugin_settings"))
             # A transform that fails on a real answer still returns the answer, with why, instead of failing the call.
             output = shaped if failed is None else {"response": output, "transform_error": failed}
@@ -559,7 +559,7 @@ class HttpExecutor(_Secrets):
 class McpExecutor(_Secrets):
     """Calls an imported MCP tool by its server name (the operation's `path`) through tools/call, on the egress
     policy's client like every other outbound request. A module with a connection signs in through it as an http one
-    does (c-331); the token goes only to the module's endpoint, the server it was issued for."""
+    does; the token goes only to the module's endpoint, the server it was issued for."""
 
     def __init__(
         self,
@@ -679,18 +679,18 @@ class Executor:
         *,
         plugins: PluginExecutor | None = None,
     ) -> None:
-        """`mocks` answers a test call from the operation's mock answers (c-332); without it none is read. `code` runs
-        a code operation's function on runner-service (c-531); without it a code operation fails."""
+        """`mocks` answers a test call from the operation's mock answers; without it none is read. `code` runs
+        a code operation's function on runner-service; without it a code operation fails."""
         self.local = local
         self.http = http
         self.mcp = mcp_executor or McpExecutor(http.client, http.policy, http.secrets, http.auth)
         self.mocks = mocks
         self.code = code
-        # A plugin's Python tools (c-564); without it they fail.
+        # A plugin's Python tools; without it they fail.
         self.plugins = plugins
 
     async def _mocked(self, module: dict[str, Any], op: dict[str, Any], mock: dict[str, Any]) -> ToolOutcome:
-        """A test call answered as the system would have, before any egress (c-332): the same failures a real answer
+        """A test call answered as the system would have, before any egress: the same failures a real answer
         or a real timeout gives, so a workflow's ports behave as they would against the system."""
         assert self.mocks is not None
         limit_ms: int = op.get("timeout_ms") or module["timeout_ms"]
@@ -747,7 +747,7 @@ class Executor:
         # holds only the instance's origin, so only every other module takes its connection's address.
         signs_in = environment or TEST
         if resolved.executor in ("http", "mcp") and self.http.auth is not None and plugin_id_of(module) is None:
-            # A module's address is its account's (c-616), its only home.
+            # A module's address is its account's, its only home.
             module = await self.http.auth.addressed(module)
         if self.mocks is not None and (
             mock := await self.mocks.for_call(caller.tenant_id, str(module["id"]), op["name"], args, environment)

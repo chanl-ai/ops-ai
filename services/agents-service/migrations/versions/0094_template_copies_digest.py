@@ -1,4 +1,4 @@
-"""Template copies keep the digest of the body they were made from (c-590)
+"""Template copies keep the digest of the body they were made from
 
 Revision ID: 0094_template_copies_digest
 Revises: 0093_template_copies

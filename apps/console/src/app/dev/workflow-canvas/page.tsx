@@ -15,7 +15,7 @@ import { BROKEN_DEFINITION, EMPTY_DEFINITION, SAMPLE_DEFINITION } from './sample
 const SCENES: Scene[] = ['empty', 'large', 'adding', 'step', 'trigger', 'error', 'phone'];
 
 /**
- * The c-096 mock: the workflow editor on a full-width canvas, drawn over a sample definition with the server's real
+ * The mock: the workflow editor on a full-width canvas, drawn over a sample definition with the server's real
  * step types and checks. `?scene=` picks the state a screenshot shows. Reachable only where src/proxy.ts lets /dev through, and not in the nav.
  */
 export default function WorkflowLargeCanvasPage() {

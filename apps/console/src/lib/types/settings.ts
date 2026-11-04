@@ -12,11 +12,11 @@ export interface Me {
   /** The workspace's own name (platform-service), for the header. */
   tenantName?: string;
   teams: { id: string; name: string; role: MemberRole }[];
-  /** Every feature flag with whether the install config turns it on (c-611); read through hooks/flag-queries. */
+  /** Every feature flag with whether the install config turns it on; read through hooks/flag-queries. */
   flags?: FeatureFlag[];
 }
 
-/** One action the person may take, as `can()` decides it (platform-service GET /v1/me/permissions, c-186). */
+/** One action the person may take, as `can()` decides it (platform-service GET /v1/me/permissions). */
 export interface EffectivePermission {
   area: string;
   action: string;
@@ -68,7 +68,7 @@ export interface RoleDetail extends RoleSummary {
   grid: { area: string; actions: Record<string, 'own' | 'all' | null> }[];
 }
 
-/** One action checked for one person (POST /v1/access/check, c-150): allowed with the granting roles, or refused. */
+/** One action checked for one person (POST /v1/access/check): allowed with the granting roles, or refused. */
 export interface AccessCheck {
   personId: string;
   teamId: string;

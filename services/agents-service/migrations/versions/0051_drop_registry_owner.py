@@ -1,9 +1,9 @@
-"""registry_agents, registry_workflows: drop `owner`, read by nothing since c-171
+"""registry_agents, registry_workflows: drop `owner`, read by nothing
 
 Revision ID: 0051_drop_registry_owner
 Revises: 0050_mailbox_sender
 
-The owning team is `team_id`, taken from the token (c-171); `owner` was a free-text label that nothing reads. The
+The owning team is `team_id`, taken from the token; `owner` was a free-text label that nothing reads. The
 downgrade puts the column back holding the team id, as the last writes did.
 """
 

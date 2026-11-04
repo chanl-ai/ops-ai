@@ -1,4 +1,4 @@
-"""a module version names its review in agents-service's Reviews (c-163)
+"""a module version names its review in agents-service's Reviews
 
 Revision ID: tools_0019_version_reviews
 Revises: tools_0018_secret_teams

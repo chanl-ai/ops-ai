@@ -1,4 +1,4 @@
-"""Agent limits callers override within (c-068 T005 to T008), by failure mode: a version saved before limits has no
+"""Agent limits callers override within, by failure mode: a version saved before limits has no
 limits or ones wider than the owner's defaults; a draft's limits reach what is live before a publish, or a publish
 does not carry them to the served definition and the reviewer; a limit that disagrees with itself or its version is
 saved, or silently clamped instead of refused with 422 naming the field; a model change leaves a stale allowed model;
@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from ops_agents.api.app import create_app
 from ops_agents.api.deps import Runtime
-from ops_agents.store.graphs import metadata
+from ops_agents.store.base import metadata
 from ops_engine.store import metadata as engine_metadata
 from ops_service_kit.settings import Settings
 from tests.conftest import fixture_knowledge
@@ -86,7 +86,7 @@ async def test_a_version_saved_before_limits_gets_the_owners_defaults(tmp_path: 
             "allowedKnowledgeBaseIds": fraud["collections"],
             "switchableToolIds": fraud["toolIds"],
             "callersMayAddInstructions": False,
-            # Every pinned widget may be switched off by default (c-071 narrowing, agreed with c-082); FRAUD pins none.
+            # Every pinned widget may be switched off by default; FRAUD pins none.
             "switchableWidgetIds": [],
             "publicKeyMay": ["tools", "knowledge", "budget", "outputSchema", "variables"],
         }

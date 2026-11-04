@@ -1,4 +1,4 @@
-"""Output shapes (c-353), by failure mode: a step type writes a key its declared shape does not list, or never writes
+"""Output shapes, by failure mode: a step type writes a key its declared shape does not list, or never writes
 one it requires, so a mapping is offered a field that never arrives; a registered type has no shape at all; a shape
 that depends on a document type or an operation ignores it. Each case runs the type's own executor on fake ports and
 holds what it wrote to what `shapes` declares for the port it left by."""
@@ -320,7 +320,7 @@ async def test_a_mapping_to_a_field_the_step_never_outputs_is_warned_and_one_int
 
 
 async def test_wait_for_offers_its_answer_schema_fields_and_the_time_limits_facts() -> None:
-    """A Decide step after Wait for picks `$.nodes.<step>.out.<field>` from the step's answer schema (c-525); with none
+    """A Decide step after Wait for picks `$.nodes.<step>.out.<field>` from the step's answer schema; with none
     any field reads, and the Timeout way always carries what it waited for."""
     schema = {"type": "object", "properties": {"approved": {"type": "boolean"}}}
     typed = await declared(node("ops.flow.waitFor", timeoutSeconds=5, outputSchema=schema))

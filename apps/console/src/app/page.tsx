@@ -28,7 +28,7 @@ interface Row {
 const match = (q: string, r: Row) => !q || `${r.title} ${r.detail}`.toLowerCase().includes(q.toLowerCase());
 
 /**
- * What is waiting (c-552): Human Tasks waiting for you, runs in flight, cases due and What's new, under one search. Every
+ * What is waiting: Human Tasks waiting for you, runs in flight, cases due and What's new, under one search. Every
  * number and row comes from the one overview response (no list joined here); a row opens its page as it ships.
  */
 export default function OverviewPage() {

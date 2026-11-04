@@ -296,7 +296,7 @@ class OpsAI:
         self.tasks = Tasks(self.raw, NOUNS["tasks"])
         self.agents = Agents(self.raw)
         self.workflows = Workflows(self.raw, self.runs)
-        # The Apps area in the screen's words (c-616).
+        # The Apps area in the screen's words.
         self.apps = Apps(self.raw)
         self.credentials = Credentials(self.raw, self.apps)
         self.accounts = Accounts(self.raw, self.apps)

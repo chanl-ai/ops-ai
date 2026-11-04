@@ -1,4 +1,4 @@
-"""The tool step's timeout port (c-332): with `onTimeout: port`, a gateway answer that the system did not answer in
+"""The tool step's timeout port: with `onTimeout: port`, a gateway answer that the system did not answer in
 time leaves by `timeout`; any other failure, or a step that does not ask, leaves by `error` as before."""
 
 from __future__ import annotations

@@ -50,17 +50,17 @@ LEGACY_MODEL_CALLS = 8
 # Model calls per turn when the builder leaves the field empty: never unlimited, since a looping agent would spend real
 # calls until the deadline. Unlimited is a large number typed on purpose.
 PLATFORM_MODEL_CALLS = 50
-# A chat conversation's budget when the builder leaves the fields empty (c-103): never unlimited, so a conversation that
+# A chat conversation's budget when the builder leaves the fields empty: never unlimited, so a conversation that
 # loops on a real model pauses and asks a person to continue. Cost is in the price table's currency.
 PLATFORM_CONVERSATION_CALLS = 200
 PLATFORM_CONVERSATION_COST = 5.0
-# What the runtime acts on, so the agent page offers only these (c-068 T004). Chat is the one channel an agent talks
+# What the runtime acts on, so the agent page offers only these. Chat is the one channel an agent talks
 # on; of the guardrail settings the tool-call and model-call caps reach a turn (definition_of), topics are blocked
-# through pinned guardrails; eval-runs score a dataset on the newest version (c-630).
+# through pinned guardrails; eval-runs score a dataset on the newest version.
 CONTROLS: dict[str, Any] = {
     "channels": ["chat"],
     "guardrails": [
-        # Masks personal data in what a turn shows and returns (c-293).
+        # Masks personal data in what a turn shows and returns.
         "redactPii",
         "maxToolCallsPerTurn",
         "maxModelCallsPerTurn",
@@ -101,7 +101,7 @@ def _cap(spec: dict[str, Any], key: str, legacy: int | None) -> int | None:
 
 
 def memory_of(spec: dict[str, Any]) -> dict[str, Any]:
-    """The agent's memory setting (c-124): on with every kind unless the spec says otherwise."""
+    """The agent's memory setting: on with every kind unless the spec says otherwise."""
     return {"enabled": True, "kinds": ["fact", "preference", "episode"], **(spec.get("memory") or {})}
 
 
@@ -189,7 +189,7 @@ async def seed_agent_version(
     """A seed's change to an agent (a pinned guardrail or skill) as a new version from the published spec: published
     at once in dev, through an `agent_publish` review elsewhere. A draft a person saved is never stepped over: the
     seed waits, and the person can pin it themselves. `by` is who the change is recorded as made by: the seed, or the
-    platform for a team's Ops Assistant (c-616)."""
+    platform for a team's Ops Assistant."""
     reg = registry(rt)
     row = await reg.row(agent_id)
     if row["published_version"] is None:
@@ -204,7 +204,7 @@ async def seed_agent_version(
     live = dict((await reg.version(agent_id, int(row["published_version"])))["spec"])
     spec = await change(dict(live))
     n = await reg.save(agent_id, spec, by=by, note=note)
-    # A seed's change follows the team's policy like a person's publish (c-086).
+    # A seed's change follows the team's policy like a person's publish.
     from .publish_policy import decide  # noqa: PLC0415 - publish_policy imports this module's callers' layer
 
     decision = await decide(rt, area="agents", team_id=row["team_id"], old=live, new=spec)
@@ -242,7 +242,7 @@ def take_down(rt: Runtime, agent_id: str) -> None:
 
 
 async def pinned_definition(rt: Runtime, agent_id: str, version: int) -> AgentDefinition | None:
-    """The agent at a published version a deployment pins (c-117), from the registry store, kept in the catalogue so the
+    """The agent at a published version a deployment pins, from the registry store, kept in the catalogue so the
     chat graph serves it; None when that version was never published."""
     if (known := rt.catalog.agent_at(agent_id, version)) is not None:
         return known
@@ -335,7 +335,7 @@ async def tasks_24h(rt: Runtime) -> dict[str, int]:
     out: dict[str, int] = {}
     for graph, meta in await GraphStore(rt.db).agent_threads_since(since):
         if meta.get("test"):
-            continue  # a builder's test is not a task the agent did (c-284)
+            continue  # a builder's test is not a task the agent did
         aid = graph.removeprefix("agent:") if graph != "agent_wrapper" else str(meta.get("agentId") or "")
         if aid:
             out[aid] = out.get(aid, 0) + 1
@@ -368,7 +368,7 @@ def agent_view(row: dict[str, Any], spec: dict[str, Any], tasks: int) -> dict[st
         "channels": spec.get("channels") or [],
         "toolIds": spec.get("toolIds") or [],
         "collections": spec.get("collections") or [],
-        # The owning team comes from the creator's token (c-171); the console names it from its teams list.
+        # The owning team comes from the creator's token; the console names it from its teams list.
         "teamId": row["team_id"],
         "paused": bool(row["paused"]),
         "availability": availability,

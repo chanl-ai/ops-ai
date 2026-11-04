@@ -1,4 +1,4 @@
-"""The open_case tool (c-219), by failure mode: a case opened in a team the call does not act in; a retried call
+"""The open_case tool, by failure mode: a case opened in a team the call does not act in; a retried call
 opening a second case; a call with no team opening one anyway; the tool missing from a tenant's registry."""
 
 from __future__ import annotations

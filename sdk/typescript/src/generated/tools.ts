@@ -118,7 +118,7 @@ export interface paths {
         };
         /**
          * List Apps
-         * @description The team's apps for the Apps grid (c-580): its plugins and the apps a person added. `include=builtin` adds
+         * @description The team's apps for the Apps grid: its plugins and the apps a person added. `include=builtin` adds
          *     the built-in apps, for the approval policy's app picker. A service asking for a person (X-Acting-For) reads
          *     each card's state as that person's.
          */
@@ -127,7 +127,7 @@ export interface paths {
         /**
          * Add App
          * @description A custom app, as its first account, which the answer is (its id is the app's): by name with a sign-in kind,
-         *     or an MCP server by its address, whose sign-in is found from the server (c-331).
+         *     or an MCP server by its address, whose sign-in is found from the server.
          */
         post: operations["apps_add_app"];
         delete?: never;
@@ -145,7 +145,7 @@ export interface paths {
         };
         /**
          * Get App
-         * @description One app's page (c-607): its card, accounts, the caller's own sign-in, tools, skills and latest runs.
+         * @description One app's page: its card, accounts, the caller's own sign-in, tools, skills and latest runs.
          */
         get: operations["apps_get_app"];
         put?: never;
@@ -167,8 +167,8 @@ export interface paths {
         put?: never;
         /**
          * Add Account
-         * @description Another account of one of the team's apps: a sandbox, which test runs use, or another named account (c-608,
-         *     with several_accounts on). The first stays the default.
+         * @description Another account of one of the team's apps: a sandbox, which test runs use, or another named account
+         *     (with several_accounts on). The first stays the default.
          */
         post: operations["apps_add_account"];
         delete?: never;
@@ -213,7 +213,7 @@ export interface paths {
         get?: never;
         /**
          * Pin Default
-         * @description Makes this account the caller's default of its app (c-608): their calls that name no account use it.
+         * @description Makes this account the caller's default of its app: their calls that name no account use it.
          */
         put: operations["apps_pin_default"];
         post?: never;
@@ -295,7 +295,7 @@ export interface paths {
         /**
          * Test Account
          * @description Reads the account's test address signed in with the caller's own sign-in or the team's, and stores the
-         *     result as the account's `health` (c-558). A failed test answers 200 with the failure in `health`.
+         *     result as the account's `health`. A failed test answers 200 with the failure in `health`.
          */
         post: operations["apps_test_account"];
         delete?: never;
@@ -404,7 +404,7 @@ export interface paths {
         put?: never;
         /**
          * Open Connect Link
-         * @description Starts the sign-in a connect link asks for, for the one person it was made for (c-558).
+         * @description Starts the sign-in a connect link asks for, for the one person it was made for.
          */
         post: operations["apps_open_connect_link"];
         delete?: never;
@@ -460,7 +460,7 @@ export interface paths {
         /**
          * List Hosts
          * @description The hosts, by name, a page at a time; `search` matches the host or its note, `templateId` the template slot
-         *     a provisioned host fills (c-180). The page and its count are queried, not sliced.
+         *     a provisioned host fills. The page and its count are queried, not sliced.
          */
         get: operations["egress_list_hosts"];
         put?: never;
@@ -549,7 +549,7 @@ export interface paths {
         };
         /**
          * Get Execution
-         * @description One call by its id, as the list shows it, so an Activity row opens to its call (c-057 T013).
+         * @description One call by its id, as the list shows it, so an Activity row opens to its call.
          */
         get: operations["executions_get_execution"];
         put?: never;
@@ -607,8 +607,8 @@ export interface paths {
         };
         /**
          * My Accounts
-         * @description The caller's own sign-ins on their team's accounts (c-558): Your connections in the person menu. With
-         *     `every`, also each account of the team they can connect themselves and have not (c-595).
+         * @description The caller's own sign-ins on their team's accounts: Your connections in the person menu. With
+         *     `every`, also each account of the team they can connect themselves and have not.
          */
         get: operations["apps_my_accounts"];
         put?: never;
@@ -650,7 +650,7 @@ export interface paths {
         get?: never;
         /**
          * Give Own Credentials
-         * @description The caller's own key, password or token on an account each person signs in to (c-595), replacing any they
+         * @description The caller's own key, password or token on an account each person signs in to, replacing any they
          *     gave before; answers their row in Your connections, never the values.
          */
         put: operations["apps_give_own_credentials"];
@@ -841,7 +841,7 @@ export interface paths {
         };
         /**
          * List Grants
-         * @description Every workflow's access to the modules the team sees (c-144): a page of one view, with each view's count.
+         * @description Every workflow's access to the modules the team sees: a page of one view, with each view's count.
          */
         get: operations["tool_modules_list_grants"];
         put?: never;
@@ -967,7 +967,7 @@ export interface paths {
         put?: never;
         /**
          * Add Function
-         * @description Adds a Python function to a code module (c-531); it runs on runner-service when called.
+         * @description Adds a Python function to a code module; it runs on runner-service when called.
          */
         post: operations["tool_modules_add_function"];
         delete?: never;
@@ -1291,7 +1291,7 @@ export interface components {
         };
         /**
          * AccountIn
-         * @description Another account of an app the team has (c-608): a sandbox, or a second org of the same system. On a plugin's
+         * @description Another account of an app the team has: a sandbox, or a second org of the same system. On a plugin's
          *     app it takes the first account's contract (the kind, whose account calls use, the OAuth app and the credentials);
          *     on a custom app it signs in with the app's kind, with the kind's fields given in `credentials`.
          */
@@ -1391,7 +1391,7 @@ export interface components {
         };
         /**
          * AppAccount
-         * @description One of the team's accounts of the app (c-608): the default is the one live calls use unless they name another,
+         * @description One of the team's accounts of the app: the default is the one live calls use unless they name another,
          *     and a sandbox one is what test runs use.
          */
         AppAccount: {
@@ -1524,7 +1524,7 @@ export interface components {
         };
         /**
          * AppPage
-         * @description One app's page (c-607), joined here: its card, its default account, the caller's own sign-in, how many people
+         * @description One app's page, joined here: its card, its default account, the caller's own sign-in, how many people
          *     signed in, its accounts, its tools, the plugin's skills and the latest runs of its tools.
          */
         AppPage: {
@@ -1602,7 +1602,7 @@ export interface components {
         };
         /**
          * AppUsers
-         * @description Who uses an app's tools in the team, read before turning it off (c-616).
+         * @description Who uses an app's tools in the team, read before turning it off.
          */
         AppUsers: {
             /** Agents */
@@ -1876,7 +1876,7 @@ export interface components {
         };
         /**
          * CodeSettings
-         * @description A code operation's function (c-531): what runs, the tools it may call and the secrets it may hand them.
+         * @description A code operation's function: what runs, the tools it may call and the secrets it may hand them.
          */
         CodeSettings: {
             /** Bindings */
@@ -2041,7 +2041,7 @@ export interface components {
         };
         /**
          * CredentialCheckIn
-         * @description Test with my account (c-616): an empty body starts it; the `state` and `code` the sign-in page was handed back
+         * @description Test with my account: an empty body starts it; the `state` and `code` the sign-in page was handed back
          *     finish it, on the same route.
          */
         CredentialCheckIn: {
@@ -3334,7 +3334,7 @@ export interface components {
         };
         /**
          * MyAccount
-         * @description One of the caller's own sign-ins (c-558), as Your connections lists it.
+         * @description One of the caller's own sign-ins, as Your connections lists it.
          */
         MyAccount: {
             /** Account */
@@ -3383,7 +3383,7 @@ export interface components {
         /**
          * NewAppIn
          * @description A custom app a builder adds, as its first account: by name with a sign-in kind, or an MCP server by its address,
-         *     whose sign-in is found from the server (c-331).
+         *     whose sign-in is found from the server.
          */
         NewAppIn: {
             /** Authkind */
@@ -3529,7 +3529,7 @@ export interface components {
         };
         /**
          * PersonCredentialsIn
-         * @description A person's own key, password or token on an account each person signs in to (c-595): the kind's person
+         * @description A person's own key, password or token on an account each person signs in to: the kind's person
          *     fields, each a value of at most 2,000 characters.
          */
         PersonCredentialsIn: {
@@ -3638,7 +3638,7 @@ export interface components {
         };
         /**
          * PluginUpdateView
-         * @description What taking the installed version would change for the team (c-609): empty `tools` when it runs it already.
+         * @description What taking the installed version would change for the team: empty `tools` when it runs it already.
          */
         PluginUpdateView: {
             /** Available */
@@ -3688,7 +3688,7 @@ export interface components {
         };
         /**
          * ReviewDecisionIn
-         * @description A decision made in Reviews, sent by agents-service (c-163).
+         * @description A decision made in Reviews, sent by agents-service.
          */
         ReviewDecisionIn: {
             /** By */
@@ -4137,7 +4137,7 @@ export interface components {
         };
         /**
          * TestDraftIn
-         * @description The workbench's unsaved transform and mock, tried by one test without staging them (c-088). A key left out
+         * @description The workbench's unsaved transform and mock, tried by one test without staging them. A key left out
          *     uses the operation's own; `responseTransform: null` runs with no transform.
          */
         TestDraftIn: {
@@ -4288,7 +4288,7 @@ export interface components {
         };
         /**
          * ToolChange
-         * @description One tool an update adds, changes or removes, by its operation name (c-609).
+         * @description One tool an update adds, changes or removes, by its operation name.
          */
         ToolChange: {
             /** Access */
@@ -4310,7 +4310,7 @@ export interface components {
         };
         /**
          * ToolGrant
-         * @description A workflow's access to one module, as the Access tab lists it across modules (c-144).
+         * @description A workflow's access to one module, as the Access tab lists it across modules.
          */
         ToolGrant: {
             /** Constraints */
@@ -4558,7 +4558,7 @@ export interface components {
         };
         /**
          * ToolRunIn
-         * @description One run of one tool from its page (c-616): Mock answers from its mock and reaches nothing, Real is the gateway
+         * @description One run of one tool from its page: Mock answers from its mock and reaches nothing, Real is the gateway
          *     call, with every check, in the environment picked.
          */
         ToolRunIn: {

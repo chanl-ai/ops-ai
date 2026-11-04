@@ -1,8 +1,7 @@
-"""The flag registry and how the install config sets it (c-611)."""
+"""The flag registry and how the install config sets it."""
 
 from __future__ import annotations
 
-import re
 from typing import get_args
 
 import pytest
@@ -12,9 +11,8 @@ from ops_service_kit.flags import FLAGS, NAMES, FlagName, Flags
 from ops_service_kit.settings import Settings
 
 
-def test_every_flag_names_its_card_and_when_it_goes() -> None:
+def test_every_flag_says_what_it_does_and_when_it_goes() -> None:
     for flag in FLAGS:
-        assert re.fullmatch(r"c-\d+", flag.card), f"{flag.name} names no owning card"
         for text in (flag.description, flag.remove_when):
             assert text.strip() and "\n" not in text, f"{flag.name} needs a one-line description and removal note"
 

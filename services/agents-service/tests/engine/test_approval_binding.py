@@ -1,5 +1,5 @@
 """The approval token a reviewed write carries names its run's workflow and whether that run is the tenant's handler for
-a service event (`system`, c-258): the no-team workflow under a shipped event workflow's id. The gateway runs a
+a service event (`system`): the no-team workflow under a shipped event workflow's id. The gateway runs a
 platform tool only for the handler that owns the decision. Failure mode: a team workflow's own review step, under the
 handler's id or another, mints a token the gateway takes for the handler's."""
 

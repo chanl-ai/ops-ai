@@ -1,4 +1,4 @@
-"""Who a Human Task is assigned to is read in the caller's tenant only (c-074): with no row-level security (SQLite),
+"""Who a Human Task is assigned to is read in the caller's tenant only: with no row-level security (SQLite),
 another tenant's assignment of the same review id would otherwise show as this tenant's assignee."""
 
 from __future__ import annotations

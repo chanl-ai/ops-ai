@@ -1,4 +1,4 @@
-"""A parsed document as one text per page, the text an extraction reads and quotes are checked against (c-235)."""
+"""A parsed document as one text per page, the text an extraction reads and quotes are checked against."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ class Pages:
     ocr: set[int]
     count: int
     confidence: dict[int, dict[str, float]] = field(default_factory=dict[int, dict[str, float]])
-    # The layout the text was rendered from, when there is one, so a field's quote can be found as boxes (c-252).
+    # The layout the text was rendered from, when there is one, so a field's quote can be found as boxes.
     layout: dict[str, Any] | None = None
 
 

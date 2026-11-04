@@ -1,6 +1,6 @@
 """built-in grid: every role corrects or forgets what agents remember about its own person
 
-Correcting or forgetting a memory needs `memory.edit` (c-206), held for one's own memory only, by every built-in
+Correcting or forgetting a memory needs `memory.edit`, held for one's own memory only, by every built-in
 role a person can hold (chat users included); API keys hold none. Adds the cell to every tenant's built-in roles and
 raises each tenant's permission version. Portable SQL only; built-in ids are reserved, so no custom role is matched.
 

@@ -2,7 +2,7 @@ import type { Guardrail } from '@/lib/types/domain';
 import type { ListParams, ListResult, OptionsPage, OptionsParams } from '@/lib/types/query';
 
 /**
- * Guardrails an agent pins by version (agents-service `/v1/guardrails`, c-063). Kind `blocked_topics` only. A save is a
+ * Guardrails an agent pins by version (agents-service `/v1/guardrails`). Kind `blocked_topics` only. A save is a
  * new draft version; agents keep the version they pin. Publishing opens a review decided in Reviews by someone other
  * than whoever asked or saved; in dev it is approved at once.
  */
@@ -11,7 +11,7 @@ export interface GuardrailsApi {
   list(): Promise<Guardrail[]>;
   /** One page of the guardrails whose name or owner matches the search, by name. */
   page(p: ListParams): Promise<ListResult<Guardrail>>;
-  /** The guardrail picker: live, published guardrails searched on the server; `ids` labels pins held (c-136). */
+  /** The guardrail picker: live, published guardrails searched on the server; `ids` labels pins held. */
   options(p: OptionsParams): Promise<OptionsPage>;
   /** One guardrail with every version. */
   get(id: string): Promise<Guardrail>;

@@ -1,6 +1,6 @@
-"""Open case and Add to case (c-219) through the real worker into the host, on the real database under tenant RLS,
+"""Open case and Add to case through the real worker into the host, on the real database under tenant RLS,
 by failure mode: a retried Open case step opens a second case; Add to case joins another team's case; a test run's
-case reads as a customer's issue; a later step's note is lost or written twice; a run closes a case (c-532)."""
+case reads as a customer's issue; a later step's note is lost or written twice; a run closes a case."""
 
 from __future__ import annotations
 
@@ -175,7 +175,7 @@ async def test_an_open_case_step_pins_its_case_types_published_version_and_an_un
     cases: Cases,
     engine: AsyncEngine,  # noqa: F811
 ) -> None:
-    """c-291: a case keeps the case type version it opened with, so editing the type later changes no open case."""
+    """A case keeps the case type version it opened with, so editing the type later changes no open case."""
     await cases.run(dispute(open={"caseType": "complaint"}), db=engine)
     [case] = await cases.all()
     assert (case["type_id"], case["type_version"]) == ("complaint", 1), case

@@ -1,4 +1,4 @@
-"""model_key_tenant_isolation: each tenant's share of a per-tenant model key is held to that tenant (c-616 C4)
+"""model_key_tenant_isolation: each tenant's share of a per-tenant model key is held to that tenant
 
 model_key_tenants was filtered only by the tenant the completion route passed its store: nothing in the database
 stopped a query that left it out from reading or spending another tenant's share. It now carries the generated tenant

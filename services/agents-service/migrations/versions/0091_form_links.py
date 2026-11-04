@@ -1,4 +1,4 @@
-"""Hosted forms (c-535)
+"""Hosted forms
 
 Revision ID: 0091_form_links
 Revises: 0090_checkpointer_portable

@@ -1,4 +1,4 @@
-"""A tool's sign-in header moves onto its module's connection at start (c-616 D3b-2b), by failure mode: the key is
+"""A tool's sign-in header moves onto its module's connection at start, by failure mode: the key is
 guessed for a module whose tools disagree; a moved module sends its key twice, or not at all; the published copy calls
 run still carries the header; a dry run writes; and a tool left alone gives no sign that it still sends a key."""
 

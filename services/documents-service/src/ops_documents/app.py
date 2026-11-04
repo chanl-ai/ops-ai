@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""documents-service's HTTP API (c-256): extractions and their corrections under /v1/documents, document types,
+"""documents-service's HTTP API: extractions and their corrections under /v1/documents, document types,
 versions, samples and test runs under /v1/document-types, and the purge a file-deleted workflow calls. The shapes are
-the ones files-service served (c-235, c-236), so a caller changes only its base URL.
+the ones files-service served, so a caller changes only its base URL.
 
 People act in the team their sign-in selected, checked with `can()` on the `documents` area; services act in the team
 their token names and need the matching `documents:<action>` scope."""
@@ -172,7 +172,7 @@ def create_documents_app(
     """`extractor` and `document_types` read bytes through files-service as the caller's team; `auth` resolves
     callers through ops_identity, by default from Settings for audience "documents". `layouts` serves the layout
     routes, by default the extractor's own, else a cache on `engine`. `plugin_templates` reads the team's plugin
-    templates from tools-service for /v1/templates (c-590); without it those routes answer 503."""
+    templates from tools-service for /v1/templates; without it those routes answer 503."""
     config = Settings()
     layouts = layouts or extractor.layouts or Layouts(extractor.files, LayoutsStore(engine))
 
@@ -264,15 +264,15 @@ def create_documents_app(
 
     @docs.post("/classifications", response_model=Envelope[Classification], dependencies=[service_scope("run")])
     async def classify_file(body: ClassifyIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """Which of the team's document types the file is, by the model over each type's name and description
-        (c-249); typeId null and needsReview when none fits or the model is less sure than the floor."""
+        """Which of the team's document types the file is, by the model over each type's name and description; typeId
+        null and needsReview when none fits or the model is less sure than the floor."""
         file = await extractor.files.readable(who, body.file_id)
         return ok(await extractor.classify(who, file, ocr=body.ocr))
 
     @docs.post("/layout", response_model=Envelope[Layout], dependencies=[service_scope("run")])
     async def compute_layout(body: LayoutIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The file's layout: pages, blocks in reading order with table cells, and words with confidence, boxes as
-        fractions of the page. Read on the first ask and cached by the file's content digest (c-247)."""
+        fractions of the page. Read on the first ask and cached by the file's content digest."""
         return ok(await layouts.compute(who, body.file_id, ocr=body.ocr))
 
     @docs.get("/layout/{file_id}", response_model=Envelope[Layout], dependencies=[service_scope("view")])
@@ -331,7 +331,7 @@ def create_documents_app(
         except NameTakenError as e:
             raise Conflict(f"A document type named {body.name} or with id {body.id} exists.", code="name_taken") from e
         if body.sample_file_id:
-            # A proposal saved from a read (c-535) keeps the file it was read from as the type's first sample.
+            # A proposal saved from a read keeps the file it was read from as the type's first sample.
             await document_types.add_sample(who, str(made["id"]), {"fileId": body.sample_file_id, "expected": {}})
         return ok(made, 201)
 
@@ -370,7 +370,7 @@ def create_documents_app(
     )
     async def suggest_template(type_id: str, body: TemplateSuggestIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """A layout template drafted from the team's finished reads of the type, and how it reads each; nothing is
-        saved until a builder posts it as a new version (c-254)."""
+        saved until a builder posts it as a new version."""
         return ok(found(await document_types.suggest_template(who, type_id, body.extraction_ids), "Document type"))
 
     @types.get(
@@ -379,7 +379,7 @@ def create_documents_app(
         dependencies=[service_scope("view")],
     )
     async def template_offers(type_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """Groups of at least 5 checked model reads of one layout that no current template reads (c-254)."""
+        """Groups of at least 5 checked model reads of one layout that no current template reads."""
         return ok(found(await document_types.template_offers(who, type_id), "Document type"))
 
     @types.get(
@@ -388,7 +388,7 @@ def create_documents_app(
         dependencies=[service_scope("view")],
     )
     async def list_examples(type_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """The corrections people made on the type's reads, which its later reads are given, newest first (c-297)."""
+        """The corrections people made on the type's reads, which its later reads are given, newest first."""
         return ok(found(await document_types.list_examples(who, type_id), "Document type"))
 
     @types.delete(

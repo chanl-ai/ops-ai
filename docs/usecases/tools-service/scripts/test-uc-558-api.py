@@ -109,7 +109,7 @@ def start(api: httpx.Client, who: dict[str, str], key: str, status: str = "Await
 
 def settle(api: httpx.Client, who: dict[str, str], run_id: str, *, done: bool = False) -> dict[str, Any]:
     """The run once it finished, or (unless `done`) once it waits: a run whose person has not connected waits for them
-    to connect (c-616 S12), naming the app's account and the event their connecting reports."""
+    to connect, naming the app's account and the event their connecting reports."""
     ends = ("succeeded", "failed") if done else ("succeeded", "failed", "waiting")
 
     def settled() -> dict[str, Any] | None:

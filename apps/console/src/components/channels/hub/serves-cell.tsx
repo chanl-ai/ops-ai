@@ -13,7 +13,7 @@ const versionText = (version: 'latest' | number, latest: number, behind: number)
 /**
  * What a channel serves, in its row. A chat embed keeps its agent and changes its version in place: Latest, or a pinned
  * one. An email follows the live version of the workflow its trigger names (changed on that workflow), and an API key
- * runs whatever its team may (c-246 binds a key to one target).
+ * runs whatever its team may.
  */
 export function ServesCell({ channel }: { channel: ChannelRow }) {
   const change = useChangeChannel();

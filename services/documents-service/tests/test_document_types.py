@@ -1,8 +1,8 @@
-"""Document types (c-236, moved here in c-256), by failure mode: a save that rewrites the version a workflow reads (F1);
+"""Document types (moved here), by failure mode: a save that rewrites the version a workflow reads (F1);
 a test that spends without a cap or without its cost shown first (F2); a correct read failing its test because the
 expected value was compared unnormalised (F3); an extraction naming a type that reads other fields, another team's
 type, or not saying which version it read (F4); a member without documents.edit changing a type, or the console
-guessing so from a role (c-243)."""
+guessing so from a role."""
 
 from __future__ import annotations
 
@@ -198,7 +198,7 @@ class MeasuredModels(Models):
 
 
 async def test_the_estimate_prices_a_type_at_what_reading_it_measured(make: Make) -> None:
-    """The baseline estimated $0.0352 for $0.0792 spent: a fixed 600 output tokens against about 2,300 (c-247)."""
+    """The baseline estimated $0.0352 for $0.0792 spent: a fixed 600 output tokens against about 2,300."""
     s = make(MeasuredModels(), Floor(), Prices())
     async with s.client as c:
         fid = await s.stored(NOTICE)
@@ -239,7 +239,7 @@ class DatedModels(Models):
 
 
 async def test_a_numeric_date_reads_month_first_unless_the_type_says_day_first(make: Make) -> None:
-    """The date order is the document type's (c-270): US levies write 03/04/2026 for March 4."""
+    """The date order is the document type's: US levies write 03/04/2026 for March 4."""
     fields = [{"key": "served", "type": "date", "required": True}]
     s = make(DatedModels(), Floor(), Prices())
     async with s.client as c:
@@ -256,7 +256,7 @@ async def test_a_numeric_date_reads_month_first_unless_the_type_says_day_first(m
 async def test_a_correction_reports_the_newest_read_with_nothing_left_to_check_and_an_older_one_none(
     make: Make, engine: AsyncEngine
 ) -> None:
-    """extraction.corrected (c-252) carries what Save data on file needs, written with the correction; correcting an
+    """extraction.corrected carries what Save data on file needs, written with the correction; correcting an
     older read reports nothing, so it can never replace a newer read on the file."""
     s = make(Models(), Floor(0.95))
     async with s.client as c:
@@ -295,7 +295,7 @@ async def test_a_correction_reports_the_newest_read_with_nothing_left_to_check_a
 async def test_a_read_of_a_document_type_reports_what_the_file_was_read_as_and_a_read_of_own_fields_does_not(
     make: Make, engine: AsyncEngine
 ) -> None:
-    """extraction.read (c-378): a workflow with no Save data on file step, an agent or an API call reads a file, and the
+    """extraction.read: a workflow with no Save data on file step, an agent or an API call reads a file, and the
     file shows it in Files only if the read reports itself. One event per typed read, keyed by the extraction, with the
     same shape extraction.corrected carries; a read of fields of its own names no type, so it records nothing."""
     s = make(Models(), Floor(0.95))
@@ -317,7 +317,7 @@ async def test_a_read_of_a_document_type_reports_what_the_file_was_read_as_and_a
 
 
 async def test_a_cleanup_rule_that_is_not_known_is_refused_when_the_type_is_saved(make: Make) -> None:
-    """c-287: a misspelt rule would otherwise be ignored on every read."""
+    """A misspelt rule would otherwise be ignored on every read."""
     s = make(Models(), Floor())
     fields = [{"key": "invoice", "type": "text", "clean": ["trimPunctuation", "trimPunctation"]}]
     async with s.client as c:
@@ -326,7 +326,7 @@ async def test_a_cleanup_rule_that_is_not_known_is_refused_when_the_type_is_save
 
 
 async def test_a_key_field_is_kept_and_a_mark_that_is_not_true_or_false_is_refused(make: Make) -> None:
-    """c-303: a review shows key fields first and requires them checked, so the mark survives a save as a boolean."""
+    """A review shows key fields first and requires them checked, so the mark survives a save as a boolean."""
     s = make(Models(), Floor())
     keyed = [{**FIELDS[0], "keyField": True}, FIELDS[1]]
     async with s.client as c:

@@ -1,4 +1,4 @@
-"""A set-aside email keeps the message for Run again (c-561)
+"""A set-aside email keeps the message for Run again
 
 Revision ID: 0088_trigger_event_item
 Revises: 0087_run_reconciler

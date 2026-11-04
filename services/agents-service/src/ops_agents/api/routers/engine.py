@@ -109,7 +109,7 @@ class NodeTypeView(Out):
     outputs: list[PortView]
     # The list parameter whose entries become the out ports (a review's options); the declared outputs are its default.
     outputs_from: str | None
-    # Out ports every instance has besides those outputs_from lists, such as a Switch's otherwise (c-259).
+    # Out ports every instance has besides those outputs_from lists, such as a Switch's otherwise.
     extra_outputs: list[str] = Field(default_factory=list[str])
     # An extra out port the instance has while `parameter` is `value` (a review's `timeout` when it expires).
     optional_outputs: list[OptionalPortView]
@@ -122,7 +122,7 @@ class NodeTypeView(Out):
     timeout_seconds: float
     # The generated form for `parameters`: field order, and per field its label, widget, help and option source.
     ui: dict[str, Any]
-    # Why the acting team cannot add this step now (an AI step while its setting is off, c-298); None when it can.
+    # Why the acting team cannot add this step now (an AI step while its setting is off); None when it can.
     unavailable: str | None = None
 
 
@@ -231,7 +231,7 @@ class DefinitionPublished(Out):
     digest: str
     # False when this exact definition was stored before; its version is returned.
     created: bool
-    # What the definition leaves out that does not stop it saving, such as a typed review step's missing param (c-288).
+    # What the definition leaves out that does not stop it saving, such as a typed review step's missing param.
     warnings: list[DefinitionWarning] = Field(default_factory=list[DefinitionWarning])
 
 
@@ -279,9 +279,9 @@ class DefinitionView(Out):
     live_version: int | None
     paused: bool
     review: OpenPublishRequest | None
-    # When the workflow was archived (c-274); None while it is not.
+    # When the workflow was archived; None while it is not.
     archived_at: str | None = None
-    # How a person starts it by hand, as its trigger declares (c-466); None for a trigger only its source starts.
+    # How a person starts it by hand, as its trigger declares; None for a trigger only its source starts.
     start_form: StartFormView | None = None
 
 
@@ -326,7 +326,7 @@ async def create_definition(rt: Rt, me: Me, body: DefinitionInput) -> JSONRespon
     d = _parsed(body)
     held = await definitions(rt).get(d.id, team=current_team())
     # A new workflow belongs to the team the caller names, or its own; a dev session acts across teams, so with neither
-    # it is refused rather than saved as no team's, which every team would see (c-602).
+    # it is refused rather than saved as no team's, which every team would see.
     new_team = current_team() or me.team_id or None
     if held is None and new_team is None:
         raise ValidationFailed(
@@ -373,7 +373,7 @@ async def create_definition(rt: Rt, me: Me, body: DefinitionInput) -> JSONRespon
 
 
 async def _newest_versions(rt: Runtime, type_ids: set[str], *, team: str | None) -> dict[str, int]:
-    """Each document type's newest version in documents-service, read as the workflow's team (c-236, c-256), so the
+    """Each document type's newest version in documents-service, read as the workflow's team, so the
     saved definition pins it. An unknown type, or one of another team, refuses the save."""
     if not rt.settings.documents_url or team is None:
         raise Unprocessable(
@@ -410,7 +410,7 @@ class DefinitionRow(Out):
     version: int
     digest: str
     # live or paused once a version is approved (the serving version's stage); before that the latest version's
-    # stage, in_review while its publish request is open; archived once archived, whatever its stage (c-274).
+    # stage, in_review while its publish request is open; archived once archived, whatever its stage.
     status: Literal["draft", "in_review", "live", "paused", "archived"]
     live_version: int | None
     runs: int
@@ -478,7 +478,7 @@ def workflow_status(summary: dict[str, Any], request: dict[str, Any] | None) -> 
 
 
 def start_of(definition: dict[str, Any]) -> dict[str, Any]:
-    """How a definition starts, for the Workflows list and its pickers (c-466): the start form's kind, whether a person
+    """How a definition starts, for the Workflows list and its pickers: the start form's kind, whether a person
     starts it by hand (a declared start form, and not only other workflows), and whether that form takes a file."""
     form = start_form(definition, REGISTRY)
     by_hand = form is not None and not only_from_workflows(definition)
@@ -568,7 +568,7 @@ async def delete_definition(rt: Rt, me: Me, workflow_id: str) -> Response:
 
 @router.post("/definitions/{workflow_id}/archive", response_model=Envelope[DefinitionView])
 async def archive_definition(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
-    """Archives the workflow (c-274): it starts no run of any mode, a trigger no longer serves it, and it leaves the
+    """Archives the workflow: it starts no run of any mode, a trigger no longer serves it, and it leaves the
     lists; its versions and runs are kept. Who may delete the workflow may archive it."""
     return ok(await _archived(rt, me, workflow_id, True))
 
@@ -597,7 +597,7 @@ class DefinitionShapes(Out):
 
 @router.get("/definitions/{workflow_id}/versions/{version}/shapes", response_model=Envelope[DefinitionShapes])
 async def definition_shapes(rt: Rt, workflow_id: str, version: int) -> JSONResponse:
-    """What each step of a saved version outputs, by port, before it has run (c-353): fixed by its type, built from
+    """What each step of a saved version outputs, by port, before it has run: fixed by its type, built from
     its settings, or read from its document type or operation. A mapping picker reads it."""
     row = await definitions(rt).get(workflow_id, version, team=current_team())
     if row is None:
@@ -790,9 +790,9 @@ class RunRow(Out):
     id: str
     # The display name of the workflow version the run is on, in the list; the id when it has none.
     workflow_name: str | None = None
-    # Whether the caller may cancel it now: runs/cancel on an unfinished run (c-123).
+    # Whether the caller may cancel it now: runs/cancel on an unfinished run.
     can_cancel: bool | None = None
-    # Whether the caller may retry it now: a Stuck run, by whoever may cancel it (c-561).
+    # Whether the caller may retry it now: a Stuck run, by whoever may cancel it.
     can_retry: bool | None = None
     workflow_id: str
     version: int
@@ -800,7 +800,7 @@ class RunRow(Out):
     mode: str
     status: str
     outcome: str | None
-    # The outcome as people read it ("Documents read"), run_story.words over `outcome` (c-508).
+    # The outcome as people read it ("Documents read"), run_story.words over `outcome`.
     outcome_text: str | None = None
     error: str | None
     input: dict[str, Any] | None
@@ -960,7 +960,7 @@ class StoryChild(Out):
 
 
 class StoryLine(Out):
-    """One thing a run did, as a sentence a person reads (c-500); the case feed is made of the same lines."""
+    """One thing a run did, as a sentence a person reads; the case feed is made of the same lines."""
 
     at: str | None
     # person, automation or email: what the feed's filters narrow by.
@@ -988,14 +988,14 @@ class RunDetail(RunRow):
     failure: RunFailure | None = None
     # Set once the run reached an End, a failure End too: what that End returned.
     result: RunResult | None
-    # The runs its steps started, in step and item order, each with its status (c-209's for each), read here so the
+    # The runs its steps started, in step and item order, each with its status (a For each step), read here so the
     # run page lists them without asking for each one.
     children: list[RunChild] = Field(default_factory=list[RunChild])
     # The files the run was given, in the order its input names them, so the run page links each by name.
     files: list[RunFile] = Field(default_factory=list[RunFile])
     # Each Human Task decided in this run, in step order, with the person named.
     decisions: list[RunDecision] = Field(default_factory=list[RunDecision])
-    # The run told from its steps' output shapes (c-477): the email, each read, each run it started.
+    # The run told from its steps' output shapes: the email, each read, each run it started.
     story: RunStory | None = None
 
 
@@ -1005,7 +1005,7 @@ def runs(rt: Runtime) -> RunStore:
 
 async def visible_run(rt: Runtime, run_id: str, me: Principal | None = None) -> dict[str, Any]:
     """The run, if the selected team may see it: the same team scoping as the run list, and for a scoped API key its
-    own workflow's runs only (c-246). Another team's run is not found rather than forbidden, so its id reveals
+    own workflow's runs only. Another team's run is not found rather than forbidden, so its id reveals
     nothing."""
     run = await runs(rt).get(run_id)
     team = current_team()
@@ -1017,7 +1017,7 @@ async def visible_run(rt: Runtime, run_id: str, me: Principal | None = None) -> 
 
 
 def can_retry(me: Principal, run: dict[str, Any]) -> bool:
-    """Retry for the caller: a Stuck run (c-561), by whoever may cancel it."""
+    """Retry for the caller: a Stuck run, by whoever may cancel it."""
     return run["status"] == "stuck" and can_cancel(me, run)
 
 
@@ -1103,7 +1103,7 @@ async def startable(
             what=f"workflow {workflow_id}",
         )
     if mode == "live":
-        # A builder or admin, or an API key of the team (c-122 Q1).
+        # A builder or admin, or an API key of the team.
         require_runs_start(me, team_id=stored.get("team_id"), what=f"workflow {workflow_id}")
         stored = await live_version(definitions(rt), workflow_id, version, team=current_team())
     return stored
@@ -1152,7 +1152,7 @@ async def start_engine_run(rt: Rt, me: Me, body: EngineRunInput) -> JSONResponse
     """Writes the run and its start work row in one transaction and returns at once: a worker runs it. With no worker
     running the run stays queued. A live run is refused (409) unless it pins the live version: `not_live` before a
     version is approved or for another version, `workflow_paused` while the workflow is paused. An API key scoped to
-    one workflow (c-246) starts that one only, on the version it pins when it pins one."""
+    one workflow starts that one only, on the version it pins when it pins one."""
     stored = await startable(rt, me, body.workflow_id, body.version, body.mode)
     form = start_form(stored["definition"], REGISTRY)
     payload = run_starts.filled(form, body.input) if form and form.get("kind") == "form" else body.input
@@ -1252,13 +1252,13 @@ _VALUE_KEYS = frozenset({"input", "output", "error", "values", "payload"})
 
 
 async def for_people(rt: Runtime, run: dict[str, Any], body: Any) -> Any:
-    """`body`, read from `run`, as people see it (c-321): masked when the run's team has aiStepsMaskPersonalData on, the
+    """`body`, read from `run`, as people see it: masked when the run's team has aiStepsMaskPersonalData on, the
     default. Every route that returns a run's or a step's values to a person answers through here."""
     return _values_masked(body) if await ai_steps_gate.people_see_masked(rt, run.get("team_id") or None) else body
 
 
 def _values_masked(body: Any) -> Any:
-    """The run as people read it with masking on (c-321): every value under _VALUE_KEYS, wherever it sits. The stored
+    """The run as people read it with masking on: every value under _VALUE_KEYS, wherever it sits. The stored
     run keeps the real values the steps after them use."""
     if isinstance(body, dict):
         return {k: masked(v) if k in _VALUE_KEYS else _values_masked(v) for k, v in cast(dict[str, Any], body).items()}
@@ -1346,7 +1346,7 @@ async def cancel_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
 
 @runs_router.post("/{run_id}/retry", response_model=Envelope[RunRow])
 async def retry_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
-    """Queues a Stuck run again from its last recorded step (c-561): recorded steps are not run again and a write
+    """Queues a Stuck run again from its last recorded step: recorded steps are not run again and a write
     with a record at the gateway is never sent again. Who may cancel the run may retry it; a run that is not Stuck is
     refused (409 run_not_stuck)."""
     run = await visible_run(rt, run_id, me)
@@ -1369,7 +1369,7 @@ async def retry_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     responses={200: {"model": Envelope[RunStarted], "description": "The email's run had started already"}},
 )
 async def run_set_aside_email(rt: Rt, me: Me, event_id: str) -> JSONResponse:
-    """Run again on an email the mailbox listener set aside (c-561): its run starts on the workflow's live version under
+    """Run again on an email the mailbox listener set aside: its run starts on the workflow's live version under
     the email's own run key, as the person, and the kept copy of the email is dropped. Who may start the workflow may
     run it; 404 when there is no such email in the team or it already ran, 503 when Files did not store an attachment
     (the email stays set aside)."""

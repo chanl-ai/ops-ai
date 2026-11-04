@@ -1,4 +1,4 @@
-"""A team's sending policy and the gateway's judgements against it (c-300).
+"""A team's sending policy and the gateway's judgements against it.
 
 The policy is the team's own written rules for what may leave (a reply, an outside call), kept as versions: a save adds
 the next one and the newest is the one writes are judged against. A judgement is kept by the payload's input hash and

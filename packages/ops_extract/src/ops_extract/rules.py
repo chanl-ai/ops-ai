@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""Checks across a read's fields (c-296), declared on the document type version beside its fields, from a fixed set
+"""Checks across a read's fields, declared on the document type version beside its fields, from a fixed set
 of kinds so a type carries them as configuration:
 
     {"id": "total_adds_up", "kind": "sum", "fields": ["subtotal", "tax"], "equals": "total", "tolerance": 0.01}

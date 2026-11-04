@@ -81,7 +81,7 @@ class ApprovalMinter:
 
 async def run_workflow(db: AsyncEngine, run_id: str) -> tuple[str, bool]:
     """The run's workflow id, and whether it is the tenant's handler for a service event (the approval's `system`
-    claim, c-258): the no-team workflow under a shipped event workflow's id. tools-service lets only the access
+    claim): the no-team workflow under a shipped event workflow's id. tools-service lets only the access
     request's handler apply a tool access decision."""
     tx = EngineTransactions(db)
     run = await RunStore(tx).get(run_id)
@@ -110,7 +110,7 @@ class GatewayTools:
         self, operation: str, input: dict[str, Any], key: str, generation: int | None, token: str | None
     ) -> ToolResult:
         # The gateway fences writes on the run's lease generation and logs the call against the run's thread.
-        # The run's mode, from the graph's config, picks the connection environment its calls use (c-330).
+        # The run's mode, from the graph's config, picks the connection environment its calls use.
         run = current_run_context()
         ctx = RUN_CONTEXT.set(
             RunContext(
@@ -125,7 +125,7 @@ class GatewayTools:
         try:
             data = await self._gw().call(operation, input, key=key, approval_token=token)
         except GatewayRefused as e:
-            # The gateway's own codes for a write under a key it already holds, read for what they say (c-561):
+            # The gateway's own codes for a write under a key it already holds, read for what they say:
             # still running is pending, an abandoned key never ran, and a newer lease owns the run now.
             if e.code == "write_in_progress":
                 return ToolResult(False, pending=True, reason=str(e))
@@ -148,7 +148,7 @@ class GatewayTools:
         return found if found in ("read", "write") else "unknown"
 
     async def deadline(self, operation: str) -> float | None:
-        """How long the gateway may take over one call of `operation` (c-561); the step waits at least that long."""
+        """How long the gateway may take over one call of `operation`; the step waits at least that long."""
         found = (await self._gw().tool_policy(operation)).get("deadlineSeconds")
         return float(found) if isinstance(found, (int, float)) else None
 
@@ -176,7 +176,7 @@ class GatewayTools:
 
 def said(output: Any) -> str:
     """A failed operation's own message, which a run's failure reads (worker._why_failed): it names the app and what to
-    do, as "Client desk needs reconnecting" does (c-616 S12)."""
+    do, as "Client desk needs reconnecting" does."""
     error = cast(dict[str, Any], output).get("error") if isinstance(output, dict) else None
     message = cast(dict[str, Any], error).get("message") if isinstance(error, dict) else None
     return str(message) if message else "the operation returned an error"
@@ -195,8 +195,8 @@ class GatewayExpressions:
 
 
 class StarterApprovals:
-    """A review step approving one write, decided as the run starter's own when they may approve it (owner,
-    2026-11-01, c-616): the run recorded at its start that they hold reviews.decide under the four-eyes policy. Only
+    """A review step approving one write, decided as the run starter's own when they may approve it: the run recorded at
+    its start that they hold reviews.decide under the four-eyes policy. Only
     a write one person approves without a step-up qualifies, the operation's policy and the workspace's stepUp read
     live; anything unread leaves the step waiting for a person. The approval is recorded as the starter's, so the
     tool node mints its token from it as from any decision."""
@@ -244,7 +244,7 @@ class StarterApprovals:
 class RunReviews:
     """A review step's review is its run: the worker records the waiting step on the run when the graph pauses, and
     Reviews lists it from there. Opening is therefore idempotent by construction. With `assist`, a typed step's task
-    gets its task assist once, in the run's team (c-302): recorded as pending at the pause, and written by the model
+    gets its task assist once, in the run's team: recorded as pending at the pause, and written by the model
     call beside the pause rather than in it, since that call can take seconds and the task is shown and decided
     without it."""
 
@@ -292,7 +292,7 @@ def assisted_reviews(
     policies: PolicySource,
     starters: StarterApprovals | None = None,
 ) -> RunReviews:
-    """The worker's reviews port with task assist (c-302). Closing `stack` (the worker stopping) waits for the assists
+    """The worker's reviews port with task assist. Closing `stack` (the worker stopping) waits for the assists
     still being written, so one is not lost mid-call and its task does not stay pending."""
     reviews = RunReviews(kernel_assist(db, agents, policies), EngineTransactions(db), starters)
     stack.push_async_callback(reviews.settled)

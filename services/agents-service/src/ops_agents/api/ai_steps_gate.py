@@ -1,5 +1,5 @@
-"""Whether a team's workflows may use AI steps (c-298): the aiSteps policy, a value per team, off until someone who
-may manage workflow settings turns it on (owner, 2026-10-18). Read live from platform-service, as publishReview is, so
+"""Whether a team's workflows may use AI steps: the aiSteps policy, a value per team, off until someone who
+may manage workflow settings turns it on. Read live from platform-service, as publishReview is, so
 a change applies to the next listing and publish. With no platform URL, or when platform-service cannot be read, the
 steps are off: the default holds."""
 
@@ -55,14 +55,14 @@ async def _masks(policies: PolicySource | None, team: str | None) -> bool:
 
 async def team_rules(policies: PolicySource | None, team: str | None) -> StepRules:
     """A team's AI step rules, read live: off when the team, the source or aiSteps cannot be read; masked unless the
-    team set aiStepsMaskPersonalData false (c-321), and masked when that cannot be read. Masking is read only for a
+    team set aiStepsMaskPersonalData false, and masked when that cannot be read. Masking is read only for a
     team whose steps may run."""
     on = await _on(policies, team)
     return StepRules(on, await _masks(policies, team) if on else True)
 
 
 async def people_see_masked(rt: Runtime, team: str | None) -> bool:
-    """Whether people reading a run of `team` see personal data masked (aiStepsMaskPersonalData, c-321): workflow data
+    """Whether people reading a run of `team` see personal data masked (aiStepsMaskPersonalData): workflow data
     stays real for the steps that use it, and the masking is where people read it."""
     return await _masks(rt.policies, team)
 

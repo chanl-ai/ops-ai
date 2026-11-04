@@ -1,9 +1,9 @@
 """Each service that switches roles per transaction (SET LOCAL ROLE) works as its own deployed login: no superuser, no
-BYPASSRLS, and a member of a role only once an install script or a migration made it one (c-444). On a scratch
+BYPASSRLS, and a member of a role only once an install script or a migration made it one. On a scratch
 database the files, documents and tools chains migrate; each login starts as staging's did, made by a roles.sql older
 than the roles; then one path that grants membership runs alone: the chains' own migrations, or grants.sql as make
 db-ddl writes it. After it, the login runs a team transaction as its tenant role and, where the service has one, the
-outbox relay as its system role (tools has none, c-602).
+outbox relay as its system role (tools has none).
 
 Runs on the server of OPS_TEST_DATABASE_URL (make python-verify sets it); skipped without a PostgreSQL URL. Roles are
 cluster-wide, so each case revokes the logins' memberships before it starts."""

@@ -1,4 +1,4 @@
-"""How an operation's body is sent (c-591), by failure mode: a form-encoded write sent as JSON (Stripe takes forms
+"""How an operation's body is sent, by failure mode: a form-encoded write sent as JSON (Stripe takes forms
 only), a raw body sent with a Content-Type other than its own, a credential coming back form-encoded through a system
 that echoes it, and a save that keeps a body its encoding cannot send."""
 
@@ -117,7 +117,7 @@ async def test_a_save_refuses_a_body_its_encoding_cannot_send(encoded: Bank, pat
 
 
 async def test_a_save_lists_every_problem_at_once_and_sends_the_key_to_the_connection(encoded: Bank) -> None:
-    """c-591 T003: the dogfood found each problem only after fixing the one before it."""
+    """The dogfood found each problem only after fixing the one before it."""
     patch = {
         "bodyEncoding": "form",
         "headers": [
@@ -135,7 +135,7 @@ async def test_a_save_lists_every_problem_at_once_and_sends_the_key_to_the_conne
 
 async def test_request_sent_shows_the_content_type_its_encoding_set(encoded: Bank) -> None:
     """The tool page's Request sent is what the system got: httpx adds a form's Content-Type on the wire, so the record
-    of the request names it too (c-591)."""
+    of the request names it too."""
     run = {
         "operation": f"form_{encoded.api.tenant}",
         "contextId": "owner",

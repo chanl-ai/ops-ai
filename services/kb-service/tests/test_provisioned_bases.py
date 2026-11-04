@@ -1,4 +1,4 @@
-"""Knowledge bases carry a template id and a protection level (c-180), by failure mode: a provisioned base not found
+"""Knowledge bases carry a template id and a protection level, by failure mode: a provisioned base not found
 again by its template id, a person setting either field, a person changing a system base, a managed base losing its
 template id on an edit, and a base from before reading as protected."""
 
@@ -42,7 +42,7 @@ async def _no_keys(_key: str) -> dict[str, Any] | None:
 
 
 def person(tenant: str, email: str, role: str) -> dict[str, str]:
-    """A person in team_ops as platform-service signs them in; an admin also holds knowledge.manage (c-180)."""
+    """A person in team_ops as platform-service signs them in; an admin also holds knowledge.manage."""
     claims = {
         "sub": f"usr_{email.split('@', maxsplit=1)[0]}",
         "email": email,

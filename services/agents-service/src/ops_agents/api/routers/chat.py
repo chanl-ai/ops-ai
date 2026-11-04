@@ -152,7 +152,7 @@ def _state(meta: dict[str, Any]) -> str:
 @router.get("/agents")
 async def agents(rt: Rt) -> JSONResponse:
     """The live agents the caller's team may chat with: the catalogue serves every team's, so it is narrowed to the
-    agents the team reads (c-407), and another team's agent is not offered."""
+    agents the team reads, and another team's agent is not offered."""
     ours = {r["id"] for r in await registry(rt).rows()}
     try:
         names = {k.id: k.name for k in await rt.kbs().bases()}
@@ -220,7 +220,7 @@ async def list_threads(
     Either read returns `nextCursor` while more rows follow."""
     rows = await chat_rows(rt, me)
     await with_summaries(rt, rows)
-    # A builder's tests (c-284) are their own list: the conversations, their facets and counts leave them out.
+    # A builder's tests are their own list: the conversations, their facets and counts leave them out.
     metas = [(r, m) for r in rows if bool((m := _meta(r)).get("test")) == test]
 
     facet_keys = ("agentId", "kbIds", "state")
@@ -290,7 +290,7 @@ async def list_threads(
 
 @router.get("/default-agent", response_model=Envelope[TeamDefaultAgent])
 async def get_default_agent(rt: Rt, me: Me) -> JSONResponse:
-    """The agent the caller's team starts chats on (c-174); its name is absent when that agent is no longer live."""
+    """The agent the caller's team starts chats on; its name is absent when that agent is no longer live."""
     agent_id = await TeamDefaults(rt.db).agent(me.team_id)
     agent = rt.catalog.agent(agent_id) if agent_id else None
     try:
@@ -303,7 +303,7 @@ async def get_default_agent(rt: Rt, me: Me) -> JSONResponse:
 
 @router.put("/default-agent", response_model=Envelope[TeamDefaultAgent])
 async def set_default_agent(rt: Rt, me: Me, body: TeamDefaultAgentInput) -> JSONResponse:
-    """chat.manage (team admins): the default changes where every member's new chat starts. Provisioning (c-175) sets
+    """chat.manage (team admins): the default changes where every member's new chat starts. Provisioning sets
     a team's first one through this route; the agent must be live and belong to the team, or to no team."""
     can(caller_of(me), "chat", "manage", team=me.team_id, what="the team's default agent")
     agent = rt.catalog.agent(body.agent_id)
@@ -317,7 +317,7 @@ async def set_default_agent(rt: Rt, me: Me, body: TeamDefaultAgentInput) -> JSON
 
 async def _team_default(rt: Runtime, me: Principal) -> AgentDefinition:
     """The live default agent of the caller's team, for a chat started without naming one. A team that has set none
-    gets its own Ops Assistant on this first chat, set as its default (c-469), so a first chat is never refused; a team
+    gets its own Ops Assistant on this first chat, set as its default, so a first chat is never refused; a team
     admin can change the default afterwards."""
     agent_id = await TeamDefaults(rt.db).agent(me.team_id)
     if agent_id is None:
@@ -333,9 +333,9 @@ async def _team_default(rt: Runtime, me: Principal) -> AgentDefinition:
 
 
 async def _test_agent(rt: Runtime, me: Principal, agent_id: str, version: int | None = None) -> AgentDefinition:
-    """The agent a test thread's message runs (c-284): its newest version, draft included, as saved now, never from a
+    """The agent a test thread's message runs: its newest version, draft included, as saved now, never from a
     cache keyed by a version number a draft keeps while it changes; or the saved version the thread was started on, for
-    a compare (c-286). Refused unless the caller may test the agent."""
+    a compare. Refused unless the caller may test the agent."""
     row = await changeable(rt, me, agent_id, "test")
     n = version if version is not None else int(row["version"])
     try:
@@ -412,7 +412,7 @@ async def get_thread(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     for w in (w for m in messages for w in m.widgets or [] if isinstance(w, ApprovalWidget)):
         if w.state in ("pending", "awaiting_second"):
             w.can_decide = await hitl_facade.can_decide(rt, me, thread_id)
-    # Ops cards are drawn from their records as this reader sees them now (c-469).
+    # Ops cards are drawn from their records as this reader sees them now.
     await fill_cards(rt, me, messages)
     return ok(thread_view(rt, row, messages).wire())
 
@@ -565,7 +565,7 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         raise ValidationFailed("Type a message first.")
     if rt.ports is None:
         raise ServiceUnavailable(rt.model_error or "No model is configured.")
-    # A widget conversation serves the version its deployment pins (c-117); every other one the live version.
+    # A widget conversation serves the version its deployment pins; every other one the live version.
     pinned = meta.get("agentVersion") if meta.get("deploymentId") else None
     test = bool(meta.get("test"))
     tested = (
@@ -585,7 +585,7 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
     if agent is None:
         await refuse_new_turns(rt, str(meta.get("agentId")))
         raise Unprocessable("This conversation's agent is no longer live.")
-    # A conversation from before per-conversation caps takes them now (c-103).
+    # A conversation from before per-conversation caps takes them now.
     await ensure_budget(rt, thread_id, agent)
     current = (await messages_of(rt, [thread_id], reader=person_of(me)))[thread_id]
 
@@ -708,14 +708,14 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
     builder = AssistantBuilder(rt.catalog, assistant, titles=await tool_titles(rt))
 
     # What the person said about themselves is read while the reply is written: the extraction needs only the
-    # messages so far, and run after the reply it held the reply's end back by a whole model call (c-124).
+    # messages so far, and run after the reply it held the reply's end back by a whole model call.
     extraction = (
         asyncio.ensure_future(
             start_learning(
                 rt, me, agent, team_id=str(row["team_id"]), thread_id=thread_id, message=question, history=transcript
             )
         )
-        # A test remembers nothing about the builder (c-284).
+        # A test remembers nothing about the builder.
         if not body.regenerate and agent.memory_enabled and not test
         else None
     )
@@ -730,20 +730,20 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
 
     async def reply() -> AsyncIterator[dict[str, str]]:
         yield _frame(StartEvent(user_message=user_message, message_id=assistant.id))
-        # The turn runs for this person: a workflow tool is offered and started only if they may start it (c-149).
+        # The turn runs for this person: a workflow tool is offered and started only if they may start it.
         with acting_for(me):
             async with aclosing(
                 execute(rt, thread_row, graph, graph_input=graph_input, run_id=run_id, kind="input")
             ) as run:
                 async for e in run:
                     for out in builder.apply_run_event(e):
-                        # The live card says whether this reader may decide it, as the thread read does (c-565): the
+                        # The live card says whether this reader may decide it, as the thread read does: the
                         # person who asked for a write never sees Approve on it.
                         w = getattr(out, "widget", None)
                         if isinstance(w, ApprovalWidget) and w.state in ("pending", "awaiting_second"):
                             w.can_decide = await hitl_facade.can_decide(rt, me, thread_id)
                         yield _frame(out)
-            # Roles decide approvals (owner, 2026-11-01): a person who may decide this write themselves is not
+            # Roles decide approvals: a person who may decide this write themselves is not
             # asked. It is decided as theirs through the path the Approve button takes, so the token, the record and
             # the four-eyes rule are the same; a write that needs a step-up still asks them. The thread read after
             # the reply shows the decided card and the resumed answer.
@@ -759,7 +759,7 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         await update_meta(rt, thread_id, lastMessageAt=now_iso())
         await store_summary(rt, thread_id)
         if extraction is not None and not assistant.error:
-            # What the person said about themselves is kept for their next chat with this agent (c-124).
+            # What the person said about themselves is kept for their next chat with this agent.
             saved = await finish_learning(
                 rt, me, agent, extraction, team_id=str(row["team_id"]), thread_id=thread_id, run_id=run_id
             )
@@ -774,7 +774,7 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
 
 
 async def _decide_own_write(rt: Runtime, me: Principal, thread_id: str, reply: ChatMessage) -> None:
-    """Approves the turn's waiting write as `me` when they may decide it and it asks for no step-up (c-616)."""
+    """Approves the turn's waiting write as `me` when they may decide it and it asks for no step-up."""
     waiting = [w for w in reply.widgets or [] if isinstance(w, ApprovalWidget) and w.state == "pending"]
     if not waiting or any(w.step_up for w in waiting) or not await hitl_facade.can_decide(rt, me, thread_id):
         return

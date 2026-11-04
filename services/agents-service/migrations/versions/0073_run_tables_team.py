@@ -1,4 +1,4 @@
-"""The run tables are held to the caller's team by the database (c-429)
+"""The run tables are held to the caller's team by the database
 
 Revision ID: 0073_run_tables_team
 Revises: 0072_memories_system_tenants

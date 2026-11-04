@@ -1,4 +1,4 @@
-"""skills as versioned attachments (c-063 slice 2)
+"""skills as versioned attachments
 
 Revision ID: 0026_skills
 Revises: 0025_guardrails

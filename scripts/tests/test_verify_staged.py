@@ -1,4 +1,4 @@
-"""The commit gate runs only the checks the staged paths can affect (c-566), by failure mode: a docs-only commit runs
+"""The commit gate runs only the checks the staged paths can affect, by failure mode: a docs-only commit runs
 the console's typecheck and tests anyway; a docs-only commit with a private path in it gets through once the full
 scans are skipped; a console change no longer runs the console's typecheck; a staged test with a type error reaches
 HEAD; a typed file that is clean fails because one module reads as two. Each case stages its change in a private index

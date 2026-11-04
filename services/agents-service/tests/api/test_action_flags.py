@@ -1,4 +1,4 @@
-"""The console's canDecide and canCancel flags (c-123), by failure mode: a flag that says yes where the route answers
+"""The console's canDecide and canCancel flags, by failure mode: a flag that says yes where the route answers
 403, or no where the route lets the person act. Each flag is read for a person and then compared with what the route
 does for that same person."""
 
@@ -114,7 +114,7 @@ async def test_can_decide_is_no_for_whoever_saved_the_version_of_any_saved_kind(
     stack: tuple[AsyncClient, AsyncEngine],  # noqa: F811
 ) -> None:
     """A tool module review the reviewer saved: the flag and the decision route read one list of saved kinds, and
-    both refuse the saver only while the tenant's requesterMayDecide is off (c-186)."""
+    both refuse the saver only while the tenant's requesterMayDecide is off."""
     c, engine = stack
     body: dict[str, Any] = {
         "moduleId": "mod_x",
@@ -141,7 +141,7 @@ async def test_can_decide_is_no_for_whoever_saved_the_version_of_any_saved_kind(
 
 
 async def test_the_streamed_approval_says_whether_the_asker_may_decide(stack: tuple[AsyncClient, AsyncEngine]) -> None:  # noqa: F811
-    """The live card showed Approve to the person who asked for the write, until a reload (c-565): the streamed widget
+    """The live card showed Approve to the person who asked for the write, until a reload: the streamed widget
     carries canDecide as the route decides it, as the thread read does."""
     c, _ = stack
     tid = (await c.post("/chat/threads", json={"agentId": "ag_dispute", "kbIds": []}, headers=BUILDER)).json()["data"][

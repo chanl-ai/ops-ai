@@ -2,7 +2,7 @@ import type { FilesApi } from './files-contract';
 import { createTransport } from './http';
 
 /**
- * Storage settings on files-service (`/v1/settings/storage`, c-100), the one files-service area the console calls
+ * Storage settings on files-service (`/v1/settings/storage`), the one files-service area the console calls
  * directly so far. The transport adds the signed-in person's token; files-service checks they are an admin on the
  * Security team.
  */

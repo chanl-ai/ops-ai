@@ -1,4 +1,4 @@
-"""The service events an app's accounts are reported with (c-616 S12, on c-258's outbox). tools-service never opens a
+"""The service events an app's accounts are reported with (on the outbox). tools-service never opens a
 Human Task itself: agents-service's event workflow for the event does, in the account's team.
 
 A team account the system refused, or whose sign-in ended with nothing to renew it, is reported once per breakage: its

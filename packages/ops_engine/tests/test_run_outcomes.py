@@ -1,4 +1,4 @@
-"""A write whose outcome is uncertain ends the run with a reason (c-561), by failure mode: the system timed out or
+"""A write whose outcome is uncertain ends the run with a reason, by failure mode: the system timed out or
 answered 5xx after the call was sent and the step took its error port as if nothing happened; the gateway lost the call
 and the run went on; a write still running at the gateway was retried for minutes with no end; and a write the system
 refused outright was failed as uncertain instead of taking its error port."""

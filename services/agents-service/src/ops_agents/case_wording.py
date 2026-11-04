@@ -1,4 +1,4 @@
-"""A case event as a sentence (c-500): the one wording of what was done on a case, for the case page's feed and the
+"""A case event as a sentence: the one wording of what was done on a case, for the case page's feed and the
 Activity page's case rows alike."""
 
 from __future__ import annotations

@@ -31,7 +31,7 @@ class _In(BaseModel):
 class EntryIn(_In):
     value: str
     note: str = ""
-    # Set only by the provisioner (c-180): the template slot the entry fills, and `system` to keep it from people.
+    # Set only by the provisioner: the template slot the entry fills, and `system` to keep it from people.
     template_id: str | None = Field(default=None, min_length=1, max_length=120)
     protection: Literal["system", "managed"] | None = None
 
@@ -128,7 +128,7 @@ def egress_router(store: EgressStore, *, security_team: str | None = None) -> AP
 
     @r.post("/held-hosts/decisions", response_model=Envelope[Change])
     async def decide_held_host(body: HeldHostDecisionIn, svc: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """A Security admin's decision on a held host (c-616 S13), sent by agents-service with its own token: a person
+        """A Security admin's decision on a held host, sent by agents-service with its own token: a person
         decides in Human Tasks, never here. Approved lists the host, in the name of whoever approved it. The token must
         hold secrets_egress:manage, which only agents-service's scope cap allows (Settings.service_scopes)."""
         Access(security_team=team).can(svc, "secrets_egress", "manage", what="the egress list")
@@ -159,7 +159,7 @@ def egress_router(store: EgressStore, *, security_team: str | None = None) -> AP
         template_id: Annotated[str | None, Query(alias="templateId")] = None,
     ) -> JSONResponse:
         """The hosts, by name, a page at a time; `search` matches the host or its note, `templateId` the template slot
-        a provisioned host fills (c-180). The page and its count are queried, not sliced."""
+        a provisioned host fills. The page and its count are queried, not sliced."""
         total = await store.hosts_count(who.tenant_id, search, template_id)
         page, offset = page_window(total, page, page_size)
         rows = await store.hosts_page(who.tenant_id, search, offset, page_size, template_id)
@@ -190,7 +190,7 @@ def egress_router(store: EgressStore, *, security_team: str | None = None) -> AP
     async def _remove(kind: str, body: RemoveIn, who: Person) -> JSONResponse:
         value = _valid(kind, body.value)
         if who.principal is not None:
-            # A `system` entry is the provisioner's: no person removes it, a Security admin included (c-180).
+            # A `system` entry is the provisioner's: no person removes it, a Security admin included.
             protection = await store.protection(who.tenant_id, kind, value)
             Access(security_team=team).can(
                 who.principal, "secrets_egress", "manage", what=value, code="not_security_admin", protection=protection

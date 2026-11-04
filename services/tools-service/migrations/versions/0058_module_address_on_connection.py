@@ -1,4 +1,4 @@
-"""A module's address lives on its connection only; tool_modules.endpoint and type go (c-616 D3c)
+"""A module's address lives on its connection only; tool_modules.endpoint and type go
 
 Calls already read a custom app's address from its connection per environment. Each connected module's endpoint is
 copied to its connection first: into every environment row that names no base address, and, for a connection with no

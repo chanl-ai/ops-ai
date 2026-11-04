@@ -197,7 +197,7 @@ async def seed_mailboxes(db: Database, path: Path | None) -> None:
             )
 
 
-# The `area:action` scopes this service claims on another service's public routes (c-168), by audience. Those calls
+# The `area:action` scopes this service claims on another service's public routes, by audience. Those calls
 # also name the team of the request or run, which the receiving service reads instead of any query parameter.
 PUBLIC_SCOPES: dict[str, list[str]] = {
     "kb": ["knowledge:view"],
@@ -393,10 +393,10 @@ def create_app(
                 )
                 rt.agent_graph = lambda agent_id: agent_wrapper.build(deps, saver, agent_id=agent_id)
                 rt.graph_deps = deps
-                # Listed background processes (c-516): each writes its heartbeat and logs its jobs in the job's team.
+                # Listed background processes: each writes its heartbeat and logs its jobs in the job's team.
                 beats, jobs = heartbeats(db), BackgroundJobs(db)
                 # SQLite tests share one connection. A sweep or expiry commit rolls back a request's half-done
-                # write, so a row just created reads 404 (c-616 T022). Those loops run on PostgreSQL only.
+                # write, so a row just created reads 404. Those loops run on PostgreSQL only.
                 if db.dialect.name != "sqlite":
                     sweeper = asyncio.create_task(
                         sweep_forever(rt, settings.sweep_interval_seconds, beats=beats, jobs=jobs)
@@ -406,7 +406,7 @@ def create_app(
                     poller = asyncio.create_task(poll_forever(rt, settings.timer_poll_seconds, beats=beats, jobs=jobs))
                     stack.callback(poller.cancel)
                 if settings.platform_url and db.dialect.name != "sqlite":
-                    # Memory retention (c-206): the workspace policy lives in platform-service.
+                    # Memory retention: the workspace policy lives in platform-service.
                     platform_http = httpx.AsyncClient(base_url=settings.platform_url, timeout=10)
                     stack.push_async_callback(platform_http.aclose)
                     # A process without a signing key still starts, and the read keeps memories when it cannot sign.
@@ -417,7 +417,7 @@ def create_app(
             # and serve what is published.
             seed_dir = settings.seed_dir
             seeded = await seed_workflows(rt.graph_store, seed_dir) if seed_dir else {}
-            # A seed update opens a publish request, and requests are per tenant (c-333 phase A) while the registries
+            # A seed update opens a publish request, and requests are per tenant while the registries
             # are not yet: the seed's requests are the dev seed's tenant's, as engine_seed's records are.
             with isolation.tenant_wide(SEED, tenant_id=LOCAL_TENANT):
                 await agent_registry.load(rt, load_catalog(seed_dir, settings.agents_seed_file))
@@ -427,7 +427,7 @@ def create_app(
                     await engine_seed.load_seed(rt, engine_seed.seed_path(seed_dir, settings.agents_seed_file))
                 await workflow_registry.load(rt, seed_dir)
                 await workflow_registry.follow_seed(rt, seeded)
-            # Each team's Ops Assistant nobody changed takes the declared one (c-616 team defaults).
+            # Each team's Ops Assistant nobody changed takes the declared one (team defaults).
             await catch_up_assistants(rt)
             if rt.channels is not None:
                 await seed_deployments(rt.channels, settings.deployments_seed_file)
@@ -461,9 +461,9 @@ def create_app(
         allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Accept", "Authorization", "X-API-Key", "X-Team-Id"],
     )
-    # Outside the console's CORS: the widget routes answer for each deployment's own origins (c-117).
+    # Outside the console's CORS: the widget routes answer for each deployment's own origins.
     app.add_middleware(embed_routes.WidgetCors)
-    # One tool directory read per request, however many calls its page words (c-508).
+    # One tool directory read per request, however many calls its page words.
     app.add_middleware(OneDirectoryRead)
     install_error_handlers(app)
 
@@ -477,7 +477,7 @@ def create_app(
     mount(chat.router, "Chat", include_in_schema=False)
     mount(chat.router, "Chat", prefix="/v1", include_in_schema=False)
     mount(chat_settings_routes.router, "Chat", include_in_schema=False)
-    # The widget API reuses the chat facade, so it stays out of the OpenAPI document with it (c-117).
+    # The widget API reuses the chat facade, so it stays out of the OpenAPI document with it.
     mount(embed_routes.deployments_router, "Widget", include_in_schema=False)
     mount(embed_routes.mint_router, "Widget", include_in_schema=False)
     mount(embed_routes.config_router, "Widget", include_in_schema=False)
@@ -489,7 +489,7 @@ def create_app(
     # Before workflows.router: its /v1/workflows/{workflow_id} would take /v1/workflows/node-types as an id.
     mount(engine_routes.router, "Workflows")
     mount(engine_routes.runs_router, "Workflows")
-    # An outside system resumes the step it was handed (c-525), by the step's own token; no person's.
+    # An outside system resumes the step it was handed, by the step's own token; no person's.
     mount(run_resume_routes.router, "Workflows")
     mount(workflows.router, "Workflows")
     mount(workflows.refs_router, "Workflows")
@@ -521,7 +521,7 @@ def create_app(
     mount(channel_list.router, "Channels")
     mount(channel_list.live_router, "Channels")
     mount(service_events.router, "Workflows")
-    # platform-service's events (c-616): a new team gets its Ops Assistant, its default here, before its first chat.
+    # platform-service's events: a new team gets its Ops Assistant, its default here, before its first chat.
     mount(platform_events_router(team_created_handlers(lambda: cast(Runtime, app.state.runtime)), tags=()), "Agents")
     mount(overview.router, "Cases")
     mount(step_up.router, "Auth")

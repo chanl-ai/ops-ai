@@ -1,4 +1,4 @@
-"""Published workflows in the agent's tool directory (c-062 T003, T004), by failure mode: a published workflow an
+"""Published workflows in the agent's tool directory, by failure mode: a published workflow an
 agent could be granted missing from the directory, a granted workflow search_tools cannot find by its words, an
 unpublished, paused or ungranted workflow offered or callable, and a refusal that does not say why."""
 

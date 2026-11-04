@@ -1,4 +1,4 @@
-"""Acting-for tokens (c-558), by failure mode: a token is minted for a person outside the call's team, a token for a
+"""Acting-for tokens, by failure mode: a token is minted for a person outside the call's team, a token for a
 member names the wrong person or service or could pass as a session, and a service token naming no tenant is
 answered for some tenant."""
 

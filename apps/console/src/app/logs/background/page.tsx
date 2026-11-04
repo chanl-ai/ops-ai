@@ -121,7 +121,7 @@ const JOB_COLUMNS: ColumnDef<BackgroundJob>[] = [
 ];
 
 /**
- * Govern > Background (c-516): every background process of the account with its heartbeat, and the latest jobs each
+ * Govern > Background: every background process of the account with its heartbeat, and the latest jobs each
  * did and for which team. Read-only, for account admins; agents-service answers anyone else with not found.
  */
 export default function BackgroundPage() {

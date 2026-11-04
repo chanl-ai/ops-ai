@@ -1,4 +1,4 @@
-"""A tool a team has just been given can be granted at once (c-607), by failure mode: the tools list this service
+"""A tool a team has just been given can be granted at once, by failure mode: the tools list this service
 keeps for 30 s does not have a plugin turned on moments ago, so saving an agent with its tool was refused as unknown
 until the list expired."""
 

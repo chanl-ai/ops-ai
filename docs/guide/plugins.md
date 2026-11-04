@@ -200,10 +200,10 @@ names are and to trust that certificate. GitHub's `tests/fake_github.py` does th
 
 | Step | How |
 |---|---|
-| 1. Start the stack with sign-in and fakes | `make up AUTH=platform DEMO_MODEL=fake`; in a lane add `OPS_STACK_FAKES=1` (CONTRIBUTING, Lanes) |
-| 2. Install the plugin | `uv run ops plugin install <plugin folder>`, then `make restart SVC=tools` and `make restart SVC=kb`, each with `AUTH=platform` in a lane |
+| 1. Start the stack with sign-in and fakes | `make up AUTH=platform DEMO_MODEL=fake` |
+| 2. Install the plugin | `uv run ops plugin install <plugin folder>`, then `make restart SVC=tools` and `make restart SVC=kb`, each with `AUTH=platform` |
 | 3. Serve the fake | `uv run --directory services/tools-service python <plugin>/tests/fake_github.py --dir .run/fake-github`; it prints its address, certificate and host map |
-| 4. Point tools-service at it | Write `OPS_EGRESS_EXTRA_CA=<certificate>` and `OPS_EGRESS_RESOLVE='{"github.test":"<address>","api.github.test":"<address>"}'` to `.run/demo-addons.env` (`.run/isolated/demo-addons.env` in a lane), then `make restart SVC=tools`. The stack reads that file after `.env` on every restart, and the map is used in development only |
+| 4. Point tools-service at it | Write `OPS_EGRESS_EXTRA_CA=<certificate>` and `OPS_EGRESS_RESOLVE='{"github.test":"<address>","api.github.test":"<address>"}'` to `.run/demo-addons.env` (`.run/isolated/demo-addons.env` on an `ISOLATED=1` stack), then `make restart SVC=tools`. The stack reads that file after `.env` on every restart, and the map is used in development only |
 | 5. Allow the hosts | As a Security admin, Settings › Security › Egress: Add host for each name, and Add range for `<address>/32` |
 | 6. Turn it on and connect | Turn a plugin on, below, then the App's Connect window (apps.md) with the fake's client id and secret, and the system's settings pointed at the fake's names |
 

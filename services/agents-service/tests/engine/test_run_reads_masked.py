@@ -1,4 +1,4 @@
-"""Masking where people read a run (c-321, tick 31: mask what people see, keep workflow data real), on PostgreSQL with
+"""Masking where people read a run (mask what people see, keep workflow data real), on PostgreSQL with
 the real worker, by failure mode: the run page shows a step's email or SSN with the setting on; it masks with the team's
 setting off; the stored run carries the masked value, so a later Send step would send to "[email]"."""
 
@@ -85,7 +85,7 @@ async def test_a_team_that_turned_masking_off_reads_real_values(engine: AsyncEng
 
 
 async def test_every_read_of_a_waiting_run_masks_what_it_shows(engine: AsyncEngine) -> None:
-    """tick 32: the runs list and cancel answered unmasked, and so did a waiting step's payload on every read."""
+    """The runs list and cancel answered unmasked, and so did a waiting step's payload on every read."""
     waiting = parse(
         {
             "schemaVersion": 2,

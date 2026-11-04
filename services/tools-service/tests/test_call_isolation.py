@@ -1,4 +1,4 @@
-"""A run reaches another team's tool module only through an approved grant (c-433), by failure mode, through the real
+"""A run reaches another team's tool module only through an approved grant, by failure mode, through the real
 call and grant-list routes with a service token naming the run's team:
 
 - a call to another team's module with no grant runs;
@@ -63,7 +63,7 @@ async def test_a_call_to_another_teams_module_is_refused(
 ) -> None:
     tool = await _read_op(engine, tenant, "mod_payments_hub")
     r = await _call(gw, tenant, LENDING, tool)
-    # The name is unique per team (c-509): another team's operation is not found, and the refusal names no owner.
+    # The name is unique per team: another team's operation is not found, and the refusal names no owner.
     assert r.status_code == 403 and r.json()["error"]["code"] == "gateway_refused", r.text
     assert "not registered" in r.json()["error"]["message"]
 

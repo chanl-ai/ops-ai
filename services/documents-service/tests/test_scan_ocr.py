@@ -1,4 +1,4 @@
-"""OCR of the scanned levy notice (c-233): the mailed scan read through ops_ingest into pages, as an extraction
+"""OCR of the scanned levy notice: the mailed scan read through ops_ingest into pages, as an extraction
 reads it (ops_extract.pages), with every postcode and amount as printed. Speckle made Tesseract read "M8V 1A5" as
 "Mav: 1A5"."""
 

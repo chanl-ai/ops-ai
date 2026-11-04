@@ -1,4 +1,4 @@
-"""Feature flags (c-611): the install's switches for features not yet fully released.
+"""Feature flags: the install's switches for features not yet fully released.
 
 Every flag is off unless the install config names it in `OPS_FLAGS` (Settings.flags); there is no admin screen and no
 flag server. Services read a flag through `Settings.feature_flags`, and the console reads platform-service's
@@ -21,8 +21,6 @@ class Flag:
     name: FlagName
     # One line, said to an operator reading the flags answer.
     description: str
-    # The card that owns the feature and removes the flag.
-    card: str
     remove_when: str
 
 
@@ -30,31 +28,26 @@ FLAGS: tuple[Flag, ...] = (
     Flag(
         name="mcp_gateway",
         description="Outside assistants reach a team's tools at the MCP address (/mcp/{env}/{team}).",
-        card="c-356",
         remove_when="Outside assistants over MCP are released to every install.",
     ),
     Flag(
         name="tool_search",
         description="Agents with more tools than OPS_TOOL_SEARCH_ABOVE search for the one they need.",
-        card="c-610",
         remove_when="Tool search is released to every install.",
     ),
     Flag(
         name="plugin_updates",
         description="Each team keeps the plugin version it took and reviews an upgrade before its tools change.",
-        card="c-609",
         remove_when="Plugin updates are released to every install.",
     ),
     Flag(
         name="several_accounts",
         description="A team keeps several named accounts of one app, and a tool or step names the one it uses.",
-        card="c-608",
         remove_when="Several accounts per app are released to every install.",
     ),
     Flag(
         name="sandbox_accounts",
         description="A team admin adds a sandbox account to an app, which test runs sign in with.",
-        card="c-608",
         remove_when="Sandbox accounts are released to every install.",
     ),
 )

@@ -27,9 +27,9 @@ export const TEST_TABS = ['test', 'why', 'compare', 'versions', 'used'] as const
 export type TestTab = (typeof TEST_TABS)[number];
 
 /**
- * The agent page's right panel (c-285): Test is a real chat on a thread the server marks test (c-284), drawn with the
+ * The agent page's right panel: Test is a real chat on a thread the server marks test, drawn with the
  * chat page's own message list, composer and cards, so a builder sees exactly what a person chatting gets, on the
- * newest draft. Why explains a reply, Compare asks two versions the same question (c-286); Versions and Used in hold
+ * newest draft. Why explains a reply, Compare asks two versions the same question; Versions and Used in hold
  * what the page's right column showed before.
  */
 export function AgentTestPanel({
@@ -58,7 +58,7 @@ export function AgentTestPanel({
   onThreadIdChange: (id: string | undefined) => void;
   versions: React.ReactNode;
   usedIn: React.ReactNode;
-  /** The newest version and every saved one, for Compare (c-286). */
+  /** The newest version and every saved one, for Compare. */
   newestVersion: number;
   savedVersions: AgentVersion[];
 }) {

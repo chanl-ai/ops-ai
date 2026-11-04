@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""A file's layout (c-247), read once per tenant, content digest, layout engine version and OCR choice, and cached:
+"""A file's layout, read once per tenant, content digest, layout engine version and OCR choice, and cached:
 extraction, highlights, templates and classify all read this one parse. Bytes come through files-service as the
 caller's team, so a file the team cannot see has no layout (FileMissingError)."""
 

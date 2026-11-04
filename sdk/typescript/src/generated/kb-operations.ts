@@ -35,6 +35,15 @@ export const kbOperations = {
     "query": [],
     "stream": false
   },
+  "health_health_background": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/health/background",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "items_get_item": {
     "body": null,
     "headers": [],

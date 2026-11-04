@@ -205,7 +205,7 @@ function ThreadView({
   me?: string;
   kbs: KbOption[];
   agent?: ChatAgent;
-  /** Agents the person can hand the chat to with @ (c-174). */
+  /** Agents the person can hand the chat to with @. */
   agents: ChatAgent[];
   editingTitle: boolean;
   titleDraft: string;
@@ -230,11 +230,11 @@ function ThreadView({
   const notFound = query.isError && (query.error as { status?: number }).status === 404;
   const owner = !!t && !!me && t.owner === me;
   const readOnly = !t || !owner || t.archived;
-  // What I remember is the person's own memories with this agent, so only the chat's owner is offered it (c-206).
+  // What I remember is the person's own memories with this agent, so only the chat's owner is offered it.
   const [memoryOpen, setMemoryOpen] = React.useState(false);
   const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
   const pausedOnBudget = lastAssistant?.budget?.state === 'waiting';
-  // Replies name their agent once the conversation has had more than one (a handover, c-174).
+  // Replies name their agent once the conversation has had more than one (a handover).
   const severalAgents = !!t?.startAgentId || new Set(messages.flatMap((m) => (m.role === 'assistant' && m.agentName ? [m.agentName] : []))).size > 1;
   const handTo = (to: { id: string; name: string }, back = false) => onPatch(threadId, { agentId: to.id }, back ? `Back to ${to.name}` : `${to.name} has the chat`);
 

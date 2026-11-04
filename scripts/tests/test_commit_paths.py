@@ -1,4 +1,4 @@
-"""scripts/commit-paths.sh commits only the given paths and runs both hooks (c-566), by failure mode: a feat on
+"""scripts/commit-paths.sh commits only the given paths and runs both hooks, by failure mode: a feat on
 services/ with no card reaches HEAD because a private-index commit skipped commit-msg; a good commit does not land, or
 lands with someone else's staged work. Each case runs the tree's script in a throwaway clone, so nothing lands here."""
 
@@ -50,7 +50,9 @@ def test_a_good_commit_lands_with_only_its_paths(tmp_path: Path) -> None:
     other = repo / "docs" / "README.md"
     other.write_text(other.read_text(encoding="utf-8") + "\nNot mine.\n", encoding="utf-8")
     subprocess.run(["git", "add", "docs/README.md"], cwd=repo, check=True)
-    done = commit(repo, "docs(tools): a probe line in the readme\n\nCard: c-566\n", "services/tools-service/README.md")
+    done = commit(
+        repo, "docs(tools): a probe line in the readme\n\nChangelog: readme-probe\n", "services/tools-service/README.md"
+    )
     assert done.returncode == 0, (done.stdout + done.stderr)[-2000:]
     changed = subprocess.run(
         ["git", "show", "--name-only", "--format=", "HEAD"], cwd=repo, capture_output=True, text=True, check=True

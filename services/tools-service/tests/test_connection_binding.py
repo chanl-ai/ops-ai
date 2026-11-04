@@ -1,5 +1,5 @@
-"""A connection's credential goes to its own system only (c-330), and a custom app's base address is its connection's
-(c-616): a connection on a host the module was never reviewed for sends nothing, and the module calls the connection's
+"""A connection's credential goes to its own system only, and a custom app's base address is its connection's: a
+connection on a host the module was never reviewed for sends nothing, and the module calls the connection's
 own address with its credential."""
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ async def _connect(g: Gateway, engine: AsyncEngine, base_url: str) -> str:
     store = ModuleStore(engine)
     m = await store.get(g.tenant, MODULE)
     assert m is not None
-    # Made in the module's team: a connection serves its own team's modules only (c-509).
+    # Made in the module's team: a connection serves its own team's modules only.
     team = {"X-Team-Id": str(m["team_id"])}
     body = {"name": "Ledger", "authKind": "api_key"}
     made = (await g.client.post("/v1/apps", json=body, headers=team)).json()["data"]

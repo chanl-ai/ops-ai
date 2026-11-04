@@ -56,8 +56,8 @@ function Loading() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  // The c-131 embed mock draws a bank intranet page and the iframe chat bare, as the embed app will; only on a
-  // development server (src/proxy.ts answers 404 for /dev otherwise), and dropped with the mock in c-158.
+  // The embed mock draws a bank intranet page and the iframe chat bare, as the embed app will; only on a
+  // development server (src/proxy.ts answers 404 for /dev otherwise), and dropped with the mock.
   if (isAuthPath(pathname)) return <React.Suspense>{children}</React.Suspense>;
   return (
     <React.Suspense fallback={<Loading />}>
@@ -86,11 +86,11 @@ function Guarded({ children }: { children: React.ReactNode }) {
   // Pages render, and team queries run (hooks/team-query.ts), only once the current team is one the person holds. A team
   // remembered in this tab from an earlier sign-in, or the console default, gives way to their own team or their first.
   const teamReady = useTeamReady();
-  // A sidebar the person folded stays folded on the next load (c-552). Only their own toggles are kept (app-sidebar.tsx), not a
+  // A sidebar the person folded stays folded on the next load. Only their own toggles are kept (app-sidebar.tsx), not a
   // page's temporary fold, which also writes the sidebar's cookie.
   const [sidebarWasOpen] = React.useState(() => readSidebarOpen());
   // The session ended while the person was in: its lifetime passed (`expired`), or a refresh was refused and no one chose
-  // Sign out. The page stays, under a sign-in dialog that keeps what they were typing (c-552).
+  // Sign out. The page stays, under a sign-in dialog that keeps what they were typing.
   const wasIn = React.useRef<{ name?: string } | null>(null);
   if (status === 'signed_in' && teamReady) wasIn.current = { name: session?.user.name };
   React.useEffect(() => {
@@ -105,7 +105,7 @@ function Guarded({ children }: { children: React.ReactNode }) {
     if (pick) setCurrentTeamId(pick);
   }, [status, teamReady, teamIds]);
   React.useEffect(() => {
-    // An ended session keeps the page under its sign-in dialog (c-552), so its sign-out and 401s do not send the person away.
+    // An ended session keeps the page under its sign-in dialog, so its sign-out and 401s do not send the person away.
     if (!ended && (status === 'signed_out' || teamsStatus === 401)) router.replace(`/login?next=${encodeURIComponent(here)}`);
     if (needsMfa) router.replace(`/mfa/setup?next=${encodeURIComponent(here)}`);
   }, [status, needsMfa, teamsStatus, ended]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -217,7 +217,7 @@ function NoTeam() {
 }
 
 /**
- * Over the page when the session lifetime passes (c-552): the page stays behind it, dimmed, and nothing new loads (queries
+ * Over the page when the session lifetime passes: the page stays behind it, dimmed, and nothing new loads (queries
  * pause) until the person signs in again. Sign in again keeps the session's storage, so the chat's unsent draft comes
  * back on the same page; only Sign out in the person menu forgets it.
  */

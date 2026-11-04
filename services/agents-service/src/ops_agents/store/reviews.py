@@ -31,7 +31,7 @@ review_decisions = sa.Table(
     sa.Column("run_id", sa.String(80)),
     sa.Column("resumed_at", sa.String(32)),
     sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local", index=True),
-    # The thread's team, so the policy holds the decision without reading its thread (c-429, migration 0073).
+    # The thread's team, so the policy holds the decision without reading its thread (migration 0073).
     sa.Column("team_id", sa.String(64), nullable=False),
     # A fingerprint of the step-up the decision was made under (api/auth.py step_up_ref), never the token.
     sa.Column("step_up_ref", sa.String(40)),

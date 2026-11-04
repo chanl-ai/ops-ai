@@ -17,7 +17,7 @@ import { ApiError } from '@/lib/api/contract';
 
 /**
  * Publish reviews: which of the acting team's publishes need a second person, area by area. It reads and writes the
- * publishReview policy (GET and PUT /v1/policies/publishReview, c-214); the value is the team's own `{ area: mode }`.
+ * publishReview policy (GET and PUT /v1/policies/publishReview); the value is the team's own `{ area: mode }`.
  */
 export default function PublishReviewsPage() {
   const { team } = useTeam();

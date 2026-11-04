@@ -26,15 +26,15 @@ AREAS = (
     "knowledge",
     "tools",
     "secrets_egress",
-    # How the platform signs in to each system (c-330): every member reads them; `manage` (create, change, set secret
-    # parts, sign in) is the admins' by default (owner, 2026-10-19).
+    # How the platform signs in to each system: every member reads them; `manage` (create, change, set secret
+    # parts, sign in) is the admins' by default.
     "connections",
     "files",
-    # What documents-service reads from a file (c-256): document types, extractions, corrections. `run` extracts;
+    # What documents-service reads from a file: document types, extractions, corrections. `run` extracts;
     # `edit` keeps types and corrects fields; `delete` purges what was derived from a deleted file (a workflow asks).
     "documents",
     "chat",
-    # What agents remember about a person (c-206): edited (corrected or forgotten) by that person only.
+    # What agents remember about a person: edited (corrected or forgotten) by that person only.
     "memory",
     "reviews",
     "cases",
@@ -42,7 +42,7 @@ AREAS = (
     "settings",
     "access",
     "audit",
-    # The workspace itself (c-529): `manage` transfers, closes and restores it. Only Owner holds it, one person per
+    # The workspace itself: `manage` transfers, closes and restores it. Only Owner holds it, one person per
     # workspace, moved only by a transfer; Admin's every-cell grid leaves it out.
     "workspace",
 )
@@ -56,7 +56,7 @@ ANY_TEAM = "*"
 # These are held in the Security team (settings `security_team_id`) whichever team the request acts in: the egress
 # list and workspace-wide secrets (`manage`), a module's security review and storage settings decide what every team's
 # tools may reach, so a role in any other team grants none of them (tools-service `security_admin`, files-service
-# `storage_admin`). A team's own secrets are created, edited and deleted in that team (owner, 2026-10-17); the
+# `storage_admin`). A team's own secrets are created, edited and deleted in that team; the
 # `securityTeamAddsSecrets` policy moves those writes back here.
 SECURITY_TEAM_ACTIONS = frozenset(
     {
@@ -80,14 +80,14 @@ _READS: list[Grant] = [
     (area, "view", "all") for area in AREAS if area not in ("settings", "audit", "chat", "memory", "workspace")
 ]
 _DEFINITIONS = ("agents", "workflows", "skills", "guardrails", "widgets", "tools")
-# Decided by a reviewer or admin of the reviewing team (c-122); a module access approval by an approver or admin of the
+# Decided by a reviewer or admin of the reviewing team; a module access approval by an approver or admin of the
 # acting team (tools-service `_needs_role(who, APPROVES, ...)`).
 _DECIDES: list[Grant] = [(area, "decide", "all") for area in (*_DEFINITIONS, "chat", "reviews")]
 # Anyone in the team uploads, deletes an unreferenced file and chats with the team's agents; the creator of a skill or
 # guardrail deletes it and the starter of a run cancels it, whatever their role now.
 _MEMBER: list[Grant] = [
     *_all("files", "create", "delete"),
-    # Anyone in the team reads a file into fields and keeps the team's document types and samples (c-256).
+    # Anyone in the team reads a file into fields and keeps the team's document types and samples.
     *_all("documents", "edit", "run"),
     ("chat", "run", "all"),
     ("chat", "view", "own"),
@@ -95,7 +95,7 @@ _MEMBER: list[Grant] = [
     ("skills", "delete", "own"),
     ("guardrails", "delete", "own"),
     ("cases", "manage", "own"),
-    # Anyone in the team opens a case and works it: status, assignee, notes (c-128). Closing it is cases.manage.
+    # Anyone in the team opens a case and works it: status, assignee, notes. Closing it is cases.manage.
     *_all("cases", "create", "edit"),
 ]
 _BUILDS: list[Grant] = [
@@ -107,9 +107,9 @@ _BUILDS: list[Grant] = [
     *_all("widgets", "create", "edit", "publish"),
     *_all("tools", "create", "edit", "publish", "delete", "run"),
     *_all("deployments", "create", "edit", "run"),
-    # Knowledge is shared by its team (owner, 2026-10-17): any builder changes the team's bases and sources.
+    # Knowledge is shared by its team: any builder changes the team's bases and sources.
     *_all("knowledge", "create", "edit", "delete"),
-    # A team's secrets are its own (owner, 2026-10-17): its builders add, change and remove them.
+    # A team's secrets are its own: its builders add, change and remove them.
     *_all("secrets_egress", "create", "edit", "delete"),
 ]
 
@@ -135,10 +135,10 @@ def _merge(*parts: Iterable[Grant]) -> tuple[Grant, ...]:
 ADMIN = BuiltinRole(
     "admin",
     "Admin",
-    # Every area and action (owner, 2026-10-17); the description is shown to people on Access, Roles.
+    # Every area and action; the description is shown to people on Access, Roles.
     "Everything in the team: every area and action. Actions held in the Security team still need a role there.",
     # Admins read the team's chat threads only where the workspace turns chatThreadsOwnerOnly off (can() caps the
-    # read at their own while it is on); what agents remember about a person is that person's to edit (c-206).
+    # read at their own while it is on); what agents remember about a person is that person's to edit.
     tuple(
         (area, action, "own" if (area, action) == ("memory", "edit") else "all")
         for area in AREAS
@@ -173,16 +173,16 @@ SECURITY_ADMIN = BuiltinRole(
         _all("settings", "view", "manage"),
     ),
 )
-# Owner decision 2026-10-17: a person who only chats. It chats with the agents published to its team and sees only its
+# A person who only chats. It chats with the agents published to its team and sees only its
 # own threads. It is granted on its own, or as the membership role `chat_user` that a first SSO sign-in gives a person
-# new to the workspace (c-188); no invite or role change can set that membership role.
+# new to the workspace; no invite or role change can set that membership role.
 CHAT_USER = BuiltinRole(
     "chat_user",
     "Chat user",
     "Chats with the agents published to the team and sees only their own threads; nothing else.",
     _merge([("chat", "view", "own"), ("chat", "run", "all"), ("memory", "edit", "own")]),
 )
-# Owner decision 2026-10-23 (c-529): the workspace's one owner, assigned in every team (`ANY_TEAM`) to its first admin
+# The workspace's one owner, assigned in every team (`ANY_TEAM`) to its first admin
 # and moved only by a transfer. It holds the workspace cell and nothing else; the owner is an account admin as well.
 OWNER = BuiltinRole(
     "owner",

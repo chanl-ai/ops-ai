@@ -52,7 +52,7 @@ STACK_ENV = ("OPS_EGRESS_RESOLVE", "OPS_MODELS_URL", "OPS_MODELS_KEY")
 _WIRE = re.compile(r"\bW-\d+\b")
 _START_WORKFLOW = re.compile(r"Start workflow (\w+):(.*)", re.S)
 _CALL = re.compile(r"\bcall (\w+) (\{.*\})", re.S)
-# Memory extraction (c-124): "My <key> is <value>" is a fact, "I prefer <value>" a preference, "maybe my <key> is
+# Memory extraction: "My <key> is <value>" is a fact, "I prefer <value>" a preference, "maybe my <key> is
 # <value>" a guess below the confidence floor. The scripted model answers the extractor's schema with them.
 _FACT = re.compile(r"(maybe )?my ([a-z ]{2,40}?) is ([^.,;]+)", re.I)
 _PREFER = re.compile(r"\bI prefer ([^.,;]+)", re.I)
@@ -64,7 +64,7 @@ _SAVED = re.compile(r"^\[(\S+)\] \w+ ([^:\n]+): (.+)$", re.M)
 
 def remembered(text: str) -> dict[str, Any]:
     """The scripted extraction: what the person's last message says, quoted, decided against the saved memories
-    listed with the same key (c-557)."""
+    listed with the same key."""
     block = text.split("</remember>", 1)[0]
     said = next((line[len("person: ") :] for line in reversed(block.splitlines()) if line.startswith("person: ")), "")
     saved = {m.group(2): (m.group(1), m.group(3)) for m in _SAVED.finditer(text)}
@@ -99,7 +99,7 @@ def remembered(text: str) -> dict[str, Any]:
     return {"memories": found}
 
 
-# A widget button's reply (c-082): "<text> (action: <tool>, key: value, ...)" asks for one granted tool.
+# A widget button's reply: "<text> (action: <tool>, key: value, ...)" asks for one granted tool.
 _ACTION = re.compile(r"\(action: (\w+)((?:, [^:,()]+: [^,()]+)*)\)")
 _CHILD = re.compile(r"gth_\w+")
 _IMAGE = re.compile(r"\bshow image (\S+)")
@@ -177,7 +177,7 @@ def scripted(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
     if (action := _ACTION.search(text)) and action.group(1) in tools:
         pairs = [p.split(": ", 1) for p in action.group(2).split(", ") if ": " in p]
         return ModelResponse(parts=[ToolCallPart(action.group(1), {k.strip(): v.strip() for k, v in pairs})])
-    # A summary in the format the person's recalled preference names (c-563), so a use case sees which memory the
+    # A summary in the format the person's recalled preference names, so a use case sees which memory the
     # reply was given. An explicit "call <tool> <json>" below wins, though its arguments say summary (a case-summary).
     if "summary" in text.lower() and "<remember>" not in text and not _CALL.search(text):
         prompt = _prompt_text(messages).lower()
@@ -186,14 +186,14 @@ def scripted(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         if "numbered" in prompt:
             return ModelResponse(parts=[TextPart("1. Two cases are open.\n2. One review is waiting.")])
         return ModelResponse(parts=[TextPart("Two cases are open and one review is waiting.")])
-    # The chat home's first start (c-469): the team's default agent lists the person's Human Tasks.
+    # The chat home's first start: the team's default agent lists the person's Human Tasks.
     if "what needs me" in text.lower() and "my_human_tasks" in tools:
         return ModelResponse(parts=[ToolCallPart("my_human_tasks", {"which": "mine"})])
     # "call <tool> <json>" calls any tool the turn was granted with those arguments: how a use case drives a registry
     # operation by name without a provider.
     if (call := _CALL.search(text)) and call.group(1) in tools:
         return ModelResponse(parts=[ToolCallPart(call.group(1), json.loads(call.group(2)))])
-    # A reply carrying a remote image, as text the model read could: the console must not load it (c-055 uc-074).
+    # A reply carrying a remote image, as text the model read could: the console must not load it (uc-074).
     if image := _IMAGE.search(text):
         return ModelResponse(parts=[TextPart(f"Here is the chart. ![balance chart]({image.group(1)})")])
     if "CHQ-" in text and "lookup_account" in tools:

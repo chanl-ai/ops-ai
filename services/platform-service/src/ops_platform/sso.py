@@ -87,7 +87,7 @@ class Sso:
     console_url: str | None
     secrets: dict[str, SecretStr]
     flow_ttl_s: int
-    # The SAML service provider's key and certificate (c-197); None when the installation has none.
+    # The SAML service provider's key and certificate; None when the installation has none.
     sp_key: SecretStr | None = None
     sp_certificate: str | None = None
     _metadata: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])

@@ -1,6 +1,6 @@
 #!/bin/sh
 # make release-tag: tags a merged commit `vYYYY-MM-DD.N` (UTC date; N counts that day's tags, from 1) and pushes the tag,
-# so every build can say which release it is (What's new, c-510). Run on every push to main of the public repo
+# so every build can say which release it is (What's new). Run on every push to main of the public repo
 # (.github/workflows/release-tag.yml) and by hand the same way.
 #   REF=<commit>   the commit to tag (default HEAD)
 #   REMOTE=<name>  where tags are read from and pushed to (default origin; with no such remote, the tag stays local)

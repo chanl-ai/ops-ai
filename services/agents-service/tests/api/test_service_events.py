@@ -1,4 +1,4 @@
-"""A service event starts its handler workflow (c-258), by failure mode: a repeat delivery starts a second run; a run
+"""A service event starts its handler workflow, by failure mode: a repeat delivery starts a second run; a run
 that failed is never tried again, or is retried under a new key; an event nobody handles is lost; a team's own workflow
 with the Service event trigger, or under the handler's id, reacts to events; the handler cannot be edited through
 review or run by hand like any workflow; a token without events:emit, a person's token or an oversized payload is

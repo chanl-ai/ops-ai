@@ -39,7 +39,7 @@ def caller_in(directory: Directory) -> Callable[..., Awaitable[Caller]]:
 
 
 def _service_reads(p: Principal, area: str) -> None:
-    """A service token (the provisioner, c-180) reaches these routes only holding `<area>:view`, so opening them to it
+    """A service token (the provisioner) reaches these routes only holding `<area>:view`, so opening them to it
     does not open them to every service; what it may change, `can` decides from its scopes."""
     if p.kind == "service" and f"{area}:view" not in p.scopes:
         raise Forbidden(f"This service may not read {area}.", code="scope_required")
@@ -51,9 +51,9 @@ class Person:
 
     tenant_id: str
     name: str
-    # Who it is, for the provisioner-only fields and a system record's protection (c-180); None only in code.
+    # Who it is, for the provisioner-only fields and a system record's protection; None only in code.
     principal: Principal | None = None
-    # The team it acts in, whose secrets it reads and writes (c-509); None for a token naming no team.
+    # The team it acts in, whose secrets it reads and writes; None for a token naming no team.
     team_id: str | None = None
 
 
@@ -74,8 +74,8 @@ def security_admin(security_team: str) -> Callable[..., Awaitable[Person]]:
     principal carries no roles and passes, as it does for module security reviews."""
 
     async def admin(p: CurrentCaller) -> Person:
-        # secrets_egress.manage, held in the Security team: Security admin in the grid (c-149). A team's own secrets
-        # are written in that team instead (secrets/routes.py `_may_write`, c-186).
+        # secrets_egress.manage, held in the Security team: Security admin in the grid. A team's own secrets
+        # are written in that team instead (secrets/routes.py `_may_write`).
         Access(security_team=security_team).can(
             p, "secrets_egress", "manage", what="the egress list", code="not_security_admin"
         )

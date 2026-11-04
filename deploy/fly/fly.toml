@@ -36,7 +36,7 @@ kill_timeout = 30
   OPS_MODELS_URL = "http://127.0.0.1:8730"
   OPS_OPA_URL = "http://127.0.0.1:8181"
   OPS_CORS_ORIGINS = '["https://<your-app>.fly.dev"]'
-  # Caddy fronts every service on this machine; a form's client address is the X-Forwarded-For entry it added (c-535).
+  # Caddy fronts every service on this machine; a form's client address is the X-Forwarded-For entry it added.
   OPS_FORMS_TRUSTED_PROXIES = '["127.0.0.1/32"]'
   OPS_CONSOLE_URL = "https://<your-app>.fly.dev"
   OPS_PLATFORM_PUBLIC_URL = "https://<your-app>.fly.dev/api/platform"

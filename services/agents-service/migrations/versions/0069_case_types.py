@@ -1,4 +1,4 @@
-"""case_types, case_type_versions: the fields a case shows, in order (c-291); cases pin the type they were opened with
+"""case_types, case_type_versions: the fields a case shows, in order; cases pin the type they were opened with
 
 A case type is a versioned record like a task type (store/typed_records.py): its fields, each with a key, label and
 type. A case pins the type's published version at open (`type_id`, `type_version`), so a later edit of the type never

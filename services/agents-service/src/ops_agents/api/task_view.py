@@ -1,4 +1,4 @@
-"""A review step's task screen from its task type (c-288): the version the step pinned when it paused, bound to the
+"""A review step's task screen from its task type: the version the step pinned when it paused, bound to the
 params it resolved then. Nothing here knows a type by id, so a team's copy draws as its seed does."""
 
 from __future__ import annotations
@@ -108,14 +108,14 @@ async def typed_task(
         # A type that shows cases gets the ones its run and child runs opened, not a value the step had to pass.
         params = {**params, "cases": await reads.cases(run)}
     bound = tt.bind(record, params, worded)
-    # A write's preview in the operation's own words (c-508): its fields and sentence from the one describer, which the
+    # A write's preview in the operation's own words: its fields and sentence from the one describer, which the
     # Human Task page draws instead of naming the call's input keys itself.
     for region in cast(list[dict[str, Any]], bound["regions"]):
         call = cast(dict[str, Any], region.get("data") or {}).get("call")
         if region["region"] == "write_preview" and isinstance(call, dict) and cast(dict[str, Any], call).get("tool"):
             told = await describe_call(rt, cast(dict[str, Any], call), currency=None, money_key=None)
             region["data"] = region["data"] | {"fields": told["fields"], "sentence": told["sentence"]}
-    # Task assist (c-302), when the team had it on as the step paused: after the question, before the evidence.
+    # Task assist, when the team had it on as the step paused: after the question, before the evidence.
     if helped := task_assist.region(
         task_assist.settled(await reads.assist(step), datetime.now(UTC)),
         bound["actions"],
@@ -129,8 +129,8 @@ async def typed_task(
 
 
 async def step_warnings(rt: Runtime, definition: dict[str, Any]) -> list[dict[str, Any]]:
-    """What a saved workflow's typed review steps leave out (c-288): a task type that is not published, or a required
-    param the step does not set. Warnings only: the owner's rule is that a missing setting never refuses a save, and
+    """What a saved workflow's typed review steps leave out: a task type that is not published, or a required
+    param the step does not set. Warnings only: a missing setting never refuses a save, and
     the task shows the param's fallback line. A param set to a path is taken as set; its value is checked at the
     pause. Types are read in the acting team; a caller acting for every team (the dev header caller) holds no one
     team's types, so its saves are not checked."""

@@ -66,7 +66,7 @@ class Roles:
         if teams is not None:
             per_team = {t: v for t, v in per_team.items() if t in teams}
         order = {(a, x): (AREAS.index(a), ACTIONS.index(x)) for a in AREAS for x in ACTIONS}
-        # What the person may do in every team at once: their `*` assignments only (a workspace admin, c-198).
+        # What the person may do in every team at once: their `*` assignments only (a workspace admin).
         every = [a for a in assignments if a.team_id == ANY_TEAM]
         workspace = effective(every, grids, [ANY_TEAM], now_iso()).get(ANY_TEAM, {}) if every else {}
 

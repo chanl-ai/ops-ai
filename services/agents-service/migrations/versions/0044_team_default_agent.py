@@ -1,9 +1,9 @@
-"""team_default_agents: the agent a team's new chats start on (c-174)
+"""team_default_agents: the agent a team's new chats start on
 
 Revision ID: 0044_team_default_agent
 Revises: 0043_agent_template
 
-One row per tenant and team. Provisioning (c-175) writes the first row when it makes a team's first agent; a team admin
+One row per tenant and team. Provisioning writes the first row when it makes a team's first agent; a team admin
 changes it after that. No row means the team has no default, and a chat started without an agent is refused. Tenant RLS
 as on engine_settings (0041).
 """

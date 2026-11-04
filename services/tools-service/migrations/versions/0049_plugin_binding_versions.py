@@ -1,4 +1,4 @@
-"""plugin_binding_versions: each team's binding records the plugin version it runs (c-609)
+"""plugin_binding_versions: each team's binding records the plugin version it runs
 
 A plugin's tools were written once per account and never followed an upgrade, and nothing said which version a team
 ran. The binding now keeps the version the team took, the digest of its tool declarations and the declarations, which

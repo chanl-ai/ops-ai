@@ -1,4 +1,4 @@
-"""Reviews older than typed steps draw through a task type (tick 31's design check), on PostgreSQL with the real worker,
+"""Reviews older than typed steps draw through a task type, on PostgreSQL with the real worker,
 by failure mode: an old review of a workflow whose live step now names a type keeps the old layout, or loses the run's
 values; a plain approve or reject review has no task; a review with its own options is forced into approve and reject;
 a mapped task cannot be decided."""

@@ -1,4 +1,4 @@
-"""Migration kb_0010 (c-507) makes a knowledge base's and a source's team required, by failure mode: a row with no team
+"""Migration kb_0010 makes a knowledge base's and a source's team required, by failure mode: a row with no team
 survives the migration and every team reads it; the refusal names nothing, so the operator cannot place it."""
 
 from __future__ import annotations

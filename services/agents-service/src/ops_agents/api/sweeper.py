@@ -123,7 +123,7 @@ async def sweep_forever(rt: Runtime, interval: float, *, beats: HeartbeatStore, 
 
 
 async def reconcile_runs(tx: EngineTransactions) -> list[str]:
-    """One pass of the run reconciler (c-561, ops_engine/store/reconciler.py): finds every tenant's workflow runs with
+    """One pass of the run reconciler (ops_engine/store/reconciler.py): finds every tenant's workflow runs with
     nothing behind them and gives each its state inside its own tenant. Returns the run ids it changed; one run that
     fails to settle is logged and the rest go on."""
     changed: list[str] = []

@@ -1,4 +1,4 @@
-"""engine_runs: indexes for the runs list and for a parent's unfinished runs (c-312, tick 30)
+"""engine_runs: indexes for the runs list and for a parent's unfinished runs
 
 The runs list reads one team's runs newest first, optionally by status, and counts them per status
 (RunStore.page). Without an index each page sorted every run the tenant has. The parent index gains `status`, so

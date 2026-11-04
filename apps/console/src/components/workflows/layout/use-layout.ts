@@ -7,7 +7,7 @@ import type { EngineDefinition, EngineNodeType } from '@/lib/types/engine';
 import { neverPlaced, overlapping, placeDefinition, unplacedSteps } from './definition-layout';
 
 /**
- * The definition with a position for every step, for a canvas to open on (c-486). A definition whose steps are all
+ * The definition with a position for every step, for a canvas to open on. A definition whose steps are all
  * placed, none overlapping, comes back at once as the same object, loading no layout code. One with unplaced steps comes back as null
  * until they are placed, so the canvas shows its skeleton and fits only once every step has its place; a layout that
  * fails falls back to one step per column (definition-layout.ts) rather than leaving the canvas blank.

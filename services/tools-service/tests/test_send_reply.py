@@ -1,4 +1,4 @@
-"""send_reply sends through the mail provider settings pick (c-187), by failure mode: a call that reports sent while
+"""send_reply sends through the mail provider settings pick, by failure mode: a call that reports sent while
 no provider is configured, and a reply that never reaches the provider."""
 
 from __future__ import annotations

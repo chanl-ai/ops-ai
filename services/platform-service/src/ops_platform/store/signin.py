@@ -2,7 +2,7 @@
 reset tokens (migration 0010).
 
 A domain listed on a provider is this workspace's claim, with a token it publishes in DNS; it routes sign-in and makes
-people only once verified (0017, c-195). Another workspace's pending claim blocks nobody, and the unique index on
+people only once verified (0017). Another workspace's pending claim blocks nobody, and the unique index on
 verified domains decides between two workspaces verifying the same one.
 
 The lookups that come before the tenant is known (an email domain, a flow by its state or handoff hash, a reset by
@@ -279,7 +279,7 @@ class SignInStore:
         async with self.db.tenant_tx(tenant_id) as c:
             await _set_password(c, tenant_id, user_id, encoded, at)
 
-    # ── Wrong passwords (c-196) ──
+    # ── Wrong passwords ──
 
     async def locked_until(self, tenant_id: str, user_id: str, *, now: str) -> str | None:
         """When the person's lock ends, while it lasts; None when they are not locked."""
@@ -437,7 +437,7 @@ class SignInStore:
                 ).scalar_one()
             )
             await _set_password(c, tenant_id, user_id, encoded, at)
-            # A new password ends a lock from wrong ones (c-196).
+            # A new password ends a lock from wrong ones.
             await c.execute(signin_lockouts.delete().where(signin_lockouts.c.user_id == user_id))
             await c.execute(
                 sessions.update()
@@ -584,7 +584,7 @@ class SignInStore:
     ) -> SsoPerson | None:
         """The person this provider subject is: the one it is linked to; else the workspace's person with that email,
         now linked; else, when the provider gives new people a role, a new person in its JIT team (or the workspace's
-        default team, c-202) with that role. A person is linked or made only for an email on one of the provider's
+        default team) with that role. A person is linked or made only for an email on one of the provider's
         domains. Then each of the provider's group mappings the person's groups match adds the mapped membership they
         lack. None: nobody may sign in as this answer."""
         try:
@@ -676,7 +676,7 @@ class SignInStore:
         request_id: str,
     ) -> None:
         """Adds the membership of each group rule the person's groups match, when they have none in that team yet.
-        A membership already there keeps its role; losing a group removes nothing (provisioning's job, c-155)."""
+        A membership already there keeps its role; losing a group removes nothing (provisioning's job)."""
         settings: dict[str, Any] = p.config.get("groups") or {}
         rules: list[dict[str, Any]] = settings.get("map") or []
         held = set(groups)

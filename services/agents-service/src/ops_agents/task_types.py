@@ -1,12 +1,12 @@
-"""Human Task types (c-288): what a task screen asks and offers, as a versioned record a review step or an API caller
+"""Human Task types: what a task screen asks and offers, as a versioned record a review step or an API caller
 picks by id and version and fills with params. The screen reads only the type and the params, so no task has code of
 its own.
 
 A type version holds `params` (a JSON Schema object; each property may carry a `fallback` line used while it is
 missing), `regions` (an ordered list over the fixed REGIONS, each binding its slots to templates over the params) and
 `actions` (the decisions offered, each leading to an out port of the step, with the consequence a person reads before
-choosing it). A missing required param never refuses a task: it is a warning and the region shows the fallback line
-(owner, 2026-10-18). A param of the wrong kind from an API caller is refused, since no fallback can show it.
+choosing it). A missing required param never refuses a task: it is a warning and the region shows the fallback line. A
+param of the wrong kind from an API caller is refused, since no fallback can show it.
 
 A template is a string over the params: `{path}` is replaced by the value at that dotted path, and a template that is
 exactly one `{path}` binds the value itself (a list of facts stays a list). Binding happens here, on the server, so

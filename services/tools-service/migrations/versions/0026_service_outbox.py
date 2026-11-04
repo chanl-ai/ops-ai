@@ -1,9 +1,9 @@
-"""tools-service's service event outbox (c-257)
+"""tools-service's service event outbox
 
 Revision ID: tools_0026_service_outbox
 Revises: tools_0025_access_reviews
 
-A tool access request and a module review are reported as service events (c-258) written in the same transaction
+A tool access request and a module review are reported as service events written in the same transaction
 as the change; the relay delivers them to agents-service. The relay reads across tenants, so the table is not under
 row-level security.
 """

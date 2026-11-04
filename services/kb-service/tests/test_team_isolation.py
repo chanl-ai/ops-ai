@@ -1,4 +1,4 @@
-"""A knowledge base is its team's (c-407): a person outside the owning team does not see it in the list, and reading it
+"""A knowledge base is its team's: a person outside the owning team does not see it in the list, and reading it
 or its documents by id answers 404. By failure mode, with tokens minted as platform-service mints them: the list
 shows another team's base; a read by id answers 200; a sub-route answers 200."""
 
@@ -63,7 +63,7 @@ async def test_a_name_is_unique_in_a_team_and_another_teams_id_is_refused_unname
     kb: httpx.AsyncClient,  # noqa: F811
     tenant: str,
 ) -> None:
-    """A base's name is unique in its team, and a team never sees another's (c-507): another team may use the name. An
+    """A base's name is unique in its team, and a team never sees another's: another team may use the name. An
     id is unique in the tenant, so another team's is refused with 409 and no owner named, never a 500."""
     base = await _base(kb)
     again = {"name": "Dispute handbook", "owner": "Lending"}

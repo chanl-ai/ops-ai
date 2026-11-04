@@ -1,4 +1,4 @@
-"""engine_waits (c-525), on the migrated test database under the tenant role, by failure mode: a parked step that an
+"""engine_waits, on the migrated test database under the tenant role, by failure mode: a parked step that an
 event cannot find (the row written apart from the run's waiting state); another team's event finding a step; a wait
 row that outlives its resume, so a later event for the same key wakes nothing or the wrong thing; a cancelled run
 parked again."""

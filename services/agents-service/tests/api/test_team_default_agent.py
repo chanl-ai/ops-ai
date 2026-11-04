@@ -1,4 +1,4 @@
-"""A team's default agent, its specialists and the @mention handover (c-174), by failure mode: someone other than a
+"""A team's default agent, its specialists and the @mention handover, by failure mode: someone other than a
 team admin changes the default; a chat starts on no default, a default that is not live or another team's agent; the
 default agent asks a specialist the person may not chat with, or reaches it by naming the tool; a specialist runs
 without the person, or asks another agent; a handover to an agent the person may not chat with or one not live; Back
@@ -108,7 +108,7 @@ async def test_only_a_team_admin_sets_the_default(stack: Stack) -> None:
 
 async def test_a_chat_without_an_agent_starts_only_on_a_live_default_of_the_team(stack: Stack) -> None:
     c, rt = stack
-    # A team that has set no default gets its own Ops Assistant on the first chat (c-469), rather than a refusal.
+    # A team that has set no default gets its own Ops Assistant on the first chat, rather than a refusal.
     assert (await start(c, VIEWER))["agentId"] == "ag_ops_team_ops"
     assert (await c.get(URL, headers=VIEWER)).json()["data"]["agentId"] == "ag_ops_team_ops"
     gone = await c.put(URL, json={"agentId": "ag_missing"}, headers=ADMIN)

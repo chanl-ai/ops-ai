@@ -1,4 +1,4 @@
-"""A connection's details and its health (c-580), by failure mode: a failing sandbox account's test turns a working
+"""A connection's details and its health, by failure mode: a failing sandbox account's test turns a working
 live account to failed, or overwrites the health the live account showed; a connection's category,
 description or docs link is lost or takes an address that is not https; the redirect address to register is unknown
 until a connection exists."""

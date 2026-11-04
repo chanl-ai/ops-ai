@@ -26,15 +26,42 @@ export const useFileExtractions = (fileId: string) =>
  * The file's layout for its Text tab: the cached one, or read now when there is none (a scanned page through OCR). The
  * read can take a minute on a long scan, so it is asked for once per visit and never retried on its own.
  */
-export const useFileLayout = (fileId: string) =>
-  useTeamQuery({
+export const useFileLayout = (fileId: string) => {
+  const qc = useQueryClient();
+  return useTeamQuery({
     queryKey: ['files', 'layout', fileId],
     queryFn: async () => {
       try {
         return await api.files.layouts.get(fileId, { ocr: true });
       } catch (e) {
         if ((e as { status?: number }).status !== 404) throw e;
-        return api.files.layouts.read(fileId, { ocr: true });
+        const read = await api.files.layouts.read(fileId, { ocr: true });
+        void qc.invalidateQueries({ queryKey: textReadKey(fileId) });
+        return read;
+      }
+    },
+    enabled: !!fileId,
+    staleTime: Infinity,
+    retry: false,
+  });
+};
+
+const textReadKey = (fileId: string) => ['files', 'text-read', fileId] as const;
+
+/**
+ * Whether the file's text was read (Full text records no read, only the layout it shows), from the first page of the
+ * saved layout so the header never starts a read itself.
+ */
+export const useFileTextRead = (fileId: string) =>
+  useTeamQuery({
+    queryKey: textReadKey(fileId),
+    queryFn: async () => {
+      try {
+        await api.files.layouts.get(fileId, { ocr: true, page: 1 });
+        return true;
+      } catch (e) {
+        if ((e as { status?: number }).status === 404) return false;
+        throw e;
       }
     },
     enabled: !!fileId,
@@ -50,7 +77,7 @@ export interface ReadResult {
   outcome: string | null;
 }
 
-// A run parked on its own read (a long file read in the background, c-525) is not waiting for a person: it is said as
+// A run parked on its own read (a long file read in the background) is not waiting for a person: it is said as
 // `reading`, and the file's page shows the read's fields as soon as the read is done.
 const onTheRead = (run: { status: string; waiting?: { payload?: Record<string, unknown> } | null }) =>
   run.status === 'waiting' && run.waiting?.payload?.kind === 'external';

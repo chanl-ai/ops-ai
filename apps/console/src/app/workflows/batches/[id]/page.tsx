@@ -63,7 +63,7 @@ function batchState(b: BatchView): { label: string; tone: string } {
 }
 
 /**
- * A batch's page (c-535): one run of a workflow per row of a file. The headline counts the rows as their runs end and
+ * A batch's page: one run of a workflow per row of a file. The headline counts the rows as their runs end and
  * the page polls while any row is waiting or running; the table lists every row, failed first, each opening its run.
  * Retry failed rows starts a new attempt for the failed rows only; Download as CSV gives the same table.
  */

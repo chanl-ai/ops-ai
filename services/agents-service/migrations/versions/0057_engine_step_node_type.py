@@ -3,7 +3,7 @@
 Revision ID: 0057_engine_step_node_type
 Revises: 0056_trigger_events
 
-Activity lists a workflow's tool calls (c-201) from the steps whose node type calls the tool gateway. Steps journaled
+Activity lists a workflow's tool calls from the steps whose node type calls the tool gateway. Steps journaled
 before this have none and are not listed.
 """
 

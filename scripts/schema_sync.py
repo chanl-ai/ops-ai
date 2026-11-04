@@ -1,7 +1,7 @@
 # pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 # asyncpg ships without type information.
 """Can `make up` migrate the stack's database in place? It always migrates and never drops data on its own (owner:
-"Always migrate", c-099): a chain behind this checkout's head is migrated forward, and a chain the database holds at
+"Always migrate"): a chain behind this checkout's head is migrated forward, and a chain the database holds at
 a revision this checkout does not have (another session's newer code, or an edited migration) stops `make up` with
 the chain named and the fix, because migrating it would be guessing.
 
@@ -35,7 +35,7 @@ CHAINS = (
     ("kb", "services/kb-service", "alembic_version_kb"),
     ("platform", "services/platform-service", "alembic_version_platform"),
     ("files", "services/files-service", "alembic_version_files"),
-    # After files: files_0006 drops the tables documents_0001 makes again on its side (c-256).
+    # After files: files_0006 drops the tables documents_0001 makes again on its side.
     ("documents", "services/documents-service", "alembic_version_documents"),
 )
 # The tests' and use cases' databases are made and dropped by their own runners.

@@ -1,4 +1,4 @@
-"""The Overview's lists and counts (c-552), through the real routes and worker, by failure mode: a Human Task assigned
+"""The Overview's lists and counts, through the real routes and worker, by failure mode: a Human Task assigned
 to someone else listed as waiting for me; the lists out of order (tasks oldest first, runs newest first, cases soonest
 deadline first); a resolved, paused or later case listed as due; a count that disagrees with Human Tasks. Team
 isolation is tests/api/test_overview_team.py."""

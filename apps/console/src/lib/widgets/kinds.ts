@@ -1,4 +1,4 @@
-// Shaped tool results as widget kinds (c-176): agents-service shapes a tool's output as rows, a series, a record, a
+// Shaped tool results as widget kinds: agents-service shapes a tool's output as rows, a series, a record, a
 // metric, a form, a decision or steps, the registry picks how to draw it, and this turns that choice into the kind the
 // one renderer set draws. Relative imports: the tests run under `node --test`, which does not resolve the `@/` alias.
 import type { ChartNode, Decision, FormSpec, KindNode, MetricNode, Steps, TableNode, WidgetHint } from '../types/widgets';

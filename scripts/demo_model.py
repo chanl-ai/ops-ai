@@ -8,7 +8,7 @@ with a dev service token, the way an operator would, and changes nothing in any 
   MODEL=fake   rebinds `openai-local` to the fake OpenAI (OPS_MODELS_FAKE_OPENAI_URL, else :8746) and adds a version of
                ALIAS on the model id the alias is named after, which the fake's rules answer
 
-When OPENAI_API_TYPE or OPENAI_API_BASE (OPENAI_BASE_URL) set `openai-local` (c-605), MODEL=<id> names the model, or the
+When OPENAI_API_TYPE or OPENAI_API_BASE (OPENAI_BASE_URL) set `openai-local`, MODEL=<id> names the model, or the
 deployment on Azure, and only adds the alias version; the connection is left as the settings set it, and MODEL=fake is
 refused.
 

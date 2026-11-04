@@ -1,4 +1,4 @@
-"""A run told from its steps' output shapes (c-477): the email it began with, what each read step read, and each run its
+"""A run told from its steps' output shapes: the email it began with, what each read step read, and each run its
 steps started, with what that run was about, where it is now in words, its case and its Human Task.
 
 Nothing here knows a workflow, a node id, a document type or a field name. Each part is recognised by the node type its
@@ -296,7 +296,7 @@ def state_of(child: dict[str, Any], ending: str | None, last: str | None, open_t
     if status == "cancelled":
         return "Cancelled"
     if status == "stuck":
-        # Nothing is behind it (c-561): the run page says why and offers Retry and Cancel.
+        # Nothing is behind it: the run page says why and offers Retry and Cancel.
         return "Stuck"
     if open_task:
         return "Waiting for a person"

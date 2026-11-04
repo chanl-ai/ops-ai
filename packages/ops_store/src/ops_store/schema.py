@@ -22,8 +22,8 @@ from sqlalchemy.dialects import mssql as mssql_dialect
 
 TENANT_KEY = "tenant_scoped"
 TENANT_SCOPED: dict[str, Any] = {TENANT_KEY: True}
-# A team's work or asset: every read names the caller's team through `ops_store.team_scope.team_visible` (c-407), and
-# `packages/ops_store/tests/test_team_reads.py` fails on a read that does not. Every row has a team (c-507): the
+# A team's work or asset: every read names the caller's team through `ops_store.team_scope.team_visible`, and
+# `packages/ops_store/tests/test_team_reads.py` fails on a read that does not. Every row has a team: the
 # database policy reads only the acting team's rows, and nothing is shared across teams.
 TEAM_KEY = "team_owned"
 # A table whose rows belong to a team-owned parent (an agent's versions): read through the parent's team.
@@ -138,7 +138,7 @@ def differences(conn: sa.Connection, metadatas: Sequence[sa.MetaData], exclude: 
     return out
 
 
-# Isolation DDL, generated from the markings (c-410; design: c-408 spec section 2) ---------------------------------
+# Isolation DDL, generated from the markings ---------------------------------
 
 SYSTEM_KEY = "system_reason"
 IsolationKind = Literal["team", "tenant", "system"]
@@ -185,7 +185,7 @@ def team_column(table: sa.Table) -> sa.Column[Any]:
 def _pg_predicates(table: sa.Table, kind: IsolationKind, *, reads_no_team: bool = False) -> tuple[str, str]:
     """The read (USING) and write (WITH CHECK) conditions of the table's one policy. Each setting is read in a scalar
     subquery, which PostgreSQL evaluates once per statement (an InitPlan) instead of once per row. `reads_no_team` is
-    the policy before c-507, which also read rows with no team; only a downgrade past c-507 asks for it."""
+    the earlier policy, which also read rows with no team; only a downgrade past that migration asks for it."""
 
     def setting(name: str) -> str:
         return f"(SELECT current_setting('{name}', true))"
@@ -251,7 +251,7 @@ def member_ddl(role: str, login: str) -> str:
     """PostgreSQL: makes a service's runtime login a member of a role its transactions switch to (SET LOCAL ROLE).
     Changes nothing when the login does not exist (services that connect as the superuser) or is a member already, so
     it runs as the migrator wherever roles.sql granted the role. A migration that adds such a role grants it with this:
-    roles.sql runs once per server, so a login made before the role existed is otherwise never a member (c-444)."""
+    roles.sql runs once per server, so a login made before the role existed is otherwise never a member."""
     return (
         f"DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{login}') "
         f"AND NOT pg_has_role('{login}', '{role}', 'MEMBER') THEN GRANT {role} TO {login}; END IF; END $$"
@@ -313,7 +313,7 @@ def mssql_team_predicates_reissue_ddl(
     system_user: str | None,
     reads_no_team: bool = False,
 ) -> list[str]:
-    """SQL Server, for a migration that changes the team predicate's text (c-507): the functions are schema-bound to
+    """SQL Server, for a migration that changes the team predicate's text: the functions are schema-bound to
     every policy that uses them, so each of the chain's team tables loses its policy, the team functions are dropped
     and created again, and each policy comes back. `team_tables` must be every team table of the chain at that
     revision, or the drop is refused by a policy still bound to the function."""

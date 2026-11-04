@@ -1,4 +1,4 @@
-"""Test connection (c-558), by failure mode: the test signs in with an account other than the one asked for, a builder
+"""Test connection, by failure mode: the test signs in with an account other than the one asked for, a builder
 tests the team's account, a failed test is stored as a pass or one person's missing sign-in marks the whole connection,
 and a connection with no test address is tested against something it never named."""
 
@@ -171,7 +171,7 @@ async def test_a_connection_with_no_test_address_is_not_tested(
 async def test_an_app_not_signed_in_yet_says_to_sign_in_not_to_type_a_test_address(
     client: httpx.AsyncClient, engine: AsyncEngine, tenant: str, system: System
 ) -> None:
-    # A plugin's test address comes with its sign-in, which names the instance (c-616): nobody types one.
+    # A plugin's test address comes with its sign-in, which names the instance: nobody types one.
     conn = await connection(client, engine, tenant, {k: v for k, v in SETTINGS.items() if k != "testPath"})
     async with engine.begin() as c:
         await c.execute(

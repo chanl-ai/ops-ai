@@ -1,4 +1,4 @@
-"""agents-service's binding of `ops_store.isolation` (c-409): its database roles and the reasons its paths act wider
+"""agents-service's binding of `ops_store.isolation`: its database roles and the reasons its paths act wider
 than one team.
 
 The context is never a repository argument and never set here: `ops_identity` enters it for each request from the
@@ -30,8 +30,8 @@ LOCAL_TENANT = "local"
 TENANT_ROLE = "ops_runtime_tenant"
 SYSTEM_ROLE = "ops_runtime_system"
 
-# Why a path acts for every team of one tenant (`isolation.tenant_wide`). c-412's slices narrow each loop to the claimed
-# row's team (the sweeper and the timer poller act as the thread's team since c-429); until then each acts for the
+# Why a path acts for every team of one tenant (`isolation.tenant_wide`). Each loop is to narrow to the claimed
+# row's team (the sweeper and the timer poller already act as the thread's team); until then each acts for the
 # tenant under its own name.
 SEED = "seed"  # the dev seed writes records of every team into the local tenant
 ENGINE_PASS = "engine_pass"  # the workflow worker runs one claimed run's pass

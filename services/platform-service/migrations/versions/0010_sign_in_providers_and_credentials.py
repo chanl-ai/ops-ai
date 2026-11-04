@@ -1,6 +1,6 @@
 """sign-in providers per workspace, SSO domains, provider identities, sign-in flows, password credentials and resets
 
-A workspace with no provider rows keeps signing in by password; once it has rows they are its methods (c-188). Each
+A workspace with no provider rows keeps signing in by password; once it has rows they are its methods. Each
 new table carries tenant_id under the same row-level security as 0001. Four lookups run before the tenant is known (an
 email domain, a flow by its state or handoff hash, a reset by its token hash) and are SECURITY DEFINER functions owned
 by the lookup role, as in 0004 and 0005, returning only the ids the caller needs. `sessions.provider_id` names the

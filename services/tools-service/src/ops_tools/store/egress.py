@@ -34,7 +34,7 @@ def _listed(name: str, key: str, length: int) -> sa.Table:
         sa.Column("added_by", sa.String(200), nullable=False),
         sa.Column("added_at", _TS, nullable=False),
         # The template slot a provisioned record fills, found again by it on the next run, and what a person may change:
-        # `system` nothing, `managed` anything (c-180). Null on a record no template made.
+        # `system` nothing, `managed` anything. Null on a record no template made.
         sa.Column("template_id", sa.String(120), index=True),
         sa.Column("protection", sa.String(16)),
     )
@@ -126,7 +126,7 @@ class EgressStore:
         return held if template_id is None else sa.and_(held, egress_hosts.c.template_id == template_id)
 
     async def protection(self, tenant_id: str, kind: str, value: str) -> str | None:
-        """A listed entry's protection (c-180); None when it is unprotected or not listed."""
+        """A listed entry's protection; None when it is unprotected or not listed."""
         table, col = TABLES[kind]
         q = sa.select(table.c.protection).where(table.c.tenant_id == tenant_id, col == value)
         async with self.engine.connect() as c:

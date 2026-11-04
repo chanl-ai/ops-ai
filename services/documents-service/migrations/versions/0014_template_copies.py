@@ -1,4 +1,4 @@
-"""Template copies (c-590)
+"""Template copies
 
 Revision ID: documents_0014
 Revises: documents_0013

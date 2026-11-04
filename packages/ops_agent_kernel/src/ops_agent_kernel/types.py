@@ -22,7 +22,7 @@ class PromptFragment:
 
 @dataclass(frozen=True)
 class Guardrail:
-    """A pinned guardrail version's rule (c-063): the topics the agent must not answer, and what it says instead."""
+    """A pinned guardrail version's rule: the topics the agent must not answer, and what it says instead."""
 
     guardrail_id: str
     version: int
@@ -58,7 +58,7 @@ class Skill:
 
 @dataclass(frozen=True)
 class WidgetTemplate:
-    """A pinned widget template version (c-082): a tree of catalogue primitives with `$bind` pointers into data that
+    """A pinned widget template version: a tree of catalogue primitives with `$bind` pointers into data that
     must match `schema`. `use_when` is the line the present tool's description gives the model."""
 
     widget_id: str
@@ -69,7 +69,7 @@ class WidgetTemplate:
     schema: dict[str, Any]
 
 
-# Above this many granted tools an agent finds its tools by searching (c-610): no schema is sent until a search
+# Above this many granted tools an agent finds its tools by searching: no schema is sent until a search
 # reveals it. OPS_TOOL_SEARCH_ABOVE changes it per deployment, with the install flag tool_search on.
 TOOL_SEARCH_ABOVE = 20
 
@@ -85,10 +85,10 @@ class AgentSettings:
     # Model requests in one turn (the loop's steps). Always a number: an uncapped loop would spend real calls until
     # the deadline, so an agent with no cap set runs on the platform default.
     max_steps: int = 8
-    # More granted tools than this and they are searched for, not all offered (c-610); 0 means always search. None is
+    # More granted tools than this and they are searched for, not all offered; 0 means always search. None is
     # off, every tool offered: the install flag tool_search is off by default.
     tool_search_above: int | None = None
-    # A caller's temperature within the agent's limits (c-071); None leaves the model's default.
+    # A caller's temperature within the agent's limits; None leaves the model's default.
     temperature: float | None = None
     # Checked before and after the answer by a classification call; none means today's path, no extra call.
     guardrails: list[Guardrail] = field(default_factory=list[Guardrail])
@@ -96,12 +96,12 @@ class AgentSettings:
     # so a turn never looks protected by them.
     guardrails_off: list[Guardrail] = field(default_factory=list[Guardrail])
     skills: list[Skill] = field(default_factory=list[Skill])
-    # Widgets the agent may fill (c-082), whether it may compose layouts from the catalogue, and how many widgets one
+    # Widgets the agent may fill, whether it may compose layouts from the catalogue, and how many widgets one
     # turn may show (None: no cap; the agent's own setting is the only limit).
     widgets: list[WidgetTemplate] = field(default_factory=list[WidgetTemplate])
     compose: bool = False
     widgets_per_turn: int | None = None
-    # Mask personal data in what the turn shows and returns (the agent's redactPii, c-293); the model sees it all.
+    # Mask personal data in what the turn shows and returns (the agent's redactPii); the model sees it all.
     redact_pii: bool = False
 
 

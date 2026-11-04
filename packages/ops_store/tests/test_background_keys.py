@@ -1,4 +1,4 @@
-"""Every background process a service runs is a listed one (c-535): `background.run` with a key the registry does not
+"""Every background process a service runs is a listed one: `background.run` with a key the registry does not
 list raises when its first heartbeat is written, inside a task nobody awaits until shutdown, so the process never
 runs and nothing says why. Found by the batch starter, which ran for no one until it was listed."""
 

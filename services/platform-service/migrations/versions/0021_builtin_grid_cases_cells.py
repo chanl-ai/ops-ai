@@ -1,6 +1,6 @@
 """built-in grid: every member role opens and works its team's cases
 
-Cases are long-lived customer issues (c-128). Builders, reviewers and viewers open a case and change its status,
+Cases are long-lived customer issues. Builders, reviewers and viewers open a case and change its status,
 assignee, priority and notes in their team; closing one stays on cases.manage. Admins hold these cells since 0016.
 Adds each missing cell and raises each tenant's permission version; the downgrade removes exactly what it added.
 

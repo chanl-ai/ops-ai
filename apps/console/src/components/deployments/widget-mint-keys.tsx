@@ -22,8 +22,8 @@ import { relativeTime } from '@/lib/format';
 import type { WidgetDeployment, WidgetMintKey } from '@/lib/types/widget-deployments';
 
 /**
- * The keys the bank's server mints one deployment's sessions with (agents-service `/v1/widget-deployments/{id}/keys`,
- * c-131). A key mints for this deployment only; its secret is shown once, because only its hash is kept.
+ * The keys the bank's server mints one deployment's sessions with (agents-service `/v1/widget-deployments/{id}/keys`).
+ * A key mints for this deployment only; its secret is shown once, because only its hash is kept.
  */
 export function WidgetMintKeysDialog({ deployment, open, onOpenChange }: { deployment: WidgetDeployment; open: boolean; onOpenChange: (open: boolean) => void }) {
   const keys = useWidgetMintKeys(open ? deployment.id : undefined);

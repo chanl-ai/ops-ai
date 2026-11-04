@@ -1,4 +1,4 @@
-// The Apps area in the screen's words (c-616 K1), by failure mode against a fake fetch: Connected lists an app whose
+// The Apps area in the screen's words, by failure mode against a fake fetch: Connected lists an app whose
 // account never signed in; a tool run goes to another module of the app, or Mock reaches the system; the team's own
 // client is saved without the revision the route needs; a caller gets the envelope instead of Usage's rows; turning on
 // a custom app sends a request to a plugin route; and a document type's copy is made in agents-service.

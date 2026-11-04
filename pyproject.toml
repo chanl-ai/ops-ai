@@ -50,7 +50,7 @@ members = ["packages/contracts", "packages/ops_plugin_sdk", "packages/ops_servic
 [tool.uv.sources]
 ops-contracts = { workspace = true }
 ops-plugin-sdk = { workspace = true }
-# The SDK and its `ops` command, so `uv run ops` from the repo runs the published command (c-616).
+# The SDK and its `ops` command, so `uv run ops` from the repo runs the published command.
 ops-ai = { workspace = true }
 ops-service-kit = { workspace = true }
 ops-agent-kernel = { workspace = true }

@@ -50,7 +50,7 @@ export interface PersonSignedIn {
 
 /**
  * One of the caller's own sign-ins on a connection of their team (Your connections); with `every`, also a connection
- * they can connect themselves and have not (`connected` false, c-595).
+ * they can connect themselves and have not (`connected` false).
  */
 export interface MyConnection {
   /** The person's own account's last test after they signed in; null before any. */
@@ -73,7 +73,7 @@ export interface MyConnection {
   connected: boolean;
   /** Where the system says how to find the key. */
   docsUrl?: string | null;
-  /** The system refused the person's key or sign-in: when and what it said; a new one clears it (c-595). */
+  /** The system refused the person's key or sign-in: when and what it said; a new one clears it. */
   refused?: boolean;
   refusedAt?: string | null;
   refusedReason?: string | null;
@@ -100,7 +100,7 @@ export interface AuthKind {
   holdsToken: boolean;
   /** Whether each person may sign in with their own account; a kind without it offers the team's account only. */
   perPerson: boolean;
-  /** The fields each person gives for themselves on a connection each person signs in to (c-595). */
+  /** The fields each person gives for themselves on a connection each person signs in to. */
   personFields?: string[];
   /** Each field's name, label and whether it is secret, as the service names them. */
   fields?: { name: string; label: string; secret: boolean; help?: string | null }[];
@@ -124,7 +124,7 @@ export interface ConnectionRequired {
   connectionId: string;
   connection: string;
   reason: ConnectionRequiredReason;
-  /** The connection's kind and what each person gives for it (c-595): a key kind is asked for in a form, not a sign-in. */
+  /** The connection's kind and what each person gives for it: a key kind is asked for in a form, not a sign-in. */
   authKind?: string;
   personFields?: string[];
   connectUrl?: string;

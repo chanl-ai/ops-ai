@@ -1,4 +1,4 @@
-"""`make release-tag` (scripts/release-tag.sh, c-510) on scratch repositories, by failure mode: the day's number does
+"""`make release-tag` (scripts/release-tag.sh) on scratch repositories, by failure mode: the day's number does
 not count up; a rerun on the same merge makes a second tag; the tag is made but never pushed; a merge that loses a race
 for a number fails instead of taking the next one; a dry run makes a tag."""
 

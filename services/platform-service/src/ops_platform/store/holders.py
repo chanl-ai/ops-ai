@@ -1,4 +1,4 @@
-"""Who in a team holds an action (c-186): the roles that grant it and the people those roles reach there, so a page
+"""Who in a team holds an action: the roles that grant it and the people those roles reach there, so a page
 that shows "View only" can say which role would let the reader change it and whom to ask. One query per answer; the
 console never joins a members list with role grids itself."""
 

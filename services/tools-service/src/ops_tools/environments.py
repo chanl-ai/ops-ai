@@ -1,4 +1,4 @@
-"""The environments tools-service knows, as one list (c-580): a module's versions are promoted through all of them, and
+"""The environments tools-service knows, as one list: a module's versions are promoted through all of them, and
 a call is made in a test run or a live (production) one. An account is not set per environment: a test run uses the
 app's sandbox account when it has one (connections.records.account_for). Each route's environment type below is checked
 against this list (tests/test_environments.py), so adding a row and forgetting a route, or the reverse, fails a test

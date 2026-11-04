@@ -34,7 +34,7 @@ export interface ActivityFilters {
 /** Running while the last pass is within two intervals, late after that, stopped after five or while its last pass failed. */
 export type BackgroundState = 'running' | 'late' | 'stopped' | 'not_reported';
 
-/** One background process and its heartbeat, from agents-service `GET /v1/background` (c-516). Times are Unix seconds. */
+/** One background process and its heartbeat, from agents-service `GET /v1/background`. Times are Unix seconds. */
 export interface BackgroundProcess {
   key: string;
   service: string;

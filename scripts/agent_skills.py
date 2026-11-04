@@ -1,4 +1,4 @@
-"""Writes the developer skills for Claude Code and GitHub Copilot from their one copy in docs/guide/skills/ (c-554).
+"""Writes the developer skills for Claude Code and GitHub Copilot from their one copy in docs/guide/skills/.
 
     python3 scripts/agent_skills.py           write .claude/skills/ops-*/SKILL.md (and .claude/skills/usecase/SKILL.md),
                                               .github/prompts/<skill>.prompt.md and .github/copilot-instructions.md

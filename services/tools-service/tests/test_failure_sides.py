@@ -1,4 +1,4 @@
-"""A failed call says which side it broke on (c-038): one test per way the side or the phase could be reported wrong,
+"""A failed call says which side it broke on: one test per way the side or the phase could be reported wrong,
 through the real HttpExecutor against a transport that fails the way the network would."""
 
 from __future__ import annotations
@@ -109,7 +109,7 @@ async def test_the_executions_log_shows_the_side_a_call_broke_on(gateway: Gatewa
     op_id = next(o["id"] for o in detail["operations"] if o["name"] == gateway.tool("limited"))
     edited = await gateway.client.patch(f"{base}/operations/{op_id}", json={"path": "/slow", "timeoutMs": 1_000})
     assert edited.status_code == 200, edited.text
-    requested = await gateway.client.post(f"{base}/versions", json={"note": "c-038"})
+    requested = await gateway.client.post(f"{base}/versions", json={"note": "a failing side"})
     assert requested.status_code == 200
     # A new path is a major change: it runs only once Security approves the version.
     v = next(x for x in requested.json()["data"]["versions"] if x["status"] == "in_review")

@@ -1,9 +1,9 @@
-"""What still runs in a team, for platform-service before it deletes the team or closes its workspace (c-529): a
+"""What still runs in a team, for platform-service before it deletes the team or closes its workspace: a
 service holding `workflows:view`, or a person with workflows.view in their team.
 
 Runs in progress are the team's runs of both engines that have not finished (a run waiting for a person counts);
 live workflows are the team's workflows whose status is live, by name, so the console can say which ones block a
-delete. Only the team the token names is read (c-507): a service naming no team reads nothing, and a team in the
+delete. Only the team the token names is read: a service naming no team reads nothing, and a team in the
 query is never read.
 """
 

@@ -1,4 +1,4 @@
-"""The manifest fields a system needs beyond a path and a query (c-584): headers, a form body, extra sign-in
+"""The manifest fields a system needs beyond a path and a query: headers, a form body, extra sign-in
 parameters, how the client is sent on the token call, a lookup after sign-in and an amount limit. One test that a
 plugin declaring all six validates, then one per way a declaration could send a secret, replace the sign-in, reach a
 host the plugin does not list, or leave a limit silently off."""

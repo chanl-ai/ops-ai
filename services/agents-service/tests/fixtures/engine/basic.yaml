@@ -1,4 +1,4 @@
-# The basic nodes of c-061 slice 1: request trigger, set fields, if, a read on the core bank, human review, end.
+# The basic nodes: request trigger, set fields, if, a read on the core bank, human review, end.
 schemaVersion: 2
 id: refund_check
 name: Refund check

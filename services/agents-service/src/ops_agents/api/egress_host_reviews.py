@@ -1,4 +1,4 @@
-"""An app's first address on a host the tenant has not listed, held for a Security admin (c-616 S13) as an ordinary
+"""An app's first address on a host the tenant has not listed, held for a Security admin as an ordinary
 publish request: opened by tools-service when a person first sets the address, listed in Human Tasks as an
 `egress_host` task with the host, the app and who asked joined in, decided by the Security team, and applied back in
 tools-service, which lists the host on approval.

@@ -1,4 +1,4 @@
-"""Whom a tool call acts for (c-558), by failure mode: a person's session token stands in for an acting-for token, a
+"""Whom a tool call acts for, by failure mode: a person's session token stands in for an acting-for token, a
 token minted for another service or another team is taken, a dev stack's self-signed token passes on a platform stack,
 the call log drops the person, and a code run's own calls forget whom the run acted for.
 

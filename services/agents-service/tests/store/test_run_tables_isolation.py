@@ -1,4 +1,4 @@
-"""The database holds the run tables to the caller's team (c-429, migration 0073; workflow runs and cases, c-507, 0076),
+"""The database holds the run tables to the caller's team (migration 0073; workflow runs and cases, 0076),
 with raw SQL and no WHERE clause as ops_runtime_tenant, by failure mode: a team transaction reading or writing another
 team's thread, run, event, decision, approval, workflow run or case; a tenant-wide one reading another tenant's; and a
 table whose generated policy is dropped, which must fail the suite naming it. On the PostgreSQL test database migrated

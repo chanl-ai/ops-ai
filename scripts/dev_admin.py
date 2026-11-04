@@ -1,4 +1,4 @@
-"""The local stack's first admin (c-542), made by `make up` through platform-service's own bootstrap
+"""The local stack's first admin, made by `make up` through platform-service's own bootstrap
 (`python -m ops_platform.bootstrap`, as an install's migrate job runs it): a workspace and Security admin who signs in
 with a password, so `make sample-team` installs the sample team as a person would.
 

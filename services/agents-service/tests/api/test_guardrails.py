@@ -1,4 +1,4 @@
-"""/v1/guardrails and agent pins (c-063 T001, T002). Failure modes: a guardrail with no topic or no message saved; a
+"""/v1/guardrails and agent pins. Failure modes: a guardrail with no topic or no message saved; a
 draft guardrail pinned; an edit to a guardrail changing what a pinned agent enforces; a deprecated guardrail taking a
 new pin or a pinned one losing its existing pin; a pinned guardrail deleted; the publish decided by its requester; a
 published pin not reaching the definition the runtime serves; a topic's scope lost between the save and the served

@@ -1,4 +1,4 @@
-"""provisioned records carry a template id and a protection level (c-180)
+"""provisioned records carry a template id and a protection level
 
 Revision ID: tools_0021_template_protection
 Revises: tools_0020_drop_security_reviews

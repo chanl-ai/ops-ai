@@ -1,4 +1,4 @@
-"""The run told for people (c-477), on PostgreSQL through the run detail route, by failure mode: an email run shows
+"""The run told for people, on PostgreSQL through the run detail route, by failure mode: an email run shows
 JSON instead of its email, or a run that is not an email shows one; a read differs from what Human Tasks shows; a
 child row has no name, the wrong state, another child's case or task, or another team's case; another team's run is
 told; a workflow-scoped key reads another workflow's names; the read grows a query per child; past the cap the rest
@@ -264,7 +264,7 @@ async def test_the_story_reads_no_more_for_two_children_than_for_one(engine: Asy
 
 
 async def test_with_masking_on_channel_addresses_show_and_what_was_read_is_masked(engine: AsyncEngine) -> None:
-    """c-477 staging: the sender and mailbox read "[email]". They are where the email came from, not a customer's
+    """On staging, the sender and mailbox read "[email]". They are where the email came from, not a customer's
     data, so they show on the email and in the input; what a document says (an SSN here) stays masked."""
     w = World(engine)
     parent, (marcus, _) = await _notice(w, ssn="123-45-6789")
@@ -288,7 +288,7 @@ async def test_a_child_run_shows_the_address_its_email_run_was_sent_from(engine:
 
 
 async def test_a_read_names_the_file_as_it_arrived(engine: AsyncEngine) -> None:
-    """c-477 staging: files-service keeps one file per bytes, so a notice sent again kept the first upload's name
+    """On staging, files-service keeps one file per bytes, so a notice sent again kept the first upload's name
     (levy-2b2c3df7.pdf); the run names it as its input does."""
     w = World(engine)
     parent, _ = await _notice(w)
@@ -371,7 +371,7 @@ async def test_a_tool_without_a_catalogue_entry_reads_as_words_and_the_directory
 
 
 async def test_with_masking_on_the_story_lines_keep_the_channel_addresses(engine: AsyncEngine) -> None:
-    """Orch's walk of an email run (c-508): the story line read "Email from [email]:" beside an Email section that shows
+    """A walk of an email run: the story line read "Email from [email]:" beside an Email section that shows
     the sender. The lines keep where the email came from as the section does; what was read stays masked."""
     w = World(engine)
     parent, _ = await _notice(w, ssn="123-45-6789")

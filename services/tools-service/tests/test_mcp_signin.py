@@ -1,4 +1,4 @@
-"""An MCP server's sign-in found from the server (c-331): its 401 names the resource metadata, the metadata names the
+"""An MCP server's sign-in found from the server: its 401 names the resource metadata, the metadata names the
 authorization server, and an issuer that is not that server is refused; a server that answers needs no sign-in, and
 an address off the allow-list is never fetched."""
 

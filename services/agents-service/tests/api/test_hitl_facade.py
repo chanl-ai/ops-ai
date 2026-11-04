@@ -18,7 +18,7 @@ from ops_agents.api import hitl_facade
 from ops_agents.api.app import create_app
 from ops_agents.api.auth import step_up_signer
 from ops_agents.api.deps import Runtime
-from ops_agents.store.graphs import metadata
+from ops_agents.store.base import metadata
 from ops_policy import HmacSigner, mint_step_up
 from ops_service_kit.settings import Settings
 from tests.api.test_graphs import EMAILS, run, thread

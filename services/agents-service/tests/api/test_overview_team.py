@@ -1,4 +1,4 @@
-"""The Overview's lists stay in the acting team (c-552): a run or a case due in one team never shows on another team's
+"""The Overview's lists stay in the acting team: a run or a case due in one team never shows on another team's
 Overview, read as people who each hold only their own team."""
 
 from __future__ import annotations

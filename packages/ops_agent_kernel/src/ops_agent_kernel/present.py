@@ -1,4 +1,4 @@
-"""The built-in `present` tool (c-055 T021): the model's way to return a shaped answer, a comparison table as rows or
+"""The built-in `present` tool: the model's way to return a shaped answer, a comparison table as rows or
 a figure as a metric, without a tool result behind it. The turn records the call like any other and puts a widget part
 on it (`ToolCallRecord.view["part"]`), which the chat stream emits as a part; nothing leaves the process.
 
@@ -121,7 +121,7 @@ _NODE: dict[str, Any] = {
 
 
 def grant(settings: AgentSettings) -> ToolGrant:
-    """This turn's present tool (c-082): the four shapes always; `widget` when the agent has widgets, its enum the
+    """This turn's present tool: the four shapes always; `widget` when the agent has widgets, its enum the
     agent's list and one use-when line per widget in the description (the implicit skill); `layout` when the agent may
     compose. An agent with neither gets today's tool unchanged."""
     if not settings.widgets and not settings.compose:

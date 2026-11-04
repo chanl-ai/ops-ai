@@ -1,4 +1,4 @@
-"""Batches (c-535)
+"""Batches
 
 Revision ID: 0092_run_batches
 Revises: 0091_form_links

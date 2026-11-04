@@ -1,4 +1,4 @@
-"""A review option's write that fails goes back to the same review (c-210, the levy hold), by failure mode: the
+"""A review option's write that fails goes back to the same review (the levy hold), by failure mode: the
 reviewer's edited amount is not what is sent; the failed write ends the run or is sent again; the second decision's
 call is bound to the first iteration's step, so it goes without its approval."""
 

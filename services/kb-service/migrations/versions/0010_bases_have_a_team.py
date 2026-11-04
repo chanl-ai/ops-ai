@@ -1,4 +1,4 @@
-"""Every knowledge base and source belongs to one team (c-507)
+"""Every knowledge base and source belongs to one team
 
 Revision ID: kb_0010
 Revises: kb_0009

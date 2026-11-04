@@ -1,4 +1,4 @@
-"""The response contract is built once per app shape for a test session (c-566), by failure mode: a cached contract
+"""The response contract is built once per app shape for a test session, by failure mode: a cached contract
 checks a response against another app's document and lets a broken body through; a cache that never hits leaves every
 test paying for a fresh document again; a test file builds its own contract per test, putting the cost back."""
 

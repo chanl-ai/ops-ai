@@ -1,4 +1,4 @@
-"""The tool-result shaper (c-055 T004), one test per rule with the case that must not match it: a malformed part
+"""The tool-result shaper, one test per rule with the case that must not match it: a malformed part
 reaching the console, a column silently dropped into a chart, a declared shape forced onto data it does not fit,
 and a part that names the tool."""
 
@@ -78,7 +78,7 @@ def test_a_flat_object_is_a_record_and_a_nested_one_is_nothing() -> None:
     assert part("done") is None and part(None) is None
 
 
-# ── Values that are not flat draw as one cell (c-055 T024), one test per rule ──
+# ── Values that are not flat draw as one cell, one test per rule ──
 
 
 def test_a_list_of_scalars_joins_into_one_cell() -> None:

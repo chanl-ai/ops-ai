@@ -1,4 +1,4 @@
-"""Human Tasks lists every task waiting for a person (c-561), by failure mode: a team with more than 200 runs loses the
+"""Human Tasks lists every task waiting for a person, by failure mode: a team with more than 200 runs loses the
 tasks of its older runs from the list and its count, while those runs still say they wait for a person."""
 
 from __future__ import annotations

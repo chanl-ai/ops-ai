@@ -8,7 +8,7 @@ must hold exactly one assertion, plain or encrypted. The assertion must name the
 provider as audience, the consumer URL as recipient, answer the request this flow sent, and sit inside its time
 window. Text is read with every node joined, so a comment inside the NameID cannot cut it short.
 
-With the service provider's key (c-197), requests are signed on the redirect binding (SAML bindings 3.4.4.1) when the
+With the service provider's key, requests are signed on the redirect binding (SAML bindings 3.4.4.1) when the
 provider asks, and an `EncryptedAssertion` is decrypted (`xmlenc`). Decryption proves nothing about the sender, so an
 encrypted assertion is trusted only when the Response signature, checked before decrypting, covers its ciphertext, or
 the decrypted Assertion carries its own signature, checked after. Every decryption failure is one refusal.
@@ -98,7 +98,7 @@ class SamlConfig:
     name_attribute: str | None = None
     # The attribute whose values are the person's groups; None reads none.
     groups_attribute: str | None = None
-    # The service provider's private key, PEM: signs requests and decrypts assertions (c-197). None: neither.
+    # The service provider's private key, PEM: signs requests and decrypts assertions. None: neither.
     sp_key: str | None = None
     sign_requests: bool = False
     # A plain assertion is refused: the provider must encrypt to the service provider's certificate.

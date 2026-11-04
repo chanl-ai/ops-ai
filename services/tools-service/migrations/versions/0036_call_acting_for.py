@@ -1,4 +1,4 @@
-"""gateway_calls.acting_for and credential: whom a call acted for and whose credential signed it (c-558)
+"""gateway_calls.acting_for and credential: whom a call acted for and whose credential signed it
 
 `acting_for` is the email of the person a verified acting-for token named, null for a call with nobody behind it.
 `credential` is `person` when the person's own sign-in signed the call, `team` for the team's, null when the call

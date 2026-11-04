@@ -1,4 +1,4 @@
-"""What a module shows of its connection, and the seed's integration list as connection records (c-330).
+"""What a module shows of its connection, and the seed's integration list as connection records.
 
 The dev seed's integrations (`seed/tool_modules.json` `connections`) load as connection rows with the same ids, so a
 seeded module keeps its `connectionId`. They carry no settings, so they add nothing to a call: the module's own
@@ -26,7 +26,7 @@ SEED_KINDS = {
     "mtls": "none",
 }
 
-# The names a module stored before c-591, read for one release: a module now says what its connection says, so
+# The names a module stored before connections, read for one release: a module now says what its connection says, so
 # `either` is person_or_team and its auth kind is the connection's kind. `mtls` was never a kind: a client certificate
 # belongs to any kind (auth/kinds.py), so it reads as kind none with a certificate.
 OLD_SIGN_IN = {"either": "person_or_team"}
@@ -47,7 +47,7 @@ def status_of(conn: dict[str, Any], now: datetime) -> str:
     return "expiring" if left is not None and left < EXPIRING else "healthy"
 
 
-# An app's account as people see it (c-616). Saving keys or choosing an app credential proves nothing about the
+# An app's account as people see it. Saving keys or choosing an app credential proves nothing about the
 # account, so an app reads Connected only once the team account holds a token or Test connection last passed.
 CONNECTED, NOT_SIGNED_IN, EXPIRED, REFUSED, REVOKED = "connected", "not_signed_in", "expired", "refused", "revoked"
 
@@ -151,7 +151,7 @@ def ref_of(conn: dict[str, Any], now: datetime) -> dict[str, Any]:
         "name": conn["name"],
         "kind": conn["auth_kind"],
         "status": status_of(conn, now),
-        # Where a module's paths go (c-616): the account's base address is their only one.
+        # Where a module's paths go: the account's base address is their only one.
         "baseUrl": connection_base(conn) or None,
     }
     if conn.get("expires_at"):

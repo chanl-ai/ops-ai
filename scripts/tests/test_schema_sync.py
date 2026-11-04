@@ -3,7 +3,7 @@
 """`make up` migrates the stack's database in place and stops only when a chain is ahead of this checkout
 (scripts/schema_sync.py), by failure mode: a service's chain missing from the check, so a database another session
 migrated ahead keeps serving code that does not match it; and a chain merely behind the code treated as a reason to
-stop or wipe, when migrating forward keeps everyone's data and sessions (c-099). Real PostgreSQL and the real chains'
+stop or wipe, when migrating forward keeps everyone's data and sessions. Real PostgreSQL and the real chains'
 heads; a throwaway database, dropped at the end."""
 
 from __future__ import annotations

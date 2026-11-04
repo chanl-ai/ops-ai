@@ -1,4 +1,4 @@
-"""Uploading files to a source and syncing them (c-056 T003), by failure mode: an uploaded PDF never indexed, its
+"""Uploading files to a source and syncing them, by failure mode: an uploaded PDF never indexed, its
 passages losing page or section, a PDF without a text layer failing the whole sync or vanishing without a reason,
 the same file indexed twice, and a document page that cannot show what was indexed."""
 
@@ -57,7 +57,7 @@ async def test_a_pdf_without_text_fails_with_a_reason_and_the_rest_index(client:
 
 
 async def test_a_source_counts_its_documents_from_what_indexed(client: httpx.AsyncClient) -> None:
-    """The source's counts are its items' statuses (c-072 T005), not every uploaded file reported as pending."""
+    """The source's counts are its items' statuses, not every uploaded file reported as pending."""
     src = await file_source(client)
     await upload(client, src["id"], "rates.pdf", RATES)
     await upload(client, src["id"], "scan.pdf", scanned_pdf())
@@ -98,7 +98,7 @@ async def test_a_knowledge_bases_documents_list_its_sources_items(client: httpx.
 
 
 async def test_a_changed_file_replaces_its_old_passages(client: httpx.AsyncClient) -> None:
-    """Reviewer's probe (c-056 T003): a file uploaded again under its name with new content becomes v2, and only v2's
+    """Reviewer's probe: a file uploaded again under its name with new content becomes v2, and only v2's
     text is served, on the item page and to a question."""
     src = await file_source(client)
     body = {"name": "Rates", "owner": "maya@harborpine.example", "sourceIds": [src["id"]]}
@@ -122,7 +122,7 @@ async def test_a_changed_file_replaces_its_old_passages(client: httpx.AsyncClien
 async def test_a_replaced_document_leaves_a_change_row_with_who_and_which_versions(
     engine: AsyncEngine, client: httpx.AsyncClient
 ) -> None:
-    """c-056 T006: the Changes page shows who replaced which document, from which version to which, and what the
+    """The Changes page shows who replaced which document, from which version to which, and what the
     section said before and after; another tenant sees none of it."""
     src = await file_source(client)
     body = {"name": "Rates", "owner": "maya@harborpine.example", "sourceIds": [src["id"]]}
@@ -149,7 +149,7 @@ async def test_a_replaced_document_leaves_a_change_row_with_who_and_which_versio
 
 
 async def test_a_reupload_replaces_the_file_so_later_syncs_leave_the_document_alone(client: httpx.AsyncClient) -> None:
-    """c-072 review: a re-upload kept both files under one name, so every later sync re-indexed the document twice
+    """A re-upload kept both files under one name, so every later sync re-indexed the document twice
     (v4, v6, v8) and the source showed one document pending forever."""
     src = await file_source(client)
     await upload(client, src["id"], "rates.pdf", RATES)
@@ -169,7 +169,7 @@ async def test_a_reupload_replaces_the_file_so_later_syncs_leave_the_document_al
 async def test_a_partly_scanned_pdf_indexes_its_text_and_says_which_pages_it_could_not_read(
     client: httpx.AsyncClient,
 ) -> None:
-    """c-072 review: a PDF with some scanned pages indexed the rest silently; the document now names the pages."""
+    """A PDF with some scanned pages indexed the rest silently; the document now names the pages."""
     src = await file_source(client)
     await upload(client, src["id"], "overdraft.pdf", partly_scanned_pdf())
     run = data(await client.post(f"/v1/sources/{src['id']}/sync"))
@@ -179,7 +179,7 @@ async def test_a_partly_scanned_pdf_indexes_its_text_and_says_which_pages_it_cou
 
 
 async def test_a_bases_counts_and_health_come_from_its_documents(client: httpx.AsyncClient) -> None:
-    """c-094 T005: the list and the overview counted every base as 0 documents and healthy; a failed document now
+    """The list and the overview counted every base as 0 documents and healthy; a failed document now
     counts as a failure and marks the base degraded, and each source says what it contributes."""
     src = await file_source(client)
     body = {"name": "Teller", "owner": "maya@harborpine.example", "sourceIds": [src["id"]]}

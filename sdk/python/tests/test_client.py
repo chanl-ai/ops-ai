@@ -132,7 +132,7 @@ def test_the_async_client_unwraps_and_raises_the_same_way() -> None:
 def test_a_person_token_from_the_profile_or_ops_token_acts_as_that_person(
     tmp_path: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # A workflow is edited by a person, never by an API key (c-535), so a token the profile or OPS_TOKEN holds is who
+    # A workflow is edited by a person, never by an API key, so a token the profile or OPS_TOKEN holds is who
     # the call acts as, even beside a key.
     seen: list[httpx.Request] = []
 

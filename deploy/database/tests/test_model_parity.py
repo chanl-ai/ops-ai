@@ -1,4 +1,4 @@
-"""Each chain's store metadata equals the schema its migrations build (c-342): one case per chain, on a scratch
+"""Each chain's store metadata equals the schema its migrations build: one case per chain, on a scratch
 PostgreSQL database that every chain migrates in order, dropped at exit. A migration that adds a table, column, index,
 CHECK or default without the same in metadata fails here, naming the object, because SQL Server's DDL is compiled from
 metadata and would lack it. Each table's isolation kind (team or tenant, from its markings) is held equal to what the
@@ -104,7 +104,7 @@ HAND_MADE = {
     "column": "ALTER TABLE files ADD COLUMN hand_made varchar(10)",
     "index": "CREATE INDEX ix_hand_made ON files (tenant_id)",
     "check": "ALTER TABLE files ADD CONSTRAINT ck_hand_made CHECK (length(id) > 0)",
-    # Every files table is isolated since c-415, so the hand-made change takes one table's forced isolation away.
+    # Every files table is isolated, so the hand-made change takes one table's forced isolation away.
     "isolation": "ALTER TABLE files_outbox NO FORCE ROW LEVEL SECURITY",
 }
 

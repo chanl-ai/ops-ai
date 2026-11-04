@@ -1,4 +1,4 @@
-"""PostgreSQL ranks memories without a full-text index (c-563)
+"""PostgreSQL ranks memories without a full-text index
 
 Revision ID: 0086_memory_text_unindexed
 Revises: 0085_memory_full_text

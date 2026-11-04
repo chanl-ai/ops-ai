@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * A plugin update's notice and review (c-609), in the app page's "Update available" slot: when the installed plugin
+ * A plugin update's notice and review, in the app page's "Update available" slot: when the installed plugin
  * version differs from the one the team runs, what taking it would change (each new, changed and removed tool, the
  * team's agents and workflows that use the changed and removed ones, and the version each template copy came from),
  * and one Take the update. Nothing shows while the team runs the installed version or plugin_updates is off.

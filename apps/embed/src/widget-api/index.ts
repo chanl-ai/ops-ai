@@ -1,4 +1,4 @@
-// `@/lib/api` inside the embed app (c-158): the console's hooks and components read `api` from here, so they talk to
+// `@/lib/api` inside the embed app: the console's hooks and components read `api` from here, so they talk to
 // the widget API (`/v1/widget/{deployment}`) with the session the loader passed in, never to console routes. Only
 // `api.chat` exists; calling any other area rejects, so a console hook that has no place in the embed fails loudly.
 import type { ChatApi } from '@/lib/api/chat-contract';
@@ -94,7 +94,7 @@ export { ApiError, type OpsApi } from '@/lib/api/contract';
 export const filesOnService = false;
 /** Widget calls carry the widget session, not a team, so the console's team queries run without waiting for one. */
 export const queriesNeedTeam = false;
-// The embedded chat has no sign-in pages, so a tool that needs a person's own account shows as a failed call (c-558).
+// The embedded chat has no sign-in pages, so a tool that needs a person's own account shows as a failed call.
 export const personalSignIn = false;
 /** The bank page brands the widget itself; the console's demo brand never applies here. */
 export const brand: { name?: string; logo?: string } = {};

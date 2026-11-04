@@ -12,13 +12,13 @@ import { useCan } from '@/hooks/me-queries';
 import { useTeam } from '@/hooks/use-team';
 import { useWorkspaceTeamsEditor } from '@/hooks/workspace-team-queries';
 
-/** Who is in the team and what each may do (c-077): one role per person per team, read from platform-service. */
+/** Who is in the team and what each may do: one role per person per team, read from platform-service. */
 export default function AccessPage() {
   const { team } = useTeam();
   // Undefined while the person's grants load: neither Invite nor its locked twin shows until the answer is known.
   const can = useCan('access', 'manage');
   const canManage = can === true;
-  // Workspace admins also reach every team from here (c-198); the server decides who they are.
+  // Workspace admins also reach every team from here; the server decides who they are.
   const teamsEditor = useWorkspaceTeamsEditor();
   const [inviteOpen, setInviteOpen] = React.useState(false);
   return (

@@ -1,4 +1,4 @@
-"""A tool module's detail says what the caller may do with it (c-186), by failure mode: a viewer shown Edit or Delete
+"""A tool module's detail says what the caller may do with it, by failure mode: a viewer shown Edit or Delete
 it would be refused, and an admin shown View only for a module they may change. Each flag runs the check its route
 runs, so the console's buttons follow it."""
 

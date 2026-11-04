@@ -1,4 +1,4 @@
-"""Each person's own key, password or token on a connection (c-595), by failure mode: a person's call carries the
+"""Each person's own key, password or token on a connection, by failure mode: a person's call carries the
 team's key or another person's; a connection that signs in as each person refuses every call because the team holds no
 key; a call with nobody behind it uses someone's key; a person with no key is sent to an OAuth sign-in that cannot
 start; a person's key is left out of what the gateway scrubs; the call log cannot tell whose key signed the call."""
@@ -319,14 +319,14 @@ async def test_your_connections_offers_every_app_you_can_connect_and_its_form(
 
 
 def test_the_console_knows_every_reason_a_call_is_refused_for_a_missing_sign_in() -> None:
-    """The console's card looks its text up by reason; a reason it lacks rendered nothing (no_person, c-595 review)."""
+    """The console's card looks its text up by reason; a reason it lacks rendered nothing (no_person)."""
     ts = (Path(__file__).resolve().parents[3] / "apps/console/src/lib/types/connections.ts").read_text()
     found = re.search(r"CONNECTION_REQUIRED_REASONS = \[([^\]]*)\]", ts)
     assert found is not None, "lib/types/connections.ts no longer lists CONNECTION_REQUIRED_REASONS"
     assert re.findall(r"'([a-z_]+)'", found.group(1)) == list(get_args(NotLinkedReason))
 
 
-# ── A refused key or sign-in is marked on the person's own row (c-595, the mock's 1g and 1h) ─────────────────────
+# ── A refused key or sign-in is marked on the person's own row (the mock's 1g and 1h) ─────────────────────
 
 
 class AllowLedger:

@@ -19,7 +19,7 @@ export function QueueDone() {
 }
 
 /**
- * The queue as a column (c-460): the rows in the order the service grouped them, a header wherever the case changes,
+ * The queue as a column: the rows in the order the service grouped them, a header wherever the case changes,
  * each row the task's question, who it is about, its amount and when it is due. The service orders and names the
  * cases (`group=case`); this only draws a header where consecutive rows change case. j and k move the cursor, Enter
  * opens the row it is on.

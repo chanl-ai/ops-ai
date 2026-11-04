@@ -1,4 +1,4 @@
-"""engine_definitions: stage, so only a reviewed version starts live runs (c-075)
+"""engine_definitions: stage, so only a reviewed version starts live runs
 
 Revision ID: 0031_engine_definitions_stage
 Revises: 0030_chat_attachments

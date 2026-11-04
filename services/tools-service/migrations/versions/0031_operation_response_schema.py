@@ -1,4 +1,4 @@
-"""module_operations.response_schema: what an imported operation answers (c-353)
+"""module_operations.response_schema: what an imported operation answers
 
 A workflow step's output fields were known only from a past run. An OpenAPI import now keeps the first success
 response's JSON Schema on the operation, so a step that calls it shows its fields before it has run.

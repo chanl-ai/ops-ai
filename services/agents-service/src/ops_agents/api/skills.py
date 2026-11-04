@@ -1,4 +1,4 @@
-"""Skills as versioned attachments (spec 11, c-063 slice 2): the views the console's skills pages and agent page
+"""Skills as versioned attachments (spec 11): the views the console's skills pages and agent page
 read, the checks on a skill's content, the publish an approval runs, and the pin check an attach runs.
 
 An agent version snapshots each pinned skill version (`skillPins[]`: id, version, name, slug, useWhen, loading,
@@ -72,7 +72,7 @@ async def check_content(rt: Runtime, fields: dict[str, Any]) -> dict[str, Any]:
     # The directory is read per tenant, so a skill naming no tool does not need it (the start-up seed has no tenant).
     offered = {t["id"]: t for t in await known_tools(rt)} if tool_ids else {}
     if any(t not in offered for t in tool_ids):
-        # A tool offered moments ago is not in the list kept for 30 s: ask once more before refusing it (c-607).
+        # A tool offered moments ago is not in the list kept for 30 s: ask once more before refusing it.
         offered = {t["id"]: t for t in await known_tools(rt, fresh=True)}
     if unknown := [t for t in tool_ids if t not in offered]:
         raise ValidationFailed(f"Unknown tools: {', '.join(unknown)}.", code="unknown_tool")

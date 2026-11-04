@@ -39,7 +39,7 @@ function toPatch(d: Draft, limits: ThreadLimits): ChatOverridesPatch {
 }
 
 /**
- * A thread's settings within its agent's limits (c-071): each control offers only what the agent allows, so a banker
+ * A thread's settings within its agent's limits: each control offers only what the agent allows, so a banker
  * never builds a request the server refuses. The model picker is hidden when there is one model, the temperature when
  * the agent sets no range, tools can only be switched off, and added instructions show only when the agent allows them.
  * Knowledge is chosen with the chips under the thread title, so the thread has one place for it.

@@ -94,7 +94,7 @@ async def engine(database_url: str) -> AsyncIterator[AsyncEngine]:
 
 @pytest.fixture
 async def stack(engine: AsyncEngine) -> AsyncIterator[tuple[httpx.AsyncClient, Worker]]:
-    # Publishing waits for a second person here: a workspace that switched requesterMayDecide off (c-186).
+    # Publishing waits for a second person here: a workspace that switched requesterMayDecide off.
     settings = Settings(
         database_url=str(engine.url),
         seed_dir=SEED,

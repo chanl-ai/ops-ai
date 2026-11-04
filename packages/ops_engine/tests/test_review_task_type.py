@@ -1,4 +1,4 @@
-"""A review step that names a task type (c-288), by failure mode: a step naming no version opens with no version, so
+"""A review step that names a task type, by failure mode: a step naming no version opens with no version, so
 the screen would follow whatever is newest when someone looks; the type's params reach the task unresolved, so it
 shows `$.input.vendor` instead of the vendor; a step naming a type that is not published opens a task with no screen."""
 

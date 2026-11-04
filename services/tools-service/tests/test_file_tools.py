@@ -1,4 +1,4 @@
-"""The built-in Files and Document types tools (c-613), by failure mode: another team's file or type read, an
+"""The built-in Files and Document types tools, by failure mode: another team's file or type read, an
 install not serving or showing them, a name matching several files read at random, a long file flooding the model, a
 large file's read still running when the tool answers, a second read paying again, documents-service's refusal
 reaching the agent as a crash, and a file the scan has not cleared. files-service is ops_files_client's fake;

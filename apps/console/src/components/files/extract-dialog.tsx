@@ -26,7 +26,7 @@ const READ_OUTCOME: Record<string, string> = {
   not_saved: 'The fields were read but not saved on the file.',
 };
 
-// Detect classifies the file over the team's types and reads it with the one found (documents-service, c-249/c-335).
+// Detect classifies the file over the team's types and reads it with the one found (documents-service).
 const DETECT = '__detect';
 
 /** How the file is read: with a document type (or Detect), as its full text, or with fields the model proposes. */

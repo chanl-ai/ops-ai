@@ -125,7 +125,7 @@ async def test_only_an_admin_invites_changes_roles_or_removes(platform: Platform
 
 
 async def test_the_roles_grid_decides_member_changes_not_the_member_row(platform: Platform) -> None:
-    """c-149: a role assigned in the team that grants access.manage lets a member invite whatever their member row
+    """A role assigned in the team that grants access.manage lets a member invite whatever their member row
     says, and the right ends with the assignment."""
     admin, _ = await as_admin(platform)
     builder = await join(platform, admin, "builder")
@@ -260,7 +260,7 @@ async def test_an_invite_to_an_existing_person_never_signs_in_whoever_holds_the_
 async def test_an_account_made_after_the_check_still_needs_its_own_session(
     platform: Platform, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Race (tick 13): the account check passes, then the invited email gets an account before the accept writes."""
+    """Race: the account check passes, then the invited email gets an account before the accept writes."""
     admin, h = await as_admin(platform)
     newcomer = await platform.person(roles=("admin",), tenant_id=admin.tenant_id)
     token = await invite_one(platform, h, newcomer.email, role="viewer")

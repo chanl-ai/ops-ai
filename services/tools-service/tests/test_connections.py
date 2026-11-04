@@ -1,4 +1,4 @@
-"""A custom app's accounts through the real routes with people signed in on platform-style tokens (c-330): who may
+"""A custom app's accounts through the real routes with people signed in on platform-style tokens: who may
 change one, secret parts written once and never read back, a stale write storing nothing, an account in use kept, and a
 sign-in finished once, by the person who started it, before it expires."""
 
@@ -255,7 +255,7 @@ async def test_an_expired_sign_in_is_refused(client: httpx.AsyncClient, tenant: 
 async def test_a_team_reads_only_its_own_connections_an_all_scope_team_included(
     client: httpx.AsyncClient, tenant: str
 ) -> None:
-    """c-509: an all-scope team (the seed's Platform team) listed and read every team's connections, a sharing across
+    """An all-scope team (the seed's Platform team) listed and read every team's connections, a sharing across
     teams the team-is-the-workspace rule does not allow."""
     cards = person(tenant, "Carla Cards", {"team_cards": "admin"})
     theirs = await _made(client, cards)
@@ -269,9 +269,9 @@ async def test_a_team_reads_only_its_own_connections_an_all_scope_team_included(
 async def test_each_team_holding_a_seeded_module_signs_in_with_its_own_connection(
     engine: AsyncEngine, seed: dict[str, Any], tenant: str
 ) -> None:
-    """c-509: the seed's connections all belonged to its all-scope team, so once a connection serves only its own team,
-    every other team's seeded module lost its sign-in. A seeded connection is made only where a module uses it (owner,
-    10-31): Operations held twenty cards no tool used."""
+    """The seed's connections all belonged to its all-scope team, so once a connection serves only its own team,
+    every other team's seeded module lost its sign-in. A seeded connection is made only where a module uses it:
+    Operations held twenty cards no tool used."""
     await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC))
     store, conns = ModuleStore(engine), ConnectionStore(engine)
     used = {(m["connection_id"], m["team_id"]) for m in await store.all(tenant) if m["connection_id"]}

@@ -1,4 +1,4 @@
-"""The MCP adapter (c-356): an outside assistant (Claude Code, Cursor) lists and runs a team's tools at
+"""The MCP adapter: an outside assistant (Claude Code, Cursor) lists and runs a team's tools at
 `/mcp/{team}` over streamable HTTP, through the same `GatewayCalls.call` as POST /v1/calls.
 
 The adapter only translates. It resolves the caller from the Bearer key or token with ops_identity, checks the URL's

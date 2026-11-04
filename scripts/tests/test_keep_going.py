@@ -1,4 +1,4 @@
-"""scripts/keep_going.sh (c-367), by failure mode: a failed check that stops the run so the checks after it never run,
+"""scripts/keep_going.sh, by failure mode: a failed check that stops the run so the checks after it never run,
 and a run with a failed check that ends green."""
 
 from __future__ import annotations

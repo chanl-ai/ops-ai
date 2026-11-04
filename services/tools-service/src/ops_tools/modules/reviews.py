@@ -1,4 +1,4 @@
-"""Opens a tool module's review as an ordinary publish request in agents-service's Reviews (c-163).
+"""Opens a tool module's review as an ordinary publish request in agents-service's Reviews.
 
 One call carries two proofs: the person's own credentials, passed through, name who asked and the team they act in,
 and this service's token in `X-Service-Authorization` vouches for the version and its changes. agents-service decides
@@ -89,7 +89,7 @@ class Reviews:
     async def open_host(
         self, credentials: dict[str, str], *, tenant_id: str, team_id: str, host: str, app: str
     ) -> dict[str, Any]:
-        """The Security task for an app's first address on an unlisted host (c-616 S13), as agents-service answers it:
+        """The Security task for an app's first address on an unlisted host, as agents-service answers it:
         the one still waiting for the host, its latest refusal, or a new one. Raises when Reviews cannot be reached,
         so nothing is held for a task that was never opened."""
         headers = {k: v for k, v in credentials.items() if k in FORWARDED} | {"X-Team-Id": team_id}

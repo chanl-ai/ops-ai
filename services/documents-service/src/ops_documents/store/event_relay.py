@@ -1,4 +1,4 @@
-"""Delivers documents-service's service events (extraction.*, c-258's outbox) to agents-service's POST /v1/events, as
+"""Delivers documents-service's service events (extraction.*, the outbox) to agents-service's POST /v1/events, as
 this service with the events:emit scope, for the event's tenant and team. An event waits in the outbox while
 agents-service is down and is delivered when it is back."""
 

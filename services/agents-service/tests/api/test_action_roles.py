@@ -1,4 +1,4 @@
-"""Who may start and cancel runs, decide reviews and chat (c-122), by failure mode: a viewer or reviewer starts a run,
+"""Who may start and cancel runs, decide reviews and chat, by failure mode: a viewer or reviewer starts a run,
 or a key starts a test run; someone cancels another person's run without being an admin or reviewer, or a key cancels
 a run it did not start; a builder or a key decides a review, a publish or a paused step, or a reviewer decides another
 team's; a person acting in another team chats with this team's agent. Tokens are minted and verified as
@@ -36,7 +36,7 @@ EMAILS: list[dict[str, Any]] = json.loads(
 )
 
 
-# Keys scoped to one agent or workflow (c-246), as platform-service introspects them; ok_ops.k1 has no target and
+# Keys scoped to one agent or workflow, as platform-service introspects them; ok_ops.k1 has no target and
 # answers as platform-service did before keys carried one.
 TARGETS: dict[str, dict[str, Any]] = {
     "ok_ops.wf": {"kind": "workflow", "id": "refunds", "version": None},
@@ -178,7 +178,7 @@ async def test_a_review_is_decided_by_a_reviewer_of_its_team(stack: tuple[AsyncC
     wrong = [await c.post(url, json=body, headers=h) for h in (SECOND_BUILDER, KEY)]
     assert all(r.status_code == 403 for r in wrong), [r.text for r in wrong]
     assert refused(wrong[0]) and refused(wrong[1])
-    # A reviewer of another team does not see the review at all (c-429).
+    # A reviewer of another team does not see the review at all.
     outside = await c.post(url, json=body, headers=OTHER_REVIEWER)
     assert outside.status_code == 404, outside.text
     assert (await c.post(url, json=body, headers=REVIEWER)).status_code == 200

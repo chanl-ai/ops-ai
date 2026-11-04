@@ -1,4 +1,4 @@
-"""Guardrails as versioned attachments (c-063): the views the console reads, the publish an approval runs, and the
+"""Guardrails as versioned attachments: the views the console reads, the publish an approval runs, and the
 pin check an agent save calls. Store: `store/guardrails.py`.
 
 A guardrail version is immutable, so an agent version snapshots each pinned version's rule (`guardrailPins[]` with
@@ -117,7 +117,7 @@ async def decide(  # noqa: PLR0917 - the route passes each part of the decision
     decision: str,
     reason: str | None,
 ) -> None:
-    """A guardrail publish is decided by a reviewer or admin of the guardrail's team (c-122), and not by who asked or
+    """A guardrail publish is decided by a reviewer or admin of the guardrail's team, and not by who asked or
     saved the version while requesterMayDecide is off, as an agent's is."""
     from .publish_reviews import require_not_asker, require_publish_reviewer  # noqa: PLC0415 - imports this module
 

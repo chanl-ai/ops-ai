@@ -1,4 +1,4 @@
-"""The built-in Knowledge bases tool (c-616): `search_knowledge` answers from the calling team's knowledge bases with
+"""The built-in Knowledge bases tool: `search_knowledge` answers from the calling team's knowledge bases with
 the passages and where each came from, through kb-service's own search, called as the run's tenant and team, so another
 team's knowledge base is never searched. It runs behind the tool gateway as the platform's local tools do, so grants,
 the call log and the team's rules apply as to any tool."""

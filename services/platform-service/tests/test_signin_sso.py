@@ -1,4 +1,4 @@
-"""SSO sign-in through the fake identity provider (c-188), by failure mode: the options route telling an account
+"""SSO sign-in through the fake identity provider, by failure mode: the options route telling an account
 apart (F10); a handoff completed by another browser or twice (F6); a first sign-in making two people, or one for an
 email outside the provider's domains (F7); a step-up that passes on the provider's old login or for another person
 (F8); an answer from another provider, or of another kind than the flow, signing anyone in (US4)."""

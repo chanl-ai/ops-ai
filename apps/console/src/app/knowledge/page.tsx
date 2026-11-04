@@ -40,7 +40,7 @@ const ACCESS: { value: 'members' | 'selected' | 'api' | 'mcp' | 'public'; label:
   { value: 'members', label: 'All members', icon: Users },
   { value: 'selected', label: 'Selected members', icon: Users },
   { value: 'api', label: 'API keys', icon: KeyRound },
-  // Offered to outside assistants over MCP, so shown only while the install turns that address on (c-611).
+  // Offered to outside assistants over MCP, so shown only while the install turns that address on.
   { value: 'mcp', label: 'MCP', icon: Server, flag: 'mcp_gateway' },
   { value: 'public', label: 'Public link', icon: Globe },
 ];

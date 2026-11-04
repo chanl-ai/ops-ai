@@ -1,4 +1,4 @@
-"""`/v1/case-types`: the fields a case shows and their order (c-291), versioned like task types.
+"""`/v1/case-types`: the fields a case shows and their order, versioned like task types.
 
 Every member of the tenant reads every type. Creating, saving and publishing one are workflow building
 (`workflows.create`, `workflows.edit`, `workflows.publish`) in the owning team; a seeded type is a system record, and a
@@ -45,7 +45,7 @@ class Definition(WireModel):
     name: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=2000)
     fields: list[CaseField] = Field(max_length=50)
-    # The key of one of the type's date fields whose value is the case's deadline, its main timer (c-500): a court
+    # The key of one of the type's date fields whose value is the case's deadline, its main timer: a court
     # notice's date to respond by, read from the notice. None: the case's resolution clock.
     deadline: str | None = Field(default=None, max_length=64)
 

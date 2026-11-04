@@ -1,4 +1,4 @@
-"""`make setup` (c-545): asks what a person has, tests each answer live, and writes settings only for what passed.
+"""`make setup`: asks what a person has, tests each answer live, and writes settings only for what passed.
 Every check uses the standard library except the database driver, so it runs before `make install`."""
 
 import os

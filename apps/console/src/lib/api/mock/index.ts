@@ -620,7 +620,7 @@ export function createMockApi(): OpsApi {
             counts: { waitingForMe: mine.length, runsInFlight: flight.length, casesDue: 0 },
             waitingForMe: mine.slice(0, 5).map((r) => ({ id: r.id, title: r.title, workflowName: r.workflowName, caseId: null, createdAt: r.createdAt })),
             runsInFlight: flight.slice(0, 5).map((r) => ({ id: r.id, workflowId: r.workflowId, subject: wfName(r.workflowId), state: r.status === 'running' ? ('running' as const) : ('waiting' as const), startedAt: r.startedAt })),
-            // Cases live in agents-service (c-128); the mock has none, so none are due.
+            // Cases live in agents-service; the mock has none, so none are due.
             casesDue: [],
           };
         }),
@@ -781,7 +781,7 @@ export function createMockApi(): OpsApi {
           const { note, ...fields } = patch;
           if (fields.toolIds) for (const t of tools) t.grantedAgentIds = fields.toolIds.includes(t.id) ? [...new Set([...t.grantedAgentIds, aid])] : t.grantedAgentIds.filter((x) => x !== aid);
           const list = versionsOf(aid, a.version, 'agent');
-          // One draft (c-172): rewrite the newest version unless it is published or a publish request names it.
+          // One draft: rewrite the newest version unless it is published or a publish request names it.
           const asked = reviews.some((r) => r.kind === 'agent_publish' && r.agentPublish?.agentId === aid && r.agentPublish.version === a.version);
           const rewrite = agentStore.publishedOf(aid) !== a.version && !asked && list[0]?.version === a.version;
           Object.assign(a, fields, { version: rewrite ? a.version : a.version + 1, updatedAt: new Date().toISOString() });
@@ -1177,7 +1177,7 @@ export function createMockApi(): OpsApi {
     files: files.api,
     skills: skills.api,
     widgets: createWidgetsMock({ me: F.CURRENT_USER.name }),
-    // Cases live in agents-service (c-128); the mock lists none and refuses writes.
+    // Cases live in agents-service; the mock lists none and refuses writes.
     caseRecords: {
       list: ({ page, pageSize }) => respond(() => ({ data: [], pagination: { page, pageSize, total: 0, totalPages: 1, hasNext: false, hasPrev: false }, facets: {} })),
       get: (cid) => respond(() => notFound(`Case ${cid}`)),

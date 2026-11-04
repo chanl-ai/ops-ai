@@ -1,4 +1,4 @@
-"""Memory text is its owner's alone (c-563), by failure mode: a person allowed to read another's thread (an admin, with
+"""Memory text is its owner's alone, by failure mode: a person allowed to read another's thread (an admin, with
 owner-only threads off) sees what the assistant remembered about them; or a response to the owner, such as the budget
 answer, drops their own memory text."""
 

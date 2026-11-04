@@ -1,4 +1,4 @@
-"""A chat conversation's budget (c-103), by failure mode: a chat with no ceiling; a spent budget drawn as an approval
+"""A chat conversation's budget, by failure mode: a chat with no ceiling; a spent budget drawn as an approval
 or leaving the chat stuck; numbers that are not the server's ledger; someone other than the owner continuing, or a
 non-admin raising; Continue or Raise not resuming the paused turn; the run API answering a chat's pause without those
 checks; a run-API agent thread with no budget or a caller's higher one; two answers at once, or a stale tab, both

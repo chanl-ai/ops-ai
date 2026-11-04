@@ -10,7 +10,7 @@ from pydantic.alias_generators import to_camel
 
 from ops_service_kit.http import Out
 
-# Whose account a call signs in with (c-558): the team's one sign-in, the person the call acts for, or the person's
+# Whose account a call signs in with: the team's one sign-in, the person the call acts for, or the person's
 # with the team's as the backup for calls with nobody behind them.
 SignIn = Literal["team", "person", "person_or_team"]
 
@@ -25,12 +25,12 @@ CREDENTIAL_MAX = 16_000
 
 class NewAppIn(_In):
     """A custom app a builder adds, as its first account: by name with a sign-in kind, or an MCP server by its address,
-    whose sign-in is found from the server (c-331)."""
+    whose sign-in is found from the server."""
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
     auth_kind: str | None = Field(default=None, min_length=1, max_length=40)
     sign_in: SignIn = "team"
-    # What the console's card shows for a system connected by name (c-580); the docs link must be https.
+    # What the console's card shows for a system connected by name; the docs link must be https.
     category: str | None = Field(default=None, max_length=80)
     description: str | None = Field(default=None, max_length=300)
     docs_url: str | None = Field(default=None, max_length=500, pattern=r"^https://\S+$")
@@ -49,7 +49,7 @@ class NewAppIn(_In):
 
 
 class AccountIn(_In):
-    """Another account of an app the team has (c-608): a sandbox, or a second org of the same system. On a plugin's
+    """Another account of an app the team has: a sandbox, or a second org of the same system. On a plugin's
     app it takes the first account's contract (the kind, whose account calls use, the OAuth app and the credentials);
     on a custom app it signs in with the app's kind, with the kind's fields given in `credentials`."""
 
@@ -75,7 +75,7 @@ class AccountPatchIn(_In):
     team_backup: bool | None = None
     # The account a test run of the app uses; a live run never signs in with it.
     sandbox: bool | None = None
-    # What the console's card shows for a system connected by name (c-580); the docs link must be https.
+    # What the console's card shows for a system connected by name; the docs link must be https.
     category: str | None = Field(default=None, max_length=80)
     description: str | None = Field(default=None, max_length=300)
     docs_url: str | None = Field(default=None, max_length=500, pattern=r"^https://\S+$")
@@ -95,7 +95,7 @@ class SignInIn(_In):
 
 
 class PersonCredentialsIn(_In):
-    """A person's own key, password or token on an account each person signs in to (c-595): the kind's person
+    """A person's own key, password or token on an account each person signs in to: the kind's person
     fields, each a value of at most 2,000 characters."""
 
     credentials: dict[str, str] = Field(max_length=4)
@@ -119,7 +119,7 @@ class SignInCompleteIn(_In):
 
 
 class CredentialCheckIn(_In):
-    """Test with my account (c-616): an empty body starts it; the `state` and `code` the sign-in page was handed back
+    """Test with my account: an empty body starts it; the `state` and `code` the sign-in page was handed back
     finish it, on the same route."""
 
     state: str | None = Field(default=None, min_length=16, max_length=200)
@@ -161,9 +161,9 @@ class AuthKind(Out):
     fields: list[KindField]
     signs_in: bool
     holds_token: bool
-    # Whether each person may sign in with their own account (c-558); a kind without it takes the team's only.
+    # Whether each person may sign in with their own account; a kind without it takes the team's only.
     per_person: bool
-    # The fields each person gives for themselves on a connection each person signs in to (c-595); empty for a kind
+    # The fields each person gives for themselves on a connection each person signs in to; empty for a kind
     # whose person signs in at the system.
     person_fields: list[str]
 
@@ -173,7 +173,7 @@ class ConnectionKinds(Out):
     # Fields every account has whatever its kind: the system's address its credentials are bound to.
     common: list[KindField]
     certificate: list[KindField]
-    # The return address to register with a system's sign-in, the same for every connection (c-580); none while the
+    # The return address to register with a system's sign-in, the same for every connection; none while the
     # console's address is not set.
     redirect_uri: str | None = None
 
@@ -236,7 +236,7 @@ class AccountTest(Out):
 
 
 class MyAccount(Out):
-    """One of the caller's own sign-ins (c-558), as Your connections lists it."""
+    """One of the caller's own sign-ins, as Your connections lists it."""
 
     connection_id: str
     # The account's app, under which its sign-in is started.
@@ -249,16 +249,16 @@ class MyAccount(Out):
     connection_status: str
     # A sandbox account, which only test runs use.
     sandbox: bool
-    # How the person signs in: the connection kind's label, such as "API key" or "Sign in with an account" (c-595).
+    # How the person signs in: the connection kind's label, such as "API key" or "Sign in with an account".
     method: str
     auth_kind: str
     # What the person gives for a key, password or token kind; empty for a sign-in at the system.
     person_fields: list[str]
-    # False for a connection the person can connect and has not, listed only with `every` (c-595).
+    # False for a connection the person can connect and has not, listed only with `every`.
     connected: bool
     # Where the system says how to find the key, from the connection's card details.
     docs_url: str | None = None
-    # The system refused the person's key or sign-in (c-595): when, and what it said; a new one clears it.
+    # The system refused the person's key or sign-in: when, and what it said; a new one clears it.
     # The person's own sign-in's last test.
     test: AccountTest | None = None
     refused: bool = False
@@ -294,7 +294,7 @@ class AccountRow(Out):
     category: str | None = None
     description: str | None = None
     docs_url: str | None = None
-    # The name a tool or step uses for the account (c-608).
+    # The name a tool or step uses for the account.
     account_name: str | None = None
 
 
@@ -313,9 +313,9 @@ class AccountDetail(AccountRow):
     secrets: dict[str, SecretPart]
     # The team's own sign-in on the account.
     signed_in: SignedIn | None = None
-    # The signing certificate's view, never its key (c-583); null when the PEM held does not read.
+    # The signing certificate's view, never its key; null when the PEM held does not read.
     certificate: SigningCertificate | None = None
-    # The plugin whose platform app the account signs in with (c-565); null on the team's own app.
+    # The plugin whose platform app the account signs in with; null on the team's own app.
     platform_app: str | None = None
     # The team's app credential it signs in with; null on Ops AI's app or a kind with no OAuth client.
     credential_id: str | None = None

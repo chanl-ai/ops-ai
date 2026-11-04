@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""The bytes documents-service reads, through files-service as the caller's team (c-256): a file that team cannot see
+"""The bytes documents-service reads, through files-service as the caller's team: a file that team cannot see
 is not found, one not scanned clean is refused, and a sample's file is kept by a `test_set` reference."""
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from ops_files_client import FileInfo, FileNotFound, FileNotReady, FilesClient
 class Who:
     """The caller, from its token: tenant, the team it acts in and who it is. `edits` is documents.edit in the team, as
     `can()` decides it, which the console reads back as canCreate and canEdit; `manages` is documents.manage, which
-    turning on page images needs (c-295)."""
+    turning on page images needs."""
 
     tenant_id: str
     team: str

@@ -1,4 +1,4 @@
-"""Workspace and team danger zones (c-529), by failure mode: someone other than the owner transfers, closes or restores
+"""Workspace and team danger zones, by failure mode: someone other than the owner transfers, closes or restores
 the workspace, or an Admin's every-cell grid reaches the owner's cell; the owner leaves or is removed and the workspace
 has no owner; two transfers both win; a closed workspace still answers a member, a key or a service token; a restore
 after the purge has started; the purge takes audit entries or team rows; the last admin leaves a team; a team with a

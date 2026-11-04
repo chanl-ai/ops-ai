@@ -19,7 +19,7 @@ from sqlalchemy.pool import StaticPool
 from ops_agents.activities import gateway as gw
 from ops_agents.api.app import create_app
 from ops_agents.api.sweeper import recover
-from ops_agents.store.graphs import metadata
+from ops_agents.store.base import metadata
 from ops_agents.store.reviews import review_approvals
 from ops_service_kit.settings import Settings
 from tests.conftest import FakeGraphModels, decide, fixture_knowledge, last_run, scripted_model, sse_events, step_up

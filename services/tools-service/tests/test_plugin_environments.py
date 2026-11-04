@@ -1,4 +1,4 @@
-"""A plugin's sandbox account beside its live one (c-580, c-608), by failure mode: the sandbox's own app never reaches
+"""A plugin's sandbox account beside its live one, by failure mode: the sandbox's own app never reaches
 its account, or replaces the live account's; a sandbox sign-in overwrites the instance a live call goes to; a test call
 reaches the live account's host; the team's client secret comes back in an answer; a plugin's card details are lost on
 the way to the console; a removed account's instance reaches the account made after it."""
@@ -126,7 +126,7 @@ async def test_a_new_account_never_calls_the_instance_a_removed_one_signed_in_to
     tenant: str,
     rig: Rig,  # noqa: F811
 ) -> None:
-    """An account's own settings are kept once, on the account (c-580). A copy on the team's binding would outlive the
+    """An account's own settings are kept once, on the account. A copy on the team's binding would outlive the
     account it came from: after Cancel removed one, the next account would call the old instance before anyone signed
     in to it."""
     client, _, _ = rig

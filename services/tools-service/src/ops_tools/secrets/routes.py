@@ -1,5 +1,5 @@
 """`/v1/secrets`: create, rotate, delete and list tool secrets. A value goes in and never comes out: responses
-carry a secret's name, version and times only. A secret belongs to one team (c-509): every route reads and writes the
+carry a secret's name, version and times only. A secret belongs to one team: every route reads and writes the
 acting team's secrets, or with `teamId` another team's, which only the Security team's admins may name. Two teams that
 need the same credential each hold their own row under the same name."""
 
@@ -40,15 +40,15 @@ TeamQuery = Annotated[str | None, Query(alias="teamId", pattern=r"^[a-z0-9][a-z0
 
 
 class SecretIn(_In):
-    # A new name is upper snake case up to 64 characters, the rule files-service's storage credentials share (c-093);
+    # A new name is upper snake case up to 64 characters, the rule files-service's storage credentials share;
     # a secret created under the older 120-character cap keeps its name and stays usable and editable.
     name: str = Field(pattern=r"^[A-Z][A-Z0-9_]*$", max_length=64)
     value: str = Field(min_length=1, max_length=8192)
     # The team it belongs to; the acting team when left out. Another team needs a Security admin (`_team`).
     team_id: Team | None = None
-    # Refused when sent (`secret_one_team`): a secret limited to several teams is one row per team now (c-509).
+    # Refused when sent (`secret_one_team`): a secret limited to several teams is one row per team now.
     teams: list[Team] | None = Field(default=None, deprecated=True)
-    # Set only by the provisioner (c-180): the template slot the secret fills, and `system` to keep the slot from
+    # Set only by the provisioner: the template slot the secret fills, and `system` to keep the slot from
     # people. A Security admin still rotates a system secret's value; that is not an edit of the slot.
     template_id: str | None = Field(default=None, min_length=1, max_length=120)
     protection: Literal["system", "managed"] | None = None
@@ -79,7 +79,7 @@ class SecretMeta(Out):
     teams: list[str] | None = Field(default=None, deprecated=True)
     template_id: str | None = None
     protection: Literal["system", "managed"] | None = None
-    # The connection this secret is a part of (c-330): it is set, replaced and removed on the connection, never here.
+    # The connection this secret is a part of: it is set, replaced and removed on the connection, never here.
     connection_id: str | None = None
     # The app credential whose client secret this is: it is replaced under Credentials, never here.
     credential_id: str | None = None
@@ -141,10 +141,10 @@ def _meta(row: dict[str, Any], users: dict[str, list[dict[str, Any]]] | None = N
 def may_write_secret(
     p: Principal, action: str, owner: str, *, security_team: str, protection: str | None = None
 ) -> None:
-    """Who may add, change or remove a secret (c-186), or Forbidden. The Security team's admins (`manage`) write any.
+    """Who may add, change or remove a secret, or Forbidden. The Security team's admins (`manage`) write any.
     A team's secret is that team's: its builders write it, acting in that team, unless the tenant's
-    `securityTeamAddsSecrets` policy keeps writes in the Security team. A `system` secret's slot is the provisioner's
-    (c-180)."""
+    `securityTeamAddsSecrets` policy keeps writes in the Security team. A `system` secret's slot is the
+    provisioner's."""
     access = Access(security_team=security_team)
     if access.may(p, "secrets_egress", "manage", protection=protection):
         return
@@ -218,7 +218,7 @@ def secrets_router(
     @contextmanager
     def _in(who: Person, owner: str) -> Generator[None]:
         """The request's transactions in `owner`'s team: the acting team, or the team a Security admin named, after
-        `_team` checked that right. The database shows a transaction its own team's secrets only (c-616 C1)."""
+        `_team` checked that right. The database shows a transaction its own team's secrets only."""
         if owner == who.team_id:
             yield
             return
@@ -281,7 +281,7 @@ def secrets_router(
     async def rotate_secret(  # pyright: ignore[reportUnusedFunction]
         name: str, body: RotateIn, who: Annotated[Person, Depends(caller)], team_id: TeamQuery = None
     ) -> JSONResponse:
-        # Setting the value is not an edit of the slot, so a system secret's protection does not apply (c-180).
+        # Setting the value is not an edit of the slot, so a system secret's protection does not apply.
         owner = _team(who, team_id)
         with _in(who, owner):
             row = await _row(who, owner, name)

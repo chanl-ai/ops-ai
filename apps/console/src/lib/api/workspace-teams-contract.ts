@@ -2,7 +2,7 @@ import type { ListParams, ListResult } from '@/lib/types/query';
 import type { WorkspaceTeam, WorkspaceTeamFilters, WorkspaceTeamInput } from '@/lib/types/team';
 
 /**
- * Every team of the workspace as workspace admins manage it on platform-service (c-198): a workspace admin holds
+ * Every team of the workspace as workspace admins manage it on platform-service: a workspace admin holds
  * access.manage in every team (an Admin role in `*`); listing needs access.view there. `editor` reports both from the
  * server's own permissions, so the console offers a control only to a person who can use it.
  */

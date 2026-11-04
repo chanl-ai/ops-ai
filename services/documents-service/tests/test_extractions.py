@@ -1,4 +1,4 @@
-"""The extraction API (c-235, moved here in c-256), by failure mode: a field's confidence or review set by anyone but
+"""The extraction API (moved here), by failure mode: a field's confidence or review set by anyone but
 the checks, or below the workspace floor (F1); a large extraction lost on restart (F2); a correction that erases the
 original (F3); another team's file, an unscanned one or an unknown document type read, or an unreadable floor lowering
 the bar (F5); a provider called directly, an unbound `extract` alias failing instead of using `default`, or the tenant
@@ -87,7 +87,7 @@ async def test_fields_are_scored_by_the_checks_against_the_highest_threshold(mak
     fields = body["fields"]
     assert (fields["invoice"]["confidence"], fields["amount"]["confidence"], body["floor"]) == (0, 0.9, 0.95), body
     assert body["needsReview"] == ["invoice", "amount"], body
-    assert models.calls == [("extract", s.tenant)], "the tenant rides on the model call (c-251)"
+    assert models.calls == [("extract", s.tenant)], "the tenant rides on the model call"
 
 
 async def test_a_queued_extraction_runs_again_after_a_restart(make: Make, monkeypatch: Any) -> None:
@@ -205,7 +205,7 @@ async def test_models_service_is_asked_on_extract_then_default_with_the_tenant()
 async def test_a_files_extractions_list_newest_first_for_the_team_and_another_teams_file_is_not_found(
     make: Make,
 ) -> None:
-    """The file page's Fields tab (c-250) reads a file's extractions in one call, paged, newest first."""
+    """The file page's Fields tab reads a file's extractions in one call, paged, newest first."""
     s = make(Models(), Floor())
     async with s.client as c:
         fid = await s.stored(NOTICE)
@@ -219,7 +219,7 @@ async def test_a_files_extractions_list_newest_first_for_the_team_and_another_te
 
 
 async def test_a_pdf_fields_value_carries_its_box_on_the_page_and_an_invented_one_none(make: Make) -> None:
-    """Through the API from a real PDF (c-252): the file page draws each field where its value is printed."""
+    """Through the API from a real PDF: the file page draws each field where its value is printed."""
     buf = io.BytesIO()
     c = Canvas(buf, pagesize=LETTER)
     for i, line in enumerate(NOTICE.decode().splitlines()):
@@ -239,7 +239,7 @@ async def test_a_pdf_fields_value_carries_its_box_on_the_page_and_an_invented_on
 async def test_every_end_of_a_read_reports_extraction_finished_once_with_its_outcome(
     make: Make, engine: AsyncEngine, monkeypatch: Any
 ) -> None:
-    """A workflow step parked on a long read resumes on extraction.finished (c-525), so a read that ends without it
+    """A workflow step parked on a long read resumes on extraction.finished, so a read that ends without it
     leaves the run waiting until its time limit. One event per extraction, keyed by its id, for done, failed and
     unreadable alike, written in the transaction that ends the read."""
     monkeypatch.setattr(extraction, "SYNC_BYTES", 10)  # every file is read in the background

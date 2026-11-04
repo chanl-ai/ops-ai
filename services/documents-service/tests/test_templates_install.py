@@ -1,4 +1,4 @@
-"""Installing a plugin's document type as a team's own copy (c-590), through the real routes, by failure mode: the list
+"""Installing a plugin's document type as a team's own copy, through the real routes, by failure mode: the list
 shows a template the team cannot install, or hides which ones it already holds; a copy is made some way other than the
 create route, so it reads differently from a type a person made; a second install of the same version makes a second
 copy; a copy whose type is gone blocks the template for good; an install of a template whose plugin is off for the team,

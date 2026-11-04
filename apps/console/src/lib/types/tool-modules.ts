@@ -122,7 +122,7 @@ export interface ModuleOperation {
   headers: { key: string; value: string }[];
   /** JSON template with `{{arg}}` placeholders; for a form, a JSON object of field to template; for raw, the text. */
   body?: string;
-  /** How `body` is sent (c-591); unset is JSON. */
+  /** How `body` is sent; unset is JSON. */
   bodyEncoding?: BodyEncoding;
   /** Jinja2 template over the parsed response as `data`; failing at call time returns the raw answer with an error. */
   responseTransform?: string;
@@ -138,12 +138,12 @@ export interface ModuleOperation {
   rateLimitPerMin: number;
   /** Each call waits for an approval token bound to the exact input. */
   requiresApproval: boolean;
-  /** A write's approval policy: how many distinct people of the run's team approve each call (c-509). */
+  /** A write's approval policy: how many distinct people of the run's team approve each call. */
   approvers: 1 | 2;
   /** Approving asks the approver to step up (implied by two approvers). */
   stepUp?: boolean;
   /** Each `{{NAME}}` the headers or path read, and whether the tenant has set it. */
-  /** `set`: the module's own team holds it, the only secrets a call of this module reads (c-509). */
+  /** `set`: the module's own team holds it, the only secrets a call of this module reads. */
   secrets?: { name: string; set: boolean; available?: boolean }[];
   /** Per-call ceiling in CAD. */
   amountMax?: number;
@@ -184,13 +184,13 @@ export interface ModuleApproval {
   status: ApprovalStatus;
   expiresAt?: string;
   reason?: string;
-  /** The Human Tasks review deciding the request (c-166); absent on requests made before they went there. */
+  /** The Human Tasks review deciding the request; absent on requests made before they went there. */
   reviewId?: string;
   /** The team whose reviewers decide it. */
   deciderTeam?: string;
 }
 
-/** A workflow's access to one module, as Access › Tool access lists it across modules (c-144). */
+/** A workflow's access to one module, as Access › Tool access lists it across modules. */
 export interface ToolGrant extends ModuleApproval {
   moduleId: string;
   moduleName: string;
@@ -227,7 +227,7 @@ export interface ModuleVersion {
   /** Workflows pinned to this version at their last publish. */
   pinnedBy: ModuleRef[];
   reachability: { environment: Environment; ok: boolean; checkedAt: string }[];
-  /** Its review, a publish request decided in Human Tasks (c-163): the request id and when it was asked for. */
+  /** Its review, a publish request decided in Human Tasks: the request id and when it was asked for. */
   reviewId?: string;
   requestedAt?: string;
   /** Who decided it, and for a no the reason, shown as the finding. */
@@ -249,7 +249,7 @@ export interface RunContextOption {
 }
 
 export interface ToolModuleDetail extends ToolModule {
-  /** What the caller may do with it, by the routes' own checks (c-186); absent before the API sends them. */
+  /** What the caller may do with it, by the routes' own checks; absent before the API sends them. */
   canEdit?: boolean;
   canDelete?: boolean;
   canPublish?: boolean;
@@ -281,7 +281,7 @@ export interface ModuleTestInput {
   input: Record<string, unknown>;
   /** Test only: the gateway issues a test approval token for this exact input instead of waiting for a person. */
   simulateApproval?: boolean;
-  /** The workbench's unsaved definition, tried without staging it; agents never see it (c-088). */
+  /** The workbench's unsaved definition, tried without staging it; agents never see it. */
   /** `responseTransform: null` runs with no transform; left out, the operation's own. */
   draft?: { responseTransform?: string | null };
   /** Secret values for this run only, never stored; a secret not given here is read from the tenant's secrets. */
@@ -376,7 +376,7 @@ export interface HttpOperationInput {
   bodyEncoding?: BodyEncoding;
 }
 
-/** How an operation's body is sent: JSON, a form, or raw text with its own Content-Type (c-591). */
+/** How an operation's body is sent: JSON, a form, or raw text with its own Content-Type. */
 export type BodyEncoding = 'json' | 'form' | 'raw';
 
 export interface ModuleInput {

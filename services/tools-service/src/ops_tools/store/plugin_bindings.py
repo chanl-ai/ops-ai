@@ -1,6 +1,6 @@
-"""Each team's part of a plugin (c-564): whether the team turned it on, the team's connection and the team's settings.
+"""Each team's part of a plugin: whether the team turned it on, the team's connection and the team's settings.
 
-A plugin's tools are one workspace-level module (no team owns it, c-433), which holds one connection, one endpoint and
+A plugin's tools are one workspace-level module (no team owns it), which holds one connection, one endpoint and
 one egress list for every team. So none of those live on the module: the gateway reads them from the calling team's
 binding on each call, and a team with no binding, or with its binding off, does not see the plugin at all."""
 
@@ -31,7 +31,7 @@ plugin_bindings = sa.Table(
     sa.Column("settings", sa.JSON, nullable=False),
     sa.Column("updated_by", sa.String(320), nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
-    # The plugin version the team took (c-609): its number, the digest of its tool declarations and the declarations
+    # The plugin version the team took: its number, the digest of its tool declarations and the declarations
     # themselves, which each call is built from until the team takes a newer one. Null until the team takes one.
     sa.Column("version", sa.String(40)),
     sa.Column("digest", sa.String(64)),
@@ -74,7 +74,7 @@ class PluginBindings:
         return dict(row) if row else None
 
     async def of_plugin(self, tenant_id: str, plugin_id: str) -> list[dict[str, Any]]:
-        """Every team's binding of one plugin, for stamping the installed version on those that have none (c-609)."""
+        """Every team's binding of one plugin, for stamping the installed version on those that have none."""
         t = plugin_bindings
         reason = "stamping a plugin's installed version on each team's binding that has none"
         q = sa.select(t).where(t.c.tenant_id == tenant_id, any_team(t, reason), t.c.plugin_id == plugin_id)

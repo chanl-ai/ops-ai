@@ -244,7 +244,7 @@ class Fired:
 
 
 async def fire(rig: Rig, tid: str, timer_id: str) -> Fired:
-    """What every scheduler does (c-168: no HTTP route fires a timer; the poller calls `fire` in-process)."""
+    """What every scheduler does (no HTTP route fires a timer; the poller calls `fire` in-process)."""
     r = await timers_module.fire(rig.rt, tid, timer_id)  # type: ignore[arg-type]
     data = {"timerId": r.timer_id, "status": r.status, "runId": r.run_id, "attempts": r.attempts}
     if r.status in timers_module.REFUSED:

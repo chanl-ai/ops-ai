@@ -43,7 +43,7 @@ def main() -> None:
     p.add_argument("--models-url", default=os.environ.get("OPS_MODELS_URL", "http://127.0.0.1:8730"))
     p.add_argument("--provider", default="provider", help="connection name")
     # Defaults from the install's model settings (OPENAI_API_TYPE, OPENAI_API_BASE, OPENAI_API_VERSION,
-    # OPENAI_API_REGION; c-605), which ModelConnectionSettings has already checked.
+    # OPENAI_API_REGION), which ModelConnectionSettings has already checked.
     settings, install = Settings(), ModelConnectionSettings()
     azure = install.openai_api_type == "azure"
     p.add_argument(

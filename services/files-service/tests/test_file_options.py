@@ -1,4 +1,4 @@
-"""The file picker's choices (`GET /v1/files/options`, c-159), by failure mode: another team's file offered; a file not
+"""The file picker's choices (`GET /v1/files/options`), by failure mode: another team's file offered; a file not
 scanned clean offered as choosable; search or paging done on one page instead of in the query; a stored id not
 labelled."""
 

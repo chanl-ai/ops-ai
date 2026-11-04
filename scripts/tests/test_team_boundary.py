@@ -1,4 +1,4 @@
-"""Every record belongs to one team, and nothing crosses teams (c-507; docs/architecture/identity-and-tenancy.md "The
+"""Every record belongs to one team, and nothing crosses teams (docs/architecture/identity-and-tenancy.md "The
 team is the workspace"). The lock, by failure mode:
 
 - a table with a team column that is not marked team-owned, or whose team column allows no team: its rows escape the
@@ -10,7 +10,7 @@ team is the workspace"). The lock, by failure mode:
 
 Tables come from importing every module under services/*/src and packages/*/src that builds a table, so a new table
 is covered without being listed. Tenant-held tables (people, sign-in, the account's own records) are allowlisted with
-a reason; the tools tables are allowlisted until c-509 gives each team its own.
+a reason; the tools tables are allowlisted until each team has its own.
 """
 
 from __future__ import annotations
@@ -38,18 +38,18 @@ TENANT_HELD = {
     "members": "a person's membership of a team, read by the account's access pages",
     "api_keys": "an account key names the team it acts in; the key belongs to the account's admins",
     "role_assignments": "a person's role in one team or in every team ('*', the account admin): the account's access",
-    "audit_entries": "sign-in and membership events have no team; team pages filter on the acting team (c-507 Q1)",
+    "audit_entries": "sign-in and membership events have no team; team pages filter on the acting team",
     "service_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
     "files_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
     "documents_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
     "platform_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
 }
-# Until c-509 gives each team its own tool modules (keys per team, its own policies): then this list is empty.
+# Until each team has its own tool modules (keys per team, its own policies): then this list is empty.
 TOOLS_UNTIL_C509 = {
-    "tool_modules": "tools per team: c-509",
-    "send_policies": "tools per team: c-509",
-    "send_checks": "tools per team: c-509",
-    "gateway_calls": "the call log records the acting team for Usage (c-616); the database lock on it is c-414's",
+    "tool_modules": "tools per team",
+    "send_policies": "tools per team",
+    "send_checks": "tools per team",
+    "gateway_calls": "the call log records the acting team for Usage; the database lock on it comes later",
 }
 # The account's background processes (docs/architecture/identity-and-tenancy.md, "The team is the workspace").
 BACKGROUND = {
@@ -60,7 +60,7 @@ BACKGROUND = {
 }
 ALLOWED_TABLES = TENANT_HELD | TOOLS_UNTIL_C509 | BACKGROUND
 
-# Source lines allowed to mean "every team", each with its reason; the tools entries leave with c-509.
+# Source lines allowed to mean "every team", each with its reason; the tools entries leave.
 ALLOWED_BRANCHES = {
     "services/platform-service/src/ops_platform/roles.py": "a person's own grants across the teams they belong to",
     "packages/ops_engine/src/ops_engine/store/definitions.py": "background process: the engine's loops read every "

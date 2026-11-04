@@ -1,5 +1,5 @@
 """A seed's change to an agent (a pinned guardrail or skill) never steps over a draft a person saved, and outside
-dev it waits for review instead of publishing (c-063, review pass 3)."""
+dev it waits for review instead of publishing (review pass 3)."""
 
 from __future__ import annotations
 

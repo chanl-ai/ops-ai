@@ -48,8 +48,8 @@ AI_STEPS_OFF = (
 
 @dataclass(frozen=True)
 class StepRules:
-    """What a team's settings say about its AI steps, read live: whether they may run (aiSteps, c-298) and whether
-    people reading its runs see personal data masked (aiStepsMaskPersonalData, c-321)."""
+    """What a team's settings say about its AI steps, read live: whether they may run (aiSteps) and whether
+    people reading its runs see personal data masked (aiStepsMaskPersonalData)."""
 
     allowed: bool
     masks: bool
@@ -63,7 +63,7 @@ class RunRules(Protocol):
 
 @dataclass
 class KernelPrompts:
-    """The engine's PromptPort and the AI step route's (c-298): one kernel call per step under its team's rules. A team
+    """The engine's PromptPort and the AI step route's: one kernel call per step under its team's rules. A team
     with AI steps off is refused here at run, not only when a workflow is saved, so turning the setting off stops
     the steps already saved."""
 
@@ -85,7 +85,7 @@ class KernelPrompts:
             schema=request.output_schema,
             model_alias=request.model_alias or self.model_alias,
             agent_id="workflow_step",
-            # Real in the step's output, for the steps after it; masked where people read the run (c-321).
+            # Real in the step's output, for the steps after it; masked where people read the run.
             redact_pii=False,
         )
         if result.status == "completed":
@@ -108,7 +108,7 @@ async def kernel_call(
     redact_pii: bool = False,
 ) -> TurnResult:
     """One kernel turn with no tools and no knowledge whose answer must match `schema`, on `model_alias`: memory
-    extraction's call and every AI step's (c-298). The ledger records it under `key`; each caller reads the result its
+    extraction's call and every AI step's. The ledger records it under `key`; each caller reads the result its
     own way."""
     req = TurnRequest(
         turn_id=key,
@@ -162,7 +162,7 @@ class KernelAgents:
             # A model the agent does not allow is the step's setting, not a passing fault: the error port, no retry.
             return AgentResult(False, error=str(e), code="step_setting")
         # The compiler appends "\n\nInput:\n" and the mapped JSON; search the prompt so those names and ids do not
-        # drown the handbook terms (c-532).
+        # drown the handbook terms.
         prompt, sep, _ = request.message.partition("\n\nInput:\n")
         req = TurnRequest(
             turn_id=request.turn_id,
@@ -191,7 +191,7 @@ class KernelAgents:
         raise AgentUnavailableError(result.error or f"the turn stopped: {result.stop_reason}")
 
     async def prompt(self, request: PromptRequest) -> AgentResult:
-        """An AI step's call (c-298), through the one prompt port the AI step route also uses."""
+        """An AI step's call, through the one prompt port the AI step route also uses."""
         return await KernelPrompts(self.ports, self.model_alias, self.rules).prompt(request)
 
     def _step_settings(self, agent: AgentDefinition, request: AgentRequest) -> AgentSettings:
@@ -205,14 +205,14 @@ class KernelAgents:
         if request.max_tool_calls is not None:
             caps = [c for c in (settings.max_tool_calls, request.max_tool_calls) if c is not None]
             settings = replace(settings, max_tool_calls=min(caps))
-        # Workflow data stays real so a later step (a Send) gets the real address; people's reads of the run mask it
-        # (c-321, tick 31). The agent's redactPii still masks its chats.
+        # Workflow data stays real so a later step (a Send) gets the real address; people's reads of the run mask it.
+        # The agent's redactPii still masks its chats.
         return replace(settings, redact_pii=False)
 
 
 @dataclass
 class KernelModels:
-    """One structured model call (memory extraction, c-206): one kernel turn with no tools and no knowledge, on the
+    """One structured model call (memory extraction): one kernel turn with no tools and no knowledge, on the
     deployment's alias, whose answer must match the JSON Schema. The kernel's ledger records the call under `key`."""
 
     ports: KernelPorts

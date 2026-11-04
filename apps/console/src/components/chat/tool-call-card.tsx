@@ -24,7 +24,7 @@ const runIdOf = (call: ToolCall): string | null => {
 export function ToolCallCard({ call }: { call: ToolCall }) {
   const runId = runIdOf(call);
   const specialist = call.name.startsWith(SPECIALIST_PREFIX);
-  // A specialist call (c-174) is named for the agent asked; the reply carries its name, the chat agents list covers the
+  // A specialist call is named for the agent asked; the reply carries its name, the chat agents list covers the
   // call while it runs.
   const agents = useChatAgents();
   const asked = specialist
@@ -45,7 +45,7 @@ export function ToolCallCard({ call }: { call: ToolCall }) {
       )}
     </>
   );
-  // A registry tool's server is its app's name (c-607): the row reads `Get a record · Salesforce`, never the slug.
+  // A registry tool's server is its app's name: the row reads `Get a record · Salesforce`, never the slug.
   const app = call.server && !INTERNAL_SERVERS.has(call.server) ? call.server : null;
   const named = call.label ?? call.name;
   return <ChatToolCall name={asked ? `Asking ${asked}` : app ? `${named} · ${app}` : named} state={stateOf(call)} input={call.input} output={call.output} error={call.status === 'failed' ? 'The tool call failed.' : undefined} detail={detail} />;

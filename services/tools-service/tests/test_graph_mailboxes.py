@@ -1,4 +1,4 @@
-"""Microsoft 365 mailboxes with the team's own app registration (c-228), against a fake Graph that checks the client
+"""Microsoft 365 mailboxes with the team's own app registration, against a fake Graph that checks the client
 credentials, the Microsoft tenant and the mailbox, by failure mode: the client secret leaves tools-service; a wrong
 secret, an address outside the app's reach or a missing Mail.Send reads as connected; Test connection sends a message;
 a Graph host off the tenant's allow-list is dialled; a reply goes out through another registration than the team's; a

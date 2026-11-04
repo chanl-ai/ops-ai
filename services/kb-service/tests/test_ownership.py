@@ -1,4 +1,4 @@
-"""Who may change a knowledge base (c-056 T013), by failure mode: the owner locked out of their own, a tenant admin
+"""Who may change a knowledge base, by failure mode: the owner locked out of their own, a tenant admin
 unable to step in, and an admin of one team stepping into another team's. Knowledge is shared by the team since
 2026-10-17, so a teammate changing someone else's base is allowed (test_write_roles)."""
 
