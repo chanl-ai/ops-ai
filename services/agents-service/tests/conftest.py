@@ -198,6 +198,10 @@ def scripted(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         return ModelResponse(parts=[TextPart(f"Here is the chart. ![balance chart]({image.group(1)})")])
     if "CHQ-" in text and "lookup_account" in tools:
         return ModelResponse(parts=[ToolCallPart("lookup_account", {"query": "CHQ-2219"})])
+    if "<attachments>" in text and "what did i attach" in text.lower():
+        # Lists the files the turn named, as they were named to it.
+        block = text.split("<attachments>", 1)[1].split("</attachments>", 1)[0]
+        return ModelResponse(parts=[TextPart(" ".join(r[2:] for r in block.splitlines() if r.startswith("- ")))])
     if "<knowledge>" in text:
         # Any other turn with passages answers from the first one and cites it, as a model told to cite would.
         return ModelResponse(parts=[TextPart("Here is what the policy says [1].")])

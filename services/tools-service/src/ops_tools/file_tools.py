@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from ops_agent_kernel.ports import ToolOutcome
-from ops_documents_client import DocumentNotFound, DocumentsClient, DocumentsRefused
+from ops_documents_client import READING, DocumentNotFound, DocumentsClient, DocumentsRefused
 from ops_files_client import FileInfo, FileNotFound, FilesClient, FilesRefused
 
 from .modules.seed import FILE_TOOL_NAMES, FILE_TOOL_TIMEOUT_MS
@@ -97,20 +97,17 @@ class FileTools:
     async def _finished(self, tenant: str, team: str, answer: dict[str, Any]) -> dict[str, Any]:
         """The extraction once it has finished, waiting for a large file's background read within the deadline."""
         ends = time.monotonic() + self.wait_s
-        while answer.get("status") in ("queued", "running") and time.monotonic() < ends:
+        while answer.get("status") in READING and time.monotonic() < ends:
             await self.sleep(POLL_S)
             answer = await self.documents.extraction(tenant, team, str(answer["id"]))
         return answer
 
     async def _text(self, tenant: str, team: str, file: FileInfo) -> ToolOutcome:
-        # Keyed by the file's bytes: a second read of the same file, in any turn, answers the read already made (or
-        # still running), and costs nothing more.
-        started = await self.documents.extract(
-            tenant, team, file.id, {"read": "text"}, idempotency_key=f"file-tools:{file.digest}:text"
+        answer = await self.documents.read_text(
+            tenant, team, file.id, digest=file.digest, wait_s=self.wait_s, poll_s=POLL_S, sleep=self.sleep
         )
-        answer = await self._finished(tenant, team, started)
         head = {"fileId": file.id, "name": file.name, "type": file.mime, "sensitivity": file.sensitivity}
-        if answer.get("status") in ("queued", "running"):
+        if answer.get("status") in READING:
             return ToolOutcome(False, {**head, "error": "The file is still being read; ask again shortly."})
         if answer.get("status") != "done":
             reason = _reason(answer, "it has no text to read")
@@ -156,7 +153,7 @@ class FileTools:
             "sensitivity": file.sensitivity,
             "documentType": answer.get("documentType") or {"id": kind["id"]},
         }
-        if answer.get("status") in ("queued", "running"):
+        if answer.get("status") in READING:
             return ToolOutcome(False, {**head, "error": "The document is still being read; ask again shortly."})
         if answer.get("status") != "done":
             reason = _reason(answer, "it could not be read")

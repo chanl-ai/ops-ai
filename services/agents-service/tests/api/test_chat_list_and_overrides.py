@@ -16,6 +16,7 @@ from ops_agents.api.runs import graph_store
 from ops_agents.store.chat_search import matching_query
 from ops_agents.store.tenancy import tenant_scope
 from tests.api.test_chat import new_thread, send
+from tests.api.test_chat_attachments import Rig
 from tests.api.test_chat_on_graph import stack  # noqa: F401  # pyright: ignore[reportUnusedImport] - fixture
 from tests.api.test_write_approval_policy import (
     dev_platform,  # noqa: F401  # pyright: ignore[reportUnusedImport] - fixture
@@ -29,14 +30,8 @@ async def test_overrides_and_attachments_reach_the_run_input_unchanged(stack: tu
     client, rt = stack
     thread_overrides = {"toolsOff": ["place_wire_hold"]}
     turn_overrides = {"knowledgeBaseIds": ["kb_people"]}
-    uploaded = await client.post(
-        "/chat/attachments",
-        params={"name": "limits.txt"},
-        content=b"Daily wire limit: 25,000.",
-        headers={"Content-Type": "text/plain"},
-    )
-    assert uploaded.status_code == 201, uploaded.text
-    file = uploaded.json()["data"]
+    rig = Rig(rt)
+    file = await rig.put(await rig.team((await new_thread(client))["id"]), "limits.txt", ["Daily wire limit: 25,000."])
     res = await client.post(
         "/chat/threads",
         json={"agentId": "ag_fraud", "kbIds": ["kb_people"], "overrides": thread_overrides, "attachments": [file]},

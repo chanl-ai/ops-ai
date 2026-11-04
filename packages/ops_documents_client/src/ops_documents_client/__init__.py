@@ -5,6 +5,9 @@ the caller acts for, which documents-service reads from the signed token, never 
 
 from __future__ import annotations
 
+import asyncio
+import time
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
@@ -12,7 +15,11 @@ import httpx
 from ops_identity import ServiceCallError, ServiceClient
 from ops_service_kit.settings import Settings
 
-__all__ = ["DocumentNotFound", "DocumentsClient", "DocumentsRefused"]
+__all__ = ["READING", "DocumentNotFound", "DocumentsClient", "DocumentsRefused"]
+
+# An extraction in these states has not finished: a file over documents-service's synchronous size reads in the
+# background.
+READING = ("queued", "running")
 
 
 class DocumentsRefused(Exception):
@@ -76,6 +83,28 @@ class DocumentsClient:
             )
         except ServiceCallError as e:
             raise _refused(e) from e
+        return answer
+
+    async def read_text(
+        self,
+        tenant: str,
+        team: str,
+        file_id: str,
+        *,
+        digest: str,
+        wait_s: float,
+        poll_s: float = 1.0,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    ) -> dict[str, Any]:
+        """The file's full text, every page in reading order (`text`, and `pages` of {number, text, tables}); no model
+        is asked. Keyed by the bytes, so every caller that reads the same file (an agent's read_file tool, a chat
+        attachment) gets the one read already made. A background read is waited for up to `wait_s`; the answer is
+        then the extraction as it is, still queued or running when it took longer."""
+        answer = await self.extract(tenant, team, file_id, {"read": "text"}, idempotency_key=f"text:{digest}")
+        ends = time.monotonic() + wait_s
+        while answer.get("status") in READING and time.monotonic() < ends:
+            await sleep(poll_s)
+            answer = await self.extraction(tenant, team, str(answer["id"]))
         return answer
 
     async def document_type(self, tenant: str, team: str, type_id: str) -> dict[str, Any]:
