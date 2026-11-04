@@ -328,6 +328,42 @@ class Authenticator:
         prepared.certificate = certificate_of(settings, values)
         return prepared
 
+    async def keep_alive(self, tenant_id: str, connection_id: str, person: str, rotation: int, *, actor: str) -> bool:
+        """Refreshes one held sign-in now, whether or not its access token is still fresh, so a system that ends a
+        sign-in left unused (Salesforce, after 30 days) keeps it. True when it was refreshed. A refresh the system
+        refuses with invalid_grant (the grant ended) marks the sign-in as a call's refusal would: the team's account
+        needs reconnecting, or the person's own sign-in is refused. Any other failure leaves it for the next pass."""
+        conn = await self.connections.get(tenant_id, connection_id)
+        if conn is None or conn["status"] == "revoked" or not kind_of(str(conn["auth_kind"])).holds_token:
+            return False
+        settings: dict[str, Any] = dict(conn["settings"] or {})
+        values = await self._secret_values(
+            tenant_id, str(conn["team_id"]), dict(conn["secrets"] or {}), tool="sign-in keep-alive", actor=actor
+        )
+        if (app := conn.get("platform_app")) and (installed := self.connections.install_client(str(app))):
+            values = {**values, "clientSecret": installed.secret.get_secret_value()}
+        cert = settings.get("signingCertificate")
+        proof = ClientProof(values.get("clientSecret"), values.get("signingKey"), str(cert) if cert else None)
+        try:
+            # The rotation held is passed as stale, so the stored token is replaced even while it is fresh.
+            await self.tokens.access(
+                tenant_id, connection_id, settings, proof, grant="none", stale_rotation=rotation, person=person
+            )
+        except AuthFailed as e:
+            if e.provider_error != "invalid_grant":
+                raise
+            if person == SHARED:
+                await self._team_account_stopped(conn, e, actor)
+            else:
+                at = datetime.now(UTC)
+                await self.connections.mark_refused(tenant_id, connection_id, person, reason=str(e), at=at)
+                event = {"action": "refresh_failed", "actor": actor, "at": at}
+                await self.connections.note(
+                    tenant_id, connection_id, {**event, "detail": {"code": e.code, "own": True}}
+                )
+            return False
+        return True
+
     async def _team_account_stopped(self, conn: dict[str, Any], e: AuthFailed, actor: str) -> AuthFailed | None:
         """A team account the system refused, or whose sign-in ended with no refresh token to renew it: the
         call says which app needs reconnecting and who does it, and the team's admins are told once per breakage

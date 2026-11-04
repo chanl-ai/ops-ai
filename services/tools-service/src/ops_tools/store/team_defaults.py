@@ -27,6 +27,9 @@ team_defaults = sa.Table(
     info=TEAM_OWNED,
 )
 
+# Why the sign-in keep-alive reads every team's row: it visits each team that has used this service, then refreshes
+# that team's own sign-ins in that team's scope; it reads only which teams there are.
+EVERY_TEAM = "the sign-in keep-alive visits every team that has used this service"
 # Why the start-up catch-up reads every team's row: it brings each team's defaults to this release's version, and
 # reads only versions, never a team's records.
 CATCH_UP = "the start-up reconciler brings every team's defaults to this release's version"
@@ -51,6 +54,13 @@ class TeamDefaults:
         row = {"tenant_id": tenant_id, "team_id": team_id, "version": version, "applied_at": at}
         async with self.engine.begin() as c:
             await c.execute(upsert(c, team_defaults, row, keys=["tenant_id", "team_id"]))
+
+    async def teams(self) -> list[tuple[str, str]]:
+        """Every (tenant, team) this service has provisioned: each team that has listed its apps or looked up a tool."""
+        t = team_defaults
+        q = sa.select(t.c.tenant_id, t.c.team_id).where(any_team(t, EVERY_TEAM)).order_by(t.c.tenant_id, t.c.team_id)
+        async with self.engine.connect() as c:
+            return [(str(r.tenant_id), str(r.team_id)) for r in await c.execute(q)]
 
     async def behind(self, version: int) -> list[tuple[str, str]]:
         """Every (tenant, team) whose defaults are older than `version`."""

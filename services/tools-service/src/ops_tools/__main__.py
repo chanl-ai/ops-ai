@@ -33,6 +33,7 @@ from .auth import Authenticator, Tokens
 from .auth.discovery import Discovery
 from .code_runs import CodeExecutor, code_signer
 from .connections.connect_links import ConnectLinks
+from .connections.keepalive import SignInKeepalive, keep_signed_in
 from .connections.routes import accounts_router
 from .connections.service import ConnectionService
 from .defaults import catch_up_at_start
@@ -281,6 +282,8 @@ def main() -> None:
             lambda: catch_up_at_start(store, TeamDefaults(engine)),
             # Once at start: a tool's sign-in header saved before they were refused moves to its connection.
             lambda: move_at_start(store, connection_store),
+            # Once a day: every sign-in left unused for 20 days is refreshed, so no system ends it for being idle.
+            lambda: keep_signed_in(SignInKeepalive(TeamDefaults(engine), connection_store, authenticator)),
         ),
         secret_resolver=secrets,
         authenticator=authenticator,

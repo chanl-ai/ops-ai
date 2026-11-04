@@ -842,6 +842,30 @@ class ConnectionStore:
         async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q.returning(*_HELD_TOKEN))).mappings()]
 
+    async def idle_sign_ins(self, tenant_id: str, refreshed_before: datetime, *, limit: int = 500) -> list[Row]:
+        """The acting team's sign-ins, the team's and each person's, that hold a refresh token, were last refreshed
+        before `refreshed_before` and are not refused, oldest first: what the keep-alive refreshes. A revoked account's
+        are left out."""
+        t, k = connection_tokens.c, connections.c
+        on = sa.and_(k.tenant_id == t.tenant_id, k.id == t.connection_id)
+        q = (
+            sa.select(t.connection_id, t.person_id, t.rotations)
+            .select_from(connection_tokens.join(connections, on))
+            .where(
+                t.tenant_id == tenant_id,
+                t.refresh_ct.is_not(None),
+                t.refreshed_at < refreshed_before,
+                t.refused_at.is_(None),
+                k.status != "revoked",
+                team_visible(connection_tokens),
+                team_visible(connections),
+            )
+            .order_by(t.refreshed_at, t.connection_id, t.person_id)
+            .limit(limit)
+        )
+        async with self._tx() as c:
+            return [dict(r) for r in (await c.execute(q)).mappings()]
+
     async def own_sign_ins(self, tenant_id: str, person: str, connection_ids: list[str]) -> list[Row]:
         """One person's own sign-ins on these connections (an app's accounts), newest first: which they pinned
         and which the system refused."""
