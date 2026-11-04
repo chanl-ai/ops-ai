@@ -34,7 +34,7 @@ else
   done
 fi
 # The long suites run as test shards (scripts/test_shard.py) beside one job for their lint, types and gates.
-declare -A SHARDS=([agents-service]=5 [tools-service]=4)
+declare -A SHARDS=([agents-service]=5 [tools-service]=5)
 jobs_json=()
 for svc in ${services[@]+"${services[@]}"}; do
   n=${SHARDS[$svc]:-0}

@@ -18,7 +18,7 @@ def write(tests: Path, name: str, count: int) -> None:
 
 
 def test_every_file_runs_in_exactly_one_shard_for_both_long_suites() -> None:
-    for svc, n in (("agents-service", 5), ("tools-service", 4)):
+    for svc, n in (("agents-service", 5), ("tools-service", 5)):
         tests = ROOT / "services" / svc / "tests"
         shards = test_shard.shards(tests, n)
         placed = [f for s in shards for f in s]

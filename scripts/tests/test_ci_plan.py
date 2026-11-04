@@ -46,7 +46,7 @@ def test_the_long_suites_run_as_shards_beside_their_checks(tmp_path: Path) -> No
     agents = sorted(j["part"] for j in jobs if j["service"] == "agents-service")
     assert agents == ["checks", "test 1/5", "test 2/5", "test 3/5", "test 4/5", "test 5/5"], agents
     tools = sorted(j["part"] for j in jobs if j["service"] == "tools-service")
-    assert tools == ["checks", "test 1/4", "test 2/4", "test 3/4", "test 4/4"], tools
+    assert tools == ["checks", "test 1/5", "test 2/5", "test 3/5", "test 4/5", "test 5/5"], tools
 
 
 def test_a_service_change_runs_that_service_and_no_repo_job(tmp_path: Path) -> None:
