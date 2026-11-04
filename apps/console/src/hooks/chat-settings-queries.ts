@@ -20,6 +20,3 @@ export function useSaveThreadSettings(threadId: string) {
     onSuccess: (settings) => qc.setQueryData(teamKey(key(threadId)), settings),
   });
 }
-
-/** Uploads one file for the next chat message; the server checks its type and size and parses it. */
-export const useAttachChatFile = () => api.chat.settings.attach;

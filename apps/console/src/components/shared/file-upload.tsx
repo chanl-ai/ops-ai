@@ -90,7 +90,7 @@ export function FileUpload({
   testId?: string;
   /** Narrows the purpose's allowed extensions for this control, e.g. `['md', 'zip']` for a skill import. */
   types?: string[];
-  /** Sends each file in one request to a service that stores and checks it (chat attachments); yields its id. */
+  /** Sends each file somewhere other than Files in one request, as a dev page's mock does; yields its id. */
   upload?: (file: File) => Promise<{ fileId: string }>;
   /** Files attached another way (picked from Files), listed as rows beside the uploads so each file shows once. */
   others?: { key: string; name: string; status: string; onRemove: () => void }[];
@@ -143,7 +143,8 @@ export function FileUpload({
             <li key={it.key} className={cn('inline-flex max-w-full items-center gap-1 rounded-md border bg-muted/40 py-0.5 pr-1 pl-2 text-xs', (it.phase === 'error' || it.phase === 'blocked') && 'border-destructive/40 text-destructive')} data-phase={it.phase} title={it.error}>
               {it.phase === 'ready' ? <Paperclip className="size-3" /> : it.phase === 'error' || it.phase === 'blocked' ? <AlertCircle className="size-3" /> : <Loader2 className="size-3 animate-spin" />}
               <span className="max-w-40 truncate">{it.name}</span>
-              <span className="text-muted-foreground tabular-nums">{it.phase === 'uploading' ? `${Math.round(it.progress * 100)}%` : it.phase === 'scanning' ? 'scanning' : bytes(it.size)}</span>
+              {/* A composer has no room for a status line, so the chip itself says why a file was refused. */}
+              {it.phase === 'error' || it.phase === 'blocked' ? <span className="max-w-72 truncate">{it.error}</span> : <span className="text-muted-foreground tabular-nums">{it.phase === 'uploading' ? `${Math.round(it.progress * 100)}%` : it.phase === 'scanning' ? 'scanning' : bytes(it.size)}</span>}
               {it.phase === 'error' && it.retryable && (
                 <button type="button" onClick={() => up.retry(it.key)} className="rounded-sm p-0.5 hover:bg-foreground/10" aria-label={`Retry ${it.name}`}>
                   <RotateCcw className="size-3" />

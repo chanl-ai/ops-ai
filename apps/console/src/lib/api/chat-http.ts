@@ -18,7 +18,7 @@ export function createChatHttp(get: Get, send: Send, qs: (p: ListParams) => stri
       get: () => get('/chat/default-agent'),
       set: (agentId) => send('PUT', '/chat/default-agent', { agentId }),
     },
-    settings: createChatSettingsHttp(get, send, baseUrl),
+    settings: createChatSettingsHttp(get, send),
     memories: createMemoriesHttp(get, send),
     threads: {
       list: ({ cursor, ...p }) => get(`/chat/threads?${qs(p)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),

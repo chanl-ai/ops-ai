@@ -274,7 +274,6 @@ export function createChatMock(deps: Deps): ChatApi {
         overridesByThread.set(tid, overrides);
         return settingsOf(tid);
       },
-      attach: async (file) => respond(() => ({ fileId: id('fl'), name: file.name, size: file.size })),
     },
     defaultAgent: {
       get: () => respond(() => ({ canChange: true, ...(defaultAgentId ? { agentId: defaultAgentId, agentName: deps.agents().find((a) => a.id === defaultAgentId)?.name } : {}) })),
