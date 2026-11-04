@@ -47,15 +47,16 @@ class Proc:
 
 
 @pytest.fixture
-async def procs() -> AsyncIterator[tuple[Proc, Proc]]:
-    engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
+async def procs(tmp_path: Path) -> AsyncIterator[tuple[Proc, Proc]]:
+    # A file, not memory: a cancel that lands inside a write drops the pooled connection, and a new connection to an
+    # in-memory database opens an empty one, so the sweeper then finds no tables.
+    url = f"sqlite+aiosqlite:///{tmp_path / 'leases.db'}"
+    engine = create_async_engine(url, poolclass=StaticPool, connect_args={"check_same_thread": False})
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
     saver = InMemorySaver()
     # A short TTL so expiry happens inside a test; the background sweeper is idle and sweeps run by hand.
-    settings = Settings(
-        database_url="sqlite+aiosqlite://", seed_dir=SEED, lease_ttl_seconds=0.6, sweep_interval_seconds=3600
-    )
+    settings = Settings(database_url=url, seed_dir=SEED, lease_ttl_seconds=0.6, sweep_interval_seconds=3600)
     out: list[Proc] = []
     async with contextlib.AsyncExitStack() as stack:
         for _ in range(2):
