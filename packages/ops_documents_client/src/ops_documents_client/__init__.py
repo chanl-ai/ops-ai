@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""documents-service for services (c-256): extract a file and read a document type, each call in the tenant and team
+"""documents-service for services: extract a file and read a document type, each call in the tenant and team
 the caller acts for, which documents-service reads from the signed token, never from a query parameter."""
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ class DocumentsClient:
     ) -> dict[str, Any]:
         """The file's extraction: finished (done, unreadable or failed) for a small file, which is read at once, or
         queued or running for a larger one, read in the background; documents-service reports `extraction.finished`
-        when it ends (c-525). A repeat with the same `idempotency_key` answers the same extraction as it is now."""
+        when it ends. A repeat with the same `idempotency_key` answers the same extraction as it is now."""
         try:
             answer: dict[str, Any] = await self._documents.request(
                 "POST",

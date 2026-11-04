@@ -1,4 +1,4 @@
-"""A set-aside email's kept copy on PostgreSQL (c-561), by failure mode: the runtime role may only add trigger events,
+"""A set-aside email's kept copy on PostgreSQL, by failure mode: the runtime role may only add trigger events,
 so dropping the copy once its run starts, or after 30 days, is refused and the poll that tries it fails; and the copy
 is listed with the trigger events."""
 

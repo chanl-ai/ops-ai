@@ -1,4 +1,4 @@
-"""A Files page read without a document type (c-535), by failure mode: the read choice, hint or page limit dropped
+"""A Files page read without a document type, by failure mode: the read choice, hint or page limit dropped
 between the read request and the event that starts the system extract workflow, so the person asked for the full text
 or proposed fields and got a Detect read; an unknown read accepted."""
 

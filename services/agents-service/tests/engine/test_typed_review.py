@@ -1,4 +1,4 @@
-"""A workflow review step that names a task type (c-288), on PostgreSQL with the real worker and the review view, by
+"""A workflow review step that names a task type, on PostgreSQL with the real worker and the review view, by
 failure mode: publishing a new version of the type changes a task already open on the old one; a step naming no
 version opens on no version, so its screen follows the type; the step's params reach the screen unresolved or
 unbound; a missing required param hides the task instead of showing its fallback."""

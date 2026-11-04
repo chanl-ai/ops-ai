@@ -11,8 +11,8 @@ import type { Cell, LayoutNode, LayoutPart, Tone } from '@/lib/types/widgets';
 
 import { KindView } from './widgets/kind-view';
 
-// A checked layout (c-082): the kernel rebuilt it from catalogue primitives, so every node type here is one this file
-// draws. Metrics, tables, charts and the c-176 kinds draw through the kind renderers, so a template, a composed layout
+// A checked layout: the kernel rebuilt it from catalogue primitives, so every node type here is one this file
+// draws. Metrics, tables, charts and the kinds draw through the kind renderers, so a template, a composed layout
 // and a shaped result look the same.
 
 const TONE: Record<Tone, string> = {
@@ -28,7 +28,7 @@ const ALIGN = { start: 'items-start', center: 'items-center', end: 'items-end', 
 const text = (v: Cell | undefined) => (v === null || v === undefined ? '—' : typeof v === 'boolean' ? (v ? 'Yes' : 'No') : typeof v === 'number' ? v.toLocaleString() : v);
 
 /**
- * What a button does: send its reply as the person's next message, the only thing a widget can do (owner Q3). A
+ * What a button does: send its reply as the person's next message, the only thing a widget can do. A
  * button that `requires` a tool names it as the action, so the agent's turn knows which of its tools was asked for.
  */
 export function replyText(reply: { text: string; values?: Record<string, Cell> }, requires?: string): string {
@@ -99,7 +99,7 @@ function Node({ node, onReply }: { node: LayoutNode; onReply?: (text: string) =>
 /** A widget layout in a message, with a line saying which widget it is or that the agent composed it (CW12). */
 export function LayoutWidget({ part, onReply }: { part: LayoutPart; onReply?: (text: string) => void }) {
   if (part.kind)
-    // One generic kind (c-176) is its own card: no frame, and no "composed" line, since the agent filled a fixed kind.
+    // One generic kind is its own card: no frame, and no "composed" line, since the agent filled a fixed kind.
     return (
       <section aria-label={part.kind} data-testid="widget" data-shape="kind" data-kind={part.kind}>
         <KindView node={part.layout as Parameters<typeof KindView>[0]['node']} actions={{ onReply }} />

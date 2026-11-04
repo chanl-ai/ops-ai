@@ -1,4 +1,4 @@
-"""A paused step's calls in a reviewer's words (c-289), by failure mode: a tool name, a raw key or a raw float in the
+"""A paused step's calls in a reviewer's words, by failure mode: a tool name, a raw key or a raw float in the
 question; a reviewer card template left unfilled because the call spells its keys differently; an options step
 asking about one option only; and the decision's document not found when the workflow nests its file id."""
 

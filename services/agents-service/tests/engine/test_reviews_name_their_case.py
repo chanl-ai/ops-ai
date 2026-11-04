@@ -1,4 +1,4 @@
-"""Human Tasks and cases (c-128), through the real routes and worker, by failure mode: a review of a run on a case
+"""Human Tasks and cases, through the real routes and worker, by failure mode: a review of a run on a case
 does not say which case; its decision is missing from the case's timeline."""
 
 from __future__ import annotations

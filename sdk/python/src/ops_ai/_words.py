@@ -1,4 +1,4 @@
-"""The Apps area in the words people see on screen (c-616): `apps`, `credentials`, `accounts`, `tools`, `resources` and
+"""The Apps area in the words people see on screen: `apps`, `credentials`, `accounts`, `tools`, `resources` and
 `usage`, each a few methods over the generated operations, which call the services' routes as they are.
 
 An app is named by its id on the Apps page: `plugin:<plugin id>` for an app a plugin brings, `builtin:<name>` for one
@@ -24,7 +24,7 @@ def plugin_of(app: str) -> str:
 
 def _connected(card: dict[str, Any]) -> bool:
     # A built-in app is always there; any other reads connected only once its team account signed in or its test
-    # passed, which the card's `state` says (c-616); `status` is the account's display status.
+    # passed, which the card's `state` says; `status` is the account's display status.
     return card.get("kind") == "builtin" or card.get("state") == "connected"
 
 

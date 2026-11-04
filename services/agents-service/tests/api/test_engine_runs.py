@@ -96,7 +96,7 @@ connections:
 
 
 async def test_a_missing_required_input_is_refused_with_its_schema_path(client: AsyncClient) -> None:
-    """c-622: POST /v1/runs refuses a request-trigger start that omits a required field, naming the schema path."""
+    """POST /v1/runs refuses a request-trigger start that omits a required field, naming the schema path."""
     saved = await client.post("/v1/workflows/definitions", json={"yaml": NORMALIZE})
     assert saved.status_code == 201, saved.text
     blank = await client.post(

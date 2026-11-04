@@ -1,4 +1,4 @@
-"""Publish requests per tenant (c-333 phase A), on PostgreSQL with RLS, by failure mode: one tenant's pending request
+"""Publish requests per tenant, on PostgreSQL with RLS, by failure mode: one tenant's pending request
 blocks another's for the same subject (every tenant has the same seeded workflow ids); a tenant lists, reads or decides
 another's requests; a statement with no tenant reads any."""
 
@@ -27,7 +27,7 @@ async def engine(database_url: str) -> AsyncIterator[AsyncEngine]:
 
 @asynccontextmanager
 async def _no_rls(engine: AsyncEngine) -> AsyncGenerator[AsyncConnection]:
-    """A transaction as a database without RLS gives it (SQL Server until c-349): nothing but the query's own filter."""
+    """A transaction as a database without RLS gives it (SQL Server, for now): nothing but the query's own filter."""
     current_tenant()
     async with engine.begin() as c:
         yield c

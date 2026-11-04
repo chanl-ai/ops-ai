@@ -1,4 +1,4 @@
-// Lays out every seeded workflow with the console's layout module and writes the positions back (c-486), so the seeds
+// Lays out every seeded workflow with the console's layout module and writes the positions back, so the seeds
 // open the way Tidy up would arrange them and Python never lays anything out. Run after changing a seed's steps or the
 // layout: `pnpm --filter @ops-ai/console bake:workflows`. layout.test.ts "the baked seeds are current" fails until then.
 import { readFileSync, writeFileSync } from 'node:fs';

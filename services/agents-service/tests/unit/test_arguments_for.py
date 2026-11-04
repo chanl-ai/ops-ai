@@ -1,4 +1,4 @@
-"""Graph tool calls name inputs the graph's way; an imported operation spells them its own way (c-057)."""
+"""Graph tool calls name inputs the graph's way; an imported operation spells them its own way."""
 
 from __future__ import annotations
 

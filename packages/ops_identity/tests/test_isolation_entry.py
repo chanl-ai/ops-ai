@@ -1,4 +1,4 @@
-"""The isolation context a request enters (c-409), through the real dependency with real tokens, by failure mode: a
+"""The isolation context a request enters, through the real dependency with real tokens, by failure mode: a
 person, key or team-bound service token acting for every team; a service token with no team acting with no reason; a
 platform session with no roles taken for the dev header caller; the dev header caller narrowed to one team; and a
 tenant named in the body or a header reaching the context."""

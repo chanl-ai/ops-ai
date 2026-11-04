@@ -21,7 +21,7 @@ function readSeen(): string[] {
 }
 
 /**
- * What's new and Coming next as built (c-510), the build's version, whether the dev Feedback button shares the corner,
+ * What's new and Coming next as built, the build's version, whether the dev Feedback button shares the corner,
  * and whether this person has an entry they have not opened. Seen ids are kept in this browser; with storage blocked
  * the dot shows on every load and opening still works.
  */

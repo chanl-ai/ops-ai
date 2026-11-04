@@ -1,4 +1,4 @@
-"""The install's model connection (c-605, owner 2026-10-31), read and checked by models-service alone, so no other
+"""The install's model connection, read and checked by models-service alone, so no other
 service can fail to start over it, under the names the OpenAI and Azure OpenAI clients read.
 
 OPENAI_API_BASE alone, or OPENAI_API_TYPE=openai, is an OpenAI-compatible endpoint called with a bearer key: vLLM,

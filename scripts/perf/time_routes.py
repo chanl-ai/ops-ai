@@ -1,4 +1,4 @@
-"""Times the routes behind the console's busiest screens on any install, signed in as a workspace admin (c-451).
+"""Times the routes behind the console's busiest screens on any install, signed in as a workspace admin.
 
     uv run python scripts/perf/time_routes.py --origin http://localhost:3016 --admin-env .run/demo.env
     uv run python scripts/perf/time_routes.py --origin https://<staging host> --admin-env <file> --runs 9

@@ -1,4 +1,4 @@
-"""Each tenant's share of a per-tenant model key is held to that tenant by the database (c-616 C4), by failure mode:
+"""Each tenant's share of a per-tenant model key is held to that tenant by the database, by failure mode:
 another tenant reads a share, or spends from it, with SQL that names no tenant, which only the database policy can
 stop; a per-tenant call's share and spend no longer run at all once the store moved onto the tenant role. Runs on the
 test PostgreSQL as `ops_models_tenant`."""

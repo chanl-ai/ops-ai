@@ -6,7 +6,7 @@
  * Matches the Record UX artifact's `.frow` (c3cceac2 §03/§04):
  *   [icon] [UPPERCASE label · 112px, nowrap+truncate] [value · left, truncates] [verified/adornment/✎]
  * In a box narrower than 28rem (a record rail, a sheet or any panel at phone width) the label sits above the value,
- * which then has the panel's whole width (c-434): side by side, a 112px label left the value a strip a few
+ * which then has the panel's whole width: side by side, a 112px label left the value a strip a few
  * characters wide. Each row measures its own box (a container query), so no caller chooses the layout.
  *
  * One uniform row for EVERY profile field (built-in or custom) on BOTH the

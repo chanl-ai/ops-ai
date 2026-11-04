@@ -27,7 +27,7 @@ import { relativeTime } from '@/lib/format';
 import { BASE, DOCS, PRESETS, type PreviewDoc } from './sample';
 
 /**
- * The c-159 preview: a knowledge base with one "Add documents" area (drop a file, paste text, add a link) that syncs on
+ * The preview: a knowledge base with one "Add documents" area (drop a file, paste text, add a link) that syncs on
  * its own, documents with Replace and Remove, and ingestion presets in settings. Mock data, dev server only, not in the
  * nav; nothing here calls a service.
  */
@@ -104,7 +104,7 @@ function Preview() {
       icon={BookOpen}
       title={BASE.name}
       description={BASE.description}
-      badge={<Badge variant="outline">Preview · c-159</Badge>}
+      badge={<Badge variant="outline">Preview</Badge>}
       actions={
         <Button variant="outline" onClick={() => setSettingsOpen(true)}>
           <Settings2 className="size-4" /> Settings

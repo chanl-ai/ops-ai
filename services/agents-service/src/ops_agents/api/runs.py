@@ -84,7 +84,7 @@ async def resolve(rt: Runtime, thread_id: str) -> tuple[dict[str, Any], Any]:
     """The thread and the graph it runs on: a code graph by name, or its pinned workflow version compiled from JSON."""
     row = await graph_store(rt).thread(thread_id)
     if row is None:
-        # Another tenant's or team's thread is not found either: the store and the database never return it (c-429).
+        # Another tenant's or team's thread is not found either: the store and the database never return it.
         raise NotFound("Thread")
     require_graphs(rt)
     if row["graph"] in rt.graphs:

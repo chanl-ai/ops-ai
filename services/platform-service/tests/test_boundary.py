@@ -11,16 +11,16 @@ from .conftest import Platform
 
 PUBLIC = {
     ("GET", "/v1/health"),
-    # Background process states (c-529), as every service answers them: counts and error types, no record's data.
+    # Background process states, as every service answers them: counts and error types, no record's data.
     ("GET", "/health/background"),
     ("GET", "/.well-known/jwks.json"),
     ("POST", "/v1/auth/sign-in"),
     ("POST", "/v1/auth/refresh"),
     ("GET", "/v1/invites/{token}"),
     ("POST", "/v1/invites/{token}/accept"),
-    # Sign-in before there is a session (c-188): what an email's domain signs in with, the SSO round trip and its
+    # Sign-in before there is a session: what an email's domain signs in with, the SSO round trip and its
     # two return routes, finishing it with the flow key, and password reset. None writes outside a flow or reset row.
-    # The SAML service provider metadata (c-197) holds only the public certificate and URLs.
+    # The SAML service provider metadata holds only the public certificate and URLs.
     ("POST", "/v1/auth/options"),
     ("POST", "/v1/auth/sso/start"),
     ("GET", "/v1/auth/oidc/callback"),
@@ -76,7 +76,7 @@ async def test_no_request_names_a_tenant_or_team_or_accepts_unknown_fields(platf
             assert schema.get("additionalProperties") is False, name
             assert not {"tenantId", "teamId", "tenant_id", "team_id"} & set(schema.get("properties", {})), name
         for path in doc["paths"]:
-            # A workspace admin's team routes name the team record they change (c-198); the team a request acts in
+            # A workspace admin's team routes name the team record they change; the team a request acts in
             # still comes from X-Team-Id among the token's teams, never from a path.
             if str(path).startswith(TEAM_RECORD_ROUTES):
                 continue

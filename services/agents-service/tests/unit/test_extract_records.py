@@ -1,4 +1,4 @@
-"""`extract_records` on the fixture levy notice (c-057 T002), through the fake OpenAI in process: the records come
+"""`extract_records` on the fixture levy notice, through the fake OpenAI in process: the records come
 from the scripted rule, and without that rule the structured call fails instead of inventing persons."""
 
 from __future__ import annotations

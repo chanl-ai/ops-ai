@@ -1,4 +1,4 @@
-"""`/v1/send-policy`: the acting team's sending policy (c-300), the written rules check before sending judges each write
+"""`/v1/send-policy`: the acting team's sending policy, the written rules check before sending judges each write
 against. Every member reads it (`workflows.view`); whoever manages the team's workflow settings (`workflows.manage`)
 saves a new version, which the next write is judged against."""
 

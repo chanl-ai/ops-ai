@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# make skills-proof (c-554): runs every developer skill's proof block (docs/guide/skills/*.md, the ```bash proof
+# make skills-proof: runs every developer skill's proof block (docs/guide/skills/*.md, the ```bash proof
 # fence) in a fresh devcontainer, ops-run first, then the rest by name. A skill that needs the stack starts it in its
 # own block (`make up`), and every skill's stack comes down (`make down`) before the next starts, so the skills that only
 # run use cases (which bring their own stacks) never run beside a full one. One PASS or FAIL line per skill; the exit

@@ -1,4 +1,4 @@
-"""poll_cursors: where each polled source stands, today a workflow's Email received trigger (c-187)
+"""poll_cursors: where each polled source stands, today a workflow's Email received trigger
 
 Revision ID: 0045_poll_cursors
 Revises: 0044_team_default_agent

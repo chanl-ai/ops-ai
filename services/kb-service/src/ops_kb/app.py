@@ -1,5 +1,5 @@
 """kb-service's FastAPI app: department knowledge bases, their file sources, and passages cited by page and section
-(c-056; the surface is in docs/services/kb-service/overview.md, at the paths apps/console's knowledge-http.ts
+(the surface is in docs/services/kb-service/overview.md, at the paths apps/console's knowledge-http.ts
 calls)."""
 
 from __future__ import annotations
@@ -76,11 +76,11 @@ class Health(Out):
 
 
 async def who(p: CurrentCaller) -> Who:
-    """The caller; what it may change is `can()`'s, from its verified roles (c-149). The provisioning service may call
-    with a token scoped to one team (c-180); like any service it needs `knowledge:view` even to read."""
+    """The caller; what it may change is `can()`'s, from its verified roles. The provisioning service may call
+    with a token scoped to one team; like any service it needs `knowledge:view` even to read."""
     if p.kind == "service":
         can(p, "knowledge", "view", what="knowledge")
-    # A person, key or dev caller reads as the team it acts in (c-407); a service reads the tenant's, as
+    # A person, key or dev caller reads as the team it acts in; a service reads the tenant's, as
     # knowledge_reader says.
     set_acting_team(acting_team_of(p, services=False))
     return Who(tenant_id=p.tenant_id, email=p.email or p.sub, team_id=p.team_id, caller=p)
@@ -90,7 +90,7 @@ Caller = Annotated[Who, Depends(who)]
 
 
 async def knowledge_reader(p: CurrentTenantCaller) -> Who:
-    """Knowledge-base refs and search (c-168, c-222): a person with knowledge.view in their team reads their team's
+    """Knowledge-base refs and search: a person with knowledge.view in their team reads their team's
     bases and those no team owns; a service holding `knowledge:view` reads the tenant's, by the ids it already checked
     against its agent's grants, so no team is needed (a workflow worker acts with none)."""
     if p.kind == "service":
@@ -114,7 +114,7 @@ def _agents_service(settings: Settings) -> AgentsUsage:
 
 
 def _tools_service(settings: Settings) -> ToolReader | None:
-    """tools-service's gateway, for "tool" sources (c-564): the declared sources and one call per list page or item."""
+    """tools-service's gateway, for "tool" sources: the declared sources and one call per list page or item."""
     # An install with no plugin (Settings.plugins) has no tool sources: kb-service then calls no tools route at all.
     if not settings.plugins or not settings.tools_url:
         return None
@@ -143,7 +143,7 @@ def create_kb_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
-        # The knowledge schedule (c-564) runs only where tool sources can be read.
+        # The knowledge schedule runs only where tool sources can be read.
         stop = asyncio.Event()
         beat = asyncio.create_task(keep_syncing(service, stop)) if reader is not None and schedule else None
         try:

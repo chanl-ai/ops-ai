@@ -47,7 +47,7 @@ export type SignInPolicyPatch =
   | { section: 'security'; mfaRequired: boolean; sessionHours: number; allowedDomains: string[] }
   | { section: 'signup'; selfSignup: boolean };
 
-/** How a workspace's people sign in, as platform-service stores it (c-188, c-195). */
+/** How a workspace's people sign in, as platform-service stores it. */
 export type SignInProviderKind = 'password' | 'oidc' | 'saml';
 
 /** The membership roles a first sign-in may give; admin is never one. */
@@ -74,9 +74,9 @@ export interface SamlSettings {
   certificate: string;
   emailAttribute: string | null;
   nameAttribute: string | null;
-  /** Sign each request to the identity provider with the installation's service provider key (c-197). */
+  /** Sign each request to the identity provider with the installation's service provider key. */
   signRequests?: boolean;
-  /** Refuse an assertion the identity provider did not encrypt to the service provider certificate (c-197). */
+  /** Refuse an assertion the identity provider did not encrypt to the service provider certificate. */
   requireEncryption?: boolean;
 }
 
@@ -96,7 +96,7 @@ export interface SignInProvider {
   saml: SamlSettings | null;
   /** Where a person new to the workspace lands on their first sign-in; no team means the workspace's default team. */
   jit: { team: string | null; role: JitRole } | null;
-  /** Identity provider groups to teams (c-202); set through the API, kept as is by the console's form. */
+  /** Identity provider groups to teams; set through the API, kept as is by the console's form. */
   groups: { source: string | null; map: GroupRule[] } | null;
   verification: DomainCheck[];
 }

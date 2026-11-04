@@ -1,4 +1,4 @@
-"""Whose account a module and an operation sign in with (c-558)
+"""Whose account a module and an operation sign in with
 
 `tool_modules.sign_in` is the sign-in a module supports: `team`, `person` or `either` (every module before this one);
 choosing a connection whose sign-in does not fit is refused. `module_operations.needs_person` marks an operation only

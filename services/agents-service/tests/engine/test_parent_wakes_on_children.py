@@ -1,4 +1,4 @@
-"""A parent waiting at Run workflow wakes as its children end (c-263), by failure mode: two children ending at the same
+"""A parent waiting at Run workflow wakes as its children end, by failure mode: two children ending at the same
 moment wake the parent twice for one change, or a child's end wakes nothing so the parent waits for ever; a parent that
 is not waiting on its children is woken anyway."""
 

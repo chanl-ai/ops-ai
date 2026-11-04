@@ -1,4 +1,4 @@
-"""POST /v1/runs/{run_id}/steps/{step}/resume (c-525): an outside system hands a workflow step it was given the work of
+"""POST /v1/runs/{run_id}/steps/{step}/resume: an outside system hands a workflow step it was given the work of
 its result, and the run carries on.
 
 No person calls it: the bearer token is the step's own resume token (api/engine_resume.py), bound to the run, step,
@@ -17,14 +17,13 @@ from pydantic import BaseModel, ConfigDict
 
 from ops_engine.store import RunStore
 from ops_service_kit.errors import Conflict, NotFound, Unauthorized
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, Out
 from ops_store import isolation
 
 from ...store.engine import EngineTransactions
 from ..deps import Runtime, runtime
 from ..engine_resume import BadResumeToken, ResumeClaim, read_token, resumed
 from ..envelope import ok
-from ..schemas import Out
 
 router = APIRouter(prefix="/v1/runs")
 Rt = Annotated[Runtime, Depends(runtime)]

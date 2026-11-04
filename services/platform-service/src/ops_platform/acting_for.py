@@ -1,4 +1,4 @@
-"""Acting-for tokens (c-558): the proof agents-service hands tools-service that a tool call acts for one person.
+"""Acting-for tokens: the proof agents-service hands tools-service that a tool call acts for one person.
 
 agents-service knows whom a chat turn or a run acts for, but a field it writes in a request body is only its word.
 platform-service checks that the person is an active member of the call's team and signs a short token naming them,

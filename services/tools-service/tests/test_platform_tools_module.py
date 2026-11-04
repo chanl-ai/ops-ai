@@ -48,7 +48,7 @@ async def test_an_edited_platform_module_is_kept(local_catalog: Any, store: Modu
 async def test_the_platform_module_belongs_to_no_team_so_every_team_reaches_it(
     local_catalog: Any, store: ModuleStore, tenant: str
 ) -> None:
-    """c-433: owned by the workspace Security team, the module was outside every other team once calls are scoped to
+    """Owned by the workspace Security team, the module was outside every other team once calls are scoped to
     the calling run's team, so their replies were refused; with no team every team reads and calls it, and a held
     reply is decided by the calling run's team (its approver team is unset)."""
     reply = await ToolRegistry(local_catalog, store).resolve("send_reply", tenant_id=tenant)
@@ -60,7 +60,7 @@ async def test_the_platform_module_belongs_to_no_team_so_every_team_reaches_it(
 async def test_the_acknowledgement_runs_at_once_and_the_reply_still_waits(
     local_catalog: Any, store: ModuleStore, tenant: str
 ) -> None:
-    """c-532: an automatic thank-you to a message's sender leaves with no approval, as its own operation, so making it
+    """An automatic thank-you to a message's sender leaves with no approval, as its own operation, so making it
     leaves send_reply waiting for a person everywhere."""
     registry = ToolRegistry(local_catalog, store)
     ack = await registry.resolve("send_acknowledgement", tenant_id=tenant)

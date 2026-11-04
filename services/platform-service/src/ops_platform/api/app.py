@@ -160,7 +160,7 @@ def _seeded_people(seed: FilePath) -> list[dict[str, Any]]:
 
 
 def _dev_sign_in(app: FastAPI, auth: Auth, demo_password: str, people: list[dict[str, Any]]) -> None:
-    """One-click sign-in for the seeded demo people (c-504). Mounted only in dev, where the seeded people share the
+    """One-click sign-in for the seeded demo people. Mounted only in dev, where the seeded people share the
     demo password: elsewhere both routes do not exist. The password is applied here and never sent to the browser,
     and only a seeded email can be signed in this way."""
     seeded = {p["email"].lower() for p in people}
@@ -197,7 +197,7 @@ def create_public_app(
 ) -> FastAPI:
     """`signin` unset takes its values from settings, with no mail sender and no public or console URL. `services`
     verifies the service tokens the few routes open to services accept (a policy read); unset, settings' keys.
-    `usage` reads what still runs in a team (c-529); unset, agents-service at settings' agents URL."""
+    `usage` reads what still runs in a team; unset, agents-service at settings' agents URL."""
     sign = signin or SignInOptions.from_settings(Settings())
     signin_store = SignInStore(store.db, security_team=security_team)
     passwords = Passwords(
@@ -320,7 +320,7 @@ def create_public_app(
     )
     async def saml_metadata() -> Response:  # pyright: ignore[reportUnusedFunction]
         """The SAML service provider metadata a bank's identity provider imports: entity id, consumer URL and the
-        certificate for signed requests and encrypted assertions (c-197). Public: it holds nothing secret."""
+        certificate for signed requests and encrypted assertions. Public: it holds nothing secret."""
         return Response(sso.sp_metadata(), media_type="application/samlmetadata+xml")
 
     @app.post("/v1/auth/saml/acs", tags=["auth"], status_code=303, responses=ERRORS)
@@ -391,7 +391,7 @@ def create_public_app(
         return (await auth.session_of(token))[1]
 
     async def claims_of(token: Annotated[str, Depends(_bearer)]) -> dict[str, Any]:
-        """A live session's claims in an active workspace; a closed one answers 403 `workspace_closed` (c-529)."""
+        """A live session's claims in an active workspace; a closed one answers 403 `workspace_closed`."""
         claims = await claims_open(token)
         await lifecycle.open_or_refuse(str(claims["tenant_id"]))
         return claims
@@ -439,7 +439,7 @@ def create_public_app(
 
     @app.get("/v1/teams", tags=["teams"], response_model=Envelope[list[TeamOut]], responses=ERRORS)
     async def list_teams(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
-        """The teams the caller may switch to: their own, and every active team for a workspace admin (c-208)."""
+        """The teams the caller may switch to: their own, and every active team for a workspace admin."""
         tenant, user = str(claims["tenant_id"]), str(claims["sub"])
         return ok(await team_store.teams_of(tenant, user, everywhere=await everywhere(tenant, user)))
 
@@ -449,7 +449,7 @@ def create_public_app(
         role: Annotated[list[str] | None, Query()] = None,
         status: Annotated[list[str] | None, Query()] = None,
     ) -> Any:
-        # Every built-in role but Chat user reads the team's people; a chat-only member does not (c-188).
+        # Every built-in role but Chat user reads the team's people; a chat-only member does not.
         await people.require_admin(actor, "access", "view")
         everyone = await team_store.members(actor.tenant_id, actor.team_id, roles=[], statuses=[])
         rows = [m for m in everyone if (not role or m["role"] in role) and (not status or m["status"] in status)]
@@ -496,14 +496,14 @@ def create_public_app(
 
     @app.post("/v1/settings/members/role", tags=["members"], response_model=Envelope[BulkOut], responses=ERRORS)
     async def change_roles(body: RoleIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
-        """The owner is never demoted here: 409 `owner_must_transfer` (c-529)."""
+        """The owner is never demoted here: 409 `owner_must_transfer`."""
         if body.role != ADMIN.id:
             await lifecycle.refuse_owner(actor.tenant_id, await users_of(actor, body.ids))
         return ok(await people.set_role(actor, body.ids, body.role))
 
     @app.post("/v1/settings/members/delete", tags=["members"], response_model=Envelope[BulkOut], responses=ERRORS)
     async def remove_members(body: DeleteIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
-        """The owner is never removed here: 409 `owner_must_transfer` (c-529)."""
+        """The owner is never removed here: 409 `owner_must_transfer`."""
         await lifecycle.refuse_owner(actor.tenant_id, await users_of(actor, body.ids))
         return ok(await people.remove(actor, body.ids))
 
@@ -532,7 +532,7 @@ def create_public_app(
         team: Annotated[str | None, Query(max_length=64)] = None,
     ) -> Any:
         """Which roles grant `area.action` in a team (the Security team for its actions), and who holds them there:
-        what a "View only" notice names (c-186). The team is `team`, the record's, when the page shows another team's
+        what a "View only" notice names. The team is `team`, the record's, when the page shows another team's
         record, else the one the request acts in; a member of that team, or a workspace admin, may ask."""
         if area not in AREAS or action not in ACTIONS:
             raise ValidationFailed(f"{area}.{action} is not in the catalogue.", code="unknown_cell")
@@ -558,7 +558,7 @@ def create_public_app(
         actor: Annotated[Actor, Depends(acting)],
     ) -> Any:
         """Whether the caller may take `area.action` in the team they act in, and if not why, which roles grant it
-        and who in the team can give roles (c-150): the reason a locked button gives."""
+        and who in the team can give roles: the reason a locked button gives."""
         if area not in AREAS or action not in ACTIONS:
             raise ValidationFailed(f"{area}.{action} is not in the catalogue.", code="unknown_cell")
         return ok(await checker.why(actor, area, action))
@@ -567,7 +567,7 @@ def create_public_app(
     async def check_access(  # pyright: ignore[reportUnusedFunction]
         body: AccessCheckIn, actor: Annotated[Actor, Depends(acting)]
     ) -> Any:
-        """Whether a person may take `area.action` in the team the request acts in (c-150), by the same `can()` the
+        """Whether a person may take `area.action` in the team the request acts in, by the same `can()` the
         services run with the workspace's policies: allowed with the granting roles, or refused with the reason. The
         caller needs access.view there; each check is audited as access.check."""
         if body.area not in AREAS or body.action not in ACTIONS:
@@ -657,7 +657,7 @@ def create_public_app(
     )
 
     async def service_of(token: str) -> Any:
-        """A service token's caller, refused with `workspace_closed` when it names a closed workspace (c-529)."""
+        """A service token's caller, refused with `workspace_closed` when it names a closed workspace."""
         svc = readers.resolve(token)
         await lifecycle.open_or_refuse(svc.tenant_id)
         return svc
@@ -669,7 +669,7 @@ def create_public_app(
         x_team_id: Annotated[str | None, Header()] = None,
     ) -> Any:
         """One policy of the workspace. Any member reads it; a service token needs the
-        `settings:view` scope and reads its own tenant's value, as a background job with no person does (c-206's
+        `settings:view` scope and reads its own tenant's value, as a background job with no person does (the
         memory sweep). 400 `policy_value` for a key the catalogue does not hold."""
         if readers.signs(token):
             svc = await service_of(token)
@@ -687,7 +687,7 @@ def create_public_app(
     async def team_names(  # pyright: ignore[reportUnusedFunction]
         token: Annotated[str, Depends(_bearer)],
     ) -> Any:
-        """Every team's display name in the workspace (c-224), so a page showing another team's record names its team.
+        """Every team's display name in the workspace, so a page showing another team's record names its team.
         Any member reads them; a service token needs the `settings:view` scope and reads its own tenant's."""
         if readers.signs(token):
             svc = await service_of(token)
@@ -702,7 +702,7 @@ def create_public_app(
     async def people_names(  # pyright: ignore[reportUnusedFunction]
         token: Annotated[str, Depends(_bearer)],
     ) -> Any:
-        """Every person's display name in the workspace by email (c-201), so a list naming who did something shows a
+        """Every person's display name in the workspace by email, so a list naming who did something shows a
         name rather than an address. Any member reads them; a service token needs the `settings:view` scope."""
         if readers.signs(token):
             svc = await service_of(token)
@@ -778,8 +778,8 @@ def create_public_app(
         responses=ERRORS,
     )
     async def read_workspace_teams(token: Annotated[str, Depends(_bearer)]) -> Any:  # pyright: ignore[reportUnusedFunction]
-        """The workspace's security team and the team new people join when nothing else names one (c-202). A workspace
-        admin reads them; a service token needs the `settings:view` scope and reads its own tenant's (c-230)."""
+        """The workspace's security team and the team new people join when nothing else names one. A workspace
+        admin reads them; a service token needs the `settings:view` scope and reads its own tenant's."""
         if readers.signs(token):
             svc = await service_of(token)
             if "settings:view" not in svc.scopes:
@@ -856,7 +856,7 @@ def create_public_app(
     async def transfer_workspace(  # pyright: ignore[reportUnusedFunction]
         body: TransferIn, actor: Annotated[Actor, Depends(on_workspace)]
     ) -> Any:
-        """The owner hands the workspace to an account admin, at once and audited (c-529); the old owner stays an
+        """The owner hands the workspace to an account admin, at once and audited; the old owner stays an
         admin. Only the owner (`workspace.manage`); 409 `not_an_account_admin` for a target without access.manage in
         every team."""
         return ok(await lifecycle.transfer(actor, body.user_id))
@@ -935,7 +935,7 @@ def create_public_app(
     async def api_key_summaries(  # pyright: ignore[reportUnusedFunction]
         token: Annotated[str, Depends(_bearer)],
     ) -> Any:
-        """Every team's keys in the workspace with what each serves (c-246): for agents-service's list of API channels
+        """Every team's keys in the workspace with what each serves: for agents-service's list of API channels
         (a service token with the `settings:view` scope), or for a person who manages access across the workspace
         (`can('access', 'manage')` in every team), as an admin may do everything."""
         if not readers.signs(token):
@@ -1032,7 +1032,7 @@ def create_internal_app(store: IdentityStore, *, services: ServiceAuth, signer: 
         async def acting_for_token(  # pyright: ignore[reportUnusedFunction]
             body: ActingForIn, caller: Annotated[Caller, Depends(services.principal)]
         ) -> Any:
-            """A 60-second token naming the person a tool call acts for (c-558); the service token names the tenant and
+            """A 60-second token naming the person a tool call acts for; the service token names the tenant and
             the team, never the body (I1)."""
             if not caller.tenant_id or not caller.team_id:
                 raise Forbidden("The service token names no tenant or team.", code="tenant_required")

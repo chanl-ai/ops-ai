@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import type { DeployChannel, Deployment, DeployEnvironment } from '@/lib/types/domain';
 import type { FlagName } from '@/lib/types/flags';
 
-/** A channel with a `flag` is offered only while the install turns that flag on (c-611). */
+/** A channel with a `flag` is offered only while the install turns that flag on. */
 export const CHANNELS: Record<DeployChannel, { label: string; description: string; icon: typeof Mail; flag?: FlagName }> = {
   widget: { label: 'Chat widget', description: "Embed an agent's chat on your intranet or website; people sign in with your SSO", icon: MessageSquare },
   api: { label: 'API', description: 'Your systems call the workflow over HTTPS', icon: Code2 },

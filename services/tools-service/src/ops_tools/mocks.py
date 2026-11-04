@@ -1,7 +1,7 @@
-"""Mock answers (c-332): which one a test call gets, and the answer it gives, in the one executor.
+"""Mock answers: which one a test call gets, and the answer it gives, in the one executor.
 
-A call gets a mock only when it says `environment: test`. A call that names no environment uses the test credential
-(c-330) but never a mock, so a caller that does not say cannot act on fake data; production never reads one. The first
+A call gets a mock only when it says `environment: test`. A call that names no environment uses the test credential but
+never a mock, so a caller that does not say cannot act on fake data; production never reads one. The first
 mock in order whose `match` values all equal the call's input answers; else the default; else the call goes to the
 system. A delay waits before the answer and a timeout waits the operation's time limit and fails as a real timeout does
 (`UPSTREAM_TIMEOUT`, the system's side), both capped, so a mock cannot hold a worker longer than a real call could.

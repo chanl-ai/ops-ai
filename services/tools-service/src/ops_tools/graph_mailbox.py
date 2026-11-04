@@ -1,4 +1,4 @@
-"""Microsoft 365 mailboxes through Graph with the team's own app registration (c-228): the Microsoft tenant id and
+"""Microsoft 365 mailboxes through Graph with the team's own app registration: the Microsoft tenant id and
 client id on the mailbox record, the client secret a Secrets-page secret. Every Graph and token request goes through
 the egress transport marked with the calling tenant, so it is dialled only when the tenant's allow-list holds the host.
 A token is kept per registration and secret value until a minute before it expires (ops_email.GraphToken)."""

@@ -1,9 +1,9 @@
-"""teams are created, renamed and archived by workspace admins (c-198)
+"""teams are created, renamed and archived by workspace admins
 
 `status` (`active` or `archived`) and `archived_at` let a team be archived without losing what it owns; an archived team
 leaves its members' tokens. `name_key` is the lower-case name under a plain unique index with `tenant_id`, so two teams
 of one workspace never share a name in any case, on every database. `template_id` and `protection` are for the
-provisioning template (c-175), as the other services' records carry them. Existing rows become active with their name
+provisioning template, as the other services' records carry them. Existing rows become active with their name
 lower-cased; a name already used in the workspace keeps its shown name and takes its id in its key.
 
 Revision ID: 0013_team_lifecycle

@@ -1,5 +1,5 @@
-"""Every service's permission checks answer what the built-in roles grant, for every membership role, area and action
-(c-147), and each answer is `ops_access.can`'s (c-149). Each cell calls the check the service runs on that route,
+"""Every service's permission checks answer what the built-in roles grant, for every membership role, area and action,
+and each answer is `ops_access.can`'s. Each cell calls the check the service runs on that route,
 through the adapter that turns the verified principal into that service's caller: a check that asks `can` for the wrong
 area or action fails the grid comparison, and a check that decides anything itself fails when `can` is made to refuse
 everyone or allow everyone. It lives at the root because it imports every service's checks.
@@ -113,8 +113,8 @@ def nobody(_: Principal) -> Scope | None:
     return None
 
 
-# agents-service: definition writes (c-115) and the delete of a shared skill or guardrail. c-147's evidence
-# (card c-147's red-grid.txt) holds the comparison with the role checks c-148 and c-149 replaced.
+# agents-service: definition writes and the delete of a shared skill or guardrail. the evidence
+# holds the comparison with the role checks the grid replaced.
 def agents_builder(area: str, action: str) -> Verdict:
     def verdict(p: Principal) -> Scope | None:
         me = run(agents_principal(p))
@@ -124,7 +124,7 @@ def agents_builder(area: str, action: str) -> Verdict:
 
 
 def agents_system_edit(p: Principal) -> Scope | None:
-    """Editing an agent provisioned as `system` (c-180) needs agents.manage as well as the edit."""
+    """Editing an agent provisioned as `system` needs agents.manage as well as the edit."""
     me = run(agents_principal(p))
     return yes(
         passes(
@@ -152,7 +152,7 @@ def chat_budget_admin(p: Principal) -> Scope | None:
 
 
 def case_route(action: str) -> Verdict:
-    """/v1/cases opens and works a case on `can(cases, <action>)` in the case's team (c-128)."""
+    """/v1/cases opens and works a case on `can(cases, <action>)` in the case's team."""
 
     def verdict(p: Principal) -> Scope | None:
         me = run(agents_principal(p))
@@ -187,7 +187,7 @@ class _Bases:
 
 
 def kb_system_edit(p: Principal) -> Scope | None:
-    """Editing a knowledge base provisioned as `system` (c-180) needs knowledge.manage as well as the edit."""
+    """Editing a knowledge base provisioned as `system` needs knowledge.manage as well as the edit."""
     w = run(kb_who(p))
     return yes(passes(lambda: w.require_builder(w.team_id, "change a system base", "edit", protection="system")))
 
@@ -227,7 +227,7 @@ def tools_step(area: str, action: str) -> Verdict:
 
 
 def tools_system_edit(p: Principal) -> Scope | None:
-    """Editing a tool module provisioned as `system` (c-180) needs tools.manage as well as the edit."""
+    """Editing a tool module provisioned as `system` needs tools.manage as well as the edit."""
     caller = tools_caller(p)
     return yes(
         passes(lambda: tools_can(caller, "tools", "edit", what="it", security_team=SECURITY, protection="system"))
@@ -239,7 +239,7 @@ def tools_security_admin(p: Principal) -> Scope | None:
 
 
 def tools_team_secret(action: str) -> Verdict:
-    """A secret of the team the person acts in: written by that team (c-186, one team per secret c-509), as the secrets
+    """A secret of the team the person acts in: written by that team (one team per secret), as the secrets
     routes check."""
 
     def verdict(p: Principal) -> Scope | None:
@@ -275,7 +275,7 @@ def documents_check(action: str) -> Verdict:
     return verdict
 
 
-# tools-service connections (c-330): every change and sign-in is connections.manage, admins' by default.
+# tools-service connections: every change and sign-in is connections.manage, admins' by default.
 def tools_connections(action: str) -> Verdict:
     def verdict(p: Principal) -> Scope | None:
         return yes(passes(lambda: connection_rights(p, action, security_team=SECURITY)))
@@ -309,7 +309,7 @@ def platform_admin(area: str, action: str) -> Verdict:
         async def security_team_of(_tenant: str) -> str:
             return SECURITY
 
-        # The workspace's security team is a tenant setting (c-208); the fake names the deployment's.
+        # The workspace's security team is a tenant setting; the fake names the deployment's.
         store = cast(Any, SimpleNamespace(security_team=SECURITY, security_team_of=security_team_of, db=None))
         members = Members(store, roles=cast(Any, _Roles(p.role or "", team)))
         actor = Actor(p.tenant_id, team, p.sub, "req_1")
@@ -318,8 +318,8 @@ def platform_admin(area: str, action: str) -> Verdict:
     return verdict
 
 
-# c-122 rules: written in the shared tree and agreed (interview Q1-Q5) but not at HEAD, where these routes check team
-# membership or separation of duties only. Each is the agreed answer until c-148 calls the c-122 functions here.
+# Agreed rules: written in the shared tree and agreed (interview Q1-Q5) but not at HEAD, where these routes check team
+# membership or separation of duties only. Each is the agreed answer until the routes call the functions here.
 def c122_decides(p: Principal) -> Scope | None:
     return yes(p.role in ("approver", "admin"))
 
@@ -329,7 +329,7 @@ def c122_cancel(p: Principal) -> Scope | None:
 
 
 TODAY: dict[tuple[str, str], Verdict] = {
-    # The workspace area (c-529) is Owner's alone: no membership role reads or changes it.
+    # The workspace area is Owner's alone: no membership role reads or changes it.
     **{
         (area, "view"): open_to_members
         for area in AREAS
@@ -339,7 +339,7 @@ TODAY: dict[tuple[str, str], Verdict] = {
     ("memory", "edit"): memory_editor,
     ("chat", "manage"): chat_budget_admin,
     ("cases", "decide"): chat_budget_admin,
-    # publishReview is set through platform-service's PUT /v1/policies (c-214), on its reviews.manage cell.
+    # publishReview is set through platform-service's PUT /v1/policies, on its reviews.manage cell.
     ("reviews", "manage"): platform_admin("reviews", "manage"),
     **{
         (area, action): agents_builder(area, "test" if action == "run" else action)
@@ -367,7 +367,7 @@ TODAY: dict[tuple[str, str], Verdict] = {
     ("knowledge", "delete"): kb_change("delete"),
     **{("tools", action): tools_step("tools", action) for action in ("create", "edit", "publish", "delete", "run")},
     ("tools", "decide"): tools_step("tools", "decide"),
-    # A record provisioned as `system` is changed only with the area's manage (c-180).
+    # A record provisioned as `system` is changed only with the area's manage.
     ("agents", "manage"): agents_system_edit,
     ("tools", "manage"): tools_system_edit,
     ("knowledge", "manage"): kb_system_edit,
@@ -396,7 +396,7 @@ def granted(role: str, team: str, area: str, action: str) -> Scope | None:
     ]
     where = SECURITY if (area, action) in SECURITY_TEAM_ACTIONS else team
     scope = scope_in(assignments, GRIDS, team=where, area=area, action=action, now=NOW)
-    # can() caps a chat read at one's own while chatThreadsOwnerOnly is on, its default (c-186).
+    # can() caps a chat read at one's own while chatThreadsOwnerOnly is on, its default.
     return "own" if scope == "all" and (area, action) == ("chat", "view") else scope
 
 
@@ -404,7 +404,7 @@ def granted(role: str, team: str, area: str, action: str) -> Scope | None:
 @pytest.mark.parametrize("role", ROLES)
 def test_builtin_grid_equals_todays_checks(role: str, team: str) -> None:
     """Every cell a service checks gives each role what the grid says. A cell no service checks yet is the admin's
-    alone (owner, 2026-10-17: admins hold every cell), so a later check on it opens to admins first."""
+    alone (admins hold every cell), so a later check on it opens to admins first."""
     wrong: list[str] = []
     for area, action in CELLS:
         if TODAY.get((area, action), nobody) is nobody:
@@ -429,9 +429,9 @@ def test_a_role_in_another_team_grants_nothing_in_the_security_team() -> None:
 
 
 def test_chat_user_only_chats_and_sees_its_own_threads() -> None:
-    """Owner decision 2026-10-17: chat with the team's published agents (`chat.run`, which `open_to_members` allows
+    """Chat with the team's published agents (`chat.run`, which `open_to_members` allows
     every member today) and read only one's own threads; no other area, so no agents, workflows, knowledge or settings
-    beyond what chat needs. Only the membership role a first SSO sign-in writes maps to it (c-188); the role
+    beyond what chat needs. Only the membership role a first SSO sign-in writes maps to it; the role
     migration's frozen mapping does not, so the migration granted it to nobody."""
     assignments = [Assignment(CHAT_USER.id, CHAT_USER.name, TEAM, "person")]
     held = {
@@ -439,7 +439,7 @@ def test_chat_user_only_chats_and_sees_its_own_threads() -> None:
         for area, action in CELLS
         if (scope := scope_in(assignments, GRIDS, team=TEAM, area=area, action=action, now=NOW)) is not None
     }
-    # And corrects or forgets what agents remember about them (c-206), their own memory only.
+    # And corrects or forgets what agents remember about them, their own memory only.
     assert held == {("chat", "view"): "own", ("chat", "run"): "all", ("memory", "edit"): "own"}
     assert TODAY[("chat", "run")](person("viewer", TEAM)) == "all"
     assert TODAY[("chat", "view")](person("admin", TEAM)) == "own"
@@ -447,14 +447,14 @@ def test_chat_user_only_chats_and_sees_its_own_threads() -> None:
     assert builtin_roles_for("chat_user", security_team=True) == (CHAT_USER.id,)
 
 
-# Cells no service decides with a role: every member, nobody, or a c-122 rule c-186 moves onto `can`.
+# Cells no service decides with a role: every member, nobody, or an agreed rule not yet moved onto `can`.
 NOT_BY_CAN = (open_to_members, nobody, c122_decides, c122_cancel)
 
 
 @pytest.mark.parametrize("answer", ["refuse", "allow"])
 def test_each_check_decides_through_can(answer: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """With `can` refusing everyone an admin is refused by every check, and with it allowing everyone a viewer passes
-    every check: no check decides on a role or an owner itself, before or after asking `can` (c-149)."""
+    every check: no check decides on a role or an owner itself, before or after asking `can`."""
 
     def decided(self: Access, p: Principal, area: str, action: str, **_: Any) -> Scope:
         if answer == "refuse":

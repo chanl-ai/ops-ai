@@ -1,4 +1,4 @@
-"""The case store (c-128), by failure mode: a producer's retry opening a second case, another team's case read, a
+"""The case store, by failure mode: a producer's retry opening a second case, another team's case read, a
 deadline counting while the case waits on the customer or never restarting, a field change with no timeline entry,
 and a link recorded twice."""
 

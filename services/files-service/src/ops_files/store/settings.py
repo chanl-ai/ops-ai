@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""Storage settings at rest (c-100): one versioned document per tenant, the tenant's storage credentials as
+"""Storage settings at rest: one versioned document per tenant, the tenant's storage credentials as
 ciphertext only, and an audit row for every change, written in the same transaction as the change.
 
 The document is JSON kept as text and never queried (database portability D5): files-service reads it whole. A save
@@ -33,7 +33,7 @@ storage_settings = sa.Table(
     sa.Column("document", sa.Text, nullable=False),
     sa.Column("updated_by", sa.String(320), nullable=False),
     sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-    # Workspace-level: the tenant's storage, changed by an admin under can() (c-415).
+    # Workspace-level: the tenant's storage, changed by an admin under can().
     info=TENANT_SCOPED,
 )
 

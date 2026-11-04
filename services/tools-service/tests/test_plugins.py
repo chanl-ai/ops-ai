@@ -1,4 +1,4 @@
-"""Plugins in tools-service (c-564), by failure mode: team A's call uses team B's connection, instance or egress hosts,
+"""Plugins in tools-service, by failure mode: team A's call uses team B's connection, instance or egress hosts,
 because the plugin is one workspace-level module; a team sees or calls a plugin it never turned on, or one the platform
 admin turned off; a team's setting beats a field the platform admin locked; a token naming a host outside the system
 points every call there; one team's calls spend another team's rate window; a Python tool reaches a host the plugin
@@ -145,7 +145,7 @@ async def test_the_instance_comes_from_the_token_and_only_from_the_systems_hosts
     extra = await h.on_token(tenant, "con_a", {"access_token": "x", "instance_url": "https://alpha.my.desk.test/"})
     assert extra == {"baseUrl": "https://alpha.my.desk.test", "testPath": "/api/v1/limits"}
     b = await PluginBindings(engine).get(tenant, "team_a", ID)
-    # The instance is the connection environment's own (c-580, test_plugin_environments.py); no copy on the binding.
+    # The instance is the connection environment's own (test_plugin_environments.py); no copy on the binding.
     assert b is not None
     assert "instance_url" not in b["settings"], b["settings"]
 
@@ -219,7 +219,7 @@ def test_the_test_plugin_is_a_plugin() -> None:
 def test_plugins_load_from_the_install_folder_with_no_switch(
     engine: AsyncEngine, store: ModuleStore, tmp_path: Path
 ) -> None:
-    # One plugins folder per install (owner, 2026-11-01): an empty folder reads nothing, a plugin dropped in loads with
+    # One plugins folder per install: an empty folder reads nothing, a plugin dropped in loads with
     # no OPS_PLUGINS, and a broken one beside it is reported by name while the good one still loads.
     parts = (store, PluginBindings(engine), InstallSwitches(None))
     folder = tmp_path / "plugins"
@@ -299,7 +299,7 @@ async def test_another_teams_connection_never_serves_a_teams_call(
 async def test_a_persons_own_account_with_no_instance_is_not_plugin_disabled(
     engine: AsyncEngine, store: ModuleStore, tenant: str
 ) -> None:
-    # Everyone signs in with their own account, and this environment has no instance yet (c-616 live walk): the plugin
+    # Everyone signs in with their own account, and this environment has no instance yet: the plugin
     # is on. The call asks this person to sign in. It does not say the plugin is off or that a team admin goes first.
     connections = ConnectionStore(engine)
     conn = await connection(connections, tenant, "person")

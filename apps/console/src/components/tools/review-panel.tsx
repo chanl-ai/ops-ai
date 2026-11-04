@@ -25,11 +25,11 @@ const DECISION = {
 
 type Decision = keyof typeof DECISION;
 
-/** A reviewed version's outcome, from its own review fields (c-163): the review itself lives in Human Tasks. */
+/** A reviewed version's outcome, from its own review fields: the review itself lives in Human Tasks. */
 const decisionOf = (v: ModuleVersion): Decision => (v.status === 'in_review' ? 'pending' : v.finding ? 'declined' : 'approved');
 
 /**
- * Security reviews a module once per major version (00 A1); the review is decided in Human Tasks (c-163). Minor
+ * Security reviews a module once per major version (00 A1); the review is decided in Human Tasks. Minor
  * versions within the major reuse the decision, so the panel shows what changed since the reviewed version.
  */
 export function ReviewPanel({ major, versions, drift, onRequest, canRequest }: { major: number; versions: ModuleVersion[]; drift: boolean; onRequest: () => void; canRequest: boolean }) {

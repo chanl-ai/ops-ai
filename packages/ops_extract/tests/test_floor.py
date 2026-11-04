@@ -1,4 +1,4 @@
-"""The floor for extracted fields read from platform-service's `extractionFloor` policy (c-157), by failure mode: the
+"""The floor for extracted fields read from platform-service's `extractionFloor` policy, by failure mode: the
 worker reads another tenant's floor; a read that fails lowers the floor to the default; a value that is not a
 confidence is used; a cleared policy has no floor at all. platform-service is faked at its documented route."""
 

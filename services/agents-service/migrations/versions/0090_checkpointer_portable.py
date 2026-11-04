@@ -1,4 +1,4 @@
-"""The checkpointer's tables on SQL Server, and a checkpoint's run as a column (c-549)
+"""The checkpointer's tables on SQL Server, and a checkpoint's run as a column
 
 Revision ID: 0090_checkpointer_portable
 Revises: 0089_trigger_event_item_update

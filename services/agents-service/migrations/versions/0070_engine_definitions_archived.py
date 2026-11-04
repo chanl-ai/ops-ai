@@ -1,4 +1,4 @@
-"""engine_definitions: archived_at and archived_by, set on every version of an archived workflow (c-274)
+"""engine_definitions: archived_at and archived_by, set on every version of an archived workflow
 
 An archived workflow starts no run of any mode and leaves the workflow lists; its versions and runs are kept, and
 restoring it clears both columns.

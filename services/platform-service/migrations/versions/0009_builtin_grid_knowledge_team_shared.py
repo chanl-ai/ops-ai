@@ -1,6 +1,6 @@
 """built-in grid: a builder changes and deletes any of the team's knowledge, not only their own
 
-Knowledge is shared by its team (owner decision 2026-10-17, kb-service 147c7b4c): any builder or admin of the team
+Knowledge is shared by its team: any builder or admin of the team
 changes or deletes its knowledge bases and sources. 0006 gave Builder `knowledge.edit` and `knowledge.delete` on its
 own records only; this widens both to `all` in every tenant and raises each tenant's permission version. Portable SQL
 only; the built-in ids are reserved, so no custom role is matched.

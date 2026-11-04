@@ -1,7 +1,7 @@
 # ruff: noqa: E501
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportMissingTypeStubs=false
 # Printed lines are the experiment's record and stay whole; asyncpg is untyped.
-"""Experiment E13: what the models-service hop adds to a chat turn (c-009), against E8's direct numbers.
+"""Experiment E13: what the models-service hop adds to a chat turn, against E8's direct numbers.
 
   uv run python experiments/e13_models_service_hop.py                                  # scripted parts, no tokens
   OPENAI_API_KEY=... uv run python experiments/e13_models_service_hop.py --only real --real-approved   # 10 real calls
@@ -50,7 +50,7 @@ MODELS_DIR = ROOT / "services" / "models-service"
 DB = "ops_e13"
 PG = f"postgresql+asyncpg://ops:ops@localhost:{os.environ.get('OPS_PG_PORT', '5477')}/{DB}"
 PORT = 8893
-# agents-service's Ed25519 token for models-service (the dev key, dev only); the shared static token is gone (c-045).
+# agents-service's Ed25519 token for models-service (the dev key, dev only); the shared static token is gone.
 SERVICE = {
     "Authorization": "Bearer "
     + mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id="local", ttl_s=3600)

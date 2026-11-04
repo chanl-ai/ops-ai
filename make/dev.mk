@@ -6,7 +6,7 @@
 
 DEMO_MODEL ?= gpt-5-mini
 # The guardrail checks and memory extraction: a non-reasoning model, so a check takes about a second rather than five
-# and a reply's end does not wait on a slow extraction (owner, 2026-10-18).
+# and a reply's end does not wait on a slow extraction.
 # The chat alias the agents name stays on gpt-5-nano: gpt-4.1-mini answered without calling load_skill, so an agent's
 # skill was never read (seed-walk check a). DEMO_MODEL stays on `default`, which reads documents. The three share one
 # provider connection, so DEMO_MODEL=fake puts all of them on the fake.
@@ -16,7 +16,7 @@ DEMO_CHAT_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-5-nano)
 up: db-up ## Compose, migrate every chain in place, then the services, the worker, models-service and the demo fakes; AUTH=platform signs in through platform-service; RESET=1 wipes the database first (as make reset-db); OPS_INFRA=external uses side containers and skips db-up/db-down
 	@# Services started before their code last changed run old code: stopped here, started again after the schema step.
 	@$(STACK) stop-stale
-	@# Always migrate, never drop data on its own (owner, c-099). A chain the database holds ahead of this checkout
+	@# Always migrate, never drop data on its own. A chain the database holds ahead of this checkout
 	@# stops here with the chain named; only RESET=1 or make reset-db wipes. KEEP_DATA=1 is accepted and changes nothing.
 	@if [ "$(RESET)" = "1" ]; then $(MAKE) -s reset-db; fi
 	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/schema_sync.py "$(OPS_DATABASE_URL)" || { \
@@ -30,7 +30,7 @@ up: db-up ## Compose, migrate every chain in place, then the services, the worke
 	@# The dev mail and bank fakes answer at this machine's private address, which moves with the network; the
 	@# shared stack's egress list is brought up to date with it so mail and bank calls are not refused after a move.
 	@if [ "$(OPS_STACK)" = shared ]; then uv run --quiet --project $(ROOT) python $(ROOT)/scripts/dev_egress.py; fi
-	@# The shared stack's agents and workflow reads run on a real OpenAI model (owner, 2026-10-18; DEMO_MODEL picks it,
+	@# The shared stack's agents and workflow reads run on a real OpenAI model (DEMO_MODEL picks it,
 	@# DEMO_MODEL=fake keeps the fake). Use cases and tests run on their own stacks and keep the fake.
 	@if [ "$(OPS_STACK)" = shared ]; then \
 		MODEL=$(DEMO_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py && \
@@ -106,7 +106,7 @@ ports: ## Print the ports this stack uses
 	@printf '  console %s (runtime %s), agents %s, tools %s, opa %s, postgres %s\n' $(OPS_CONSOLE_PORT) \
 		$(OPS_CONSOLE_RUNTIME_PORT) $(OPS_AGENTS_PORT) $(OPS_TOOLS_PORT) $(OPS_OPA_PORT) $(OPS_PG_PORT)
 
-##@ Call an API as a dev user (c-614)
+##@ Call an API as a dev user
 
 # `make api GET /v1/me AS=viewer`: the method and path are the words after `api`, so they become goals that do nothing.
 # A query string goes in Q=, since make reads any word holding `=` as a variable.

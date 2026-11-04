@@ -1,4 +1,4 @@
-"""GET /v1/channels (c-245): every channel the caller's teams run, one row per existing record (a mailbox is email, a
+"""GET /v1/channels: every channel the caller's teams run, one row per existing record (a mailbox is email, a
 widget deployment is chat), with what it serves, a health dot from real checks, and its traffic, so the Channels hub
 neither joins records nor counts anything itself. `kinds` gives the gallery one row per channel type."""
 
@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from ops_access import can
 from ops_contracts.chat import WireModel
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, Unprocessable
-from ops_service_kit.http import Envelope, ListResult, paged
+from ops_service_kit.http import Envelope, ListResult, Out, paged
 from ops_service_kit.ids import now_iso
 
 from ...store.channel_list import NOT_FOUND, STALE_READ, ChannelList
@@ -26,7 +26,6 @@ from .. import deployment_reviews
 from ..auth import Principal, caller_in, caller_of, require_builder
 from ..deps import Runtime, runtime
 from ..envelope import ok
-from ..schemas import Out
 from ..team_names import PlatformTeamNames
 from ..widget_sessions import normal_origin
 from .activity import _teams  # pyright: ignore[reportPrivateUsage]
@@ -611,7 +610,7 @@ async def update_channel(rt: Rt, me: Me, channel_id: str, body: ChannelPatch) ->
 
 @router.post("/{channel_id}/retire", response_model=Envelope[Retired])
 async def retire_channel(rt: Rt, me: Me, channel_id: str) -> JSONResponse:
-    """Retires a chat channel for good (c-130): the embed answers no page again and cannot be changed. An email channel
+    """Retires a chat channel for good: the embed answers no page again and cannot be changed. An email channel
     is removed on its mailbox's page, and an API channel is a key revoked in Settings."""
     if not channel_id.startswith("wd_"):
         raise Conflict("Only a chat channel is retired here.", code="channel_managed_elsewhere")

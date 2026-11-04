@@ -1,4 +1,4 @@
-"""A review step's notDecidedBy (c-257 asks it of c-258's engine): a person it names may not decide the review whatever
+"""A review step's notDecidedBy: a person it names may not decide the review whatever
 their role, such as whoever saved the tool module version it approves; anyone else decides as before. On PostgreSQL
 with the real worker; failure mode: the named person approves their own change."""
 
@@ -82,7 +82,7 @@ async def test_a_person_the_step_names_cannot_decide_and_another_reviewer_can(en
 
 
 async def test_whoever_the_step_names_as_asking_decides_while_the_requester_policy_is_on(engine: AsyncEngine) -> None:
-    """requestedBy follows requesterMayDecide (tick 29): while it is on, the default, the asker decides."""
+    """requestedBy follows requesterMayDecide: while it is on, the default, the asker decides."""
     asked = parse(
         {
             **FLOW.wire(),

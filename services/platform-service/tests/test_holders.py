@@ -1,4 +1,4 @@
-"""Who in a team holds an action (GET /v1/access/holders, c-186), what a "View only" notice names, by failure mode: a
+"""Who in a team holds an action (GET /v1/access/holders), what a "View only" notice names, by failure mode: a
 holder in another team named, a workspace admin (`*`) left out, an expired grant still counted, a caller reading a
 team they are not in, and a cell outside the catalogue answered."""
 

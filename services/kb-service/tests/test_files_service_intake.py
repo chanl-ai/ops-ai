@@ -1,4 +1,4 @@
-"""kb-service reading source files from files-service (c-094 T008), against a fake of files-service's public file
+"""kb-service reading source files from files-service, against a fake of files-service's public file
 routes (tests/files_fake.py): files from kb-service's own store move across on start, and a refusal from files-service
 says what failed. Adding files by id: test_add_existing_files.py."""
 
@@ -26,7 +26,7 @@ from .test_sync import file_source, upload
 async def test_a_start_moves_files_from_kb_services_own_store_into_files_service(
     engine: AsyncEngine, tmp_path: Path, tenant: str
 ) -> None:
-    """c-094: the shared stack switched kb-service to files-service while its sources held ids from kb-service's
+    """The shared stack switched kb-service to files-service while its sources held ids from kb-service's
     own store, so every sync after the switch failed them as missing. A start copies them across and the next sync
     finds each document unchanged."""
     old = KnowledgeFiles(tmp_path / "kb-files")

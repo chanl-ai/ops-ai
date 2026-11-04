@@ -1,4 +1,4 @@
-"""Who a Human Task is assigned to (c-074): one row per assignment, only ever added, so the latest row per review is
+"""Who a Human Task is assigned to: one row per assignment, only ever added, so the latest row per review is
 who has it now and the rows before it are the record of who had it. Assigning routes a review to a person; it does not
 change who may decide it."""
 

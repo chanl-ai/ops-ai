@@ -41,7 +41,7 @@ export interface OptionsParams {
 export type ReviewView = 'mine' | 'open' | 'overdue' | 'resolved' | 'all';
 
 export type ReviewFilters = { risk?: string[]; workflowId?: string[]; kind?: string[]; agentSlug?: string[]; status?: string[] };
-/** `group: 'case'` lists the view grouped by case with each row's `caseTitle` (c-460). */
+/** `group: 'case'` lists the view grouped by case with each row's `caseTitle`. */
 export type ReviewListParams = ListParams<ReviewFilters> & { view: ReviewView; group?: 'case' };
 
 export type AgentFilters = { availability?: string[]; teamId?: string[] };

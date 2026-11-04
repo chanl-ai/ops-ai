@@ -30,7 +30,7 @@ services:
       - "${OPS_OPA_PORT:-8181}:8181"
     volumes:
       - ../../services/tools-service/policy:/policy:ro
-  # Test mail servers (c-192), for dev and the tests only; no release needs them. GreenMail is a real SMTP and IMAP
+  # Test mail servers, for dev and the tests only; no release needs them. GreenMail is a real SMTP and IMAP
   # server: mail sent to any address on its SMTP port lands in that address's mailbox, read over IMAP with any password
   # (auth disabled). Mailpit catches what the platform sends over SMTP and shows it on its HTTP API and web page.
   greenmail:

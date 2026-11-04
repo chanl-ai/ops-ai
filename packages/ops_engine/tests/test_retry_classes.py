@@ -1,4 +1,4 @@
-"""Retries by what an error says (c-561), by failure mode: a read the outside system never got failed at once instead of
+"""Retries by what an error says, by failure mode: a read the outside system never got failed at once instead of
 being tried again; a read refused for bad input was retried for minutes; a write the gateway never received was dropped
 (the error port) instead of sent again; a write was sent again under its own blocked key; and a worker that died while
 re-sending a write sent it a third time on recovery."""

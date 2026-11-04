@@ -31,7 +31,7 @@ engine_definitions = sa.Table(
     # draft, live, paused or superseded (STAGES). At most one version of a workflow is live or paused; only that one
     # starts runs outside test mode. "In review" is not stored: it is a draft with an open publish request.
     sa.Column("stage", sa.String(16), nullable=False, server_default="draft"),
-    # Set on every version when the workflow is archived (c-274): it starts no run of any mode and leaves the lists,
+    # Set on every version when the workflow is archived: it starts no run of any mode and leaves the lists,
     # its versions and runs kept; restoring clears it.
     sa.Column("archived_at", sa.String(32)),
     sa.Column("archived_by", sa.String(200)),
@@ -41,7 +41,7 @@ engine_definitions = sa.Table(
 )
 
 # Live versions only, for a service event's listeners and the mailbox listener, which read nothing else from a table
-# that keeps every version of every workflow (c-280). The same rows on PostgreSQL and SQL Server.
+# that keeps every version of every workflow. The same rows on PostgreSQL and SQL Server.
 LIVE = engine_definitions.c.stage == "live"
 sa.Index(
     "ix_engine_definitions_live",
@@ -58,7 +58,7 @@ engine_runs = sa.Table(
     metadata,
     sa.Column("id", sa.String(64), primary_key=True),
     # No single-column index on tenant or workflow: every index below leads with tenant_id, and a lone tenant or
-    # workflow index let the planner read a tenant's runs and sort them instead of the team's index in order (c-507).
+    # workflow index let the planner read a tenant's runs and sort them instead of the team's index in order.
     sa.Column("tenant_id", sa.String(64), nullable=False),
     sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("workflow_id", sa.String(64), nullable=False),
@@ -67,7 +67,7 @@ engine_runs = sa.Table(
     # The caller's key for what started the run; a repeated key returns the first run.
     sa.Column("run_key", sa.String(200), nullable=False),
     sa.Column("mode", sa.String(8), nullable=False),
-    # queued, running, waiting, stuck (nothing behind it, c-561), succeeded, failed, cancelled
+    # queued, running, waiting, stuck (nothing behind it), succeeded, failed, cancelled
     sa.Column("status", sa.String(16), nullable=False),
     sa.Column("input", sa.JSON),
     sa.Column("outcome", sa.String(64)),
@@ -76,11 +76,11 @@ engine_runs = sa.Table(
     # While waiting: {node, iteration, interruptId, payload}; the Reviews facade reads it.
     sa.Column("waiting", sa.JSON),
     sa.Column("created_by", sa.String(200), nullable=False),
-    # What carried a person's request when it was not the person (c-258): `event:<service>/<event>`. created_by stays
+    # What carried a person's request when it was not the person: `event:<service>/<event>`. created_by stays
     # the person's email, so every rule on who started a run reads them.
     sa.Column("started_via", sa.String(200)),
     # Whether the person who started the run may approve its writes themselves: reviews.decide in the run's team under
-    # the requesterMayDecide policy, read from their roles at the start (agents migration 0095, c-616). A run's step
+    # the requesterMayDecide policy, read from their roles at the start (agents migration 0095). A run's step
     # approving a write is then decided as theirs; false for a run no person started.
     sa.Column("started_by_approver", sa.Boolean, nullable=False, server_default=sa.false()),
     sa.Column("created_at", sa.String(32), nullable=False),
@@ -90,7 +90,7 @@ engine_runs = sa.Table(
     # The runs list: one team's runs newest first, optionally by status, with a count per status (migration 0066).
     sa.Index("ix_engine_runs_team_created", "tenant_id", "team_id", "created_at"),
     sa.Index("ix_engine_runs_team_status_created", "tenant_id", "team_id", "status", "created_at"),
-    # The runs list filtered by one workflow (c-280).
+    # The runs list filtered by one workflow.
     sa.Index("ix_engine_runs_workflow_created", "tenant_id", "workflow_id", "created_at"),
     # The waiting or unfinished runs a run started, looked up on each child's status change to settle the parent.
     sa.Index("ix_engine_runs_parent_status", "tenant_id", "created_by", "status"),
@@ -133,7 +133,7 @@ engine_work = sa.Table(
     sa.Column("payload", sa.JSON),
     # One row per thing that happened: a second decision of the same review finds the first.
     sa.Column("dedupe_key", sa.String(240), nullable=False),
-    # queued, claimed, done, failed, stuck (set aside by the reconciler until Retry, c-561)
+    # queued, claimed, done, failed, stuck (set aside by the reconciler until Retry)
     sa.Column("status", sa.String(16), nullable=False),
     # The engine build that may claim the row (workflow-runner.md section 7).
     sa.Column("build", sa.String(32), nullable=False),
@@ -142,18 +142,18 @@ engine_work = sa.Table(
     sa.Column("claimed_by", sa.String(120)),
     sa.Column("lease_expires_at", sa.Float()),
     sa.Column("attempts", sa.Integer, nullable=False, server_default="0"),
-    # Claims that lapsed because their worker died, not claims given back (c-561): more than five marks the run Stuck.
+    # Claims that lapsed because their worker died, not claims given back: more than five marks the run Stuck.
     sa.Column("lapses", sa.Integer, nullable=False, server_default="0"),
     sa.Column("error", sa.Text),
     sa.Column("created_at", sa.String(32), nullable=False),
     sa.UniqueConstraint("tenant_id", "dedupe_key", name="uq_engine_work_dedupe"),
     sa.Index("ix_engine_work_due", "status", "build", "available_at"),
-    # The claim's other branch: claimed work whose lease lapsed (c-280).
+    # The claim's other branch: claimed work whose lease lapsed.
     sa.Index("ix_engine_work_lease", "status", "build", "lease_expires_at"),
     info=TENANT_SCOPED,
 )
 
-# One row per step parked on work another service finishes (c-525): what a service event or a signed callback looks a
+# One row per step parked on work another service finishes: what a service event or a signed callback looks a
 # waiting step up by. Written with the run's waiting state, deleted by every resume. `event` and `wait_key` are empty
 # for a step only a callback resumes.
 engine_waits = sa.Table(

@@ -2,7 +2,7 @@
 
 A domain listed on a provider was owned by the first workspace to list it (the key was the domain alone) and routed
 sign-in at once. Now a listing is a claim of one workspace, keyed (domain, tenant_id), carrying a random token the
-workspace publishes as a TXT record; `verified_at` is set when the record is seen (c-195). The partial unique index on
+workspace publishes as a TXT record; `verified_at` is set when the record is seen. The partial unique index on
 verified domains is what stops two workspaces sending the same domain's people to different providers, and a pending
 claim blocks nobody. `platform_signin_domain` returns verified claims only. Claims that exist before this revision are
 marked verified: they were set by Security admins in development data, and unverifying them would stop sign-in there.

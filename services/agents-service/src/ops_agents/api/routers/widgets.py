@@ -1,5 +1,4 @@
-"""/v1/widgets: widget templates an agent version pins and fills in chat (c-082,
-`docs/architecture/chat-widgets.md`).
+"""/v1/widgets: widget templates an agent version pins and fills in chat (`docs/architecture/chat-widgets.md`).
 
 The seeded library (seed/widgets.json) is listed as published, platform-wide templates. A builder creates a widget in
 their team, saves drafts, and requests its publish, decided in Reviews by someone other than whoever asked or saved
@@ -100,7 +99,7 @@ async def widget_options(  # noqa: PLR0917 - FastAPI reads each query parameter 
     ids: Annotated[list[str] | None, Query()] = None,
     granted: Annotated[list[str] | None, Query()] = None,
 ) -> JSONResponse:
-    """The agent page's widget picker (c-136): the seeded library's matches first, then the caller's teams' published,
+    """The agent page's widget picker: the seeded library's matches first, then the caller's teams' published,
     unretired widgets, searched and limited in the query. A widget whose buttons need a tool outside `granted` (the
     draft's tools) is offered disabled with the reason, as a pin of it is refused."""
     held = set(granted or [])

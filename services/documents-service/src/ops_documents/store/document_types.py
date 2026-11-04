@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""Document types at rest (c-236): a team's type, its immutable numbered versions (the fields an extraction reads),
+"""Document types at rest: a team's type, its immutable numbered versions (the fields an extraction reads),
 its samples (a file and the values it should read), and the test runs of a version over those samples.
 
 Fields, expected values and results are JSON kept as text and never queried (database portability D5). A version is
@@ -53,18 +53,18 @@ document_type_versions = sa.Table(
     sa.Column("review_below", sa.Float()),
     # MDY or DMY: how the version reads a numeric date such as 03/04/2026 (null on versions before it was a setting).
     sa.Column("date_order", sa.String(3)),
-    # Layout templates (c-253), JSON; null on versions saved before, read as none.
+    # Layout templates, JSON; null on versions saved before, read as none.
     sa.Column("templates", sa.Text),
-    # Checks across fields (c-296), JSON; null on versions saved before, read as none.
+    # Checks across fields, JSON; null on versions saved before, read as none.
     sa.Column("checks", sa.Text),
-    # Whether reads may show the model the page image (c-295); null on versions saved before, read as off.
+    # Whether reads may show the model the page image; null on versions saved before, read as off.
     sa.Column("page_images", sa.Boolean),
-    # How many checked reads of one layout offer a template (c-254); null on versions saved before, read as the default.
+    # How many checked reads of one layout offer a template; null on versions saved before, read as the default.
     sa.Column("offer_at", sa.Integer),
     sa.Column("note", sa.String(500)),
     sa.Column("created_by", sa.String(320), nullable=False),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-    # The type's team, copied when the version is written, so the policy holds it without reading the type (c-415).
+    # The type's team, copied when the version is written, so the policy holds it without reading the type.
     sa.Column("team", sa.String(64), nullable=False),
     info={**TENANT_SCOPED, **team_owned("team")},
 )
@@ -107,7 +107,7 @@ document_type_tests = sa.Table(
 )
 
 
-# A type's examples (c-297): the corrections people made on its reads, as the field, the line its value was printed on
+# A type's examples: the corrections people made on its reads, as the field, the line its value was printed on
 # and the corrected value (JSON). One per read and field; `record` is the record's position, SINGLE for a read of one.
 document_type_examples = sa.Table(
     "document_type_examples",
@@ -129,7 +129,7 @@ document_type_examples = sa.Table(
 )
 # The record of a read of one record, in the examples' unique key (a null would not be unique).
 SINGLE = -1
-# How many examples of one field a team's type keeps (c-297): a new one drops the oldest past this. Reads are given the
+# How many examples of one field a team's type keeps: a new one drops the oldest past this. Reads are given the
 # newest few, so the rest only let a person remove a wrong one without a gap; nothing grows without bound.
 EXAMPLES_KEPT_PER_FIELD = 10
 
@@ -350,7 +350,7 @@ class DocumentTypesStore:
         return dict(m) if m is not None else None
 
     async def examples(self, team: str, type_id: str) -> list[dict[str, Any]]:
-        """The type's examples in the team, newest first (c-297)."""
+        """The type's examples in the team, newest first."""
         tenant = isolation.tenant()
         e = document_type_examples.c
         q = (

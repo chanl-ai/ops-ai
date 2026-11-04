@@ -135,7 +135,7 @@ class RoleStore:
                 .order_by(role_assignments.c.created_at, role_assignments.c.id)
             )
             rows = (await c.execute(q)).all()
-            # An assignment in an archived team grants nothing there (c-198).
+            # An assignment in an archived team grants nothing there.
             archived = {
                 str(t) for t in (await c.execute(sa.select(teams.c.id).where(teams.c.status != "active"))).scalars()
             }
@@ -150,7 +150,7 @@ class RoleStore:
 
     async def workspace_admin(self, tenant_id: str, user_id: str, *, now: str) -> bool:
         """Whether the person holds `access.manage` through a role assigned in every team (`*`): a workspace admin,
-        who acts in any team of the workspace whether or not they belong to it (owner, 2026-10-17; c-208)."""
+        who acts in any team of the workspace whether or not they belong to it."""
         held = await self.holdings(tenant_id, user_id)
         every = [a for a in active(held.assignments, now) if a.team_id == ANY_TEAM]
         if not every:
@@ -183,7 +183,7 @@ class RoleStore:
     async def record_check(
         self, tenant_id: str, team_id: str, *, by: str, request_id: str, detail: dict[str, Any]
     ) -> None:
-        """An access check an admin ran (c-150): who checked whom for what, and the answer, in the audit log."""
+        """An access check an admin ran: who checked whom for what, and the answer, in the audit log."""
         async with self.db.tenant_tx(tenant_id) as c:
             await record(
                 c,
@@ -269,7 +269,7 @@ async def ensure_builtin_roles(c: AsyncConnection, tenant_id: str, *, at: str) -
 
 
 async def ensure_owner(c: AsyncConnection, tenant_id: str, *, at: str) -> str | None:
-    """The workspace's owner (c-529): while it has none, its earliest account admin (Admin in every team) becomes it,
+    """The workspace's owner: while it has none, its earliest account admin (Admin in every team) becomes it,
     as migration 0026 did for workspaces made before it. None when it has no account admin."""
     owner = role_assignments.c.role_id == OWNER.id
     found = (

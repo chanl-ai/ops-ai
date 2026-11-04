@@ -1,4 +1,4 @@
-"""Tool modules, egress entries and secrets carry a template id and a protection level (c-180), by failure mode: a
+"""Tool modules, egress entries and secrets carry a template id and a protection level, by failure mode: a
 provisioned record not found again by its template id, a person setting either field, a person changing a system
 record, a Security admin unable to set a system secret's value, a managed module losing its template id on an edit, and
 a record from before reading as protected."""
@@ -201,7 +201,7 @@ async def test_a_record_made_without_a_template_reads_as_neither(
 async def test_bulk_delete_follows_can_for_a_system_module_as_a_single_delete_does(
     tools: tuple[httpx.AsyncClient, dict[str, dict[str, str]]], tenant: str
 ) -> None:
-    """Admins do everything (owner): bulk delete skipped a system module for everyone but the provisioner, admins
+    """Admins do everything: bulk delete skipped a system module for everyone but the provisioner, admins
     included, while a single delete let the admin through. Now both ask can() with the module's protection."""
     c, people = tools
     made = await _module(c, tenant, "core-bulk", "system")

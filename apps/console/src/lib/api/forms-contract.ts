@@ -1,7 +1,7 @@
 import type { HostedFormInput, HostedFormLink, HostedFormPatch, HostedFormReceived, HostedFormView } from '@/lib/types/forms';
 
 /**
- * Hosted forms (c-535): a workflow's start form shared as a page. A link form opens in the embed app with its signed
+ * Hosted forms: a workflow's start form shared as a page. A link form opens in the embed app with its signed
  * token and needs no sign-in; a members-only form opens in the console. Builders of the workflow's team make, rotate
  * and pause them.
  */

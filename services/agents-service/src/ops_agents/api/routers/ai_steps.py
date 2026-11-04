@@ -1,4 +1,4 @@
-"""`/v1/ai-steps/{step}`: a workflow AI step's answer for an agent or an outside caller (c-298, tick 30).
+"""`/v1/ai-steps/{step}`: a workflow AI step's answer for an agent or an outside caller.
 
 Classify, Summarise, Extract from text and Draft run here exactly as a workflow step runs them (ops_engine.ai_steps.run
 over the same prompt port), with the step's settings in the body and the text to read. The answer names the port a

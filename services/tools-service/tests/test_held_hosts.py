@@ -1,4 +1,4 @@
-"""An app's first address on a host the tenant has not listed asks Security instead of failing (c-616 S13). Who may
+"""An app's first address on a host the tenant has not listed asks Security instead of failing. Who may
 decide the task and how it lists in Human Tasks are agents-service's rules and uc-617's walk. By failure mode here:
 something saved while the host waits, a refused host asked about again, someone other than agents-service listing a
 host through the decision route, and a Security admin asked to approve their own change (roles decide: they list it)."""

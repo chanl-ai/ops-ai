@@ -1,4 +1,4 @@
-"""A run records whether its starter may approve its writes themselves (owner, 2026-11-01; c-616), by failure mode: an
+"""A run records whether its starter may approve its writes themselves, by failure mode: an
 admin's run recorded as not theirs to approve, so its write waits on someone else; a builder's run recorded as theirs,
 so it skips a person; and the four-eyes rule (requesterMayDecide off) not counted."""
 

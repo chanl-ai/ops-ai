@@ -1,4 +1,4 @@
-"""Which writes wait for approval is declared once per tool, and fails closed (c-219), by failure mode: a write that
+"""Which writes wait for approval is declared once per tool, and fails closed, by failure mode: a write that
 declares nothing, so its approval depends on a default somewhere; a write other than open_case declared to run at once
 without anyone deciding it; a team's toolWritesNeedApproval read for the wrong team; and a policy that cannot be read
 letting a write through unapproved. platform-service is a fake HTTP endpoint here."""
@@ -26,9 +26,9 @@ CATALOGS = [
     ROOT / "services/agents-service/seed/tools.json",
     ROOT / "services/agents-service/tests/fixtures/seed/tools.json",
 ]
-# The writes that run without approval, each decided by a person (owner via orch, 2026-10-18): open_case changes only
-# the team's own case list; log_activity is an internal note; send_acknowledgement thanks a message's sender at once
-# (owner via orch, 2026-10-23, c-532). book_appointment books with the bank, so it waits.
+# The writes that run without approval, each decided by a person: open_case changes only
+# the team's own case list; log_activity is an internal note; send_acknowledgement thanks a message's sender at once.
+# book_appointment books with the bank, so it waits.
 AT_ONCE = {"open_case", "log_activity", "send_acknowledgement"}
 
 

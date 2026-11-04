@@ -1,5 +1,5 @@
 """The install's model connection from OPENAI_API_TYPE, OPENAI_API_BASE (or OPENAI_BASE_URL), OPENAI_API_VERSION and
-OPENAI_API_REGION (c-605, owner 2026-10-31), one test per rule: a plain base starts as an OpenAI-compatible endpoint,
+OPENAI_API_REGION, one test per rule: a plain base starts as an OpenAI-compatible endpoint,
 Azure needs its endpoint and api-version, the region is optional, an unknown type or a base that is not a URL stops
 models-service naming the variable, the old OPENAI_BASE_URL name still works, nothing set changes nothing, a dev restart
 moves openai-local to what the settings name, and no other service reads any of it."""

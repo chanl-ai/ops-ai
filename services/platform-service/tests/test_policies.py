@@ -1,4 +1,4 @@
-"""Workspace access policies at rest (c-186), by failure mode: a policy that starts closed, a change with no audit
+"""Workspace access policies at rest, by failure mode: a policy that starts closed, a change with no audit
 entry, a change that leaves tokens on the old permission version, a value the policy does not take stored, and one
 tenant's setting reaching another."""
 
@@ -33,16 +33,16 @@ DEFAULTS: dict[str, Any] = {
     "memoryRetentionDays": None,
     "reviewSlaHours": 8,
     "toolWritesNeedApproval": {},
-    # Approvals are off by default (owner, 2026-11-01): no team lists an app whose writes wait.
+    # Approvals are off by default: no team lists an app whose writes wait.
     "appWritesNeedApproval": {},
-    # No team set: off for every team until one turns it on (owner, 2026-10-18; c-298, c-302, c-300, c-295).
+    # No team set: off for every team until one turns it on.
     "aiSteps": {},
     "taskAssist": {},
     "checkBeforeSend": {},
     "pageImages": {},
-    # Per team and on unless a team turns it off (c-321): {} names no team, so every team masks.
+    # Per team and on unless a team turns it off: {} names no team, so every team masks.
     "aiStepsMaskPersonalData": {},
-    # No plugin is on until the platform admin turns it on for the install (c-564).
+    # No plugin is on until the platform admin turns it on for the install.
     "plugins": {},
 }
 # The AI uses: the one documented exception to open defaults, off until a team turns them on.
@@ -219,7 +219,7 @@ async def test_a_team_admin_sets_their_own_teams_publish_reviews_and_no_other_te
     assert ("policy.set", "publishReview", {"before": None, "after": {"agents": "always"}}) in await audit(
         signin.engine, signin.tenant
     )
-    # Read live on each decision, never from a token (owner, 2026-10-18): a token leaves it out, a service reads it.
+    # Read live on each decision, never from a token: a token leaves it out, a service reads it.
     token = a["Authorization"].removeprefix("Bearer ")
     assert "publishReview" not in json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=="))["policies"]
     tools = mint_service_token(
@@ -230,7 +230,7 @@ async def test_a_team_admin_sets_their_own_teams_publish_reviews_and_no_other_te
 
 
 async def test_only_the_security_team_lets_a_team_send_page_images(signin: SignInRig) -> None:
-    """The page image leaves for the model provider (c-295): a team's own admin cannot turn it on for the team; a
+    """The page image leaves for the model provider: a team's own admin cannot turn it on for the team; a
     Security admin acting in that team can, and it applies to that team alone."""
     _, ana = await _team_admin(signin, "ana")
     refused = await signin.public.put("/v1/policies/pageImages", json={"value": True}, headers=ana)
@@ -242,7 +242,7 @@ async def test_only_the_security_team_lets_a_team_send_page_images(signin: SignI
 
 
 async def test_every_member_reads_the_policies_and_only_the_cell_holder_changes_one(signin: SignInRig) -> None:
-    # Policies are not secret (owner, 2026-10-18): a team admin and a viewer read every value; a change stays per cell.
+    # Policies are not secret: a team admin and a viewer read every value; a change stays per cell.
     for name, role in (("tara", "admin"), ("val", "viewer")):
         _, who = await _team_admin(signin, name, role=role)
         listed = await signin.public.get("/v1/policies", headers=who)
@@ -255,7 +255,7 @@ async def test_every_member_reads_the_policies_and_only_the_cell_holder_changes_
 
 
 async def test_every_policy_says_how_it_is_drawn_and_what_it_is_called(signin: SignInRig) -> None:
-    """The Policies page draws each row from its kind and title (c-224): a policy added without them would show as a
+    """The Policies page draws each row from its kind and title: a policy added without them would show as a
     blank row or be guessed from its value's shape."""
     rows = (await signin.public.get("/v1/policies", headers=signin.admin)).json()["data"]
     assert {r["key"]: r["kind"] for r in rows} == {p.key: p.kind for p in POLICIES}
@@ -263,7 +263,7 @@ async def test_every_policy_says_how_it_is_drawn_and_what_it_is_called(signin: S
 
 
 async def test_a_team_lists_the_apps_whose_writes_wait_through_the_route(signin: SignInRig) -> None:
-    """appWritesNeedApproval (c-616) takes a list, which a route typed for switches and numbers would refuse."""
+    """appWritesNeedApproval takes a list, which a route typed for switches and numbers would refuse."""
     put = await signin.public.put(
         "/v1/policies/appWritesNeedApproval", json={"value": ["plugin:opsai.salesforce"]}, headers=signin.admin
     )

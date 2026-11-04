@@ -1,4 +1,4 @@
-"""An API key's traffic on the Channels list (c-246), on PostgreSQL under the tenant role: a thread a key started is
+"""An API key's traffic on the Channels list, on PostgreSQL under the tenant role: a thread a key started is
 counted by the `startedBy` its metadata holds, a JSON read that SQLite answers more loosely than PostgreSQL; another
 tenant's thread under the same key id counts nothing. Runs on the migrated test database."""
 

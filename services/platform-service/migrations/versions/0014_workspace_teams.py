@@ -1,4 +1,4 @@
-"""each workspace names its security team and its default team for new people (c-202)
+"""each workspace names its security team and its default team for new people
 
 Null keeps today's behaviour: the security team is `Settings.security_team_id` and there is no default team.
 

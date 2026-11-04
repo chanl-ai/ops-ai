@@ -1,4 +1,4 @@
-"""Editing an operation's HTTP call after it is added (c-027), through the real routes and the real executor against
+"""Editing an operation's HTTP call after it is added, through the real routes and the real executor against
 the in-process fake bank: one test per way it can break."""
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from .conftest import service_headers
 from .test_calls import MODULE, Gateway, gateway  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 BASE = f"/v1/tool-modules/{MODULE}"
-# The module's team, which holds the secrets its operations read (c-509).
+# The module's team, which holds the secrets its operations read.
 TEAM = "team_platform"
 
 
@@ -32,12 +32,12 @@ async def _patch(g: Gateway, base: str, body: dict[str, Any]) -> httpx.Response:
 
 async def _publish(g: Gateway) -> dict[str, Any]:
     """Publishes what is staged; a major version is approved by Security so the module serves again."""
-    r = await g.client.post(f"{BASE}/versions", json={"note": "c-027"})
+    r = await g.client.post(f"{BASE}/versions", json={"note": "call shape"})
     assert r.status_code == 200, r.text
     detail = r.json()["data"]
     waiting = next((v for v in detail["versions"] if v["status"] == "in_review"), None)
     if waiting is not None:
-        # Approved in Reviews (c-163), which tells tools-service with agents-service's token.
+        # Approved in Reviews, which tells tools-service with agents-service's token.
         decision = {"requestId": waiting["reviewId"], "version": waiting["version"], "decision": "approved"}
         r = await g.client.post(f"{BASE}/review-decisions", json=decision, headers=service_headers(g.tenant))
         assert r.status_code == 200, r.text
@@ -63,7 +63,7 @@ def _out(r: httpx.Response) -> Any:
 
 
 async def test_an_edited_sign_in_header_is_refused_whatever_it_holds_and_nothing_is_staged(g: Gateway) -> None:
-    # The module's connection signs every call (c-616): a typed key or a {{NAME}} reference would be a second home.
+    # The module's connection signs every call: a typed key or a {{NAME}} reference would be a second home.
     for value in ("Bearer sk_live_abc123", "{{BANK_TOKEN}}"):
         r = await _patch(g, "get_account", {"headers": [{"key": "Authorization", "value": value}]})
         assert r.status_code == 400 and "connection" in r.json()["error"]["message"], (value, r.text)
@@ -95,7 +95,7 @@ async def test_method_path_and_body_are_major_and_headers_transform_and_timeout_
     assert (await _patch(g, "get_account", {"path": "/accounts/{accountId}/summary"})).status_code == 200
     [change] = (await g.client.get(BASE)).json()["data"]["pendingChanges"]
     assert change["major"] is True and change["kind"] == "schema_changed"
-    r = await g.client.post(f"{BASE}/versions", json={"note": "c-027"})
+    r = await g.client.post(f"{BASE}/versions", json={"note": "call shape"})
     detail = r.json()["data"]
     assert detail["version"] == "2.0.0" and detail["pendingReview"] is not None, "a review opens"
 

@@ -1,4 +1,4 @@
-"""The background processes (c-516). GET /health/background: agents-service's processes and their state, with no
+"""The background processes. GET /health/background: agents-service's processes and their state, with no
 record's data, for `make health` and the staging check. GET /v1/background: every listed process of every service and
 the latest jobs, for an account admin's Govern > Background page; anyone else gets not found.
 
@@ -77,7 +77,7 @@ def _urls(settings: Settings) -> dict[str, str | None]:
         "files": settings.files_url,
         "documents": settings.documents_url,
         "tools": settings.tools_url or settings.gateway_url,
-        # The workspace purge (c-529).
+        # The workspace purge.
         "platform": settings.platform_url,
     }
 

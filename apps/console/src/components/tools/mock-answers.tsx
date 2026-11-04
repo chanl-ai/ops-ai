@@ -55,7 +55,7 @@ const when = (m: MockAnswer) => {
 };
 
 /**
- * An operation's mock answers (c-580), in the order they are tried: the first whose match equals the call's inputs
+ * An operation's mock answers, in the order they are tried: the first whose match equals the call's inputs
  * answers, and the one marked default answers anything else. Each is saved at once, not staged with the operation.
  */
 export function MockAnswers({ moduleId, opId }: { moduleId: string; opId: string }) {

@@ -1,4 +1,4 @@
-"""Delivers platform-service's events (c-616 S14, on c-258's outbox) to every service that acts on each, at that
+"""Delivers platform-service's events (on the outbox) to every service that acts on each, at that
 service's POST /v1/platform-events, as this service, for the event's tenant and team. An event waits in the outbox
 while a subscriber is down and goes out once it is back; a subscriber acts idempotently, since delivery is at least
 once and a failed delivery to one subscriber sends the event to all of them again.

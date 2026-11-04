@@ -84,7 +84,7 @@ def executions_router(service: ModuleService, directory: Directory) -> APIRouter
 
     @r.get("/{call_id}", response_model=Envelope[ToolCallRow])
     async def get_execution(call_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """One call by its id, as the list shows it, so an Activity row opens to its call (c-057 T013)."""
+        """One call by its id, as the list shows it, so an Activity row opens to its call."""
         return ok(await service.execution(who, call_id))
 
     return r
@@ -113,7 +113,7 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
         template_id: Annotated[str | None, Query(alias="templateId")] = None,
     ) -> JSONResponse:
         filters = {"type": type or [], "access": access or [], "approvalState": approval_state or []}
-        # The provisioner finds the module that fills a template slot by it (c-180).
+        # The provisioner finds the module that fills a template slot by it.
         filters["templateId"] = [template_id] if template_id else []
         data = await service.list(
             who,
@@ -155,7 +155,7 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
         page: Annotated[int, Query(ge=1)] = 1,
         page_size: Annotated[int, Query(alias="pageSize", ge=1, le=100)] = 25,
     ) -> JSONResponse:
-        """Every workflow's access to the modules the team sees (c-144): a page of one view, with each view's count."""
+        """Every workflow's access to the modules the team sees: a page of one view, with each view's count."""
         return ok(await service.grants(who, view=view, search=search, page=page, page_size=page_size))
 
     @r.get("/{module_id}", response_model=Envelope[ToolModuleDetail])
@@ -183,7 +183,7 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
     async def add_function(
         module_id: str, body: CodeOperationIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """Adds a Python function to a code module (c-531); it runs on runner-service when called."""
+        """Adds a Python function to a code module; it runs on runner-service when called."""
         return ok(await service.add_function(who, module_id, body.model_dump()))
 
     @r.post("/{module_id}/operations/import", response_model=Envelope[ToolModuleDetail])
@@ -224,7 +224,7 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
     async def apply_review_decision(  # pyright: ignore[reportUnusedFunction]
         module_id: str, body: ReviewDecisionIn, svc: CurrentService
     ) -> JSONResponse:
-        """A decision made in agents-service's Reviews (c-163). Only agents-service sends it, with its own token: a
+        """A decision made in agents-service's Reviews. Only agents-service sends it, with its own token: a
         person decides in Reviews, never here."""
         if svc.sub != "service:agents":
             raise Forbidden("Only agents-service applies a review decision.", code="service_required")

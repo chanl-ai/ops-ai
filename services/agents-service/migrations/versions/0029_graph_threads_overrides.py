@@ -3,7 +3,7 @@
 Revision ID: 0029_graph_threads_overrides
 Revises: 0028_engine_definitions_row_lock
 
-Applied to every turn in the thread through the resolver (activities/overrides.py, c-071); a turn may narrow them.
+Applied to every turn in the thread through the resolver (activities/overrides.py); a turn may narrow them.
 The tenant role already updates graph_threads, so no grant changes.
 """
 

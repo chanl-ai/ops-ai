@@ -1,4 +1,4 @@
-"""The /wf-builder skill's scripts (c-535), one test per failure mode: an examples page left stale after a seed
+"""The /wf-builder skill's scripts, one test per failure mode: an examples page left stale after a seed
 changed, which would have the skill copy a workflow that no longer exists; and a create on a profile that is not local
 (named otherwise, or not on this machine) going ahead without the workflow id typed back."""
 

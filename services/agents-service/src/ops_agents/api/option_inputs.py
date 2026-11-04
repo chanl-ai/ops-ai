@@ -1,4 +1,4 @@
-"""The inputs a reviewer may set when deciding a step with options (c-057): validated against the option's
+"""The inputs a reviewer may set when deciding a step with options: validated against the option's
 declaration, which the human step derived from the operation's input schema, so a decision can neither add an input
 the operation does not take nor send one of the wrong type."""
 

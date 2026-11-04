@@ -1,6 +1,6 @@
 # Runner service
 
-Status: first slice (c-531). On :8770 (`make run`). No database.
+Status: first slice. On :8770 (`make run`). No database.
 
 Runs a code tool's Python function in a sandbox: CPython 3.12 compiled to WASI, run by wasmtime, with a memory cap, a
 time limit, a call limit, no network, no environment and no files beyond the run's own. The function reaches other

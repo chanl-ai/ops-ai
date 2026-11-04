@@ -1,4 +1,4 @@
-"""Checks across fields (c-296), by failure mode: a total that does not add up or a due date before the issue date
+"""Checks across fields, by failure mode: a total that does not add up or a due date before the issue date
 passing (F1); a check failing because the document does not print a field it names (F2); a value of the wrong type
 not named, so its re-read is not told why (F3); a check naming a field the version lacks, or of no known kind (F5)."""
 

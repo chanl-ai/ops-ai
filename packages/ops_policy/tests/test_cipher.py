@@ -1,4 +1,4 @@
-"""The one cipher for secrets at rest (c-189), by failure mode: a value that no longer opens after the move from
+"""The one cipher for secrets at rest, by failure mode: a value that no longer opens after the move from
 tools-service and files-service (the format must not change), and a value moved to another tenant or name opening
 there."""
 

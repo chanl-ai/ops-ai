@@ -1,4 +1,4 @@
-"""The built-in Knowledge bases tool, `search_knowledge` (c-616 PV1), by failure mode: it searches another team's
+"""The built-in Knowledge bases tool, `search_knowledge`, by failure mode: it searches another team's
 knowledge bases; a knowledge base named by its name is not found; kb-service's outage reaches the agent as a crash or
 as no results; and an install does not serve it. kb-service is faked on the two routes the tool calls."""
 

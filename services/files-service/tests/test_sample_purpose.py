@@ -1,7 +1,7 @@
-"""Files a document type is tested against (c-379), by failure mode: a sample uploaded with the sample purpose
+"""Files a document type is tested against, by failure mode: a sample uploaded with the sample purpose
 refused, so the seed has to call it an email attachment; and the files already stored that way never relabelled, or
 a file a case or chat also uses relabelled as a sample; a sample's bytes mailed as an attachment still shown as a
-sample, because dedupe kept the first purpose (c-380)."""
+sample, because dedupe kept the first purpose."""
 
 from __future__ import annotations
 

@@ -13,7 +13,7 @@ from ops_service_kit.http import ListResult, Out
 from ..environments import ConnectionEnvironment as Environment
 
 Team = str
-# Whose account a call signs in with (c-558): the team's one sign-in, the person the call acts for, or the person's
+# Whose account a call signs in with: the team's one sign-in, the person the call acts for, or the person's
 # with the team's as the backup for calls with nobody behind them.
 SignIn = Literal["team", "person", "person_or_team"]
 
@@ -26,11 +26,11 @@ class NewConnectionIn(_In):
     name: str = Field(min_length=1, max_length=200)
     auth_kind: str = Field(min_length=1, max_length=40)
     sign_in: SignIn = "team"
-    # What the console's card shows for a system connected by name (c-580); the docs link must be https.
+    # What the console's card shows for a system connected by name; the docs link must be https.
     category: str | None = Field(default=None, max_length=80)
     description: str | None = Field(default=None, max_length=300)
     docs_url: str | None = Field(default=None, max_length=500, pattern=r"^https://\S+$")
-    # Accepted and ignored for one release, then removed (c-509): another team holds its own connection.
+    # Accepted and ignored for one release, then removed: another team holds its own connection.
     available_to: list[Team] | None = Field(default=None, deprecated=True)
 
 
@@ -39,11 +39,11 @@ class ConnectionPatchIn(_In):
     name: str | None = Field(default=None, max_length=200)
     sign_in: SignIn | None = None
     team_backup: bool | None = None
-    # What the console's card shows for a system connected by name (c-580); the docs link must be https.
+    # What the console's card shows for a system connected by name; the docs link must be https.
     category: str | None = Field(default=None, max_length=80)
     description: str | None = Field(default=None, max_length=300)
     docs_url: str | None = Field(default=None, max_length=500, pattern=r"^https://\S+$")
-    # Accepted and ignored for one release, then removed (c-509).
+    # Accepted and ignored for one release, then removed.
     available_to: list[Team] | None = Field(default=None, deprecated=True)
 
 
@@ -56,7 +56,7 @@ class EnvironmentIn(_In):
 
 
 class McpConnectionIn(_In):
-    """An MCP server by its address; its sign-in is found from the server (c-331)."""
+    """An MCP server by its address; its sign-in is found from the server."""
 
     server_url: str = Field(min_length=8, max_length=2000)
     name: str | None = Field(default=None, max_length=200)
@@ -74,7 +74,7 @@ class SignInIn(_In):
 
 
 class PersonCredentialsIn(_In):
-    """A person's own key, password or token on a connection each person signs in to (c-595): the kind's person
+    """A person's own key, password or token on a connection each person signs in to: the kind's person
     fields, each a value of at most 2,000 characters."""
 
     environment: Environment
@@ -100,7 +100,7 @@ class SignInCompleteIn(_In):
 
 
 class CredentialCheckIn(_In):
-    """Test with my account (c-616): `environment` starts it; the `state` and `code` the sign-in page was handed back
+    """Test with my account: `environment` starts it; the `state` and `code` the sign-in page was handed back
     finish it, on the same route."""
 
     environment: Environment = "production"
@@ -144,9 +144,9 @@ class AuthKind(Out):
     fields: list[KindField]
     signs_in: bool
     holds_token: bool
-    # Whether each person may sign in with their own account (c-558); a kind without it takes the team's only.
+    # Whether each person may sign in with their own account; a kind without it takes the team's only.
     per_person: bool
-    # The fields each person gives for themselves on a connection each person signs in to (c-595); empty for a kind
+    # The fields each person gives for themselves on a connection each person signs in to; empty for a kind
     # whose person signs in at the system.
     person_fields: list[str]
 
@@ -162,13 +162,13 @@ class EnvironmentOption(Out):
 
 class ConnectionKinds(Out):
     kinds: list[AuthKind]
-    # The environments a connection is set for, in order (c-580): the console draws one section per entry, so a new
+    # The environments a connection is set for, in order: the console draws one section per entry, so a new
     # environment is data here, not console code.
     environments: list[EnvironmentOption]
     # Fields every environment has whatever its kind: the system's address its credentials are bound to.
     common: list[KindField]
     certificate: list[KindField]
-    # The return address to register with a system's sign-in, the same for every connection (c-580); none while the
+    # The return address to register with a system's sign-in, the same for every connection; none while the
     # console's address is not set.
     redirect_uri: str | None = None
 
@@ -218,11 +218,11 @@ class ConnectionEnvironment(Out):
     settings: dict[str, str]
     secrets: dict[str, SecretPart]
     signed_in: SignedIn | None = None
-    # The signing certificate's view, never its key (c-583); null when the PEM held does not read.
+    # The signing certificate's view, never its key; null when the PEM held does not read.
     certificate: SigningCertificate | None = None
-    # This environment's last Test connection (c-580); the connection's `health` is the deciding environment's.
+    # This environment's last Test connection; the connection's `health` is the deciding environment's.
     health: ConnectionHealth | None = None
-    # The plugin whose platform app this environment signs in with (c-565); null on the team's own app.
+    # The plugin whose platform app this environment signs in with; null on the team's own app.
     platform_app: str | None = None
 
 
@@ -238,23 +238,23 @@ Status = Literal["draft", "healthy", "needs_reconnect", "expiring", "revoked", "
 
 
 class MyConnection(Out):
-    """One of the caller's own sign-ins (c-558), as Your connections lists it."""
+    """One of the caller's own sign-ins, as Your connections lists it."""
 
     connection_id: str
     connection: str
     # The connection's own status; the person's sign-in is held while it is listed.
     connection_status: str
     environment: Environment
-    # How the person signs in: the connection kind's label, such as "API key" or "Sign in with an account" (c-595).
+    # How the person signs in: the connection kind's label, such as "API key" or "Sign in with an account".
     method: str
     auth_kind: str
     # What the person gives for a key, password or token kind; empty for a sign-in at the system.
     person_fields: list[str]
-    # False for a connection the person can connect and has not, listed only with `every` (c-595).
+    # False for a connection the person can connect and has not, listed only with `every`.
     connected: bool
     # Where the system says how to find the key, from the connection's card details.
     docs_url: str | None = None
-    # The system refused the person's key or sign-in (c-595): when, and what it said; a new one clears it.
+    # The system refused the person's key or sign-in: when, and what it said; a new one clears it.
     refused: bool = False
     refused_at: str | None = None
     refused_reason: str | None = None
@@ -281,12 +281,12 @@ class ConnectionRow(Out):
     may_manage: bool
     sign_in: SignIn = "team"
     team_backup: bool = False
-    # The deciding environment's last test: production when it is set, else test (c-580).
+    # The deciding environment's last test: production when it is set, else test.
     health: ConnectionHealth | None = None
     category: str | None = None
     description: str | None = None
     docs_url: str | None = None
-    # An app's account (c-608): the plugin it belongs to and the name a tool or step uses for it.
+    # An app's account: the plugin it belongs to and the name a tool or step uses for it.
     plugin_id: str | None = None
     account_name: str | None = None
 

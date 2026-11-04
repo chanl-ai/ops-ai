@@ -1,4 +1,4 @@
-"""Page images to the model (c-295), through the extraction API and the real models-service client over a faked
+"""Page images to the model, through the extraction API and the real models-service client over a faked
 models-service, by failure mode: a member without documents.manage turning images on (US1); a team that never turned
 the policy on, or whose policy cannot be read, sending pages anyway (US2); a version with images off sending them; a
 text page whose fields all pass sending its page; a scan read without its page or a doubtful field re-read without its

@@ -37,17 +37,17 @@ tenants = sa.Table(
     metadata,
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("name", sa.String(200), nullable=False),
-    # active | suspended | closed (its owner deleted it, restorable for the window) | purging | purged (c-529)
+    # active | suspended | closed (its owner deleted it, restorable for the window) | purging | purged
     sa.Column("status", sa.String(16), nullable=False),
     # Email domains an invite may be accepted from; empty means any.
     sa.Column("allowed_domains", sa.JSON, nullable=False),
     sa.Column("created_at", sa.String(40), nullable=False),
     sa.Column("permission_version", sa.Integer, nullable=False, server_default="1"),
-    # Migration 0014 (c-202): the workspace's security team (null: Settings.security_team_id) and the team new people
+    # Migration 0014: the workspace's security team (null: Settings.security_team_id) and the team new people
     # join when nothing else names one (null: none).
     sa.Column("security_team_id", sa.String(64)),
     sa.Column("default_team_id", sa.String(64)),
-    # Migration 0026 (c-529): when and by whom the workspace was closed; a restore clears both.
+    # Migration 0026: when and by whom the workspace was closed; a restore clears both.
     sa.Column("closed_at", sa.String(40)),
     sa.Column("closed_by", sa.String(64)),
     info=TENANT_SCOPED,
@@ -62,13 +62,13 @@ teams = sa.Table(
     sa.Column("owner_groups", sa.JSON, nullable=False),
     sa.Column("scope", sa.String(16), nullable=False),  # all | owned
     sa.Column("created_at", sa.String(40), nullable=False),
-    # Migration 0013 (c-198): an archived team keeps what it owns and leaves its members' tokens.
-    # active | archived | deleted (c-529: never removed as a row, since audit entries reference it)
+    # Migration 0013: an archived team keeps what it owns and leaves its members' tokens.
+    # active | archived | deleted (never removed as a row, since audit entries reference it)
     sa.Column("status", sa.String(16), nullable=False, server_default="active"),
     sa.Column("archived_at", sa.String(40)),
     # The lower-case name: two teams of one workspace never share a name in any case, on every database.
     sa.Column("name_key", sa.String(200), nullable=False, default=_name_key),
-    sa.Column("template_id", sa.String(64)),  # the provisioning template's id for a team it made (c-175)
+    sa.Column("template_id", sa.String(64)),  # the provisioning template's id for a team it made
     sa.Column("protection", sa.String(16), nullable=False, server_default="none"),  # none | managed | system
     sa.UniqueConstraint("tenant_id", "id", name="uq_teams_tenant_id"),
     sa.UniqueConstraint("tenant_id", "name_key", name="uq_teams_tenant_name"),
@@ -126,7 +126,7 @@ api_keys = sa.Table(
     # Set when the creator leaves the team or is suspended (I10); a disabled key verifies as revoked.
     sa.Column("disabled_at", sa.String(40)),
     sa.Column("expires_at", sa.String(40)),  # null: the key does not expire
-    # What the key may start (c-246): agent or workflow, its id, and a pinned workflow version (null: the live one). No
+    # What the key may start: agent or workflow, its id, and a pinned workflow version (null: the live one). No
     # target: any live workflow of the key's team.
     sa.Column("target_kind", sa.String(16)),
     sa.Column("target_id", sa.String(64)),
@@ -208,7 +208,7 @@ role_assignments = sa.Table(
     sa.Column("expires_at", sa.String(40)),  # null: no expiry
     sa.Column("granted_by", sa.String(320), nullable=False),
     sa.Column("reason", sa.String(500), nullable=False),
-    # membership: kept equal to members.role by the member routes; grant: given on its own (c-151, c-152).
+    # membership: kept equal to members.role by the member routes; grant: given on its own.
     sa.Column("source", sa.String(16), nullable=False),
     sa.Column("created_at", sa.String(40), nullable=False),
     # One assignment per subject, role and team: a repeat grant extends or replaces it, never stacks.
@@ -217,7 +217,7 @@ role_assignments = sa.Table(
     sa.ForeignKeyConstraint(["tenant_id", "role_id"], ["roles.tenant_id", "roles.id"], name="fk_role_assignments_role"),
     info=TENANT_SCOPED,
 )
-# One owner per workspace (c-529): two transfers racing cannot both leave an Owner assignment behind.
+# One owner per workspace: two transfers racing cannot both leave an Owner assignment behind.
 sa.Index(
     "ux_role_assignments_owner",
     role_assignments.c.tenant_id,
@@ -227,7 +227,7 @@ sa.Index(
     sqlite_where=role_assignments.c.role_id == OWNER.id,
 )
 
-# Sign-in (migration 0010, c-188). A workspace with no enabled provider signs in by password; once one is enabled,
+# Sign-in (migration 0010). A workspace with no enabled provider signs in by password; once one is enabled,
 # the enabled rows are its methods. A domain row sends an email domain to one SSO provider; a domain is unique
 # across tenants, so one address never has two workspaces to sign in to. An identity links a provider's subject to a
 # person, unique per provider, so a first sign-in that races itself links one person. A flow is one round trip to an
@@ -263,7 +263,7 @@ signin_domains = sa.Table(
     sa.Column("created_at", sa.String(40), nullable=False),
     # The value the workspace publishes as `ops-ai-verify=<token>` in the domain's TXT records.
     sa.Column("token", sa.String(64), nullable=False),
-    # Set when the record was seen; only then does the domain route sign-in (c-195).
+    # Set when the record was seen; only then does the domain route sign-in.
     sa.Column("verified_at", sa.String(40)),
     sa.ForeignKeyConstraint(
         ["tenant_id", "provider_id"],
@@ -362,7 +362,7 @@ password_resets = sa.Table(
     info=TENANT_SCOPED,
 )
 
-# Wrong passwords per person in the current window, and until when sign-in and step-up refuse them (c-196).
+# Wrong passwords per person in the current window, and until when sign-in and step-up refuse them.
 signin_lockouts = sa.Table(
     "signin_lockouts",
     metadata,
@@ -375,7 +375,7 @@ signin_lockouts = sa.Table(
     info=TENANT_SCOPED,
 )
 
-# Wrong passwords at sign-in per email address, known or not (c-196): the address as a SHA-256 of its lowercased form,
+# Wrong passwords at sign-in per email address, known or not: the address as a SHA-256 of its lowercased form,
 # with no tenant, since sign-in names none. An address that matches nobody locks exactly as a known one does.
 signin_email_failures = sa.Table(
     "signin_email_failures",
@@ -386,7 +386,7 @@ signin_email_failures = sa.Table(
     sa.Column("locked_until", sa.String(40)),
 )
 
-# The stricter rules an admin has switched on (c-186): one row per policy a tenant has set, the value as JSON; a policy
+# The stricter rules an admin has switched on: one row per policy a tenant has set, the value as JSON; a policy
 # with no row has its open default from ops_access.POLICIES. A change bumps `tenants.permission_version`, since tokens
 # carry the values, and is recorded in audit_entries with its before and after.
 policies = sa.Table(
@@ -422,7 +422,7 @@ TENANT_TABLES = (
     policies,
 )
 
-# What platform-service tells other services (c-616 S14, on c-258's outbox): written in the transaction that makes the
+# What platform-service tells other services (on the outbox): written in the transaction that makes the
 # change, delivered by its relay (event_relay.py) to each service that acts on the event. platform-service never
 # touches another service's tables. Read by the relay across tenants.
 platform_outbox = outbox_table(

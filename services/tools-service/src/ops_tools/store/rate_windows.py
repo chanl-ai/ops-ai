@@ -1,4 +1,4 @@
-"""Per-operation call counters for the gateway's rate limit (c-028).
+"""Per-operation call counters for the gateway's rate limit.
 
 One row per tenant, operation and one-minute window on the database clock. Each call that is about to run spends
 one with a single atomic upsert, so two gateway processes, or a restarted one, count against the same row and two

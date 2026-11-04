@@ -1,4 +1,4 @@
-"""An operation added to a published module is a major change (c-070): publish sends any new operation to Security,
+"""An operation added to a published module is a major change: publish sends any new operation to Security,
 so the staged change must say major too, or the module page offers a minor publish that then opens a review."""
 
 from __future__ import annotations

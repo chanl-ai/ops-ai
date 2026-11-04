@@ -1,4 +1,4 @@
-"""The shared service client (c-189), by failure mode: a token that does not name the caller's tenant, team and
+"""The shared service client, by failure mode: a token that does not name the caller's tenant, team and
 scopes; an error whose status or code is lost on the way back; a read not retried after a dropped connection; a write
 retried and run twice; a cursor list read only to its first page."""
 

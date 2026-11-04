@@ -1,6 +1,6 @@
 """built-in grid: a team admin changes the records the platform provisions as system
 
-Editing or deleting a record provisioned as `system` (c-180) needs `<area>.manage`; the owner decided admins may do
+Editing or deleting a record provisioned as `system` needs `<area>.manage`; the owner decided admins may do
 everything, builders not, and the next provisioning run puts back the fields the template owns. Adds `manage` on
 agents, tools and knowledge to every tenant's admin role and raises each tenant's permission version. Portable SQL
 only; built-in ids are reserved, so no custom role is matched.

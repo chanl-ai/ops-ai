@@ -1,8 +1,8 @@
-"""Widget deployment changes that wait for a second person (c-139): an ordinary publish request of kind `deployment`
+"""Widget deployment changes that wait for a second person: an ordinary publish request of kind `deployment`
 in the Reviews flow, decided under `publish_reviews.decide` like every other kind.
 
 Changing a deployment's allowed origins changes who can reach the agent, so the publish policy treats it as an access
-change, reviewed under every mode, never included (c-086). Moving it to the agent's newest published version follows
+change, reviewed under every mode, never included. Moving it to the agent's newest published version follows
 the Agents setting as a minor change: that version was reviewed when it was published. What waits is held on the
 request and applied when it is approved; the deployment keeps serving as it was until then."""
 

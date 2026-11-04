@@ -1,4 +1,4 @@
-"""Who may change a tool module and who may decide its approvals (c-080), through the real routes with people signed in
+"""Who may change a tool module and who may decide its approvals, through the real routes with people signed in
 on platform-style tokens. Building needs builder or admin in the team acting; approving needs approver or admin. A
 viewer who could publish a module would change what every agent may call, and a builder who could approve access would
 grant it to their own workflows."""
@@ -43,7 +43,7 @@ async def test_a_module_approval_is_decided_in_human_tasks_not_on_the_module(
     client: httpx.AsyncClient,  # noqa: F811
     tenant: str,
 ) -> None:
-    # c-166/c-257: who decides is can(reviews.decide) on the request's workflow run (agents-service's tests); here, no
+    # Who decides is can(reviews.decide) on the request's workflow run (agents-service's tests); here, no
     # person decides it, an approver included (test_apply_tool_access covers the run's apply). Revoking stays here.
     james = person(tenant, "James Richardson", {"team_platform": "builder"})
     bob = person(tenant, "Bob Tanaka", {"team_platform": "builder"})

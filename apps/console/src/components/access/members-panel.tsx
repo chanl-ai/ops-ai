@@ -109,7 +109,7 @@ const STATUS_OPTIONS = [
 ];
 
 /**
- * The team's people and their roles (c-077): everyone reads the list, and an admin invites, changes roles and removes.
+ * The team's people and their roles: everyone reads the list, and an admin invites, changes roles and removes.
  * platform-service refuses the same writes from anyone else with 403 admin_required, keeps the last admin, and ends a
  * removed member's sessions at once. An invite's link is shown once, in a dialog, because no email is sent.
  */
@@ -131,7 +131,7 @@ export function MembersPanel({ inviteOpen, onInviteOpenChange }: { inviteOpen: b
   const [resetKey, setResetKey] = React.useState(0);
 
   const router = useRouter();
-  // A person who has joined opens their own page: what they can do and which role grants it (c-150).
+  // A person who has joined opens their own page: what they can do and which role grants it.
   const rows = React.useMemo(
     () => (query.data?.data ?? []).map((m) => ({ ...m, onRowClick: m.userId ? () => router.push(`/access/people/${encodeURIComponent(m.userId!)}`) : undefined })),
     [query.data, router],

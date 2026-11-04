@@ -1,7 +1,7 @@
 """The workspace members a change to some packages can break: the packages themselves, then every package and service
 that depends on one of them, directly or through another package, read from each member's own pyproject.toml.
 
-scripts/verify-changed.sh runs these instead of the full suite when a commit changes a package (c-566): a package change
+scripts/verify-changed.sh runs these instead of the full suite when a commit changes a package: a package change
 used to force a full run whatever it touched. A changed directory that is not a workspace member is printed as
 `unknown <dir>`, and the caller then runs everything. --direct stops at the members that list a changed package
 themselves: the push check (.githooks/pre-push) runs those, and the full run on each new HEAD covers the rest.

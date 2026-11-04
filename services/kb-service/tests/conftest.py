@@ -70,7 +70,7 @@ def kb_client(
         agents=agents or StaticAgents(),
     )
     if admin:
-        # Dev sign-in carries no roles, and `can()` passes the dev caller as it would a team admin (c-149).
+        # Dev sign-in carries no roles, and `can()` passes the dev caller as it would a team admin.
         async def as_admin(p: CurrentPrincipal) -> Who:
             return Who(tenant_id=p.tenant_id, email=p.email, team_id=p.team_id, caller=p)
 

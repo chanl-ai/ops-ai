@@ -11,4 +11,4 @@ Status: current.
 | Docs | Follow the doc standards in `CONTRIBUTING.md`; update cross-references when a file moves |
 | Branches | Work on a branch and open a PR (`CONTRIBUTING.md`); never `--no-verify`, a stash or a push to `main` |
 | Secrets | Never commit `.env`, credentials or real customer data; `.env.example` is the only env file in git |
-| Names in code | A name or comment says what the thing is, never a card id (`c-631`), a board slice (`A2`) or a private path; readers have only this repo |
+| Names in code | A name or comment says what the thing is, never a tracker id, a board slice (`A2`) or a private path; readers have only this repo |

@@ -1,4 +1,4 @@
-"""Switch and Combine facts (c-259), by failure mode: a run leaves on a later way when an earlier one held, or on no
+"""Switch and Combine facts, by failure mode: a run leaves on a later way when an earlier one held, or on no
 way at all; a Switch wired from a way it does not name, or naming one twice, passes its checks; Combine picks a value
 silently when sources disagree, calls an empty value a disagreement, or calls 1200 and 1,200.00 (or the same name in
 another case) different; a field's precedence is ignored."""

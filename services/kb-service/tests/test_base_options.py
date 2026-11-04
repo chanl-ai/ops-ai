@@ -1,4 +1,4 @@
-"""GET /v1/knowledge-bases/options, the agent page's knowledge picker (c-135), by failure mode: a base past the first
+"""GET /v1/knowledge-bases/options, the agent page's knowledge picker, by failure mode: a base past the first
 hundred not findable; a page that loads every base; the cursor repeating or skipping a base; stored ids not resolving
 to their names; another team's base offered."""
 

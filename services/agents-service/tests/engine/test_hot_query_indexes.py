@@ -1,4 +1,4 @@
-"""The hot workflow and agent queries seek an index on their filters (c-280), by failure mode: every worker poll scans
+"""The hot workflow and agent queries seek an index on their filters, by failure mode: every worker poll scans
 the work queue for lapsed leases; every service event and the mailbox listener read every version of every workflow
 to find the live ones; a team's thread list and event poll read every tenant's rows of the same team id; the runs list
 filtered by one workflow reads the whole team. Each test records the SQL the store runs on a seeded crowd (ANALYZEd as

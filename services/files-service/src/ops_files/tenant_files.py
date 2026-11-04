@@ -81,7 +81,7 @@ _REF_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 # at completion. hook: files stay pending until a scanner posts its result to the scan-results route.
 ScanningMode = Literal["off", "inline", "hook"]
 
-# The purpose of a file a document type is tested against (c-379); it gives way to any other on dedupe (c-380).
+# The purpose of a file a document type is tested against; it gives way to any other on dedupe.
 SAMPLE_PURPOSE = "document_type_sample"
 
 # Suggested from purpose until a person confirms it (files 5.5.1).
@@ -117,9 +117,9 @@ class Who:
     team: str
     actor: str
     admin_teams: frozenset[str] = field(default_factory=frozenset[str])
-    # files.delete in the team, as `can()` decides it (c-216): every member role holds it, a chat-only member does not.
+    # files.delete in the team, as `can()` decides it: every member role holds it, a chat-only member does not.
     deletes: bool = True
-    # Whether the caller may record what was read from a file (c-250): files:edit for a service, files.create for a
+    # Whether the caller may record what was read from a file: files:edit for a service, files.create for a
     # person until the extract workflow's step writes it.
     edits: bool = True
 
@@ -170,7 +170,7 @@ class TenantFiles:
     ) -> None:
         """`proxy`: browsers send and fetch bytes through this service instead of signed storage URLs. Always on for
         the local backend, which has no HTTP endpoint of its own; on elsewhere when a bank's network blocks browsers
-        from storage. `settings`: the tenant's saved storage settings (c-100), which choose each purpose's target,
+        from storage. `settings`: the tenant's saved storage settings, which choose each purpose's target,
         limits and retention; without them every file goes to `store` under `config`."""
         if scanning == "inline" and scanner is None:
             raise ValueError("scanning 'inline' needs a scanner")
@@ -226,7 +226,7 @@ class TenantFiles:
         return row
 
     async def request_read(self, who: Who, file_id: str, body: ReadRequestIn, *, key: str | None) -> ReadRequest:
-        """Asks for a clean file of the caller's team to be read with a document type (c-250): the request and its
+        """Asks for a clean file of the caller's team to be read with a document type: the request and its
         file.read_requested event commit together, and the system extract workflow runs as the caller once the relay
         delivers it. A repeat with the same key returns the first request."""
         if not who.edits:
@@ -250,7 +250,7 @@ class TenantFiles:
             "documentTypeId": body.document_type_id,
             "version": body.version,
             "typeName": body.type_name,
-            # The system extract workflow passes these to its Extract step (c-535); null reads as today.
+            # The system extract workflow passes these to its Extract step; null reads as today.
             "read": body.read,
             "hint": body.hint,
             "maxPages": body.max_pages,
@@ -266,7 +266,7 @@ class TenantFiles:
 
     async def set_data(self, who: Who, file_id: str, data: FileData) -> FileDetail:
         """Records what was read from an available file of the caller's team, replacing what was recorded before. For
-        the same extraction the fields to check never rise again: the read's own save (extraction.read, c-378) can
+        the same extraction the fields to check never rise again: the read's own save (extraction.read) can
         arrive after a workflow saved it checked or a correction lowered the count, and must not put fields back."""
         if not who.edits:
             raise EditNotAllowedError("your role in this team does not change files")
@@ -549,7 +549,7 @@ class TenantFiles:
             first = await self._files.get(existing)
             assert first is not None
             if first.file["purpose"] == SAMPLE_PURPOSE and row["purpose"] != SAMPLE_PURPOSE:
-                # Files shows what people use a file for (c-380): a document type sample's bytes arriving as a mail or
+                # Files shows what people use a file for: a document type sample's bytes arriving as a mail or
                 # chat attachment take that purpose. Nothing else changes on dedupe, so an attachment later uploaded
                 # as a sample stays the attachment.
                 await self._files.update(existing, {"purpose": row["purpose"]})

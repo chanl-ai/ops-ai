@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""Where on the page each extracted field came from (c-252): the cited quote's words found in the file's layout,
+"""Where on the page each extracted field came from: the cited quote's words found in the file's layout,
 narrowed to the value's words when the value sits inside the quote, as one box per line and the ids of the layout
 blocks (or table cells) those words are in.
 

@@ -1,4 +1,4 @@
-"""An agent's embeds on its Channels tab (c-130), by failure mode: a retired embed still answering its page; a retired
+"""An agent's embeds on its Channels tab, by failure mode: a retired embed still answering its page; a retired
 embed resumed or changed; a viewer retiring one; usage counting another embed's or another team's conversations; a
 revoked key counted as active."""
 
@@ -73,7 +73,7 @@ CHAT = {"type": "chat", "agentId": "ag_fraud", "name": "Intranet help", "origins
 
 
 async def test_a_chat_channel_is_created_on_the_channel_api_and_answers_with_its_row(client: AsyncClient) -> None:  # noqa: F811
-    """c-339: create is on /v1/channels like every other change, and answers with the row Channels lists."""
+    """Create is on /v1/channels like every other change, and answers with the row Channels lists."""
     assert (await client.post("/v1/channels", json=CHAT, headers=VIEWER)).status_code == 403, "a viewer creates"
     made = await client.post("/v1/channels", json=CHAT, headers=BUILDER)
     assert made.status_code == 201, made.text
@@ -95,7 +95,7 @@ async def test_a_chat_channel_is_created_on_the_channel_api_and_answers_with_its
 async def test_an_agents_embeds_list_on_the_channel_api_with_usage_keys_and_retired_ones_on_request(
     client: AsyncClient,  # noqa: F811
 ) -> None:
-    """c-339: GET /v1/channels?type=chat&agentId= carries what the embed table shows; retired embeds only when asked."""
+    """GET /v1/channels?type=chat&agentId= carries what the embed table shows; retired embeds only when asked."""
     one = (await client.post("/v1/channels", json=CHAT, headers=BUILDER)).json()["data"]["id"]
     two = (await client.post("/v1/channels", json=CHAT, headers=BUILDER)).json()["data"]["id"]
     other = await client.post("/v1/channels", json=CHAT | {"agentId": "ag_branch"}, headers=BUILDER)

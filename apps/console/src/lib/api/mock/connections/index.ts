@@ -26,7 +26,7 @@ export function createConnectionsMock(deps: { me: string }): ConnectionsApi {
     { id: 'conn_itsm', name: 'ServiceNow', teamId: 'team_ops', authKind: 'oauth2_client_credentials', kindLabel: 'OAuth 2.0 client credentials', status: 'healthy', signIn: 'team', health: null, mayManage: true, revision: 1, environments: { test: env(true) }, environmentsSet: ['test'], usedBy: [], availableTo: [], updatedAt: at },
   ];
   const mine: MyConnection[] = [];
-  // One person's password the system refused, so Your connections shows the refused state (c-595).
+  // One person's password the system refused, so Your connections shows the refused state.
   const refusedRow = (): MyConnection => ({ ...own(rows[2], 'production'), account: 'j.richardson', refused: true, refusedAt: at, refusedReason: 'cases.example.com answered 401.' });
   const find = (id: string) => rows.find((r) => r.id === id) ?? notFound(`Connection ${id}`);
   const own = (row: ConnectionDetail, environment: ConnectionEnvironment): MyConnection => {

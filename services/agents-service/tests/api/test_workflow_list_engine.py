@@ -1,4 +1,4 @@
-"""The Workflows list for the current engine only (c-562): the console no longer shows workflows of the earlier engine,
+"""The Workflows list for the current engine only: the console no longer shows workflows of the earlier engine,
 so with `engine=current` a v1 workflow must not reach a page, its total or its status counts. Without it the list still
 holds both, for the callers that have not moved."""
 

@@ -1,4 +1,4 @@
-"""Checks the logins a person demonstrates with against a demo team, through the public API only (c-405):
+"""Checks the logins a person demonstrates with against a demo team, through the public API only:
 
     MEMBER_PASSWORD=... VIEWER_PASSWORD=... uv run python scripts/check_demo_team.py --origin <install> \
       --team <demo team id> --admin <email> --builder <email> --approver <email> --viewer <email> \

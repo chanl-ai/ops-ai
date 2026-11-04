@@ -9,7 +9,7 @@ import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { useMemberForm, useSubmitMemberForm } from '@/hooks/form-queries';
 
 /**
- * A members-only hosted form (c-535): opened behind sign-in, sent as the signed-in person, and refused with why for
+ * A members-only hosted form: opened behind sign-in, sent as the signed-in person, and refused with why for
  * anyone outside the team that shares it. File fields pick or upload through Files, as the Start run dialog's do.
  */
 export default function MemberFormPage() {

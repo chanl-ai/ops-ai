@@ -1,5 +1,5 @@
-"""The workflow runner's DocumentsPort, DocumentTypesPort and FileDataPort in agents-service (c-157, c-235, c-256,
-c-250, c-298): an Extract from file step asks documents-service's extraction API, Extract from text a document type's
+"""The workflow runner's DocumentsPort, DocumentTypesPort and FileDataPort in agents-service: an Extract from file step
+asks documents-service's extraction API, Extract from text a document type's
 fields, a Purge step its purge, and a Save data on file step files-service, each as the run's own team, through the
 services' clients (never their code). Another team's or tenant's file is not found, as the service answers it."""
 
@@ -32,7 +32,7 @@ class DocumentsExtractions:
 
     async def fields(self, run_id: str, type_id: str, version: int | None) -> list[dict[str, Any]]:
         """The DocumentTypesPort: a document type's fields at `version`, the newest when None, read as the run's team
-        (Extract from text, c-298). A version the type does not have is LookupError, so the step fails, not guesses."""
+        (Extract from text). A version the type does not have is LookupError, so the step fails, not guesses."""
         return await type_fields(self.client, await _team(self.tx, run_id), type_id, version)
 
 

@@ -1,4 +1,4 @@
-"""The Save data on file and Purge steps (c-250), by failure mode: Save data writing data made up for the file when the
+"""The Save data on file and Purge steps, by failure mode: Save data writing data made up for the file when the
 read names no document type or extraction, or counting fields as waiting after a person checked them (F2); Purge
 asking for another file than the deleted one (F4)."""
 
@@ -62,7 +62,7 @@ async def test_save_data_records_the_read_and_a_checked_read_has_nothing_waiting
 
 
 async def test_a_template_read_is_saved_with_its_path_and_template() -> None:
-    """c-253: the files list shows which form a file was read as."""
+    """The files list shows which form a file was read as."""
     ports = Ports()
     read = {**READ, "path": "template", "templateId": "tpl_invoice_a"}
     await files_set_data(call("ops.files.setData", ports, file="fil_1", read=read))
@@ -77,7 +77,7 @@ async def test_purge_removes_what_was_read_from_the_deleted_file() -> None:
 
 
 async def test_a_detect_read_is_saved_as_the_kind_found_or_as_not_recognised() -> None:
-    """c-335: a Detect read names the kind it found, so the files list shows it; one that found none of the team's
+    """A Detect read names the kind it found, so the files list shows it; one that found none of the team's
     types is saved with no type, never refused, so the file shows it was read and not recognised."""
     ports = Ports()
     found = {**READ, "classification": {"typeId": "restraining_notice", "name": "Restraining notice"}}

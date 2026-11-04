@@ -20,7 +20,7 @@ import type { ChatMessage } from '@/lib/types/chat';
 import { AGENTS, DEFAULT_THREAD, HANDED_OVER, type TeamAgent } from './sample';
 
 /**
- * The c-174 preview: chat starts on the team's default agent, which calls specialist agents as tools (agent__<id>, as
+ * The preview: chat starts on the team's default agent, which calls specialist agents as tools (agent__<id>, as
  * workflows are called); typing @ hands the chat to an agent until Back. General settings picks the default. Mock data,
  * dev server only, not in the nav; nothing here calls a service.
  */
@@ -41,7 +41,7 @@ function Preview() {
   };
 
   return (
-    <PageLayout title="Chat (c-174 preview)" description="One assistant per team that asks a specialist when it needs one">
+    <PageLayout title="Chat (preview)" description="One assistant per team that asks a specialist when it needs one">
       <Tabs defaultValue="chat" className="gap-4">
         <TabsList>
           <TabsTrigger value="chat">Chat</TabsTrigger>

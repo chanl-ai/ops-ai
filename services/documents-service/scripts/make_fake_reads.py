@@ -1,4 +1,4 @@
-"""Writes tests/fixtures/fake-model/script.json (c-255): the fake OpenAI's answers for every fixture of the four
+"""Writes tests/fixtures/fake-model/script.json: the fake OpenAI's answers for every fixture of the four
 seeded document types, so a use case drives the model path end to end without a real model call.
 
     uv run python scripts/make_fake_reads.py
@@ -25,7 +25,7 @@ FIXTURES = HERE.parent / "tests" / "fixtures"
 OUT = FIXTURES / "fake-model" / "script.json"
 # A marker shorter than this could be printed in another fixture by chance.
 MARKER_CHARS = 6
-# A page of no seeded type (c-335): classify answers that none fits, so a Detect read is saved as not recognised.
+# A page of no seeded type: classify answers that none fits, so a Detect read is saved as not recognised.
 UNKNOWN = "Staff canteen menu for the week"
 
 

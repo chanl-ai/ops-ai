@@ -1,4 +1,4 @@
-"""The assembled case and case types (c-291), by failure mode: fields come in no declared order or unformatted; a case
+"""The assembled case and case types, by failure mode: fields come in no declared order or unformatted; a case
 type edit changes a case already open; the case does not say what it waits on, or still says so once it is decided;
 another team's case or run shows on the page; the page reads one query per run."""
 
@@ -124,7 +124,7 @@ async def test_the_case_says_what_it_waits_on_until_the_task_is_decided(stack: S
         await RunStore(EngineTransactions(rt.db)).update(run, status="waiting", waiting=waiting)
     page = data(await c.get(f"/v1/cases/{case_id}", headers=BUILDER))
     [task] = page["waiting"]
-    # The task's own page (c-291), its id encoded as the console's Open link encodes it, not the list's quick view.
+    # The task's own page, its id encoded as the console's Open link encodes it, not the list's quick view.
     assert (
         task["href"] == f"/reviews/{quote(task['taskId'], safe='')}" and page["nextAction"]["href"] == task["href"]
     ), page
@@ -264,7 +264,7 @@ NAMED, UNNAMED = "fil_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "fil_bbbbbbbbbbbbbbbbbb
 
 
 async def test_a_linked_file_is_named_by_files_service_when_its_run_gave_only_the_id(stack: Stack) -> None:  # noqa: F811
-    """c-434: the case's Linked records and the run page showed a file as its id when the run's input carried the id
+    """The case's Linked records and the run page showed a file as its id when the run's input carried the id
     alone; a file files-service cannot name is sent with no name, so the console shows the id as an id."""
     c, rt = stack
     files = FakeFilesService()
@@ -286,7 +286,7 @@ async def test_a_linked_file_is_named_by_files_service_when_its_run_gave_only_th
 
 
 async def test_an_approved_hold_reads_the_amount_the_approver_placed(stack: Stack) -> None:  # noqa: F811
-    """c-420: an approver changed the proposed 3,250.00 to 2,140.55 and the bank held 2,140.55, while the case's
+    """An approver changed the proposed 3,250.00 to 2,140.55 and the bank held 2,140.55, while the case's
     Drafted actions row and the task still said 3,250.00."""
     c, rt = stack
     case_id = await typed_case(stack)
@@ -326,7 +326,7 @@ async def test_an_approved_hold_reads_the_amount_the_approver_placed(stack: Stac
 
 
 async def test_an_approved_hold_the_bank_refused_reads_refused(stack: Stack) -> None:  # noqa: F811
-    """c-402: the bank answered 422 to an approved hold and the run went back to its review, while the case's Drafted
+    """The bank answered 422 to an approved hold and the run went back to its review, while the case's Drafted
     actions still said Approved, so two refused holds read as two placed holds."""
     c, rt = stack
     case_id = await typed_case(stack)
@@ -371,7 +371,7 @@ async def test_an_approved_hold_the_bank_refused_reads_refused(stack: Stack) -> 
 
 
 async def test_the_cases_list_names_each_owner_as_the_case_page_does(stack: Stack) -> None:  # noqa: F811
-    """c-403: the Cases list showed riley.chen@harborpine.example where the case page said Riley Chen; the console may
+    """The Cases list showed riley.chen@harborpine.example where the case page said Riley Chen; the console may
     not look the name up itself, so the list row carries it."""
     c, rt = stack
     rt.people_names = PlatformPeopleNames(Platform())  # pyright: ignore[reportArgumentType]

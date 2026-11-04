@@ -1,4 +1,4 @@
-"""What a case links to, for its assembled page (c-291): its runs with their workflow names, the emails that started
+"""What a case links to, for its assembled page: its runs with their workflow names, the emails that started
 them, and the cases linked to it or open for the same customer. Each list is one
 query whatever the case holds, and capped, so a case with many runs reads as fast as one with a few."""
 

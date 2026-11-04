@@ -62,7 +62,7 @@ def _csv_rows(data: bytes) -> list[list[str]]:
 
 def spreadsheet_rows(data: bytes, *, filename: str) -> tuple[list[str], list[dict[str, str]]]:
     """A CSV or the first sheet of an Excel workbook as its header row and one dict per row after it, keyed by the
-    header (c-535: a batch starts one run per row). Blank rows are left out; the dialect of a CSV is sniffed as
+    header (a batch starts one run per row). Blank rows are left out; the dialect of a CSV is sniffed as
     `parse_csv` does, so a quoted comma stays inside its value."""
     if filename.lower().endswith((".xlsx", ".xlsm")):
         workbook = load_workbook(io.BytesIO(data), read_only=True, data_only=True)

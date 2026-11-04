@@ -1,4 +1,4 @@
-"""module approvals keep the review that decides them and the team that decides it (c-166)
+"""module approvals keep the review that decides them and the team that decides it
 
 Revision ID: tools_0025_access_reviews
 Revises: tools_0024_version_policy

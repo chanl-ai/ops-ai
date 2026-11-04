@@ -94,7 +94,7 @@ class AgentRun(Out):
 
 
 class WidgetTemplateOut(Out):
-    """A published widget template version (c-082): its catalogue tree, its data schema and a sample to preview."""
+    """A published widget template version: its catalogue tree, its data schema and a sample to preview."""
 
     widget_id: str
     # The owning team's display name (api/team_names.py), on the detail response only; None when unread.
@@ -134,7 +134,7 @@ MEMORY_KINDS = ("fact", "preference", "episode")
 
 
 class MemorySettings(Out):
-    """What the agent remembers about each person (c-124): on by default (owner, 2026-10-17), and which kinds: facts
+    """What the agent remembers about each person: on by default, and which kinds: facts
     (timezone, preferred account), preferences (how they like answers) and episodes (a line about each chat)."""
 
     enabled: bool = True
@@ -142,7 +142,7 @@ class MemorySettings(Out):
 
 
 class MemoryView(Out):
-    """One thing an agent remembers about the caller (c-124)."""
+    """One thing an agent remembers about the caller."""
 
     id: str
     agent_id: str
@@ -180,7 +180,7 @@ class Agent(Out):
     can_delete: bool | None = None
     can_publish: bool | None = None
     name: str
-    # From the provisioning service (c-180): the template it was made from, and `system` or `managed`; null otherwise.
+    # From the provisioning service: the template it was made from, and `system` or `managed`; null otherwise.
     template_id: str | None = None
     protection: Literal["system", "managed"] | None = None
     slug: str
@@ -192,7 +192,7 @@ class Agent(Out):
     # Granted ids the tool directory no longer offers; the next save drops them.
     stale_tool_ids: list[str]
     collections: list[str]
-    # The owning team, from the creator's token (c-171); null for an agent no team owns.
+    # The owning team, from the creator's token; null for an agent no team owns.
     team_id: str | None
     paused: bool
     availability: Literal["published", "not_published", "paused"]
@@ -207,7 +207,7 @@ class Agent(Out):
     wrapper_workflow_id: str | None = None
     # What callers may override; defaults derived from the version when it was saved without limits.
     limits: AgentLimits
-    # Widgets the agent may show in chat, and its composition and per-answer settings (c-082).
+    # Widgets the agent may show in chat, and its composition and per-answer settings.
     widget_pins: list[WidgetPin] = Field(default_factory=list[WidgetPin])
     widgets: WidgetSettings = Field(default_factory=WidgetSettings)
     memory: MemorySettings = Field(default_factory=MemorySettings)
@@ -232,7 +232,7 @@ class ToolCallView(Out):
     name: str
     input: str
     output: str
-    # How the call went (c-170): ok, error, or gated (stopped for a review), so a failed call does not read as done.
+    # How the call went: ok, error, or gated (stopped for a review), so a failed call does not read as done.
     status: Literal["ok", "error", "gated", "running"] = "ok"
     access: str = "read"
 
@@ -240,7 +240,7 @@ class ToolCallView(Out):
 class CitationView(Out):
     source: str
     section: str
-    # Which knowledge base, page and words the reply cited (c-170).
+    # Which knowledge base, page and words the reply cited.
     kb_id: str | None = None
     kb_name: str | None = None
     page: int | None = None
@@ -253,7 +253,7 @@ class KnowledgeBaseRef(Out):
 
 
 class HeldTool(Out):
-    """A tool the tested agent holds (c-170), and whether calling it pauses for a review, at which gate, for whom."""
+    """A tool the tested agent holds, and whether calling it pauses for a review, at which gate, for whom."""
 
     name: str
     access: str
@@ -276,7 +276,7 @@ class BlockedBy(Out):
 class WouldPause(Out):
     gate: str
     reviewers: str
-    # The approval a real run raises for the same call (c-068 T002): the tool, what it would do, and whether
+    # The approval a real run raises for the same call: the tool, what it would do, and whether
     # deciding it needs a step-up.
     tool: str
     action: str
@@ -324,7 +324,7 @@ class AgentTestTurn(Out):
     # The model alias the turn ran on: the agent's, or the runtime's when the agent names none.
     model: str
     would_pause: WouldPause | None = None
-    # What the reply could use and did (c-170): the bases it searched, the tools it holds, and the skills and
+    # What the reply could use and did: the bases it searched, the tools it holds, and the skills and
     # guardrails the turn loaded and checked.
     knowledge_bases: list[KnowledgeBaseRef] = Field(default_factory=list[KnowledgeBaseRef])
     tools: list[HeldTool] = Field(default_factory=list[HeldTool])
@@ -386,7 +386,7 @@ class ReviewGuardrailPin(Out):
 
 
 class PublishDecisionFields(Out):
-    """What the team's publish policy said when the request was made (c-086); absent on requests made before it."""
+    """What the team's publish policy said when the request was made; absent on requests made before it."""
 
     review_required: bool | None = None
     policy: Literal["always", "major", "never"] | None = None
@@ -413,9 +413,9 @@ class AgentPublishRequest(PublishDecisionFields):
     failing: int
     blockers: list[str]
     changes: list[str]
-    # Absent on requests opened before limits were reviewed with the agent (c-068).
+    # Absent on requests opened before limits were reviewed with the agent.
     limits: AgentLimits | None = None
-    # Each pinned guardrail and whether it is checked (c-085); absent on requests opened before the switch.
+    # Each pinned guardrail and whether it is checked; absent on requests opened before the switch.
     guardrail_pins: list[ReviewGuardrailPin] | None = None
 
 
@@ -450,7 +450,7 @@ class ChangedOperation(OperationSummary):
 
 
 class ToolModuleDiff(Out):
-    """What a tool module review approves since the published version (c-204), as tools-service sent it when the
+    """What a tool module review approves since the published version, as tools-service sent it when the
     review opened."""
 
     added: list[OperationSummary] = Field(default_factory=list[OperationSummary])
@@ -464,12 +464,12 @@ class ToolModuleReviewRef(Out):
     module_id: str
     version: str
     apply_pending: bool
-    # Absent on a review copied from before c-204.
+    # Absent on a review copied from an older version.
     diff: ToolModuleDiff | None = None
 
 
 class EgressHostRef(Out):
-    """An app's address on a host nobody listed (c-616 S13): the host, the app, who set it and their team."""
+    """An app's address on a host nobody listed: the host, the app, who set it and their team."""
 
     host: str
     app: str
@@ -483,7 +483,7 @@ class PublishReview(Out):
     """The console's `Review` as a publish request carries it: `agent_publish` or `publish_request`."""
 
     id: str
-    # Whether the caller may decide it now, by the same checks the decision route runs (c-123); absent outside Reviews.
+    # Whether the caller may decide it now, by the same checks the decision route runs; absent outside Reviews.
     can_decide: bool | None = None
     title: str
     customer: str
@@ -491,7 +491,7 @@ class PublishReview(Out):
     workflow_name: str
     agent_slug: str
     agent_name: str | None
-    # egress_host: an app's first address on a host the tenant has not listed, for a Security admin (c-616 S13).
+    # egress_host: an app's first address on a host the tenant has not listed, for a Security admin.
     kind: Literal["agent_publish", "publish_request", "egress_host"]
     risk: Literal["critical", "high", "medium", "low"]
     confidence: float
@@ -513,7 +513,7 @@ class PublishReview(Out):
     publish: PublishRequestInfo | None = None
     tool_module: ToolModuleReviewRef | None = None
     egress_host: EgressHostRef | None = None
-    # Who the review is assigned to now (c-074); None while nobody has it.
+    # Who the review is assigned to now; None while nobody has it.
     assignee: str | None = None
 
 
@@ -581,7 +581,7 @@ class Workflow(Out):
     id: str
     name: str
     description: str
-    # The owning team, from the creator's token (c-171).
+    # The owning team, from the creator's token.
     team_id: str | None
     trigger: str
     agent_slugs: list[str]
@@ -598,7 +598,7 @@ class Workflow(Out):
     kind: Literal["standard", "email_intake"]
     # v1 (a graph on /v1/graphs) or v2 (a runner definition on /v1/workflows/definitions); the list holds both.
     engine: Literal["v1", "v2"] = "v1"
-    # How it starts, from its trigger (c-466); the list sets it on every row.
+    # How it starts, from its trigger; the list sets it on every row.
     start: WorkflowStart | None = None
 
 
@@ -865,7 +865,7 @@ class ActionField(Out):
 
 
 class ReviewOption(Out):
-    """One way to decide a step with options (c-057: a levy case's hold or flag): its call and the inputs the
+    """One way to decide a step with options (a levy case's hold or flag): its call and the inputs the
     reviewer may set on it. A form renders from `inputs`; decide validates against them."""
 
     name: str
@@ -873,7 +873,7 @@ class ReviewOption(Out):
     call: dict[str, Any] | None = None
     # Choosing this option asks the reviewer for a step-up (its call's policy).
     step_up: bool = False
-    # The button's words, what choosing it does, and the values its call sends, in a reviewer's words (c-289).
+    # The button's words, what choosing it does, and the values its call sends, in a reviewer's words.
     label: str | None = None
     consequence: str | None = None
     fields: list[ActionField] = Field(default_factory=list[ActionField])
@@ -896,7 +896,7 @@ class ReadCitation(Out):
 
 
 class ReadBox(Out):
-    """Where a value sits on a page, as fractions of the page from its top left (documents-service, c-252)."""
+    """Where a value sits on a page, as fractions of the page from its top left (documents-service)."""
 
     page: int
     x: float
@@ -915,8 +915,8 @@ class FieldRead(Out):
     needs_review: bool
     citation: ReadCitation | None
     boxes: list[ReadBox] = Field(default_factory=list[ReadBox])
-    # When the step also combined this read with other sources (Combine facts, c-259): each source's value for the
-    # field, and whether the sources disagree on it (c-261).
+    # When the step also combined this read with other sources (Combine facts): each source's value for the
+    # field, and whether the sources disagree on it.
     by_source: dict[str, Any] | None = None
     conflict: bool = False
 
@@ -927,7 +927,7 @@ class ReadRecord(Out):
 
 
 class DocumentRead(Out):
-    """A document read a review asks a person to check (c-169): the file, the floor, and each record's fields. Editable
+    """A document read a review asks a person to check: the file, the floor, and each record's fields. Editable
     when the step takes a correction (`inputs.edited`); `corrected` holds the values a decided review was approved
     with, None when no correction was sent."""
 
@@ -938,7 +938,7 @@ class DocumentRead(Out):
     records: list[ReadRecord]
     editable: bool
     corrected: list[dict[str, Any]] | None
-    # The sources a Combine facts step weighed against this read, in order; empty for a read of one source (c-261).
+    # The sources a Combine facts step weighed against this read, in order; empty for a read of one source.
     sources: list[str] = Field(default_factory=list[str])
 
 
@@ -946,13 +946,13 @@ class ReplyCase(Out):
     run_id: str
     # None while that run has not opened its case yet.
     case_id: str | None
-    # The case's subject, for the reviewer to read in place of its id (c-289); None until the case opens.
+    # The case's subject, for the reviewer to read in place of its id; None until the case opens.
     subject: str | None = None
 
 
 class ReplyPreview(Out):
     """The reply a review approves, as it will leave: to the sender, from the team's mailbox, with the cases the
-    document opened (c-169)."""
+    document opened."""
 
     to: str
     mailbox: str | None
@@ -968,12 +968,12 @@ class TaskTypeRef(Out):
 
 
 class TaskRegion(Out):
-    # The type's regions, and `assist`: what task assist wrote for the task (c-302), marked AI in its data.
+    # The type's regions, and `assist`: what task assist wrote for the task, marked AI in its data.
     region: Literal[
         "header", "why_source", "document", "facts", "write_preview", "form", "message", "history", "assist"
     ]
     collapsed: bool
-    # Each slot of the region filled from the task's params (c-288); the console draws it, it never fills a template.
+    # Each slot of the region filled from the task's params; the console draws it, it never fills a template.
     data: dict[str, Any]
 
 
@@ -996,7 +996,7 @@ class TaskWarning(Out):
 
 
 class TypedTask(Out):
-    """A review drawn from its task type (c-288): the type at the version the step pinned, its regions and actions
+    """A review drawn from its task type: the type at the version the step pinned, its regions and actions
     bound to the step's params, and what is missing or of the wrong kind."""
 
     type: TaskTypeRef
@@ -1006,7 +1006,7 @@ class TypedTask(Out):
 
 
 class ConnectWait(Out):
-    """What a run waiting for a person's own account of an app needs (c-616 S12): Connect my account, or Run as the
+    """What a run waiting for a person's own account of an app needs: Connect my account, or Run as the
     team account where the app has one."""
 
     app: str
@@ -1020,21 +1020,21 @@ class ThreadReview(Out):
     """A paused workflow or agent step as a console `Review`, pending or decided."""
 
     id: str
-    # Whether the caller may decide it now, by the same checks the decision route runs (c-123); absent outside Reviews.
+    # Whether the caller may decide it now, by the same checks the decision route runs; absent outside Reviews.
     can_decide: bool | None = None
     title: str
     customer: str
     workflow_id: str
     workflow_name: str
-    # A workflow runner's step: its name and its run, for the sheet's subtitle and link (c-169); None elsewhere.
+    # A workflow runner's step: its name and its run, for the sheet's subtitle and link; None elsewhere.
     step_name: str | None = None
     run_id: str | None = None
-    # The workflow version the run pinned, so a reviewer knows which definition paused it (c-074).
+    # The workflow version the run pinned, so a reviewer knows which definition paused it.
     workflow_version: int | None = None
-    # Who the review is assigned to now (c-074); None while nobody has it.
+    # Who the review is assigned to now; None while nobody has it.
     assignee: str | None = None
     agent_slug: str
-    # connect_account: a run waiting for the person it acts for to connect their own account of an app (c-616 S12).
+    # connect_account: a run waiting for the person it acts for to connect their own account of an app.
     kind: Literal["approval", "connect_account"]
     # The app and the person a connect_account task asks; None on every other review.
     connect: ConnectWait | None = None
@@ -1065,7 +1065,7 @@ class ThreadReview(Out):
     # The resume value a decided review was recorded with.
     resume: dict[str, Any] | None = None
     # What the proposal would move (the call input named amount), the options a step offers and the call behind
-    # each, and the last failed call's error (a bank's 422 on a hold) the case waits on (c-057).
+    # each, and the last failed call's error (a bank's 422 on a hold) the case waits on.
     amount: float | None = None
     options: list[ReviewOption] | None = None
     # Why the step's options could not be read (a row paused before declarations existed, on a version that no
@@ -1077,21 +1077,21 @@ class ThreadReview(Out):
     option: str | None = None
     # A fingerprint of the step-up a decided money review was made under; null when none was needed.
     step_up_ref: str | None = None
-    # The case the review's run is on (c-128), so Human Tasks names it; None when the run is on no case.
+    # The case the review's run is on, so Human Tasks names it; None when the run is on no case.
     case_id: str | None = None
-    # The case's subject, on a list grouped by case (c-460); None when the reader's teams do not hold the case.
+    # The case's subject, on a list grouped by case; None when the reader's teams do not hold the case.
     case_title: str | None = None
-    # The document read the step asks a person to check, and the reply it approves (c-169); None on other reviews.
+    # The document read the step asks a person to check, and the reply it approves; None on other reviews.
     read: DocumentRead | None = None
     reply: ReplyPreview | None = None
     # The one question the step asks, in a reviewer's words, and the file the decision is about (the first file id in
-    # the run's input or the step's summary) (c-289).
+    # the run's input or the step's summary).
     question: str | None = None
     source_file: str | None = None
     # The first call's consequence (its reviewer card's, when it has one) and the values it sends, worded.
     consequence: str | None = None
     action_fields: list[ActionField] = Field(default_factory=list[ActionField])
-    # Who decides it, so the task names the deciding team (c-371); None on a review that predates it.
+    # Who decides it, so the task names the deciding team; None on a review that predates it.
     deciding_team: DecidingTeam | None = None
     # The screen of a step that names a task type; None for a step that does not.
     task: TypedTask | None = None
@@ -1244,7 +1244,7 @@ class GuardrailVersion(Out):
 
 
 class Guardrail(Out):
-    """A guardrail an agent pins by version (c-063); kind blocked_topics today."""
+    """A guardrail an agent pins by version; kind blocked_topics today."""
 
     id: str
     slug: str

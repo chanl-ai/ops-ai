@@ -1,4 +1,4 @@
-"""A workflow AI step's answer for an agent or an outside caller (tick 30: the four AI steps had no API), by failure
+"""A workflow AI step's answer for an agent or an outside caller (the four AI steps had no API), by failure
 mode: the route answers differently from a step; someone who may not run workflows gets an answer; a team with AI steps
 off gets one; settings the step's type refuses are run anyway."""
 
@@ -76,7 +76,7 @@ async def test_settings_the_steps_type_refuses_are_not_run(c: AsyncClient) -> No
 
 
 async def test_a_text_past_the_bound_is_not_run(c: AsyncClient) -> None:
-    """tick 31: the route had no limit, so one outside call could send any amount of text to the model."""
+    """The route had no limit, so one outside call could send any amount of text to the model."""
     policies(c, {"aiSteps": {"team_ops": True}})
     rt = cast(Any, c)._transport.app.state.runtime
     body = {"text": "x" * (rt.settings.ai_step_max_text_chars + 1), "settings": SETTINGS}
@@ -103,7 +103,7 @@ def amount(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
 
 
 async def test_a_document_types_fields_are_read_as_the_callers_team(monkeypatch: pytest.MonkeyPatch) -> None:
-    """tick 31: the route skipped the documentType lookup a step makes, so the two answered differently."""
+    """The route skipped the documentType lookup a step makes, so the two answered differently."""
 
     def documents(*args: Any, **kwargs: Any) -> Documents:
         return Documents()
@@ -119,7 +119,7 @@ async def test_a_document_types_fields_are_read_as_the_callers_team(monkeypatch:
 
 
 async def test_a_team_past_its_calls_a_minute_is_refused_before_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    """tick 32: the route had no rate limit, so one team's caller could spend the service's whole model key."""
+    """The route had no rate limit, so one team's caller could spend the service's whole model key."""
     from ops_agents.api.routers import ai_steps  # noqa: PLC0415
     from ops_agents.api.widget_sessions import RateLimit  # noqa: PLC0415
 

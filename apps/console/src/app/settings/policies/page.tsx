@@ -96,7 +96,7 @@ function PolicyCard({ policy, cells, sample, teamId }: { policy: WorkspacePolicy
     }
   };
   const dirty = names ? JSON.stringify(picked) !== JSON.stringify(teamNames) : per ? JSON.stringify(modes) !== JSON.stringify(teamModes) : draft !== current;
-  // Which publishes need a review is edited in one place, Publish reviews; this card says so and links there (c-214).
+  // Which publishes need a review is edited in one place, Publish reviews; this card says so and links there.
   if (per)
     return (
       <SettingCard {...common}>
@@ -137,7 +137,7 @@ function PolicyCard({ policy, cells, sample, teamId }: { policy: WorkspacePolicy
 }
 
 /**
- * The team's sending policy (c-580): the plain words Check before sending reads a write against. Each save is a new
+ * The team's sending policy: the plain words Check before sending reads a write against. Each save is a new
  * version; a run is checked against the newest one when its write is about to go out.
  */
 function SendPolicyCard({ locked }: { locked: boolean }) {
@@ -209,7 +209,7 @@ export default function PoliciesPage() {
         <QueryError what="the policies" error={policies.error} onRetry={() => policies.refetch()} retrying={policies.isFetching} />
       ) : (
         <div className="flex flex-col gap-4" data-testid="policy-cards">
-          {/* The install's plugins (c-564) are switched through the API; they have no editor on this page yet. */}
+          {/* The install's plugins are switched through the API; they have no editor on this page yet. */}
           {policies.data.filter((p) => p.kind !== 'plugins').map((p) => (
             <React.Fragment key={p.key}>
               <PolicyCard policy={p} cells={editor.data?.cells ?? {}} sample={sample} teamId={team?.id ?? ''} />

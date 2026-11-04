@@ -1,4 +1,4 @@
-"""Who may write knowledge (c-115), by failure mode: a viewer or reviewer creating a knowledge base or a source, a
+"""Who may write knowledge, by failure mode: a viewer or reviewer creating a knowledge base or a source, a
 viewer named as a knowledge base's or source's owner changing it, and a builder of the team refused knowledge someone
 else owns (knowledge is shared by the team). Builders and admins of the owning team write;
 reviewers decide reviews and viewers read (roles-and-permissions.md), whatever the owner field names. Tokens are
@@ -53,7 +53,7 @@ async def test_a_viewer_named_as_owner_cannot_change_it(engine: AsyncEngine, ten
 
 
 async def test_a_builder_of_the_team_changes_knowledge_someone_else_owns(engine: AsyncEngine, tenant: str) -> None:
-    """Knowledge is shared by the team (owner decision, 2026-10-17): the owner field names who answers for it, not who
+    """Knowledge is shared by the team: the owner field names who answers for it, not who
     may change it. The owner's report: Activate and sync refused a teammate with not_source_owner."""
     nadia = "nadia@harborpine.example"
     async with _signed_in(engine, tenant, nadia, TEAM, {TEAM: "builder"}) as owner:

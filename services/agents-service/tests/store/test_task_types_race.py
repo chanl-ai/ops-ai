@@ -1,4 +1,4 @@
-"""Task type saves at once (tick 30, c-288), on PostgreSQL: two saves after a publish both read the published version
+"""Task type saves at once, on PostgreSQL: two saves after a publish both read the published version
 as the newest, both open the next one, and the second fails on the version key."""
 
 from __future__ import annotations

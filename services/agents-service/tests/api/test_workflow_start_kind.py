@@ -1,4 +1,4 @@
-"""Starting a workflow by hand through the API (c-466), by failure mode: the definition does not say how its trigger is
+"""Starting a workflow by hand through the API, by failure mode: the definition does not say how its trigger is
 started, or names the wrong form; a form start's run gets other values than the form sent, or does not say how it
 started; a viewer starts a run by hand; a trigger only its source starts is started by hand; the Start run list
 offers a workflow only other workflows start, or Files offers one that takes no file. Real platform tokens, real

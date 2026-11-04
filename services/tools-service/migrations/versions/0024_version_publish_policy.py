@@ -1,4 +1,4 @@
-"""a version records whether its publish waited for review and the mode it followed (c-139)
+"""a version records whether its publish waited for review and the mode it followed
 
 A tool module publish follows the team's publish-review mode (always, major, never), read live from platform-service;
 each version records whether it waited and which mode it followed, null on versions published before.

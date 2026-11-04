@@ -1,4 +1,4 @@
-"""A person's own sign-in on a connection whose app proves itself with its certificate (c-583), by failure mode: the
+"""A person's own sign-in on a connection whose app proves itself with its certificate, by failure mode: the
 code exchange or the disconnect's revocation sends the client secret, or no proof, instead of a signed assertion."""
 
 from __future__ import annotations

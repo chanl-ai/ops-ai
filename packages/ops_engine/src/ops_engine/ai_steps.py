@@ -1,4 +1,4 @@
-"""Workflow AI steps (c-298): Classify, Summarise, Extract from text and Draft. Each is its own node type, and all four
+"""Workflow AI steps: Classify, Summarise, Extract from text and Draft. Each is its own node type, and all four
 run one executor over one model call (the agent kernel with no tools, the step's instructions, model alias and an
 answer schema; EnginePorts.prompts). A job here only says what its answer looks like, how the model is asked, and
 which port an answer leaves by, from the step's settings: no category, field or wording is fixed in code."""
@@ -159,7 +159,7 @@ def message_of(text: Any) -> str:
 async def resolve_fields(
     params: Mapping[str, Any], lookup: Callable[[str, int | None], Awaitable[list[dict[str, Any]]]] | None
 ) -> dict[str, Any]:
-    """The step's settings with a named document type's fields in place (Extract from text, c-298): `lookup` reads
+    """The step's settings with a named document type's fields in place (Extract from text): `lookup` reads
     them as whoever runs the step, the run's team in a workflow or the caller's on the route."""
     out = dict(params)
     if (ref := out.get("documentType")) and not out.get("fields"):

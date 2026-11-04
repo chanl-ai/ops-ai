@@ -15,7 +15,7 @@ import { cacheBuster, cacheOn, MAX_AGE_MS, openSavedQueries, wipeSavedQueries } 
 const BUSTER = cacheBuster(buildTag, buildCommit);
 
 /**
- * Shows what this person last saw in this team at once on a reload, and saves it as it changes (c-560). Nothing is
+ * Shows what this person last saw in this team at once on a reload, and saves it as it changes. Nothing is
  * read or saved until the session is signed in, and an ended session, from this tab or another, removes every copy.
  */
 function SavedQueries() {

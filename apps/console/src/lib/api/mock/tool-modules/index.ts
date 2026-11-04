@@ -53,7 +53,7 @@ interface MockReview {
   note?: string;
 }
 
-/** A version with its review's fields, as tools-service answers (c-163). The mock has no Reviews, so nothing here decides one. */
+/** A version with its review's fields, as tools-service answers. The mock has no Reviews, so nothing here decides one. */
 const withReview = (m: { reviews: MockReview[] }, v: ModuleVersion): ModuleVersion => {
   const r = [...m.reviews].reverse().find((x) => x.version === v.version);
   if (!r) return v;
@@ -104,7 +104,7 @@ interface Mod {
   version: string;
   ops: Op[];
   approvals: ModuleApproval[];
-  /** The mock's stand-in for Reviews: who asked and, once decided elsewhere, the outcome (c-163). */
+  /** The mock's stand-in for Reviews: who asked and, once decided elsewhere, the outcome. */
   reviews: MockReview[];
   versions: ModuleVersion[];
   connectionId?: string;
@@ -174,7 +174,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
   recentCalls: (moduleId: string, n: number) => ToolCallRow[];
   /** Each endpoint host and the ids of the modules calling it, for the egress allow-list. */
   hostsInUse: () => Record<string, string[]>;
-  /** Each secret name and the operations whose headers or path read it (c-093). */
+  /** Each secret name and the operations whose headers or path read it. */
   secretUsers: () => Record<string, SecretUser[]>;
 } {
   const { tools, agents } = deps;
@@ -996,9 +996,9 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
         const testApprovalToken = wouldPause && input.simulateApproval ? `test-apt_${Math.random().toString(36).slice(2, 8)}` : undefined;
         // Mirrors tools-service: on the test environment a read reaches the system (the mock answers with the stub), a write answers from the stub and says so.
         const sandbox = input.target === 'sandbox';
-        // Real calls the system, a write included (c-591); the mock stands in for its answer.
+        // Real calls the system, a write included; the mock stands in for its answer.
         const reached = sandbox ? { stubbed: false, reachedHost: new URL(m.endpoint).hostname } : {};
-        // The draft mock and transform run for this test only, as tools-service runs them (c-088).
+        // The draft mock and transform run for this test only, as tools-service runs them.
         const draft = input.draft ?? {};
         const raw = 'stub' in draft && draft.stub !== undefined ? draft.stub : o.stub;
         const template = 'responseTransform' in draft ? draft.responseTransform : o.responseTransform;

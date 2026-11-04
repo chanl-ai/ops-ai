@@ -1,4 +1,4 @@
-"""A workspace's security and default teams, and identity provider groups (c-202), by failure mode: a non workspace
+"""A workspace's security and default teams, and identity provider groups, by failure mode: a non workspace
 admin changes them (F1); Security admin stays with the old security team or misses the new one (F2); an archived or
 another workspace's team is set (F3); a new person lands nowhere when the provider names only a role (F4); a group
 mapping adds a membership twice, for a group the person does not carry, or as admin (F5)."""

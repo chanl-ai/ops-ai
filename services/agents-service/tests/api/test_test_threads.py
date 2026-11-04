@@ -1,4 +1,4 @@
-"""A builder's test of an agent is a real chat thread the server marks test (c-284), by failure mode: a person marks
+"""A builder's test of an agent is a real chat thread the server marks test, by failure mode: a person marks
 their own chat test to escape counts and memory; a test answers on the published version instead of the draft being
 tested; a draft edited between two test messages is served stale; a test remembers things about the builder; test
 threads inflate the agent's tasks or crowd the conversations list; the mark changes after the thread starts. Tokens
@@ -172,7 +172,7 @@ async def test_the_test_mark_cannot_be_patched(stack: tuple[AsyncClient, Recorde
 
 
 async def test_a_test_reply_says_what_it_spent(stack: tuple[AsyncClient, Recorder]) -> None:
-    """c-286: each reply carries its model calls, tokens, cost and seconds, read with the thread (no second request)."""
+    """Each reply carries its model calls, tokens, cost and seconds, read with the thread (no second request)."""
     c, _ = stack
     await _draft(c, "MARK-COST")
     tid = ok(await _thread(c, BUILDER, test=True), 201)["id"]
@@ -185,7 +185,7 @@ async def test_a_test_reply_says_what_it_spent(stack: tuple[AsyncClient, Recorde
 
 
 async def test_a_compare_runs_the_same_question_on_two_versions(stack: tuple[AsyncClient, Recorder]) -> None:
-    """c-286: a test thread started on a saved version runs that version, so the draft and the published answer can
+    """A test thread started on a saved version runs that version, so the draft and the published answer can
     be read side by side; a version the agent does not have is refused."""
     c, _ = stack
     await _draft(c, "MARK-NEW")

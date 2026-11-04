@@ -75,7 +75,7 @@ for (const f of files) {
     for (const m of text.matchAll(/process\.env\.(?!NODE_ENV)/g)) report(f, m.index, 'reads process.env outside src/lib/api/index.ts');
   }
 
-  // 17. Reads go through hooks/team-query.ts (c-505): a raw React Query read neither waits for the person's team nor
+  // 17. Reads go through hooks/team-query.ts: a raw React Query read neither waits for the person's team nor
   //     keys its answer by team, so it can ask for a team they do not hold or show one team's data in another.
   if (f.rel !== 'src/hooks/team-query.ts') {
     for (const m of text.matchAll(/import\s*\{[^}]*\b(useQuery|useInfiniteQuery|useQueries|useSuspenseQuery|useSuspenseInfiniteQuery|useSuspenseQueries)\b[^}]*\}\s*from\s*['"]@tanstack\/react-query['"]/g))
@@ -125,7 +125,7 @@ for (const f of files) {
     report(f, first.index, `${hits.length} raw palette classes or fixed px widths, ${allowed} allowed (use the success, warning and destructive tokens and fluid widths)`);
   } else if (hits.length < allowed) notes.push(`${f.rel}: ${hits.length} of ${allowed} allowed; run with --write-baseline to lock the drop in`);
 
-  // 18. Steps are worded once, by the API (agents-service run_story.lines, c-500): a page that tells people what a run
+  // 18. Steps are worded once, by the API (agents-service run_story.lines): a page that tells people what a run
   //     did draws those lines (StoryFeed) and never prints a step's node id, its operation or a call's tool name as
   //     text. Builder and audit views show what was built or called, by path. Its reach is console TSX only; rule 19
   //     covers task files that word a call's input keys.
@@ -133,18 +133,18 @@ for (const f of files) {
     for (const m of text.matchAll(SELF_WORDED)) report(f, m.index, 'prints a step or tool name itself (draw the API\'s story lines through StoryFeed)');
   }
 
-  // 19. A Human Task never words a call's input keys itself (c-508): the API sends each write's fields as the operation
+  // 19. A Human Task never words a call's input keys itself: the API sends each write's fields as the operation
   //     labels them (write_preview.fields from describe_call). A camelCase-splitting humaniser in a task file is that
   //     wording done in the browser.
   if (/^src\/components\/tasks\/.*\.tsx?$/.test(f.rel)) {
     for (const m of text.matchAll(/\.replace\(\/\(\[a-z\]\)\(\[A-Z\]\)\/g/g)) report(f, m.index, "words a call's input keys itself (draw the API's write_preview.fields)");
   }
 
-  // 20. No mock pages in the console (c-517): a design mock is HTML in the docs (:3009), never a console route, so what
+  // 20. No mock pages in the console: a design mock is HTML in the docs (:3009), never a console route, so what
   //     is reviewed is what ships.
   if (/^src\/app\/preview\//.test(f.rel)) report(f, 0, 'is a preview page (draw design mocks as HTML in the docs; ship the real page)');
 
-  // 21. One way to decide a Human Task (c-460): the decide forms and the decision route are used only by the shared
+  // 21. One way to decide a Human Task: the decide forms and the decision route are used only by the shared
   //     TaskDecision, the queue's panel, the decider and chat's task card, so a new surface cannot drift from them.
   if (!/^src\/components\/reviews\/(task-decision|decision-panel|use-review-decider|option-decision-form|review-detail|model-validation)\.tsx$|^src\/components\/chat\/record-cards\.tsx$|^src\/hooks\/queries\.ts$/.test(f.rel))
     for (const m of text.matchAll(/import\s*\{[^}]*\b(OptionDecisionForm|ReviewDecisionForm|ModelValidationDecisionForm|useDecideReview)\b[^}]*\}\s*from/g)) report(f, m.index, `imports ${m[1]} (decide through components/reviews/task-decision.tsx)`);
@@ -184,7 +184,7 @@ const reachesLayout = (f, depth = 0) =>
       const source = importedSource(f, name);
       return !!source && source.abs !== f.abs && reachesLayout(source, depth + 1);
     }));
-// 19. The outside-assistant MCP address is behind the install flag mcp_gateway (c-611): a file that links to the MCP
+// 19. The outside-assistant MCP address is behind the install flag mcp_gateway: a file that links to the MCP
 //     channel or names the MCP URL on screen (app/ and components/) reads the flag (hooks/flag-queries), so a new entry point cannot show it on an install
 //     that has it off. Exempt: the mock's data, the retired /connect redirect (it lands on the channel page, which checks
 //     the flag), and the MCP channel's own panels (app/deployments/_parts/mcp-tab.tsx, components/deployments/mcp/),
@@ -192,7 +192,7 @@ const reachesLayout = (f, depth = 0) =>
 const mcpExempt = (rel) => rel.startsWith('src/lib/api/mock/') || rel.startsWith('src/components/deployments/mcp/') || ['src/app/connect/page.tsx', 'src/app/deployments/_parts/mcp-tab.tsx'].includes(rel);
 for (const f of files.filter((x) => /^src\/(app|components)\//.test(x.rel) && !mcpExempt(x.rel))) {
   const hit = /['"`]\/channels\/mcp['"`]|MCP URL/.exec(f.text);
-  if (hit && !f.text.includes("'mcp_gateway'")) report(f, hit.index, 'links to the MCP address without reading the mcp_gateway flag (c-611)');
+  if (hit && !f.text.includes("'mcp_gateway'")) report(f, hit.index, 'links to the MCP address without reading the mcp_gateway flag');
 }
 for (const f of files.filter((x) => /^src\/app\/.*page\.tsx$/.test(x.rel) && !redirectOnly(x.text) && !authShell(x.rel))) {
   if (!reachesLayout(f)) report(f, 0, 'page that never reaches PageLayout or RecordLayout (in the page or up to three components down)');

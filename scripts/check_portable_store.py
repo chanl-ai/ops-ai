@@ -52,7 +52,7 @@ SQL_SHAPE = re.compile(r"\b(SELECT|INSERT|UPDATE|DELETE|WHERE|FROM|RETURNING|CON
 # The same constructs built with SQLAlchemy Core.
 ADVISORY_NAME = re.compile(r"^pg_(try_)?advisory_")
 # A Postgres-only option that is portable when the same call gives SQL Server its own form: a partial index and a
-# filtered index with the same simple predicate hold the same rows (c-342).
+# filtered index with the same simple predicate hold the same rows.
 TWINS = {"postgresql_where": "mssql_where"}
 # Core's returning() is portable (OUTPUT on SQL Server); RETURNING written in SQL text is not.
 CALLS = {

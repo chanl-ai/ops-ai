@@ -30,7 +30,7 @@ import { KnowledgeChangesQueue } from '@/components/knowledge/knowledge-changes-
 // No Retrieval tab: kb-service answers with the base's keyword search and reads no saved retrieval settings yet.
 const TABS = ['overview', 'sources', 'documents', 'changes', 'playground'] as const;
 type Tab = (typeof TABS)[number];
-// Documents are added and managed under Sources (c-159). The documents view stays a route so a citation or a failure
+// Documents are added and managed under Sources. The documents view stays a route so a citation or a failure
 // count can open a document, but it is not offered as a tab.
 const SHOWN = TABS.filter((t) => t !== 'documents');
 const LABEL: Record<Tab, string> = { overview: 'Overview', sources: 'Sources', documents: 'Documents', changes: 'Changes', playground: 'Playground' };

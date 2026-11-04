@@ -1,4 +1,4 @@
-"""The knowledge schedule (c-564): a beat that syncs each tool source when its schedule says, in the source's team.
+"""The knowledge schedule: a beat that syncs each tool source when its schedule says, in the source's team.
 
 Every minute it reads each tenant's tool sources, and syncs each one that is due: never synced, or a daily source
 whose time of day has passed since its last sync, or a weekly one a week on. The sync takes the source's lease

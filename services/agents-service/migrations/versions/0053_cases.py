@@ -1,4 +1,4 @@
-"""cases and case_events: a team's long-lived issues and their timelines (c-128)
+"""cases and case_events: a team's long-lived issues and their timelines
 
 Revision ID: 0053_cases
 Revises: 0052_drop_engine_settings

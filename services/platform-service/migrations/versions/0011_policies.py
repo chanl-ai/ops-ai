@@ -1,6 +1,6 @@
-"""policies: the stricter rules an admin switches on per workspace (c-186)
+"""policies: the stricter rules an admin switches on per workspace
 
-A tenant with no row has every policy at its open default (owner direction 2026-10-17), so no running workspace meets a
+A tenant with no row has every policy at its open default, so no running workspace meets a
 control it did not set. The table carries tenant_id under the same row-level security as 0001; changes are audited in
 audit_entries.
 

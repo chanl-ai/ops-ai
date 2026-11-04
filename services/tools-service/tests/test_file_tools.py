@@ -1,4 +1,4 @@
-"""The built-in Files and Document types tools (c-613), by failure mode: another team's file or type read, an
+"""The built-in Files and Document types tools, by failure mode: another team's file or type read, an
 install not serving or showing them, a name matching several files read at random, a long file flooding the model, a
 large file's read still running when the tool answers, a second read paying again, documents-service's refusal
 reaching the agent as a crash, and a file the scan has not cleared. files-service is ops_files_client's fake;
@@ -18,8 +18,8 @@ from ops_documents_client import DocumentsClient
 from ops_files_client.testing import FakeFilesService
 from ops_identity import ServiceClient, dev_service_signer
 from ops_tools.file_tools import TEXT_LIMIT, FileTools
+from ops_tools.modules.seed import BUILT_IN
 from ops_tools.registry import ToolRegistry
-from ops_tools.systems import BUILT_IN
 
 TENANT, OPS, RETAIL = "t_bank", "team_ops", "team_retail"
 LEVY_ID = "dt_levy"

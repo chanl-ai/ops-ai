@@ -45,7 +45,7 @@ export function LifecycleActions({
 }: {
   lifecycle: Lifecycle;
   dirty: boolean;
-  /** False when the person may not publish workflows: Publish shows locked with the reason, as on an agent (c-150). */
+  /** False when the person may not publish workflows: Publish shows locked with the reason, as on an agent. */
   canPublish?: boolean;
   onPublish: () => void;
   onSetPaused: (paused: boolean) => Promise<unknown>;

@@ -1,4 +1,4 @@
-"""Who may change the tenant's egress allow-list and another team's tool secrets (c-079, c-509), through the real routes
+"""Who may change the tenant's egress allow-list and another team's tool secrets, through the real routes
 with people signed in on platform-style tokens: only an admin on the Security team. A builder or an admin of another
 team would otherwise widen what every module may reach, or swap the credentials another team calls with; to them that
 team's secrets do not exist."""

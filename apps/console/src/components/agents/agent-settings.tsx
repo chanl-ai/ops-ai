@@ -172,9 +172,9 @@ export function InstructionsSection({ draft, set, toolbar, footer, textareaRef }
 }
 
 /**
- * The tools the agent may call, picked through the tools options route so any grantable tool can be found (c-135).
+ * The tools the agent may call, picked through the tools options route so any grantable tool can be found.
  * Grants the registry no longer offers (unpublished, hidden or removed from their module) are listed apart with
- * Remove, as c-048 asks, rather than as a chip the picker cannot label.
+ * Remove, rather than as a chip the picker cannot label.
  */
 export function ToolsSection({ draft, set, stale = [] }: { draft: AgentDraft; set: Set; stale?: string[] }) {
   const gone = stale.filter((id) => draft.toolIds.includes(id));
@@ -208,7 +208,7 @@ export function ToolsSection({ draft, set, stale = [] }: { draft: AgentDraft; se
   );
 }
 
-/** The knowledge bases the agent may search and cite, stored by id and picked through the options route (c-135). */
+/** The knowledge bases the agent may search and cite, stored by id and picked through the options route. */
 export function KnowledgeSection({ draft, set }: { draft: AgentDraft; set: Set }) {
   return (
     <SettingsSection title={`Knowledge · ${draft.collections.length}`} description="Knowledge bases the agent may search and cite.">
@@ -218,7 +218,7 @@ export function KnowledgeSection({ draft, set }: { draft: AgentDraft; set: Set }
   );
 }
 
-/** Widgets the agent may show in chat (c-082): pinned templates by version, composition and a per-answer cap. */
+/** Widgets the agent may show in chat: pinned templates by version, composition and a per-answer cap. */
 export function WidgetsSection({ draft, set }: { draft: AgentDraft; set: Set }) {
   // A new pin takes the published version on save (version 0 is sent as none); a held pin keeps its version.
   const choose = (ids: string[]) => set('widgetPins', ids.map((id) => draft.widgetPins.find((p) => p.widgetId === id) ?? { widgetId: id, version: 0, name: id }));
@@ -287,7 +287,7 @@ export function GuardrailsSection({ draft, set, shown }: { draft: AgentDraft; se
   // Off is saved on the version and goes live with it; the guardrail stays pinned but is not checked.
   const setEnabled = (x: Guardrail, enabled: boolean) => set('guardrailPins', draft.guardrailPins.map((p) => (p.guardrailId === x.id ? { ...p, enabled } : p)));
   // A pin keeps its version; a new pin takes the published one. Deprecated guardrails take no new pins.
-  // The picker adds and removes pins (searched on the server, c-136); the rows below are the pinned ones, with their
+  // The picker adds and removes pins (searched on the server); the rows below are the pinned ones, with their
   // version and on/off. A new pin takes the published version on save (version 0 is sent as none).
   const choices = (library.data ?? []).filter((x) => pinned.has(x.id));
   const choose = (ids: string[]) =>

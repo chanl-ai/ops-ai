@@ -1,5 +1,5 @@
 """A dev session acts across every team of its tenant (ops_store.isolation, DEV), so a record it saved under the acting
-team alone would be no team's and every team would see it (c-602). A new workflow and a new agent are saved in the team
+team alone would be no team's and every team would see it. A new workflow and a new agent are saved in the team
 the session names, or its own; a session with neither is refused with 400 team_required and nothing is saved."""
 
 from __future__ import annotations

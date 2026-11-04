@@ -43,7 +43,7 @@ const columns: ColumnDef<Tool>[] = [
 
 /**
  * Workflows exposed to agents, as they sit beside app tools: each is a write tool that starts a run. Exposure is
- * switched on the Deployments MCP tab, so the empty state and footer point there while the install serves MCP (c-611).
+ * switched on the Deployments MCP tab, so the empty state and footer point there while the install serves MCP.
  */
 export function WorkflowToolsTable({ tools, total }: { tools: Tool[]; total: number }) {
   const mcpOn = useFlag('mcp_gateway');

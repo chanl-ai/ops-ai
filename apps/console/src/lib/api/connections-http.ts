@@ -5,7 +5,7 @@ import type { ConnectionsApi } from './connections-contract';
 type Get = <T>(path: string) => Promise<T>;
 type Send = <T>(method: string, path: string, body?: unknown) => Promise<T>;
 
-/** tools-service's `/connections`, `/connection-kinds` and `/me/connections` routes (c-558). */
+/** tools-service's `/connections`, `/connection-kinds` and `/me/connections` routes. */
 export function createConnectionsHttp(get: Get, send: Send): ConnectionsApi {
   const one = (id: string) => `/connections/${encodeURIComponent(id)}`;
   return {

@@ -1,4 +1,4 @@
-"""The Match step (c-210), by failure mode: a name alone opens a case; a street number alone counts as the same
+"""The Match step, by failure mode: a name alone opens a case; a street number alone counts as the same
 address; a blank field matches a blank field; case or spacing makes the same name differ; a search answer that is not
 a list crashes the step."""
 

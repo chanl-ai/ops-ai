@@ -1,4 +1,4 @@
-"""A tool module publish follows the team's publish-review mode, read live (c-139, c-214), by failure mode: a minor
+"""A tool module publish follows the team's publish-review mode, read live, by failure mode: a minor
 version published at once while the team set "always", a minor version held while it set "major", a change of the
 setting that waits for a restart, a policy that cannot be read letting a version through, and a minor review sent to
 Security instead of the module's team. Driven through the real routes into the real PublishPolicy; platform-service is

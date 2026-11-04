@@ -29,7 +29,7 @@ export function useReviewDecider({
   edits: ReadEdits;
   confirmed?: ReadConfirmed;
   onDone: () => void;
-  /** A link on the recorded decision's toast (Human Tasks links the case, c-460). */
+  /** A link on the recorded decision's toast (Human Tasks links the case). */
   action?: (r: Review) => { label: string; onClick: () => void } | undefined;
 }) {
   const decide = useDecideReview();

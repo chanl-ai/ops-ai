@@ -1,7 +1,7 @@
 /** Live runs the live version; test runs the latest saved version. */
 export type BatchMode = 'live' | 'test';
 
-/** Starting a workflow once per row of a CSV or Excel file already uploaded to Files (c-535). */
+/** Starting a workflow once per row of a CSV or Excel file already uploaded to Files. */
 export interface BatchInput {
   fileId: string;
   mode: BatchMode;

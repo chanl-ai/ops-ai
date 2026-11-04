@@ -1,6 +1,6 @@
 """built-in grid: a team's builders add, change and remove that team's secrets
 
-A team's secrets are its own (owner, 2026-10-17; c-186): builders now hold `secrets_egress` create, edit and delete,
+A team's secrets are its own: builders now hold `secrets_egress` create, edit and delete,
 checked in the team that owns the secret; the egress list and workspace-wide secrets stay with the Security team
 (`manage`), and the `securityTeamAddsSecrets` policy moves team writes back there. Admins already hold every cell
 (0016). Adds the builder rows in every tenant, once, and raises each tenant's permission version. Portable SQL only.

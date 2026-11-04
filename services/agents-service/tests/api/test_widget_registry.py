@@ -1,4 +1,4 @@
-"""Authoring widget templates through /v1/widgets (c-082), by failure mode: a tree that binds a field its schema lacks
+"""Authoring widget templates through /v1/widgets, by failure mode: a tree that binds a field its schema lacks
 or uses something outside the catalogue saved; a seeded platform widget edited; a draft pinned before it is published;
 a published version changed in place; a retired widget pinned again; another team's widget listed; a member of the
 owning team outside the builder and admin roles creating, saving, publishing or retiring one."""

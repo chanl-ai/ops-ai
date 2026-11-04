@@ -1,6 +1,6 @@
 """Every service opens its database through open_database, so each one tests a pooled connection before using it. A
 store that calls create_async_engine itself loses that check and fails its first request after the database closed
-an idle connection (c-384). Migrations, scripts and experiments run once and exit, so they are not checked."""
+an idle connection. Migrations, scripts and experiments run once and exit, so they are not checked."""
 
 from __future__ import annotations
 

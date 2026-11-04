@@ -36,7 +36,7 @@ from .workflow_registry import registry, thread_pin
 
 log = get_logger("ops_agents.api.child_runs")
 
-# The person a chat turn runs for (c-149). A workflow an agent holds as a tool is offered and started only when that
+# The person a chat turn runs for. A workflow an agent holds as a tool is offered and started only when that
 # person may start it: the turn's authority is the person's rights and the agent's grants together. A run with no person
 # (an unattended agent run) acts as the agent; a chat turn whose person is not known (a turn resumed after a decision)
 # starts no workflow.
@@ -87,7 +87,7 @@ async def tell_parent(rt: Runtime, child: dict[str, Any]) -> None:
     _, graph = await resolve(rt, child["id"])
     values: dict[str, Any] = (await graph.aget_state(config(child["id"]))).values or {}
     if meta.get("startedBy") == "workflow":
-        # A levy case (c-057): the parent case lists each child's outcome, read from its own meta.
+        # A levy case: the parent case lists each child's outcome, read from its own meta.
         listed: list[dict[str, Any]] = list(cast(dict[str, Any], parent.get("meta") or {}).get("children") or [])
         entry = {
             "threadId": child["id"],
@@ -271,7 +271,7 @@ class ChildRuns:
         return None
 
     async def refused_for_person(self, workflow: str, team: str | None) -> ApiError | None:
-        """Why the turn's person may not start `workflow`, or None when they may: the Ops tools' check (c-469)."""
+        """Why the turn's person may not start `workflow`, or None when they may: the Ops tools' check."""
         return await self._refused_for_person(workflow, team, None)
 
     async def _published(self, workflow: str) -> tuple[int, str] | None:
@@ -352,7 +352,7 @@ class ChildRuns:
         assert parent is not None, "a tool runs inside its parent's run"
         meta = {
             "startedBy": "agent",
-            # The person a chat turn ran it for, beside the agent that started it (c-149).
+            # The person a chat turn ran it for, beside the agent that started it.
             **({"startedFor": person.email} if (person := TURN_PERSON.get()) is not None else {}),
             "agentName": cast(dict[str, Any], parent["meta"] or {}).get("agentName") or "an agent",
             **(meta or {}),

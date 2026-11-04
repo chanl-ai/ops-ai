@@ -1,4 +1,4 @@
-"""Combine facts' disagree port (c-535), by failure mode: sources that disagree going on by `out` when the step asks
+"""Combine facts' disagree port, by failure mode: sources that disagree going on by `out` when the step asks
 for its own way; sources that agree taken down `disagree`; the port offered when the step did not ask for it; and the
 field picker not knowing the port."""
 

@@ -1,4 +1,4 @@
-"""platform_outbox: the events platform-service reports to other services (c-616 S14, on c-258's outbox)
+"""platform_outbox: the events platform-service reports to other services (on the outbox)
 
 A member removed from a team kept their own accounts on its apps in tools-service, so their tokens worked again if they
 came back. platform-service now writes `member.removed` here in the transaction that removes them, and its relay

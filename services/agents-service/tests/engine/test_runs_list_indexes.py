@@ -1,4 +1,4 @@
-"""The runs list reads engine_runs through an index (c-312), by failure mode: the list sorts every run the tenant has to
+"""The runs list reads engine_runs through an index, by failure mode: the list sorts every run the tenant has to
 show one team's page, filtered or not, and a parent settling on its unfinished runs answers wrongly once it asks by
 status. The list test records the SQL the store runs, then asks PostgreSQL for that statement's plan with sequential
 scans priced out, so a plan that sorts the whole list or picks another index means no index serves the store's query.

@@ -49,7 +49,7 @@ class GuardrailRule(_Model):
     message: str
     # Topic to what it covers and what it does not; absent on versions saved before scopes existed.
     scopes: dict[str, str] = {}
-    # The builder's switch on the agent version (c-085): off is never checked. Absent on pins saved before it: on.
+    # The builder's switch on the agent version: off is never checked. Absent on pins saved before it: on.
     enabled: bool = True
     # Shown only once checked (kernel Guardrail.hold); absent on versions saved before the setting: off.
     hold: bool = Field(default=False, alias="holdUntilChecked")
@@ -73,7 +73,7 @@ class SkillPinRule(_Model):
 
 
 class WidgetPinRule(_Model):
-    """A widget template version (c-082): published in the library, and snapshotted on each agent version that pins
+    """A widget template version: published in the library, and snapshotted on each agent version that pins
     it, so a turn reads its tree and data schema with no lookup."""
 
     model_config = ConfigDict(extra="ignore", frozen=True, populate_by_name=True)
@@ -101,25 +101,25 @@ class AgentDefinition(_Model):
     # Per turn. Tool calls may be uncapped (the model-call cap still bounds the turn); model calls are always a number.
     max_tool_calls: int | None = 6
     max_model_calls: int = 8
-    # Mask personal data in what the agent's turns show and return (guardrails.redactPii, c-293); on by default.
+    # Mask personal data in what the agent's turns show and return (guardrails.redactPii); on by default.
     redact_pii: bool = True
-    # Per conversation (c-103): a chat thread's budget when it starts, and what each Continue adds. Always numbers; the
+    # Per conversation: a chat thread's budget when it starts, and what each Continue adds. Always numbers; the
     # platform defaults stand in for an empty field (agent_registry.PLATFORM_CONVERSATION_*).
     max_conversation_calls: int = 200
     max_conversation_cost: float = 5.0
     # The model alias this agent runs on; None uses the runtime's alias.
     model_alias: str | None = None
-    # Pinned guardrails, each its version's rule (c-063).
+    # Pinned guardrails, each its version's rule.
     guardrails: list[GuardrailRule] = []
-    # Pinned skills, each its version's body and guardrails (c-063 slice 2).
+    # Pinned skills, each its version's body and guardrails.
     skills: list[SkillPinRule] = []
-    # What callers may override, from the published version (c-068); None for a fixture agent with no registry row.
+    # What callers may override, from the published version; None for a fixture agent with no registry row.
     limits: AgentLimits | None = None
-    # Pinned widgets, whether the model may compose layouts, and how many widgets one answer may show (c-082).
+    # Pinned widgets, whether the model may compose layouts, and how many widgets one answer may show.
     widgets: list[WidgetPinRule] = []
     compose: bool = False
     widgets_per_turn: int | None = None
-    # What it remembers about each person (c-124): on by default, with these kinds.
+    # What it remembers about each person: on by default, with these kinds.
     memory_enabled: bool = True
     memory_kinds: tuple[str, ...] = ("fact", "preference", "episode")
 
@@ -184,15 +184,15 @@ class Catalog(_Model):
     datasets: dict[str, list[dict[str, str]]]
     passages: list[PassageDefinition]
     knowledge_bases: list[KnowledgeBase]
-    # Published widget templates an agent version may pin (c-082 P1: seeded from widgets.json).
+    # Published widget templates an agent version may pin, seeded from widgets.json.
     widgets: list[WidgetPinRule] = []
-    # The deployment's tool search (c-610): above this many tools an agent searches for them; None, the install flag
+    # The deployment's tool search: above this many tools an agent searches for them; None, the install flag
     # tool_search is off and every tool is offered.
     tool_search_above: int | None = None
     # Agents taken out of service (paused, unpublished): kept so a turn already under way, or an approval decided
     # after the pause, finishes on the definition it started with. No new turn starts on them.
     _retired: dict[str, AgentDefinition] = PrivateAttr(default_factory=dict[str, AgentDefinition])
-    # Published versions a deployment pins (c-117), by (id, version): loaded from the registry on first use
+    # Published versions a deployment pins, by (id, version): loaded from the registry on first use
     # (api/agent_registry.pinned_definition), so a pinned embed keeps serving its version after a newer one goes live.
     _pinned: dict[tuple[str, int], AgentDefinition] = PrivateAttr(
         default_factory=dict[tuple[str, int], AgentDefinition]

@@ -1,4 +1,4 @@
-// The embedded chat loader's rules (c-131 T006), run in a real browser with the host page, the embed app and a hostile
+// The embedded chat loader's rules, run in a real browser with the host page, the embed app and a hostile
 // frame on three origins. By failure mode: a message from another window or origin acting on the chat, the iframe's
 // ready going unanswered once a session exists, a session not refreshed before it ends or after a 401, a refresh loop
 // on a session that keeps ending, message text reaching the host page, and an unlisted page drawing the chat.

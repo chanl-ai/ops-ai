@@ -152,7 +152,7 @@ class DefinitionStore:
     async def set_archived(
         self, workflow_id: str, archived: bool, *, by: str, now: str, team: str | None = None
     ) -> dict[str, Any] | None:
-        """Archives every version of the workflow, or restores it (c-274); its stages, versions and runs are kept, so
+        """Archives every version of the workflow, or restores it; its stages, versions and runs are kept, so
         a restored workflow serves as it did. Runs already started keep going. None when `team` sees no version."""
         t = engine_definitions
         where = sa.and_(t.c.tenant_id == self.tx.tenant(), t.c.workflow_id == workflow_id, _seen_by(team))

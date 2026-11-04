@@ -1,4 +1,4 @@
-"""Numbers a memory must never hold (c-563), by failure mode: a card number, IBAN or national id saved because the
+"""Numbers a memory must never hold, by failure mode: a card number, IBAN or national id saved because the
 model marked it harmless, and a number that only looks like one dropped. Each pattern is decided by its check digits
 or its issuing rules, never by the model."""
 

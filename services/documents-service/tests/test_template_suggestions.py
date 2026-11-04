@@ -1,4 +1,4 @@
-"""Template suggestions and offers through the API (c-254), on invoices printed from one master: a suggestion from one
+"""Template suggestions and offers through the API, on invoices printed from one master: a suggestion from one
 read, saved as a version, reads another invoice with no model call (F1, F2); suggesting saves nothing (F3); offers
 appear at 5 checked reads of one layout, never for another layout or one a template already reads (F4); a read of
 another type or one the team cannot see feeds no suggestion (F5)."""
@@ -105,7 +105,7 @@ async def test_offers_appear_at_five_checked_reads_of_one_layout_and_stop_once_a
 
 
 async def test_a_type_that_offers_at_three_reads_offers_at_three_and_keeps_it_on_its_next_version(make: Make) -> None:
-    """The offer count was fixed at 5 in code; the owner's rule is 5, changeable per type (2026-10-18)."""
+    """The offer count was fixed at 5 in code; the count is 5, changeable per type."""
     model = Reader()
     s = make(model, Floor())
     url = "/v1/document-types/supplier_invoice"

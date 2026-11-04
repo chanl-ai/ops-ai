@@ -6,7 +6,7 @@ workflow approvals with expiry that the requester never decides, the refusal of 
 console's deny reasons. A method reads the module aggregate, changes it, and writes it back against the revision it
 read, so two concurrent edits cannot overwrite each other.
 
-Not here yet: discovery and import from OpenAPI or MCP (c-008), auditing to platform-service, and granting approved
+Not here yet: discovery and import from OpenAPI or MCP, auditing to platform-service, and granting approved
 operations to a workflow's agent (agents-service owns grants).
 """
 
@@ -77,8 +77,8 @@ GRANT_VIEWS = ("active", "expiring", "requested", "expired", "ended", "all")
 FAILING_RATE = 0.02
 ACCESS_ORDER = ("read", "write")
 WRITES = {"write"}
-# The case id of a run context with no case: the builder types the bound values (c-039).
-# The run context of the module's own team trying it, with no workflow and no case (c-048 T008).
+# The case id of a run context with no case: the builder types the bound values.
+# The run context of the module's own team trying it, with no workflow and no case.
 OWNER_CONTEXT = "owner"
 SAMPLE_CASE = "sample"
 STATUS_ORDER = {"requested": 0, "approved": 1, "expired": 2, "rejected": 3, "revoked": 4}
@@ -138,7 +138,7 @@ class Caller:
     verified: bool = False
     # The caller's role in the team the request acts in (the token's team, before any fallback to an all-scope team).
     team_role: str | None = None
-    # The verified principal, which `ops_access.can` decides on (c-149); None for a caller made in code (the seed).
+    # The verified principal, which `ops_access.can` decides on; None for a caller made in code (the seed).
     principal: Principal | None = None
     # The identity headers the caller sent, lower-cased, passed through when tools-service asks agents-service on their
     # behalf (the publish policy), so agents-service decides what they may read.
@@ -156,9 +156,9 @@ def _can(
     protection: str | None = None,
     requested_by: tuple[str | None, ...] = (),
 ) -> None:
-    """`ops_access.can` for a tools-service caller (c-149): the grid decides, in the team the request acts in, or in the
+    """`ops_access.can` for a tools-service caller: the grid decides, in the team the request acts in, or in the
     Security team for the actions held there. A caller with no principal (the seed) acts as the system. `requested_by`
-    is refused only while the tenant's requesterMayDecide policy is off (c-186)."""
+    is refused only while the tenant's requesterMayDecide policy is off."""
     if who.principal is None:
         return
     Access(security_team=security_team).can(
@@ -167,7 +167,7 @@ def _can(
 
 
 def _not_a_plugin(m: Aggregate) -> None:
-    """A plugin's module (c-564) changes only with its installed package: no route edits, publishes, deletes or asks
+    """A plugin's module changes only with its installed package: no route edits, publishes, deletes or asks
     access for it, whoever asks, admins included."""
     if str(m.get("template_id") or "").startswith("plugin:"):
         raise Forbidden(
@@ -177,7 +177,7 @@ def _not_a_plugin(m: Aggregate) -> None:
 
 
 def _provisioned(who: Caller, i: dict[str, Any]) -> dict[str, Any]:
-    """The template fields a create or patch carries (c-180), refused with `provisioner_only` unless the caller is a
+    """The template fields a create or patch carries, refused with `provisioner_only` unless the caller is a
     service token holding `tools:provision`: a person setting them could take a template's slot or lock others out."""
     fields = {k: i[k] for k in ("template_id", "protection") if i.get(k) is not None}
     if fields and who.principal is not None:
@@ -190,7 +190,7 @@ def _iso(value: datetime | None) -> str | None:
 
 
 def _code_settings(c: dict[str, Any]) -> dict[str, Any]:
-    """A code operation's settings as stored and sent to runner-service (c-531), from CodeSettingsIn's dump."""
+    """A code operation's settings as stored and sent to runner-service, from CodeSettingsIn's dump."""
     limits = cast(dict[str, Any], c.get("limits") or {})
     return {
         "source": c["source"],
@@ -206,7 +206,7 @@ def _code_settings(c: dict[str, Any]) -> dict[str, Any]:
 
 
 def _kind_of(i: dict[str, Any]) -> str:
-    """A new module's kind: as given, else what its first operations are (c-616: the kind follows the executor)."""
+    """A new module's kind: as given, else what its first operations are (the kind follows the executor)."""
     if i.get("type"):
         return str(i["type"])
     if i.get("function"):
@@ -294,7 +294,7 @@ def _refuse_during_review(m: Aggregate, what: str) -> None:
 
 
 def refuse(problems: list[str]) -> None:
-    """One 400 for every problem a save found (c-591): the message reads them all, and `details.problems` lists them
+    """One 400 for every problem a save found: the message reads them all, and `details.problems` lists them
     for a form to show each beside its field."""
     if len(problems) == 1:
         raise ValidationFailed(problems[0], details={"problems": problems})
@@ -303,7 +303,7 @@ def refuse(problems: list[str]) -> None:
 
 
 def sign_in_fits(module_sign_in: str, conn: dict[str, Any]) -> None:
-    """A module takes only a connection whose sign-in it supports (c-558): `team` a team connection, `person` one each
+    """A module takes only a connection whose sign-in it supports: `team` a team connection, `person` one each
     person signs in to (the team backup included), `person_or_team` any; refused when the connection is chosen."""
     module_sign_in = sign_in_of(module_sign_in)
     given = str(conn.get("sign_in") or "team")
@@ -322,7 +322,7 @@ class ModuleService:
     # The team's connection for a plugin's module (`PluginHost.team_connection`), set once the plugin host is up.
     team_connections: Callable[[str, str, Aggregate], Awaitable[str | None]] | None = None
     # A tool page's Real run (`GatewayCalls.console_run`), set by create_gateway_app: Real goes through the gateway's
-    # checks, never a path of its own (c-616).
+    # checks, never a path of its own.
     real_runs: Callable[..., Awaitable[dict[str, Any]]] | None = None
 
     def __init__(
@@ -355,16 +355,16 @@ class ModuleService:
         self.secrets = secrets
         self.clock = clock
         self.security_team = security_team
-        # agents-service's Reviews, where a version's review opens (c-163); without it no review can open.
+        # agents-service's Reviews, where a version's review opens; without it no review can open.
         self.reviews = reviews
-        # The team's publish-review mode, read live from platform-service on each publish (c-139, c-214). Without a
+        # The team's publish-review mode, read live from platform-service on each publish. Without a
         # reader (no platform URL, the tests) a publish follows the default "major": a major version waits.
         self.publish_policy = publish_policy
         # requesterMayDecide for access decisions applied for a workflow; without it the asker never decides.
         self.requester_policy = requester_policy
-        # The tenant's connections (c-330), in this service's own database.
+        # The tenant's connections, in this service's own database.
         self.connections = ConnectionStore(store.engine)
-        # The operations' mock answers (c-332), which Try it's test answer reads as a test run does.
+        # The operations' mock answers, which Try it's test answer reads as a test run does.
         self.mocks = MockAnswers(MockStore(store.engine))
         # Signs the test console's real reads in through the module's connection, in the test environment; without it
         # a connection adds nothing to them.
@@ -381,7 +381,7 @@ class ModuleService:
 
     def _owners(self, m: Aggregate) -> list[str | None]:
         """The module's owner group and those of the teams owning the workflows it is approved for, as each approval
-        recorded them when it was requested (the workflow's team comes from agents-service, c-039)."""
+        recorded them when it was requested (the workflow's team comes from agents-service)."""
         return self.dir.owners(m)
 
     def _workflow_groups(self, a: dict[str, Any]) -> list[str | None]:
@@ -398,7 +398,7 @@ class ModuleService:
         return await self.calls.traffic([m["id"] for m in mods], since, tenant_id=tenant_id, team_ids=teams)
 
     def _call_teams(self, who: Caller) -> list[str]:
-        """The teams whose calls the caller reads (c-616): its own acting team. A call is its team's even on a module
+        """The teams whose calls the caller reads: its own acting team. A call is its team's even on a module
         every team shares, so Usage never shows another team's calls. Only the dev header caller acting in an all-scope
         team reads every directory team's, as `_sees` lets it read every team's modules."""
         if not who.verified and who.team.scope == "all":
@@ -406,7 +406,7 @@ class ModuleService:
         return [who.team.id]
 
     async def _secret_names(self, tenant_id: str, mods: list[Aggregate]) -> dict[str | None, set[str]]:
-        """The names of the secrets each of the modules' teams has set (c-509: a module reads its own team's only);
+        """The names of the secrets each of the modules' teams has set (a module reads its own team's only);
         values are never read here."""
         if self.secrets is None:
             return {}
@@ -414,7 +414,7 @@ class ModuleService:
         return {team: {str(r["name"]) for r in await self.secrets.store.listed(tenant_id, team)} for team in owners}
 
     async def _as_team_sees(self, tenant_id: str, team_id: str, mods: list[Aggregate]) -> list[Aggregate]:
-        """The modules with a plugin's module showing the team's own connection (c-616): the gateway signs a plugin
+        """The modules with a plugin's module showing the team's own connection: the gateway signs a plugin
         tool in through the team's binding, so its page names that account instead of no connection."""
         if self.team_connections is None:
             return mods
@@ -524,9 +524,9 @@ class ModuleService:
         return r["errorRate"] >= FAILING_RATE or not r["reachable"]
 
     def _run_contexts(self, m: Aggregate, team: Team) -> list[dict[str, Any]]:
-        """The module owner first, which needs no workflow approval (c-048 T008), so the run panel's default is a try
+        """The module owner first, which needs no workflow approval, so the run panel's default is a try
         the owner can always make; then one context per workflow this module is approved for or asked for, with no
-        case: the builder types the bound values, which the panel marks as a sample (c-039). Only the caller's team's
+        case: the builder types the bound values, which the panel marks as a sample. Only the caller's team's
         workflows: running as another team's workflow would borrow its approval."""
         seen: dict[str, dict[str, Any]] = {}
         for a in m["approvals"]:
@@ -592,7 +592,7 @@ class ModuleService:
         if o.get("code"):
             out["code"] = o["code"]
         out["headers"] = o.get("headers") or []
-        # A tool saved before sign-in headers were refused (c-616) still sends one; its page asks to move it to the app.
+        # A tool saved before sign-in headers were refused still sends one; its page asks to move it to the app.
         held = cast(list[dict[str, str]], out["headers"])
         out["signInHeader"] = next(
             (h["key"] for h in held if CREDENTIAL_HEADER.match(h["key"].strip()) and h["value"].strip()), None
@@ -612,13 +612,13 @@ class ModuleService:
             # callers written when a secret could be limited to some teams.
             mine = have.get(m["team_id"], set())
             out["secrets"] = [{"name": n, "set": n in mine, "available": n in mine} for n in secret_names(o)]
-        # The operation's example mock under its old name, while the console still reads it; removed in D3c/D3d (c-616),
+        # The operation's example mock under its old name, while the console still reads it; removed in D3c/D3d,
         # when the console reads GET .../mocks?environment=example.
         out["stub"] = o.get("stub")
         return out
 
     def _rights(self, who: Caller, m: Aggregate) -> dict[str, bool]:
-        """What the caller may do with this module (c-186), by the check each write route runs: `can` for the action
+        """What the caller may do with this module, by the check each write route runs: `can` for the action
         with the module's protection, so the console's buttons and the routes never disagree."""
         out: dict[str, bool] = {}
         for action in ("edit", "delete", "publish"):
@@ -681,7 +681,7 @@ class ModuleService:
                 "status": a["status"],
                 "expiresAt": _iso(a["expires_at"]),
                 "reason": a["reason"],
-                # The Human Tasks review deciding it and the team whose reviewers do (c-166).
+                # The Human Tasks review deciding it and the team whose reviewers do.
                 "reviewId": a.get("review_id"),
                 "deciderTeam": a.get("decider_team"),
             }
@@ -717,12 +717,12 @@ class ModuleService:
         return m
 
     def _sees(self, who: Caller, m: Aggregate) -> bool:
-        """The caller's team reads the module: its own, a workspace-level one, or one approved for its workflows
-        (c-423). Only the dev header caller acting in one of the dev seed's all-scope teams reads every team's."""
+        """The caller's team reads the module: its own, a workspace-level one, or one approved for its workflows. Only
+        the dev header caller acting in one of the dev seed's all-scope teams reads every team's."""
         return self.dir.sees_module(who.team, m) or (not who.verified and who.team.scope == "all")
 
     async def _changeable(self, who: Caller, module_id: str, action: str = "edit") -> Aggregate:
-        """The module, when the caller may change it: a `system` module is the provisioner's alone (c-180)."""
+        """The module, when the caller may change it: a `system` module is the provisioner's alone."""
         m = await self._find(who, module_id)
         _not_a_plugin(m)
         _can(
@@ -736,7 +736,7 @@ class ModuleService:
         return m
 
     async def _save(self, m: Aggregate, *, touch: bool = True, events: Sequence[dict[str, Any]] = ()) -> Aggregate:
-        """`events` are service events written in the same transaction (c-258)."""
+        """`events` are service events written in the same transaction."""
         if touch:
             m["updated_at"] = self.clock()
         try:
@@ -975,7 +975,7 @@ class ModuleService:
     @staticmethod
     def _checked_headers(headers: list[dict[str, str]], problems: list[str]) -> list[dict[str, str]]:
         """A sign-in header is refused whatever it holds, a {{NAME}} reference too: every custom module is on a
-        connection (c-616), which signs every call in, so the key has one home. Used by add and edit alike; each
+        connection, which signs every call in, so the key has one home. Used by add and edit alike; each
         refusal joins `problems`."""
         for header in headers:
             key, value = header["key"].strip(), header["value"].strip()
@@ -992,7 +992,7 @@ class ModuleService:
         operation on it (the executor joins the endpoint and the path), so a URL on any other base is refused: a
         second system is a second module."""
         if url.startswith("/"):
-            # A path alone hangs off the module's base address: its connection's for a custom app (c-616).
+            # A path alone hangs off the module's base address: its connection's for a custom app.
             if not endpoint:
                 raise ValidationFailed("Enter the full https URL of the operation, or pick the app's connection first.")
             return endpoint.rstrip("/"), url
@@ -1008,7 +1008,7 @@ class ModuleService:
 
     @classmethod
     def _encoding_problem(cls, body: str | None, encoding: str | None, headers: list[dict[str, str]]) -> str | None:
-        """Why this body cannot be sent in its encoding (c-591), or None. JSON and form set Content-Type themselves, so
+        """Why this body cannot be sent in its encoding, or None. JSON and form set Content-Type themselves, so
         a header naming another would contradict them; raw sends the text as typed, so it needs that header."""
         enc = encoding or "json"
         typed = any(h["key"].strip().lower() == "content-type" for h in headers)
@@ -1099,7 +1099,7 @@ class ModuleService:
             "masked_output": [],
             "binding": None,
             "rate_limit_per_min": 60,
-            # Approvals are off by default (owner, 2026-11-01): a new write runs until its tool's switch or a team
+            # Approvals are off by default: a new write runs until its tool's switch or a team
             # policy turns approval on.
             "requires_approval": False,
             "amount_max": None,
@@ -1138,18 +1138,18 @@ class ModuleService:
         ops_in: list[dict[str, Any]] = list(i.get("operations") or [])
         kind = _kind_of(i)
         if kind == "code":
-            # A code module's functions run on runner-service (c-531): no endpoint and no egress host of its own.
+            # A code module's functions run on runner-service: no endpoint and no egress host of its own.
             if not i.get("function"):
                 raise ValidationFailed("Write the module's first function.")
             ops_in = [_code_operation(i["function"])]
         endpoint: str = i["endpoint"]
         if i.get("source") and ops_in:
-            # An MCP server behind sign-in lists its tools only with the connection's token (c-331).
+            # An MCP server behind sign-in lists its tools only with the connection's token.
             found = await self._discover(who, {"connection_id": i.get("connection_id"), **_given(i["source"])})
             ops_in = self._chosen(found, ops_in)
             endpoint = found["endpoint"]
         if i.get("http") and conn is not None:
-            # A custom app's base address and key live on its connection only (c-616): one beside it is refused.
+            # A custom app's base address and key live on its connection only: one beside it is refused.
             if endpoint:
                 raise ValidationFailed(
                     f"The base address comes from the {conn['name']} connection; leave the module's endpoint empty."
@@ -1224,9 +1224,9 @@ class ModuleService:
         return conn
 
     async def _held_unless_listed(self, who: Caller, host: str | None, app: str) -> None:
-        """An app's address on a host the tenant has not listed asks the Security team instead of failing (c-616 S13),
+        """An app's address on a host the tenant has not listed asks the Security team instead of failing,
         before anything is saved: HostHeld with the task's run key while it waits, its reason once it was refused.
-        Roles decide (owner, 2026-11-01): a caller who may manage the egress list is not asked, and the host is listed
+        Roles decide: a caller who may manage the egress list is not asked, and the host is listed
         in their name, audited. Without Reviews or an egress policy the store's own check refuses the host."""
         if not host or self.egress is None or self.reviews is None:
             return
@@ -1251,7 +1251,7 @@ class ModuleService:
         return True
 
     async def _open_connection(self, who: Caller, name: str, base: str, team_id: str | None = None) -> dict[str, Any]:
-        """The connection a custom module with none of its own keeps its address on (c-616): no sign-in, the address
+        """The connection a custom module with none of its own keeps its address on: no sign-in, the address
         in every environment, so a call reads it as it reads any app's. Empty until the first tool names one."""
         now = self.clock()
         row, environments = open_connection(
@@ -1266,7 +1266,7 @@ class ModuleService:
 
     async def _address_on(self, who: Caller, conn: dict[str, Any], address: str) -> None:
         """A discovered address (an imported spec's server, an MCP server) onto the module's chosen connection: set
-        where it names none, refused where it names another system (c-616)."""
+        where it names none, refused where it names another system."""
         held = connection_base(conn)
         if not held:
             envs = list(cast(dict[str, Any], conn.get("environments") or {})) or [TEST]
@@ -1301,7 +1301,7 @@ class ModuleService:
             input={**i, "displayName": i["display_name"], "name": name},
         )
         if conn is not None:
-            # A custom app's tools are paths on its connection's base address (c-616): it is the module's only one.
+            # A custom app's tools are paths on its connection's base address: it is the module's only one.
             base = connection_base(conn)
             host = urlsplit(base).hostname
             await self._held_unless_listed(who, host, conn["name"])
@@ -1381,7 +1381,7 @@ class ModuleService:
         op, origin = self._http_operation(h, connection_base(conn) if conn else "")
         await self._held_unless_listed(who, urlsplit(origin).hostname, conn["name"] if conn else m["display_name"])
         if conn is None:
-            # A blank module's first tool with an address makes the connection that address lives on (c-616), so a
+            # A blank module's first tool with an address makes the connection that address lives on, so a
             # code module never gets an empty app.
             conn = await self._open_connection(who, m["display_name"], origin, m["team_id"])
             m.update(connection_id=conn["id"], auth=module_auth(conn))
@@ -1486,7 +1486,7 @@ class ModuleService:
             raise ValidationFailed("A write is approved by one person or by two different people.")
         team = patch.get("approver_team")
         # The directory is the console seed. A platform team the token names (the demo team) is not in that
-        # list; the caller naming their own team is enough (c-509: a record belongs to the acting team).
+        # list; the caller naming their own team is enough (a record belongs to the acting team).
         if team is not None and self.dir.team_by_id(team) is None and team != who.team.id:
             raise Unprocessable(f"{team} is not a team in this workspace.")
         binding = patch.get("binding")
@@ -1518,7 +1518,7 @@ class ModuleService:
             detail = f"Access {o['access']} → {access}"
             changes.append({"operation": name, "kind": "access_widened", "detail": detail, "major": True})
             o["access"] = access
-            # A read never waits; a write keeps its own switch, off unless someone turned it on (owner, 2026-11-01).
+            # A read never waits; a write keeps its own switch, off unless someone turned it on.
             if access == "read":
                 o["requires_approval"] = False
             if access == "read":
@@ -1563,8 +1563,8 @@ class ModuleService:
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": approvers < 2})
             o["approvers"] = approvers
             if approvers > 1 and not o["requires_approval"]:
-                # Asking for two approvers turns the tool's approval on: approvals are off by default (owner,
-                # 2026-11-01), and a write two people approve always waits for them.
+                # Asking for two approvers turns the tool's approval on: approvals are off by default,
+                # and a write two people approve always waits for them.
                 changes.append(
                     {
                         "operation": name,
@@ -1617,8 +1617,8 @@ class ModuleService:
                 detail = "No record binding"
             changes.append({"operation": name, "kind": "binding_changed", "detail": detail, "major": widened})
             o["binding"] = binding
-        # Writes the operation's example mock under its old name, while the console still sends it; removed in D3c/D3d
-        # (c-616), when the console writes the example through the mock routes.
+        # Writes the operation's example mock under its old name, while the console still sends it; removed in D3c/D3d,
+        # when the console writes the example through the mock routes.
         if "stub" in fields:
             stub = patch.get("stub")
             stub = {"ok": True} if stub is None else stub
@@ -1656,7 +1656,7 @@ class ModuleService:
         return [{"operation": o["name"], "kind": kind, "detail": detail, "major": bool(added)}]
 
     async def add_function(self, who: Caller, module_id: str, f: dict[str, Any]) -> dict[str, Any]:
-        """Adds a function to a code module (c-531)."""
+        """Adds a function to a code module."""
         _can(who, "tools", "edit", what="tool modules", security_team=self.security_team)
         m = await self._changeable(who, module_id)
         if kind_of(m) != "code" or m["connection_id"]:
@@ -1676,7 +1676,7 @@ class ModuleService:
         for k in ("method", "path", "headers"):
             if k in sent and sent[k] is None:
                 raise ValidationFailed(f"An HTTP operation keeps a {k}.")
-        # Every problem is found before any is reported, so one save lists them all (c-591).
+        # Every problem is found before any is reported, so one save lists them all.
         problems: list[str] = []
         if "path" in sent:
             path = str(sent["path"]).strip()
@@ -1863,7 +1863,7 @@ class ModuleService:
         _refuse_during_review(m, "publish another version")
         major = reviewed_change or any(c["major"] for c in m["pending"])
         # "always" sends every version to a review; "major" and "never" send a major one only, since every major
-        # change to a tool module touches what it calls, how a write is approved, or where it reaches (c-139).
+        # change to a tool module touches what it calls, how a write is approved, or where it reaches.
         mode = (
             await self.publish_policy.mode(who.tenant_id, m["team_id"]) if self.publish_policy else ToolsMode("major")
         )
@@ -1924,7 +1924,7 @@ class ModuleService:
             who.credentials,
             tenant_id=who.tenant_id,
             team_id=who.team.id,
-            # The diff names the hosts a path reaches, which hang off the app's address on its connection (c-616).
+            # The diff names the hosts a path reaches, which hang off the app's address on its connection.
             module={**m, "endpoint": await self._address(who.tenant_id, m)},
             version=version,
             changes=changes,
@@ -1970,7 +1970,7 @@ class ModuleService:
         reason: str | None,
         by: str | None,
     ) -> dict[str, Any]:
-        """A decision made in Reviews, sent by agents-service (c-163), which already held it to the review rules: not
+        """A decision made in Reviews, sent by agents-service, which already held it to the review rules: not
         the requester, not the saver, Security for a security change, a reason for a no. Approving the module's
         current version publishes it and clears drift, since the reviewed tool list is the one now held; a no sends a
         module never published back to draft, and withdraws the declined version of a published one. Applying the same
@@ -2017,7 +2017,7 @@ class ModuleService:
         if not wf.team_id:
             # Fail closed: a workflow no team owns has no one the grant would be for.
             raise Unprocessable(f"{wf.name} belongs to no team, so no team can be granted access for it.")
-        # The workflow's platform team, which the dev seed need not hold (c-423): the grant is for that team id.
+        # The workflow's platform team, which the dev seed need not hold: the grant is for that team id.
         owner = self.dir.team(wf.team_id)
         if not i["operations"]:
             raise ValidationFailed("Choose at least one operation.")
@@ -2027,8 +2027,8 @@ class ModuleService:
             m["team_id"],
         )
         if decider is None:
-            # A workspace-level module (the platform's tools, c-433) serves every team's runs with no grant, and no team
-            # would decide a request for it (c-439).
+            # A workspace-level module (the platform's tools) serves every team's runs with no grant, and no team
+            # would decide a request for it.
             raise Unprocessable(
                 f"{m['display_name']} belongs to no team: every team's workflows may already use it, so there is "
                 "nothing to request."
@@ -2063,10 +2063,10 @@ class ModuleService:
             "status": "requested",
             "expires_at": now + timedelta(days=i["expires_in_days"]),
             "reason": None,
-            # Decided in Human Tasks (c-166) by `decider`; who in that team may decide is can(reviews.decide), as for
+            # Decided in Human Tasks by `decider`; who in that team may decide is can(reviews.decide), as for
             # any review.
             "decider_team": decider,
-            # The system workflow's run key (c-257): the module page opens its review in Human Tasks by it.
+            # The system workflow's run key: the module page opens its review in Human Tasks by it.
             "review_id": f"{ACCESS_REQUESTED}:{approval_id}",
         }
         m["approvals"] = [*m["approvals"], a]
@@ -2085,7 +2085,7 @@ class ModuleService:
         team_id: str | None = None,
         deciders: Sequence[str] = (),
     ) -> dict[str, Any]:
-        """A tool access review's decision from Human Tasks (c-166), applied to the module's approval: approved grants
+        """A tool access review's decision from Human Tasks, applied to the module's approval: approved grants
         it, anything else ends the request. Applying the same decision again changes nothing; a request already ended
         another way (revoked, or decided otherwise) is refused, so a late approval never revives a revoked grant."""
         m = await self.store.get_any(tenant_id, module_id)
@@ -2095,11 +2095,11 @@ class ModuleService:
         if a is None:
             raise NotFound("Approval")
         if team_id is not None and a.get("decider_team") not in (None, team_id):
-            # The system workflow runs in the deciding team (c-257); a run in another team decides nothing here.
+            # The system workflow runs in the deciding team; a run in another team decides nothing here.
             raise Forbidden("This request is decided by another team.", code="team_forbidden")
         asker = str(a.get("requested_by_email") or "").lower()
         if asker and asker in {str(d).lower() for d in (*deciders, by or "")}:
-            # Separation of duties follows the tenant's requesterMayDecide (c-186), as every other decision does: the
+            # Separation of duties follows the tenant's requesterMayDecide, as every other decision does: the
             # asker decides their own request only while it is on.
             allowed = self.requester_policy is not None and await self.requester_policy.allowed(tenant_id)
             if not allowed:
@@ -2121,7 +2121,7 @@ class ModuleService:
         if a is None:
             raise NotFound("Approval")
         if a.get("review_id"):
-            # Decided in Human Tasks with every other review (c-166); this route only ends requests made before then.
+            # Decided in Human Tasks with every other review; this route only ends requests made before then.
             raise Conflict(f"Decide this request in Human Tasks ({a['review_id']}).", code="decided_in_reviews")
         _can(
             who,
@@ -2166,15 +2166,15 @@ class ModuleService:
 
     async def test(self, who: Caller, module_id: str, i: dict[str, Any]) -> dict[str, Any]:
         """What the gateway would decide for this call in this run context, and the answer when it allows. On the
-        sandbox target, the console's Real, the call is a gateway call (c-616): the same approval, limits, egress,
+        sandbox target, the console's Real, the call is a gateway call: the same approval, limits, egress,
         account choice and call log as an agent's, in the environment the person picked; on the stub target, Mock,
         nothing leaves the gateway.
         The `owner` context is the module's own team trying it (whoever passes the module's team guard): no workflow
-        approval is needed and a bound field takes the value typed (c-048 T008). A workflow's context needs that
+        approval is needed and a bound field takes the value typed. A workflow's context needs that
         workflow's approval and, for a write that asks for one, an approval token, which a test run never makes up
         (ADR-0005)."""
         if who.principal is not None and who.principal.kind == "api_key":
-            # A key's tools.run is for the gateway's call path over MCP (c-356); the test console is a person's page.
+            # A key's tools.run is for the gateway's call path over MCP; the test console is a person's page.
             raise Forbidden("An API key runs tools over MCP, not the test console.", code="role_required")
         _can(who, "tools", "run", what="tool modules", security_team=self.security_team)
         m = await self._find(who, module_id)
@@ -2250,7 +2250,7 @@ class ModuleService:
         # A real write in a workflow's context needs a real approval; simulate_approval stands in for one on Mock only.
         if would_pause and sandbox and ctx is not None:
             return deny("approval_token_missing")
-        # The workbench's draft transform and mock run in place of the operation's for this test only (c-088): nothing
+        # The workbench's draft transform and mock run in place of the operation's for this test only: nothing
         # is staged, so what agents get changes only through staging and publishing.
         draft: dict[str, Any] = i.get("draft") or {}
         if "stub" in draft and len(json.dumps(draft["stub"])) > MAX_STUB_BYTES:
@@ -2291,7 +2291,7 @@ class ModuleService:
                 )
             )
         elif answer is not None:
-            # A mock answer the test environment holds for this input (c-332), as a test run would get it.
+            # A mock answer the test environment holds for this input, as a test run would get it.
             await self.mocks.wait(answer, o.get("timeout_ms") or m["timeout_ms"])
             status = 504 if answer["timeout"] else int(answer["status"])
             out.update(status=status, output=masked(answer.get("body"), o["masked_output"]), mockId=answer["id"])
@@ -2325,7 +2325,7 @@ class ModuleService:
         trial: Trial,
         environment: str,
     ) -> dict[str, Any]:
-        """The Real run, as one gateway call (c-616): the gateway decides it as it decides an agent's call (approval,
+        """The Real run, as one gateway call: the gateway decides it as it decides an agent's call (approval,
         limits, egress, the team's account) in the environment the person chose, and logs it under them. `trial` comes
         back with the request as sent, secrets hidden; `secret_values` stand in for unset secrets for this call only.
         A test environment holding a saved mock answer for this input answers from it, as an agent's call would."""
@@ -2410,13 +2410,13 @@ class ModuleService:
         return await self._discover_mcp(who, source["url"], source.get("connection_id"))
 
     async def _signed_in_headers(self, who: Caller, connection_id: str | None, url: str) -> tuple[dict[str, str], Any]:
-        """A discovery's sign-in through the named connection, in the test environment (c-331): its headers and its
+        """A discovery's sign-in through the named connection, in the test environment: its headers and its
         client certificate; nothing for no connection."""
         if not connection_id or self.auth is None:
             return {}, None
         conn = await self.connections.get(who.tenant_id, connection_id)
         if conn is not None and conn["auth_kind"] == "none":
-            # A module's own open connection (c-616) holds only its address: there is nothing to sign in with.
+            # A module's own open connection holds only its address: there is nothing to sign in with.
             return {}, None
         probe = {"tenant_id": who.tenant_id, "connection_id": connection_id, "team_id": who.team.id, "endpoint": url}
         try:

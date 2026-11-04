@@ -1,4 +1,4 @@
-// What a bank needs to embed an agent's chat (c-224), generated from the mint-key flow in
+// What a bank needs to embed an agent's chat, generated from the mint-key flow in
 // docs/console/embedding-the-chat.md: its server mints a 15-minute session with the deployment's mint key, and the page
 // loads `/embed/v1.js` and starts it with `OpsChat.init`. Neither part carries a key: the server reads it from its own
 // secrets. Relative imports only: the test runs under `node --test`.

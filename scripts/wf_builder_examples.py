@@ -1,4 +1,4 @@
-"""Writes the /wf-builder skill's examples page from the seeded workflows (c-535), so the examples the skill adapts are
+"""Writes the /wf-builder skill's examples page from the seeded workflows, so the examples the skill adapts are
 the ones a dev stack starts with, never a copy that drifted.
 
     python3 scripts/wf_builder_examples.py           write docs/guide/skills/wf-builder/examples.md

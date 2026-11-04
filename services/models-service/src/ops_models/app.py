@@ -119,7 +119,7 @@ class AliasVersionIn(_Wire):
     output_per_million: Decimal = Decimal(0)
     # A reasoning model at its default effort thinks for seconds before its first word; chat aliases name a low one.
     reasoning_effort: str | None = Field(default=None, pattern="^(minimal|low|medium|high)$")
-    # Cleared for page images (c-295): an image carries the whole page, so a version receives none unless set.
+    # Cleared for page images: an image carries the whole page, so a version receives none unless set.
     images: bool = False
 
 
@@ -362,7 +362,7 @@ def create_models_app(
         return ok(_provider_view({**row, **fields, "observed_region": None}))
 
     def account_admin(p: CurrentPrincipal) -> str:
-        """settings.manage, held in the Security team: an account admin (owner, 2026-10-27). Returns the actor."""
+        """settings.manage, held in the Security team: an account admin. Returns the actor."""
         access.can(p, "settings", "manage", what="model provider keys", code="admin_only")
         return p.email or p.sub
 
@@ -612,11 +612,11 @@ def create_models_app(
             await log("denied", why[1])
             return refused(*why)
         if key["tenant_budget"] is not None:
-            # A key one service spends for many tenants (c-251): the tenant names its own budget row.
+            # A key one service spends for many tenants: the tenant names its own budget row.
             if not x_tenant_id:
                 await log("denied", "tenant_required")
                 return refused(400, "tenant_required", f"Model key {key['id']} spends per tenant; send X-Tenant-Id.")
-            # The share is the named tenant's: read as that tenant, which the database holds the row to (c-616 C4).
+            # The share is the named tenant's: read as that tenant, which the database holds the row to.
             with isolation.scope(x_tenant_id, None):
                 share = await key_store.tenant_share(key["id"], x_tenant_id, key["tenant_budget"])
             if share["spent"] >= share["budget"]:

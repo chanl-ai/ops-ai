@@ -27,9 +27,9 @@ export function connectsSmall(card: SystemCard, kinds: Kinds | undefined): boole
 }
 
 /**
- * Connect from the catalog in a small window (c-607): one button turns the plugin on for the team in
+ * Connect from the catalog in a small window: one button turns the plugin on for the team in
  * production with Ops AI's app and opens the system's own page to allow access. Environments, who signs in and the
- * team's own app are on the app's page; an app that needs keys or its own app opens c-580's connect dialog instead.
+ * team's own app are on the app's page; an app that needs keys or its own app opens the connect dialog instead.
  */
 export function ConnectSmallDialog({ card, kinds, open, onOpenChange }: { card: SystemCard; kinds: Kinds; open: boolean; onOpenChange: (open: boolean) => void }) {
   const router = useRouter();
@@ -57,7 +57,7 @@ export function ConnectSmallDialog({ card, kinds, open, onOpenChange }: { card: 
       if (e.origin !== window.location.origin || e.data?.type !== CONNECTED_MESSAGE || e.source !== opened.current) return;
       opened.current = null;
       made.current = null;
-      // The new account is tested once before the app's page shows it, as every connection is (c-580).
+      // The new account is tested once before the app's page shows it, as every connection is.
       void test
         .mutateAsync({ connectionId: e.data.connectionId, environment })
         .catch(() => undefined)

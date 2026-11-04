@@ -5,7 +5,7 @@ import { Loader2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
-/** Where a field's value sits on a page, as fractions of the page from its top left (documents-service, c-252). */
+/** Where a field's value sits on a page, as fractions of the page from its top left (documents-service). */
 export interface ViewerBox {
   key: string;
   page: number;

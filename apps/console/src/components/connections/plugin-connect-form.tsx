@@ -47,7 +47,7 @@ type PluginInfo = NonNullable<SystemCard['plugin']>;
 
 const message = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong');
 
-/** The connect dialog's form for a plugin (c-580): its sign-in kind, the platform's app or the team's own, and each environment. */
+/** The connect dialog's form for a plugin: its sign-in kind, the platform's app or the team's own, and each environment. */
 export function PluginConnectForm({
   open,
   card,
@@ -92,7 +92,7 @@ export function PluginConnectForm({
   const signIn = useStartSignIn();
   const remove = useDeleteConnection();
 
-  // One environment in the Connect window (c-617); the other is set up from the app page's Settings.
+  // One environment in the Connect window; the other is set up from the app page's Settings.
   const envs = ordered(kinds, first).slice(0, 1);
   const ready = envs.map((e) => e.id).filter((id) => complete(state.sections[id], groups));
 

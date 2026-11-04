@@ -23,7 +23,7 @@ class Binding:
     tool: str
     inputHash: str  # noqa: N815 - the claim name is part of the wire contract with the policy
     approvers: list[str] = field(default_factory=list[str])
-    # The workflow whose run the write is in, and whether the platform owns it (c-258): the gateway runs a platform
+    # The workflow whose run the write is in, and whether the platform owns it: the gateway runs a platform
     # tool (granting access, publishing a module) only for the system workflow that owns that decision.
     workflow: str = ""
     system: bool = False

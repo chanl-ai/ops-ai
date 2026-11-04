@@ -1,4 +1,4 @@
-"""A tool module is its team's (c-423, c-509): a person outside the owning team does not see it listed and reads it by
+"""A tool module is its team's: a person outside the owning team does not see it listed and reads it by
 id as 404, unless it is approved for one of their team's workflows, the explicit grant across teams. By failure mode,
 with tokens minted as platform-service mints them:
 

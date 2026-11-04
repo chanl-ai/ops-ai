@@ -1,4 +1,4 @@
-"""The routes the console's knowledge pages call (c-056 T015), by failure mode: a sync nobody can find afterwards, a
+"""The routes the console's knowledge pages call, by failure mode: a sync nobody can find afterwards, a
 sync option silently ignored, a paused source still syncing, a reprocess that pretends to be a new version, someone
 else editing, detaching or verifying what they do not own, and a refresh that does not refresh."""
 
@@ -63,8 +63,8 @@ async def test_a_paused_source_does_not_sync_until_resumed(client: httpx.AsyncCl
 async def test_a_teammate_edits_detaches_and_verifies(
     engine: AsyncEngine, tenant: str, client: httpx.AsyncClient
 ) -> None:
-    """Knowledge is shared by the team: someone other than the owner refreshes, edits, detaches and verifies (owner
-    decision, 2026-10-17); a viewer or reviewer may not (test_write_roles)."""
+    """Knowledge is shared by the team: someone other than the owner refreshes, edits, detaches and verifies; a viewer
+    or reviewer may not (test_write_roles)."""
     src, kb = await synced(client)
     item = data(await client.get(f"/v1/sources/{src['id']}/items"))["data"][0]
     async with kb_client(engine, tenant, "maya@harborpine.example") as maya:

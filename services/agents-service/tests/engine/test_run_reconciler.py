@@ -1,4 +1,4 @@
-"""The run reconciler (c-561) on PostgreSQL, by failure mode: a run with nothing behind it reads Running or Queued for
+"""The run reconciler on PostgreSQL, by failure mode: a run with nothing behind it reads Running or Queued for
 ever; a healthy run is marked Stuck because it waits on a person, an event, its children or a timer, or holds a live
 claim; a run whose worker keeps dying on it flips between Running and Queued; a run queued under an older engine build
 is never claimed; and a child that runs past its time limit keeps its parent waiting."""

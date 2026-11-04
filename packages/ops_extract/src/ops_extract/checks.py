@@ -1,4 +1,4 @@
-"""Extracted-field checks (c-157, c-235): a field's confidence comes from signals these checks verify, never from the
+"""Extracted-field checks: a field's confidence comes from signals these checks verify, never from the
 model. The quote the model gives must be on the page it cites; the value must be a valid value of its type; a page
 read by OCR counts for less. A field needs a person when its confidence is below the highest of its own threshold, the
 schema's and the workspace floor, or when it is always reviewed, so no step can set a threshold below the floor.
@@ -18,22 +18,22 @@ import regex
 # The value types and their canonical forms are shared with case types (ops_contracts.field_values).
 from ops_contracts.field_values import DEFAULT_DATE_ORDER, as_date, as_number, normalise
 
-# Signals (research, c-157): quote exact 1.0, found after folding 0.85, not found 0; value valid as given 1.0,
+# Signals (research): quote exact 1.0, found after folding 0.85, not found 0; value valid as given 1.0,
 # normalised 0.9, invalid 0; a page read by OCR multiplies by its words' recognition confidence when the reader kept
-# it (a layout, c-247), else by 0.7.
+# it (a layout), else by 0.7.
 EXACT, FOLDED = 1.0, 0.85
 OCR_FACTOR = 0.7
-# The longest a field's `pattern` may take on one value (c-247).
+# The longest a field's `pattern` may take on one value.
 PATTERN_SECONDS = 0.05
 DEFAULT_FLOOR = 0.8
 
 _SPACE = re.compile(r"\s+")
 _QUOTES = str.maketrans({"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u2013": "-", "\u2014": "-"})
 
-# A field's cleanup rules (`clean`, c-287), run on the model's text before the field's other rules and its score, for
+# A field's cleanup rules (`clean`), run on the model's text before the field's other rules and its score, for
 # copying habits a description does not stop: a trailing comma after a name, a masked number given whole, a label kept
 # with its value. Each is opt-in per field, so a value that needs its punctuation keeps it.
-# The rule a rejected value broke, on the field's result as `rejected` (c-247, c-296).
+# The rule a rejected value broke, on the field's result as `rejected`.
 REJECTED_TYPE = "type"
 TRIM_PUNCTUATION = "trimPunctuation"
 LAST_FOUR = "lastFour"
@@ -122,7 +122,7 @@ def cleaned(field: dict[str, Any], raw: Any) -> tuple[Any, list[str]]:
 
 
 def broken_rule(field: dict[str, Any], raw: Any) -> str | None:
-    """Which of the field's own rules the model's value breaks (c-247): `emptyWhen`, phrases that mean the document
+    """Which of the field's own rules the model's value breaks: `emptyWhen`, phrases that mean the document
     gives no value ("Not supplied on this form"), or `pattern`, a regular expression the whole value must match (a
     full SSN, so a masked "***-**-4321" is not one). None when it keeps both."""
     text = str(raw).strip()

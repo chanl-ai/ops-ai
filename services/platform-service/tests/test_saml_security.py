@@ -1,4 +1,4 @@
-"""SAML with the service provider's key (c-197), through the routes, by failure mode: a provider that asks for signed
+"""SAML with the service provider's key, through the routes, by failure mode: a provider that asks for signed
 requests or encryption is saved where no key is set (F1); an identity provider checking signatures accepts a request
 signed with another key (F2); an encrypted assertion signs nobody in end to end, or a plain one passes where encryption
 is required (F6); the metadata does not carry the certificate a bank's identity provider needs."""

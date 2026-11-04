@@ -12,7 +12,7 @@ from ._cli.agents import main as agents_main
 from ._cli.workflows import main as workflows_main
 
 # Each area's handler takes the arguments after the area's name; areas over the SDK (apps, accounts, tools, resources)
-# join this table one by one (c-616 L1, L2).
+# join this table one by one.
 Area = Callable[[list[str]], int]
 
 

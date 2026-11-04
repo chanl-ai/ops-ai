@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""The document type templates of the plugins on for a team, from tools-service (c-590), the one service that loads
+"""The document type templates of the plugins on for a team, from tools-service, the one service that loads
 plugins. Each call carries a service token holding `tools:view` and naming the caller's tenant and team, so
 tools-service answers that team's view and never every team's."""
 

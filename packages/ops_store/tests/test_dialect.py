@@ -1,7 +1,7 @@
-"""ops_store.dialect (c-343), by failure mode: a helper that renders the wrong form for a database (compiled for
+"""ops_store.dialect, by failure mode: a helper that renders the wrong form for a database (compiled for
 PostgreSQL and SQL Server, no server needed), a row lock or claim that does not hold a second writer, an upsert that
 inserts twice, and a clock read from the host (the tenant setting is test_isolation_context's). The live cases run on
-the PostgreSQL conformance database; SQL Server runs them in c-345."""
+the PostgreSQL conformance database; SQL Server runs them."""
 
 from __future__ import annotations
 

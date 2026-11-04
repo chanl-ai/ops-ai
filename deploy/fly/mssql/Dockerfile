@@ -1,4 +1,4 @@
-# SQL Server 2025 Developer edition with Full-Text Search (c-563), which the stock image leaves out: memory search uses
+# SQL Server 2025 Developer edition with Full-Text Search, which the stock image leaves out: memory search uses
 # CONTAINSTABLE where the server has it and counts words where it does not, and the test machine proves the first.
 # Installing mssql-server-fts brings the mssql-server build it was released with.
 FROM mcr.microsoft.com/mssql/server:2025-latest

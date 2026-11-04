@@ -21,7 +21,7 @@ export interface TaskDecisionParts {
 }
 
 /**
- * How a Human Task is decided, in one place for every surface that decides one (c-460): who decided it once closed;
+ * How a Human Task is decided, in one place for every surface that decides one: who decided it once closed;
  * that another team decides it; a model validation's form; a typed task's actions or a step's options; else approve,
  * reject and return. `sheet` is the All tasks quick view, `panel` the queue's decision panel, which keeps Decide in its
  * fixed footer and the choice in its scrolling middle. The forms are imported nowhere else (check-standards).

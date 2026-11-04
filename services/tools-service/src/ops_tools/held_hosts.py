@@ -1,4 +1,4 @@
-"""An app's first address on a host the tenant has not listed (c-616 S13): instead of refusing it, tools-service asks
+"""An app's first address on a host the tenant has not listed: instead of refusing it, tools-service asks
 the Security team in Human Tasks and answers 202 with the run key, the task's id. Approving lists the host on the
 tenant's allow-list (`/v1/egress/held-hosts/decisions`), and the person's screen retries what it was doing; refusing
 keeps the reason on the task, and a retry is refused with it."""

@@ -1,4 +1,4 @@
-"""How an MCP server signs in, found from the server itself (c-331), as the MCP authorization spec asks of a client.
+"""How an MCP server signs in, found from the server itself, as the MCP authorization spec asks of a client.
 
 The server answers an unsigned request with 401 and `WWW-Authenticate: Bearer resource_metadata="<url>"` (RFC 9728);
 without the parameter the metadata is at `/.well-known/oauth-protected-resource<path>` on the server's origin. The
@@ -32,7 +32,7 @@ INITIALIZE = {
 
 @dataclass(frozen=True)
 class SignIn:
-    """What a connection needs to sign in to the server: c-330's authorization code settings, `resource` the server."""
+    """What a connection needs to sign in to the server: the authorization code settings, `resource` the server."""
 
     resource: str
     issuer: str

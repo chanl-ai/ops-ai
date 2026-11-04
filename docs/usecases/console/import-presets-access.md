@@ -32,4 +32,4 @@ import asks for no connection record.
 ## Non-vacuous check
 
 Step 2 fails on the dialog before the fix, which required a connection before Next; step 4 fails on tools-service
-before T006, which imported every operation as Write.
+before the import fix, when every operation was imported as Write.

@@ -1,4 +1,4 @@
-/** Who may fill a hosted form (c-535): anyone holding its signed link, or signed-in members of the form's team. */
+/** Who may fill a hosted form: anyone holding its signed link, or signed-in members of the form's team. */
 export type HostedFormMode = 'link' | 'members';
 
 /** A workflow's start form shared as a page of its own (agents-service `/v1/workflows/{id}/forms`). */

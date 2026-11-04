@@ -29,14 +29,14 @@ class Principal(BaseModel):
     access: dict[str, list[str]] = Field(default_factory=dict[str, list[str]])
     # The tenant's permission version when the token was issued; ops_access caches role grids under it.
     permission_version: int | None = None
-    # The tenant's access policies when the token was issued (c-186), key to value; a key missing here has its open
+    # The tenant's access policies when the token was issued, key to value; a key missing here has its open
     # default (ops_access.POLICIES), so a token from before policies existed holds nothing back.
     policies: dict[str, Any] = Field(default_factory=dict[str, Any])
-    # The workspace's security team when the token was issued (c-202), which holds the Security team's actions; None
+    # The workspace's security team when the token was issued, which holds the Security team's actions; None
     # for a token without it, which ops_access answers from the deployment's setting.
     security_team: str | None = None
-    # An API key's own id, and the one agent or workflow it may start (`{kind, id, version}`), from introspection only
-    # (c-246); None for a person, a service, or a key with no target.
+    # An API key's own id, and the one agent or workflow it may start (`{kind, id, version}`), from introspection only;
+    # None for a person, a service, or a key with no target.
     key_id: str | None = None
     key_target: dict[str, Any] | None = None
 

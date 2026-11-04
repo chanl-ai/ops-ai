@@ -1,6 +1,6 @@
 import type { StoryLine } from './engine';
 
-/** A team's customer issue (agents-service `/v1/cases`, c-128): who it is for, who works it, and its two deadlines. */
+/** A team's customer issue (agents-service `/v1/cases`): who it is for, who works it, and its two deadlines. */
 export type CaseStatus = 'open' | 'waiting_on_customer' | 'waiting_on_us' | 'resolved' | 'closed';
 export type CasePriority = 'low' | 'normal' | 'high' | 'urgent';
 
@@ -13,7 +13,7 @@ export interface CaseRecord {
   status: CaseStatus;
   /** By email. */
   assignee: string | null;
-  /** The assignee by name, joined by the list (GET /v1/cases, c-403); a person the platform cannot name keeps the email. */
+  /** The assignee by name, joined by the list (GET /v1/cases); a person the platform cannot name keeps the email. */
   owner?: { email: string; name: string } | null;
   priority: CasePriority;
   responseDueAt: string;
@@ -27,7 +27,7 @@ export interface CaseRecord {
   /** Seconds to each deadline, negative once past; null while paused, once met, or once the case is resolved. */
   responseLeftS: number | null;
   resolutionLeftS: number | null;
-  /** What a workflow read and worked out for the case (Open case / Add to case, c-259), by name; null when none. */
+  /** What a workflow read and worked out for the case (Open case / Add to case), by name; null when none. */
   fields?: Record<string, unknown> | null;
 }
 
@@ -41,7 +41,7 @@ export interface CaseEvent {
   at: string;
 }
 
-/** One clock as the server states it (c-291): running, met, breached or paused, with seconds left while running. */
+/** One clock as the server states it: running, met, breached or paused, with seconds left while running. */
 export interface CaseClock {
   state: 'running' | 'met' | 'breached' | 'paused' | (string & {});
   dueAt: string;
@@ -87,8 +87,8 @@ export interface CaseDraftedAction {
 }
 
 /**
- * One case as its page shows it (GET /v1/cases/{id}, c-291): assembled on the server, so the page joins nothing. The
- * page keys arrive with c-291; a service without them still returns the base record and events.
+ * One case as its page shows it (GET /v1/cases/{id}): assembled on the server, so the page joins nothing. The
+ * page keys arrive; a service without them still returns the base record and events.
  */
 export interface CaseRecordDetail extends CaseRecord {
   events: CaseEvent[];
@@ -108,7 +108,7 @@ export interface CaseRecordDetail extends CaseRecord {
     allHrefs: { runs: string; emails: string; cases: string | null };
   };
   workflow?: { id: string; name: string; href: string } | null;
-  /** The case's one timer (c-500): its type's deadline field, else the resolution clock. */
+  /** The case's one timer: its type's deadline field, else the resolution clock. */
   timer?: { label: string; dueAt: string; state: CaseClock['state']; leftS: number | null };
   /** What is left: open Human Tasks and refused actions, who and by when; `resolvable` when nothing is. */
   whatsLeft?: { items: { kind: 'task' | 'action'; who: string; what: string; dueAt: string | null; href: string }[]; resolvable: boolean };

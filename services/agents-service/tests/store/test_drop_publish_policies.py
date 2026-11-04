@@ -1,4 +1,4 @@
-"""Migration 0055 (c-214) drops agents-service's old publish-policy tables, by failure mode: it writes into
+"""Migration 0055 drops agents-service's old publish-policy tables, by failure mode: it writes into
 platform-service's `policies` (an agents migration may touch agents tables only), so a value a team admin set
 through /v1/policies is overwritten; the downgrade leaves tables 0038's downgrade cannot drop."""
 

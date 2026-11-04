@@ -25,11 +25,11 @@ from ..envelope import ok
 from ..schemas import PublishReview
 
 router = APIRouter(prefix="/v1/publish-requests", dependencies=[Depends(principal)])
-# Opening a tool module review also takes tools-service's own token (c-222), so it sits apart from the routes only
+# Opening a tool module review also takes tools-service's own token, so it sits apart from the routes only
 # people call; the route itself decides who may open one.
 open_router = APIRouter(prefix="/v1/publish-requests")
-# Copies of older tool module reviews come from tools-service alone, with no person behind them (c-163).
-# service_principal sets the token's tenant: requests are per tenant (c-333).
+# Copies of older tool module reviews come from tools-service alone, with no person behind them.
+# service_principal sets the token's tenant: requests are per tenant.
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 Caller: TypeAlias = Annotated[Principal, Depends(caller)]  # noqa: UP040
@@ -52,7 +52,7 @@ class _Changed(_Op):
 
 
 class ToolModuleDiffInput(WireModel):
-    """What tools-service computed the version changes since the published one (c-204)."""
+    """What tools-service computed the version changes since the published one."""
 
     added: list[_Op] = Field(default_factory=list[_Op])
     removed: list[_Op] = Field(default_factory=list[_Op])
@@ -73,7 +73,7 @@ class ToolModuleReviewInput(WireModel):
     # Refused unless it is the team the caller acts in; the team always comes from their credentials or token.
     team_id: str | None = None
     # Who asked, when tools-service opens the review with its own token for a person not on the call (its seed's
-    # versions waiting for review, c-222); refused on any other call, where the person's credentials say who asked.
+    # versions waiting for review); refused on any other call, where the person's credentials say who asked.
     requested_by: str | None = Field(default=None, min_length=3, max_length=320)
 
 
@@ -85,10 +85,10 @@ async def open_publish_request(
     body: ToolModuleReviewInput,
     x_service_authorization: Annotated[str | None, Header()] = None,
 ) -> JSONResponse:
-    """A tool module review (c-163). Opened by tools-service for the person publishing: their credentials name who
+    """A tool module review. Opened by tools-service for the person publishing: their credentials name who
     asked and the team, and tools-service's token in `X-Service-Authorization` vouches for the version and changes. Or
     opened by tools-service alone with its token scoped to the module's team, naming in `requestedBy` the person who
-    asked (its seed, c-222); the review then says tools-service opened it on their behalf."""
+    asked (its seed); the review then says tools-service opened it on their behalf."""
     if me.identity is not None and me.identity.kind == "service":
         req = await tool_module_reviews.open_for(rt, me.identity, body.model_dump(by_alias=True))
     else:
@@ -121,7 +121,7 @@ async def open_egress_host_request(
     body: EgressHostReviewInput,
     x_service_authorization: Annotated[str | None, Header()] = None,
 ) -> JSONResponse:
-    """A host held for Security (c-616 S13), opened by tools-service for the person setting an app's address: their
+    """A host held for Security, opened by tools-service for the person setting an app's address: their
     credentials name who asked and the team, and tools-service's token in `X-Service-Authorization` vouches for the
     host. 201 with a new request; 200 with the one still waiting for the host, or with its latest refusal."""
     await tool_module_reviews.tools_service(request, x_service_authorization, me.tenant_id)

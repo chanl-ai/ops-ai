@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useCompleteSignIn } from '@/hooks/connections-queries';
 
 /**
- * Where a connected system sends the person back after signing in (tools-service's SIGN_IN_RETURN_PATH, c-558):
+ * Where a connected system sends the person back after signing in (tools-service's SIGN_IN_RETURN_PATH):
  * finishes the sign-in, tells the chat that opened this window, and closes it. Opened in a tab of its own (a phone),
  * it offers the way back instead. Errors keep the person here: consent denied, a sign-in already used or expired.
  */

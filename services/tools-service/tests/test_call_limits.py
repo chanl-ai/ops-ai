@@ -1,4 +1,4 @@
-"""An operation's rate and amount limits on /v1/calls (c-028), one test per way a limit could fail to hold. The fake
+"""An operation's rate and amount limits on /v1/calls, one test per way a limit could fail to hold. The fake
 bank records what reaches it, so "never sent" is checked on the upstream's side. Needs OPA (`make db-up`)."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""A tool access request runs as the tool_access_request event workflow (c-257), through the real event route, worker,
+"""A tool access request runs as the tool_access_request event workflow, through the real event route, worker,
 Human Tasks and gateway. By failure mode: the request opens no review; the sheet loses what the reviewer decides on;
 the requester decides their own request; the decision never reaches the module, or reaches it under nobody or
 without its reason; and a team's own workflow, built like the handler, grants access through the same tool."""
@@ -81,7 +81,7 @@ async def test_the_request_waits_in_human_tasks_and_an_approval_grants_it(
     assert review["title"] == "Let Dispute email use Core banking?", review["title"]
     # The row reads from the task and the step's requestedBy, as every typed review's does (no per-workflow sheet).
     assert review["reasoning"] == ["Holds during a dispute"], review["reasoning"]
-    # The tool_access_request task type draws the same question (c-288), with the actions it declares.
+    # The tool_access_request task type draws the same question, with the actions it declares.
     task = review["task"]
     assert task["type"]["id"] == "tool_access_request", task["type"]
     assert task["regions"][0]["data"] == {"title": "Let Dispute email use Core banking?"}, task["regions"]
@@ -153,9 +153,9 @@ async def test_the_asker_named_in_the_request_does_not_decide_it_while_the_polic
     stack: tuple[httpx.AsyncClient, Worker],  # noqa: F811
     gateway: Gateway,
 ) -> None:
-    # The step names whoever asked (requestedBy) even when the event names no actor, so the run's creator is the event
-    # (tick 25); they are refused under the tenant's requesterMayDecide, off in this stack, as a run's starter is (tick
-    # 29), not whatever the policy.
+    # The step names whoever asked (requestedBy) even when the event names no actor, so the run's creator is the event;
+    # they are refused under the tenant's requesterMayDecide, off in this stack, as a run's starter is, not whatever
+    # the policy.
     client, worker = stack
     key = f"apr_{uuid4().hex[:10]}"
     body = {

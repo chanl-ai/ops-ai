@@ -23,7 +23,7 @@ export interface TeamInput {
 /** Sent with a 403 when a record exists but belongs to a team other than the current one. */
 export type TeamRef = Pick<Team, 'id' | 'name'>;
 
-/** A team as a workspace admin sees it on Govern > Access > Teams (c-198); counts come from platform-service. */
+/** A team as a workspace admin sees it on Govern > Access > Teams; counts come from platform-service. */
 export interface WorkspaceTeam {
   id: string;
   name: string;

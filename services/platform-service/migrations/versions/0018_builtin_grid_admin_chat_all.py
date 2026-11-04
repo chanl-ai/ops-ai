@@ -1,7 +1,7 @@
 """built-in grid: an admin's chat read is all scope, capped by the chatThreadsOwnerOnly policy
 
 Admins hold every cell (0016) but chat reads stayed one's own in the grid. The read is now all scope for admins and
-`can()` caps it at one's own while the workspace keeps chats private (`chatThreadsOwnerOnly`, on by default, c-186),
+`can()` caps it at one's own while the workspace keeps chats private (`chatThreadsOwnerOnly`, on by default),
 so nothing changes until an admin turns the policy off. Raises each tenant's permission version.
 
 Revision ID: 0018_admin_chat_all

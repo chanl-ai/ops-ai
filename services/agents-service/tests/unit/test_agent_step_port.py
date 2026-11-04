@@ -151,7 +151,7 @@ def _prompt_port(model: FunctionModel) -> KernelAgents:
 
 
 async def test_an_ai_step_call_offers_the_model_no_tools_and_returns_its_answer() -> None:
-    """c-298: an AI step has no saved agent, so the model must be offered nothing to call and no knowledge."""
+    """An AI step has no saved agent, so the model must be offered nothing to call and no knowledge."""
     offered: list[list[str]] = []
 
     def answer(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
@@ -192,7 +192,7 @@ class Rules:
 
 
 async def test_an_ai_steps_output_stays_real_for_the_steps_after_it() -> None:
-    """c-321, tick 31: a masked output gave a later Send step "[email]" to send to. Masking is where people read."""
+    """A masked output gave a later Send step "[email]" to send to. Masking is where people read."""
     said = {"summary": "Ann Lee, SSN 123-45-6789, ann.lee@example.com."}
 
     def answer(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
@@ -207,7 +207,7 @@ async def test_an_ai_steps_output_stays_real_for_the_steps_after_it() -> None:
 
 
 async def test_an_ai_step_whose_team_turned_ai_steps_off_is_refused_at_run() -> None:
-    """tick 30: aiSteps was read only when a workflow was saved, so a team that turned it off still ran its saved
+    """AiSteps was read only when a workflow was saved, so a team that turned it off still ran its saved
     steps; the prompt port now refuses them without a model call."""
     calls = 0
 

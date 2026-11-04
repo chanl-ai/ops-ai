@@ -1,4 +1,4 @@
-"""A plugin version's declarations, digest and diff (c-609), by failure mode: a changed tool the review does not list,
+"""A plugin version's declarations, digest and diff, by failure mode: a changed tool the review does not list,
 or an unchanged one it does; an input change it misses; a digest that changes when nothing a call sends changed, or
 stays when something did; and declarations that do not read back as the tools they were taken from."""
 

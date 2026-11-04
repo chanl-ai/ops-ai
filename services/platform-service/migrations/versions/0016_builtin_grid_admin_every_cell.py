@@ -2,7 +2,7 @@
 
 The owner decided admins do everything (2026-10-17): the admin role holds every area and action of the catalogue in
 its team, all scope, except reading chat threads and editing memory, which stay one's own until the
-chatThreadsOwnerOnly policy decides chat (c-186). Actions held in the Security team still need a role there. Adds
+chatThreadsOwnerOnly policy decides chat. Actions held in the Security team still need a role there. Adds
 each missing cell to every tenant's admin role and raises each tenant's permission version. The catalogue is frozen
 here as it stood: a later cell needs its own migration. Portable SQL only; built-in ids are reserved.
 

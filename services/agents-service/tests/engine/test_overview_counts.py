@@ -1,4 +1,4 @@
-"""The Overview's counts (c-129), through the real routes and worker, by failure mode: a case waiting on the customer
+"""The Overview's counts, through the real routes and worker, by failure mode: a case waiting on the customer
 or resolved counted as needing a person; a paused case counted past its deadline; a case with a review open on its
 run not counted as awaiting approval; the review counts disagreeing with Human Tasks."""
 

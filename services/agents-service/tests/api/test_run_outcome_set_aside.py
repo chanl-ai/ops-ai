@@ -1,4 +1,4 @@
-"""Run again on a set-aside email (c-561), through the route, by failure mode: the email cannot be run at all, so its
+"""Run again on a set-aside email, through the route, by failure mode: the email cannot be run at all, so its
 mail is lost to the workflow; someone who may not start the workflow, or another team, runs it; it runs twice; and its
 kept copy stays held after it ran."""
 

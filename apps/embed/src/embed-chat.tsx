@@ -41,7 +41,7 @@ export interface EmbedChatProps {
 }
 
 /**
- * The embedded chat (c-158): header, messages, starter questions, composer and footer, drawn from the console's own chat
+ * The embedded chat: header, messages, starter questions, composer and footer, drawn from the console's own chat
  * components, so citations, answer widgets, tool cards, the approval card and the budget card are the console's. The
  * thread is created on the first message, never on open. Widgets take no actions here: a widget session approves for
  * no team, so an approval is decided in Human Tasks and the conversation carries on here, and form submit is not built.

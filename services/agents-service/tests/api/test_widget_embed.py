@@ -1,9 +1,9 @@
-"""Widget deployments and the widget API (c-117), by failure mode: an embed that follows a newer agent version instead
+"""Widget deployments and the widget API, by failure mode: an embed that follows a newer agent version instead
 of its pin; a session minted for, or used from, an origin the deployment does not list; a server outside the team, or
 a person's token, minting server sessions; a page changing what only trusted callers may; no limit on a busy page; a
 browser on another page reading a widget response; a paused widget still answering; someone other than a builder
-making deployments; a team key, a person's token, a revoked key or another deployment's key minting server sessions
-(c-131); a paused agent still answering an open widget conversation; a person of another team, or a key,
+making deployments; a team key, a person's token, a revoked key or another deployment's key minting server sessions; a
+paused agent still answering an open widget conversation; a person of another team, or a key,
 minting from the page; an error the page cannot read; a session naming another tenant or team, another deployment, or
 past its expiry."""
 
@@ -184,7 +184,7 @@ async def test_only_the_deployments_mint_key_mints_server_sessions(client: Async
     assert tid.startswith("th_")
     listed = (await client.get(f"/v1/widget-deployments/{dep['id']}/keys", headers=BUILDER)).json()["data"]
     assert listed[0]["lastUsedAt"], "a mint is recorded on its key"
-    # A team API key minted sessions before c-131; it can call far more than one chat, so it no longer may.
+    # A team API key once minted sessions; it can call far more than one chat, so it no longer may.
     team_key = await client.post(url, json=body, headers=OPS_KEY)
     assert team_key.status_code == 403 and team_key.json()["error"]["code"] == "widget_key_required", team_key.text
     elsewhere = await client.post(
@@ -299,7 +299,7 @@ async def test_only_a_person_of_the_deployments_team_signs_in_from_the_page(clie
     url = f"/v1/widget/{dep['id']}/session"
     outsider = await client.post(url, headers={**who("usr_f", "approver", "team_fraud"), "Origin": INTRANET})
     key = await client.post(url, headers={**OPS_KEY, "Origin": INTRANET})
-    # Another team's embed is not found, with no owner named (c-507).
+    # Another team's embed is not found, with no owner named.
     assert outsider.status_code == 404 and "team_" not in outsider.text, outsider.text
     assert key.status_code == 403 and key.json()["error"]["code"] == "api_key_refused"
 

@@ -1,4 +1,4 @@
-"""Each step's output shape for one saved workflow version (c-353): `ops_engine.shapes` resolved against this
+"""Each step's output shape for one saved workflow version: `ops_engine.shapes` resolved against this
 service's clients, so a document type's fields and an operation's response come from documents-service and
 tools-service as the caller's team reads them."""
 

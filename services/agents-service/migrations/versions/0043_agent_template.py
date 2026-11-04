@@ -1,9 +1,9 @@
-"""registry_agents carry a template id and a protection level (c-180)
+"""registry_agents carry a template id and a protection level
 
 Revision ID: 0043_agent_template
 Revises: 0042_skill_published_loading
 
-The provisioning service (c-175) finds an agent again by the template it was made from, and marks it `system` (no
+The provisioning service finds an agent again by the template it was made from, and marks it `system` (no
 person may change it) or `managed` (people may; the template's fields come back on the next run). Both are null on
 every agent made before, which reads as no template and no protection.
 """

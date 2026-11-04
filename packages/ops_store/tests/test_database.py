@@ -116,7 +116,7 @@ async def test_a_connection_closed_while_pooled_is_replaced_and_the_transaction_
 
 
 async def test_on_postgresql_the_test_is_one_statement_with_no_transaction(monkeypatch: pytest.MonkeyPatch) -> None:
-    """pool_pre_ping opened and rolled back a transaction around its ping: three round trips per checkout (c-451)."""
+    """pool_pre_ping opened and rolled back a transaction around its ping: three round trips per checkout."""
     url = Settings().database_url
     if not url.startswith("postgresql"):
         pytest.skip("the asyncpg test needs PostgreSQL")

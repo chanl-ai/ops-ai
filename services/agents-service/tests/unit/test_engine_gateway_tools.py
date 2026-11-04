@@ -112,14 +112,14 @@ async def _environment_sent(mode: str | None) -> str | None:
 
 
 async def test_a_test_run_calls_in_test_and_a_live_run_in_production() -> None:
-    """c-330: the gateway picks a connection's settings by this; a run that names no mode leaves it to the gateway."""
+    """The gateway picks a connection's settings by this; a run that names no mode leaves it to the gateway."""
     assert await _environment_sent("test") == "test"
     assert await _environment_sent("live") == "production"
     assert await _environment_sent(None) is None
 
 
 async def test_a_test_chat_calls_in_test_and_a_live_chat_in_production() -> None:
-    """c-330/c-332: an agent turn names its environment, so a test chat's tool call reaches its mock and a live chat's
+    """An agent turn names its environment, so a test chat's tool call reaches its mock and a live chat's
     never does; the test chat is the thread whose state carries the agent under test."""
     seen: list[dict[str, Any]] = []
 
@@ -136,7 +136,7 @@ async def test_a_test_chat_calls_in_test_and_a_live_chat_in_production() -> None
 
 async def test_a_failed_call_gives_the_gateways_own_words_as_its_reason() -> None:
     """The run's failure reads the step's reason (worker._why_failed): "the operation returned an error" named neither
-    the app nor the fix (c-616 S12)."""
+    the app nor the fix."""
     said = "Client desk needs reconnecting: login.multi.test refused the sign-in (invalid_client)."
 
     def handler(req: httpx.Request) -> httpx.Response:

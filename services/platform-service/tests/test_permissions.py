@@ -1,4 +1,4 @@
-"""Roles and what a person may do (c-147), by failure mode: two roles in one team showing only one role's actions, an
+"""Roles and what a person may do, by failure mode: two roles in one team showing only one role's actions, an
 expired assignment still granting, a role change through the member routes leaving the old role's actions in place or
 the token's permission version unchanged, and another person's permissions readable without a shared team."""
 
@@ -108,7 +108,7 @@ async def test_roles_lists_the_five_builtin_roles_with_their_grids(platform: Pla
     assert [row["area"] for row in admin["grid"]] == list(AREAS)
     assert set(admin["grid"][0]["actions"]) == set(ACTIONS)
     assert admin["grid"][AREAS.index("audit")]["actions"]["view"] == "all"
-    # Admins hold every cell (owner, 2026-10-17); settings.manage is still checked in the Security team.
+    # Admins hold every cell; settings.manage is still checked in the Security team.
     assert admin["grid"][AREAS.index("settings")]["actions"]["manage"] == "all"
     assert (await platform.public.get("/v1/roles/nope", headers=h)).status_code == 404
 

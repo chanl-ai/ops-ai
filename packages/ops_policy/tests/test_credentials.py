@@ -1,4 +1,4 @@
-"""The credential store port (c-616 C6), by failure mode: rows written before the port stop opening (the reference the
+"""The credential store port, by failure mode: rows written before the port stop opening (the reference the
 row-sealed adapter hands back must be the cipher's own format, so no row moves), and a reference copied to another
 tenant or name opening there."""
 

@@ -13,8 +13,8 @@
 }
 
 # A request that reaches a service still starting (agents binds its port after its startup, and caddy has no ready
-# gate on it) or restarting is held and its connection retried until the service answers, instead of answering 502
-# (c-451). A connection that failed is retried for any request; one the service received is retried only for a GET.
+# gate on it) or restarting is held and its connection retried until the service answers, instead of answering 502.
+# A connection that failed is retried for any request; one the service received is retried only for a GET.
 (wait_for_upstream) {
 	lb_try_duration 30s
 	lb_try_interval 250ms

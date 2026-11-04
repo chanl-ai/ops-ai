@@ -1,4 +1,4 @@
-"""Wait and reminders (c-277) on the real worker, on PostgreSQL, by failure mode: a Wait is woken early, or lost when
+"""Wait and reminders on the real worker, on PostgreSQL, by failure mode: a Wait is woken early, or lost when
 the worker restarts; a date already past waits anyway, and a value that is not a date waits for ever; a reminder
 never fires, ends the review's wait, or keeps firing after the review is decided; a reminder is missing from
 Activity."""

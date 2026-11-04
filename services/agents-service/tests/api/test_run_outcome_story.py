@@ -1,4 +1,4 @@
-"""How a Stuck run reads on a case and in a parent's list of the runs it started (c-561), by failure mode: a run the
+"""How a Stuck run reads on a case and in a parent's list of the runs it started, by failure mode: a run the
 reconciler marked Stuck reads "Running", so nobody looks at it."""
 
 from __future__ import annotations

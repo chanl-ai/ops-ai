@@ -1,4 +1,4 @@
-// A widget template filled with data for the authoring preview (c-082): the same rules as agents-service's
+// A widget template filled with data for the authoring preview: the same rules as agents-service's
 // ops_agent_kernel.layout.fill, minus the schema check, which the service runs on save. Pure, so the preview and its
 // tests need no service. Relative imports: the tests run under `node --test`, which does not resolve the `@/` alias.
 import type { LayoutNode, TemplateNode } from '../types/widgets';

@@ -1,4 +1,4 @@
-"""Every publish follows the one publish-policy module (c-086, api/publish_policy.py), by failure mode: a new publish
+"""Every publish follows the one publish-policy module (api/publish_policy.py), by failure mode: a new publish
 route deciding a review its own way, a route that stops asking, a route that asks and then ignores the answer, and a
 second copy of the dev auto-approve rule. The static checks read the app's routes and the source; the behaviour check
 publishes on every route under "major" with dev auto-approve on (live at once) and under "always" (a review opens)."""
@@ -44,17 +44,17 @@ PUBLISH_ROUTES: dict[str, Callable[..., Any]] = {
     "/v1/graphs/{name}/versions": graphs.publish_version,
 }
 # Names the policy is imported under, and agents' one wrapper the publish and its preview share.
-# engine_lifecycle.open_publish asks decide for a person's publish and a shipped workflow's update alike (tick 30).
+# engine_lifecycle.open_publish asks decide for a person's publish and a shipped workflow's update alike.
 ASKS = {"decide", "review_needed", "_publish_decision", "open_publish"}
 # Opens a request without asking: a seed's change outside dev, which always waits, and records reviewRequired.
 SEED_ONLY = {
     ("workflow_registry.py", "_seed_for_review"),
-    # tools-service decides whether a tool module version needs review and opens it here (c-163), for the person
-    # publishing or, for its seed's waiting versions, on their behalf (c-222). Neither decides anything in
+    # tools-service decides whether a tool module version needs review and opens it here, for the person
+    # publishing or, for its seed's waiting versions, on their behalf. Neither decides anything in
     # agents-service.
     ("tool_module_reviews.py", "open_review"),
     ("tool_module_reviews.py", "open_for"),
-    # tools-service holds a host nobody listed for Security (c-616 S13); the Security team decides it, no policy here.
+    # tools-service holds a host nobody listed for Security; the Security team decides it, no policy here.
     ("egress_host_reviews.py", "open_review"),
 }
 # Routes that open a review another service decided on.

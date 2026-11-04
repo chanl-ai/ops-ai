@@ -47,7 +47,7 @@ await withUiStack(
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
 
-      // 1. Create a base from the list; the person lands on it (T002).
+      // 1. Create a base from the list; the person lands on it.
       await step('1 James creates a knowledge base and lands on it', async () => {
         await page.goto(`${consoleUrl}/knowledge`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByRole('button', { name: 'New knowledge base' }).click({ timeout: 120_000 });
@@ -64,7 +64,7 @@ await withUiStack(
         check('1 James creates a knowledge base and lands on it', res?.status() === 201 && landed && title, { status: res?.status(), url: page.url(), title });
       });
 
-      // 2. Add files from the base's Sources tab: a file source, two PDFs, synced on add (T003).
+      // 2. Add files from the base's Sources tab: a file source, two PDFs, synced on add.
       await step('2 James adds two PDFs from the Sources tab and syncs them', async () => {
         await page.goto(`${consoleUrl}/knowledge/${kbId}?tab=sources`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByRole('button', { name: 'Add source' }).first().click({ timeout: 120_000 });
@@ -91,7 +91,7 @@ await withUiStack(
       });
 
       // 3. Watch ingestion on the base: the manual indexed, the scan failed with its reason; the list counts one document and
-      // shows the base degraded by the failure (T005).
+      // shows the base degraded by the failure.
       await step('3 the base shows each document indexed or failed with its reason, and the list counts them', async () => {
         await page.goto(`${consoleUrl}/knowledge/${kbId}?tab=documents`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const manual = page.getByRole('row', { name: /Branch Operations Manual/ });
@@ -114,7 +114,7 @@ await withUiStack(
         check('3 the base shows each document indexed or failed with its reason, and the list counts them', indexed === 1 && reason && documents === '1' && health === 'Degraded', { indexed, reason, heads, cells });
       });
 
-      // 4. Add a page: a titled text written in the console, indexed like a file (T004).
+      // 4. Add a page: a titled text written in the console, indexed like a file.
       await step('4 James writes a page in the console and it indexes', async () => {
         await page.goto(`${consoleUrl}/knowledge/${kbId}?tab=documents`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByRole('button', { name: 'Add page' }).click({ timeout: 60_000 });
@@ -128,7 +128,7 @@ await withUiStack(
         check('4 James writes a page in the console and it indexes', res?.status() === 201 && row, { status: res?.status(), row });
       });
 
-      // 5. Test a question in the playground: a cited answer by page and section, and no control that is not built (T006).
+      // 5. Test a question in the playground: a cited answer by page and section, and no control that is not built.
       await step('5 the playground answers with a citation by page and section', async () => {
         await page.goto(`${consoleUrl}/knowledge/${kbId}?tab=playground`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const unbuilt = await page.getByText(/^(Hybrid|Semantic|Rerank|Compare two configurations)$/).count();
@@ -141,7 +141,7 @@ await withUiStack(
       });
 
       // 6. Retire a base an agent cites: the name must be typed, the dialog names the agent, the base leaves the list,
-      // and kb-service no longer serves it (T007). An agent still naming it answering from its other bases is
+      // and kb-service no longer serves it. An agent still naming it answering from its other bases is
       // services/kb-service/tests/test_retrieval.py.
       await step('6 James retires a base an agent cites by typing its name, and it leaves the list', async () => {
         const J = { Authorization: `Bearer ${await tokenFor(JAMES)}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };

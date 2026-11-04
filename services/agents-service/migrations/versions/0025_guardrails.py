@@ -1,4 +1,4 @@
-"""guardrails as versioned attachments (c-063)
+"""guardrails as versioned attachments
 
 Revision ID: 0025_guardrails
 Revises: 0024_engine_runs_steps_work

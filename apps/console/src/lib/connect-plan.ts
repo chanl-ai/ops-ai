@@ -1,5 +1,5 @@
 /**
- * What the one connect dialog shows and does for a system (c-580), as data: its plan, each environment's fields and
+ * What the one connect dialog shows and does for a system, as data: its plan, each environment's fields and
  * draft, and one reducer so a save, a test and a sign-in cannot overlap.
  *
  * The plan reads a kind's flags from `GET /v1/connection-kinds`, never its id, so a kind tools-service adds later (a

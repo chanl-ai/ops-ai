@@ -1,4 +1,4 @@
-"""An agent's and a workflow's owning team come from the caller's token (c-171): a body naming an owner is refused,
+"""An agent's and a workflow's owning team come from the caller's token: a body naming an owner is refused,
 so nobody labels a record as another team's, and the record answers with the team id the console names from its own
 teams list, which stays right when a team is renamed."""
 

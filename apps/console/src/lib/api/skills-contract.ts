@@ -88,7 +88,7 @@ export interface SkillsApi {
     /** Attaches or moves the pin; saves a new agent version. 422 when the agent lacks a tool or knowledge base the version needs. */
     /** `version` omitted attaches the latest published one, as the picker offers it. */
     attach(agentId: string, skillId: string, version?: number): Promise<AgentSkills>;
-    /** The skill picker: published skills the agent does not hold, searched on the server; one needing access the agent lacks is disabled with the reason (c-136). */
+    /** The skill picker: published skills the agent does not hold, searched on the server; one needing access the agent lacks is disabled with the reason. */
     options(agentId: string, p: OptionsParams, loading?: SkillLoading): Promise<OptionsPage>;
     detach(agentId: string, skillId: string): Promise<AgentSkills>;
   };

@@ -1,5 +1,5 @@
 /**
- * The Apps area in the words people see on screen (c-616): `apps`, `credentials`, `accounts`, `tools`, `resources` and
+ * The Apps area in the words people see on screen: `apps`, `credentials`, `accounts`, `tools`, `resources` and
  * `usage`, each a few methods over the generated operations, which call the services' routes as they are. The Python
  * SDK has the same layer (sdk/python/src/ops_ai/_words.py).
  *

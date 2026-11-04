@@ -1,4 +1,4 @@
-"""Who may create an embed and mint its keys (orch, embed UX run 2026-10-19), with tokens as platform-service mints
+"""Who may create an embed and mint its keys, with tokens as platform-service mints
 them, by failure mode: a viewer creates an embed, mints a key, or changes one; a builder of the agent's team does.
 On the shared dev stack every seeded person also holds Admin in every team (OPS_SEED_EVERYONE_ADMIN), so a "Viewer"
 there acts as an admin; these tokens carry only the roles the grid gives."""

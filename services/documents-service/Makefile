@@ -2,7 +2,7 @@
 # types, samples and test runs; it reads bytes through files-service and never holds them. Its tables have their
 # own migration chain (alembic_version_documents).
 SERVICE_NAME := documents-service
-SERVICE_STATUS := extraction and document types moved from files-service (c-256)
+SERVICE_STATUS := extraction and document types moved from files-service
 STACK_SVC := documents
 
 PY_DIRS := src tests migrations scripts

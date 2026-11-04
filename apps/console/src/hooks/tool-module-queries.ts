@@ -45,6 +45,6 @@ export const useDecideModuleApproval = () =>
   useModuleWrite(({ id, approvalId, decision, reason }: { id: string; approvalId: string; decision: 'approved' | 'rejected'; reason?: string }) => api.toolModules.decideApproval(id, approvalId, decision, reason));
 export const useRevokeModuleApprovals = () => useModuleWrite(({ id, approvalIds, reason }: { id: string; approvalIds: string[]; reason: string }) => api.toolModules.revokeApprovals(id, approvalIds, reason));
 
-/** Every workflow's access across the team's modules, one view at a time (Access › Tool access, c-144). */
+/** Every workflow's access across the team's modules, one view at a time (Access › Tool access). */
 export const useToolGrants = (p: { view: GrantView; search?: string; page: number; pageSize: number }) =>
   usePagedQuery({ queryKey: ['modules', 'grants', p], queryFn: () => api.toolModules.grants(p) });

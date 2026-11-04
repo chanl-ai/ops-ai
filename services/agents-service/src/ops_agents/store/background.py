@@ -1,4 +1,4 @@
-"""Background processes' heartbeats and jobs in agents-service (c-516). The worker has no web port and several API
+"""Background processes' heartbeats and jobs in agents-service. The worker has no web port and several API
 processes each run a sweeper and a timer poller, so their heartbeats live in the database, one row per process
 instance. A job is one piece of work a process did for a team, written inside that team; a team reads its own in
 Activity, an account admin reads every team's on Govern > Background."""

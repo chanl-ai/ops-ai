@@ -168,7 +168,7 @@ export function TestConsole({
   error?: string;
   /** Request above response, for the side panel beside the module's tabs. */
   stacked?: boolean;
-  /** The workbench runs one operation (`initialOperation`), so it shows no operation picker (c-088). */
+  /** The workbench runs one operation (`initialOperation`), so it shows no operation picker. */
   fixedOperation?: boolean;
 }) {
   const [opName, setOpName] = React.useState(initialOperation ?? operations[0]?.name ?? '');
@@ -373,10 +373,10 @@ export function ResultBody({ result, op, running, onSimulate, badge, labels, bri
 type ResultLabels = { output: string; request: string };
 export type ResultTab = 'output' | 'request' | 'raw' | 'log';
 /** Which result tabs show, and the one open when a caller chooses it (a REST tool's page opens Raw and Log from its
- * More menu, c-591). */
+ * More menu). */
 type TabChoice = { tabs?: ResultTab[]; tab?: ResultTab; onTab?: (t: ResultTab) => void };
 
-/** The output, and when tools-service sends them (c-088), the request it sent, the answer before the transform and its
+/** The output, and when tools-service sends them, the request it sent, the answer before the transform and its
  * steps, each on a tab. */
 function ResultTabs({ result: r, labels = { output: 'Output', request: 'Request' }, tabs = ['output', 'request', 'raw', 'log'], tab, onTab }: { result: ModuleTestResult; labels?: ResultLabels } & TabChoice) {
   const tone = r.decision === 'deny' || r.status >= 400 ? 'error' : 'default';

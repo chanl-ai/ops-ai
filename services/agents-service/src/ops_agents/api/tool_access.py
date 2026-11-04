@@ -29,8 +29,8 @@ class ToolsUnavailable(ApiError):
 @dataclass(frozen=True)
 class WritePolicy:
     """How a write to a tool is approved (docs/architecture/tool-lifecycle.md, "Write approval"): `approvers` distinct
-    people of the run's team (c-509; an approving team tools-service still names is ignored). Whether the person who
-    asked may be one is the tenant's requesterMayDecide policy (c-186), not the tool's."""
+    people of the run's team (an approving team tools-service still names is ignored). Whether the person who
+    asked may be one is the tenant's requesterMayDecide policy, not the tool's."""
 
     access: str
     approvers: int

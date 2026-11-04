@@ -129,11 +129,11 @@ def test_only_the_two_loops_reach_past_rls() -> None:
             if isinstance(node, ast.Name) and node.id == "system_tx":
                 system_users.add(path.relative_to(SRC).as_posix())
     assert callers == {"api/tenant_tasks.py"}
-    # store/background.py: the Background page, a central background process's view, reads every team's jobs (c-516).
+    # store/background.py: the Background page, a central background process's view, reads every team's jobs.
     # store/batches.py: the batch starter, in the workflow worker, finds every tenant's pending rows and starts each
-    # inside its own tenant and team (api/batches.py), as the engine's claim loop does with runs (c-535).
+    # inside its own tenant and team (api/batches.py), as the engine's claim loop does with runs.
     # store/team_defaults.py: the start-up catch-up finds every team whose default is its Ops Assistant and brings
-    # each to the declared one inside its own tenant (api/ops_tools.py, c-616).
+    # each to the declared one inside its own tenant (api/ops_tools.py).
     assert system_users == {
         "store/graphs.py",
         "store/engine.py",
@@ -169,7 +169,7 @@ async def test_two_threads_worked_by_one_sweep_each_get_their_own_tenant(engine:
 
 
 async def test_a_sweep_works_a_thread_as_its_own_team(engine: AsyncEngine) -> None:
-    """The sweeper and the timer poller act as the claimed thread's team, not for its whole tenant (c-429)."""
+    """The sweeper and the timer poller act as the claimed thread's team, not for its whole tenant."""
     from ops_agents.api.tenant_tasks import as_thread_tenant  # noqa: PLC0415
 
     tenant, thread_id = f"a-{uuid4().hex[:8]}", new_id("gth")

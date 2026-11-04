@@ -1,5 +1,5 @@
-"""`/v1/templates` (c-590): the agents, skills and workflows a team may install from its plugins; and
-`/v1/resources/{resource}/copies` (c-616), Add to team, which makes the team's own copy.
+"""`/v1/templates`: the agents, skills and workflows a team may install from its plugins; and
+`/v1/resources/{resource}/copies`, Add to team, which makes the team's own copy.
 
 tools-service is the one service that loads plugins; it answers the templates of the plugins on for the acting team,
 with each body (`GET /v1/plugin-templates`). A copy is made through the checks its create route makes, called here
@@ -39,7 +39,7 @@ from .engine import DefinitionInput, create_definition, definitions
 from .skills import SkillCreateInput
 
 router = APIRouter(prefix="/v1/templates", tags=["templates"])
-# Add to team in the screen's words (c-616): a resource is an agent, skill or workflow an app brings, copied into the
+# Add to team in the screen's words: a resource is an agent, skill or workflow an app brings, copied into the
 # team. documents-service answers the same route for document types.
 resources = APIRouter(prefix="/v1/resources", tags=["resources"])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
@@ -151,7 +151,7 @@ async def list_templates(
     source: Annotated[str | None, Query(max_length=200)] = None,
 ) -> JSONResponse:
     """The agents, skills and workflows the team's plugins bring, each with the copies the team holds of it; `source`
-    keeps one plugin's (a plugin update's review shows the version each copy came from, c-609)."""
+    keeps one plugin's (a plugin update's review shows the version each copy came from)."""
     team = _team(me)
     held = await TemplateCopies(rt.db).of_team()
     out: list[dict[str, Any]] = []

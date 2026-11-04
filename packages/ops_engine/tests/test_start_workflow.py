@@ -1,4 +1,4 @@
-"""Start workflow (c-209) on an in-memory checkpointer and journal, by failure mode: a re-run or retry that starts a
+"""Start workflow on an in-memory checkpointer and journal, by failure mode: a re-run or retry that starts a
 second child for an item, a retry reconciled through the tool gateway (which never sees a start) instead of repeated,
 a refusal or a bad list that still starts children, and `$.item` used where no item is."""
 
@@ -167,7 +167,7 @@ def test_item_paths_pass_in_a_loop_input_and_are_refused_anywhere_else() -> None
 
 
 async def test_each_child_is_labelled_by_the_steps_label_for_its_item() -> None:
-    """c-477: a run page names each child by what it was about, never by its index."""
+    """A run page names each child by what it was about, never by its index."""
     runs = FakeRuns()
     g = build(PER_PERSON | {"label": "{$.item.name} for {$.input.letter}"}, runs, MemoryJournal(), InMemorySaver())
     await g.ainvoke({"input": PERSONS}, config("p10"), durability="sync")

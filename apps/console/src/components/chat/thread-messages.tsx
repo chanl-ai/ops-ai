@@ -61,7 +61,7 @@ export function ThreadMessages({
   readOnly: boolean;
   owner: boolean;
   archived: boolean;
-  /** Replies name their agent once the conversation has had more than one (a handover, c-174). */
+  /** Replies name their agent once the conversation has had more than one (a handover). */
   severalAgents: boolean;
   onOpenMemory?: () => void;
   onSend: (input: SendInput, cutFrom?: string) => void;
@@ -75,7 +75,7 @@ export function ThreadMessages({
   const streaming = !!live?.streaming;
   const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
   const answerBudget = useAnswerBudget();
-  // Raise is a team admin's (c-103); the server checks it again from the token.
+  // Raise is a team admin's; the server checks it again from the token.
   const canRaise = useCan('chat', 'manage') === true;
   return (
     <ChatConversation>

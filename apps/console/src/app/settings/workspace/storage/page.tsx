@@ -225,7 +225,7 @@ function CredentialDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
 
 /**
  * Where each upload purpose stores its bytes, the credentials storage is signed in with, upload limits, retention per
- * purpose and download link lifetime (files-service `/v1/settings/storage`, c-100). An admin on the Security team
+ * purpose and download link lifetime (files-service `/v1/settings/storage`). An admin on the Security team
  * changes it; a save is a new version, made with the Save button only, and each new or changed target is tested
  * before the version is written.
  */

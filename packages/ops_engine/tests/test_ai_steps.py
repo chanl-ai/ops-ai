@@ -1,4 +1,4 @@
-"""Workflow AI steps (c-298) on the engine with a fake prompt port, by failure mode: a confident answer leaves by the
+"""Workflow AI steps on the engine with a fake prompt port, by failure mode: a confident answer leaves by the
 wrong port, or a doubtful one by a category instead of otherwise; a wire to a category the step no longer has is
 saved; an answer outside the schema is retried and paid for again; Extract from text asks for fields other than the
 document type's; a step's settings never reach the model."""

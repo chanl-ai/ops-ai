@@ -65,7 +65,7 @@ class WidgetBase(WireModel):
     app: str
     tool: str
     as_of: str
-    # The tool's action in words, as people read it (c-508); `tool` stays for builders and the event log.
+    # The tool's action in words, as people read it; `tool` stays for builders and the event log.
     tool_label: str = ""
 
 
@@ -129,7 +129,7 @@ class ApprovalWidget(WidgetBase):
     reason: str | None = None
     # Whom the thread waits on while the approval is open: the operation's reviewers, or a second approver.
     waiting_on: str | None = None
-    # Whether the person reading the thread may decide it now, by the decision route's checks (c-123).
+    # Whether the person reading the thread may decide it now, by the decision route's checks.
     can_decide: bool | None = None
 
 
@@ -201,7 +201,7 @@ class WidgetHint(WireModel):
 
 
 class WidgetTemplateRef(WireModel):
-    """The published widget template a layout part was filled from (c-082)."""
+    """The published widget template a layout part was filled from."""
 
     id: str
     version: int
@@ -209,10 +209,10 @@ class WidgetTemplateRef(WireModel):
 
 
 class WidgetPart(WireModel):
-    """A shaped result (c-055, "Widget architecture"): a shape and its data, never a tool or component name; the
+    """A shaped result ("Widget architecture"): a shape and its data, never a tool or component name; the
     console's widget registry picks how to draw it. Matches apps/console/src/lib/types/widgets.ts.
 
-    Or a layout (c-082): a tree of catalogue primitives the kernel checked (ops_agent_kernel.layout), filled from an
+    Or a layout: a tree of catalogue primitives the kernel checked (ops_agent_kernel.layout), filled from an
     agent's widget template (`template` names it) or composed by the model. Exactly one of `shape` and `layout`."""
 
     type: Literal["widget"] = "widget"
@@ -224,7 +224,7 @@ class WidgetPart(WireModel):
     schema_: Any | None = Field(default=None, alias="schema")
     layout: dict[str, Any] | None = None
     template: WidgetTemplateRef | None = None
-    # The generic kind the layout is (c-176, ops_agent_kernel.kinds) when the agent showed one with `present {kind}`.
+    # The generic kind the layout is (ops_agent_kernel.kinds) when the agent showed one with `present {kind}`.
     kind: str | None = None
 
     @model_validator(mode="after")
@@ -272,7 +272,7 @@ class LoadedSkill(WireModel):
 
 
 class BudgetPause(WireModel):
-    """A turn paused on the conversation's budget (c-103). The numbers are the thread's ledger at the pause, from
+    """A turn paused on the conversation's budget. The numbers are the thread's ledger at the pause, from
     agents-service's meter, never a sum the client made."""
 
     # The pause's interrupt id; an answer names it, so a tab showing an older pause is refused.
@@ -339,7 +339,7 @@ class ChatOverrides(WireModel):
 
 
 class ReplyUsage(WireModel):
-    """What one reply spent (c-286): its model calls, tokens and cost from the model call records, and the seconds from
+    """What one reply spent: its model calls, tokens and cost from the model call records, and the seconds from
     its run starting to finishing."""
 
     calls: int
@@ -397,7 +397,7 @@ class ThreadSettings(WireModel):
 
 
 class RememberedItem(WireModel):
-    """One memory a reply saved, confirmed or asked about (c-206, c-557); an episode has no key. The thread keeps only
+    """One memory a reply saved, confirmed or asked about; an episode has no key. The thread keeps only
     the id, kind, status and decision, so a reload reads key and value from the memory, and a forgotten one has
     neither."""
 
@@ -440,16 +440,16 @@ class ChatMessage(WireModel):
     guardrail_audit: list[GuardrailAudit] | None = None
     # Skills the turn loaded, always-on first; the turn's detail reads "Loaded skill X v1".
     skills: list[LoadedSkill] | None = None
-    # The settings the turn ran on (c-071); absent on turns from before overrides.
+    # The settings the turn ran on; absent on turns from before overrides.
     settings: EffectiveSettings | None = None
-    # What the reply spent (c-286); absent when no model call was recorded for it.
+    # What the reply spent; absent when no model call was recorded for it.
     usage: ReplyUsage | None = None
-    # The conversation's budget ran out during this turn (c-103); the turn waits until it is continued or raised.
+    # The conversation's budget ran out during this turn; the turn waits until it is continued or raised.
     budget: BudgetPause | None = None
-    # The agent that wrote this reply (c-174): after a handover it is not the agent the conversation started on.
+    # The agent that wrote this reply: after a handover it is not the agent the conversation started on.
     agent_id: str | None = None
     agent_name: str | None = None
-    # What this turn saved about the person (c-206), so the reply can say so; absent when it saved nothing.
+    # What this turn saved about the person, so the reply can say so; absent when it saved nothing.
     remembered: list[RememberedItem] | None = None
 
 
@@ -467,10 +467,10 @@ class ChatThreadBase(WireModel):
     created_at: str
     last_message_at: str
     message_count: int
-    # Set while the conversation is handed over (c-174): the agent it started on, which Back returns to.
+    # Set while the conversation is handed over: the agent it started on, which Back returns to.
     start_agent_id: str | None = None
     start_agent_name: str | None = None
-    # A builder's test of the agent (c-284), set by the server only: left out of counts and memory, listed under Test.
+    # A builder's test of the agent, set by the server only: left out of counts and memory, listed under Test.
     test: bool = False
 
 
@@ -485,7 +485,7 @@ class ChatThreadRow(ChatThreadBase):
 
 
 class ChatThreadInput(WireModel):
-    # Left out, the conversation starts on the team's default agent (c-174).
+    # Left out, the conversation starts on the team's default agent.
     agent_id: str | None = None
     kb_ids: list[str]
     title: str | None = None
@@ -493,10 +493,10 @@ class ChatThreadInput(WireModel):
     # field with 422 naming it, like a value outside the limits.
     overrides: dict[str, Any] | None = None
     attachments: list[ChatAttachment] | None = None
-    # Ask to test the agent (c-284): each message runs its newest version, draft included. Granted only to a caller
+    # Ask to test the agent: each message runs its newest version, draft included. Granted only to a caller
     # who may test the agent; the mark is stored by the server and never changes after.
     test: bool = False
-    # With `test`, the saved version every message runs instead of the newest (c-286): a compare asks the same question
+    # With `test`, the saved version every message runs instead of the newest: a compare asks the same question
     # of two versions on two test threads.
     test_version: int | None = Field(default=None, ge=1)
 
@@ -506,7 +506,7 @@ class ChatThreadPatch(WireModel):
     pinned: bool | None = None
     archived: bool | None = None
     kb_ids: list[str] | None = None
-    # Hands the conversation to this agent (an @mention, c-174); the agent it started on hands it back.
+    # Hands the conversation to this agent (an @mention); the agent it started on hands it back.
     agent_id: str | None = None
 
 

@@ -1,4 +1,4 @@
-"""The reviews list draws every waiting typed task (c-288) without a query per task (proto-worker's tick 32 count): a
+"""The reviews list draws every waiting typed task without a query per task: a
 task's type, its assist and the cases its run opened are read once for the list, so a team with five tasks waiting
 reads them in as many statements as a team with one."""
 

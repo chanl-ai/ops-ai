@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""documents-service's request and response shapes, the same the console and the workflow step read (c-235, c-236)."""
+"""documents-service's request and response shapes, the same the console and the workflow step read."""
 
 from __future__ import annotations
 
@@ -17,11 +17,11 @@ class Model(BaseModel):
 
 class ExtractionRequest(Model):
     """`fields` follow the Extract from file step's schema (key, label, type, required, description, enum,
-    reviewBelow, alwaysReview); `many` answers one record per thing the document names (c-235)."""
+    reviewBelow, alwaysReview); `many` answers one record per thing the document names."""
 
     # The files-service file to read, as the caller's team.
     file_id: str = Field(min_length=1, max_length=64)
-    # The fields to read, or a document type whose version holds them (c-236).
+    # The fields to read, or a document type whose version holds them.
     fields: list[dict[str, Any]] | None = None
     many: bool = False
     ocr: bool = False
@@ -29,9 +29,9 @@ class ExtractionRequest(Model):
     document_type_id: str | None = None
     # The document type's version; the newest when not given, and the answer names the one read.
     version: int | None = Field(default=None, ge=1)
-    # Classify the file over the team's types first and read it with the kind found (c-249).
+    # Classify the file over the team's types first and read it with the kind found.
     detect: bool = False
-    # What comes back (c-535): the fields asked for (today's read), the full text from the cached layout with no model
+    # What comes back: the fields asked for (today's read), the full text from the cached layout with no model
     # call, or fields the model proposes from the first `propose_pages` pages and then reads like any other.
     read: Literal["fields", "text", "propose"] = "fields"
     # What the document is, in a few words, for a proposed read ("a supplier invoice").
@@ -53,7 +53,7 @@ class CorrectionIn(Model):
 class DocumentTypeRef(Model):
     id: str
     version: int
-    # The type's name when it was read, so whatever records the read names it without asking again (c-378).
+    # The type's name when it was read, so whatever records the read names it without asking again.
     name: str | None = None
 
 
@@ -64,7 +64,7 @@ class ExtractionError(Model):
 
 
 class Classification(Model):
-    """Which of the team's document types a file is (c-249): the model's choice and how sure it is, or none.
+    """Which of the team's document types a file is: the model's choice and how sure it is, or none.
     `needsReview` when none fits or the confidence is under the floor."""
 
     type_id: str | None
@@ -94,29 +94,29 @@ class Extraction(Model):
     needs_review: list[Any] | None = None
     floor: float | None = None
     asked: list[dict[str, Any]] | None = Field(default=None, alias="schema")
-    # How many pages an unreadable file has; a full-text read's pages, each {number, text, tables} (c-535).
+    # How many pages an unreadable file has; a full-text read's pages, each {number, text, tables}.
     pages: int | list[dict[str, Any]] | None = None
-    # A full-text read's text, page after page in reading order (c-535).
+    # A full-text read's text, page after page in reading order.
     text: str | None = None
-    # A proposed read's fields in the document type's shape and a suggested name (c-535).
+    # A proposed read's fields in the document type's shape and a suggested name.
     proposal: dict[str, Any] | None = None
-    # The pages read when a limit applied, and whether the token ceiling left pages unread (c-535).
+    # The pages read when a limit applied, and whether the token ceiling left pages unread.
     read_pages: int | None = None
     partial: bool | None = None
     error: ExtractionError | None = None
     corrections: list[dict[str, Any]] | None = None
     document_type: DocumentTypeRef | None = None
     classification: Classification | None = None
-    # How the read was made (c-253): from a layout template's zones, with its id, or by the model, with the best
+    # How the read was made: from a layout template's zones, with its id, or by the model, with the best
     # template's score and missing anchors when the type version has templates and none matched.
     path: Literal["template", "model"] | None = None
     template_id: str | None = None
     template_miss: TemplateMiss | None = None
-    # Every model call that carried a page image (c-295): {step, pages, images, alias}; and why none was sent though
+    # Every model call that carried a page image: {step, pages, images, alias}; and why none was sent though
     # the version and the team allowed it (the alias is not cleared for images).
     image_calls: list[dict[str, Any]] | None = None
     image_refused: str | None = None
-    # The tokens a template read's re-read of failed fields spent (c-296), kept out of the test estimate's average.
+    # The tokens a template read's re-read of failed fields spent, kept out of the test estimate's average.
     reread_tokens: dict[str, int] | None = None
 
 
@@ -143,16 +143,16 @@ class DocumentTypeIn(Model):
     review_below: float | None = Field(default=None, ge=0, le=1)
     # How a numeric date reads: MDY (03/04/2026 is March 4, US documents) or DMY (4 March); MDY when not given.
     date_order: Literal["MDY", "DMY"] = "MDY"
-    # Layout templates for version 1 (c-253), as on DocumentTypeVersionIn.
+    # Layout templates for version 1, as on DocumentTypeVersionIn.
     templates: list[dict[str, Any]] = Field(default_factory=list[dict[str, Any]], max_length=20)
-    # Checks across fields for version 1 (c-296), as on DocumentTypeVersionIn.
+    # Checks across fields for version 1, as on DocumentTypeVersionIn.
     checks: list[dict[str, Any]] | None = Field(default=None, max_length=20)
-    # Show the model the page image (c-295), as on DocumentTypeVersionIn; off when not given.
+    # Show the model the page image, as on DocumentTypeVersionIn; off when not given.
     page_images: bool = False
-    # How many checked reads of one layout offer a template (c-254), as on DocumentTypeVersionIn; 5 when not given.
+    # How many checked reads of one layout offer a template, as on DocumentTypeVersionIn; 5 when not given.
     offer_at: int | None = Field(default=None, ge=2, le=1000)
     note: str | None = Field(default=None, max_length=500)
-    # The file a proposed read was made from (c-535), kept as the type's first sample.
+    # The file a proposed read was made from, kept as the type's first sample.
     sample_file_id: str | None = Field(default=None, min_length=1, max_length=64)
 
 
@@ -169,19 +169,19 @@ class DocumentTypeVersionIn(Model):
     review_below: float | None = Field(default=None, ge=0, le=1)
     # How a numeric date reads: MDY (03/04/2026 is March 4, US documents) or DMY (4 March); MDY when not given.
     date_order: Literal["MDY", "DMY"] = "MDY"
-    # Layout templates (c-253): {id, pages: [{page, anchors: [{text, box, required?}], zones: [{field, box}]}]}, boxes
+    # Layout templates: {id, pages: [{page, anchors: [{text, box, required?}], zones: [{field, box}]}]}, boxes
     # as [x0, top, x1, bottom] fractions of the page. A file printed from one is read from its zones with no model call.
     # Left out, the latest version's templates are carried forward, each flagged needsRebuild when a field it reads is
     # gone; given (even empty), they replace them.
     templates: list[dict[str, Any]] | None = Field(default=None, max_length=20)
-    # Checks across fields (c-296): {id, kind: sum, fields, equals, tolerance?} or {id, kind: before, earlier, later}.
+    # Checks across fields: {id, kind: sum, fields, equals, tolerance?} or {id, kind: before, earlier, later}.
     # Left out on a new version, the latest version's carry forward (dropping one naming a field the version lacks).
     checks: list[dict[str, Any]] | None = Field(default=None, max_length=20)
-    # Show the model the page image of an OCR'd page, and a crop of each doubtful field on its re-read (c-295), where
+    # Show the model the page image of an OCR'd page, and a crop of each doubtful field on its re-read, where
     # the team's pageImages policy and the model alias allow it. Turning it on needs documents.manage; left out, the
     # latest version's setting carries forward.
     page_images: bool | None = None
-    # How many checked reads sharing one layout offer a template (c-254): 5 unless set; left out, the latest carries.
+    # How many checked reads sharing one layout offer a template: 5 unless set; left out, the latest carries.
     offer_at: int | None = Field(default=None, ge=2, le=1000)
     note: str | None = Field(default=None, max_length=500)
 
@@ -202,7 +202,7 @@ class DocumentTypeVersion(Model):
 
 
 class TemplateSuggestIn(Model):
-    """The team's finished reads of the type a suggestion is drawn from (c-254)."""
+    """The team's finished reads of the type a suggestion is drawn from."""
 
     extraction_ids: list[str] = Field(min_length=1, max_length=20)
 
@@ -216,7 +216,7 @@ class TemplateSuggestion(Model):
 
 
 class TemplateOffer(Model):
-    """Checked model reads of the type that share one layout no current template reads (c-254)."""
+    """Checked model reads of the type that share one layout no current template reads."""
 
     fingerprint: str
     extraction_ids: list[str]
@@ -230,7 +230,7 @@ class SampleIn(Model):
 
 
 class DocumentTypeExample(Model):
-    """A correction a person made on a read of the type, which later reads of it are given (c-297). `line` is where the
+    """A correction a person made on a read of the type, which later reads of it are given. `line` is where the
     value was printed, masked as the team masks personal data; `record` is the record's position, for several."""
 
     id: str
@@ -261,7 +261,7 @@ class DocumentTypeRow(Model):
 
 class DocumentTypeList(Model):
     items: list[DocumentTypeRow]
-    # Whether the caller may add a type in the team (c-243), so the console never decides it from a role.
+    # Whether the caller may add a type in the team, so the console never decides it from a role.
     can_create: bool
 
 
@@ -276,8 +276,8 @@ class DocumentType(DocumentTypeRow):
 
 
 class TestEstimate(Model):
-    """What testing a version spends, before it runs (c-236): priced at the type's measured tokens per call, the
-    tenant's when the type has none yet, else a fixed guess (c-247); `basis` says which."""
+    """What testing a version spends, before it runs: priced at the type's measured tokens per call, the
+    tenant's when the type has none yet, else a fixed guess; `basis` says which."""
 
     samples: int
     calls: int
@@ -333,7 +333,7 @@ class LayoutWord(Model):
 
 
 class Layout(Model):
-    """A file's layout (c-247): pages, blocks in reading order with their table cells, and words."""
+    """A file's layout: pages, blocks in reading order with their table cells, and words."""
 
     engine: str
     pages: list[LayoutPage]

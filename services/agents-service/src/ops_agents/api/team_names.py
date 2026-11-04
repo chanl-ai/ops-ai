@@ -1,4 +1,4 @@
-"""Team display names for detail responses (c-224): a record of another team says whose it is by name, which only
+"""Team display names for detail responses: a record of another team says whose it is by name, which only
 platform-service knows. Read through ServiceClient once a minute per tenant; a name that cannot be read is None and
 the console shows the id."""
 

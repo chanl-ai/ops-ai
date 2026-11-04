@@ -1,4 +1,4 @@
-"""The agent page's guardrail, widget and skill pickers (c-136), one test per failure row in the card's tasks file:
+"""The agent page's guardrail, widget and skill pickers, one test per failure mode:
 F1 an item past the first page not findable; F2 a deprecated, retired or unpublished item offered for a new pin; F3 a
 widget needing an ungranted tool offered as choosable; F4 another team's widget offered; F5 a held skill offered
 again; F6 wildcards matching every row."""
@@ -118,7 +118,7 @@ async def test_a_new_pin_without_a_version_takes_the_published_one(tmp_path: Pat
 
 
 async def test_f7_a_loading_filter_keeps_pages_full(tmp_path: Path) -> None:
-    """F7 (tick 18): filtering loading after the page was read returned short pages and stopped the cursor early."""
+    """F7: filtering loading after the page was read returned short pages and stopped the cursor early."""
     async with _app(str(tmp_path / "db.sqlite")) as c:
         for i in range(4):
             await _published(c, {**HARDSHIP, "name": f"A match {i}"})

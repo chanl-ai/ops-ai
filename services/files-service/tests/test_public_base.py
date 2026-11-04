@@ -1,4 +1,4 @@
-"""files-service behind a proxy that serves it under a path (c-215): the proxy strips the prefix, so the request's own
+"""files-service behind a proxy that serves it under a path: the proxy strips the prefix, so the request's own
 base lacks it, and an upload or download URL built on that base misses the service. Every URL it hands out is built
 on `files_public_url` when set."""
 

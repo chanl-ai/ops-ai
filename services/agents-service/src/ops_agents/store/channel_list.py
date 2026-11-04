@@ -1,4 +1,4 @@
-"""The Channels list (c-245): each door people reach an agent or workflow through, from the record that already holds
+"""The Channels list: each door people reach an agent or workflow through, from the record that already holds
 it, under that record's id. A mailbox (`mbx_`) is an email channel and serves the live workflows whose Email received
 trigger names its address; a widget deployment (`wd_`) is a chat channel and serves its agent, pinned or on the latest
 published version; an API key (`key_`, platform-service's record) is an API channel and serves its target. Traffic,
@@ -88,7 +88,7 @@ class ChannelList:
         return NOT_FOUND if row is None else row[0]
 
     async def api_rows(self, keys: list[dict[str, Any]], *, now: datetime | None = None) -> list[dict[str, Any]]:
-        """API keys (platform-service's records, c-246) with their traffic and what they serve: runs and threads a key
+        """API keys (platform-service's records) with their traffic and what they serve: runs and threads a key
         started record `key:<id>`, and a key's target is named from the live workflow or the agent's registry row."""
         if not keys:
             return []

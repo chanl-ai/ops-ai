@@ -9,7 +9,7 @@ from typing import Any, cast
 
 # A replay ran nothing, so it is its own status, not a success; a write refused because the same one was running is a
 # denial. Both stay out of a module's call counts (CallLog.traffic) and the 409 counts as denied. A write still running
-# is running, never ok: whether it happened is not known yet (c-561).
+# is running, never ok: whether it happened is not known yet.
 STATUS = {
     "ok": "ok",
     "replayed": "replayed",
@@ -37,7 +37,7 @@ def _identity(value: str, kinds: dict[str, str], names: dict[str, str]) -> dict[
 def call_row(
     r: dict[str, Any], names: dict[str, str], module: dict[str, Any] | None, title: str | None = None
 ) -> dict[str, Any]:
-    """One call as the log shows it. `title` is the tool's display name (a plugin's manifest gives it, c-607); the row
+    """One call as the log shows it. `title` is the tool's display name (a plugin's manifest gives it); the row
     falls back to the tool's own name, so no reader shows a blank."""
     subject = _identity(r["sub"], SUBJECT_KINDS, names)
     workflow_id = subject["id"] if subject["kind"] == "workflow" else ""
@@ -87,7 +87,7 @@ def call_row(
         row["denyReason"] = "; ".join(r["reasons"])
     if r.get("replay_of"):
         row["replayOf"] = r["replay_of"]
-    # Which environment the call used and the connection that signed it in (c-330): every row shows Test or Production.
+    # Which environment the call used and the connection that signed it in: every row shows Test or Production.
     if r.get("environment"):
         row["environment"] = r["environment"]
     if r.get("connection_id"):
@@ -96,12 +96,12 @@ def call_row(
         row["channel"] = r["channel"]
     if r.get("client_name"):
         row["clientName"] = r["client_name"]
-    # Whom the call acted for and whose sign-in signed it (c-558).
+    # Whom the call acted for and whose sign-in signed it.
     if r.get("acting_for"):
         row["actingFor"] = r["acting_for"]
     if r.get("credential"):
         row["credential"] = r["credential"]
-    # Whom Usage says the call ran as (c-616): whose sign-in signed it; one refused before any sign-in ran as the
+    # Whom Usage says the call ran as: whose sign-in signed it; one refused before any sign-in ran as the
     # person it acted for, if any. Never the service that carried the call.
     as_person = r.get("acting_for") and r.get("credential") in ("person", None)
     row["runAs"] = {"kind": "person", "email": r["acting_for"]} if as_person else {"kind": "team"}

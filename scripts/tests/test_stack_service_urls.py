@@ -29,7 +29,7 @@ def test_the_worker_and_agents_service_reach_the_same_services() -> None:
 
 def test_an_isolated_stack_reaches_its_own_models_service_whatever_the_env_file_names(tmp_path: Path) -> None:
     """A laptop .env naming the shared stack's models-service sent every isolated run's model calls to the shared
-    stack's aliases, real models included, and its fake bank certificate failed the isolated bank's TLS (c-542)."""
+    stack's aliases, real models included, and its fake bank certificate failed the isolated bank's TLS."""
     (tmp_path / "scripts").mkdir()
     (tmp_path / "scripts/stack.sh").write_text((ROOT / "scripts/stack.sh").read_text())
     (tmp_path / ".env").write_text(
@@ -62,13 +62,13 @@ def test_an_isolated_stack_reaches_its_own_models_service_whatever_the_env_file_
 
 def test_kb_reaches_tools_service_for_plugin_knowledge_sources() -> None:
     """With plugins on, a plugin knowledge source is read through tools-service: kb-service without its address
-    refuses the source with tools_unavailable on the stack while it works in tests (c-565)."""
+    refuses the source with tools_unavailable on the stack while it works in tests."""
     assert urls("kb").get("OPS_TOOLS_URL") == urls("runner")["OPS_TOOLS_URL"]
 
 
 def test_a_demos_own_ca_is_trusted_beside_the_fake_banks(tmp_path: Path) -> None:
     """tools-service reads one CA file: a demo's outside system (the fake Salesforce) with its own CA failed TLS on
-    every call unless that CA is bundled with the fake bank's (c-565)."""
+    every call unless that CA is bundled with the fake bank's."""
     (tmp_path / "scripts").mkdir()
     (tmp_path / "scripts/stack.sh").write_text((ROOT / "scripts/stack.sh").read_text())
     bank, extra = tmp_path / ".run/fake-bank/bank.crt", tmp_path / "extra.crt"

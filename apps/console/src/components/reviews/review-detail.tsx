@@ -94,7 +94,7 @@ function OperationRow({ op, tone, note }: { op: OperationSummary; tone: string; 
   );
 }
 
-/** A tool module review (c-204): what the version adds, removes and changes since the published one, the hosts it
+/** A tool module review: what the version adds, removes and changes since the published one, the hosts it
  * would reach and the secrets it reads, as tools-service sent them when the review opened. */
 function ToolModuleReviewBody({ review }: { review: Review }) {
   const t = review.toolModule!;
@@ -164,7 +164,7 @@ function ToolModuleReviewBody({ review }: { review: Review }) {
   );
 }
 
-/** A workflow's document check or reply step: what was read, or what will be sent, is the whole case for it (c-169). */
+/** A workflow's document check or reply step: what was read, or what will be sent, is the whole case for it. */
 function WorkflowStepBody({ review, edits, onEdit, checks }: { review: Review; edits: ReadEdits; onEdit?: (record: number, key: string, text: string) => void; checks?: ReadChecks }) {
   return (
     <div className="flex flex-col gap-6">
@@ -203,7 +203,7 @@ function WorkflowStepBody({ review, edits, onEdit, checks }: { review: Review; e
   );
 }
 
-/** `edits` and `onEdit` hold a reviewer's corrections to a document read while the review is open (c-169). */
+/** `edits` and `onEdit` hold a reviewer's corrections to a document read while the review is open. */
 export function ReviewDetailBody({
   review,
   edits = {},

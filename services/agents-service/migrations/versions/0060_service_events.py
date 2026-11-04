@@ -1,4 +1,4 @@
-"""service_events: a named event a service emitted, and the system workflow runs it started (c-258)
+"""service_events: a named event a service emitted, and the system workflow runs it started
 
 Revision ID: 0060_service_events
 Revises: 0059_review_assignments

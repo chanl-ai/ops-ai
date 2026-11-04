@@ -1,10 +1,10 @@
-"""chat_attachments: metadata and capped parsed text of files attached to chat messages (c-071)
+"""chat_attachments: metadata and capped parsed text of files attached to chat messages
 
 Revision ID: 0030_chat_attachments
 Revises: 0029_graph_threads_overrides
 
 The bytes are in an ops_storage object store, written by agents-service's interim chat file store
-(activities/attachments.py `ChatFileStore`, `fl_` ids) until c-087 moves them to files-service; this holds who owns
+(activities/attachments.py `ChatFileStore`, `fl_` ids) until they move to files-service; this holds who owns
 each file, its type and size, and the text parsed at upload. Tenant RLS as on the run tables (0021).
 """
 

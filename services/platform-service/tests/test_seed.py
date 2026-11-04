@@ -97,7 +97,7 @@ async def test_a_seeded_persons_new_address_reaches_a_database_seeded_before_it(
 async def test_a_stack_seeded_as_shipped_gives_each_person_only_their_own_roles(
     platform: Platform, database_url: str, tmp_path: Path
 ) -> None:
-    """The start-up seed with the install's settings (c-615): no one is made admin in every team unless the install
+    """The start-up seed with the install's settings: no one is made admin in every team unless the install
     asks, so a viewer on a `make up` stack is a viewer and a role test there means something. A person no earlier test
     seeded, since the seed only adds rows."""
     data = json.loads(PEOPLE.read_text())

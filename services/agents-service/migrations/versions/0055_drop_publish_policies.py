@@ -1,4 +1,4 @@
-"""Drop publish_policies and its audit: the publish-review setting lives in platform-service's policies (c-214)
+"""Drop publish_policies and its audit: the publish-review setting lives in platform-service's policies
 
 Revision ID: 0055_drop_publish_policies
 Revises: 0054_drop_mailbox_deployments

@@ -1,4 +1,4 @@
-"""A module's review is a publish request in agents-service's Reviews (c-163); tools-service opens it for the person and
+"""A module's review is a publish request in agents-service's Reviews; tools-service opens it for the person and
 applies the decision Reviews sends. Who may decide (Security, never the requester or saver) is agents-service's rule
 and its tests. By failure mode here: a person or another service applying a decision, a review opened without the
 person's credentials or team, a version left waiting when no review opened, and the queue's view out of step."""
@@ -92,7 +92,7 @@ async def _reviewed_module(c: httpx.AsyncClient, james: dict[str, str], name: st
         "url": f"https://{HOST}/v1/x",
     }
     assert (await c.post(f"/v1/tool-modules/{mid}/operations", json=op, headers=james)).status_code == 200
-    reviewed = await c.post(f"/v1/tool-modules/{mid}/reviews", json={"note": "c-163"}, headers=james)
+    reviewed = await c.post(f"/v1/tool-modules/{mid}/reviews", json={"note": "a review"}, headers=james)
     assert reviewed.status_code == 200, reviewed.text
     return mid, next(v for v in reviewed.json()["data"]["versions"] if v["status"] == "in_review")
 
@@ -169,7 +169,7 @@ async def test_the_security_review_view_lists_pending_reviews_and_drops_decided_
     c, people = signed_in
     mid, v = await _reviewed_module(c, people["james"], "c163-ledger")
     params = {"view": "security_review", "pageSize": 100}
-    # Security decides the review in Human Tasks; its Tools page lists only its own team's modules (c-423), so the
+    # Security decides the review in Human Tasks; its Tools page lists only its own team's modules, so the
     # owning team's list carries the pending review.
     theirs = (await c.get("/v1/tool-modules", params=params, headers=people["nadia"])).json()["data"]
     assert mid not in [m["id"] for m in theirs["data"]], "another team's module is not listed to Security"

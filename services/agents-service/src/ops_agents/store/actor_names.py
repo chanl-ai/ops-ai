@@ -17,7 +17,7 @@ from .form_links import form_links
 from .mailboxes import mailboxes
 from .tenancy import current_tenant, tenant_tx
 
-# What a run of a workflow version with no name is called where people read it: never its id (c-508).
+# What a run of a workflow version with no name is called where people read it: never its id.
 UNNAMED_WORKFLOW = "a workflow run"
 FORM = "form:"
 
@@ -38,7 +38,7 @@ class ActorNames:
                     m.c.tenant_id == current_tenant(), m.c.address.in_(addresses), team_visible(m)
                 )
                 names |= {("trigger", str(a)): str(n) for a, n in (await c.execute(q)).all()}
-                # A hosted form's link run (`trigger:form:<id>`, c-535) is named by the form's title.
+                # A hosted form's link run (`trigger:form:<id>`) is named by the form's title.
                 forms = {a.removeprefix(FORM) for a in addresses if a.startswith(FORM)}
                 if forms:
                     f = form_links

@@ -1,4 +1,4 @@
-"""Every seeded workflow that reads a file of a document type saves what it read on the file (c-378), by failure mode:
+"""Every seeded workflow that reads a file of a document type saves what it read on the file, by failure mode:
 a workflow with no Save data on file step leaves Files saying "Not read" while the Fields tab shows the read (staging,
 mail_document wfrun_d150e5be12e3); a step that saves only the ok path leaves a read waiting for a check unsaved; and a
 step that names the type by its id shows "levy_notice" where the type's name belongs."""

@@ -1,4 +1,4 @@
-"""Migration 0075 (c-507) gives every workflow definition a team but the background processes, by failure mode: a
+"""Migration 0075 gives every workflow definition a team but the background processes, by failure mode: a
 definition one team ran is left readable by every team; a background process loses its account-level handler; an
 unused no-team definition survives; a definition two teams ran is given to one of them and the other's runs are left
 pointing at a definition it cannot read."""

@@ -1,4 +1,4 @@
-"""Running one tool from its page (c-616 P1, `POST /v1/tool-modules/{id}/operations/{op}/run`), by failure mode: a
+"""Running one tool from its page (`POST /v1/tool-modules/{id}/operations/{op}/run`), by failure mode: a
 Mock run reaches the system; a Real run skips the gateway (no call row, no checks); and the route answers for a tool
 the module does not have."""
 

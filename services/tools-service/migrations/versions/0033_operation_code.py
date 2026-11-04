@@ -1,4 +1,4 @@
-"""module_operations.code: a code operation's function, the tools and secrets it may use, and its limits (c-531)
+"""module_operations.code: a code operation's function, the tools and secrets it may use, and its limits
 
 An operation with executor `code` runs a builder's Python function on runner-service. Its source, entry, bound tool
 names, secret names and limits are one JSON value, null for every other executor.

@@ -14,7 +14,7 @@ STACK=${OPS_STACK:-shared}
 SERVICES=(platform agents runner tools files documents kb console embed apidocs)
 # The workflow runner's worker serves no port; v2 runs (POST /v1/runs) and every mailbox trigger wait until it runs.
 WORKERS=(worker)
-# What the demos need beside the services (c-212, c-223, the mailbox demo): models-service with the fake OpenAI behind
+# What the demos need beside the services (the mailbox demo): models-service with the fake OpenAI behind
 # it (the committed demo rules, so no turn reaches a real provider) and the fake bank the levy cases look customers up
 # in. Ahead of the services: tools-service trusts the fake bank's certificate, which the bank writes on its first start.
 FAKES=(fakeai models fakebank)
@@ -74,7 +74,7 @@ if [[ "${OPS_INFRA:-}" == external ]]; then
   unset OPS_EGRESS_RESOLVE
 fi
 AUTH=${OPS_STACK_AUTH:-$(cat ".run/stack.auth" 2>/dev/null || echo dev)}
-# Dev-only exception (owner 2026-10-18): models-service reads a connection's key from the account's provider keys
+# Dev-only exception: models-service reads a connection's key from the account's provider keys
 # (Settings > Model providers) first and falls back to these settings in dev; outside dev it refuses them.
 # `openai` is the credential name make demo-model binds openai-local to.
 if [[ -n "${OPENAI_API_KEY:-}" && -z "${OPS_MODEL_PROVIDER_KEYS:-}" ]]; then
@@ -110,10 +110,10 @@ url_of() {
 # AUTH=platform: the services verify platform-service tokens; the console signs in through platform-service.
 auth_env() { [[ "$AUTH" == platform ]] && echo "env OPS_AUTH_MODE=platform OPS_PLATFORM_URL=http://127.0.0.1:$PLATFORM_PORT OPS_PLATFORM_INTERNAL_PORT=$PLATFORM_INTERNAL_PORT " || true; }
 console_auth() { [[ "$AUTH" == platform ]] && echo "NEXT_PUBLIC_AUTH_PROVIDER=platform NEXT_PUBLIC_OPS_PLATFORM_API_URL=http://localhost:$PLATFORM_PORT " || true; }
-# The Feedback button (c-504) shows only when this machine runs the ui-feedback collector at start.
+# The Feedback button shows only when this machine runs the ui-feedback collector at start.
 ui_feedback() { curl -sf -m 1 http://127.0.0.1:4790/health >/dev/null && echo 1 || echo 0; }
 
-# Dev mail (c-187, c-192, c-199, c-229). Team mailboxes are records connected on Channels > Email; the dev stack seeds
+# Dev mail. Team mailboxes are records connected on Channels > Email; the dev stack seeds
 # two (services/agents-service/seed/mailboxes.json), levy@harborpine.example and intake@harborpine.test, both on
 # GreenMail over IMAP and read by tools-service with the DEV_IMAP_PASSWORD secret. tools-service reaches GreenMail as any outside host: mail.harborpine.test is answered with this machine's
 # private address (OPS_EGRESS_RESOLVE, dev only, merged into any mapping .env sets), and the host and that address are
@@ -130,11 +130,11 @@ MAILBOX_ENV="OPS_MAILBOXES_SEED_FILE=seed/mailboxes.json"
 # models-service is the default alias's only server; a clean clone has no .env naming it, so the dev runtime key it
 # seeds is the default here.
 # scripts/tests/test_stack_service_urls.py fails when the two commands' URLs differ.
-# The embed app's origin is configuration (c-158): without it agents-service refuses every widget send from the console's
+# The embed app's origin is configuration: without it agents-service refuses every widget send from the console's
 # Preview and the sample intranet page with 403 origin_not_allowed. JSON, no spaces, so the command's word split keeps it.
 AGENTS_URLS="OPS_MODELS_URL=${OPS_MODELS_URL:-http://127.0.0.1:$MODELS_PORT} OPS_MODELS_KEY=${OPS_MODELS_KEY:-mk_dev_agents} OPS_GATEWAY_URL=http://127.0.0.1:$TOOLS_PORT OPS_KB_URL=http://127.0.0.1:$KB_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_DOCUMENTS_URL=http://127.0.0.1:$DOCUMENTS_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT OPS_EMBED_ORIGINS=[\"http://localhost:$EMBED_PORT\"]"
 # The CA tools-service trusts: the fake bank's, plus OPS_EGRESS_EXTRA_CA when a demo brings its own outside system
-# (the fake Salesforce of c-565), bundled into one file since tools-service reads one.
+# (the fake Salesforce), bundled into one file since tools-service reads one.
 egress_ca() {
   local bank=${OPS_EGRESS_CA_FILE:-$RUN_ABS/fake-bank/bank.crt}
   if [[ -n "${OPS_EGRESS_EXTRA_CA:-}" && -f "$OPS_EGRESS_EXTRA_CA" ]]; then
@@ -167,18 +167,18 @@ MAIL_OUT_ENV="OPS_MAIL_PROVIDER=smtp OPS_MAIL_FROM=ops@harborpine.example OPS_SM
 
 cmd_of() {
   case "$1" in
-    # Dev mode seeds team_ops (Priya Shah admin, James Richardson builder, Maya Okafor approver) on start. Sign-in
-    # (c-188): identity providers send people back to platform-service's public URL and on to the console; reset links
+    # Dev mode seeds team_ops (Priya Shah admin, James Richardson builder, Maya Okafor approver) on start. Sign-in:
+    # identity providers send people back to platform-service's public URL and on to the console; reset links
     # go out through Mailpit like every other mail the stack sends (read them at http://localhost:$OPS_MAILPIT_HTTP_PORT).
     platform) echo "env OPS_PLATFORM_PUBLIC_URL=http://localhost:$PLATFORM_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT $MAIL_OUT_ENV uv run --directory services/platform-service python -m ops_platform" ;;
-    # Agents call tools through tools-service's gateway and are seeded with agents granted its operations (c-048).
-    # services/agents-service/scripts/send_levy_email.py emails the levy notice to levy@ on GreenMail (c-229).
+    # Agents call tools through tools-service's gateway and are seeded with agents granted its operations.
+    # services/agents-service/scripts/send_levy_email.py emails the levy notice to levy@ on GreenMail.
     agents) echo "$(auth_env)env $AGENTS_URLS $MAILBOX_ENV uv run --directory services/agents-service python -m ops_agents.api" ;;
     # The fake bank's certificate doubles as the CA tools-service trusts for api.bank.test.
     # A sign-in returns to the console (OPS_CONSOLE_URL); without it tools-service starts none.
-    # Its own model key judges writes against a team's sending policy when the team has check before sending on (c-300).
+    # Its own model key judges writes against a team's sending policy when the team has check before sending on.
     tools) echo "$(auth_env)env $MAIL_OUT_ENV OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_tools_check $(egress_ca_env) OPS_EGRESS_RESOLVE=$(GM=$GREENMAIL_IMAP MP=$MAILPIT_SMTP FB=$FAKE_BANK_PORT dev_egress_resolve) OPS_RUNNER_URL=http://127.0.0.1:$RUNNER_PORT uv run --directory services/tools-service python -m ops_tools" ;;
-    # Code tools' functions (c-531): Python on WASM, calling back to tools-service. start fetches its Python build first.
+    # Code tools' functions: Python on WASM, calling back to tools-service. start fetches its Python build first.
     runner) echo "$(auth_env)env OPS_RUNNER_PORT=$RUNNER_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT uv run --directory services/runner-service python -m ops_runner" ;;
     # The worker also reads the workflows' mailboxes (Email received) and stores their attachments in files-service.
     worker) echo "$(auth_env)env $AGENTS_URLS $MAILBOX_ENV OPS_EMAIL_POLL_SECONDS=3 uv run --directory services/agents-service python -m ops_agents.api.worker" ;;
@@ -187,13 +187,13 @@ cmd_of() {
     fakeai) echo "env FAKE_OPENAI_PORT=$FAKE_OPENAI_PORT uv run --directory services/models-service/scripts --project .. python -m fake_openai $PWD/services/models-service/seed/demo-fake-openai" ;;
     fakebank) echo "env FAKE_BANK_PORT=$FAKE_BANK_PORT uv run --directory services/tools-service/scripts --project .. python -m fake_bank $RUN_ABS/fake-bank" ;;
     apidocs) echo "env OPS_API_DOCS_PORT=$API_DOCS_PORT OPS_PLATFORM_PORT=$PLATFORM_PORT OPS_AGENTS_PORT=$AGENTS_PORT OPS_TOOLS_PORT=$TOOLS_PORT OPS_MODELS_PORT=$MODELS_PORT OPS_KB_PORT=$KB_PORT OPS_FILES_PORT=$FILES_PORT OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT python3 scripts/api_docs.py" ;;
-    # Uploads go to files-service (c-094); kb-service keeps no file store of its own on the stack.
-    # Plugin knowledge sources are read through tools-service's gateway, when the plugins folder holds any (c-565).
+    # Uploads go to files-service; kb-service keeps no file store of its own on the stack.
+    # Plugin knowledge sources are read through tools-service's gateway, when the plugins folder holds any.
     kb) echo "$(auth_env)env OPS_KB_PORT=$KB_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT uv run --directory services/kb-service python -m ops_kb" ;;
     # Local backend under .data/files, bytes through its proxy routes; scanning off marks files clean (dev only).
-    # files-service delivers its service events (file.deleted, file.read_requested) to agents-service (c-250).
+    # files-service delivers its service events (file.deleted, file.read_requested) to agents-service.
     files) echo "$(auth_env)env OPS_FILES_PORT=$FILES_PORT OPS_FILES_SCANNING=off OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT uv run --directory services/files-service python -m ops_files" ;;
-    # documents-service extracts on its own models-service key (c-235, c-256), whatever key the root .env hands agents.
+    # documents-service extracts on its own models-service key, whatever key the root .env hands agents.
     documents) echo "$(auth_env)env OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_extract uv run --directory services/documents-service python -m ops_documents" ;;
     # A second Next dev server in the same folder needs its own build directory: Next locks the one it uses.
     console)
@@ -325,7 +325,7 @@ start() {
   fi
   if alive "$svc"; then echo "$svc: already running (pid $(cat "$(pidfile "$svc")"), auth $AUTH)"; return; fi
   # A worker whose pidfile was lost is still this stack's: record it instead of starting a second one (three leftovers
-  # were still claiming work and the mail listener's lease after make up, c-532).
+  # were still claiming work and the mail listener's lease after make up).
   if [[ "$svc" == worker ]]; then
     local leftover
     leftover=$(stack_worker_leftover)
@@ -339,7 +339,7 @@ start() {
   # A port held by a process this script did not start belongs to someone else; it is reported, never killed.
   if [[ -n "$port" ]] && pid=$(listener "$port") && [[ -n "$pid" ]]; then echo "$port already served by pid $pid, skipping $svc"; return; fi
   migrate "$svc" || return 1
-  # The runner's pinned Python build (c-531): fetched into .data/runner once, checked by SHA-256 on every start. The
+  # The runner's pinned Python build: fetched into .data/runner once, checked by SHA-256 on every start. The
   # command line is word-split, not parsed by a shell, so this runs here rather than chained in cmd_of.
   if [[ "$svc" == runner ]] && ! uv run --directory services/runner-service python -m ops_runner.fetch >/dev/null; then
     echo "runner: its Python build could not be fetched or checked, not starting it" >&2
@@ -547,7 +547,7 @@ docker_disk() {
   fi
 }
 
-# The background processes each service reports at /health/background (c-516): one row per process, its state and how
+# The background processes each service reports at /health/background: one row per process, its state and how
 # long since its last pass. Late or stopped fails the command, so a stuck worker or relay shows here as on Govern >
 # Background; not reported (an event-run process that has had nothing to do yet) does not.
 background_rows() {

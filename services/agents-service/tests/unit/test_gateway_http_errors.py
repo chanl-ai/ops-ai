@@ -1,4 +1,4 @@
-"""The gateway client's answer to a call the gateway rejects with a status it has no reason list for (c-057): a 422
+"""The gateway client's answer to a call the gateway rejects with a status it has no reason list for: a 422
 on an input the operation's schema refuses, and a body that is not JSON. Each is a failed outcome the graph or the
 model reads, never an exception that ends the run."""
 

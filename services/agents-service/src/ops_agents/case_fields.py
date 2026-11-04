@@ -1,4 +1,4 @@
-"""A case's fields as the case page shows them (c-291): each with its label, type and display text, in its case type's
+"""A case's fields as the case page shows them: each with its label, type and display text, in its case type's
 order. The field types are the extraction field types (`ops_contracts.field_values.FIELD_TYPES`, which a document type
 declares), plus `file` (a Files id) and `link` (a URL), so a field read from a document keeps its type on the case.
 Display text is formatted here, on the server, so no client formats a bank's money or dates its own way."""

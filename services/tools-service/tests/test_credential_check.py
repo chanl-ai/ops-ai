@@ -1,4 +1,4 @@
-"""An app credential set and checked by a team admin (c-616 P1, group B), by failure mode: saving the team's own client
+"""An app credential set and checked by a team admin (group B), by failure mode: saving the team's own client
 drops the environment's addresses or is refused for them; Test with my account keeps a token, so a check replaces the
 team account; it signs in with a client other than the environment's; and someone who may not set app credentials
 can check them."""

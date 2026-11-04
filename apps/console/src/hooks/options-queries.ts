@@ -36,7 +36,7 @@ const workflowsWhere = (key: string, filters: WorkflowFilters = {}): OptionSourc
 });
 /** Every workflow of the team. */
 export const workflowOptions = workflowsWhere('workflow-options');
-/** Workflows a person may start by hand: those only other workflows start are left out (c-466). */
+/** Workflows a person may start by hand: those only other workflows start are left out. */
 export const startableWorkflowOptions = workflowsWhere('workflow-options:startable', { startable: ['true'] });
 /** Workflows a file can start: an email trigger, or a form with a file field; never one only other workflows start. */
 export const fileWorkflowOptions = workflowsWhere('workflow-options:files', { startable: ['true'], takesFiles: ['true'] });

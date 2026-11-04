@@ -291,7 +291,7 @@ def check(config: HostConfig) -> int:
 
 
 def _background(name: str, url: str) -> int:
-    """The process's background processes from its /health/background (c-516), one line each; late or stopped counts
+    """The process's background processes from its /health/background, one line each; late or stopped counts
     as down, as `make health` reads it locally. A service with no such route has none."""
     parts = urllib.parse.urlsplit(url)
     try:

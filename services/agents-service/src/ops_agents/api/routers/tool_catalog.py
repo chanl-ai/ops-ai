@@ -32,7 +32,7 @@ Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI re
 async def known_tools(rt: Runtime, *, fresh: bool = False) -> list[dict[str, Any]]:
     """Registry operations, then the tenant's published workflows (from this service's own workflow registry) under
     `workflow:<id>`: what an agent may be granted, and what search_tools finds among an agent's grants. `fresh` asks
-    tools-service again past the 30 s list, for a grant naming a tool the kept list lacks (c-607)."""
+    tools-service again past the 30 s list, for a grant naming a tool the kept list lacks."""
     # Only a directory that keeps a list has one to drop; a fixed catalogue or a test's list has none.
     if fresh and (forget := getattr(rt.directory(), "forget", None)) is not None:
         forget()
@@ -144,7 +144,7 @@ async def tool_options(
         hits = [t for t in tools if q in f"{t.get('title') or ''} {t['name']} {t['server']} {t['description']}".lower()]
         offset, _ = options_window(cursor, limit)
     page = hits[offset : offset + limit + 1]
-    # A plugin tool reads by its title (c-581); every other tool by its name.
+    # A plugin tool reads by its title; every other tool by its name.
     options = [
         {"id": t["id"], "label": t.get("title") or t["name"], "hint": t["server"], "disabled": None} for t in page
     ]

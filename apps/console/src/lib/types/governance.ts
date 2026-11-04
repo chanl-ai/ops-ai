@@ -11,7 +11,7 @@ export type CallOperation = 'read' | 'write' | 'completion';
 /** How a write was authorised: a person's approval token, a gate policy that auto-approves, or none (reads, model calls). */
 export type ApprovalKind = 'person' | 'policy' | 'none';
 /** `replayed`: the same approved write sent again; it ran nothing and returned the first call's result (`replayOf`). */
-/** `running`: a write the gateway received and has not finished; whether it happened is not known yet (c-561). */
+/** `running`: a write the gateway received and has not finished; whether it happened is not known yet. */
 export type CallStatus = 'ok' | 'error' | 'denied' | 'awaiting_approval' | 'replayed' | 'running';
 
 export interface CallApproval {
@@ -37,7 +37,7 @@ export interface ToolCallRow {
   caseId?: string;
   /** `place_wire_hold` for a tool, the model alias for a model call. */
   target: string;
-  /** The tool's title (`Read a record`) and its app's name (`Salesforce`), from tools-service's call log (c-607). */
+  /** The tool's title (`Read a record`) and its app's name (`Salesforce`), from tools-service's call log. */
   title?: string | null;
   app?: string | null;
   /** Bank system or module for a tool; the resolved model for a model call. */

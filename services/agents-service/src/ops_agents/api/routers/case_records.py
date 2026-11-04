@@ -1,9 +1,9 @@
-"""`/v1/cases`: a team's long-lived customer issues and their timelines (c-128). The run list stays on `/runs`.
+"""`/v1/cases`: a team's long-lived customer issues and their timelines. The run list stays on `/runs`.
 
 A case belongs to the team the request acts in; another team's or tenant's case answers 404. Every member reads,
 opens and works its team's cases (`cases.view`, `cases.create`, `cases.edit`); closing one, or reopening a closed
-one, is `cases.manage` and a person's: an agent or workflow may resolve a case but never close it (owner,
-2026-10-17). A service token opens and works cases with the `cases:*` scopes Settings.service_scopes gives it."""
+one, is `cases.manage` and a person's: an agent or workflow may resolve a case but never close it. A service token opens
+and works cases with the `cases:*` scopes Settings.service_scopes gives it."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from ops_access import can
 from ops_contracts.chat import WireModel
 from ops_engine.store import RunStore
 from ops_service_kit.errors import NotFound, Unprocessable
-from ops_service_kit.http import Envelope, ListResult, Pagination
+from ops_service_kit.http import Envelope, ListResult, Out, Pagination
 
 from ...store.cases import CaseNotFound, CaseStore, Priority, Status
 from ...store.engine import EngineTransactions
@@ -30,7 +30,6 @@ from ..case_page import assembled
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..runs import graph_store
-from ..schemas import Out
 from .engine import StoryLine
 
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
@@ -115,7 +114,7 @@ class CaseDetail(CaseView):
     events: list[CaseEventView]
 
 
-# The assembled case (c-291): docs/services/agents-service/overview.md "Cases" and the approved case page design.
+# The assembled case: docs/services/agents-service/overview.md "Cases" and the approved case page design.
 class CaseTypeRef(Out):
     id: str
     version: int
@@ -128,7 +127,7 @@ class PersonRef(Out):
 
 
 class CaseRow(CaseView):
-    # Who works the case, by name as its page says it; the list joins it so the console looks nothing up (c-403).
+    # Who works the case, by name as its page says it; the list joins it so the console looks nothing up.
     owner: PersonRef | None
 
 
@@ -281,7 +280,7 @@ class WhatsLeft(Out):
 
 
 class CaseOrigin(Out):
-    """How the case's work began (c-500): email, request (a form or an API call), event, other, or person (opened by
+    """How the case's work began: email, request (a form or an API call), event, other, or person (opened by
     hand, with no run)."""
 
     kind: str
@@ -407,7 +406,7 @@ async def list_cases(rt: Rt, me: Me, q: Annotated[CasesQuery, Query()]) -> JSONR
 
 @router.get("/{case_id}", response_model=Envelope[CasePage])
 async def get_case(rt: Rt, me: Me, case_id: str) -> JSONResponse:
-    """The case assembled for its page (c-291): its timeline, oldest entry first, and who owns it, its clocks, what
+    """The case assembled for its page: its timeline, oldest entry first, and who owns it, its clocks, what
     it waits on and the actions drafted there, its fields in its case type's order, what it links to, its newest
     activity and what the caller may do."""
     store = CaseStore(rt.db)

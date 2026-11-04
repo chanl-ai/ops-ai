@@ -1,4 +1,4 @@
-# SQL Server 2025 Developer edition for the two-database test matrix (c-345; ADR-0017). Never a bank's database and
+# SQL Server 2025 Developer edition for the two-database test matrix (ADR-0017). Never a bank's database and
 # never public: no service and no IP, so only Fly's private network reaches it (`fly proxy 14330:1433 -a
 # <app-prefix>-mssql`). The SA password is the MSSQL_SA_PASSWORD secret. Runbook: docs/deploy/fly.md.
 #   fly deploy -c deploy/fly/mssql/fly.toml -a "$STG_APP_PREFIX-mssql"   (STG_APP_PREFIX: deploy/fly/staging.env.example)

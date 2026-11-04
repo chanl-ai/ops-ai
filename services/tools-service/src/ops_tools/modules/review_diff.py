@@ -1,4 +1,4 @@
-"""What a tool module review approves (c-204): the operations added, removed and changed since the published version,
+"""What a tool module review approves: the operations added, removed and changed since the published version,
 the hosts its calls would reach that the published version did not, and the secrets its operations read. Sent with the
 review when it opens, so the reviewer sees what was asked for even if the module is edited afterwards."""
 

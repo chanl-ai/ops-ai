@@ -129,7 +129,7 @@ class RunStore:
         team_id: str | None = None,
         limit: int | None = 200,
     ) -> list[dict[str, Any]]:
-        """The newest runs first, at most `limit` of them; None reads every one (Human Tasks' waiting runs, c-561)."""
+        """The newest runs first, at most `limit` of them; None reads every one (Human Tasks' waiting runs)."""
         q = engine_runs.select().where(engine_runs.c.tenant_id == self.tx.tenant(), team_visible(engine_runs))
         if workflow_id:
             q = q.where(engine_runs.c.workflow_id == workflow_id)
@@ -317,7 +317,7 @@ class RunStore:
         """After `run` changed status: the run that started it, once its own graph has ended (its outcome is set),
         takes the status its unfinished runs leave it, and succeeds when none is left; then the same for that run's
         parent. The parent row is locked, so two runs ending at once cannot both leave it unsettled. A parent paused at
-        a Run workflow step waiting for its children (c-263) is woken instead: one resume per change of a child's
+        a Run workflow step waiting for its children is woken instead: one resume per change of a child's
         status, keyed so settling twice queues it once, naming the step rather than the pause."""
         r = engine_runs
         here = run
@@ -360,7 +360,7 @@ class RunStore:
 
     async def children(self, parent_run_id: str, key_prefix: str, *, outputs: bool = False) -> list[dict[str, Any]]:
         """The runs `parent_run_id` started under keys beginning `key_prefix`, in one read on the parent index, each
-        with the item index its key ends with, in item order (c-263). Outputs are read only when asked: a step waiting
+        with the item index its key ends with, in item order. Outputs are read only when asked: a step waiting
         on many children reads their states on every wake and their outputs once, when it goes on."""
         r = engine_runs
         columns = [r.c.id, r.c.status, r.c.outcome, r.c.run_key, *([r.c.output] if outputs else [])]
@@ -421,7 +421,7 @@ class RunStore:
         return await self.get(run_id), changed
 
     async def retry(self, run_id: str) -> tuple[dict[str, Any] | None, bool]:
-        """Queues a Stuck run again (c-561): its set-aside work rows are closed and one new row goes on under the
+        """Queues a Stuck run again: its set-aside work rows are closed and one new row goes on under the
         current engine build. A run paused at a step is resumed at that step, which reads its state again; any other
         continues from its last checkpoint, where recorded steps return their record and a write reconciles by its
         last attempt's key, so nothing is sent twice. Returns (run, changed); changed is False for a run not Stuck."""

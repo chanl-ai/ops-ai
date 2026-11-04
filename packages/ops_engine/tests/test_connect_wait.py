@@ -1,4 +1,4 @@
-"""A run that needs its person's own account of an app waits for them to connect (c-616 S12), by failure mode: the
+"""A run that needs its person's own account of an app waits for them to connect, by failure mode: the
 step fails as if the system had refused it; the run waits on something nobody reports, or on the wrong person's key;
 connecting does not send the call again; and a call still refused after the person connected waits forever instead of
 failing with the reason. A refusal for nobody behind the call is setup to fix, so it still fails at once."""

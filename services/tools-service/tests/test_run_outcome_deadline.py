@@ -1,4 +1,4 @@
-"""How long the gateway may take over an operation (c-561), by failure mode: the engine's step deadline falls short of
+"""How long the gateway may take over an operation, by failure mode: the engine's step deadline falls short of
 the operation's own time limit, so a write the gateway is still running is failed as uncertain while it may finish."""
 
 from __future__ import annotations

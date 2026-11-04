@@ -1,4 +1,4 @@
-"""Single-tenant and multi-tenant installs differ only by `tenancy_mode` (c-418), by failure mode: a single-tenant
+"""Single-tenant and multi-tenant installs differ only by `tenancy_mode`, by failure mode: a single-tenant
 install that creates a second tenant; a multi-tenant install that refuses one; the install's tenant taken from anything
 but the settings; and a code path that reads the mode anywhere but where tenants are created, which would make one mode
 behave differently from the other."""

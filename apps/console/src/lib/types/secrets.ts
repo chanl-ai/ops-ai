@@ -14,8 +14,8 @@ export interface SecretMeta {
   createdAt: string;
   rotatedAt?: string | null;
   lastUsedAt?: string | null;
-  /** The operations that read it (c-093); a secret any operation names cannot be deleted. */
+  /** The operations that read it; a secret any operation names cannot be deleted. */
   usedBy: SecretUser[];
-  /** The team whose tool modules and connections read it (c-509); another team that needs it holds its own. */
+  /** The team whose tool modules and connections read it; another team that needs it holds its own. */
   teamId: string;
 }

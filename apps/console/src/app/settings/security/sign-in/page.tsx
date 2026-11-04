@@ -22,7 +22,7 @@ import type { SignInProvider } from '@/lib/types/sign-in';
 const newId = () => `sip_${Math.random().toString(36).slice(2, 12)}`;
 
 /**
- * Settings → Sign-in (c-195): the workspace's providers and the DNS proof of each domain, on platform-service. MFA,
+ * Settings → Sign-in: the workspace's providers and the DNS proof of each domain, on platform-service. MFA,
  * session length and sign-up have no service yet, so they show as sample sections below.
  */
 export default function SignInSettingsPage() {

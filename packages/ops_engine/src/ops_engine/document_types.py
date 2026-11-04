@@ -1,4 +1,4 @@
-"""Document type pins in a workflow definition (c-236): an Extract from file step may name a team's document type
+"""Document type pins in a workflow definition: an Extract from file step may name a team's document type
 without a version; saving the workflow writes the newest version into the step, so the saved definition (and its
 digest) reads with that version until the workflow is saved again, whatever versions are added after."""
 

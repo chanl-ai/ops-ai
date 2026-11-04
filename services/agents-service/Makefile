@@ -32,7 +32,7 @@ typecheck: ## Strict pyright
 test: ## pytest on the test database (needs db-up)
 	$(TEST_DB) uv run pytest $(or $(T),tests)
 
-loader-test: ## The embedded chat loader's rules in a real browser (c-131)
+loader-test: ## The embedded chat loader's rules in a real browser
 	node --test tests/loader/loader.browser.mjs
 
 verify: lint typecheck db-up test loader-test standards openapi-check ## lint, typecheck, test and standards; the root runs it with model keys unset

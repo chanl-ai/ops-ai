@@ -1,4 +1,4 @@
-"""API keys as the Channels list shows them (c-246): platform-service holds the keys, agents-service counts what each
+"""API keys as the Channels list shows them: platform-service holds the keys, agents-service counts what each
 started. Read through ServiceClient on every list, since a key revoked a moment ago must not stay green; None when the
 keys cannot be read, and the list then has no API rows."""
 

@@ -1,4 +1,4 @@
-"""What an agent remembers about each person (c-124, c-557), on the chat path.
+"""What an agent remembers about each person, on the chat path.
 
 Write: beside each chat turn, one schema-bound model call reads the last messages with the person's words marked and
 the person's closest saved memories, and lists candidates, each with a kind, a quote, a confidence and a decision

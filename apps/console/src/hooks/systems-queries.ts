@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * The real-connections screens' reads and writes (c-580), on the generated SDK through `sdk()` (lib/api/ops-sdk.ts):
+ * The real-connections screens' reads and writes, on the generated SDK through `sdk()` (lib/api/ops-sdk.ts):
  * the systems grid, a connection's keys per environment, a plugin's own app per environment, binding a module to its
  * connection, the team's sending policy and an operation's mock answers. Types come from the SDK's operations, so a
  * route change shows here as a type error, not as a broken screen.
@@ -48,7 +48,7 @@ type ApiEnvironment = NonNullable<Args<'connections_test_connection'>['body']>['
 const env = (id: string) => id as ApiEnvironment;
 
 export type AppPage = Data<'connections_get_app'>;
-/** One app's page, joined by tools-service (c-607): card, account, your own sign-in, tools, skills and latest runs. */
+/** One app's page, joined by tools-service: card, account, your own sign-in, tools, skills and latest runs. */
 export const useApp = (appId: string) =>
   useTeamQuery({ queryKey: [...APPS, appId], queryFn: () => sdk((ops) => ops.raw.tools.connections_get_app({ path: { app_id: appId } })) });
 /** Disconnect: ends the caller's own sign-in on a connection's environment (DELETE /v1/me/connections/{id}); the team's stays. */
@@ -66,7 +66,7 @@ export const useConnectionDetail = (connectionId: string | null | undefined) =>
     enabled: Boolean(connectionId),
   });
 
-/** The team's connections a module may sign in through, for the connection picker (c-591). */
+/** The team's connections a module may sign in through, for the connection picker. */
 export const useConnectionOptions = (enabled = true) =>
   useTeamQuery({
     queryKey: [...CONNECTIONS, 'options'],
@@ -121,9 +121,9 @@ export const useAppCredentials = () =>
 /** Replaces the client secret of the team's own app for a plugin (PUT /v1/plugins/{id}/app-secret); sealed on save. */
 export const useSetAppSecret = () => useSystemsMutation((a: Args<'plugins_set_app_secret'>) => sdk((ops) => ops.raw.tools.plugins_set_app_secret(a)));
 export const useSetTeamPlugin = () => useSystemsMutation((a: Args<'plugins_set_team_plugin'>) => sdk((ops) => ops.raw.tools.plugins_set_team_plugin(a)));
-/** Another named account of an app the team has connected (c-608, several_accounts); answers the new account. */
+/** Another named account of an app the team has connected (several_accounts); answers the new account. */
 export const useAddAccount = () => useSystemsMutation((a: Args<'plugins_add_account'>) => sdk((ops) => ops.raw.tools.plugins_add_account(a)));
-/** Makes one of the app's accounts the caller's default: their calls that name no account use it (c-608). */
+/** Makes one of the app's accounts the caller's default: their calls that name no account use it. */
 export const usePinDefault = () =>
   useSystemsMutation((connectionId: string) => sdk((ops) => ops.raw.tools.connections_pin_default({ path: { connection_id: connectionId } })));
 

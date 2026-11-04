@@ -1,4 +1,4 @@
-"""The team's app credentials in one answer (c-616 C0, the Credentials page), by failure mode: an app on Ops AI's app
+"""The team's app credentials in one answer (the Credentials page), by failure mode: an app on Ops AI's app
 reads as the team's own or the other way round; the accounts signed in through it are not counted; its status
 ignores the last Test with my account; an app with no OAuth app of its own (a key) is listed; a secret comes back; and
 someone who cannot manage the team's apps reads them. Rig: test_app_accounts."""

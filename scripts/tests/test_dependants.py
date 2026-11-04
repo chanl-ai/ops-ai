@@ -1,4 +1,4 @@
-"""A package change runs what depends on it, not the whole suite (c-566), by failure mode: a dependant reached only
+"""A package change runs what depends on it, not the whole suite, by failure mode: a dependant reached only
 through another package is skipped; a package nothing depends on still forces a full run; a changed directory that is
 no workspace member is skipped instead of running everything."""
 

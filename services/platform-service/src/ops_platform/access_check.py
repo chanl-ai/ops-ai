@@ -1,4 +1,4 @@
-"""Check one action for one person (c-150): the same `can()` the services run, for that person's roles now and the
+"""Check one action for one person: the same `can()` the services run, for that person's roles now and the
 workspace's policies, answering allowed with the scope and the roles that grant it, or refused with the reason. The
 admin who asks needs `access.view` in the team; every check is written to the audit log."""
 

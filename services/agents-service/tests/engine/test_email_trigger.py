@@ -1,4 +1,4 @@
-"""The Email received trigger's listener (c-187), by failure mode: mail already in the mailbox starts runs when the
+"""The Email received trigger's listener, by failure mode: mail already in the mailbox starts runs when the
 trigger goes live; a redelivery or a second worker starts a second run; a run starts before its attachment is in Files,
 or with the bytes in its input; mail that fails a filter starts a run; a paused workflow starts runs from mail; a new
 folder continues from the old folder's cursor. The mailbox is the dev fake (a folder of Graph items) and Files is
@@ -209,7 +209,7 @@ async def test_mail_already_there_starts_nothing_and_new_mail_with_a_pdf_starts_
         "size": len(PDF),
     }
     assert stored["bytes"] == PDF and stored["purpose"] == "case_attachment"
-    # The text is a file too (c-259), read like an attachment.
+    # The text is a file too, read like an attachment.
     [body] = [f for f in env.files.stored.values() if f["purpose"] == "email_body"]
     assert run["input"]["bodyFile"] == {
         "fileId": body["id"],
@@ -382,7 +382,7 @@ async def test_an_upload_in_flight_from_another_workflow_is_read_again_not_dropp
 
 async def test_a_database_error_after_a_poll_does_not_stop_the_listener(env: Env) -> None:
     # run_forever used to call bindings() again for IDLE outside the try, so a postgres restart ended the task and
-    # mail_listener stayed stopped until the worker was restarted (c-532).
+    # mail_listener stayed stopped until the worker was restarted.
     await env.publish()
     listener = env.listener()
     calls = {"n": 0}
@@ -416,7 +416,7 @@ async def test_a_database_error_after_a_poll_does_not_stop_the_listener(env: Env
 
 
 async def test_an_email_with_no_attachment_carries_its_text_as_a_file(env: Env) -> None:
-    # A body-only email started a run with nothing for Extract from file to read (c-259).
+    # A body-only email started a run with nothing for Extract from file to read.
     await env.publish()
     await env.listener().poll_all()
     env.drop(mail(7, attachments=[], hasAttachments=False))
@@ -428,7 +428,7 @@ async def test_an_email_with_no_attachment_carries_its_text_as_a_file(env: Env) 
 
 
 async def test_a_message_that_fails_three_polls_is_set_aside_and_run_again_starts_it(env: Env) -> None:
-    # Its attachment's upload never leaves "in progress": the message fails every read, and before c-561 the mailbox
+    # Its attachment's upload never leaves "in progress": the message fails every read, and before the fix the mailbox
     # read nothing after it.
     await env.publish()
     await env.listener().poll_all()

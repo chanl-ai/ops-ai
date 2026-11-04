@@ -1,4 +1,4 @@
-"""One API for people and services (c-168): no service serves or calls a `/v1/internal` route, and no HTTP route fires
+"""One API for people and services: no service serves or calls a `/v1/internal` route, and no HTTP route fires
 a timer. By failure mode: an internal route or client call coming back in a service or package, and a scan that finds
 nothing because it reads nothing (each check is first run on a file that breaks it)."""
 

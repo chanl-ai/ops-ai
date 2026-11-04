@@ -1,4 +1,4 @@
-"""The console's copy of the node types (c-486) matches the registry: a port added or removed without re-running
+"""The console's copy of the node types matches the registry: a port added or removed without re-running
 scripts/export_node_types.py would leave the seed bake and the layout tests placing the wrong ports."""
 
 from __future__ import annotations

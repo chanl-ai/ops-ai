@@ -102,7 +102,7 @@ export function CreateDeploymentDialog({
   const channels: DeployChannel[] = useFlagged(WIZARD_CHANNELS).map((c) => c.channel);
   const [v, setV] = React.useState<Values>({ ...initial(fixedWorkflowId), channel: initialChannel ?? 'widget' });
   const [touched, setTouched] = React.useState(false);
-  // A chat widget is an agent's embed (c-224): the wizard hands off to the embed dialog, which picks the agent,
+  // A chat widget is an agent's embed: the wizard hands off to the embed dialog, which picks the agent,
   // creates the deployment and shows its snippet.
   const [embedOpen, setEmbedOpen] = React.useState(false);
   const scriptUrl = useWidgetScriptUrl();

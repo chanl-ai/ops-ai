@@ -15,7 +15,7 @@ const KINDS: { kind: MemorySettings['kinds'][number]; label: string; hint: strin
 ];
 
 /**
- * What the agent remembers about each person between chats (c-124, c-206), saved with the version like every other
+ * What the agent remembers about each person between chats, saved with the version like every other
  * setting. People see, correct and forget what it keeps from the chat; the workspace retention policy deletes old ones.
  */
 export function MemorySection({ draft, set }: { draft: AgentDraft; set: (k: 'memory', v: MemorySettings) => void }) {

@@ -1,4 +1,4 @@
-"""Each team's plugin version (c-609), by failure mode: a turn-on or settings save wipes the version a team took, a
+"""Each team's plugin version, by failure mode: a turn-on or settings save wipes the version a team took, a
 take lands on a team with no binding, or the stamp cannot find another team's binding of the same plugin."""
 
 from __future__ import annotations
@@ -65,7 +65,7 @@ async def test_every_teams_binding_of_a_plugin_is_found_for_the_stamp(engine: As
     assert sorted(r["team_id"] for r in await b.of_plugin(tenant, ID)) == ["team_ops", "team_platform"]
 
 
-# Calls and lists run each team's version across an upgrade (c-609 T003).
+# Calls and lists run each team's version across an upgrade.
 
 V1 = Path(__file__).parent / "plugin_fields" / "fields_desk"
 V2 = Path(__file__).parent / "plugin_versions" / "fields_desk" / "plugin.yaml"
@@ -218,7 +218,7 @@ async def test_a_rewrite_another_process_made_first_is_left_alone(up: Upgrade, m
     assert "fields_close_case" not in names, "a stale write lands nothing"
 
 
-# The review and the take, through the real plugin routes (c-609 T004).
+# The review and the take, through the real plugin routes.
 
 
 @pytest.fixture

@@ -1,6 +1,6 @@
 """Thread events. `POST /v1/threads/{id}/events`: things that happen to a waiting thread from outside it; a customer
 reply restarts the SLA clock of the human step the thread waits on. Timers fire in-process from the PostgreSQL poller
-(api/timers.py); no HTTP route fires one (c-168)."""
+(api/timers.py); no HTTP route fires one."""
 
 from __future__ import annotations
 

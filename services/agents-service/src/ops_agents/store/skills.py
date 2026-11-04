@@ -1,4 +1,4 @@
-"""Skills as versioned attachments (spec 11, c-063 slice 2): a procedure written once, published through a review, and
+"""Skills as versioned attachments (spec 11): a procedure written once, published through a review, and
 pinned on agents by `{skillId, version}`. Versions are immutable once published; a draft is edited in place until it
 is requested. Publish requests are the registry's (`registry_publish_requests`, kind `skill`).
 

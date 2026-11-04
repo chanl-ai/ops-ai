@@ -22,14 +22,14 @@ export function evidenceDir(name: string, ...parts: string[]): string {
 }
 export const AGENTS_PORT = Number(process.env.OPS_USECASE_AGENTS_PORT ?? 8790);
 export const CONSOLE_PORT = Number(process.env.OPS_USECASE_CONSOLE_PORT ?? 3018);
-/** The embed app (apps/embed, c-158), started when a use case asks for `embed`. */
+/** The embed app (apps/embed), started when a use case asks for `embed`. */
 export const EMBED_PORT = Number(process.env.OPS_USECASE_EMBED_PORT ?? 3019);
 export const PLATFORM_PORT = Number(process.env.OPS_USECASE_PLATFORM_PORT ?? 8810);
 const PLATFORM_INTERNAL_PORT = Number(process.env.OPS_USECASE_PLATFORM_INTERNAL_PORT ?? 8811);
 export const TOOLS_PORT = Number(process.env.OPS_USECASE_TOOLS_PORT ?? 8792);
 export const KB_PORT = Number(process.env.OPS_USECASE_KB_PORT ?? 8793);
 export const FILES_PORT = Number(process.env.OPS_USECASE_FILES_PORT ?? 8796);
-/** documents-service (c-256): extractions and document types, reading bytes from files-service. */
+/** documents-service: extractions and document types, reading bytes from files-service. */
 export const DOCUMENTS_PORT = Number(process.env.OPS_USECASE_DOCUMENTS_PORT ?? 8798);
 export const MODELS_PORT = Number(process.env.OPS_USECASE_MODELS_PORT ?? 8794);
 export const IDP_PORT = Number(process.env.OPS_USECASE_IDP_PORT ?? 8797);
@@ -45,7 +45,7 @@ export const FAKE_OPENAI_KEY = 'sk-usecase-fake-openai';
 /** platform-service's dev seed: the demo's builder and Security approver, and the dev password. */
 const JAMES = 'j.richardson@harborpine.example';
 const NADIA = 'n.petrov@harborpine.example';
-// The Security team's admin: only they change egress and secrets (c-079).
+// The Security team's admin: only they change egress and secrets.
 const SAM = 's.adeyemi@harborpine.example';
 // The workspace admin, who can make teams: the sample team installer signs in as them.
 const WANJIRU = 'w.kamau@harborpine.example';
@@ -84,8 +84,8 @@ export function check(name: string, ok: boolean, detail: unknown = ''): boolean 
 
 /**
  * Approves a tool module's open review in agents-service's Reviews as `headers` (a Security approver), as Human
- * Tasks would (c-163); Reviews applies it in tools-service. The module is read as `owner`, a person of its own team:
- * the approver acts in Security, which does not read another team's modules (c-509). Returns the module's detail
+ * Tasks would; Reviews applies it in tools-service. The module is read as `owner`, a person of its own team:
+ * the approver acts in Security, which does not read another team's modules. Returns the module's detail
  * afterwards.
  */
 export async function approveToolReview(moduleId: string, headers: Record<string, string>, owner: Record<string, string>): Promise<Record<string, unknown>> {
@@ -103,7 +103,7 @@ export async function approveToolReview(moduleId: string, headers: Record<string
 }
 
 /**
- * Proves each unverified domain of a saved sign-in provider as a bank would (c-195): publishes the claim's TXT record
+ * Proves each unverified domain of a saved sign-in provider as a bank would: publishes the claim's TXT record
  * at the fake identity provider's DNS and asks platform-service to verify it. Throws on any refusal.
  */
 export async function proveDomains(provider: { verification?: { domain: string; verifiedAt: string | null; record: { value: string } }[] }, headers: Record<string, string>): Promise<void> {
@@ -115,11 +115,11 @@ export async function proveDomains(provider: { verification?: { domain: string; 
   }
 }
 
-/** The password every person a use case invites sets when accepting (c-218). */
+/** The password every person a use case invites sets when accepting. */
 export const INVITED_PASSWORD = "an invited person's password";
 
 /**
- * A person made the way a bank makes one (c-218): `adminEmail`, signed in with the demo password, invites `email`
+ * A person made the way a bank makes one: `adminEmail`, signed in with the demo password, invites `email`
  * with `role` into `team` on platform-service, and the person accepts with a name and INVITED_PASSWORD. Returns the
  * person's session token. Throws on any refusal, so a script never checks a person who was not made.
  */
@@ -139,7 +139,7 @@ export async function invitePerson(adminEmail: string, email: string, role: stri
 
 /** Signs `email` in on the console's login page in a fresh browser context and returns the page. */
 /**
- * A standard dev user's headers (c-614): the role's seeded person (services/platform-service/seed/dev-roles.json: admin,
+ * A standard dev user's headers: the role's seeded person (services/platform-service/seed/dev-roles.json: admin,
  * builder, approver, viewer, security, platform) signed in through the password sign-in, acting in the team the sign-in
  * names unless `team` is given. The same map `make api AS=<role>` uses (scripts/api_as.py).
  */
@@ -300,7 +300,7 @@ function runToEnd(name: string, argv: string[], cwd: string, env: NodeJS.Process
 export interface StackOptions {
   /** Settings for the agents service, e.g. `{ OPS_REGISTRY_AUTO_APPROVE: 'false' }` to keep publish requests pending. */
   agentsEnv?: Record<string, string>;
-  /** Settings for platform-service when `platform` is on, e.g. `{ OPS_TEAM_DELETE_AFTER_DAYS: '0' }` (c-529). */
+  /** Settings for platform-service when `platform` is on, e.g. `{ OPS_TEAM_DELETE_AFTER_DAYS: '0' }`. */
   platformEnv?: Record<string, string>;
   /**
    * Also start platform-service on the run's database (its own migration chain, the dev seed of team_ops with Priya,
@@ -323,7 +323,7 @@ export interface StackOptions {
      * `stack.mail.range` on the tenant's allow-list, as a person would.
      */
     mail?: boolean;
-    /** Start runner-service (c-531) beside tools-service, so a code operation runs its Python on WASM. */
+    /** Start runner-service beside tools-service, so a code operation runs its Python on WASM. */
     runner?: boolean;
     /**
      * More tools-service settings, applied last: how it reaches an outside system the use case started itself (its
@@ -368,7 +368,7 @@ export interface Stack {
   mailDir?: string;
   /** With `tools.bank`: the bank's host name, the range it answers on, its own address for reading what it
    * received (`${url}/webhooks.json`, the webhook stand-in), and the CA file its certificate for `host` is signed by. */
-  /** The bank stand-in; with `bank: 'core'`, also its certificate-only host and the CA and client certificate's files (c-580). */
+  /** The bank stand-in; with `bank: 'core'`, also its certificate-only host and the CA and client certificate's files. */
   bank?: { host: string; range: string; url: string; ca: string; mtlsHost?: string; mtls?: Record<string, string> };
   /** With `tools.mail`: the names tools-service resolves to GreenMail and Mailpit, and the range they answer on. */
   mail?: { imapHost: string; smtpHost: string; range: string };
@@ -491,7 +491,7 @@ const MODEL_ENDPOINT_ENV = ['OPENAI_API_TYPE', 'OPENAI_API_BASE', 'OPENAI_BASE_U
 export function stackEnv(base: NodeJS.ProcessEnv, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   const inherited = { ...base };
   // The shared stack's fake bank CA and name map stay with it, as in usecase_harness._env: a use case's bank passes its own.
-  // So does the shell's model endpoint (OPENAI_API_BASE and the rest, c-605), which would move openai-local off the fake.
+  // So does the shell's model endpoint (OPENAI_API_BASE and the rest), which would move openai-local off the fake.
   for (const key of ['OPS_MODELS_URL', 'OPS_MODELS_KEY', 'OPS_MODELS_FAKE_OPENAI_URL', 'OPS_PLATFORM_URL', 'OPS_EGRESS_CA_FILE', 'OPS_EGRESS_RESOLVE', ...MODEL_ENDPOINT_ENV]) delete inherited[key];
   const env = { ...inherited, ...extra };
   for (const key of ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'VIRTUAL_ENV']) delete env[key];
@@ -564,16 +564,16 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       // kb-service starts below on its known port; agents ask it on first use. Without it agents that hold knowledge
       // bases are refused, so every ui stack has one.
       OPS_KB_URL: `http://127.0.0.1:${KB_PORT}`,
-      // Tool module reviews decided in Reviews are applied in tools-service (c-163), with or without a gateway.
+      // Tool module reviews decided in Reviews are applied in tools-service, with or without a gateway.
       OPS_TOOLS_URL: `http://127.0.0.1:${TOOLS_PORT}`,
       // documents-service starts below; a workflow save pins its document types there and a worker's Extract from
-      // file step reads through it (c-256). Workers inherit this environment.
+      // file step reads through it. Workers inherit this environment.
       OPS_DOCUMENTS_URL: `http://127.0.0.1:${DOCUMENTS_PORT}`,
       // A test email or a set-aside email's Run again stores the email's files in Files from the API process itself.
       OPS_FILES_URL: `http://127.0.0.1:${FILES_PORT}`,
       ...modelsRoute,
-      // The embed app's origin is configuration: agents-service trusts no request header to name it (c-158).
-      // The console's origin too: a preview session (c-232) is minted for the console's own frame.
+      // The embed app's origin is configuration: agents-service trusts no request header to name it.
+      // The console's origin too: a preview session is minted for the console's own frame.
       ...(options.embed
         ? { OPS_EMBED_ORIGINS: JSON.stringify([`http://localhost:${EMBED_PORT}`]), OPS_CONSOLE_URL: consoleUrl }
         : {}),
@@ -663,19 +663,19 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
         OPS_GATEWAY_PORT: String(TOOLS_PORT),
         OPS_OPA_URL: opa.url,
         OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),
-        // Workflow approvals name agents-service's workflows (c-039); without this tools-service would ask the dev port.
+        // Workflow approvals name agents-service's workflows; without this tools-service would ask the dev port.
         OPS_AGENTS_URL: `http://127.0.0.1:${AGENTS_PORT}`,
-        // The read_file and read_document tools read the team's files through documents-service (c-613).
+        // The read_file and read_document tools read the team's files through documents-service.
         OPS_FILES_URL: `http://127.0.0.1:${FILES_PORT}`,
         OPS_DOCUMENTS_URL: `http://127.0.0.1:${DOCUMENTS_PORT}`,
-        // send_reply sends through the provider settings pick and fails with none (c-187): the dev fake writes each
+        // send_reply sends through the provider settings pick and fails with none: the dev fake writes each
         // mail to this run's folder.
         OPS_MAIL_PROVIDER: 'fake',
         OPS_MAIL_FROM: 'ops@harborpine.example',
         OPS_MAIL_FAKE_OUT_DIR: mkdtempSync(join(tmpdir(), 'usecase-mail-out-')),
         // Under platform sign-in tools-service verifies the console's tokens too, so people are told apart by role.
         ...(options.platform ? { OPS_AUTH_MODE: 'platform', OPS_PLATFORM_URL: `http://127.0.0.1:${PLATFORM_PORT}`, OPS_PLATFORM_INTERNAL_PORT: String(PLATFORM_INTERNAL_PORT) } : {}),
-        // Connect links and the sign-in's return page are the run's console (c-558).
+        // Connect links and the sign-in's return page are the run's console.
         OPS_CONSOLE_URL: consoleUrl,
         ...bankSettings,
         ...(options.tools.runner ? { OPS_RUNNER_URL: `http://127.0.0.1:${RUNNER_PORT}` } : {}),
@@ -693,7 +693,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       toolsUrl.NEXT_PUBLIC_OPS_TOOLS_API_URL = `http://127.0.0.1:${TOOLS_PORT}`;
     }
     if (options.platform && options.signIn) {
-      // The fake DNS answers on the same port number over UDP, so a domain's TXT record can be proven (c-195).
+      // The fake DNS answers on the same port number over UDP, so a domain's TXT record can be proven.
       idpProc = await serve('fake-idp', IDP_PORT, ['uv', 'run', 'python', '-m', 'ops_signin.fake_idp', '--port', String(IDP_PORT), '--dns-port', String(IDP_PORT)], ROOT, env, `http://127.0.0.1:${IDP_PORT}/health`, 60_000);
       stack.idpUrl = `http://127.0.0.1:${IDP_PORT}`;
       stack.mailDir = mkdtempSync(join(tmpdir(), 'usecase-mail-'));
@@ -708,7 +708,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
         // The seed's own roles: use cases check what a builder or viewer may not do, so nobody is Admin everywhere.
         OPS_SEED_EVERYONE_ADMIN: 'false',
         OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),
-        // What still runs in a team, read before a team is deleted or the workspace closed (c-529).
+        // What still runs in a team, read before a team is deleted or the workspace closed.
         OPS_AGENTS_URL: `http://127.0.0.1:${AGENTS_PORT}`,
         ...(stack.mailDir
           ? {
@@ -728,7 +728,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       platformProc = await serve('platform', PLATFORM_PORT, ['uv', 'run', 'python', '-m', 'ops_platform'], platformDir, platformEnv, `http://127.0.0.1:${PLATFORM_PORT}/.well-known/jwks.json`, 90_000);
       Object.assign(signIn, { NEXT_PUBLIC_AUTH_PROVIDER: 'platform', NEXT_PUBLIC_OPS_PLATFORM_API_URL: `http://127.0.0.1:${PLATFORM_PORT}` });
     }
-    // files-service on the run's database: kb-service stores every upload there, as on the shared stack (c-094).
+    // files-service on the run's database: kb-service stores every upload there, as on the shared stack.
     // Scanning is off, as the owner decided for now; the hook stays for when a scanner is chosen.
     const auth: Record<string, string> = options.platform ? { OPS_AUTH_MODE: 'platform', OPS_PLATFORM_URL: `http://127.0.0.1:${PLATFORM_PORT}`, OPS_PLATFORM_INTERNAL_PORT: String(PLATFORM_INTERNAL_PORT) } : {};
     const filesSvcDir = join(ROOT, 'services/files-service');
@@ -737,9 +737,9 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       OPS_FILES_PORT: String(FILES_PORT),
       OPS_FILES_DIR: filesDir,
       OPS_FILES_SCANNING: 'off',
-      // Service events (file.deleted, file.read_requested) reach this run's agents-service (c-250).
+      // Service events (file.deleted, file.read_requested) reach this run's agents-service.
       OPS_AGENTS_URL: `http://127.0.0.1:${AGENTS_PORT}`,
-      // The console calls files-service for its Storage settings (c-100).
+      // The console calls files-service for its Storage settings.
       OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),
       ...auth,
     });
@@ -751,11 +751,11 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       OPS_DATABASE_URL: pgUrl(DB),
       OPS_DOCUMENTS_PORT: String(DOCUMENTS_PORT),
       OPS_FILES_URL: `http://127.0.0.1:${FILES_PORT}`,
-      // A team's document type templates come from its plugins in tools-service (c-590).
+      // A team's document type templates come from its plugins in tools-service.
       OPS_TOOLS_URL: `http://127.0.0.1:${TOOLS_PORT}`,
       OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),
       ...auth,
-      // Extractions run on the run's models-service with documents-service's own dev key (c-235, c-256).
+      // Extractions run on the run's models-service with documents-service's own dev key.
       ...(modelsRoute.OPS_MODELS_URL ? { OPS_MODELS_URL: modelsRoute.OPS_MODELS_URL, OPS_MODELS_KEY: 'mk_dev_extract' } : {}),
     });
     await runToEnd('documents-migrate', ['uv', 'run', 'alembic', 'upgrade', 'head'], documentsDir, documentsEnv);
@@ -767,7 +767,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       OPS_DATABASE_URL: pgUrl(DB),
       OPS_KB_PORT: String(KB_PORT),
       OPS_FILES_URL: `http://127.0.0.1:${FILES_PORT}`,
-      // A knowledge base's "used by" comes from agents-service (c-072 T007), on this run's port.
+      // A knowledge base's "used by" comes from agents-service, on this run's port.
       OPS_AGENTS_URL: `http://127.0.0.1:${AGENTS_PORT}`,
       OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),
       ...auth,
@@ -776,7 +776,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
     kbProc = await serve('kb', KB_PORT, ['uv', 'run', 'python', '-m', 'ops_kb'], kbDir, kbEnv, `http://127.0.0.1:${KB_PORT}/health`, 90_000);
     const seedArgs = ['--kb', `http://127.0.0.1:${KB_PORT}`, '--files', `http://127.0.0.1:${FILES_PORT}`, ...(options.platform ? ['--platform', `http://127.0.0.1:${PLATFORM_PORT}`] : [])];
     await runToEnd('kb-seed', ['uv', 'run', 'python', join(ROOT, 'docs/usecases/lib/seed_fixture_knowledge.py'), ...seedArgs], ROOT, env);
-    // The demo's document types (levy_notice v1 and its samples), which the seeded levy workflows name (c-236).
+    // The demo's document types (levy_notice v1 and its samples), which the seeded levy workflows name.
     const typeArgs = options.platform ? ['--platform', `http://127.0.0.1:${PLATFORM_PORT}`] : ['--dev'];
     await runToEnd('document-types', ['uv', 'run', 'python', 'scripts/seed_document_types.py', '--documents', `http://127.0.0.1:${DOCUMENTS_PORT}`, '--files', `http://127.0.0.1:${FILES_PORT}`, ...typeArgs], documentsDir, stackEnv(process.env, { OPS_PLATFORM_DEMO_PASSWORD: DEMO_PASSWORD }));
     if (options.demo) {

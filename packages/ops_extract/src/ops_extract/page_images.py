@@ -1,4 +1,4 @@
-"""Page images a read may show the model (c-295): a whole page for a page read through OCR, and a crop around one
+"""Page images a read may show the model: a whole page for a page read through OCR, and a crop around one
 field for its re-read. The image leaves for the model provider, so the caller decides whether any is sent; this module
 only draws them."""
 

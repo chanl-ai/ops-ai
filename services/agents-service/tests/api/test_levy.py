@@ -1,4 +1,4 @@
-"""A levy notice from the mailbox to customer cases and holds (c-057 T004, T005), by failure mode: a person matched
+"""A levy notice from the mailbox to customer cases and holds, by failure mode: a person matched
 on name alone becoming a case, a notice with nobody in it opening cases, a hold or note running without the
 reviewer's token, a decision that is not one of the step's options, the bank's 422 on a hold being retried or lost,
 and the parent not listing what its children did."""
@@ -131,7 +131,7 @@ async def stack() -> AsyncIterator[Stack]:
         yield Stack(client, cast(Runtime, app.state.runtime))
 
 
-# ── T004: records, matching, cases ──
+# ── records, matching, cases ──
 
 
 async def test_the_notice_opens_one_case_per_matched_customer(stack: Stack) -> None:
@@ -217,7 +217,7 @@ async def test_a_search_the_bank_cannot_answer_is_an_error_on_the_parent(stack: 
     assert all("not offered" in u["error"] for u in values["unmatched"]) and len(values["unmatched"]) == 3
 
 
-# ── T005: hold and flag decisions ──
+# ── hold and flag decisions ──
 
 
 async def test_hold_places_the_hold_with_the_decisions_call_and_amount(stack: Stack) -> None:
@@ -305,7 +305,7 @@ async def test_a_hold_over_the_balance_shows_the_422_and_waits_for_a_new_decisio
         "status": 422,
         "code": "upstream_error",
         "message": "hold of 9000.00 exceeds the available balance of 2140.55",
-        # The call in words for the page (c-500), from the decision that carried it, never the tool's name.
+        # The call in words for the page, from the decision that carried it, never the tool's name.
         "action": "Hold 9,000 on CHQ-1001",
     }
     assert state["values"].get("hold") is None and "status" not in state["values"]
@@ -325,7 +325,7 @@ async def test_a_hold_over_the_balance_shows_the_422_and_waits_for_a_new_decisio
     assert values["decision"]["call"]["step"].endswith(":flag:2")
 
 
-# ── T012: what the console needed and the server lacked ──
+# ── what the console needed and the server lacked ──
 
 
 async def test_a_one_approver_hold_still_asks_for_a_step_up(stack: Stack) -> None:

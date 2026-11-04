@@ -1,4 +1,4 @@
-"""Installing a plugin's agent as a team's own copy (c-590), through the real routes, by failure mode: the list shows a
+"""Installing a plugin's agent as a team's own copy, through the real routes, by failure mode: the list shows a
 template the team cannot install, or hides which ones it already holds; an install skips a check the agent create
 route makes, so a copy grants a tool the team cannot call, cites a knowledge base it does not have, or runs on a model
 alias nobody serves; a second install of the same version makes a second copy; a deleted copy blocks the template for
@@ -127,7 +127,7 @@ async def test_the_list_shows_the_teams_templates_and_which_it_holds(client: Asy
 
 
 async def test_the_list_keeps_one_plugins_templates_when_asked(client: AsyncClient) -> None:
-    """A plugin update's review shows the version each of that plugin's copies came from (c-609)."""
+    """A plugin update's review shows the version each of that plugin's copies came from."""
     wire(client, [AGENT])
     mine = ok(await client.get("/v1/templates", params={"source": SOURCE}, headers=OPS))
     other = ok(await client.get("/v1/templates", params={"source": "plugin:test.other"}, headers=OPS))

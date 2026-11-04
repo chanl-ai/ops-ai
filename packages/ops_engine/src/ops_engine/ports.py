@@ -25,13 +25,13 @@ class ToolResult:
     reason: str | None = None
     # Only from find(): the gateway has the call and is still running it, so its outcome is not known yet.
     pending: bool = False
-    # Only from find(): the gateway's claim expired without an answer, so the write may have run (c-561).
+    # Only from find(): the gateway's claim expired without an answer, so the write may have run.
     lost: bool = False
-    # The gateway refused the key as abandoned: the call never ran under it and never will (c-561).
+    # The gateway refused the key as abandoned: the call never ran under it and never will.
     not_sent: bool = False
 
 
-# Set while a step sends a call on the team's account in place of the person the run acts for (c-616 S12, "Run as the
+# Set while a step sends a call on the team's account in place of the person the run acts for ("Run as the
 # team account"); the host's tool port then sends the call acting for nobody, which the gateway signs in with the team
 # account where the app allows one. A context value, so no ToolPort implementation changes its signature.
 AS_TEAM_ACCOUNT: ContextVar[bool] = ContextVar("ops_engine_as_team_account", default=False)
@@ -76,7 +76,7 @@ class ReviewPort(Protocol):
 
     async def own_decision(self, run_id: str, node_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
         """The decision of a step that approves a write when the person who started the run may approve it themselves
-        (roles decide approvals, owner 2026-11-01): {decision, by, call, approval}, recorded as theirs. None to pause
+        (roles decide approvals): {decision, by, call, approval}, recorded as theirs. None to pause
         for a person as before."""
         ...
 
@@ -120,7 +120,7 @@ class AgentPort(Protocol):
 
 @dataclass(frozen=True)
 class PromptRequest:
-    """One model call with no saved agent (c-298's AI steps): the step's own instructions, its text, the answer's JSON
+    """One model call with no saved agent (the AI steps): the step's own instructions, its text, the answer's JSON
     Schema and a model alias (the workspace's when None). No tools and no knowledge."""
 
     instructions: str
@@ -129,7 +129,7 @@ class PromptRequest:
     turn_id: str
     output_schema: dict[str, Any]
     model_alias: str | None = None
-    # The run the step is in, so the host applies the run's team settings (masking personal data, c-321).
+    # The run the step is in, so the host applies the run's team settings (masking personal data).
     run_id: str | None = None
 
 
@@ -142,7 +142,7 @@ class PromptPort(Protocol):
 
 class FileDataPort(Protocol):
     async def set_data(self, run_id: str, file_id: str, data: dict[str, Any]) -> dict[str, Any]:
-        """Records on the file what was read from it (c-250), as the run's team: files-service's
+        """Records on the file what was read from it, as the run's team: files-service's
         PUT /v1/files/{id}/data. Another team's file is not found; files-service down is raised, so the wrapper
         retries."""
         ...
@@ -150,7 +150,7 @@ class FileDataPort(Protocol):
 
 class DocumentsPort(Protocol):
     async def extract(self, run_id: str, file_id: str, request: dict[str, Any], *, key: str) -> dict[str, Any]:
-        """documents-service's extraction of the file (c-235, c-256), as the run's team, finished: `{status, outcome,
+        """documents-service's extraction of the file, as the run's team, finished: `{status, outcome,
         ...}` with status done, unreadable or failed and, once done, the scored answer. `request` is {fields, many,
         ocr, reviewBelow}; `key` (run:node:iteration) is the Idempotency-Key, so a retried step reads the same
         extraction. Another team's or tenant's file is not found; documents-service down is raised, so the wrapper
@@ -165,7 +165,7 @@ class DocumentsPort(Protocol):
 class DocumentTypesPort(Protocol):
     async def fields(self, run_id: str, type_id: str, version: int | None) -> list[dict[str, Any]]:
         """A document type's fields at a version (the newest when None), as the run's team reads them from
-        documents-service: what Extract from text asks for when a step names a type (c-298)."""
+        documents-service: what Extract from text asks for when a step names a type."""
         ...
 
 
@@ -199,7 +199,7 @@ class RunPort(Protocol):
 
     async def children(self, parent_run_id: str, key_prefix: str, *, outputs: bool = False) -> list[dict[str, Any]]:
         """The children `parent_run_id` started under keys beginning `key_prefix` (`<run>:<node>:<iteration>:`), in one
-        read: `{index, runId, status, outcome, output}` each, ordered by the item index the key ends with (c-263);
+        read: `{index, runId, status, outcome, output}` each, ordered by the item index the key ends with;
         `output` is None unless `outputs`."""
         ...
 
@@ -220,7 +220,7 @@ class CaseTypeNotFoundError(Exception):
 
 
 class CasePort(Protocol):
-    """The host's cases (c-219): a case opens in the run's team, and a run joins one of that team's cases."""
+    """The host's cases: a case opens in the run's team, and a run joins one of that team's cases."""
 
     async def open(self, run_id: str, fields: dict[str, Any], key: str) -> OpenedCase:
         """Opens a case in the run's team with `fields` (subject, priority, customerId, customerName, assignee,

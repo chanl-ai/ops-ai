@@ -34,7 +34,7 @@ provider_connections = sa.Table(
     info=system("an install's model connection: no tenant and no value; the provider key it names is held by tenant"),
 )
 
-# An account's model provider keys (owner, 2026-10-27): account admins set them, only this service reads them, and no
+# An account's model provider keys: account admins set them, only this service reads them, and no
 # team sees one, so a new team needs no setup. A value is never returned once saved.
 provider_keys = sa.Table(
     "provider_keys",
@@ -47,7 +47,7 @@ provider_keys = sa.Table(
     sa.Column("created_by", sa.String(320), nullable=False),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now()),
     sa.Column("rotated_at", sa.DateTime(timezone=True)),
-    # Held to its tenant by the database (c-616 C3): read only by a transaction run as ROLE in that tenant.
+    # Held to its tenant by the database: read only by a transaction run as ROLE in that tenant.
     info=TENANT_SCOPED,
 )
 
@@ -67,7 +67,7 @@ model_aliases = sa.Table(
     sa.Column("created_at", sa.String(32), nullable=False),
     # The reasoning effort this version's calls run at, sent when a request names none; null leaves the provider's.
     sa.Column("reasoning_effort", sa.String(16)),
-    # Whether this version may receive page images (c-295): an image carries the whole page, so none is sent unless set.
+    # Whether this version may receive page images: an image carries the whole page, so none is sent unless set.
     sa.Column("images", sa.Boolean, nullable=False, server_default=sa.false()),
     # One version of an alias serves: a second current row would leave which one serves to the query's order.
     sa.Index(
@@ -94,7 +94,7 @@ model_keys = sa.Table(
     sa.Column("previous_valid_until", sa.DateTime(timezone=True)),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now()),
     sa.Column("rotated_at", sa.DateTime(timezone=True)),
-    # Set for a key one service uses for many tenants (files-service's extractions, c-251): each tenant then spends
+    # Set for a key one service uses for many tenants (files-service's extractions): each tenant then spends
     # from its own row in model_key_tenants, starting at this budget, so one tenant cannot use up the others' share.
     sa.Column("tenant_budget", MONEY),
     info=system("one identity's model key, spent for many tenants; each tenant's share is held by tenant"),
@@ -107,7 +107,7 @@ model_key_tenants = sa.Table(
     sa.Column("tenant_id", sa.String(64), primary_key=True),
     sa.Column("budget", MONEY, nullable=False),
     sa.Column("spent", MONEY, nullable=False),
-    # Held to its tenant by the database (c-616 C4): read and spent only as ROLE in that tenant.
+    # Held to its tenant by the database: read and spent only as ROLE in that tenant.
     info=TENANT_SCOPED,
 )
 
@@ -132,6 +132,6 @@ model_call_log = sa.Table(
     sa.Column("request_hash", sa.String(64)),
     sa.Column("tenant_id", sa.String(64)),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now(), index=True),
-    # How many images the request carried (c-295), refused or sent.
+    # How many images the request carried, refused or sent.
     sa.Column("images", sa.Integer, nullable=False, server_default="0"),
 )

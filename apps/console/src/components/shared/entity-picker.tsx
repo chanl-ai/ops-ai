@@ -11,7 +11,7 @@ import { type OptionSource, useOptionLabels, useOptionSearch } from '@/hooks/opt
 import { cn } from '@/lib/utils';
 
 /**
- * Pick one or many entities from an `/options` route (c-135): the search runs on the server, the list pages in as it
+ * Pick one or many entities from an `/options` route: the search runs on the server, the list pages in as it
  * scrolls, and chosen values show as chips labelled by id from the service. Every picker of agents, tools, knowledge
  * bases and the like uses this rather than filtering a list the browser loaded, which caps what can be found.
  */

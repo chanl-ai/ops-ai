@@ -1,7 +1,7 @@
-"""Reviews tools-service holds reach where they are decided at start-up (c-163, c-222, c-257), by failure mode: a
+"""Reviews tools-service holds reach where they are decided at start-up, by failure mode: a
 seeded waiting review that Human Tasks never shows, one opened with a token for another team or without the scope the
 route asks, a version that keeps the seed's id once Reviews named its own, a review Reviews already holds failing the
-start-up, and a workflow's open tool access request left on the module (c-166). Reviews is a fake HTTP endpoint here;
+start-up, and a workflow's open tool access request left on the module. Reviews is a fake HTTP endpoint here;
 who may open a review is agents-service's tests."""
 
 from __future__ import annotations
@@ -77,7 +77,7 @@ async def test_a_review_reviews_already_holds_is_skipped_and_keeps_the_seeds_id(
 async def test_an_open_access_request_is_handed_to_its_workflow_once_for_its_modules_team(
     engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_tools: list[dict[str, Any]]
 ) -> None:
-    # c-257: an open request becomes its system workflow's event, with the run key written in the same transaction,
+    # An open request becomes its system workflow's event, with the run key written in the same transaction,
     # so a second hand-over finds nothing to report.
     await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC), catalog=catalog_tools)
     client, _ = _reviews()

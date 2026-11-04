@@ -143,7 +143,7 @@ async def test_unknown_variable_fails_before_any_model_call() -> None:
 
 
 async def test_present_puts_a_shaped_part_on_the_call_without_any_port() -> None:
-    """c-055 T021: the model returns a comparison as rows; the record carries the part, no tool port is called."""
+    """The model returns a comparison as rows; the record carries the part, no tool port is called."""
     tools = RecordingTools()
     rows = [{"product": "Savings Plus", "rate": 3.1}, {"product": "Money Market", "rate": 3.65}]
     ask = f"call present {json.dumps({'shape': 'rows', 'data': rows, 'hint': {'title': 'Compared'}})}"
@@ -167,7 +167,7 @@ async def test_present_refuses_a_malformed_part_as_a_tool_error() -> None:
 
 async def test_an_agent_with_no_tool_calls_can_still_present() -> None:
     """The branch policy agent has max_tool_calls 0: its answer as a widget is not a call to a system, so it is not
-    refused by that budget (c-058 uc-079's empty reply)."""
+    refused by that budget (uc-079's empty reply)."""
     rows = [{"limit": "ATM withdrawal, per day", "amount": "1,000"}]
     ask = f"call present {json.dumps({'shape': 'rows', 'data': rows})}"
     no_calls = AgentSettings("ag_policy", 1, [PromptFragment("You answer from the manual.")], "test-model", 0)
@@ -255,7 +255,7 @@ async def test_every_open_tool_card_closes_when_the_tool_budget_ends_the_turn() 
 
 
 class ReviewFirst(RecordingTools):
-    """The gateway's check before sending (c-300): a write without an approval waits for a person, with the reason."""
+    """The gateway's check before sending: a write without an approval waits for a person, with the reason."""
 
     async def execute(
         self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None

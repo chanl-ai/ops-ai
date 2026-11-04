@@ -1,6 +1,6 @@
-"""Which agents cite each knowledge base, for kb-service's "used by" (c-072 T007), by failure mode: a saved but
+"""Which agents cite each knowledge base, for kb-service's "used by", by failure mode: a saved but
 unpublished grant counted as live, a published grant missed, a token without `agents:view`, a team named in a query
-instead of the token (c-168), and a person shown another team's agents by name (c-222)."""
+instead of the token, and a person shown another team's agents by name."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ async def test_a_base_lists_the_agents_whose_live_version_cites_it(client: Async
     live = next(a for a in agents if a["publishedVersion"] and a["collections"])
     usage = await _usage(client)
     assert all(live["id"] in usage[kb] for kb in live["collections"]), (live["id"], live["collections"], usage)
-    # A real base the live version does not cite: a save refuses an unknown value (c-141).
+    # A real base the live version does not cite: a save refuses an unknown value.
     extra = next(k for k in ("kb_lending", "kb_legal", "kb_support", "kb_people") if k not in live["collections"])
     saved = await client.patch(f"/v1/agents/{live['id']}", json={"collections": [*live["collections"], extra]})
     assert saved.status_code == 200, saved.text
@@ -42,7 +42,7 @@ async def test_a_base_lists_the_agents_whose_live_version_cites_it(client: Async
 
 
 async def test_agents_of_another_team_are_neither_named_nor_counted(client: AsyncClient) -> None:
-    """A base belongs to one team and no team counts another's agents (c-507)."""
+    """A base belongs to one team and no team counts another's agents."""
     agents: list[dict[str, Any]] = (await client.get("/v1/agents", params={"pageSize": 200})).json()["data"]["data"]
     # Seeded agents belong to the seed team.
     live = next(a for a in agents if a["publishedVersion"] and a["collections"])
@@ -54,13 +54,13 @@ async def test_agents_of_another_team_are_neither_named_nor_counted(client: Asyn
 
 
 async def test_a_caller_naming_no_team_sees_nothing(client: AsyncClient) -> None:
-    """A service naming no team reads no team's agents, and a team in the query is not read (c-168, c-507)."""
+    """A service naming no team reads no team's agents, and a team in the query is not read."""
     rows = (await client.get(URL, params={"teamId": SEED_TEAM}, headers=service())).json()["data"]
     assert rows == [], rows
 
 
 async def test_a_person_reads_their_teams_usage_and_a_service_needs_its_scope(client: AsyncClient) -> None:
-    """A person calls it too (c-222): their team's agents are named; another team's base reads as cited by none."""
+    """A person calls it too: their team's agents are named; another team's base reads as cited by none."""
     agents: list[dict[str, Any]] = (await client.get("/v1/agents", params={"pageSize": 200})).json()["data"]["data"]
     live = next(a for a in agents if a["publishedVersion"] and a["collections"])
     kb = live["collections"][0]

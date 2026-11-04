@@ -43,7 +43,7 @@ export interface MetadataMapping {
 export type Permissions = { mode: 'inherit' } | { mode: 'workspace' } | { mode: 'selected'; principals: string[] };
 
 export interface Source {
-  /** What the caller may do with it, from the same check its write routes run (c-216); on the detail only. */
+  /** What the caller may do with it, from the same check its write routes run; on the detail only. */
   canEdit?: boolean;
   canDelete?: boolean;
   canPublish?: boolean;
@@ -292,7 +292,7 @@ export interface IndexJob {
 }
 
 export interface KnowledgeBase {
-  /** What the caller may do with it, from the same check its write routes run (c-216); on the detail only. */
+  /** What the caller may do with it, from the same check its write routes run; on the detail only. */
   canEdit?: boolean;
   canDelete?: boolean;
   canPublish?: boolean;
@@ -332,7 +332,7 @@ export interface KnowledgeBaseRow extends KnowledgeBase {
   sourceNames: string[];
   /** Agents of the signed-in person's team that cite it. */
   agentNames: string[];
-  /** @deprecated Always 0: a base is its team's alone (c-507); the field leaves the API next release. */
+  /** @deprecated Always 0: a base is its team's alone; the field leaves the API next release. */
   agentsElsewhere?: number;
   /** False when agents-service could not say who cites it; treat the base as in use. */
   agentsKnown?: boolean;

@@ -1,11 +1,10 @@
-"""Widget deployments and the widget API (c-117): an agent's chat on a page on another origin.
+"""Widget deployments and the widget API: an agent's chat on a page on another origin.
 
 `/v1/widget-deployments` is for the team that owns the agent: make a deployment (it pins the agent's published version
 and lists the exact origins allowed to use it), list, change origins, pause, move to the newest published version, and
-issue the per-deployment mint keys a bank's server mints sessions with (c-131). `/v1/widget/{deployment}` is for the
+issue the per-deployment mint keys a bank's server mints sessions with. `/v1/widget/{deployment}` is for the
 page: exchange the bank's SSO token for a session, then start, read and continue conversations through the same chat
-code the console uses, as the public-key caller class, so budgets and guardrails apply exactly as there. Design: c-076
-interview.
+code the console uses, as the public-key caller class, so budgets and guardrails apply exactly as there.
 """
 
 from __future__ import annotations
@@ -70,7 +69,7 @@ deployments_router = APIRouter(prefix="/v1/widget-deployments", tags=["widget"],
 # The bank's server mints sessions here with a deployment's mint key, not a platform token, so no principal is read.
 mint_router = APIRouter(prefix="/v1/widget-deployments", tags=["widget"])
 widget_router = APIRouter(prefix="/v1/widget/{deployment_id}", tags=["widget"])
-# Read by the embed app's server before a page has a session; it carries nothing a page could act with (c-131).
+# Read by the embed app's server before a page has a session; it carries nothing a page could act with.
 config_router = APIRouter(prefix="/v1/widget/{deployment_id}", tags=["widget"])
 bundle_router = APIRouter(tags=["widget"])
 LOADER = Path(__file__).resolve().parents[2] / "static" / "ops-chat-loader.js"
@@ -78,7 +77,7 @@ LOADER = Path(__file__).resolve().parents[2] / "static" / "ops-chat-loader.js"
 
 @bundle_router.get("/widget/v1.js", include_in_schema=False)
 async def retired_bundle() -> Response:
-    """The first widget script (c-118), retired by c-224: pages load `/embed/v1.js` and call `OpsChat.init`. Gone, not
+    """The first widget script, retired: pages load `/embed/v1.js` and call `OpsChat.init`. Gone, not
     redirected: the two scripts take different tags (`data-token` against `OpsChat.init`), so an old tag served the new
     script would draw nothing and say nothing."""
     return Response(
@@ -90,7 +89,7 @@ async def retired_bundle() -> Response:
 
 @bundle_router.get("/embed/v1.js", include_in_schema=False)
 async def loader() -> FileResponse:
-    """The embedded chat's loader (c-131): launcher, frame and the session hand-over. Public: it holds no key; the chat
+    """The embedded chat's loader: launcher, frame and the session hand-over. Public: it holds no key; the chat
     itself is the embed app's page under `/embed/{deployment}` on the same host."""
     return FileResponse(LOADER, media_type="text/javascript", headers={"Cache-Control": "public, max-age=300"})
 
@@ -177,7 +176,7 @@ async def make_deployment(rt: Runtime, me: Principal, body: WidgetDeploymentInpu
     return row
 
 
-# Deprecated (c-339): `POST /v1/channels` with `type: chat` creates and `GET /v1/channels?type=chat&agentId=` lists,
+# Deprecated: `POST /v1/channels` with `type: chat` creates and `GET /v1/channels?type=chat&agentId=` lists,
 # with these fields under `embed`. Kept until the console's adapter moves, then removed.
 @deployments_router.post("", status_code=201, deprecated=True)
 async def create_deployment(rt: Rt, me: Me, body: WidgetDeploymentInput) -> JSONResponse:
@@ -390,7 +389,7 @@ def _claimed_origin(token: str) -> str | None:
 
 def _page_origin(request: Request, session_token: str | None, embed_origins: list[str]) -> str | None:
     """The page a request speaks for. The embed app's iframe sends its own origin, which `Settings.embed_origins`
-    lists; such a request speaks for the bank page its session was minted for (c-158). The list is configuration, so
+    lists; such a request speaks for the bank page its session was minted for. The list is configuration, so
     no Host or X-Forwarded-Host header can make a page's origin count as the embed app's."""
     origin = request.headers.get("origin")
     if not session_token or not embed_origins:
@@ -473,13 +472,13 @@ Caller: TypeAlias = Annotated[WidgetCaller, Depends(widget_caller)]  # noqa: UP0
 @widget_router.post("/session", status_code=201)
 async def page_session(rt: Rt, me: Me, caller: CurrentPrincipal, request: Request, deployment_id: str) -> JSONResponse:
     """The page exchanges the person's SSO token (the `Authorization` header) for a widget session on this origin. Only
-    a person of the deployment's team, in its tenant: anyone else is refused, as for chat (c-122 Q4). An API key never
+    a person of the deployment's team, in its tenant: anyone else is refused, as for chat. An API key never
     mints here; the bank's server uses `/v1/widget-deployments/{id}/sessions`."""
     if caller.auth_method == "api_key":
         raise Forbidden("A page signs the person in; servers mint with /sessions.", code="api_key_refused")
     # The person's token set their tenant; a deployment of another tenant is not found.
     row = _listed(request, await _store(rt).get(deployment_id))
-    # chat.run in the deployment's team, from whichever team the page's sign-in selected (c-122 Q4).
+    # chat.run in the deployment's team, from whichever team the page's sign-in selected.
     can(
         caller_of(me),
         "chat",
@@ -555,7 +554,7 @@ async def budget(rt: Rt, caller: Caller, thread_id: str, body: BudgetAnswer) -> 
     """Continue a spent conversation budget, as the conversation's owner; raising is chat.manage, which no widget
     session holds."""
     await _widget_thread(rt, caller.session, thread_id)
-    # Raising is chat.manage; a widget session holds no role, so `can` refuses it as for any non-admin (c-149).
+    # Raising is chat.manage; a widget session holds no role, so `can` refuses it as for any non-admin.
     return await chat_settings_routes.budget(rt=rt, me=caller.session.principal(), thread_id=thread_id, body=body)
 
 

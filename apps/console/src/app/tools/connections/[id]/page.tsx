@@ -8,7 +8,7 @@ import { RecordSkeleton } from '@/components/shared/record-skeleton';
 import { useSystems } from '@/hooks/systems-queries';
 
 /**
- * The old connection page's address (c-617): it lands on the app's own page. A plugin's account opens its plugin's app,
+ * The old connection page's address: it lands on the app's own page. A plugin's account opens its plugin's app,
  * an app connected by name opens itself; the card list is the one place that says which app holds the account.
  */
 export default function OldConnectionPage() {

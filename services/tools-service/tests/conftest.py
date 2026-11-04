@@ -83,7 +83,7 @@ def opa_client() -> httpx.AsyncClient:
 
 
 REVIEW_KEY = "test-review-key"
-# Where a connection's sign-in returns (c-330): the console's page, which the tests stand in for.
+# Where a connection's sign-in returns: the console's page, which the tests stand in for.
 CONSOLE_URL = "https://console.bank.test"
 
 # Tests call the fake upstreams with their own httpx clients, outside the gateway app; their request lines would
@@ -124,7 +124,7 @@ def _no_dev_egress_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def _acting_for_the_tests_tenant(request: pytest.FixtureRequest) -> Iterator[None]:
-    """The connection store runs each transaction as the caller's tenant and team (c-602); a test that drives the store,
+    """The connection store runs each transaction as the caller's tenant and team; a test that drives the store,
     Tokens or the Authenticator itself, with no request in between, acts for every team of its own tenant. A test
     proving the team boundary enters `isolation.scope` inside this."""
     if "tenant" not in request.fixturenames:
@@ -157,7 +157,7 @@ def tenant() -> str:
 
 
 class FakeReviews:
-    """agents-service's Reviews for tests that do not run it (c-163): records each review opened and gives it an id.
+    """agents-service's Reviews for tests that do not run it: records each review opened and gives it an id.
     agents-service's own tests cover who may open and decide."""
 
     def __init__(self) -> None:
@@ -216,7 +216,7 @@ def local_catalog() -> Catalog:
 
 @pytest.fixture(scope="session")
 def catalog_tools() -> list[dict[str, Any]]:
-    """agents-service's fixture tools, minus its stand-ins for the fake bank's operations (c-057): a tenant here
+    """agents-service's fixture tools, minus its stand-ins for the fake bank's operations: a tenant here
     imports the bank's document itself, and an operation name held by another module refuses the import."""
     tools: list[dict[str, Any]] = json.loads((AGENTS_FIXTURES / "tools.json").read_text())
     return [t for t in tools if t.get("server") != "Harbor & Pine Core Banking"]
@@ -241,7 +241,7 @@ async def no_api_keys(_key: str) -> dict[str, Any] | None:
 
 def service_headers(tenant: str, service: str = "agents", scopes: list[str] | None = None) -> dict[str, str]:
     """A calling service's Ed25519 token for tools-service (dev key), naming the tenant it calls for; agents-service
-    claims `tools:view` for the grantable operations (c-168) unless `scopes` says otherwise."""
+    claims `tools:view` for the grantable operations unless `scopes` says otherwise."""
     claimed = scopes if scopes is not None else (["tools:view"] if service == "agents" else [])
     token = mint_service_token(
         dev_service_signer(), service=service, audience="tools", tenant_id=tenant, scopes=claimed
@@ -250,8 +250,8 @@ def service_headers(tenant: str, service: str = "agents", scopes: list[str] | No
 
 
 async def grant(engine: AsyncEngine, tenant: str, module_id: str, approval_id: str) -> None:
-    """Test setup: a workflow's access request approved, as its system workflow's apply step would leave it (c-257;
-    that path is tested in test_apply_tool_access and agents-service's gateway tests)."""
+    """Test setup: a workflow's access request approved, as its system workflow's apply step would leave it (that path
+    is tested in test_apply_tool_access and agents-service's gateway tests)."""
     store = ModuleStore(engine)
     m = await store.get(tenant, module_id)
     assert m is not None

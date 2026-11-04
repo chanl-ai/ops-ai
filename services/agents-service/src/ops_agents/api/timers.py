@@ -3,7 +3,7 @@
 When a run ends waiting on a human step whose interrupt carries an `sla` block, `sync_timers` writes its timers
 (warn, breach, maxWait) and cancels the timers of interrupts no longer waiting. The `timers` table is the source of
 truth. `fire(thread, timer)` is the only way a timer fires (ADR-0016): the PostgreSQL poller, the one scheduler shipped,
-calls it in-process, and no HTTP route fires a timer (c-168). A later scheduler (pg_cron, a cloud scheduler, Temporal)
+calls it in-process, and no HTTP route fires a timer. A later scheduler (pg_cron, a cloud scheduler, Temporal)
 wakes the poller, never a route.
 
 `fire` is idempotent on the timer id and safe to call early, twice or concurrently. Under the thread's lease it

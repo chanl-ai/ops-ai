@@ -1,4 +1,4 @@
-"""Background processes (c-516), by failure mode, through the real routes: the Background page shows to a team admin,
+"""Background processes, by failure mode, through the real routes: the Background page shows to a team admin,
 or misses a listed process; a team reads another team's background jobs in Activity; the health check carries data."""
 
 from __future__ import annotations

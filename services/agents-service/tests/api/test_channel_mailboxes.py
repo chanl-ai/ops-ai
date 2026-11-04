@@ -1,4 +1,4 @@
-"""Mailboxes connected on Channels > Email (c-199), through the routes with tokens minted as platform-service mints
+"""Mailboxes connected on Channels > Email, through the routes with tokens minted as platform-service mints
 them, by failure mode: a viewer connects one; a builder of another team reads or edits this team's; an address
 changes under a live workflow, which then stops receiving mail; the dev folder provider is accepted outside dev; Test
 connection sends the password itself, or the wrong team's token, to tools-service; a paused mailbox is still read."""

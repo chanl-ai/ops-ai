@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { PageLayout } from '@/components/page-layout';
 import { RecordSkeleton } from '@/components/shared/record-skeleton';
 
-/** The old address of the person's accounts (c-617): they live in the Apps menu as My accounts now. */
+/** The old address of the person's accounts: they live in the Apps menu as My accounts now. */
 export default function OldMyConnectionsPage() {
   const router = useRouter();
   React.useEffect(() => {

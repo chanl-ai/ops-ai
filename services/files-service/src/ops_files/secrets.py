@@ -26,7 +26,7 @@ __all__ = ["FIELDS", "CipherError", "CredentialCipher", "CredentialKind"]
 
 
 class CredentialCipher:
-    """A storage credential's fields as JSON, sealed with the one secrets cipher (ops_policy, c-189)."""
+    """A storage credential's fields as JSON, sealed with the one secrets cipher (ops_policy)."""
 
     def __init__(self, key_hex: str) -> None:
         self._cipher = AesGcmCipher(key_hex)

@@ -1,4 +1,4 @@
-"""Agent threads, runs, events and reviews are read inside the caller's team (c-429), through the real routes with the
+"""Agent threads, runs, events and reviews are read inside the caller's team, through the real routes with the
 tokens platform-service mints, by failure mode: another team's thread read by id through any of its routes answers
 anything but 404; a thread list shows another team's threads; and an approver of the approving team reaches a review
 while acting in a team other than the thread's. Each read is checked as the owning team first, so a 404 means the row
@@ -72,10 +72,10 @@ async def test_a_reviewer_reaches_a_review_only_acting_in_the_threads_team(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The reviewer acts in the thread's team (Operations) to decide its write; from any other team the review is not
-    found (c-429, c-509)."""
+    found."""
     monkeypatch.setattr(hitl_facade, "policy_of", policy())
     c = dev_platform
-    # James builds and does not decide reviews, so his write waits for an approver (owner, 2026-11-01).
+    # James builds and does not decide reviews, so his write waits for an approver.
     url = await drafted(c, person("usr_james", ["team_ops"], role="builder"))
     thread = url.split("/chat/threads/")[1].split("/")[0]
     in_fraud = {**person("usr_nadia", ["team_ops", "team_fraud"]), "X-Team-Id": "team_fraud"}

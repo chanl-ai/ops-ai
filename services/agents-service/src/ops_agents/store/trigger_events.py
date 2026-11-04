@@ -1,4 +1,4 @@
-"""What a workflow's trigger received (c-201): one row per message read, with the run it started or why it started
+"""What a workflow's trigger received: one row per message read, with the run it started or why it started
 none. Rows are only ever added; the list is what shows a filtered message, a caught redelivery or a capped day."""
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from .tenancy import current_tenant, tenant_tx
 # cursor_reset: no message. The mailbox refused the stored read position, so mail that arrived since the last read was
 # skipped and reading starts again at the folder's end.
 # start_failed: starting the message's run raised; the next read tries it again. set_aside: it failed SET_ASIDE_AFTER
-# reads, so reading went on past it and the row keeps the message for Run again (c-561).
+# reads, so reading went on past it and the row keeps the message for Run again.
 Outcome = Literal["started", "duplicate", "filtered", "daily_cap", "cursor_reset", "start_failed", "set_aside"]
 SET_ASIDE_AFTER = 3
 # How long a set-aside message is kept for Run again: raw mail is not held for ever.
@@ -45,7 +45,7 @@ trigger_events = sa.Table(
     sa.Column("run_id", sa.String(64)),
     sa.Column("detail", sa.Text(), nullable=False),
     sa.Column("recorded_at", sa.String(32), nullable=False),
-    # A set-aside message as read (c-561), JSON, for Run again; cleared once its run starts or after 30 days. Never
+    # A set-aside message as read, JSON, for Run again; cleared once its run starts or after 30 days. Never
     # listed: it holds the whole mail, attachments included.
     sa.Column("item", sa.Text()),
     sa.Index("ix_trigger_events_workflow", "tenant_id", "workflow_id", "recorded_at"),

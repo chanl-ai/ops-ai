@@ -166,7 +166,7 @@
   "pages": {}
  },
  "TEST009.pdf": {
-  "edge": "One PDF holds two writs: one row with two case groups, each value kept with its own case. The flat fields below are the bundle's; the groups need tables (c-238).",
+  "edge": "One PDF holds two writs: one row with two case groups, each value kept with its own case. The flat fields below are the bundle's; the groups need tables.",
   "expected": {
    "case_no": "SYN-BUNDLE-0009",
    "notice_kind": "Combined writs"

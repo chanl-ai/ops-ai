@@ -18,7 +18,7 @@ app=$STG_APP
 ref=${REF:-HEAD}
 conf=$stg_conf
 sha=$(git -C "$root" rev-parse --short=8 "$ref")
-# An open release PR pins staging to its build so it can be tested and rolled back to before merge (owner, 2026-10-28).
+# An open release PR pins staging to its build so it can be tested and rolled back to before merge.
 # repo.sh snapshot writes the pin and repo.sh merge clears it; STG_UNPIN=1 deploys another build anyway.
 pin=$(cat "$conf/staging-pin" 2>/dev/null || true)
 if [ -n "$pin" ] && [ "$pin" != "$sha" ] && [ "${STG_UNPIN:-0}" != 1 ]; then

@@ -1,4 +1,4 @@
-"""Masking personal data in what an agent's turn shows (c-293), by failure mode: an SSN, its last
+"""Masking personal data in what an agent's turn shows, by failure mode: an SSN, its last
 four, a card or account number, an email or a phone reaches a reply, a stored message, a step's output or a citation;
 a number streamed across two chunks shows its first half unmasked; an amount, a date or a case number is masked by
 mistake; the model stops seeing the real value, so a turn cannot chain on it; the setting off still masks."""
@@ -140,7 +140,7 @@ class Knowledge:
 
 
 async def test_a_cited_passage_is_masked_where_people_see_it() -> None:
-    """tick 30: citations carried the passage text unmasked, in the stream and in the stored answer."""
+    """Citations carried the passage text unmasked, in the stream and in the stored answer."""
 
     def reply(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         return ModelResponse(parts=[TextPart("Ann's details are on file [1].")])

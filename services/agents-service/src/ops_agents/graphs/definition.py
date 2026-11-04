@@ -10,7 +10,7 @@ condition (routes by a rule: score_gate, decision, route, option or outcome), hu
 `options`, a review decided by one of them), tool (send_reply, compliance_check, or any granted operation through the
 tool port), end; for workflows built in the console, pass (a step with nothing to run) and agent_turn (one kernel
 turn of a published agent, its definition copied into the node so the version is pinned by the digest); and for
-intake from a notice (c-057), extract_records (typed records from the email and its attachments), match (one per
+intake from a notice, extract_records (typed records from the email and its attachments), match (one per
 record, fanned out by Send: the customer it names, by the matching rule) and open_cases (one child case per match).
 Routing rules: docs/architecture/definitions-and-versions.md.
 """
@@ -34,12 +34,12 @@ from pydantic import BaseModel, ConfigDict
 from ops_agent_kernel.ports import ToolOutcome
 from ops_agent_kernel.types import Resume, TurnRequest
 from ops_agents.activities.catalog import AgentDefinition
+from ops_agents.activities.tool_directory import CatalogTools
 from ops_agents.activities.tools import fill
 from ops_ingest.parsers.pdf import parse_pdf
 from ops_service_kit.ids import canonical_json, new_id
 
 from .common import (
-    CatalogTools,
     GraphDeps,
     agent_grants,
     approval_token,
@@ -123,7 +123,7 @@ class WorkflowState(TypedDict):
     # An agent step that ended at a gated write: the call waiting for a review, then that review's decision.
     pending: NotRequired[dict[str, Any] | None]
     agent_decision: NotRequired[dict[str, Any] | None]
-    # Intake from a notice (c-057): the text read, the records it names and how each fared against the bank.
+    # Intake from a notice: the text read, the records it names and how each fared against the bank.
     text: NotRequired[str]
     records: NotRequired[list[dict[str, Any]]]
     record_count: NotRequired[int]
@@ -358,7 +358,7 @@ def _norm(value: Any) -> str:
 
 
 def record_matches(record: Mapping[str, Any], customer: Mapping[str, Any], *, min_address_chars: int) -> bool:
-    """The matching rule (c-057): the name matches, and the address (one a substring of the other, at least
+    """The matching rule: the name matches, and the address (one a substring of the other, at least
     `min_address_chars` long) or the whole last four of the SSN matches. A name alone is a candidate, never a case."""
     if _norm(record.get("name")) != _norm(customer.get("name")) or not _norm(record.get("name")):
         return False

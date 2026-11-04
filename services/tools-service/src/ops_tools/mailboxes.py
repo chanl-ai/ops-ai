@@ -1,9 +1,9 @@
-"""`/v1/mailboxes`: team mailboxes read for agents-service's Email received trigger and its Test connection (c-192,
-c-199), here because a mailbox password is a Secrets-page secret and secret values never leave tools-service.
+"""`/v1/mailboxes`: team mailboxes read for agents-service's Email received trigger and its Test connection, here
+because a mailbox password is a Secrets-page secret and secret values never leave tools-service.
 
 agents-service owns the mailbox records (Channels > Email) and sends the connection: provider, host, port, login and
 the password secret's name (for Microsoft 365, the app registration's tenant and client id, the client secret by its
-name, c-228). What bounds that is decided here: only service tokens holding `deployments:run` in a team
+name). What bounds that is decided here: only service tokens holding `deployments:run` in a team
 are served, the secret is looked up for that team (a secret scoped to another team is refused, each use audited), the
 host must be on the tenant's egress allow-list and is dialled at the address `EgressPolicy.dial_address` returns, and
 plain IMAP, which sends the password in clear, is refused outside dev and test."""
@@ -137,7 +137,7 @@ class MailboxSendRefused(MailNotConfiguredError):
 
 
 class MailboxSenders:
-    """The sender a reply goes out through when `send_reply` names a mailbox (c-200). The mailbox is read from
+    """The sender a reply goes out through when `send_reply` names a mailbox. The mailbox is read from
     agents-service, which owns mailbox records, with a token naming the calling run's tenant and team, so only that
     team's mailbox is found. Its password or API key is a Secrets-page secret looked up for the mailbox's team at each
     send; an SMTP host is dialled at the address the egress allow-list gives, and Resend goes through `resend_http`,
@@ -217,7 +217,7 @@ class MailboxSenders:
         )
 
     async def _graph_sender(self, tenant: str, team: str, m: dict[str, Any]) -> MailSender:
-        """A Microsoft 365 mailbox replies as itself through Graph, with the team's own app registration (c-228)."""
+        """A Microsoft 365 mailbox replies as itself through Graph, with the team's own app registration."""
         address, secret = str(m["address"]), m.get("passwordSecret")
         if str(m["teamId"]) != team:
             raise MailboxSendRefused(f"{address} is not a mailbox of {team}.")

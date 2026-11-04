@@ -16,7 +16,7 @@ import type { DefinitionView, EngineRunDetail } from '@/lib/types/engine';
 import type { CardButton, OpsCardRef } from '@/lib/types/ops-card';
 
 /**
- * One card reference from an Ops tool, filled in by the thread read (c-469), drawn as the record's card. Buttons do
+ * One card reference from an Ops tool, filled in by the thread read, drawn as the record's card. Buttons do
  * what the record's own page does, as the signed-in person: a Human Task is decided through the decision route with
  * the step-up /reviews asks for, a workflow starts from its trigger's start form. `readOnly` (the embedded chat, whose
  * widget API serves no record routes) draws the card with Open and no buttons. `onActed` runs once a press is recorded,

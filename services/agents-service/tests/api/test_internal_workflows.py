@@ -1,4 +1,4 @@
-"""agents-service's workflow refs for services (c-039, on a public route since c-168), by failure mode: a person's
+"""agents-service's workflow refs for services (on a public route), by failure mode: a person's
 token, a token naming no tenant or a token without `workflows:view` reading it, a workflow missing its owning team,
 and a seed that names a placeholder team no service has a record of."""
 
@@ -35,7 +35,7 @@ async def test_a_service_reads_every_workflow_with_its_owning_team(client: Async
 async def test_a_person_reads_their_teams_workflows_and_a_service_needs_a_tenant_and_its_scope(
     client: AsyncClient,
 ) -> None:
-    """A person calls it too (c-222) and reads their team's workflows only."""
+    """A person calls it too and reads their team's workflows only."""
     body = {"name": f"Cards {new_id('x')}", "trigger": "manual"}
     created = (await client.post("/v1/workflows", json=body, headers={"X-Team-Id": "team_cards"})).json()["data"]
     cards = (await client.get(URL, headers={"X-Team-Id": "team_cards"})).json()["data"]
@@ -47,7 +47,7 @@ async def test_a_person_reads_their_teams_workflows_and_a_service_needs_a_tenant
 
 async def test_a_service_token_naming_a_team_still_reads_every_teams_workflows(client: AsyncClient) -> None:
     # tools-service calls on behalf of a person, so its token names that person's team; the workflow it checks a grant
-    # for may belong to any team (c-407: the registry read is scoped to the acting team, so this read names why not).
+    # for may belong to any team (the registry read is scoped to the acting team, so this read names why not).
     body = {"name": f"Cards {new_id('x')}", "trigger": "manual"}
     made = (await client.post("/v1/workflows", json=body, headers={"X-Team-Id": "team_cards"})).json()["data"]
     token = mint_service_token(

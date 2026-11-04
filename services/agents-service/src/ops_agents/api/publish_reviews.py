@@ -103,7 +103,7 @@ async def get(rt: Runtime, request_id: str) -> dict[str, Any]:
 
 async def all_views(rt: Runtime) -> list[dict[str, Any]]:
     """Every publish request, pending and decided, for the Reviews list. A tool access request still pending is not
-    one: it runs as its system workflow now (c-257), and listing both would show it twice."""
+    one: it runs as its system workflow now, and listing both would show it twice."""
     out: list[dict[str, Any]] = []
     requests = await registry(rt).all_requests()
     pinned = {(str(r["subject_id"]), int(r["version"])) for r in requests if r["kind"] == engine_lifecycle.KIND}
@@ -148,7 +148,7 @@ async def subject_team(rt: Runtime, req: dict[str, Any]) -> str | None:
 
 
 async def require_publish_reviewer(rt: Runtime, req: dict[str, Any], approver_teams: list[str]) -> None:
-    """A reviewer or admin of the owning team decides a publish (c-122 Q3); one no team owns, a reviewer or admin of
+    """A reviewer or admin of the owning team decides a publish; one no team owns, a reviewer or admin of
     any team."""
     team = await subject_team(rt, req)
     if team is not None:
@@ -159,7 +159,7 @@ async def require_publish_reviewer(rt: Runtime, req: dict[str, Any], approver_te
 
 async def require_publish_decider(rt: Runtime, req: dict[str, Any], approver: Principal) -> None:
     """Who decides a publish: a reviewer or admin of the owning team, and not who asked for it or saved the version
-    while requesterMayDecide is off (c-186)."""
+    while requesterMayDecide is off."""
     await require_publish_reviewer(rt, req, review_teams(approver))
     await require_not_asker(rt, req, approver)
 
@@ -203,7 +203,7 @@ async def decide(
     if not await reg.decide_request(request_id, decision, approver.email, reason):
         raise Conflict(f"{request_id} was decided by someone else first.", code="already_decided")
     # The reviewer holds reviews.decide in the owning team, which need not be the team they act in: the publish reads
-    # and writes the record as that team (c-407), as the record's own page would.
+    # and writes the record as that team, as the record's own page would.
     with isolation.scope(isolation.tenant(), await subject_team(rt, req) or isolation.team()):
         if req["kind"] == tool_module_reviews.KIND:
             # tools-service applies every decision, not only an approval: a no withdraws the version or returns it to

@@ -35,9 +35,9 @@ thread_events = sa.Table(
     sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local", index=True),
     sa.UniqueConstraint("thread_id", "seq", name="uq_thread_events_thread_seq"),
     sa.Index("ix_thread_events_run", "thread_id", "run_id", "seq"),
-    # The team event poll, by tenant first: a team id is the same in every tenant (c-280).
+    # The team event poll, by tenant first: a team id is the same in every tenant.
     sa.Index("ix_thread_events_tenant_team_position", "tenant_id", "team_id", "position"),
-    # Held to the caller's team by the database too (c-429, migration 0073).
+    # Held to the caller's team by the database too (migration 0073).
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 

@@ -197,14 +197,14 @@ async def platform(engine: AsyncEngine, database_url: str) -> AsyncIterator[Plat
     await store.close()
 
 
-# ── Sign-in providers (c-188): the public app with a fake identity provider, a mail sender that keeps what it sends,
+# ── Sign-in providers: the public app with a fake identity provider, a mail sender that keeps what it sends,
 # and one tenant whose Security team admin configures its providers ──
 
 IDP = "http://idp.test"
 CONSOLE = "http://console.test"
 PUBLIC_URL = "http://platform"
 OIDC_SECRET = "bank-oidc"
-# The SAML service provider's key pair every rig's platform-service holds (c-197).
+# The SAML service provider's key pair every rig's platform-service holds.
 SP_KEY, SP_CERT = self_signed("sp")
 
 
@@ -287,7 +287,7 @@ class SignInRig:
         self, provider_id: str, body: dict[str, Any], *, headers: dict[str, str] | None = None, verify: bool = True
     ) -> httpx.Response:
         """Saves a provider and, with `verify`, proves each of its new domains the way a bank would: publishes the
-        claim's TXT record at the fake DNS and asks platform-service to check it (c-195)."""
+        claim's TXT record at the fake DNS and asks platform-service to check it."""
         r = await self.public.put(
             f"/v1/settings/sign-in/providers/{provider_id}", json=body, headers=headers or self.admin
         )
@@ -431,7 +431,7 @@ async def signin(engine: AsyncEngine, database_url: str) -> AsyncIterator[SignIn
                 c, tenant_id=tenant, team_id=team, user_id=admin, member_role="admin", security_team=security,
                 granted_by="test", at=now,
             )  # fmt: skip
-        # The rig's admin is also a workspace admin: Admin in every team (c-198).
+        # The rig's admin is also a workspace admin: Admin in every team.
         await c.execute(
             role_assignments.insert().values(
                 id=new_id("ras"), tenant_id=tenant, subject_kind="person", subject_id=admin, role_id="admin",

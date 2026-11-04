@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# c-086 proof: the publish policy's agents-service tests, its contract test, and uc-114 through the console.
+# Proof: the publish policy's agents-service tests, its contract test, and uc-114 through the console.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 DB="${OPS_TEST_DATABASE_URL:-postgresql+asyncpg://ops:ops@localhost:5477/ops_test_c041rev}"

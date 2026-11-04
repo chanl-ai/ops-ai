@@ -1,4 +1,4 @@
-"""A field's boxes on the page (c-252), by failure mode: a labelled quote lighting up the label instead of the value; a
+"""A field's boxes on the page, by failure mode: a labelled quote lighting up the label instead of the value; a
 quote the model made up, or cites on another page, getting a box; a quote over two lines drawn as one box across the
 gap; a value in a table cell, quoted from a row the page text joins with " | ", not found or not naming its cell."""
 

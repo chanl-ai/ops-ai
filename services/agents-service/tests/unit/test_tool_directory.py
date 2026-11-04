@@ -1,4 +1,5 @@
-"""The agents side of c-048 G1, by failure mode: one tenant's tools served to another from the cache, a list nobody
+"""The agents side of the tool directory, by failure mode: one tenant's tools served to another from the cache, a list
+nobody
 vouched for served when tools-service is down, a stale list kept past its time, and a granted name the registry no
 longer offers handed to the model anyway."""
 

@@ -1,4 +1,4 @@
-"""A service event runs its handler workflow to the end on PostgreSQL (c-258), under the tenant role and a real worker:
+"""A service event runs its handler workflow to the end on PostgreSQL, under the tenant role and a real worker:
 the handler is published to the tenant on its first event and runs to its outcome; a repeat after it finished
 returns the same run; another tenant's event of the same name and key is its own. Runs on the migrated test database."""
 

@@ -51,7 +51,7 @@ export interface ToolModulesApi {
   /** Publishes staged changes. A major version opens a security review and needs new workflow approvals. */
   publishVersion(id: string, note: string): Promise<ToolModuleDetail>;
   discardChanges(id: string): Promise<ToolModuleDetail>;
-  /** Opens the version's review in Human Tasks, where it is decided (c-163). */
+  /** Opens the version's review in Human Tasks, where it is decided. */
   requestReview(id: string, note: string): Promise<ToolModuleDetail>;
   requestApproval(id: string, input: ApprovalRequestInput): Promise<ModuleApproval>;
   /** Owner team only, and never the requester. */

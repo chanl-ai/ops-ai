@@ -1,7 +1,7 @@
 import { toast } from 'sonner';
 
 /**
- * The one message every record page shows after Publish (c-139). The route answers whether the version went live or
+ * The one message every record page shows after Publish. The route answers whether the version went live or
  * waits for a second person, under the team's publish-review setting; the page says that and nothing else, so no
  * page claims a review that did not open or a publish that did not happen.
  */

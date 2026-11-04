@@ -1,6 +1,6 @@
 """Workspace policies read live from platform-service (`GET /v1/policies/{key}`) through `ServiceClient`, for the
-current tenant. Read on every call, never cached, for a policy whose change must apply at once (publishReview,
-c-214). A read that fails raises PolicyUnread, so each caller decides what an unread policy means for it; so does a
+current tenant. Read on every call, never cached, for a policy whose change must apply at once (publishReview). A read
+that fails raises PolicyUnread, so each caller decides what an unread policy means for it; so does a
 process with no service signing key (no client), which still starts."""
 
 from __future__ import annotations

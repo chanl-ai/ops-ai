@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""Document types (c-236): a schema a team defines once, versions and tests, so workflows and agents read with one
+"""Document types: a schema a team defines once, versions and tests, so workflows and agents read with one
 tested set of fields instead of a copy each.
 
 A type belongs to a team. Saving its fields makes an immutable version n+1; an extraction names the type and a version
@@ -230,7 +230,7 @@ class DocumentTypes:
 
     @staticmethod
     def _may_show_pages(who: Who, version: dict[str, Any], *, held: bool) -> None:
-        """Page images leave for the model provider (c-295): turning them on needs documents.manage; a version keeping
+        """Page images leave for the model provider: turning them on needs documents.manage; a version keeping
         what the one before held, or turning them off, needs only documents.edit."""
         if version["page_images"] and not held and not who.manages:
             raise CreateNotAllowedError("Turning on page images needs someone who manages the team's documents.")
@@ -330,7 +330,7 @@ class DocumentTypes:
             "offerAt": found.get("offer_at") or DEFAULT_OFFER_AT,
         }
 
-    # ── template suggestions (c-254) ──
+    # ── template suggestions ──
 
     async def _read_of(self, who: Who, type_id: str, row: ExtractionRow | None, extraction_id: str) -> templates.Read:
         if row is None or row.team != who.team:
@@ -467,7 +467,7 @@ class DocumentTypes:
         await self.files.release(who, gone["file_id"], ref_id=sample_id)
         return True
 
-    # ── examples (c-297) ──
+    # ── examples ──
 
     async def examples(self, tenant: str, team: str, type_id: str, keys: list[str]) -> list[dict[str, Any]]:
         """What a read of the type is given: the newest few per field it asks, within the two caps."""
@@ -665,10 +665,10 @@ def masked(value: Any) -> Any:
     return value
 
 
-# The owner's rule (2026-10-18): a template is offered once this many checked reads share one layout, unless the type's
+# A template is offered once this many checked reads share one layout, unless the type's
 # version sets its own (`offerAt`).
 DEFAULT_OFFER_AT = 5
-# How many of a type's examples a read is given (c-297): the newest per field it asks, and at most this many in all.
+# How many of a type's examples a read is given: the newest per field it asks, and at most this many in all.
 EXAMPLES_PER_FIELD = 3
 EXAMPLES_IN_ALL = 12
 MIN_OFFER_AT = 2

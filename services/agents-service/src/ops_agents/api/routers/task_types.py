@@ -1,4 +1,4 @@
-"""`/v1/task-types`: the records a Human Task screen is drawn from (c-288).
+"""`/v1/task-types`: the records a Human Task screen is drawn from.
 
 Every member of the tenant reads every type, seeded or a team's, so a workflow may use a type another team keeps.
 Creating, saving and publishing one are workflow building (`workflows.create`, `workflows.edit`, `workflows.publish`)

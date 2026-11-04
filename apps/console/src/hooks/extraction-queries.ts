@@ -50,7 +50,7 @@ export interface ReadResult {
   outcome: string | null;
 }
 
-// A run parked on its own read (a long file read in the background, c-525) is not waiting for a person: it is said as
+// A run parked on its own read (a long file read in the background) is not waiting for a person: it is said as
 // `reading`, and the file's page shows the read's fields as soon as the read is done.
 const onTheRead = (run: { status: string; waiting?: { payload?: Record<string, unknown> } | null }) =>
   run.status === 'waiting' && run.waiting?.payload?.kind === 'external';

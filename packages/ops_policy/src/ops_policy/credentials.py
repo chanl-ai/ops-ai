@@ -1,4 +1,4 @@
-"""The credential store port (c-616 C6): every secret value a service keeps, a tool secret, an app credential's secret,
+"""The credential store port: every secret value a service keeps, a tool secret, an app credential's secret,
 a sign-in's token or verifier, a person's own key or a model provider key, is put and read through it, and the row that
 uses the value keeps only the reference `put` returns, beside its plain metadata (name, version, who set it, when).
 

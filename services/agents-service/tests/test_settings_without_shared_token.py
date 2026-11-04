@@ -1,4 +1,4 @@
-"""The shared static service token is gone (c-045): every internal call uses a per-service Ed25519 token, so outside
+"""The shared static service token is gone: every internal call uses a per-service Ed25519 token, so outside
 dev no service may demand a secret nothing reads, and one left over in an environment changes nothing."""
 
 from __future__ import annotations

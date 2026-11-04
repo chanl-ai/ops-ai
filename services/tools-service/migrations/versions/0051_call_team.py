@@ -1,8 +1,8 @@
-"""gateway_calls.team_id: the team each call was made in (c-616)
+"""gateway_calls.team_id: the team each call was made in
 
 The call log carried only its tenant, so Usage could filter only by the modules a team sees, and a call on a shared
 module showed in every team's Usage. Each row now records the acting team. Existing rows take their module's team; a
-row on no module, or on a shared one, keeps none and is read by nobody (old rows are test data, owner 2026-10-26).
+row on no module, or on a shared one, keeps none and is read by nobody (old rows are test data).
 
 Revision ID: tools_0051_call_team
 Revises: tools_0050_app_accounts

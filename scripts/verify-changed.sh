@@ -26,7 +26,7 @@ for f in "${changed[@]}"; do
   esac
 done
 # A changed package runs itself and every member that depends on it, directly or through another package, read
-# from the workspace's pyproject.toml files (scripts/dependants.py, c-566); a directory that is no member runs everything.
+# from the workspace's pyproject.toml files (scripts/dependants.py); a directory that is no member runs everything.
 if [ "${#pkgs[@]}" -gt 0 ]; then
   declare -A reached=()
   depth=(); [ "${VERIFY_CHANGED_DEPTH:-}" = direct ] && depth=(--direct)

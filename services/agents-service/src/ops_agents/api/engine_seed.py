@@ -1,5 +1,5 @@
 """Dev seed of v2 workflows: `engine_workflows.json` beside the agents seed (the demo's seed/ holds the customer
-summary workflow c-062 uses; test fixtures hold none). Each definition is checked against the type registry and
+summary workflow; test fixtures hold none). Each definition is checked against the type registry and
 stored live for the dev tenant; one already stored under its digest is left as it is. An item's `teamId` names the
 team that owns it (a workflow an Email received trigger binds must have one, as the levy intake does); without one it
 is stored under no team, so every team sees it.

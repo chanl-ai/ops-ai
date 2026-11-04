@@ -67,7 +67,7 @@ endif
 comma := ,
 port = $(shell echo $$(( $(1) + $(OPS_PORT_OFFSET) )))
 OPS_CONSOLE_PORT ?= $(call port,3016)
-# The embed app (apps/embed): the widget a bank page loads, and the console's preview frame (c-232).
+# The embed app (apps/embed): the widget a bank page loads, and the console's preview frame.
 OPS_EMBED_PORT ?= $(call port,3020)
 OPS_CONSOLE_RUNTIME_PORT ?= $(call port,3017)
 OPS_AGENTS_PORT ?= $(call port,8700)
@@ -75,7 +75,7 @@ OPS_TOOLS_PORT ?= $(call port,8720)
 OPS_KB_PORT ?= $(call port,8740)
 OPS_FILES_PORT ?= $(call port,8750)
 OPS_DOCUMENTS_PORT ?= $(call port,8760)
-# The code runner (services/runner-service, c-531) and the API docs site. Without the offset an isolated stack's runner
+# The code runner (services/runner-service) and the API docs site. Without the offset an isolated stack's runner
 # took the shared stack's :8770, and the shared `make up` found that port healthy and called back the other stack.
 OPS_RUNNER_PORT ?= $(call port,8770)
 OPS_API_DOCS_PORT ?= $(call port,8799)
@@ -95,7 +95,7 @@ OPS_GREENMAIL_IMAP_PORT ?= $(call mail_port,3143)
 OPS_MAILPIT_SMTP_PORT ?= $(call mail_port,1025)
 OPS_MAILPIT_HTTP_PORT ?= $(call mail_port,8025)
 # A make run started inside another (a use case's runner, a recipe) inherits the outer stack's exported addresses, and
-# `?=` keeps them, so an ISOLATED=1 run from inside a shared one would act on the shared stack (c-099, tick 14). With
+# `?=` keeps them, so an ISOLATED=1 run from inside a shared one would act on the shared stack. With
 # ISOLATED=1 every address that came from the environment is recomputed; one given on the make command line still wins.
 # GNU Make 3.81 (macOS) has no undefine, hence the reassignment.
 reset_inherited = $(if $(filter 1,$(ISOLATED)),$(foreach v,$(1),$(if $(filter environment,$(origin $(v))),$(eval $(v) := $(2)))))
@@ -198,7 +198,7 @@ BEGIN { FS = ":.*## " } /^##@/ { printf "\n%s\n", substr($$0, 5) } /^[a-z0-9-]+:
 endef
 export HELP_AWK
 
-# A verify run keeps going after a failing check (-k) and still fails at the end (c-367): the root's verify runs its
+# A verify run keeps going after a failing check (-k) and still fails at the end: the root's verify runs its
 # console, docs and python prerequisites, and a service's verify its lint, typecheck, test, standards and openapi
 # checks, each to the end, so a red never hides the reds after it. env.mk is the one file both include.
 ifneq ($(filter verify python-verify,$(MAKECMDGOALS)),)

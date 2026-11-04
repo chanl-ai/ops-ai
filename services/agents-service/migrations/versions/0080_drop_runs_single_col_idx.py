@@ -1,4 +1,4 @@
-"""Workflow runs lose their single-column tenant and workflow indexes (c-507)
+"""Workflow runs lose their single-column tenant and workflow indexes
 
 Revision ID: 0080_drop_runs_single_col_idx
 Revises: 0078_background_processes

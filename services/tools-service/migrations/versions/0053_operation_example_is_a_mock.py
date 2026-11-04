@@ -1,4 +1,4 @@
-"""module_operations.stub moves into operation_mocks: an operation's example answer is its "example" mock (c-616)
+"""module_operations.stub moves into operation_mocks: an operation's example answer is its "example" mock
 
 The stub and the mock answers were two homes for what Mock answers. Each operation's stub becomes one mock in the
 "example" environment, which test-environment calls never read, with the operation's id as its id (unique in the

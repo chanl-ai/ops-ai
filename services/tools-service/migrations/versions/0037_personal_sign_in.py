@@ -1,4 +1,4 @@
-"""Each person's own sign-in on a connection, and the links that ask them for it (c-558)
+"""Each person's own sign-in on a connection, and the links that ask them for it
 
 `connections.sign_in` says whose account a call signs in with: `team` (the connection's one sign-in, as before),
 `person` (the person the call acts for) or `person_or_team` (the person's, and the team's for a call with nobody

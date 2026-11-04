@@ -91,7 +91,7 @@ class IdentityStore:
 
     async def workspace_open_to(self, tenant_id: str, user_id: str) -> str:
         """`open` in an active workspace; in a closed one, `open` for its owner and `closed` for everyone else; `gone`
-        once its purge has started (c-529)."""
+        once its purge has started."""
         async with self.db.tenant_tx(tenant_id) as c:
             status = (await c.execute(sa.select(tenants.c.status).where(tenants.c.id == tenant_id))).scalar()
             if status in {"active", "suspended"}:
@@ -112,7 +112,7 @@ class IdentityStore:
         q = (
             sa.select(members.c.team_id, members.c.role)
             .join(teams, teams.c.id == members.c.team_id)
-            # An archived team leaves the token (c-198).
+            # An archived team leaves the token.
             .where(members.c.user_id == user_id, members.c.status == "active", teams.c.status == "active")
             .order_by(members.c.created_at, members.c.id)
         )
@@ -121,8 +121,8 @@ class IdentityStore:
         return {str(row[0]): str(row[1]) for row in rows}
 
     async def acting_teams(self, tenant_id: str, user_id: str, *, now: str) -> list[str]:
-        """The teams the person may act in: their memberships, then, for a workspace admin, every other active team
-        (c-208). The token's `team_ids`, which every service picks `X-Team-Id` from."""
+        """The teams the person may act in: their memberships, then, for a workspace admin, every other active team. The
+        token's `team_ids`, which every service picks `X-Team-Id` from."""
         mine = list(await self.roles(tenant_id, user_id))
         store = RoleStore(self.db)
         if not await store.workspace_admin(tenant_id, user_id, now=now):
@@ -278,7 +278,7 @@ class IdentityStore:
         return Key(row[0], row[1], row[2], row[3], list(row[4]), row[5], bool(row[6])) if row else None
 
     async def key_used(self, key: Key, *, at: str) -> dict[str, Any] | None:
-        """Moves the key's last use and returns what it may start (c-246), None for a key with no target. Read here,
+        """Moves the key's last use and returns what it may start, None for a key with no target. Read here,
         under the tenant, so the pre-tenant lookup function keeps returning only what verifying needs."""
         k = api_keys
         async with self.db.tenant_tx(key.tenant_id) as c:

@@ -1,4 +1,4 @@
-"""The runtime role may clear a set-aside email's kept copy (c-561)
+"""The runtime role may clear a set-aside email's kept copy
 
 Revision ID: 0089_trigger_event_item_update
 Revises: 0088_trigger_event_item

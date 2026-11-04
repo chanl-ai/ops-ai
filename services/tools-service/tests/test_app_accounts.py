@@ -1,4 +1,4 @@
-"""A team keeps several named accounts of one app (c-608), by failure mode: a second account replaces the first; a
+"""A team keeps several named accounts of one app, by failure mode: a second account replaces the first; a
 sign-in on the second account settles the first's instance; a call naming an account runs with another, or with
 another team's; a person's call ignores the account they pinned; and with several_accounts off, a second account
 can still be made or named."""
@@ -209,7 +209,7 @@ async def test_a_plugin_tools_page_names_the_teams_account_not_no_connection(
     world: World, tenant: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A plugin's module row is shared by every team, so it holds no connection; its page shows the calling team's
-    default account, the one the gateway signs its calls in through (c-616), and another team's stays its own."""
+    default account, the one the gateway signs its calls in through, and another team's stays its own."""
     monkeypatch.setattr(ModuleService, "team_connections", world.host.team_connection)
     ours, theirs = await connected(world, tenant), await connected(world, tenant, OTHER)
     await world.host.ensure(tenant, datetime.now(UTC))
@@ -222,7 +222,7 @@ async def test_a_plugin_tools_page_names_the_teams_account_not_no_connection(
 
 
 async def test_the_first_turn_on_names_the_teams_account(world: World, tenant: str) -> None:
-    # The Connect window asks for the account's name (c-616); without it the account takes the app's title.
+    # The Connect window asks for the account's name; without it the account takes the app's title.
     on = await world.client.put(
         f"/v1/plugins/{ID}/team",
         json={"enabled": True, "clientId": "app", "accountName": "Billing desk"},

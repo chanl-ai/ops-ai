@@ -1,4 +1,4 @@
-# The fields desk at 0.2.0 (c-609): find takes pending too and moves, post_message moves, transfer is gone, close_case is new.
+# The fields desk at 0.2.0: find takes pending too and moves, post_message moves, transfer is gone, close_case is new.
 schema: ops-ai/plugin@2
 id: test.fields
 title: Fields desk

@@ -1,4 +1,4 @@
-"""The Email received trigger on a Microsoft 365 mailbox (c-228), by failure mode: a Graph message starts no run, or two
+"""The Email received trigger on a Microsoft 365 mailbox, by failure mode: a Graph message starts no run, or two
 when Graph sends it again; its attachment is not in Files before the run starts. tools-service is faked at its
 documented `/v1/mailboxes` API, answering from ops_email's Graph reader over a fake Graph, so the listener's gateway
 source, Graph's JSON items and the start path all run as on the stack."""
@@ -126,7 +126,7 @@ async def test_a_graph_message_starts_one_run_with_its_attachment_in_files(graph
 
 
 def test_an_imap_mailbox_sends_no_graph_fields() -> None:
-    # A tools-service from before c-228 refuses unknown connection fields (400), so an IMAP read must not carry them.
+    # An older tools-service refuses unknown connection fields (400), so an IMAP read must not carry them.
     from ops_agents.api.mailbox_gateway import connection  # noqa: PLC0415
     from ops_agents.store.mailboxes import MailboxRow  # noqa: PLC0415
 

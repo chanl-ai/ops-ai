@@ -1,4 +1,4 @@
-"""Team mailboxes connected on Channels > Email (c-199): what the Email received trigger watches and how it is read.
+"""Team mailboxes connected on Channels > Email: what the Email received trigger watches and how it is read.
 A mailbox belongs to one team of one tenant; its address is unique in the tenant, since a workflow names the mailbox it
 watches by address. Credentials are never stored here: `password_secret` names a Secrets-page secret that only
 tools-service reads."""
@@ -41,7 +41,7 @@ mailboxes = sa.Table(
     sa.Column("graph_client_id", sa.String(64)),
     sa.Column("folder", sa.String(200), nullable=False, server_default="inbox"),
     # How replies leave: none, smtp or resend, from `from_address`; the password or API key is `sender_secret`, a
-    # Secrets-page secret by name (c-200). A Gmail mailbox with smtp and no host uses Gmail's SMTP server.
+    # Secrets-page secret by name. A Gmail mailbox with smtp and no host uses Gmail's SMTP server.
     sa.Column("sender", sa.String(16), nullable=False, server_default="none"),
     sa.Column("from_address", sa.String(320)),
     sa.Column("smtp_host", sa.String(255)),

@@ -1,4 +1,4 @@
-"""background_heartbeats and background_jobs: what each background process is doing, and what it did for a team (c-516)
+"""background_heartbeats and background_jobs: what each background process is doing, and what it did for a team
 
 Revision ID: 0078_background_processes
 Revises: 0077_channels_and_memories_team

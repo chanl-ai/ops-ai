@@ -1,4 +1,4 @@
-"""The sample team's installer (c-542): the manifest is checked before anything is made, a second team's ids never meet
+"""The sample team's installer: the manifest is checked before anything is made, a second team's ids never meet
 the first team's, `--no-levy` leaves the levy story to staging's walk, and the first admin's password is made once."""
 
 from __future__ import annotations

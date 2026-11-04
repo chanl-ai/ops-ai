@@ -1,4 +1,4 @@
-"""The Email received trigger (c-187): a live workflow version whose trigger node is `ops.trigger.email` watches one
+"""The Email received trigger: a live workflow version whose trigger node is `ops.trigger.email` watches one
 folder of one team mailbox, and each new message that matches its filters starts one run through `start_run`.
 
 The trigger node in the live version is the binding. Going live already takes a publish request, so binding a mailbox
@@ -51,7 +51,7 @@ SourceFor = Callable[[MailboxRow, str], MailSource]
 POLL_LEASE_PREFIX = "poll_"
 
 EMAIL_TRIGGER = "ops.trigger.email"
-# The name an email's text is stored under in Files (c-259).
+# The name an email's text is stored under in Files.
 BODY_FILE = "email-body.txt"
 
 
@@ -102,7 +102,7 @@ async def require_binding(mailboxes: MailboxStore, me: Principal, row: dict[str,
     """Refuses to take a version live whose email trigger the publisher may not bind. A no-op for other triggers."""
     binding = binding_of(row.get("definition"))
     if binding is None or not binding.mailbox:
-        # No mailbox named: the trigger reads no mail, so there is nothing to authorise until one is set (c-466).
+        # No mailbox named: the trigger reads no mail, so there is nothing to authorise until one is set.
         return
     mailbox, why = await bindable(mailboxes, row, binding.mailbox)
     if mailbox is None:
@@ -229,11 +229,11 @@ class Started:
 class EmailStarts:
     """One email message to one run: the attachments and the text stored in Files, the closed EMAIL input built, the
     run started under the message's run key, and a trigger event recorded. The mailbox listener calls it for each new
-    message and the test email composer for the message a person writes (c-466), so both runs get the same input and
+    message and the test email composer for the message a person writes, so both runs get the same input and
     take the same steps; only who started it differs."""
 
     def __init__(self, db: AsyncEngine, files: FilesClient) -> None:
-        # The mail listener's job log (c-516), set by the listener; a test email from a person logs none.
+        # The mail listener's job log, set by the listener; a test email from a person logs none.
         self.jobs: BackgroundJobs | None = None
         self.db = db
         self.files = files
@@ -301,7 +301,7 @@ class EmailStarts:
                 {"fileId": stored.file.id, "name": a.name, "mime": stored.file.mime, "size": stored.file.size}
             )
         # The text as a file too, so a workflow reads a body-only email through Extract from file like an attachment,
-        # with places and corrections (c-259); the plain body stays on the input for workflows that use it.
+        # with places and corrections; the plain body stays on the input for workflows that use it.
         body_file: dict[str, Any] | None = None
         if msg.body and msg.body.strip():
             try:
@@ -405,7 +405,7 @@ class EmailTriggers:
         self._forgot: dict[str, float] = {}
         self.events = TriggerEvents(db)
         self.mailboxes = MailboxStore(db)
-        # The mail listener's heartbeat (c-516); the worker sets it and the job log on `starts`, tests leave them off.
+        # The mail listener's heartbeat; the worker sets it and the job log on `starts`, tests leave them off.
         self.beat: background.Beat | None = None
         self.starts = EmailStarts(db, files)
 

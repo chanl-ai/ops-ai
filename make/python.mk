@@ -3,8 +3,8 @@
 
 ##@ Python
 
-# Every check runs even after one fails, and the run fails at the end listing each failed check (c-367): a check that
-# stopped the run hid every red after it, and c-222's rule-5 failure reached HEAD behind a lint error that way.
+# Every check runs even after one fails, and the run fails at the end listing each failed check: a check that
+# stopped the run hid every red after it, and the rule-5 failure reached HEAD behind a lint error that way.
 # VERIFY_FAILED is one temporary file per make run, made on first use, so builders verifying at once never share it.
 VERIFY_FAILED = $(eval VERIFY_FAILED := $(shell mktemp -t ops-verify.XXXXXX))$(VERIFY_FAILED)
 KEEP = $(ROOT)/scripts/keep_going.sh $(VERIFY_FAILED)
@@ -20,10 +20,10 @@ python-verify: ## Lint and type-check packages, then verify each service with mo
 	@rm -f $(VERIFY_FAILED)
 	$(KEEP) uv run ruff format --check packages
 	$(KEEP) uv run ruff check packages
-	@# Database code only in store packages, and the layers' import directions (.importlinter, c-346). Seconds.
+	@# Database code only in store packages, and the layers' import directions (.importlinter). Seconds.
 	$(KEEP) uv run lint-imports --no-logo
 	@mkdir -p $(VERIFY_LOGS)
-	@# The suites side by side (c-566); each writes its own log, printed below in a fixed order once all have ended.
+	@# The suites side by side; each writes its own log, printed below in a fixed order once all have ended.
 	-@$(MAKE) -s -k -j$(VERIFY_JOBS) $(VERIFY_POOL) VERIFY_FAILED=$(VERIFY_FAILED) VERIFY_LOGS=$(VERIFY_LOGS)
 	@for job in $(VERIFY_POOL); do echo "== $$job"; cat $(VERIFY_LOGS)/$$job.log 2>/dev/null; done; rm -rf $(VERIFY_LOGS)
 	$(KEEP) uv run python scripts/store_inventory.py --check
@@ -38,7 +38,7 @@ python-verify: ## Lint and type-check packages, then verify each service with mo
 	$(KEEP) uv run python scripts/check_portable_store.py --commits
 	@$(ROOT)/scripts/keep_going.sh --report $(VERIFY_FAILED)
 
-# The suites share nothing but the machine, so they run side by side (c-566): one after another they used one of 14
+# The suites share nothing but the machine, so they run side by side: one after another they used one of 14
 # cores and a full run took about 21 minutes. Each service verify and each database-backed package suite gets its own
 # test database, <db>_<name>, so none waits on another's locks or reads its rows. agents-service, the longest suite,
 # starts first so the run does not end waiting on it alone. VERIFY_JOBS sets the width: the Mac is shared by builders.

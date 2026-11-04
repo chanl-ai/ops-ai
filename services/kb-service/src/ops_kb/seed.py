@@ -1,11 +1,11 @@
-"""The banker demo's two knowledge bases, seeded when a dev kb-service starts (c-072 T006).
+"""The banker demo's two knowledge bases, seeded when a dev kb-service starts.
 
 Retail products (owned by James, the builder) holds the retail product sheet; Branch operations (owned by Nadia,
 Security's approver) holds the branch manual and the fee schedule. Each base has a stable id, which agents-service's
 seed names in Advisor's Helper and Branch Policy (`seed/chat_agents.json`), so a rebuilt database has both FAQ agents
 answering from their bases with no hand-run script. A base that exists is left as it is: people may have changed it.
 Its demo files are uploaded again when the store cannot read them, as after kb-service moved from its own store to
-files-service (c-094).
+files-service.
 `scripts/seed_demo_knowledge.py` finds these bases by name and reuses them.
 """
 

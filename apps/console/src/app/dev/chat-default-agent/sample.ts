@@ -6,7 +6,7 @@ export interface TeamAgent {
   role: string;
 }
 
-/** Operations' published agents. The first is the team default, provisioned with the workspace (c-175). */
+/** Operations' published agents. The first is the team default, provisioned with the workspace. */
 export const AGENTS: TeamAgent[] = [
   { id: 'ag_ops_assistant', name: 'Operations Assistant', role: 'Answers from the team’s knowledge and asks a specialist when it needs one' },
   { id: 'ag_fraud', name: 'Fraud Specialist', role: 'Checks accounts, holds and wire activity' },

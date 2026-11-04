@@ -1,4 +1,4 @@
-"""Blocked-topic guardrails in the kernel (c-063 T003 to T005), by failure mode: a blocked question answered anyway,
+"""Blocked-topic guardrails in the kernel, by failure mode: a blocked question answered anyway,
 the answering model called for a question the guardrail refuses, an answer that drifts into a blocked topic shown,
 a correction that is not tried before refusing, a check that passes when it cannot run or returns nonsense, and an
 agent with no guardrail paying for a classification call."""
@@ -534,7 +534,7 @@ async def test_a_skills_guardrail_allows_the_skills_own_scope_and_still_refuses_
 
 
 async def test_a_skills_scope_does_not_narrow_a_team_guardrail_on_the_same_topic() -> None:
-    # Review tick 23: scopes were keyed by topic alone, so the skill's "Not: hardship" narrowed the team's own rule.
+    # Scopes were keyed by topic alone, so the skill's "Not: hardship" narrowed the team's own rule.
     team = Guardrail("gr_team", 1, "Collections rules", (DEFERRAL,), "Collections decides deferrals, not this chat.")
     settings = AgentSettings(
         "ag_advisor", 1, [PromptFragment("You help bankers.")], "m", guardrails=[team], skills=[HARDSHIP_ALWAYS]

@@ -1,7 +1,7 @@
 """How the sweeper and the timer poller work one claimed thread as its own tenant and team.
 
 They claim before they know the owner, so they read it from the thread's row past row-level security
-(`GraphStore.owner_of`), then do the work in a new task that acts as that tenant and team (c-429). Setting it inside
+(`GraphStore.owner_of`), then do the work in a new task that acts as that tenant and team. Setting it inside
 that task, never on the loop's own context, means two threads of different tenants or teams worked by one sweep cannot
 see each other's rows.
 """

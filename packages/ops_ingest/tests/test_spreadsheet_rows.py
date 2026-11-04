@@ -1,4 +1,4 @@
-"""A spreadsheet as a header and rows (c-535), for batches: a CSV's dialect or quoted commas splitting a value; an
+"""A spreadsheet as a header and rows, for batches: a CSV's dialect or quoted commas splitting a value; an
 Excel file read differently from the same table as CSV; blank trailing rows counted as rows."""
 
 from __future__ import annotations

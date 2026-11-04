@@ -1,4 +1,4 @@
-"""The shape every service's `/health/background` answers in, and agents-service's Background page reads (c-516)."""
+"""The shape every service's `/health/background` answers in, and agents-service's Background page reads."""
 
 from __future__ import annotations
 

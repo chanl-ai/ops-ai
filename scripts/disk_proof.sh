@@ -1,5 +1,5 @@
 #!/bin/sh
-# Proves c-369 on this machine: test runs and builds clean up after themselves. PASS or FAIL per check; exit 1 on any.
+# Proves on this machine: test runs and builds clean up after themselves. PASS or FAIL per check; exit 1 on any.
 # Touches only what it makes: one scratch database per sweep check, one container, one throwaway image.
 #   sh scripts/disk_proof.sh
 set -u

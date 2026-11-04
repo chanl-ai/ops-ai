@@ -39,7 +39,7 @@ export function AgentWorkflowChannels({ agent }: { agent: Agent }) {
   );
 }
 
-/** Whether new chats in the team start on this agent (c-174), and the way to make it so for a team admin. */
+/** Whether new chats in the team start on this agent, and the way to make it so for a team admin. */
 export function AgentChatChannel({ agent }: { agent: Agent }) {
   const current = useDefaultAgent();
   const isAdmin = useCanSetDefaultAgent();

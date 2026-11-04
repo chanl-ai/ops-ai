@@ -5,7 +5,7 @@ import { HostHeldError } from '@/lib/api/held-host';
 
 /**
  * Why a dialog's save did not land, inside the dialog. An address on a host nobody listed is not an error: it waits on
- * the Security team (c-616 S13), so it reads as waiting, and saving again once the host is allowed goes through.
+ * the Security team, so it reads as waiting, and saving again once the host is allowed goes through.
  */
 export function SaveProblem({ error }: { error: unknown }) {
   if (!error) return null;

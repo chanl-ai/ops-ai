@@ -1,4 +1,4 @@
-"""Workflows come from agents-service (c-039), one test per way an approval could govern the wrong thing: a fixture
+"""Workflows come from agents-service, one test per way an approval could govern the wrong thing: a fixture
 workflow accepted or a real one refused, a workflow whose team nobody here knows handed to the all-scope team, a
 stopped agents-service answered from stale or invented data, one tenant's workflows answering another, fixture cases
 offered in the test panel, and a running service reading tests/."""
@@ -84,7 +84,7 @@ async def test_an_approval_for_a_real_workflow_is_requested_and_waits_for_its_ru
     assert made.status_code == 201, made.text
     approval = made.json()["data"]
     assert approval["workflowName"] == "Dispute email"
-    # Decided by its system workflow run (c-257; test_apply_tool_access), which the run key names.
+    # Decided by its system workflow run (test_apply_tool_access), which the run key names.
     assert (approval["status"], approval["reviewId"]) == ("requested", f"tool_access.requested:{approval['id']}")
 
 
@@ -96,7 +96,7 @@ async def test_a_workflow_agents_service_does_not_have_is_refused(api: Api) -> N
 async def test_a_workflow_of_a_team_the_seed_does_not_hold_is_granted_for_that_team(
     api: Api, engine: AsyncEngine, tenant: str
 ) -> None:
-    # A team made on the Teams page is a platform team the dev seed does not list (c-423): the grant names it.
+    # A team made on the Teams page is a platform team the dev seed does not list: the grant names it.
     r = await api.call("POST", "/mod_core_banking/approvals", json=request("orphan_flow"))
     assert r.status_code == 201, r.text
     stored = await ModuleStore(engine).get_any(tenant, "mod_core_banking")

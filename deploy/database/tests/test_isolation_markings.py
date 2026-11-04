@@ -1,4 +1,4 @@
-"""Every table of every chain says how the database isolates it (c-410): tenant-scoped (by tenant, or by tenant and
+"""Every table of every chain says how the database isolates it: tenant-scoped (by tenant, or by tenant and
 team when it is also team-owned) or `system(reason)`. A table with neither fails here by name, unless it is on the
 waiting list of the card that marks it; that list only shrinks, and a listed table that is now marked fails too, so the
 entry comes off in the commit that marks it. No server is needed."""
@@ -16,10 +16,10 @@ from models import chain_metadata, chains
 
 from ops_store.schema import isolation_ddl, isolation_kind
 
-# Card -> tables the database does not isolate yet, by the c-408 design's build cards.
+# Area -> tables the database does not isolate yet.
 WAITING: dict[str, set[str]] = {
-    "c-411": {"signin_email_failures"},
-    "c-412": {
+    "platform sign-in": {"signin_email_failures"},
+    "agents runtime": {
         "channel_cursors",
         "channel_files",
         "channel_messages",
@@ -31,7 +31,7 @@ WAITING: dict[str, set[str]] = {
         "thread_leases",
         "timers",
     },
-    "c-413": {
+    "agents registry": {
         "registry_agent_versions",
         "registry_agents",
         "registry_guardrail_versions",
@@ -44,8 +44,8 @@ WAITING: dict[str, set[str]] = {
         "registry_workflow_versions",
         "registry_workflows",
     },
-    "c-414": {
-        # connect_links, connection_environments, connection_tokens and oauth_states are isolated by c-602.
+    "tools": {
+        # connect_links, connection_environments, connection_tokens and oauth_states are isolated.
         "egress_audit",
         "egress_hosts",
         "egress_ranges",
@@ -60,11 +60,11 @@ WAITING: dict[str, set[str]] = {
         "plugin_bindings",
         "send_checks",
         "send_policies",
-        # Each team's defaults version (c-616), team-owned like tool_modules beside it; isolated with them.
+        # Each team's defaults version, team-owned like tool_modules beside it; isolated with them.
         "team_defaults",
         "tool_modules",
     },
-    "c-416": {
+    "models": {
         "model_aliases",
         "model_call_log",
     },
@@ -92,9 +92,9 @@ def test_every_marked_table_compiles_to_its_policy(dialect: str) -> None:
         assert bool(statements) == (kind in ("team", "tenant")), t
 
 
-# A table holding sign-in material: a sealed value (`*_ct`, `ciphertext`) or a person's own row (`person_id`) (c-602).
+# A table holding sign-in material: a sealed value (`*_ct`, `ciphertext`) or a person's own row (`person_id`).
 # Each is isolated by the database, or waits here for the card that isolates it; the list only shrinks.
-# Every table holding sign-in material is isolated by the database (c-616 C1, C3); a new one waits here with its card.
+# Every table holding sign-in material is isolated by the database; a new one waits here with its card.
 SIGN_IN_MATERIAL_WAITING: set[str] = set()
 
 

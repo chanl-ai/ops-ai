@@ -36,6 +36,6 @@ name when the shared `ops_usecase` database holds rows an older checkout wrote.
 
 ## Non-vacuous check
 
-Run before the case page changed (after T006), the case page steps failed: no What's left line, no origin, no feed
+Run before the case page changed (after that change), the case page steps failed: no What's left line, no origin, no feed
 drawn through StoryFeed (`uc-red.txt` under `evidenceDir('500')`). After it, all eight pass (`uc-green.txt`
 there).

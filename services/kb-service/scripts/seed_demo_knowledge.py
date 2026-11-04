@@ -1,4 +1,4 @@
-"""Seeds the banker demo's knowledge (c-058 T001): renders the markdown under seed/ into text PDFs (one section per
+"""Seeds the banker demo's knowledge: renders the markdown under seed/ into text PDFs (one section per
 page, so citations carry a page and a section), creates the two knowledge bases with their owners through kb-service's
 API, puts the PDFs in Files (files-service), adds them to their sources by id and syncs, and runs the demo questions
 through K12, printing each one's best score against the retrieval floor.
@@ -13,7 +13,7 @@ through K12, printing each one's best score against the retrieval floor.
 A harness imports `seed_from(kb_url, files_url, token=...)` (or `dev=True`) and gets the bases and the K12 scores back.
 
 Retail products is owned by the builder (James), Branch operations by Security's approver (Nadia). Each base is
-written by a builder or admin of its owning team, which kb-service requires (c-115): James for Retail products, and for
+written by a builder or admin of its owning team, which kb-service requires: James for Retail products, and for
 Branch operations Security's admin (Sam), since an approver may own a base but not change it. Rendering alone:
 `--render-only`.
 """
@@ -227,7 +227,7 @@ async def replace_fee_schedule(kb: httpx.AsyncClient, store: Store, seeded: Seed
 
 async def ask(kb_for: dict[str, httpx.AsyncClient], seeded: Seeded) -> list[dict[str, Any]]:
     """Every demo question through K12 on its base, asked by the client of the team that owns the base (`kb_for`, as
-    seed takes it): another team's base answers 404 (c-407, c-453). The best passage's score (None when nothing passes
+    seed takes it): another team's base answers 404. The best passage's score (None when nothing passes
     the floor)."""
     out: list[dict[str, Any]] = []
     for question, base, covered in QUESTIONS:
@@ -255,7 +255,7 @@ async def wire_agents(agents: httpx.AsyncClient, seeded: Seeded) -> None:
     reads = ["search_customers", "get_customer", "list_accounts", "list_transactions"]
     # The seeded agents belong to the operations team (agent_registry.SEED_TEAM); the caller acts in it.
     team = {"X-Team-Id": "team_ops"}
-    # The advisor may also start the seeded v2 customer summary workflow (c-062), found through search_tools.
+    # The advisor may also start the seeded v2 customer summary workflow, found through search_tools.
     advisor = [*reads, "workflow:customer_summary"]
     for agent_id, kb_ids, tools in (("ag_advisor", [seeded.retail_kb], advisor), ("ag_policy", [seeded.branch_kb], [])):
         body: dict[str, Any] = {"collections": kb_ids, "toolIds": tools}
@@ -263,7 +263,7 @@ async def wire_agents(agents: httpx.AsyncClient, seeded: Seeded) -> None:
         patched = data(r)
         r = await agents.post(
             f"/v1/agents/{agent_id}/publish-requests",
-            json={"version": patched["version"], "note": "c-058 knowledge bases"},
+            json={"version": patched["version"], "note": "demo knowledge bases"},
             headers=team,
         )
         print(f"{agent_id}: collections {kb_ids}, publish request {r.status_code}")

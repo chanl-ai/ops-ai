@@ -1,4 +1,4 @@
-"""Memories keep their history and say what each answer used (c-557)
+"""Memories keep their history and say what each answer used
 
 Revision ID: 0083_memory_history
 Revises: 0082_engine_waits

@@ -1,4 +1,4 @@
-"""The review queue reads a chat thread's checkpoint only when the thread can hold a review (tick 36), by failure mode:
+"""The review queue reads a chat thread's checkpoint only when the thread can hold a review, by failure mode:
 every chat thread of the team is resolved and its state read on each list, so the queue costs a checkpoint read per
 conversation ever held; and a thread that is waiting on an approval is skipped and its review goes missing."""
 
@@ -21,7 +21,7 @@ async def test_the_queue_reads_only_threads_that_can_hold_a_review(
     dev_platform: AsyncClient,  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # James builds and does not decide reviews, so his write waits for an approver (owner, 2026-11-01).
+    # James builds and does not decide reviews, so his write waits for an approver.
     james = person("usr_james", ["team_ops"], role="builder")
     for _ in range(4):
         res = await dev_platform.post("/chat/threads", json={"agentId": "ag_dispute", "kbIds": []}, headers=james)

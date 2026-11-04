@@ -1,5 +1,5 @@
 {
-  "about": "Synthetic tax levies for the levy demo (c-270). Invented: every agency, person, business, address, identifier and amount. Three state levies and one federal, in the restraining notices' table layout, a plain-lines layout and a two-page continuation; TAXLEVY03 also comes as a scan. `expected` holds each field as printed; `pages_of` names a page other than 1.",
+  "about": "Synthetic tax levies for the levy demo. Invented: every agency, person, business, address, identifier and amount. Three state levies and one federal, in the restraining notices' table layout, a plain-lines layout and a two-page continuation; TAXLEVY03 also comes as a scan. `expected` holds each field as printed; `pages_of` names a page other than 1.",
   "notices": [
     {
       "id": "TAXLEVY01",

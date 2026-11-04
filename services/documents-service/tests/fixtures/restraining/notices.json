@@ -1,5 +1,5 @@
 {
-  "about": "Synthetic restraining notices (c-248). TEST001-TEST012 are transcribed from photographs of synthetic test documents; every name, address, identifier and agency is fictional. VAR01-VAR07 are invented layout variants. `invented` lists what no photograph shows. `expected` holds each field as printed (null: must come back empty); `pages` names the page a value sits on when it is not page 1. scripts/make_restraining_fixtures.py renders the PDFs from this file.",
+  "about": "Synthetic restraining notices. TEST001-TEST012 are transcribed from photographs of synthetic test documents; every name, address, identifier and agency is fictional. VAR01-VAR07 are invented layout variants. `invented` lists what no photograph shows. `expected` holds each field as printed (null: must come back empty); `pages` names the page a value sits on when it is not page 1. scripts/make_restraining_fixtures.py renders the PDFs from this file.",
   "notices": [
     {
       "id": "TEST001",
@@ -251,7 +251,7 @@
     {
       "id": "TEST009",
       "source": "IMG_0807",
-      "edge": "One PDF holds two writs: one row with two case groups, each value kept with its own case. The flat fields below are the bundle's; the groups need tables (c-238).",
+      "edge": "One PDF holds two writs: one row with two case groups, each value kept with its own case. The flat fields below are the bundle's; the groups need tables.",
       "invented": ["the banner (out of frame in the photo)"],
       "layout": "table",
       "title": "COMBINED WRITS - TEST BUNDLE",

@@ -64,7 +64,7 @@ export const useWidgetAction = () =>
     ['reviews', 'overview'],
   );
 
-/** Continue or raise a spent conversation budget (c-103); the server checks who may do which. */
+/** Continue or raise a spent conversation budget; the server checks who may do which. */
 export const useAnswerBudget = () => useWrite(({ threadId, answer }: { threadId: string; answer: BudgetAnswer }) => api.chat.budget(threadId, answer));
 
 // ── Streaming replies ──
@@ -213,7 +213,7 @@ export function useSendMessage() {
   );
 }
 
-/** The agent the team's new chats start on (c-174). */
+/** The agent the team's new chats start on. */
 export const useDefaultAgent = () => useTeamQuery({ queryKey: ['chat', 'default-agent'], queryFn: api.chat.defaultAgent.get, staleTime: 60_000 });
 /** Whether agents-service lets the person change the default: the console offers the control only then. */
 export const useCanSetDefaultAgent = () => useDefaultAgent().data?.canChange === true;

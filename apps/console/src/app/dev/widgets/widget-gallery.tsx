@@ -8,7 +8,7 @@ import { JsonBlock } from '@/components/shared/json-block';
 import { Section } from '@/components/shared/surface';
 import type { LayoutPart, WidgetPart } from '@/lib/types/widgets';
 
-/** Each part through WidgetView, then each layout (c-082) through LayoutWidget; approve, reject, submit and button
+/** Each part through WidgetView, then each layout through LayoutWidget; approve, reject, submit and button
  * replies are recorded below instead of reaching a service. */
 export function WidgetGallery({ parts, layouts = [] }: { parts: WidgetPart[]; layouts?: LayoutPart[] }) {
   const [log, setLog] = React.useState<unknown[]>([]);

@@ -1,4 +1,4 @@
-"""Task assist (c-302) on PostgreSQL with the real worker and the review view, by failure mode: assist runs with the
+"""Task assist on PostgreSQL with the real worker and the review view, by failure mode: assist runs with the
 setting off; a model call is made per read instead of once per task; a suggestion names an action the type does not
 have; a failing model call holds or fails the task; the call reads run data the task does not show."""
 
@@ -180,7 +180,7 @@ async def test_a_failing_model_leaves_the_task_open_without_help(engine: AsyncEn
 
 
 async def test_a_slow_assist_does_not_hold_the_task_back(engine: AsyncEngine) -> None:
-    """tick 30: the pause waited up to 20 s on the assist's model call before the task could be shown; and a task read
+    """The pause waited up to 20 s on the assist's model call before the task could be shown; and a task read
     before the assist is written must say it is coming, or the page never shows it (uc-234)."""
     prompts = Slow(HELP)
     tenant, run_id, rt = await _paused(engine, prompts, on=True, settle=False)
@@ -193,7 +193,7 @@ async def test_a_slow_assist_does_not_hold_the_task_back(engine: AsyncEngine) ->
 
 
 async def test_the_workers_assist_runs_whatever_the_ai_step_rules_say(engine: AsyncEngine) -> None:
-    """tick 31: the worker's assist borrowed the AI step port, whose rules refuse a call that names no run, so every
+    """The worker's assist borrowed the AI step port, whose rules refuse a call that names no run, so every
     assist failed as ai_steps_off. Built as the worker builds it, under AI step rules that refuse everything."""
 
     def answer(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
@@ -210,7 +210,7 @@ async def test_the_workers_assist_runs_whatever_the_ai_step_rules_say(engine: As
 
 
 async def test_a_stopping_worker_waits_for_the_assist_it_is_writing(engine: AsyncEngine) -> None:
-    """tick 31: the assist ran in an untracked task, so a worker stopping mid-call lost it and the task stayed pending.
+    """The assist ran in an untracked task, so a worker stopping mid-call lost it and the task stayed pending.
     Built as the worker builds it; the model answers only after the stop has begun."""
 
     def answer(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
@@ -228,7 +228,7 @@ async def test_a_stopping_worker_waits_for_the_assist_it_is_writing(engine: Asyn
 
 
 async def test_an_assist_still_pending_past_its_limit_reads_as_failed(engine: AsyncEngine) -> None:
-    """tick 32: a worker killed mid-call leaves the assist pending for ever, and the console polls it for ever."""
+    """A worker killed mid-call leaves the assist pending for ever, and the console polls it for ever."""
     prompts = Slow(HELP)
     tenant, run_id, rt = await _paused(engine, prompts, on=True, settle=False)
     assert (await _regions(rt, tenant, run_id))["assist"] == {"pending": True, "ai": True}

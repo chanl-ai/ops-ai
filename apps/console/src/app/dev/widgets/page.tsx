@@ -8,7 +8,7 @@ import type { LayoutPart, WidgetPart } from '@/lib/types/widgets';
 
 // The same parts uc-073 reads and uc-061 will replay through the real chat stream, so all three draw identical data.
 import parts from '@/lib/widgets/sample-parts.json';
-// Filled widget templates and one composed layout, as agents-service sends them (c-082).
+// Filled widget templates and one composed layout, as agents-service sends them.
 import layouts from '@/lib/widgets/sample-layouts.json';
 
 import { WidgetGallery } from './widget-gallery';

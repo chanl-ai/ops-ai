@@ -91,7 +91,7 @@ class App:
     models_key: str | None = None
 
 
-# Sizes from the compose run after the walk (c-203): agents 224 MB, worker 202, console 253, the rest under 110.
+# Sizes from the compose run after the walk: agents 224 MB, worker 202, console 253, the rest under 110.
 # Every Python service reads these (the compose file's x-settings, with Fly's private addresses).
 SETTINGS: dict[str, str] = {
     "OPS_ENVIRONMENT": "production",
@@ -146,7 +146,7 @@ APPS: list[App] = [
         python=False,
     ),
     App("tools", "tools", 256, 8720, "/health", signs_as="TOOLS"),
-    # Code tools' functions on WASM (c-531): 512 MB for two runs at the default 256 MB cap each.
+    # Code tools' functions on WASM: 512 MB for two runs at the default 256 MB cap each.
     App("runner", "runner", 512, 8770, "/health", signs_as="RUNNER"),
     App("models", "models", 256, 8730, "/health", signs_as="MODELS"),
     # The fake model: answers from committed rules and never calls a provider. Staging's only model connection.

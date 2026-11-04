@@ -1,5 +1,5 @@
 /**
- * The console's saved query cache (c-560): what a person's screens read is kept in IndexedDB, so a reload shows it at
+ * The console's saved query cache: what a person's screens read is kept in IndexedDB, so a reload shows it at
  * once and refreshes it behind. One copy per person and team, dropped when the app version changes or after 24 hours.
  *
  * A write changes what the screens read, so the saved copy never outlives one: when a write starts the copy is removed

@@ -1,4 +1,4 @@
-"""Agent edits keep one draft and a version is cut only on publish (c-172), by failure mode: every save adds a
+"""Agent edits keep one draft and a version is cut only on publish, by failure mode: every save adds a
 version (F1); a save after publish rewrites what runs (F2); a save while a publish request is open rewrites what the
 reviewer approves (F3); a skill attach still cuts a version per save (F4); two saves at once open the next version
 twice (F5)."""

@@ -5,7 +5,7 @@
 // Extract from file step reads, shares a workflow as a form that a person outside the console fills in the embed app,
 // opens a members-only form in the console, and runs a workflow once per row of a CSV from the Start run dialog.
 //
-// The data-testid contract T002, T004 and T006 implement:
+// The data-testid contract the page implements:
 //   file-read-full-text   Read dialog (extract-dialog.tsx): the Full text choice
 //   file-read-propose     Read dialog: "Let the model propose the fields"
 //   file-text-tab         the file page's Text tab
@@ -152,7 +152,7 @@ try {
       const H = { ...J, 'Content-Type': 'application/json' };
       for (const flow of [READ_FLOW, FORM_FLOW, BATCH_FLOW]) {
         const saved = await fetch(`${agents}/v1/workflows/definitions`, { method: 'POST', headers: H, body: JSON.stringify({ definition: flow }) });
-        // The read flow names `read`, which T001 adds; until then it is refused, and step 34 says so.
+        // The read flow names `read`, which a later change adds; until then it is refused, and step 34 says so.
         if (saved.status !== 201 && flow !== READ_FLOW) throw new Error(`setup: ${flow.id} answered ${saved.status}: ${await saved.text()}`);
         if (flow !== READ_FLOW) await fetch(`${agents}/v1/workflows/definitions/${flow.id}/publish-requests`, { method: 'POST', headers: H, body: '{}' });
       }

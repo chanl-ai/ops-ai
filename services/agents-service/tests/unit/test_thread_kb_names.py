@@ -1,4 +1,4 @@
-"""A thread's knowledge bases are named as kb-service named them when it was opened (c-170), by failure mode: a thread
+"""A thread's knowledge bases are named as kb-service named them when it was opened, by failure mode: a thread
 saved before names were kept showing the agents seed's names, which can differ from kb-service's."""
 
 from __future__ import annotations

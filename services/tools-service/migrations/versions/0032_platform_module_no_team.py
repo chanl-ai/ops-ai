@@ -1,7 +1,7 @@
-"""tool_modules.team_id nullable: the platform tools module is a workspace-level record (c-433)
+"""tool_modules.team_id nullable: the platform tools module is a workspace-level record
 
 The module holding send_reply and open_case was owned by the workspace's Security team, so once calls are scoped to
-the calling run's team (c-433) every other team's reply would be refused. A module with no team is read and called by
+the calling run's team every other team's reply would be refused. A module with no team is read and called by
 every team, and a held write on it is decided by the calling run's team. The existing platform module (its id is the
 platform's constant, PLATFORM_MODULE in ops_tools.modules.seed) moves to no team.
 

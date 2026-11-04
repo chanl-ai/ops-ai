@@ -5,12 +5,12 @@ ones (same Message-ID, some without brackets or with the domain in another case)
 person, 3 replies to cases that are mid-run when they arrive (marked `_fixture.midRun`), plus 2 `@removed` items (a
 delete and a move out of the folder) that are not counted.
 
-`levy_notice.pdf` and `levy_notice.json` (c-057): one garnishment notice naming three persons, the PDF with a text
+`levy_notice.pdf` and `levy_notice.json`: one garnishment notice naming three persons, the PDF with a text
 layer listing each person's name, address, last four of their SSN, amount, court and case number, and the Graph item
 that carries it as a base64 `contentBytes` attachment. Two persons match customers the fake bank seeds
 (services/tools-service/scripts/fake_bank/app.py), one matches none.
 
-`levy_notice_long.pdf` (c-532), written alone by `make_mailbox_fixture.py long`: the same notice followed by five pages
+`levy_notice_long.pdf`, written alone by `make_mailbox_fixture.py long`: the same notice followed by five pages
 of schedules, so it is past documents-service's at-once limit (SYNC_PAGES) and is read in the background.
 """
 

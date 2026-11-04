@@ -1,4 +1,4 @@
-"""A person outside a team reads none of its records (c-407): every GET route in every service's committed OpenAPI is
+"""A person outside a team reads none of its records: every GET route in every service's committed OpenAPI is
 called as a member of team A with team B's ids, and any 200 that carries one of B's ids is a leak.
 
     OUTSIDER_PASSWORD=... OWNER_PASSWORD=... uv run python scripts/team_isolation_probe.py \

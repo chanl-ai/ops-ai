@@ -1,6 +1,5 @@
-"""Reviews opened before their workflow's review step named a task type (c-288; tick 31's design check found every open
-task on the shared stack drawn the old way). They are drawn through a task type too, so the console draws one task
-layout and never branches on how old a review is.
+"""Reviews opened before their workflow's review step named a task type. They are drawn through a task type too, so
+the console draws one task layout and never branches on how old a review is.
 
 The workflow's live version decides first: when its step now names a type, the old review draws with that type, its
 params resolved against the old run as the step would have resolved them. Otherwise what the review carries picks one

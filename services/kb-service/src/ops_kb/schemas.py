@@ -22,7 +22,7 @@ class KnowledgeBaseIn(In):
     # A caller-chosen id, for knowledge bases that agents were granted before they moved here; kb-service makes one.
     id: str | None = Field(default=None, pattern=r"^kb_[a-z0-9_]{1,60}$")
     name: str
-    # Set by the provisioning service only (c-180).
+    # Set by the provisioning service only.
     template_id: str | None = Field(default=None, min_length=1, max_length=120)
     protection: Literal["system", "managed"] | None = None
     owner: str | None = None
@@ -34,7 +34,7 @@ class KnowledgeBaseIn(In):
 
 
 class KnowledgeBasePatch(In):
-    # Set by the provisioning service only (c-180).
+    # Set by the provisioning service only.
     template_id: str | None = Field(default=None, min_length=1, max_length=120)
     protection: Literal["system", "managed"] | None = None
     name: str | None = None
@@ -60,7 +60,7 @@ class SourceIn(In):
     file_ids: list[str] = []
     kb_ids: list[str] = []
     sync: bool = False
-    # A "tool" source's plugin and source names (c-564): {"plugin": "opsai.salesforce", "source": "articles"}. Any
+    # A "tool" source's plugin and source names: {"plugin": "opsai.salesforce", "source": "articles"}. Any
     # values: the console's Add source sends its whole draft config for every type, and only a tool source reads it.
     config: dict[str, Any] | None = None
 
@@ -75,7 +75,7 @@ class KnowledgeBase(Out):
     id: str
     name: str
     slug: str
-    # From the provisioning service (c-180): the template it was made from, and `system` or `managed`; null otherwise.
+    # From the provisioning service: the template it was made from, and `system` or `managed`; null otherwise.
     template_id: str | None = None
     protection: Literal["system", "managed"] | None = None
     description: str
@@ -155,7 +155,7 @@ class KnowledgeBaseDetail(KnowledgeBaseRow):
     metadata_keys: list[str]
     suggested_questions: list[str]
     held_count: int
-    # What the caller may do with it (c-216), from the write routes' own check.
+    # What the caller may do with it, from the write routes' own check.
     can_edit: bool | None = None
     can_delete: bool | None = None
     can_publish: bool | None = None
@@ -180,7 +180,7 @@ class SourceDetail(Source):
     required_metadata: list[str]
     governance: Json
     ai_steps_waiting: list[str]
-    # What the caller may do with it (c-216), from the write routes' own check.
+    # What the caller may do with it, from the write routes' own check.
     can_edit: bool | None = None
     can_delete: bool | None = None
     can_publish: bool | None = None

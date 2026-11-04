@@ -1,4 +1,4 @@
-"""Secrets at rest, one way for every service (c-189): the cipher port and its AES-256-GCM implementation, a 12-byte
+"""Secrets at rest, one way for every service: the cipher port and its AES-256-GCM implementation, a 12-byte
 random nonce and a 16-byte tag, stored as base64 of nonce, ciphertext and tag. The tenant and the secret's name are
 authenticated as associated data, so a stored value moved to another name or tenant fails to decrypt instead of being
 used there. tools-service seals tool secrets with it and files-service storage credentials (as JSON); a key management

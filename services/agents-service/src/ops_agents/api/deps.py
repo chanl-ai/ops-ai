@@ -51,7 +51,7 @@ class Runtime:
     gateway: bool = False
     # The tools-service client when a gateway is configured; the review service asks it for tool access classes.
     tools: GatewayClient | None = None
-    # tools-service for applying tool module review decisions (c-163): the gateway's client, or one for `tools_url`
+    # tools-service for applying tool module review decisions: the gateway's client, or one for `tools_url`
     # when this service runs without a gateway.
     tool_reviews: GatewayClient | None = None
     # The tools an agent may be granted: tools-service's registry with a gateway, the fixture catalogue without.
@@ -68,7 +68,7 @@ class Runtime:
     agent_graph: Callable[[str], Any] | None = None
     # What graph nodes run on; a workflow test run compiles its draft against it.
     graph_deps: GraphDeps | None = None
-    # Reads what a chat turn's person said about themselves (c-124); None uses a kernel turn on the runtime's alias.
+    # Reads what a chat turn's person said about themselves; None uses a kernel turn on the runtime's alias.
     memory_extractor: Any = None
     # The aliases an agent may name (models-service's when configured); set in the lifespan.
     model_aliases: ModelAliases | None = None
@@ -83,7 +83,7 @@ class Runtime:
     team_names: Any = None
     # File display names from files-service (file_names.py); None without a files URL.
     file_names: Any = None
-    # files-service as a test email's attachments are read and stored (run_starts.py, c-466); None without a files URL.
+    # files-service as a test email's attachments are read and stored (run_starts.py); None without a files URL.
     start_files: Any = None
     # People's display names from platform-service (people_names.py); None without a platform URL.
     people_names: Any = None

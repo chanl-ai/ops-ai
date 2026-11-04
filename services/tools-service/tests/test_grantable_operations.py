@@ -1,4 +1,4 @@
-"""GET /v1/grantable-operations, what agents-service grants and hands a run from (c-048 G1), and GET /v1/tools/{name},
+"""GET /v1/grantable-operations, what agents-service grants and hands a run from, and GET /v1/tools/{name},
 how many approvers a call needs, by failure mode: an operation that /v1/calls would refuse (hidden, unpublished,
 drifted) offered to an agent, a model handed no usable input schema, another tenant's operations listed, a person
 or a token without `tools:view` reading the list, and a registry operation's access class reported as unknown."""

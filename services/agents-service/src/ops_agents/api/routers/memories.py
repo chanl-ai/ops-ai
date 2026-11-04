@@ -1,4 +1,4 @@
-"""A person's memories (c-124, c-557): `/v1/me/memories` lists, corrects, exports, forgets, takes back and erases what
+"""A person's memories: `/v1/me/memories` lists, corrects, exports, forgets, takes back and erases what
 agents remember about the caller, and only the caller. A forget can be taken back for 30 days; an erase is final.
 There is no route that reads another person's memories: an admin manages the agent's memory setting, not what it holds
 about people."""

@@ -1,4 +1,4 @@
-"""Grants whose operation the tool directory no longer offers (c-048 T010, G22), by failure mode: a stale grant
+"""Grants whose operation the tool directory no longer offers, by failure mode: a stale grant
 hidden from the agent's owner, a stale grant blocking every later save, a stale-grant drop that also lets an unknown
 new grant through, and an agent page failing because tools-service cannot answer."""
 

@@ -1,4 +1,4 @@
-"""The run reconciler (c-561): a work row counts the times its claim lapsed, and the system role reads runs and steps
+"""The run reconciler: a work row counts the times its claim lapsed, and the system role reads runs and steps
 
 Revision ID: 0087_run_reconciler
 Revises: 0086_memory_text_unindexed

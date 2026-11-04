@@ -1,4 +1,4 @@
-"""provider_key_isolation: an account's model provider keys are held to their tenant by the database (c-616 C3)
+"""provider_key_isolation: an account's model provider keys are held to their tenant by the database
 
 provider_keys was filtered only by the tenant clause its store wrote: nothing in the database stopped a query that
 left the clause out from reading another account's sealed keys. It now carries the generated tenant policy

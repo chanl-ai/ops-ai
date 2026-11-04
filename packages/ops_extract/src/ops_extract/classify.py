@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""Which of the team's document types a file is (c-249, model first): the model is shown each type's id, name and
+"""Which of the team's document types a file is (model first): the model is shown each type's id, name and
 description and the file's first pages, and answers one id or unknown with a confidence and a reason. A kind under the
 floor, or unknown, goes to a person rather than being read with the wrong fields."""
 

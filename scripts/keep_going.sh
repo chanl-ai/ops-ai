@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One verify check, run so that a failure is recorded instead of stopping the run (c-367): python-verify runs every
+# One verify check, run so that a failure is recorded instead of stopping the run: python-verify runs every
 # check through this and fails at the end listing each one that failed, so one red never hides the reds after it.
 #
 #   scripts/keep_going.sh <list-file> <command> [args...]   run a check; on failure append it to <list-file>

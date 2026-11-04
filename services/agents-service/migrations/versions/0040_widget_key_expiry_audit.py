@@ -1,4 +1,4 @@
-"""widget mint keys expire, and creating or revoking one leaves an audit row (c-131 review)
+"""widget mint keys expire, and creating or revoking one leaves an audit row
 
 Revision ID: 0040_widget_key_expiry_audit
 Revises: 0039_widget_mint_keys

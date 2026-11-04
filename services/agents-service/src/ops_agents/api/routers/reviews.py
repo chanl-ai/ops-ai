@@ -72,7 +72,7 @@ async def record_approval(
     if call is None:
         raise Conflict("This thread is not waiting on a call to approve.", code="nothing_to_approve")
     policy = await policy_of(rt, call["tool"])
-    # The thread's team reviews it, by its reviewers and admins (c-122 Q3, c-509).
+    # The thread's team reviews it, by its reviewers and admins.
     require_reviews_decide(review_teams(approver), str(row["team_id"]), f"the write {call['tool']}")
     payload: dict[str, Any] = waiting[0]["payload"] if waiting else {}
     require_not_own(
@@ -116,7 +116,7 @@ class ReviewDecisionInput(WireModel):
     decision: str
     reason: str | None = None
     step_up_token: str | None = None
-    # A step with options: the inputs the reviewer set, validated against the option's declaration (c-057);
+    # A step with options: the inputs the reviewer set, validated against the option's declaration;
     # `amount` is the console's shorthand for the one input so named.
     inputs: dict[str, Any] | None = None
     amount: float | None = None
@@ -135,7 +135,7 @@ class ReviewsQuery(BaseModel):
     kind: list[str] = Field(default_factory=list[str])
     agentSlug: list[str] = Field(default_factory=list[str])  # noqa: N815
     status: list[str] = Field(default_factory=list[str])
-    # "case" orders the view by case and names each row's case (c-460).
+    # "case" orders the view by case and names each row's case.
     group: str | None = None
 
 
@@ -159,14 +159,14 @@ async def list_reviews(rt: Rt, me: Me, q: Annotated[ReviewsQuery, Query()]) -> J
 
 
 async def _with_can_decide(rt: Runtime, me: Principal, review: dict[str, Any]) -> dict[str, Any]:
-    """The review with whether the caller may decide it now (c-123): the console shows Approve and Reject only then."""
+    """The review with whether the caller may decide it now: the console shows Approve and Reject only then."""
     waiting = review.get("status") in ("pending", "in_review")
     return review | {"canDecide": waiting and await hitl_facade.can_decide(rt, me, str(review["id"]))}
 
 
 @console_router.get("/by-run-key/{run_key:path}", response_model=Envelope[Review])
 async def get_review_by_run_key(rt: Rt, me: Me, run_key: str) -> JSONResponse:
-    """The review of the run a service event started in its handler (c-257), by its run key `<event>:<key>`: the step
+    """The review of the run a service event started in its handler, by its run key `<event>:<key>`: the step
     it waits on, else its latest decision. A service links to it before the run exists, so it names the key, not the
     step; a team that cannot see the run gets not found, as for the step itself."""
     event = run_key.split(":", 1)[0]
@@ -190,7 +190,7 @@ class QueuePlace(Out):
 @console_router.get("/{review_id}/place", response_model=Envelope[QueuePlace])
 async def get_queue_place(rt: Rt, me: Me, review_id: str, view: str = "open", group: str | None = None) -> JSONResponse:
     """Where the review sits in a Human Tasks view (open by default): position, total and the reviews either side;
-    `group=case` in the order the queue grouped by case lists them (c-460)."""
+    `group=case` in the order the queue grouped by case lists them."""
     with one_read_per_tool():
         return ok(await hitl_facade.queue_place(rt, review_id, view, group))
 
@@ -218,8 +218,8 @@ async def decide(rt: Rt, me: Me, thread_id: str, body: ReviewDecisionInput) -> J
 
 @console_router.post("/{thread_id}/team-account", response_model=Envelope[Review])
 async def run_as_team_account(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
-    """Run as the team account: a run waiting for a person's own account of an app goes on with the app's team account
-    (c-616 S12), for a person who may use it (connections.run), on an app that has one."""
+    """Run as the team account: a run waiting for a person's own account of an app goes on with the app's team account,
+    for a person who may use it (connections.run), on an app that has one."""
     return ok(await engine_reviews.run_as_team_account(rt, me, thread_id))
 
 
@@ -258,7 +258,7 @@ async def bulk_decide(rt: Rt, me: Me, body: BulkDecisionInput) -> JSONResponse:
 
 @console_router.post("/assign", response_model=Envelope[BulkResult])
 async def assign(rt: Rt, me: Me, body: AssignInput) -> JSONResponse:
-    """Assigns each open review to `assignee`, the caller when left out (c-074). Only someone who may decide a review
+    """Assigns each open review to `assignee`, the caller when left out. Only someone who may decide a review
     assigns it; assigning routes the review and changes nothing about who may decide it. A result per id."""
     to = (body.assignee or me.email).strip()
     updated: list[str] = []

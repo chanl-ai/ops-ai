@@ -1,4 +1,4 @@
-"""A workflow an agent holds as a tool, in a chat turn, is the person's to start (c-149), by failure mode: a person who
+"""A workflow an agent holds as a tool, in a chat turn, is the person's to start, by failure mode: a person who
 may not start the workflow has it offered, or runs it through the agent's grant; a chat turn whose person is not known
 runs it as the agent; and an unattended agent run refused for want of a person."""
 

@@ -1,4 +1,4 @@
-"""`/v1/plugins` and `/v1/knowledge-sources` (c-564): what a team sees of the installed plugins and turns on.
+"""`/v1/plugins` and `/v1/knowledge-sources`: what a team sees of the installed plugins and turns on.
 
 A team admin (connections.manage in the team) turns a plugin on or off for the team, gives its settings and the OAuth
 app the team signs in with; the first turn-on makes the team's connection from the plugin's connection definition.
@@ -48,9 +48,9 @@ class TeamPluginIn(_Wire):
     client_id: str | None = Field(default=None, max_length=500)
     client_secret: str | None = Field(default=None, max_length=2000)
     sign_in: str | None = None
-    # Which environment the app and the sign-in address settings are for (c-580): a sandbox has its own of both.
+    # Which environment the app and the sign-in address settings are for: a sandbox has its own of both.
     environment: ConnectionEnvironment = "production"
-    # Which of the plugin's sign-in kinds the team's connection uses, the first it lists when left out (c-588). It is
+    # Which of the plugin's sign-in kinds the team's connection uses, the first it lists when left out. It is
     # chosen at the first turn-on only: a connection's kind never changes.
     kind: str | None = Field(default=None, max_length=50)
     # The kind's own fields and the client certificate's (auth/kinds.py), secret parts included: an API key, a username
@@ -59,13 +59,13 @@ class TeamPluginIn(_Wire):
     credentials: dict[str, Annotated[str, Field(max_length=CREDENTIAL_MAX)]] = Field(
         default_factory=dict[str, str], max_length=20
     )
-    # The team account's name, from the Connect window (c-616); taken at the first turn-on, the app's title when left
+    # The team account's name, from the Connect window; taken at the first turn-on, the app's title when left
     # out. A later rename goes through PATCH /v1/connections/{id}.
     account_name: str | None = Field(default=None, min_length=1, max_length=200)
 
     @model_validator(mode="after")
     def _app_in_credentials(self) -> "TeamPluginIn":
-        """The connect dialog sends a client-credentials app as the kind's fields, inside `credentials` (c-580): the
+        """The connect dialog sends a client-credentials app as the kind's fields, inside `credentials`: the
         client id and secret given there are the app's, as when given at the top level."""
         if self.client_id is None and (cid := self.credentials.pop("clientId", None)):
             self.client_id = cid
@@ -75,7 +75,7 @@ class TeamPluginIn(_Wire):
 
 
 class AccountIn(TeamPluginIn):
-    """Another account of an app the team has connected (c-608): its name, and the same turn-on contract as the
+    """Another account of an app the team has connected: its name, and the same turn-on contract as the
     first account's (the environment, the kind, whose account calls use, the app and the credentials)."""
 
     enabled: bool = True
@@ -83,7 +83,7 @@ class AccountIn(TeamPluginIn):
 
 
 class FeatureOff(ApiError):
-    """A route of a feature the install has not turned on (c-611): answered as if it were not there."""
+    """A route of a feature the install has not turned on: answered as if it were not there."""
 
     status = 404
     code = "feature_off"
@@ -102,7 +102,7 @@ class AppSecretIn(_Wire):
 
 
 class PluginDisplay(_Wire):
-    """The manifest's card details (c-580): a logo, a category, one line, and where to read how to set up its app."""
+    """The manifest's card details: a logo, a category, one line, and where to read how to set up its app."""
 
     logo: str | None = None
     category: str | None = None
@@ -123,7 +123,7 @@ class PluginView(_Wire):
     knowledge_sources: list[str]
     platform_app: PlatformApp
     display: PluginDisplay = Field(default_factory=PluginDisplay)
-    # The version this team runs (c-609, with plugin_updates on), and whether the installed one differs from it;
+    # The version this team runs (with plugin_updates on), and whether the installed one differs from it;
     # `version` is the installed package's.
     team_version: str | None = None
     update_available: bool = False
@@ -136,7 +136,7 @@ class InputChanges(_Wire):
 
 
 class ToolChange(_Wire):
-    """One tool an update adds, changes or removes, by its operation name (c-609)."""
+    """One tool an update adds, changes or removes, by its operation name."""
 
     name: str
     title: str
@@ -155,7 +155,7 @@ class VersionRef(_Wire):
 
 
 class PluginUpdateView(_Wire):
-    """What taking the installed version would change for the team (c-609): empty `tools` when it runs it already."""
+    """What taking the installed version would change for the team: empty `tools` when it runs it already."""
 
     version: str | None
     digest: str | None
@@ -173,7 +173,7 @@ class AppUser(_Wire):
 
 
 class AppUsers(_Wire):
-    """Who uses an app's tools in the team, read before turning it off (c-616)."""
+    """Who uses an app's tools in the team, read before turning it off."""
 
     agents: list[AppUser]
     workflows: list[AppUser]
@@ -215,7 +215,7 @@ def _shown(plugin: Plugin, settings: dict[str, Any]) -> dict[str, Any]:
 
 
 def _split(plugin: Plugin, given: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    """A save's settings as the team's and the environment's own (the sign-in address, c-580): the team's stay on the
+    """A save's settings as the team's and the environment's own (the sign-in address): the team's stay on the
     binding, the environment's go on the connection's environment, kept there once."""
     own = per_environment(plugin.manifest)
     return {k: v for k, v in given.items() if k not in own}, {k: v for k, v in given.items() if k in own}
@@ -270,7 +270,7 @@ def plugins_router(
         return decl, digest(decl)
 
     def _team_tools(plugin: Plugin, b: dict[str, Any]) -> list[str]:
-        """The tool names the team's version has (c-609), else the installed manifest's."""
+        """The tool names the team's version has, else the installed manifest's."""
         if host.versions and b.get("declarations"):
             return list(tools_of(cast(dict[str, Any], b["declarations"])))
         return [t.name for t in plugin.manifest.tools]
@@ -303,7 +303,7 @@ def plugins_router(
         ).model_dump(by_alias=True)
 
     def _account_admin(who: Caller) -> str:
-        """settings.manage in the Security team: an account admin, never a team admin (c-565)."""
+        """settings.manage in the Security team: an account admin, never a team admin."""
         if who.principal is None:
             raise ValidationFailed("Only an account admin sets the platform's app.", code="admin_only")
         access.can(who.principal, "settings", "manage", what="the platform's plugin apps", code="admin_only")
@@ -323,7 +323,7 @@ def plugins_router(
     async def set_app_secret(  # pyright: ignore[reportUnusedFunction]
         plugin_id: str, body: AppSecretIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
-        """Seals the platform's own OAuth app secret for the plugin at the account (c-565). Its client id is in the
+        """Seals the platform's own OAuth app secret for the plugin at the account. Its client id is in the
         plugins policy; a team with no app of its own signs in with this one. The answer never carries the secret."""
         by = _account_admin(who)
         plugin = _plugin(plugin_id)
@@ -360,14 +360,14 @@ def plugins_router(
                 raise ValidationFailed(f"{k} is read from the sign-in, not typed.", code="setting_from_token")
         before = await host.bindings.get(who.tenant_id, who.team.id, m.id) or {}
         team, own = _split(plugin, body.settings)
-        # The binding keeps the team's settings only: an environment's own are its connection's (c-580), so a copy
+        # The binding keeps the team's settings only: an environment's own are its connection's, so a copy
         # left from before (a removed connection's instance) never reaches a call.
         mine = per_environment(m)
         held = dict(before.get("settings") or {})
         settings = {k: v for k, v in held.items() if k != "environments" and k not in mine} | team
         connection_id = before.get("connection_id")
         if connection_id is not None and await connections.store.get(who.tenant_id, str(connection_id)) is None:
-            # Removed, as the connect dialog's Cancel removes the one it made (c-580): the next turn-on makes another.
+            # Removed, as the connect dialog's Cancel removes the one it made: the next turn-on makes another.
             connection_id = None
         if body.enabled and connection_id is None:
             connection_id = await _connect(who, plugin, settings, own, body, account_name=body.account_name)
@@ -379,7 +379,7 @@ def plugins_router(
             or own
             or body.environment not in await _set(who, connection_id)
         ):
-            # The connection exists (c-580): this PUT sets the named environment's app on it, a sandbox beside
+            # The connection exists: this PUT sets the named environment's app on it, a sandbox beside
             # production, instead of being dropped as it was when only the first turn-on built the connection.
             await _environment(who, plugin, str(connection_id), settings, body, own=own)
         await host.bindings.put(
@@ -392,7 +392,7 @@ def plugins_router(
             by=who.name,
         )
         if host.versions and not before.get("version"):
-            # A team turning a plugin on takes the installed version (c-609); a later upgrade waits for its review.
+            # A team turning a plugin on takes the installed version; a later upgrade waits for its review.
             await host.take_installed(who.tenant_id, who.team.id, plugin)
         return ok(await _view(who, plugin))
 
@@ -423,7 +423,7 @@ def plugins_router(
     async def add_account(  # pyright: ignore[reportUnusedFunction]
         plugin_id: str, body: AccountIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
-        """Another named account of an app the team has connected (c-608, with several_accounts on): a second org or a
+        """Another named account of an app the team has connected (with several_accounts on): a second org or a
         second account of the same system, made with the first's contract. The first stays the default."""
         if not host.accounts:
             raise FeatureOff("Several accounts of one app are not turned on for this install.")
@@ -489,7 +489,7 @@ def plugins_router(
         *,
         account_name: str | None = None,
     ) -> str:
-        """The team's connection, from the plugin's definition, made whole in one call for every kind (c-588): its
+        """The team's connection, from the plugin's definition, made whole in one call for every kind: its
         address, its test path, how its key is sent, the credentials the team gave, and for a kind that holds a token
         the OAuth app and its addresses. An instance the token names comes later, at sign-in."""
         m = plugin.manifest
@@ -500,11 +500,11 @@ def plugins_router(
             raise ValidationFailed(f"{m.title} signs in with {', '.join(c.sign_in)}.", code="sign_in_not_offered")
         plain, secret = _credentials(plugin, kind, body.credentials)
         # A token kind's client secret comes from the team's own app or the platform's, checked when it is used.
-        # On a connection each person signs in to, their own key, password or token is theirs to give (c-595).
+        # On a connection each person signs in to, their own key, password or token is theirs to give.
         each_person = sign_in == "person" and kind.per_person
         missing = [
             f.label
-            # The plugin's own clientAuth counts, so one that signs an assertion asks for the signing pair (c-584).
+            # The plugin's own clientAuth counts, so one that signs an assertion asks for the signing pair.
             for f in kind.requires({**plain, **sign_in_fixed(plugin.manifest)}, each_person=each_person)
             if f.secret and f.name not in secret and not (kind.holds_token and f.name == "clientSecret")
         ]
@@ -516,14 +516,14 @@ def plugins_router(
             )
         if missing:
             raise ValidationFailed(f"{m.title} needs {', '.join(missing)} to sign in with {kind.label}.")
-        # The same create contract as a connection made by name (c-595, cross-card review): the row carries the
+        # The same create contract as a connection made by name (cross-card review): the row carries the
         # system's card details from the manifest, so a plugin's connection and one made by hand hold the same columns.
         shown = m.display
         made = await connections.create(
             who,
             {
                 "name": account_name or m.title,
-                # The app's account (c-608): the plugin it belongs to, and its name, the app's title for the first.
+                # The app's account: the plugin it belongs to, and its name, the app's title for the first.
                 "plugin_id": m.id,
                 "account_name": account_name or m.title,
                 "auth_kind": kind.id,
@@ -557,8 +557,8 @@ def plugins_router(
         """One environment of the plugin's connection: the system's address (the endpoint's origin, or the sign-in
         host's until the token names the instance), the health check as Test connection's path, how an API key is
         sent, the team's credentials over what the environment already holds, and for a kind that holds a token the
-        OAuth app (the team's own first, else the platform's, set up once by an account admin, c-565) and its
-        addresses, rendered with that environment's settings (c-580)."""
+        OAuth app (the team's own first, else the platform's, set up once by an account admin) and its
+        addresses, rendered with that environment's settings."""
         m = plugin.manifest
         c = m.connection
         environment = body.environment

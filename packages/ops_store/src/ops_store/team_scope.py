@@ -1,4 +1,4 @@
-"""The team a request reads as, and the one where-clause every read of a team-owned table carries (c-407).
+"""The team a request reads as, and the one where-clause every read of a team-owned table carries.
 
   set_acting_team(principal.team_id)            # once per request, from the verified caller's X-Team-Id
   sa.select(agents).where(team_visible(agents))  # the caller's team's rows and workspace-level (null team) rows

@@ -1,7 +1,7 @@
 import type { AuthKind, ConnectionDetail, ConnectionEnvironment, MyConnection, SignInAccount, SignInSetting, SignInStart } from '@/lib/types/connections';
 
 /**
- * A connected system's sign-in (tools-service, c-558): whose account its calls use, Test connection, and each person's
+ * A connected system's sign-in (tools-service): whose account its calls use, Test connection, and each person's
  * own sign-in. Every call acts in the current team, the only team whose connections it sees.
  */
 export interface ConnectionsApi {
@@ -20,7 +20,7 @@ export interface ConnectionsApi {
   openConnectLink(link: string): Promise<SignInStart>;
   /** The caller's own sign-ins on this team's connections (Your connections); `every` adds those they can connect. */
   mine(every?: boolean): Promise<MyConnection[]>;
-  /** The caller's own key, password or token on a connection each person signs in to (c-595); never answered back. */
+  /** The caller's own key, password or token on a connection each person signs in to; never answered back. */
   giveOwn(id: string, input: { environment: ConnectionEnvironment; credentials: Record<string, string> }): Promise<MyConnection>;
   /** Ends the caller's own sign-in, asking the system to revoke it; the next call asks them to connect again. */
   disconnect(id: string, environment: ConnectionEnvironment): Promise<void>;

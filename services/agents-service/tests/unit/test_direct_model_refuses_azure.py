@@ -1,4 +1,4 @@
-"""The direct model path (no models-service) with Azure install settings (c-605): it can only call api.openai.com, so it
+"""The direct model path (no models-service) with Azure install settings: it can only call api.openai.com, so it
 would send the Azure resource's key there. It refuses and names models-service instead."""
 
 from __future__ import annotations

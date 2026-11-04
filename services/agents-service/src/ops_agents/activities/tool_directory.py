@@ -42,7 +42,7 @@ class OperationRef:
     output_shape: str | None = None
     # Approving a call asks for a step-up: set on the operation, or two approvers.
     step_up: bool = False
-    # What people see in place of the name: a plugin tool's manifest title (c-581); None for any other tool.
+    # What people see in place of the name: a plugin tool's manifest title; None for any other tool.
     title: str | None = None
 
     def grant(self) -> ToolGrant:
@@ -70,7 +70,7 @@ async def grants_for(directory: ToolDirectory, names: list[str]) -> list[ToolGra
         return []
     by_name = {o.name: o for o in await directory.operations()}
     # A name the kept list lacks may be a tool published since it was read (the agent was granted it and published
-    # moments ago, c-616 S7): ask tools-service once more before leaving it out of the turn.
+    # moments ago): ask tools-service once more before leaving it out of the turn.
     if any(n not in by_name for n in wanted) and (forget := getattr(directory, "forget", None)) is not None:
         forget()
         by_name = {o.name: o for o in await directory.operations()}

@@ -1,4 +1,4 @@
-"""An app's team account that stopped working tells the team's admins in Human Tasks (c-616 S12), through the real event
+"""An app's team account that stopped working tells the team's admins in Human Tasks, through the real event
 route, worker and Human Tasks, as tools-service's relay reports it. By failure mode: the event has no handler and is
 recorded unhandled, so nobody is told; the task does not say which app, what the system said or where to fix it; and
 the task cannot be closed once the account is reconnected."""

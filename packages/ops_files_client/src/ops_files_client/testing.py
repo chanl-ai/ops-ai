@@ -96,7 +96,7 @@ class FakeFilesService:
             f["referenceCount"] = len(refs)
             return httpx.Response(200, json={"data": self._info(f)})
         if request.method == "GET" and path == "/v1/files":
-            # The team's files whose name holds `search`, as files-service's list answers (c-613's file lookup).
+            # The team's files whose name holds `search`, as files-service's list answers (the file lookup).
             asked = request.url.params.get("search", "").lower()
             rows = [
                 self._info(f)

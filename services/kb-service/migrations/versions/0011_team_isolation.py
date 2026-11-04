@@ -1,4 +1,4 @@
-"""kb-service's tables are held to the caller's tenant and team by the database (c-507)
+"""kb-service's tables are held to the caller's tenant and team by the database
 
 Revision ID: kb_0011
 Revises: kb_0010

@@ -1,6 +1,6 @@
-"""A held write is decided in its run's team (c-509 US2), through the real routes with the tokens platform-service
+"""A held write is decided in its run's team, through the real routes with the tokens platform-service
 mints, by failure mode: tools-service still naming another approving team (an operation saved with `approverTeam`
-before c-509) sends the write to a team that cannot see the run, so nobody can decide it; and a person of another team
+earlier) sends the write to a team that cannot see the run, so nobody can decide it; and a person of another team
 with reviews.decide reaches it. tools-service's answer is faked at the client, as rt.tools returns it."""
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ async def test_the_runs_team_decides_whatever_team_tools_service_names(dev_platf
     # The app behind the fixture's client: its runtime asks tools-service through `tools`.
     app = cast(Any, c._transport).app  # pyright: ignore[reportPrivateUsage]
     app.state.runtime.tools = _StaleTools()
-    # James builds and does not decide reviews, so his write waits for an approver (owner, 2026-11-01).
+    # James builds and does not decide reviews, so his write waits for an approver.
     james = person("usr_james", ["team_ops"], role="builder")
     url = await drafted(c, james)
     thread = url.split("/chat/threads/")[1].split("/")[0]

@@ -1,4 +1,4 @@
-"""Whom agents-service's tool calls act for (c-558), by failure mode: a run's call acts for nobody or the wrong person
+"""Whom agents-service's tool calls act for, by failure mode: a run's call acts for nobody or the wrong person
 (a child run, a run an API key started), a chat turn's call loses its person, the token never reaches tools-service, a
 platform-service outage fails every personal call at once, and an acting-for token signs a person in here."""
 

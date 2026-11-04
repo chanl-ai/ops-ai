@@ -19,8 +19,8 @@ function targetOf(system: SystemCard | null): ConnectTarget | null {
 }
 
 /**
- * Connections (c-607): the apps catalog. A plugin that signs in through Ops AI's app connects in the small window;
- * anything that needs keys or its own app opens c-580's connect dialog.
+ * Connections: the apps catalog. A plugin that signs in through Ops AI's app connects in the small window;
+ * anything that needs keys or its own app opens the connect dialog.
  */
 export function RealConnectionsPage() {
   const kinds = useConnectionKinds();

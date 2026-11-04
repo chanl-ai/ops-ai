@@ -1,4 +1,4 @@
-"""Tokens a connection holds (c-330): two calls finding a token past its time refresh it once, and a rotated refresh
+"""Tokens a connection holds: two calls finding a token past its time refresh it once, and a rotated refresh
 token replaces the spent one in the same transaction."""
 
 from __future__ import annotations

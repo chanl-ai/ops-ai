@@ -1,6 +1,6 @@
 """Writes the engine's node types, as `GET /v1/workflows/node-types` returns them without the per-team `unavailable`,
 to apps/console/src/components/workflows/layout/node-types.json. The console's layout tests and the seed bake script
-(c-486) read ports from it without a running stack; tests/engine/test_node_types_export.py fails when it is stale.
+read ports from it without a running stack; tests/engine/test_node_types_export.py fails when it is stale.
 
     uv run python scripts/export_node_types.py
 """

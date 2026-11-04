@@ -120,7 +120,7 @@ def _refused(e: ServiceCallError) -> FilesRefused:
 class FilesClient:
     def __init__(self, files: ServiceClient) -> None:
         """`files` calls files-service as this service; each call names the tenant and the team it acts in, which
-        files-service reads from the token instead of any query parameter (c-168). JSON calls go through it; an upload
+        files-service reads from the token instead of any query parameter. JSON calls go through it; an upload
         and a download send bytes on its connection with its token."""
         self._files = files
 
@@ -221,7 +221,7 @@ class FilesClient:
         return await self._json("POST", f"/v1/files/{file_id}/references", tenant, team, json=body)
 
     async def set_data(self, tenant: str, team: str, file_id: str, data: dict[str, Any]) -> dict[str, Any]:
-        """Records what was read from the file (c-250); needs `files:edit`. Answers the stored data."""
+        """Records what was read from the file; needs `files:edit`. Answers the stored data."""
         try:
             detail = await self._files.request("PUT", f"/v1/files/{file_id}/data", json=data, tenant=tenant, team=team)
         except ServiceCallError as e:

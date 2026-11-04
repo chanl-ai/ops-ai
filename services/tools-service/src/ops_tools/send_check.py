@@ -1,4 +1,4 @@
-"""Check before sending (c-300): with the team's checkBeforeSend on, a write that carries no approval is judged against
+"""Check before sending: with the team's checkBeforeSend on, a write that carries no approval is judged against
 the team's newest sending policy before it runs. One model call per payload and policy version (kept by input hash);
 a failure, a judge that cannot be reached or an answer that cannot be read sends the write to a person with the
 reason, never through. A team with no policy has nothing to judge against, and a write with an approval was decided by

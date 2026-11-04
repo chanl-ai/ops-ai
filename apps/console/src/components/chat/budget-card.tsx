@@ -18,7 +18,7 @@ const WHAT: Record<BudgetPause['limit'], string> = { calls: 'model calls', token
 const spentText = (p: BudgetPause) => `${p.spent} of ${p.cap} ${WHAT[p.limit]}`;
 
 /**
- * A conversation paused on its budget (c-103): which cap was reached and what was spent, from the server's ledger, with
+ * A conversation paused on its budget: which cap was reached and what was spent, from the server's ledger, with
  * Continue for the conversation's owner and Raise for an admin of its team. The server checks both; this card offers
  * only what the person may do. Once answered it says who continued or raised it.
  */

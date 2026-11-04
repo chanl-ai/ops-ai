@@ -1,4 +1,4 @@
-"""A plugin's headers, form body and amount limit at call time (c-584), through the registry and the executors as the
+"""A plugin's headers, form body and amount limit at call time, through the registry and the executors as the
 gateway runs a call, by failure mode: a plugin header never reaches the system, or replaces the connection's sign-in;
 a Python tool's requests go out without the plugin's headers; a team setting holding `{{NAME}}` reaches a header,
 where the http executor would resolve it as one of the tenant's secrets; a form tool's body goes out as JSON; and a
@@ -157,7 +157,7 @@ async def test_a_form_tool_sends_its_fields_form_encoded(rig: Rig) -> None:
 
 
 async def test_a_form_tools_operation_is_a_form_body_as_a_custom_tools_is(rig: Rig) -> None:
-    # One form path (c-616 S5): the manifest's `form` becomes the body with body_encoding form, so the tool page, the
+    # One form path: the manifest's `form` becomes the body with body_encoding form, so the tool page, the
     # executor and Request sent read a plugin's form tool as they read a builder's.
     op = (await rig.resolve("post_message")).operation
     assert op is not None and "form" not in op, op
@@ -187,7 +187,7 @@ async def test_the_limit_holds_on_a_module_row_written_before_the_plugin_declare
     assert rig.seen == []
 
 
-# The token call and the sign-in address (c-584 T004), through the real plugin turn-on route.
+# The token call and the sign-in address, through the real plugin turn-on route.
 
 ZOOM, ZOOM_SECRET = "multi-zoom", "zoom-secret-6d0e"
 
@@ -319,7 +319,7 @@ async def test_a_connections_sign_in_parameters_reach_the_sign_in_address_and_ne
     assert query["client_id"] == ["ops-console"] and "Client_Id" not in query, query
 
 
-# The lookup after sign-in (c-584 T005), on a plugin's real connection.
+# The lookup after sign-in, on a plugin's real connection.
 
 
 def test_the_team_sets_or_replaces_a_value_filled_at_sign_in_and_a_person_may_not_change_it() -> None:

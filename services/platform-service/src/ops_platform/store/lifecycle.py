@@ -1,4 +1,4 @@
-"""A workspace's and a team's danger zones (c-529): transfer, leave, close, restore and purge a workspace; leave and
+"""A workspace's and a team's danger zones: transfer, leave, close, restore and purge a workspace; leave and
 delete a team.
 
 The owner is the one person with an Owner assignment in every team (`*`); the partial unique index

@@ -102,7 +102,7 @@ function EnvState({ env }: { env?: Env }) {
 }
 
 /**
- * One app's page (c-607): who you are signed in as and one button to connect your own
+ * One app's page: who you are signed in as and one button to connect your own
  * account, the team's account, then Tools, Skills, Sign-in and secrets, Usage and Settings. Everything comes from one
  * answer, GET /v1/apps/{id}.
  */
@@ -118,7 +118,7 @@ export function AppPageView({ appId }: { appId: string }) {
   const [connecting, setConnecting] = React.useState(false);
   const [another, setAnother] = React.useState(false);
   const pin = usePinDefault();
-  // Several named accounts of one app (c-608) are behind the several_accounts install flag; off, one account.
+  // Several named accounts of one app are behind the several_accounts install flag; off, one account.
   const several = useFlag('several_accounts');
 
   React.useEffect(() => {
@@ -678,7 +678,7 @@ function SettingsTab({ app, kinds, onSetUp }: { app: AppData; kinds?: Kinds; onS
                         >
                           Test
                         </LoadingButton>
-                        {/* Keys and sign-in settings change in the Connect window, one environment at a time (c-617). */}
+                        {/* Keys and sign-in settings change in the Connect window, one environment at a time. */}
                         <Button size="sm" variant="ghost" onClick={() => onSetUp(e.id)} data-testid={`app-edit-${e.id}`}>
                           Edit
                         </Button>
@@ -793,7 +793,7 @@ function TurnOffSection({ name, pluginId }: { name: string; pluginId: string }) 
 
 
 /**
- * Connect another account (c-608): a second org or a second account of the same app, under its own name, with the
+ * Connect another account: a second org or a second account of the same app, under its own name, with the
  * first's contract; the system's own page then asks to allow access for it. Calls keep the default unless they name it.
  */
 function AnotherAccountDialog({ app, pluginId, signInOptions, onClose, onMade }: { app: string; pluginId: string; signInOptions: string[]; onClose: () => void; onMade: (id: string) => void }) {

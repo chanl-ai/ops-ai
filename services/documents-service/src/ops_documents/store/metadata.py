@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_store.database import open_database
 
 metadata = sa.MetaData()
-# The role every transaction runs as; row-level security applies to it (migration documents_0011, c-415).
+# The role every transaction runs as; row-level security applies to it (migration documents_0011).
 ROLE = "ops_documents_tenant"
 # The role a restart reads every tenant's queued work as, past row-level security; its grants name what it reads.
 SYSTEM_ROLE = "ops_documents_system"

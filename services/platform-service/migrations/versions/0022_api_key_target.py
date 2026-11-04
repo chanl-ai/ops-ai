@@ -1,6 +1,6 @@
 """an API key may be scoped to one agent or workflow
 
-A key names what it may start (c-246): `target_kind` agent or workflow, `target_id`, and `target_version`, a pinned
+A key names what it may start: `target_kind` agent or workflow, `target_id`, and `target_version`, a pinned
 workflow version or null for the live one. A key with no target starts any live workflow of its team, as before. The
 columns sit on api_keys under its existing grants and row-level security.
 

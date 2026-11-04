@@ -1,4 +1,4 @@
-"""A Microsoft 365 mailbox record (c-228), by failure mode: a mailbox that could not be read is saved; a Graph sender
+"""A Microsoft 365 mailbox record, by failure mode: a mailbox that could not be read is saved; a Graph sender
 on a mailbox of another kind is saved; the record or any response carries the client secret's value."""
 
 from __future__ import annotations

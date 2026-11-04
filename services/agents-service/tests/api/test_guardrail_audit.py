@@ -1,4 +1,4 @@
-"""What a guardrail took back from a person stays on the record (tick 28), by failure mode: text that streamed and was
+"""What a guardrail took back from a person stays on the record, by failure mode: text that streamed and was
 then withdrawn is lost from the journal, so the audit cannot say what the person saw; the record does not survive a
 reload; or it reaches a reader the roles grid does not let view the audit. Tokens carry real roles, as
 platform-service mints them: an admin may view the audit, a builder may not."""

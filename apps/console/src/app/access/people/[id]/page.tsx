@@ -53,7 +53,7 @@ function Grants({ permissions, testId }: { permissions: EffectivePermission[]; t
 }
 
 /**
- * A person's access (c-150): what they may do in each team they share with you, and what they may do in every team
+ * A person's access: what they may do in each team they share with you, and what they may do in every team
  * (a role assigned workspace-wide), each action with the role and the assignment that grant it. This is their
  * effective access, which can be more than their team role says.
  */

@@ -1,4 +1,4 @@
-"""A custom app's base address and key come only from its connection (c-616 S4), by failure mode: a call goes to the
+"""A custom app's base address and key come only from its connection, by failure mode: a call goes to the
 module's own copy of the address instead of the connection's; a tool addressed by its path alone cannot be made; a
 module names a second base address beside its connection; and a sign-in key in an operation's header, typed or
 referenced, competes with the connection that signs every call."""
@@ -113,7 +113,7 @@ async def test_a_sign_in_header_is_refused_on_a_module_its_connection_signs(gate
 
 
 async def test_a_modules_answer_names_its_connections_base_address_per_environment(gateway: Gateway) -> None:  # noqa: F811
-    # The tool page shows where a path goes (c-616): the module has no address of its own to show.
+    # The tool page shows where a path goes: the module has no address of its own to show.
     conn = await connection(gateway)
     made = await gateway.client.post("/v1/tool-modules", json=made_by_path(gateway, conn), headers=TEAM)
     assert made.status_code == 201, made.text
@@ -125,7 +125,7 @@ async def test_a_custom_app_starts_from_its_connection_with_no_type_or_address(
     gateway: Gateway,  # noqa: F811
     engine: AsyncEngine,
 ) -> None:
-    # The New module dialog sends a connection and a name (c-616 group F); the kind follows the operations added.
+    # The New module dialog sends a connection and a name; the kind follows the operations added.
     conn = await connection(gateway)
     body = {"displayName": "Ledger", "name": f"ledger-blank-{gateway.suffix}", "connectionId": conn}
     made = await gateway.client.post("/v1/tool-modules/blank", json=body, headers=TEAM)

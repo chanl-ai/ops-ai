@@ -7,7 +7,7 @@ replaced, and only when the agent allows it; tools switched off, never added, an
 switch off; knowledge chosen from the allowed bases, and a turn may only narrow the thread's; a budget at or below the
 ceiling, and a turn may only lower the thread's; output schema and variables free. A public widget key may set only
 what the agent's `public_key_may` lists. A value outside the limits is refused with 422 naming the field, never
-clamped (owner decision, 2026-10-16). Guardrails and approval policy are not settings here at all.
+clamped. Guardrails and approval policy are not settings here at all.
 """
 
 from __future__ import annotations

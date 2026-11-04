@@ -68,7 +68,7 @@ class TeamStore:
 
     def __init__(self, db: TenantDb, *, security_team: str = "team_security") -> None:
         self.db = db
-        # The deployment's security team (settings `security_team_id`), for a workspace that names none (c-202).
+        # The deployment's security team (settings `security_team_id`), for a workspace that names none.
         self.security_team = security_team
 
     async def people_names(self, tenant_id: str) -> list[dict[str, str]]:
@@ -100,7 +100,7 @@ class TeamStore:
             return await security_team_in(c, tenant_id, self.security_team)
 
     async def teams_of(self, tenant_id: str, user_id: str, *, everywhere: bool = False) -> list[dict[str, Any]]:
-        """The person's active teams with their role; `everywhere` (a workspace admin, c-208) adds every other active
+        """The person's active teams with their role; `everywhere` (a workspace admin) adds every other active
         team of the workspace with the role `admin` they hold there through their workspace role."""
         mine = (
             sa.select(teams.c.id, teams.c.name, teams.c.owner_groups, teams.c.scope, members.c.role)
@@ -406,7 +406,7 @@ class TeamStore:
 
 
 class TeamArchivedError(Exception):
-    """The team is archived and takes no new members (c-198)."""
+    """The team is archived and takes no new members."""
 
 
 class NotTheInvitee(Exception):

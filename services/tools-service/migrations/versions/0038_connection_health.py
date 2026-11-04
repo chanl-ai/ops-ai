@@ -1,4 +1,4 @@
-"""The last Test connection on each connection (c-558)
+"""The last Test connection on each connection
 
 `connections.health` holds what Test connection found: ok or failed, the environment, whose account signed the read
 (own or team), when and by whom, its latency, and the status or code it failed with. Null until the first test.

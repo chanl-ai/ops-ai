@@ -1,7 +1,7 @@
-"""A tool operation's mock answers at rest (c-332): rows per operation and environment, in order, one the default.
+"""A tool operation's mock answers at rest: rows per operation and environment, in order, one the default.
 
 Keyed by the module and the operation's name: a name is unique within a module, not across teams' modules. The
-"example" environment holds the operation's example answer, which ModuleStore reads as the operation's `stub` (c-616).
+"example" environment holds the operation's example answer, which ModuleStore reads as the operation's `stub`.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ class MockStore:
 
     @staticmethod
     def _of(tenant_id: str, module_id: str, operation: str, environment: str) -> tuple[Any, ...]:
-        # By module and operation name: names repeat across teams' modules since tools are per team (c-509), and a
+        # By module and operation name: names repeat across teams' modules since tools are per team, and a
         # mock answers only the operation it was made on.
         m = operation_mocks.c
         return (

@@ -82,7 +82,7 @@ const COLUMNS: ColumnDef<Row>[] = [
   { id: 'source', header: 'Source', cell: ({ row }) => <span className="text-muted-foreground">{row.original.source.name}</span> },
   { accessorKey: 'at', header: 'When', cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{relativeTime(row.original.at)}</span> },
   {
-    // An email the mail listener set aside after its run failed to start 3 times (c-561).
+    // An email the mail listener set aside after its run failed to start 3 times.
     id: 'actions',
     header: '',
     enableHiding: false,

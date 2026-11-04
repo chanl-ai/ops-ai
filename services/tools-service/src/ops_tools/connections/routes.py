@@ -1,4 +1,4 @@
-"""`/v1/connections` and `/v1/connection-kinds` (c-330): the console's Connections pages and the SDK read these."""
+"""`/v1/connections` and `/v1/connection-kinds`: the console's Connections pages and the SDK read these."""
 
 # No `from __future__ import annotations`: the routes' `caller` dependency is a local of connections_router, and FastAPI
 # resolves string annotations against module globals, where it does not exist.
@@ -61,15 +61,15 @@ def connections_router(service: ConnectionService, directory: Directory) -> APIR
     async def my_connections(  # pyright: ignore[reportUnusedFunction]
         who: Annotated[Caller, Depends(caller)], every: bool = False
     ) -> JSONResponse:
-        """The caller's own sign-ins on their team's connections (c-558): Your connections in the person menu. With
-        `every`, also each connection of the team they can connect themselves and have not (c-595)."""
+        """The caller's own sign-ins on their team's connections: Your connections in the person menu. With
+        `every`, also each connection of the team they can connect themselves and have not."""
         return ok(await service.mine(who, every=every))
 
     @r.put("/v1/me/connections/{connection_id}/credentials", response_model=Envelope[MyConnection])
     async def give_own_credentials(  # pyright: ignore[reportUnusedFunction]
         connection_id: str, body: PersonCredentialsIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
-        """The caller's own key, password or token on a connection each person signs in to (c-595), replacing any they
+        """The caller's own key, password or token on a connection each person signs in to, replacing any they
         gave before; answers their row in Your connections, never the values."""
         return ok(await service.give_own(who, connection_id, body.environment, body.credentials))
 
@@ -85,12 +85,12 @@ def connections_router(service: ConnectionService, directory: Directory) -> APIR
     # Before the routes under /v1/connections/{connection_id}, which would take "connect-links" as an id.
     @r.post("/v1/connections/connect-links/sign-in", response_model=Envelope[SignInStart])
     async def open_connect_link(body: ConnectLinkIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """Starts the sign-in a connect link asks for, for the one person it was made for (c-558)."""
+        """Starts the sign-in a connect link asks for, for the one person it was made for."""
         return ok(await service.open_link(who, body.link))
 
     @r.post("/v1/connections/mcp", response_model=Envelope[ConnectionDetail], status_code=201)
     async def connect_mcp(body: McpConnectionIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """An MCP server's connection, its sign-in found from the server's 401 and metadata (c-331)."""
+        """An MCP server's connection, its sign-in found from the server's 401 and metadata."""
         return ok(await service.connect_mcp(who, body.model_dump()), 201)
 
     @r.get("/v1/connections/{connection_id}", response_model=Envelope[ConnectionDetail])
@@ -146,14 +146,14 @@ def connections_router(service: ConnectionService, directory: Directory) -> APIR
         connection_id: str, body: ConnectionTestIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
         """Reads the environment's test address signed in with the caller's own account or the team's, and stores the
-        result as the connection's `health` (c-558). A failed test answers 200 with the failure in `health`."""
+        result as the connection's `health`. A failed test answers 200 with the failure in `health`."""
         return ok(await service.test(who, connection_id, body.environment, body.account))
 
     @r.put("/v1/connections/{connection_id}/default", response_model=Envelope[ConnectionDetail])
     async def pin_default(  # pyright: ignore[reportUnusedFunction]
         connection_id: str, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
-        """Makes this account the caller's default of its app (c-608): their calls that name no account use it."""
+        """Makes this account the caller's default of its app: their calls that name no account use it."""
         return ok(await service.pin_default(who, connection_id))
 
     @r.post("/v1/connections/{connection_id}/sign-out", response_model=Envelope[ConnectionDetail])

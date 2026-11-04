@@ -1,4 +1,4 @@
-"""A review step's deadline on the real worker (c-074), on PostgreSQL: a step set to expire leaves on its timeout port
+"""A review step's deadline on the real worker, on PostgreSQL: a step set to expire leaves on its timeout port
 once its deadline passes, and a person who decides first wins. By failure mode: nothing ever expires the step; a
 timeout queued for a review the person already decided resumes the run a second time."""
 

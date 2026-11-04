@@ -1,4 +1,4 @@
-"""Each call is logged with the team it was made in (c-616), by failure mode, through the real call route with a service
+"""Each call is logged with the team it was made in, by failure mode, through the real call route with a service
 token naming the run's team:
 
 - a call on a module no team owns (the platform tools) is logged with no team, or with the module's (empty) team, so

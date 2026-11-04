@@ -1,4 +1,4 @@
-/** An agent's chat served to pages on other origins (agents-service `/v1/widget-deployments`, c-117). */
+/** An agent's chat served to pages on other origins (agents-service `/v1/widget-deployments`). */
 export interface WidgetDeployment {
   id: string;
   name: string;
@@ -8,9 +8,9 @@ export interface WidgetDeployment {
   /** Exact `scheme://host[:port]` origins allowed to embed it. */
   origins: string[];
   paused: boolean;
-  /** Set once, never cleared (c-130): a retired embed answers no page and cannot be changed. */
+  /** Set once, never cleared: a retired embed answers no page and cannot be changed. */
   retiredAt?: string | null;
-  /** Conversations started on it in the last 7 days, and when one last had a message (c-130). */
+  /** Conversations started on it in the last 7 days, and when one last had a message. */
   conversations7d?: number;
   lastUsedAt?: string | null;
   /** Unrevoked mint keys. */
@@ -37,7 +37,7 @@ export interface WidgetDeploymentPatch {
   serves?: { kind: 'agent'; id: string; version: number | 'latest' };
 }
 
-/** A key the bank's server mints this deployment's sessions with (c-131). The secret is shown once, at creation. */
+/** A key the bank's server mints this deployment's sessions with. The secret is shown once, at creation. */
 export interface WidgetMintKey {
   id: string;
   name: string;

@@ -15,9 +15,9 @@ FilePurpose = Literal[
     "knowledge_source",
     "chat_attachment",
     "case_attachment",
-    # A file a document type is tested against (c-379): seeded with the type or added from Files.
+    # A file a document type is tested against: seeded with the type or added from Files.
     "document_type_sample",
-    # An email's text, stored by the Email received trigger so a workflow reads it like an attachment (c-259).
+    # An email's text, stored by the Email received trigger so a workflow reads it like an attachment.
     "email_body",
     "test_import",
     "evidence_bundle",
@@ -86,9 +86,9 @@ class LegalHold(Model):
 
 
 class FileData(Model):
-    """What was read from the file, as the extract workflow records it (c-250): the document type and version it was
+    """What was read from the file, as the extract workflow records it: the document type and version it was
     read as, whether a template or the model read it, how many fields wait for a person, and the extraction. A file read
-    with Detect whose kind is none of the team's types has no type and no version: it was not recognised (c-335)."""
+    with Detect whose kind is none of the team's types has no type and no version: it was not recognised."""
 
     type_id: str | None = Field(default=None, min_length=1, max_length=64)
     # The type's display name when it was read, so the list shows it without asking documents-service per row.
@@ -102,13 +102,13 @@ class FileData(Model):
 
 
 class ReadRequestIn(Model):
-    """Read the file with a team's document type (c-250), the newest version when none is named; with no type, the file
-    is classified over the team's types and read with the one found (Detect, c-335)."""
+    """Read the file with a team's document type, the newest version when none is named; with no type, the file
+    is classified over the team's types and read with the one found (Detect)."""
 
     document_type_id: str | None = Field(default=None, min_length=1, max_length=64)
     version: int | None = Field(default=None, ge=1)
     type_name: str | None = Field(default=None, max_length=200)
-    # Fields the model proposes instead of a type's (c-535), with what the person said the file is; the first pages
+    # Fields the model proposes instead of a type's, with what the person said the file is; the first pages
     # only when `max_pages` is given. The full text is read on the file page from its layout, not through a request.
     read: Literal["fields", "propose"] | None = None
     hint: str | None = Field(default=None, max_length=200)
@@ -147,7 +147,7 @@ class FileRecord(Model):
     reference_count: int = 0
     version_count: int = 0
     storage: StorageLocation | None = None
-    # What was read from it (c-250); None until the extract workflow records it.
+    # What was read from it; None until the extract workflow records it.
     data: FileData | None = None
 
 
@@ -156,7 +156,7 @@ class FileDetail(FileRecord):
     references: list[FileReference] = Field(default_factory=list[FileReference])
     # Why the file cannot be deleted now (references, a hold, retention); None when it can. Set on the detail route.
     delete_blocked_by: str | None = None
-    # What the caller may do with it (c-216), on the detail route only: a file is deleted, never edited or published.
+    # What the caller may do with it, on the detail route only: a file is deleted, never edited or published.
     can_edit: bool | None = None
     can_delete: bool | None = None
     can_publish: bool | None = None

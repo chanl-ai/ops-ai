@@ -36,7 +36,7 @@ type InputSchema = { title?: string; description?: string; properties?: Record<s
 const THANKS = 'Thank you. We will reply by email within two working days.';
 
 /**
- * Share as a form on a Request trigger (c-535): the workflow's start form on a page of its own, for anyone holding a
+ * Share as a form on a Request trigger: the workflow's start form on a page of its own, for anyone holding a
  * signed link (the embed app) or for the team's signed-in members (the console). A link's token is shown once, in the
  * answer that made it; the list never holds it, so a link made earlier is got again by rotating it.
  */

@@ -1,7 +1,7 @@
-"""Everything that happened in a team, as one list (c-201): workflow runs, agent runs, chats, emails received, Human
-Task decisions, tool calls, what was done on a case and shipped system workflow updates (c-317), each read from the
+"""Everything that happened in a team, as one list: workflow runs, agent runs, chats, emails received, Human
+Task decisions, tool calls, what was done on a case and shipped system workflow updates, each read from the
 table that records it and joined into one query, so the console pages and counts it without merging lists of its own.
-Filtered to one case (c-341), the list is the case's own entries and every row about a run or chat linked to it.
+Filtered to one case, the list is the case's own entries and every row about a run or chat linked to it.
 
 Every source is selected into the same columns and unioned; filters, the page and the facet counts all run on that one
 union inside one transaction. Which teams a kind is read in is decided by the caller (`Scope`), never here.
@@ -97,7 +97,7 @@ class Filters:
     sources: tuple[tuple[str, str], ...] = ()
     since: str | None = None
     until: str | None = None
-    # One case's entries and the rows about the runs and chats linked to it, in the case's team (c-341).
+    # One case's entries and the rows about the runs and chats linked to it, in the case's team.
     case: tuple[str, str] | None = None  # (case id, its team)
 
 
@@ -207,7 +207,7 @@ def _emails(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
     """An email names its channel by the mailbox record's id and name; by its address when the record is gone."""
     e, m = trigger_events, mailboxes
     # One row per message: its newest event. Each read of a message records one, so a message that failed to start
-    # twice and was then set aside would otherwise list three rows that read as three emails (c-561 PM test).
+    # twice and was then set aside would otherwise list three rows that read as three emails.
     later = trigger_events.alias("later")
     newer = sa.select(later.c.id).where(
         later.c.tenant_id == e.c.tenant_id,
@@ -244,7 +244,7 @@ def _emails(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
 
 
 def _form_submissions(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
-    """A hosted form's submissions (c-535): each one started its run or says why not (the daily cap, the rate). The
+    """A hosted form's submissions: each one started its run or says why not (the daily cap, the rate). The
     form names its channel by its id and title; the sender is the client address, or the member who sent it."""
     e, f = trigger_events, form_links
     form_id = sa.func.substr(e.c.source, len("form:") + 1)
@@ -437,7 +437,7 @@ def _case_entries(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
     )
 
 
-# The service events a shipped system workflow's change is recorded as (api/service_events.py, c-288).
+# The service events a shipped system workflow's change is recorded as (api/service_events.py).
 SYSTEM_UPDATED = "system_workflow.updated"
 SYSTEM_UPDATE_AVAILABLE = "system_workflow.update_available"
 
@@ -492,7 +492,7 @@ def _system_workflows(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
     )
 
 
-# A review still waiting was reminded (api/service_events.py reminders, c-277).
+# A review still waiting was reminded (api/service_events.py reminders).
 REMINDER = "task.reminder"
 
 
@@ -534,7 +534,7 @@ def _reminders(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
 
 
 def _background_jobs(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
-    """What a background process did for the team (c-516): its own sentence, under the process's name."""
+    """What a background process did for the team: its own sentence, under the process's name."""
     j = background_jobs
     title = sa.case(*((j.c.process == p.key, p.title) for p in PROCESSES), else_=j.c.process)
     return sa.select(

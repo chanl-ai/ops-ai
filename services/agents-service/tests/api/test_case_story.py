@@ -1,4 +1,4 @@
-"""The case told for people (c-500), on PostgreSQL, by failure mode: how a case started is wrong for an email, a form
+"""The case told for people, on PostgreSQL, by failure mode: how a case started is wrong for an email, a form
 or a hand-opened case; the walk up the runs that started it follows another team's run, runs past its bound or fails
 on a parent that is gone; the feed shows another team's run, a scoped key's other workflows or a masked value, grows
 without a cap, or words a case event unlike the Activity page (identity-and-tenancy.md, "The team is the
@@ -249,7 +249,7 @@ async def test_resolve_is_not_offered_while_a_run_is_in_flight(stack: Stack) -> 
 
 async def test_resolve_is_offered_only_to_who_may_change_status(stack: Stack) -> None:  # noqa: F811
     case = await typed_case(stack)
-    # Every member of the team works its cases (cases.edit, c-128), a viewer too.
+    # Every member of the team works its cases (cases.edit), a viewer too.
     assert (await _left(stack, case))["resolvable"] is True
     assert (await _left(stack, case, VIEWER))["resolvable"] is True
     row = {"status": "open"}

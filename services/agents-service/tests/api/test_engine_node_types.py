@@ -24,11 +24,11 @@ async def test_the_six_basic_types_are_served_with_their_ports(client: AsyncClie
     assert ports["ops.action.tool"] == ["ok", "refused", "error"]
     assert ports["ops.flow.humanReview"] == ["approve", "reject"]
     assert by_id["ops.flow.humanReview"]["outputsFrom"] == "options"
-    # The route lists the port a review leaves by when it expires, so an editor can draw it (c-261).
+    # The route lists the port a review leaves by when it expires, so an editor can draw it.
     assert by_id["ops.flow.humanReview"]["optionalOutputs"] == [
         {"parameter": "onTimeout", "value": "expire", "port": "timeout"}
     ]
     assert ports["ops.flow.end"] == []
-    # A write is sent again only when the gateway proves it never ran it, each time under a new key (c-561).
+    # A write is sent again only when the gateway proves it never ran it, each time under a new key.
     assert by_id["ops.action.tool"]["retry"]["attempts"] == 3, "a write gets three attempts at most"
     assert all(p["connection"] == "main" for t in by_id.values() for p in t["outputs"])

@@ -28,12 +28,12 @@ export interface PickedFile {
   name: string;
 }
 
-/** Where a picked file is checked and its runs started: its own page, since a dialog stays small (owner, 10-30). */
+/** Where a picked file is checked and its runs started: its own page, since a dialog stays small. */
 export const batchCheckHref = (workflowId: string, file: PickedFile, mode: BatchMode) =>
   `/workflows/batches/check?${new URLSearchParams({ workflow: workflowId, file: file.fileId, name: file.name, mode })}`;
 
 /**
- * The Start run dialog's Start from a file tab (c-535): only the file. A CSV or Excel file is uploaded to Files and
+ * The Start run dialog's Start from a file tab: only the file. A CSV or Excel file is uploaded to Files and
  * handed back; the dialog then opens the check page (`BatchCheck`).
  */
 export function BatchFilePicker({ inputs, onPicked }: { inputs: Record<string, { title?: string }>; onPicked: (file: PickedFile | null) => void }) {
@@ -55,7 +55,7 @@ export function BatchFilePicker({ inputs, onPicked }: { inputs: Record<string, {
 }
 
 /**
- * The check page's body (c-535): the picked file checked against the workflow's inputs without starting anything (the
+ * The check page's body: the picked file checked against the workflow's inputs without starting anything (the
  * dry run): the row count, which column feeds which input, the columns left out and the first rows as the runs will
  * get them. A refusal (too many rows, no column naming an input) shows here and nothing starts. The page starts the
  * runs once `onChecked` has the answer.

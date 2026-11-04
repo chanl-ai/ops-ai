@@ -1,4 +1,4 @@
-"""A plugin tool's title from its manifest (c-581), by failure mode: the approval card and the tools catalog show the
+"""A plugin tool's title from its manifest, by failure mode: the approval card and the tools catalog show the
 raw operation name (salesforce_update_record) where the plugin gave a title, and a tool with no title loses its
 readable name."""
 

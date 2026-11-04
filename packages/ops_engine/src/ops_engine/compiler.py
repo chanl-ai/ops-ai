@@ -86,7 +86,7 @@ class NodeFailedError(RuntimeError):
         self.detail = detail
 
 
-# What a run says when a write's result is uncertain (owner, c-561): it fails, and nothing sends the write again.
+# What a run says when a write's result is uncertain: it fails, and nothing sends the write again.
 UNCERTAIN = "the write may have run; check before retrying"
 
 
@@ -432,7 +432,7 @@ TIMEOUT_CODES = frozenset({"UPSTREAM_TIMEOUT", "CONNECT_TIMEOUT"})
 
 
 # Gateway codes for a call that never reached the outside system (tools-service executor.py transport_failure), and
-# a 429 the system refused before acting: safe to send again (c-561).
+# a 429 the system refused before acting: safe to send again.
 NEVER_SENT = frozenset({"CONNECT_FAILED", "CONNECT_TIMEOUT", "POOL_TIMEOUT", "TLS_FAILED", "RATE_LIMITED"})
 
 
@@ -443,7 +443,7 @@ def never_sent(error: Any) -> bool:
 def sent_and_unanswered(error: Any) -> bool:
     """Whether a gateway error says the call reached the outside system and no answer came back that says what it did:
     it timed out after connecting, broke off, or answered 5xx (tools-service executor.py transport_failure and
-    status_failure). A write that ends this way may have happened (c-561)."""
+    status_failure). A write that ends this way may have happened."""
     if not isinstance(error, dict):
         return False
     e = cast(dict[str, Any], error)
@@ -518,7 +518,7 @@ async def gateway_call(call: NodeCall) -> Outcome:
 
     result = await send()
     if (wait := connect_wait(result.output)) is not None:
-        # The call acts for a person who has not connected their own account of the app (c-616 S12): the run waits,
+        # The call acts for a person who has not connected their own account of the app: the run waits,
         # with no time limit, until their connecting reports the event the gateway named, then sends the same call
         # again under its key. On the resumed pass the first send already succeeds, so this is reached again only
         # when the call is still refused after they connected, and then the step fails with the gateway's reason.
@@ -545,7 +545,7 @@ async def gateway_call(call: NodeCall) -> Outcome:
     if result.ok:
         return Outcome("ok", result.output)
     if result.pending:
-        # The gateway is still running a call under this key: not an answer, so the step's reconcile decides (c-561).
+        # The gateway is still running a call under this key: not an answer, so the step's reconcile decides.
         raise WriteInDoubtError(f"{call.key} is already running at the gateway")
     if result.not_sent:
         # The gateway refused the key as abandoned: never ran under it. The step's reconcile confirms and re-sends.
@@ -553,7 +553,7 @@ async def gateway_call(call: NodeCall) -> Outcome:
     if result.refused:
         return Outcome("refused", {"reason": result.reason})
     if call.params.get("onTimeout") == "port" and _error_code(result.output) in TIMEOUT_CODES:
-        # The system did not answer in time (c-332): the step's own port, for a workflow that handles it apart.
+        # The system did not answer in time: the step's own port, for a workflow that handles it apart.
         return Outcome("timeout", {"error": result.output, "reason": result.reason})
     return Outcome("error", {"error": result.output, "reason": result.reason})
 
@@ -606,7 +606,7 @@ async def review_open(call: NodeCall) -> Outcome:
                 declared["inputs"] = list(cast(list[Any], o.get("inputs") or []))
             listed.append(declared)
         payload["options"] = listed
-    # A plain approval of one write needs no one when the run's starter may approve it themselves (c-616); a step with
+    # A plain approval of one write needs no one when the run's starter may approve it themselves; a step with
     # options or a task type is a person's choice, so it always pauses.
     plain = bool(payload.get("call")) and "options" not in payload and "taskType" not in payload
     own = await call.ports.reviews.own_decision(call.run_id, call.node.id, payload) if plain else None
@@ -634,7 +634,7 @@ async def review_open(call: NodeCall) -> Outcome:
         # engine_reviews checked a correction's shape against the value before resuming.
         out["edited"] = chosen["edited"] if "edited" in chosen else call.params.get("editable")
     if isinstance(chosen.get("inputs"), dict):
-        # A typed action's own inputs, checked against the type (c-329): a Reject's assignee routes the next step.
+        # A typed action's own inputs, checked against the type: a Reject's assignee routes the next step.
         out["inputs"] = chosen["inputs"]
     return Outcome(port, out)
 
@@ -664,7 +664,7 @@ async def kernel_turn(call: NodeCall) -> Outcome:
 
 
 async def ai_prompt(call: NodeCall) -> Outcome:
-    """Classify, Summarise, Extract from text and Draft (c-298): one model call with the step's own instructions and
+    """Classify, Summarise, Extract from text and Draft: one model call with the step's own instructions and
     the answer schema its job builds from the settings (ai_steps.JOBS), no saved agent and no tools. An answer outside
     the schema takes the error port at once; a model that cannot be reached is raised, so the wrapper retries it."""
     if call.ports.prompts is None:
@@ -686,12 +686,12 @@ async def ai_prompt(call: NodeCall) -> Outcome:
     return Outcome(port, out)
 
 
-# How long Extract from file waits for a background read by default: 20 minutes (c-525).
+# How long Extract from file waits for a background read by default: 20 minutes.
 EXTRACT_WAIT_SECONDS = 1200.0
 
 
 async def ai_extract(call: NodeCall) -> Outcome:
-    """Extract from file (c-157, c-235, c-256): documents-service's extraction API reads the file and scores every
+    """Extract from file: documents-service's extraction API reads the file and scores every
     field; the step maps its answer onto the ports. A failure documents-service may get past on a retry (the floor or
     the model out of reach) is raised, so the wrapper retries it under the same key."""
     if call.ports.documents is None:
@@ -704,12 +704,12 @@ async def ai_extract(call: NodeCall) -> Outcome:
         "ocr": bool(call.params.get("ocr")),
         "reviewBelow": float(below) if isinstance(below, int | float) else None,
     }
-    # A documentType whose id resolved to nothing (a read request that named no type, c-335) is no type at all.
+    # A documentType whose id resolved to nothing (a read request that named no type) is no type at all.
     doc_type = cast(dict[str, Any] | None, call.params.get("documentType"))
     if doc_type is not None and not doc_type.get("id"):
         doc_type = None
     if call.params.get("detect") and not doc_type and not call.params.get("fields"):
-        # documents-service classifies the file over the team's types and reads it with the kind found (c-249).
+        # documents-service classifies the file over the team's types and reads it with the kind found.
         request = {"detect": True, "ocr": request["ocr"], "reviewBelow": request["reviewBelow"]}
     elif doc_type:
         # The type's version holds the fields and `many`; the version was pinned when the workflow was saved.
@@ -719,7 +719,7 @@ async def ai_extract(call: NodeCall) -> Outcome:
             "ocr": request["ocr"],
             "reviewBelow": request["reviewBelow"],
         }
-    # A full-text or proposed read (c-535) names no fields, type or Detect: the read itself says what comes back. A read
+    # A full-text or proposed read names no fields, type or Detect: the read itself says what comes back. A read
     # that resolved to nothing (a read request that asked for none) is today's read.
     read = call.params.get("read")
     if read in ("text", "propose"):
@@ -733,7 +733,7 @@ async def ai_extract(call: NodeCall) -> Outcome:
     answer = await call.ports.documents.extract(call.run_id, file_id, request, key=key)
     status = answer.get("status")
     if status in ("queued", "running"):
-        # A long file is read in the background (c-525): the step parks until documents-service reports the read
+        # A long file is read in the background: the step parks until documents-service reports the read
         # finished. The step then runs again, and its request under the same key reads the finished extraction.
         eid = str(answer.get("id") or "")
         seconds = float(call.params.get("waitSeconds") or EXTRACT_WAIT_SECONDS)
@@ -761,7 +761,7 @@ async def ai_extract(call: NodeCall) -> Outcome:
         return Outcome("unreadable", out)
     if status == "done" and answer.get("outcome") == "unknown":
         # No kind of the team's fits, or the model is unsure: review, with no fields, so a person decides what the
-        # file is; `classification` on the output says why (c-249).
+        # file is; `classification` on the output says why.
         return Outcome("review", out)
     if status != "done" or answer.get("outcome") not in ("ok", "review"):
         # A state this step does not know is raised, never turned into a port it does not have.
@@ -770,9 +770,9 @@ async def ai_extract(call: NodeCall) -> Outcome:
 
 
 def read_on_file(read: dict[str, Any], *, checked: bool, type_name: Any) -> dict[str, Any] | None:
-    """What a file records of a read (c-250): its type and version, template or model, the fields waiting for a person
+    """What a file records of a read: its type and version, template or model, the fields waiting for a person
     and the extraction; None for a read naming no document type or extraction, never data made up for the file. A
-    Detect read that found none of the team's types is recorded with no type, as not recognised (c-335)."""
+    Detect read that found none of the team's types is recorded with no type, as not recognised."""
     doc_type = cast(dict[str, Any], read.get("documentType") or {})
     classification = cast(dict[str, Any], read.get("classification") or {})
     unrecognised = not doc_type.get("id") and bool(classification)
@@ -791,15 +791,15 @@ def read_on_file(read: dict[str, Any], *, checked: bool, type_name: Any) -> dict
     if not unrecognised and (name := type_name or doc_type.get("name") or classification.get("name")):
         data["typeName"] = str(name)
     if template := read.get("templateId"):
-        # A read from a layout template (c-253) names it, so the files list can say which form a file was read as.
+        # A read from a layout template names it, so the files list can say which form a file was read as.
         data["templateId"] = str(template)
     return data
 
 
 async def files_set_data(call: NodeCall) -> Outcome:
-    """Save data on file (c-250): what an Extract from file step read, recorded on the file through files-service as the
+    """Save data on file: what an Extract from file step read, recorded on the file through files-service as the
     run's team, so the files list shows and filters it. A Detect read that found none of the team's types is saved with
-    no type, as not recognised (c-335); any other read naming no document type or extraction is an error, never data
+    no type, as not recognised; any other read naming no document type or extraction is an error, never data
     made up for the file."""
     if call.ports.file_data is None:
         raise RuntimeError("no file data port: this worker cannot run Save data on file")
@@ -812,7 +812,7 @@ async def files_set_data(call: NodeCall) -> Outcome:
 
 
 async def documents_purge(call: NodeCall) -> Outcome:
-    """Purge what was read from a file (c-250): the extractions and samples documents-service holds for a deleted file,
+    """Purge what was read from a file: the extractions and samples documents-service holds for a deleted file,
     as the run's team. Repeating it removes nothing more."""
     if call.ports.documents is None:
         raise RuntimeError("no documents port: this worker cannot purge what was read from a file")
@@ -839,7 +839,7 @@ def _first_text(value: Any) -> str | None:
 
 
 def child_label(template: Any, scope: Mapping[str, Any], item: Any, looping: bool) -> str | None:
-    """What a started child is about, for the run page (c-477): the step's `label` read for this item, else the item's
+    """What a started child is about, for the run page: the step's `label` read for this item, else the item's
     first text that is not an id; None for a step that starts one child with no label."""
     if isinstance(template, str) and template.strip():
         text = str(resolve(template, scope)).strip()
@@ -921,7 +921,7 @@ def _collected(
 def park_external(
     call: NodeCall, *, event: str, key: str, title: str, timeout_seconds: float, **shown: Any
 ) -> dict[str, Any]:
-    """Parks the step on work another service finishes (c-525): the pass ends and no worker is held. The run is woken
+    """Parks the step on work another service finishes: the pass ends and no worker is held. The run is woken
     by whichever comes first: the service event `event` carrying correlation key `key`, a signed callback to the
     step's resume URL, or the time limit (none when 0). Returns how it was woken: `{"event": payload}`,
     `{"callback": body}` or `{"timeout": True}`; the step runs again in the same attempt and reads it. `shown`: what
@@ -951,7 +951,7 @@ async def _wait_for_children(
     *,
     labels: list[str | None],
 ) -> Outcome:
-    """Run workflow with Wait for them (c-263): start up to `batchSize` children, pause, and on each resume (a child
+    """Run workflow with Wait for them: start up to `batchSize` children, pause, and on each resume (a child
     ended, or the step's timeout fell due) read them all in one call, start more, and go on by `done` once every child
     has ended, or by `timeout` with the rest named. A refused start still takes the error port."""
     runs = cast(RunPort, call.ports.runs)
@@ -1052,7 +1052,7 @@ async def flow_end(call: NodeCall) -> Outcome:
 
 
 async def flow_join(call: NodeCall) -> Outcome:
-    """Join (c-278): each step connected to it, by id, with its output when it left by the connected port, or None
+    """Join: each step connected to it, by id, with its output when it left by the connected port, or None
     when it took another port or never ran. The compiler adds a Join deferred, so this runs once, after every branch
     that can still arrive."""
     nodes = cast(dict[str, Any], call.scope.get("nodes") or {})
@@ -1080,7 +1080,7 @@ def _instant(value: Any) -> datetime | None:
 
 
 async def flow_wait(call: NodeCall) -> Outcome:
-    """Wait (c-277): pauses until its time has passed, then goes on by `out`. The pause is an interrupt the worker
+    """Wait: pauses until its time has passed, then goes on by `out`. The pause is an interrupt the worker
     wakes with delayed work keyed by step and iteration, so no worker is held and a restart loses nothing. On resume the
     step runs again: a date now past goes on without pausing, a duration takes the resume its first pause asked for."""
     if call.params.get("mode") == "until":
@@ -1101,7 +1101,7 @@ async def flow_wait(call: NodeCall) -> Outcome:
 
 
 async def flow_wait_for(call: NodeCall) -> Outcome:
-    """Wait for (c-525): parks until a callback, the event with its key, or the time limit; goes on by `ok` with the
+    """Wait for: parks until a callback, the event with its key, or the time limit; goes on by `ok` with the
     callback's body or the event's payload, or by `timeout` with what it waited for."""
     event = str(call.params.get("event") or "")
     key = str(call.params.get("key") or "") if event else ""
@@ -1265,7 +1265,7 @@ class Wrapper:
 
     async def deadline(self, params: Mapping[str, Any]) -> float:
         """The attempt's limit: the step's own `timeoutSeconds`, else the type's default, raised to how long the
-        gateway may take over the operation when that is longer (a code operation's run limit, c-561)."""
+        gateway may take over the operation when that is longer (a code operation's run limit)."""
         own = self.node.parameters.get("timeoutSeconds")
         if own:
             return float(own)
@@ -1354,7 +1354,7 @@ class Wrapper:
             return await self.record(r, outcome)
 
         if last is not None and last.status == "waiting":
-            # A step that paused (Run workflow waiting for its children, c-263) resumes in the same attempt: its
+            # A step that paused (Run workflow waiting for its children) resumes in the same attempt: its
             # writes are keyed by step and item, so running it again starts nothing twice.
             try:
                 return await self.record(last, await executor(call(last)))
@@ -1391,11 +1391,11 @@ class Wrapper:
             try:
                 outcome = await asyncio.wait_for(executor(call(r)), timeout)
             except GraphInterrupt:
-                # Paused (c-263), not dead: the attempt is marked waiting so a resume continues it.
+                # Paused, not dead: the attempt is marked waiting so a resume continues it.
                 await self.journal.finish(r, status="waiting", port=None, output=None, error=None)
                 raise
             except LeaseSupersededError:
-                # A newer owner has the run: this pass stops here, and the owner reconciles the row (c-561).
+                # A newer owner has the run: this pass stops here, and the owner reconciles the row.
                 raise
             except Exception as e:
                 message = technical(e)
@@ -1406,7 +1406,7 @@ class Wrapper:
                     )
                     if settled is not None:
                         return settled
-                    # Never received, its key now blocked: sent again under the next attempt's key (c-561).
+                    # Never received, its key now blocked: sent again under the next attempt's key.
                     attempt += 1
                     await sleep(policy.wait(attempt))
                     continue
@@ -1425,14 +1425,14 @@ class Wrapper:
                 raise NodeFailedError(plain_failure(self.node.name or nid, e, tried), detail) from e
             error = _error_of(outcome.out) if outcome.port == "error" else None
             if reconciled and sent_and_unanswered(error):
-                # The system may have acted: the run stops here with the reason, and nothing sends it again (c-561).
+                # The system may have acted: the run stops here with the reason, and nothing sends it again.
                 message = technical_error(outcome.out)
                 await self.journal.finish(r, status="error", port=None, output=outcome.out, error=message)
                 await self.ports.hooks.after_step(run_id, nid, "error")
                 raise WriteUncertainError(uncertain_failure(self.node.name or nid), message)
             tried = attempt if reconciled else attempt - first + 1
             if (never_sent(error) or (not reconciled and sent_and_unanswered(error))) and tried < policy.attempts:
-                # An outage, not an answer (c-561): a read is tried again; a write the system never got is sent again
+                # An outage, not an answer: a read is tried again; a write the system never got is sent again
                 # under the next attempt's key, its first key recorded as failed at the gateway.
                 message = technical_error(outcome.out)
                 await self.journal.finish(r, status="error", port=None, output=outcome.out, error=message)
@@ -1461,8 +1461,8 @@ class Wrapper:
         """A write whose outcome is unknown: the gateway's record under the attempt's own key decides. Found done
         means the write happened; refused or failed by its input is that port; absent means it never arrived, and the
         run takes the error port rather than risk a second send. Lost, failed after reaching the system, or still
-        running past the step's deadline (from the attempt's start) is uncertain: the run fails with the reason
-        (c-561). Still running inside the deadline is not yet known: the pass stops with WriteInDoubtError and the
+        running past the step's deadline (from the attempt's start) is uncertain: the run fails with the reason. Still
+        running inside the deadline is not yet known: the pass stops with WriteInDoubtError and the
         worker tries the run again later, the row left as it is. With `may_resend`, a write the gateway never ran under
         the key (no record, which also blocks the key, or a record that it never reached the system) returns None:
         the caller sends it again under the next attempt's key."""

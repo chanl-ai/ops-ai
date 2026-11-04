@@ -1,8 +1,8 @@
-"""The workspace and team danger zones (c-529): who may transfer, leave, close and restore a workspace, and leave and
+"""The workspace and team danger zones: who may transfer, leave, close and restore a workspace, and leave and
 delete a team, decided by `can()` from the roles the database holds now.
 
 The owner holds `workspace.manage`, the one cell of the built-in role Owner, which Admin's every-cell grid leaves out
-(owner, 2026-10-23: "open defaults, can() only"). A transfer goes to an account admin (`access.manage` in every team),
+("open defaults, can() only"). A transfer goes to an account admin (`access.manage` in every team),
 decided by `can()` on the target. The refusals outside `can()` are state invariants (register rows E42 to E44 and the
 state lines of the access allowlist): `owner_must_transfer`, `last_admin`, `workspace_closed`, and the delete and
 close preconditions. Closing a workspace or deleting a team first asks agents-service what still runs there; with no

@@ -1,5 +1,5 @@
 """Model keys: one per identity, with its budget, its spend and a hash of its secret (plus the previous hash during a
-rotation's overlap), and each tenant's share of a key one service spends for many tenants (c-251)."""
+rotation's overlap), and each tenant's share of a key one service spends for many tenants."""
 
 from __future__ import annotations
 

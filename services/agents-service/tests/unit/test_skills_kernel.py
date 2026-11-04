@@ -1,4 +1,4 @@
-"""Skills in the kernel (c-063 T010), by failure mode: an on-match skill missing from the index or its body sent before
+"""Skills in the kernel, by failure mode: an on-match skill missing from the index or its body sent before
 it loads; an always-on body left out; a load past two skills or the token budget accepted; load_skill charged to the
 tool-call budget; a loaded skill's guardrails not applied, or applied when it never loaded; a load not recorded."""
 

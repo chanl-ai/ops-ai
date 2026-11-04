@@ -95,14 +95,14 @@ export interface ToolWorkbenchProps extends ToolRunProps {
 }
 
 /**
- * One operation on a full page (c-088): its definition on the left (request, inputs, secrets, mock, transform) and a run
+ * One operation on a full page: its definition on the left (request, inputs, secrets, mock, transform) and a run
  * on the right, with the request sent, the raw response, the transformed output and the gateway's log side by side. A run
  * uses the draft as it stands, so a transform is tried before it is staged (Mock answers from the saved mock answers); only staging and publishing change
  * what agents get.
  */
 export function ToolWorkbench(p: ToolWorkbenchProps) {
   const { op, draft: d } = p;
-  // With real connections on, an operation keeps an ordered list of mock answers in place of its one mock (c-580).
+  // With real connections on, an operation keeps an ordered list of mock answers in place of its one mock.
   const set = (patch: Partial<WorkbenchDraft>) => p.onDraftChange({ ...d, ...patch });
   const [secretValues, setSecretValues] = React.useState<Record<string, string>>({});
   // A value typed for one run leaves the page when the run ends, whether it answered or failed: React writes a controlled

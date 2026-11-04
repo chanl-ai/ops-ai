@@ -10,8 +10,8 @@
 streamdown  2.7.0, released 2026-09-30
 remend  1.4.0, streamdown 2.7.0's dependency
 
-# Versions younger than 30 days allowed by name in pyproject.toml exclude-newer-package and pnpm-workspace.yaml
-# (owner, 2026-10-27): security fixes, and asyncpg for a broken TLS connection to Fly Postgres. Remove each line when
+# Versions younger than 30 days allowed by name in pyproject.toml exclude-newer-package and pnpm-workspace.yaml:
+# security fixes, and asyncpg for a broken TLS connection to Fly Postgres. Remove each line when
 # its version turns 30 days old or the package moves on.
 certifi  2026.10.19, fixes PYSEC-2026-4320
 pillow  13.0.0, fixes five critical GHSA advisories

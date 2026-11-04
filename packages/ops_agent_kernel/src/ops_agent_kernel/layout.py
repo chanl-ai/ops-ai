@@ -1,4 +1,4 @@
-"""Widget layouts (c-082, `docs/architecture/chat-widgets.md`): a tree of catalogue primitives the console draws
+"""Widget layouts (`docs/architecture/chat-widgets.md`): a tree of catalogue primitives the console draws
 in chat, either composed by the model or filled from a builder's published widget template.
 
 Nothing outside the catalogue can be emitted. Every tree is rebuilt here from closed per-primitive field lists before a
@@ -64,7 +64,7 @@ CATALOGUE: dict[str, tuple[dict[str, str], bool, tuple[str, ...]]] = {
     "button": ({"label": "text", "reply": "reply", "requires": "text"}, False, ("label", "reply")),
     "divider": ({}, False, ()),
     "image": ({"alt": "text", "src": "text"}, False, ("alt",)),
-    # The c-176 kinds: each checked whole against its JSON Schema (`kinds.SCHEMAS`), which closes every object in it.
+    # The kinds: each checked whole against its JSON Schema (`kinds.SCHEMAS`), which closes every object in it.
     **{
         k: (dict.fromkeys(kinds.SCHEMAS[k]["properties"], "kind"), False, tuple(kinds.SCHEMAS[k]["required"]))
         for k in kinds.KINDS
@@ -202,7 +202,7 @@ class _Walk:
         raise LayoutError(f"{where}: unknown field kind.")  # pragma: no cover
 
     def kind(self, kind: str, value: dict[str, Any], where: str) -> dict[str, Any]:
-        """A c-176 kind's node: its fields checked against the kind's schema (closed objects, list and text limits),
+        """A widget kind's node: its fields checked against the kind's schema (closed objects, list and text limits),
         and its text counted toward the layout's total like any other node's."""
         found: list[Any] = list(Draft202012Validator(kinds.SCHEMAS[kind]).iter_errors(value))  # pyright: ignore[reportUnknownMemberType]
         if found:

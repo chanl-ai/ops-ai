@@ -1,4 +1,4 @@
-"""Service tokens with scopes (c-167), by failure mode: a service minting itself a scope it was never given, the dev
+"""Service tokens with scopes, by failure mode: a service minting itself a scope it was never given, the dev
 key passing any scope, a service token reaching a route that decides on roles, a service on a public route without a
 team or naming another team in a header. Tokens are real, routes are real FastAPI apps built by `Auth.for_dev`, as
 every service builds them."""

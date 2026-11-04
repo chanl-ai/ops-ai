@@ -1,4 +1,4 @@
-"""The AI steps setting (c-298), by failure mode: a team that never turned AI steps on can add or save one; the step
+"""The AI steps setting, by failure mode: a team that never turned AI steps on can add or save one; the step
 list does not say why one is missing; one team's switch turns them on for another; an unread policy opens them."""
 
 from __future__ import annotations

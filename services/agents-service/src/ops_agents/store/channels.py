@@ -34,7 +34,7 @@ deployments = sa.Table(
     sa.Column("created_at", sa.String(32), nullable=False),
     # Default budget for each case it opens: {"max_calls", "max_tokens", "max_cost"} (E12).
     sa.Column("budget", sa.JSON(), nullable=True),
-    # The team that owns the deployment; empty when none does, which only an admin changes (c-115).
+    # The team that owns the deployment; empty when none does, which only an admin changes.
     sa.Column("team_id", sa.String(64), nullable=False, server_default=""),
     info=TEAM_OWNED,
 )

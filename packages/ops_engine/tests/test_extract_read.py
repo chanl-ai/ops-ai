@@ -1,4 +1,4 @@
-"""Extract from file's "What to read" (c-535), by failure mode: a full-text or proposed read refused by the step's own
+"""Extract from file's "What to read", by failure mode: a full-text or proposed read refused by the step's own
 parameter check because it names no fields, type or Detect; the read choice dropped on its way to documents-service;
 a full-text or proposed answer reshaped so later steps lose `text`, `pages` or `proposal`; and the field picker
 offering the wrong outputs after such a step."""

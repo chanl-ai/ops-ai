@@ -1,4 +1,4 @@
-"""a read request may name no document type, so the file is read with Detect (c-335)
+"""a read request may name no document type, so the file is read with Detect
 
 Revision ID: files_0009
 Revises: files_0008
