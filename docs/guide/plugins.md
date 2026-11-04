@@ -24,6 +24,118 @@ The manifest file is `plugin.yaml`. The Salesforce example lives at `plugins/sal
 | Templates | `src/ops_plugin_salesforce/templates/` | Agents, skills, workflows and document types the manifest lists under `templates`; a team adds its own copy from the App's Resources tab |
 | Tests | `tests/test_tools.py` | Each tool against a fake of the system, through the SDK's runner |
 
+## Start a new plugin
+
+The smallest plugin is four files: a package file, a manifest, the line that loads the manifest, and one test. This one
+signs in with an API key and has one read tool. Make the folder anywhere, then check and test it from the ops-ai
+checkout, as below.
+
+```
+ticketdesk/
+  pyproject.toml
+  src/ops_plugin_ticketdesk/__init__.py
+  src/ops_plugin_ticketdesk/plugin.yaml
+  tests/test_tools.py
+```
+
+`pyproject.toml` names the package and the entry point tools-service finds it by:
+
+```toml
+[project]
+name = "ops-plugin-ticketdesk"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = ["ops-plugin-sdk"]
+
+[project.entry-points."ops_ai.plugins"]
+ticketdesk = "ops_plugin_ticketdesk:plugin"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ops_plugin_ticketdesk"]
+```
+
+`src/ops_plugin_ticketdesk/__init__.py` loads the manifest beside it:
+
+```python
+from ops_plugin_sdk import Plugin
+
+plugin = Plugin.beside(__file__)
+```
+
+`src/ops_plugin_ticketdesk/plugin.yaml` is the plugin itself (every field is in The manifest, below):
+
+```yaml
+schema: ops-ai/plugin@2
+id: acme.ticketdesk
+title: Ticket desk
+version: 0.1.0
+sdk: "1"
+
+connection:
+  kinds: [api_key]
+  api_key: { placement: header, name: X-Api-Key }
+  sign_in: [team]
+  health_check: { path: /me }
+
+settings:
+  api_url: { type: string, default: "https://api.ticketdesk.example", title: API address }
+
+egress: ["{api_url}"]
+endpoint: "{api_url}"
+
+tools:
+  - name: get_ticket
+    title: Get a ticket
+    description: One ticket by its number, with its subject and status
+    access: read
+    input:
+      number: { type: integer, description: "The ticket number, such as 4182" }
+    request:
+      method: GET
+      path: "/tickets/{number}"
+```
+
+`tests/test_tools.py` calls the tool against a fake of the system, as tools-service would:
+
+```python
+import httpx
+from ops_plugin_ticketdesk import plugin
+
+from ops_plugin_sdk.testing import Fake, call
+
+SETTINGS = {"api_url": "https://api.ticketdesk.test"}
+
+
+def test_get_ticket_sends_the_number_in_its_path() -> None:
+    seen: list[httpx.Request] = []
+
+    def desk(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"number": 4182, "subject": "Printer jam", "status": "open"})
+
+    client = Fake(httpx.Client(transport=httpx.MockTransport(desk)), "k-1")
+    out = call(plugin, "get_ticket", {"number": 4182}, SETTINGS, client)
+    assert seen[-1].url.path == "/tickets/4182"
+    assert out["status"] == "open"
+```
+
+Then, from the ops-ai checkout:
+
+```
+uv run ops plugin validate ../ticketdesk
+uv run ops plugin test ../ticketdesk
+```
+
+`validate` prints `OK acme.ticketdesk 0.1.0: 1 tools, 0 knowledge sources, 0 templates` and `test` prints `1 passed`.
+The test runner sends the key as a bearer token whatever `connection.api_key` names, so assert the key's header on a
+local stack (Try a plugin on a local stack), not in the test. To see it in the console, install it (Install a plugin)
+and connect it from Apps. Salesforce and GitHub in the plugins repository are the fuller examples: OAuth sign-in,
+paging, knowledge sources and templates.
+
 ## The manifest
 
 | Field | What it says |
