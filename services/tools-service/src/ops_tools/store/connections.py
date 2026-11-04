@@ -103,8 +103,9 @@ connections = sa.Table(
 )
 
 # A team's own OAuth client of an app (the app credential): its client id and the name of the team secret holding its
-# client secret. The one place a team's client is kept; an account points at it by credential_id, and the store puts
-# both into the account it reads (settings.clientId, secrets.clientSecret) and takes them out on a write.
+# client secret. The one place a team's client is kept, made under Credentials with no account; an account points at it
+# by credential_id, and the store puts both into the account it reads (settings.clientId, secrets.clientSecret) and
+# takes them out on a write. Deleting an account leaves it: other accounts may sign in with it.
 app_credentials = sa.Table(
     "app_credentials",
     metadata,
@@ -113,8 +114,13 @@ app_credentials = sa.Table(
     sa.Column("team_id", sa.String(64), nullable=False),
     # The app the client was registered for, as connections.app_id names it.
     sa.Column("app_id", sa.String(120), nullable=False),
+    # What the Credentials page lists it as.
+    sa.Column("name", sa.String(200), nullable=False),
     sa.Column("client_id", sa.String(500), nullable=False),
-    # The tool_secrets name in the team holding the client secret; null for a public client.
+    # The permissions it asks for, space-separated as an account's scopes setting is; null for all the app offers.
+    sa.Column("scopes", sa.String(2000)),
+    # The tool_secrets name in the team holding the client secret (its row's credential_id is this credential's id);
+    # null for a public client.
     sa.Column("secret_name", sa.String(200)),
     sa.Column("created_by", sa.String(200), nullable=False),
     sa.Column("created_at", _TS, nullable=False),
@@ -318,13 +324,49 @@ class ConnectionStore:
         q = t.select().where(t.c.tenant_id == tenant_id, t.c.id.in_(ids), team_visible(t))
         return {str(r["id"]): dict(r) for r in (await c.execute(q)).mappings()}
 
-    async def credential_account(self, tenant_id: str, credential_id: str) -> Row | None:
-        """The account signing in with the team's app credential; None when it is not the team's."""
-        k = connections.c
-        q = sa.select(k.id).where(k.tenant_id == tenant_id, k.credential_id == credential_id, team_visible(connections))
+    async def credential(self, tenant_id: str, credential_id: str) -> Row | None:
+        """The team's app credential; None when it is not the team's."""
         async with self._tx() as c:
-            found = (await c.execute(q)).scalar()
-        return await self.get(tenant_id, str(found)) if found else None
+            return (await self._credentials(c, tenant_id, [credential_id])).get(credential_id)
+
+    async def team_credentials(self, tenant_id: str, team_id: str, app_id: str | None = None) -> list[Row]:
+        """The team's app credentials, of one app when `app_id` is given, oldest first."""
+        t = app_credentials.c
+        where = [t.tenant_id == tenant_id, t.team_id == team_id, team_visible(app_credentials)]
+        if app_id is not None:
+            where.append(t.app_id == app_id)
+        q = app_credentials.select().where(*where).order_by(t.created_at, t.id)
+        async with self._tx() as c:
+            return [dict(r) for r in (await c.execute(q)).mappings()]
+
+    async def add_credential(self, row: Row) -> None:
+        """A new app credential: tenant, id, team, app, name, client id, scopes, secret name, who and when."""
+        async with self._tx() as c:
+            await c.execute(app_credentials.insert().values(**row))
+
+    async def touch_credential(self, tenant_id: str, credential_id: str, *, actor: str, at: datetime) -> None:
+        """Records who changed the credential last (its secret, replaced in the secret store)."""
+        t = app_credentials.c
+        async with self._tx() as c:
+            await c.execute(
+                app_credentials.update()
+                .where(t.tenant_id == tenant_id, t.id == credential_id, team_visible(app_credentials))
+                .values(updated_by=actor, updated_at=at)
+            )
+
+    async def credential_accounts(self, tenant_id: str, credential_ids: list[str]) -> list[Row]:
+        """The accounts signing in with each named credential, oldest first."""
+        if not credential_ids:
+            return []
+        k = connections.c
+        q = (
+            connections.select()
+            .where(k.tenant_id == tenant_id, k.credential_id.in_(credential_ids), team_visible(connections))
+            .order_by(k.created_at, k.id)
+        )
+        async with self._tx() as c:
+            rows = [dict(r) for r in (await c.execute(q)).mappings()]
+            return await self._read(c, tenant_id, rows, used=False)
 
     def install_client(self, plugin_id: str) -> PluginClient | None:
         """Ops AI's own OAuth client for a plugin, from the install config; None when the install set none."""
@@ -338,6 +380,9 @@ class ConnectionStore:
         installed = self.install_clients.get(str(row.get("platform_app") or ""))
         if cred is not None:
             settings["clientId"] = cred["client_id"]
+            if cred.get("scopes"):
+                # The permissions the team's client asks for are the credential's, for every account on it.
+                settings["scopes"] = cred["scopes"]
             if cred.get("secret_name"):
                 secrets["clientSecret"] = cred["secret_name"]
         elif installed is not None:
@@ -351,6 +396,12 @@ class ConnectionStore:
         id and secret name go to the account's app credential (made on the first one) and the account keeps only its
         credential_id. A write that names no secrets (a sign-in saving the instance it read) keeps the client's
         secret as it is."""
+        if "credential_id" in fields:
+            # The account picks one of the team's credentials (or Ops AI's app): the client it reads is that one's.
+            for part, key in (("settings", "clientId"), ("secrets", "clientSecret")):
+                if part in fields:
+                    fields = {**fields, part: {k: v for k, v in dict(fields[part] or {}).items() if k != key}}
+            return fields
         named = "secrets" in fields
         settings, secrets = dict(fields.get("settings") or {}), dict(fields.get("secrets") or {})
         client_id, secret_name = settings.pop("clientId", None), secrets.pop("clientSecret", None)
@@ -358,7 +409,7 @@ class ConnectionStore:
         k = connections.c
         held = (
             await c.execute(
-                sa.select(k.credential_id, k.platform_app, k.team_id, k.app_id).where(
+                sa.select(k.credential_id, k.platform_app, k.team_id, k.app_id, k.account_name, k.name).where(
                     k.tenant_id == tenant_id, k.id == connection_id, team_visible(connections)
                 )
             )
@@ -378,8 +429,8 @@ class ConnectionStore:
         made = f"cred_{uuid.uuid4().hex[:12]}"
         await c.execute(
             t.insert().values(
-                tenant_id=tenant_id, id=made, team_id=held.team_id, app_id=held.app_id, created_by=actor,
-                created_at=at, **values,
+                tenant_id=tenant_id, id=made, team_id=held.team_id, app_id=held.app_id,
+                name=held.account_name or held.name, created_by=actor, created_at=at, **values,
             )
         )  # fmt: skip
         return {**fields, "credential_id": made}
@@ -555,9 +606,7 @@ class ConnectionStore:
             if used:
                 raise ConnectionInUse([str(u["name"]) for u in used])
             mine = (connections.c.tenant_id == tenant_id, connections.c.id == connection_id, team_visible(connections))
-            found = (
-                await c.execute(sa.select(connections.c.team_id, connections.c.credential_id).where(*mine))
-            ).first()
+            found = (await c.execute(sa.select(connections.c.team_id).where(*mine))).first()
             if found is None:
                 return None
             tokens_q = sa.select(*_HELD_TOKEN).where(
@@ -573,10 +622,6 @@ class ConnectionStore:
             held = [dict(r) for q in (tokens_q, states_q) for r in (await c.execute(q)).mappings()]
             if (await c.execute(connections.delete().where(*mine))).rowcount == 0:
                 return None
-            # Its app credential goes with it; the secret values are the caller's to forget (`held_of`).
-            if found.credential_id:
-                t = app_credentials
-                await c.execute(t.delete().where(t.c.tenant_id == tenant_id, t.c.id == found.credential_id))
             # The cascade takes the tokens and links; sign-in states name the connection with no key, so they go here.
             await c.execute(
                 oauth_states.delete().where(

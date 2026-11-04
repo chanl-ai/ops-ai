@@ -45,14 +45,14 @@ test('a tool runs on the module that holds it and Mock says mock', async () => {
   assert.deepEqual(run.body, { mode: 'mock', input: { id: 'r1' } });
 });
 
-test("the team's own client goes on the app's account with its revision", async () => {
+test("an account picks the team's credential by its id with its revision", async () => {
   const seen = [];
   const ops = client({ 'GET apps/plugin:desk': { ...PAGE, connection: { id: 'con_team' } }, 'GET apps/plugin:desk/accounts/con_team': { revision: 4 } }, seen);
-  await ops.credentials.set('plugin:desk', { clientId: 'own-app', clientSecret: 's3' });
+  await ops.credentials.set('plugin:desk', 'cred_bank');
   const put = seen.at(-1);
   assert.equal(put.method, 'PATCH');
   assert.equal(decodeURIComponent(put.url.pathname), '/api/tools/v1/apps/plugin:desk/accounts/con_team');
-  assert.deepEqual(put.body, { revision: 4, settings: { clientId: 'own-app' }, secretValues: { clientSecret: 's3' } });
+  assert.deepEqual(put.body, { revision: 4, credentialId: 'cred_bank' });
 });
 
 test("usage is the calls' rows, not the envelope", async () => {
@@ -91,9 +91,9 @@ test('credentials.create posts the app, its client and secret to the app credent
 
 test('a sandbox account is added as a sandbox under its app', async () => {
   const seen = [];
-  await client({}, seen).accounts.add('plugin:desk', 'Desk sandbox', { sandbox: true, clientId: 'uat-app' });
+  await client({}, seen).accounts.add('plugin:desk', 'Desk sandbox', { sandbox: true, credentialId: 'cred_uat' });
   const made = seen.at(-1);
   assert.equal(made.method, 'POST');
   assert.equal(decodeURIComponent(made.url.pathname), '/api/tools/v1/apps/plugin:desk/accounts');
-  assert.deepEqual(made.body, { name: 'Desk sandbox', sandbox: true, clientId: 'uat-app' });
+  assert.deepEqual(made.body, { name: 'Desk sandbox', sandbox: true, credentialId: 'cred_uat' });
 });

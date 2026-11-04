@@ -32,6 +32,7 @@ async def _sealed(engine: AsyncEngine, tenant: str) -> SecretStore:
                 id="cred_a",
                 team_id=TEAM_A,
                 app_id="test.desk",
+                name="Desk credentials",
                 client_id="team-a-app",
                 secret_name="DESK_KEY",
                 created_by="t",

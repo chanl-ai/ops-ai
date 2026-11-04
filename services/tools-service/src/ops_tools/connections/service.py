@@ -269,6 +269,7 @@ class ConnectionService:
             "secrets": secrets,
             "signedIn": signed,
             "platformApp": conn.get("platform_app"),
+            "credentialId": conn.get("credential_id"),
         }
         if cert := settings.get("signingCertificate"):
             try:
@@ -427,15 +428,22 @@ class ConnectionService:
         drop = False
         detail: dict[str, Any] = {"fields": sorted(values)}
         action = "changed"
+        client: dict[str, Any] | None = None
+        if "credential_id" in i:
+            client = await self._client_of(who, conn, i["credential_id"])
         if i.get("settings") is not None or i.get("secret_values"):
             keys, sealed, drop = await self._new_keys(
-                who, conn, dict(i.get("settings") or {}), dict(i.get("secret_values") or {})
+                who, conn, dict(i.get("settings") or {}), dict(i.get("secret_values") or {}), client=client
             )
             values |= keys
             status = "healthy" if conn["status"] in ("draft", "needs_reconnect", "error") else conn["status"]
             values |= {"status": status, "status_detail": None}
             detail |= {"settings": sorted(keys["settings"]), "secrets": sorted(i.get("secret_values") or {})}
             action = "secret_set" if sealed else "changed"
+        if client is not None:
+            values |= {k: client[k] for k in ("credential_id", "platform_app")}
+            detail["credentialId"] = client["credential_id"]
+            drop = True
         if plugin_settings is not None:
             values["plugin_settings"] = plugin_settings
         # The row (naming its secrets) lands first, against the revision read; a stale write stores no value. A failure
@@ -455,15 +463,25 @@ class ConnectionService:
         return await self.detail(who, connection_id)
 
     async def _new_keys(
-        self, who: Caller, conn: dict[str, Any], given: dict[str, Any], secret_values: dict[str, str]
+        self,
+        who: Caller,
+        conn: dict[str, Any],
+        given: dict[str, Any],
+        secret_values: dict[str, str],
+        *,
+        client: dict[str, Any] | None = None,
     ) -> tuple[dict[str, Any], dict[str, str], bool]:
         """The account's settings and secret names after a save, the values to seal by secret name, and whether a held
-        token is wrong for the system now (it is dropped, so the next call signs in again)."""
+        token is wrong for the system now (it is dropped, so the next call signs in again). `client`: the OAuth client
+        the same save picks (`_client_of`), whose secret counts as held."""
         kind = kind_of(str(conn["auth_kind"]))
         each_person = (conn.get("sign_in") or "team") == "person"
         stored = cast(dict[str, Any], conn.get("settings") or {})
         held = {k: v for k, v in stored.items() if (f := kind.field(k)) and not f.secret}
-        settings = self._checked(kind, {**held, **given}, each_person=each_person)
+        # A client the same save picks is the account's client id from now on, though the store keeps it on the
+        # credential (or the install), never in the account's settings.
+        picked = {"clientId": client["client_id"]} if client is not None else {}
+        settings = self._checked(kind, {**held, **given, **picked}, each_person=each_person)
         values = {k: v for k, v in secret_values.items() if v}
         for k in values:
             f = kind.field(k)
@@ -471,7 +489,11 @@ class ConnectionService:
                 raise ValidationFailed(f"{k} is not a secret part of {kind.label}.", details={"field": k})
         names = _names(conn)
         needs = kind.requires(settings, each_person=each_person)
-        missing = [f.label for f in needs if f.secret and f.name not in names | values]
+        held = names | (client or {}).get("names", {})
+        if client is not None and client["platform_app"]:
+            # Ops AI's app proves itself with the install's secret, never one the team holds.
+            held = held | {"clientSecret": ""}
+        missing = [f.label for f in needs if f.secret and f.name not in held | values]
         if missing:
             raise ValidationFailed(f"{kind.label} needs {', '.join(missing)}.")
         await self._pair_checked(who, conn, settings, values)
@@ -486,6 +508,32 @@ class ConnectionService:
             {"clientSecret", "signingKey"} & set(values)
         )
         return row, {names[k]: v for k, v in values.items()}, drop
+
+    async def _client_of(self, who: Caller, conn: dict[str, Any], credential_id: str | None) -> dict[str, Any]:
+        """The OAuth client an account picks: one of the team's app credentials for the account's app, or with none,
+        Ops AI's app for a plugin's account when the install has one. Both columns are written, as a token exchange
+        prefers Ops AI's app while `platform_app` is set."""
+        if kind_of(str(conn["auth_kind"])).field("clientId") is None:
+            raise ValidationFailed(f"{conn['name']} signs in with no OAuth app.", code="no_app_credential")
+        if credential_id is None:
+            plugin = plugin_of(conn)
+            installed = self.store.install_client(plugin) if plugin is not None else None
+            if plugin is None or installed is None:
+                raise ValidationFailed(
+                    f"This install has no app of its own for {conn['name']}; pick one of the team's app credentials.",
+                    code="client_missing",
+                )
+            return {"credential_id": None, "platform_app": plugin, "client_id": installed.id, "names": {}}
+        found = await self.store.credential(who.tenant_id, credential_id)
+        if found is None or found["team_id"] != conn["team_id"]:
+            raise _not_found(f"App credential {credential_id}", "credential_not_found")
+        if found["app_id"] != conn["app_id"]:
+            raise ValidationFailed(
+                f"{found['name']} is another app's credential.", code="credential_other_app",
+                details={"field": "credentialId"},
+            )  # fmt: skip
+        secret = {"clientSecret": str(found["secret_name"])} if found.get("secret_name") else {}
+        return {"credential_id": credential_id, "platform_app": None, "client_id": found["client_id"], "names": secret}
 
     @staticmethod
     def _sign_in_fits(kind: Kind, sign_in: str) -> None:
@@ -572,7 +620,9 @@ class ConnectionService:
         if deleted is None:
             raise NotFound(f"Connection {connection_id}")
         await self.tokens.drop(who.tenant_id, deleted)
-        for name in _names(conn).values():
+        # The client secret of the app credential it signed in with is the credential's, which outlives the account.
+        names = {k: v for k, v in _names(conn).items() if not (k == "clientSecret" and conn.get("credential_id"))}
+        for name in names.values():
             await self.secrets.delete(who.tenant_id, str(conn["team_id"]), name, actor=who.name, at=self.clock())
 
     async def connect_mcp(self, who: Caller, i: dict[str, Any]) -> dict[str, Any]:

@@ -44,7 +44,8 @@ async def test_an_app_the_team_has_not_turned_on_is_not_installed(world: World, 
 async def test_a_team_account_needs_its_sign_in_then_is_connected(world: World, tenant: str) -> None:  # noqa: F811
     conn = await connected(world, tenant)
     before = await card(world, tenant)
-    assert before["appState"] == "needs_sign_in" and before["credential"] == {"name": "Desk", "type": "own"}, before
+    shown = before["credential"]
+    assert before["appState"] == "needs_sign_in" and shown["type"] == "own" and shown["id"], before
     await signed(world, tenant, conn, "https://acme.my.desk.test")
     assert state(await card(world, tenant)) == ("connected", None)
 

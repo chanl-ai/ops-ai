@@ -50,17 +50,39 @@ export interface paths {
         };
         /**
          * List App Credentials
-         * @description The team's app credentials, for the Credentials page under Apps (c-616 C0): each account's type,
-         *     permissions, accounts and the last Test with my account. Team admins only; no secret.
+         * @description The team's app credentials and Ops AI's app of each app using it, for the Credentials page and the pickers
+         *     that name one (`app` keeps one app's): type, client id, permissions, accounts on it and the last Test with my
+         *     account. Team admins only; no secret.
          */
         get: operations["apps_list_app_credentials"];
         put?: never;
         /**
          * Create App Credential
-         * @description Adds the team's own OAuth app to one of its apps' accounts: client id, secret and permissions. Team admins
-         *     only; the answer is the Credentials page's row, with no secret.
+         * @description Adds the team's own OAuth app for one of its apps: name, client id, secret and permissions, with no account
+         *     needed; an account picks it by credentialId when connected. Team admins only; the answer has no secret.
          */
         post: operations["apps_create_app_credential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/app-credentials/{credential_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get App Credential
+         * @description One app credential's page: its app, client id, permissions, who made it and the accounts signing in with it,
+         *     each with its state. `ops-ai:<app>` is Ops AI's app of one app. Team admins only; no secret.
+         */
+        get: operations["apps_get_app_credential"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1187,6 +1209,8 @@ export interface components {
             /** Category */
             category?: string | null;
             certificate?: components["schemas"]["SigningCertificate"] | null;
+            /** Credentialid */
+            credentialId?: string | null;
             /** Description */
             description?: string | null;
             /** Docsurl */
@@ -1272,10 +1296,8 @@ export interface components {
          *     on a custom app it signs in with the app's kind, with the kind's fields given in `credentials`.
          */
         AccountIn: {
-            /** Clientid */
-            clientId?: string | null;
-            /** Clientsecret */
-            clientSecret?: string | null;
+            /** Credentialid */
+            credentialId?: string | null;
             /** Credentials */
             credentials?: {
                 [key: string]: string;
@@ -1300,6 +1322,8 @@ export interface components {
         AccountPatchIn: {
             /** Category */
             category?: string | null;
+            /** Credentialid */
+            credentialId?: string | null;
             /** Description */
             description?: string | null;
             /** Docsurl */
@@ -1402,8 +1426,8 @@ export interface components {
         };
         /**
          * AppCredential
-         * @description How one of the team's accounts signs in (c-616 C0): Ops AI's app or the team's own OAuth client, never its
-         *     secret.
+         * @description One OAuth client the team's apps sign in with: one of the team's own (app_credentials, made under Credentials)
+         *     or Ops AI's app for an app whose accounts use it. Never its secret.
          */
         AppCredential: {
             /** Accounts */
@@ -1412,21 +1436,18 @@ export interface components {
             app: string;
             /** Appname */
             appName: string;
+            /** Clientid */
+            clientId?: string | null;
             /** Created */
-            created: string;
-            /** Credentialid */
-            credentialId?: string | null;
+            created?: string | null;
+            /** Createdby */
+            createdBy?: string | null;
             /** Id */
             id: string;
             /** Name */
             name: string;
             /** Permissions */
             permissions: string[];
-            /**
-             * Sandbox
-             * @default false
-             */
-            sandbox: boolean;
             /**
              * Status
              * @enum {string}
@@ -1438,19 +1459,56 @@ export interface components {
              */
             type: "ops_ai" | "own";
         };
+        /** AppCredentialDetail */
+        AppCredentialDetail: {
+            /** Accounts */
+            accounts: number;
+            /** Accountslist */
+            accountsList: components["schemas"]["CredentialAccount"][];
+            /** App */
+            app: string;
+            /** Appname */
+            appName: string;
+            /** Clientid */
+            clientId?: string | null;
+            /** Created */
+            created?: string | null;
+            /** Createdby */
+            createdBy?: string | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Permissions */
+            permissions: string[];
+            /** Redirecturi */
+            redirectUri?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "working" | "not_tested" | "failing";
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "ops_ai" | "own";
+            /** Updated */
+            updated?: string | null;
+        };
         /**
          * AppCredentialIn
-         * @description The team's own OAuth app for one of its apps (the New app credential window).
+         * @description The team's own OAuth app for one of its apps (the New app credential window); no account needed.
          */
         AppCredentialIn: {
-            /** Account */
-            account?: string | null;
             /** App */
             app: string;
             /** Clientid */
             clientId: string;
             /** Clientsecret */
-            clientSecret: string;
+            clientSecret?: string | null;
+            /** Name */
+            name?: string | null;
             /** Scopes */
             scopes?: string[] | null;
         };
@@ -1723,6 +1781,8 @@ export interface components {
         };
         /** CardCredential */
         CardCredential: {
+            /** Id */
+            id?: string | null;
             /** Name */
             name: string;
             /**
@@ -1944,6 +2004,37 @@ export interface components {
              */
             status: "draft" | "healthy" | "needs_reconnect" | "expiring" | "revoked" | "error";
         };
+        /**
+         * CredentialAccount
+         * @description An account signing in with an app credential, as its page lists it.
+         */
+        CredentialAccount: {
+            /** Connectedat */
+            connectedAt?: string | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Sandbox
+             * @default false
+             */
+            sandbox: boolean;
+            /**
+             * Signin
+             * @enum {string}
+             */
+            signIn: "team" | "person" | "person_or_team";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "connected" | "not_signed_in" | "expired" | "refused" | "revoked";
+            /** Statereason */
+            stateReason?: string | null;
+            /** Status */
+            status: string;
+        };
         /** CredentialCheck */
         CredentialCheck: {
             health: components["schemas"]["CheckedCredential"];
@@ -2080,9 +2171,9 @@ export interface components {
              */
             success: true;
         };
-        /** Envelope[AppCredential] */
-        Envelope_AppCredential_: {
-            data: components["schemas"]["AppCredential"];
+        /** Envelope[AppCredentialDetail] */
+        Envelope_AppCredentialDetail_: {
+            data: components["schemas"]["AppCredentialDetail"];
             /**
              * Success
              * @constant
@@ -3744,6 +3835,8 @@ export interface components {
             createdAt: string;
             /** Createdby */
             createdBy: string;
+            /** Credentialid */
+            credentialId?: string | null;
             /** Lastusedat */
             lastUsedAt?: string | null;
             /** Name */
@@ -4011,10 +4104,8 @@ export interface components {
         TeamPluginIn: {
             /** Accountname */
             accountName?: string | null;
-            /** Clientid */
-            clientId?: string | null;
-            /** Clientsecret */
-            clientSecret?: string | null;
+            /** Credentialid */
+            credentialId?: string | null;
             /** Credentials */
             credentials?: {
                 [key: string]: string;
@@ -4634,7 +4725,9 @@ export interface operations {
     };
     apps_list_app_credentials: {
         parameters: {
-            query?: never;
+            query?: {
+                app?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -4770,7 +4863,128 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_AppCredential_"];
+                    "application/json": components["schemas"]["Envelope_AppCredentialDetail_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    apps_get_app_credential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credential_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AppCredentialDetail_"];
                 };
             };
             /** @description Invalid request */
@@ -4895,7 +5109,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_AppCredential_"];
+                    "application/json": components["schemas"]["Envelope_AppCredentialDetail_"];
                 };
             };
             /** @description Invalid request */

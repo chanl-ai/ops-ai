@@ -145,12 +145,9 @@ with ExitStack() as stack:
 
     # 2. The team admin turns it on for the team with the team's OAuth app; a builder cannot, nor change a locked field.
     login = sf["authorize_url"].rsplit("/", 1)[0]
-    team_on = {
-        "enabled": True,
-        "settings": {"login_url": login},
-        "clientId": "ops-ai-acme",
-        "clientSecret": CLIENT_SECRET,
-    }
+    own = {"app": f"plugin:{PLUGIN}", "clientId": "ops-ai-acme", "clientSecret": CLIENT_SECRET}
+    credential = (data(gw.post("/v1/app-credentials", json=own, headers=priya)) or {}).get("id")
+    team_on = {"enabled": True, "settings": {"login_url": login}, "credentialId": credential}
     refused = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json=team_on, headers=james)
     turned = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json=team_on, headers=priya)
     view = data(turned) or {}

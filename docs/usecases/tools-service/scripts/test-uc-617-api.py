@@ -19,7 +19,8 @@ with (
     engine_worker("uc-617", AUTH | {"OPS_GATEWAY_URL": f"http://127.0.0.1:{TOOLS_PORT}"}),
 ):
     # 1. A team account the app refuses shows Refused.
-    account = w.turn_on("admin", "test.client", clientId="multi-cc", clientSecret="wrong-secret-0000")
+    wrong = w.credential("admin", "test.client", "multi-cc", "wrong-secret-0000")
+    account = w.turn_on("admin", "test.client", credentialId=wrong)
     failed = w.call("client_get_record", args={"id": "rec-1042"})
     page = data(w.kept(w.gw.get(app_path(APP), headers=w.who["admin"]))) or {}
     team = next((a for a in page.get("accounts") or [] if a.get("id") == account), {})
@@ -128,9 +129,8 @@ with (
 
     # 3d. On a desk whose team account backs its people, Priya (connections.run) runs her own waiting run as the team
     # account, and it reads the record with the team's token.
-    backed = w.turn_on(
-        "admin", "test.person", signIn="person_or_team", clientId="multi-app", clientSecret=w.m["clients"]["multi-app"]
-    )
+    own = w.credential("admin", "test.person", "multi-app", w.m["clients"]["multi-app"])
+    backed = w.turn_on("admin", "test.person", signIn="person_or_team", credentialId=own)
     backed_path = account_path("plugin:test.person", backed)
     revision = (data(w.gw.get(backed_path, headers=w.who["admin"])) or {}).get("revision")
     w.gw.patch(

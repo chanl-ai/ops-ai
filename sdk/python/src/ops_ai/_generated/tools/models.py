@@ -31,8 +31,7 @@ class AccountEvent(TypedDict, closed=True):
 
 
 class AccountIn(TypedDict, closed=True):
-    clientId: NotRequired[str | None]
-    clientSecret: NotRequired[str | None]
+    credentialId: NotRequired[str | None]
     credentials: NotRequired[dict[str, str]]
     kind: NotRequired[str | None]
     name: str
@@ -43,6 +42,7 @@ class AccountIn(TypedDict, closed=True):
 
 class AccountPatchIn(TypedDict, closed=True):
     category: NotRequired[str | None]
+    credentialId: NotRequired[str | None]
     description: NotRequired[str | None]
     docsUrl: NotRequired[str | None]
     name: NotRequired[str | None]
@@ -75,12 +75,12 @@ class AppCredential(TypedDict, closed=True):
     accounts: int
     app: str
     appName: str
-    created: str
-    credentialId: NotRequired[str | None]
+    clientId: NotRequired[str | None]
+    created: NotRequired[str | None]
+    createdBy: NotRequired[str | None]
     id: str
     name: str
     permissions: list[str]
-    sandbox: NotRequired[bool]
     status: Literal["working", "not_tested", "failing"]
     type: Literal["ops_ai", "own"]
 
@@ -89,10 +89,10 @@ Scope: TypeAlias = str
 
 
 class AppCredentialIn(TypedDict, closed=True):
-    account: NotRequired[str | None]
     app: str
     clientId: str
-    clientSecret: str
+    clientSecret: NotRequired[str | None]
+    name: NotRequired[str | None]
     scopes: NotRequired[list[Scope] | None]
 
 
@@ -203,6 +203,7 @@ class CallRunAs(TypedDict, closed=True):
 
 
 class CardCredential(TypedDict, closed=True):
+    id: NotRequired[str | None]
     name: str
     type: Literal["ops_ai", "own"]
 
@@ -297,6 +298,17 @@ class ConnectionRef(TypedDict, closed=True):
     status: Literal["draft", "healthy", "needs_reconnect", "expiring", "revoked", "error"]
 
 
+class CredentialAccount(TypedDict, closed=True):
+    connectedAt: NotRequired[str | None]
+    id: str
+    name: str
+    sandbox: NotRequired[bool]
+    signIn: Literal["team", "person", "person_or_team"]
+    state: Literal["connected", "not_signed_in", "expired", "refused", "revoked"]
+    stateReason: NotRequired[str | None]
+    status: str
+
+
 class CredentialCheck(TypedDict, closed=True):
     health: CheckedCredential
 
@@ -320,11 +332,6 @@ class EntryIn(TypedDict, closed=True):
     protection: NotRequired[Literal["system", "managed"] | None]
     templateId: NotRequired[str | None]
     value: str
-
-
-class EnvelopeAppCredential(TypedDict, closed=True):
-    data: AppCredential
-    success: Literal[True]
 
 
 class EnvelopeAppUsers(TypedDict, closed=True):
@@ -915,8 +922,7 @@ class TakeUpdateIn(TypedDict, closed=True):
 
 class TeamPluginIn(TypedDict, closed=True):
     accountName: NotRequired[str | None]
-    clientId: NotRequired[str | None]
-    clientSecret: NotRequired[str | None]
+    credentialId: NotRequired[str | None]
     credentials: NotRequired[dict[str, str]]
     enabled: bool
     kind: NotRequired[str | None]
@@ -1139,6 +1145,7 @@ class AccountDetail(TypedDict, closed=True):
     authKind: str
     category: NotRequired[str | None]
     certificate: NotRequired[SigningCertificate | None]
+    credentialId: NotRequired[str | None]
     description: NotRequired[str | None]
     docsUrl: NotRequired[str | None]
     health: NotRequired[ConnectionHealth | None]
@@ -1183,6 +1190,23 @@ class AppAccount(TypedDict, closed=True):
     status: str
     statusDetail: NotRequired[str | None]
     test: NotRequired[AccountTest | None]
+
+
+class AppCredentialDetail(TypedDict, closed=True):
+    accounts: int
+    accountsList: list[CredentialAccount]
+    app: str
+    appName: str
+    clientId: NotRequired[str | None]
+    created: NotRequired[str | None]
+    createdBy: NotRequired[str | None]
+    id: str
+    name: str
+    permissions: list[str]
+    redirectUri: NotRequired[str | None]
+    status: Literal["working", "not_tested", "failing"]
+    type: Literal["ops_ai", "own"]
+    updated: NotRequired[str | None]
 
 
 class AuthKind(TypedDict, closed=True):
@@ -1270,6 +1294,11 @@ class EnvelopeAccountDetail(TypedDict, closed=True):
 
 class EnvelopeAllowList(TypedDict, closed=True):
     data: AllowList
+    success: Literal[True]
+
+
+class EnvelopeAppCredentialDetail(TypedDict, closed=True):
+    data: AppCredentialDetail
     success: Literal[True]
 
 
@@ -1573,6 +1602,7 @@ class SecretMeta(TypedDict, closed=True):
     connectionId: NotRequired[str | None]
     createdAt: str
     createdBy: str
+    credentialId: NotRequired[str | None]
     lastUsedAt: NotRequired[str | None]
     name: str
     protection: NotRequired[Literal["system", "managed"] | None]

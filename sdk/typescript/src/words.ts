@@ -78,30 +78,41 @@ export class Apps {
   }
 }
 
-/** How an app signs in: Ops AI's app, or the team's own client. */
+/** How an app signs in: Ops AI's app, or one of the team's own clients (app credentials). */
 export class Credentials {
   constructor(private readonly raw: Raw, private readonly apps: Apps) {}
 
-  /** Each account's credential: Ops AI's app or the team's own client, its permissions, accounts and last test. */
+  /** The team's app credentials and Ops AI's app of each app using it: permissions, accounts and last test. */
   async list(): Promise<Obj[]> {
     return call(this.raw, 'tools', 'apps_list_app_credentials', {});
   }
 
-  /** Adds the team's own client to an app the team set up: its client id, secret and permissions (all when left
-   * out), on the app's default account or `account`. The answer is the credential's row; it never carries the secret. */
-  async create(app: string, o: { clientId: string; clientSecret: string; scopes?: string[]; account?: string }): Promise<Obj> {
-    const body: Obj = { app, clientId: o.clientId, clientSecret: o.clientSecret };
+  /** One app credential with the accounts signing in with it. */
+  async get(credential: string): Promise<Obj> {
+    return call(this.raw, 'tools', 'apps_get_app_credential', { path: { credential_id: credential } });
+  }
+
+  /** The team's own client for an app: its client id, secret and permissions (all when left out), with no account
+   * needed. Accounts pick it by its id (`set`, or credentialId when connected); no answer carries the secret. */
+  async create(app: string, o: { clientId: string; clientSecret?: string; name?: string; scopes?: string[] }): Promise<Obj> {
+    const body: Obj = { app, clientId: o.clientId };
+    if (o.clientSecret) body.clientSecret = o.clientSecret;
+    if (o.name) body.name = o.name;
     if (o.scopes) body.scopes = o.scopes;
-    if (o.account) body.account = o.account;
     return call(this.raw, 'tools', 'apps_create_app_credential', { body });
   }
 
-  async set(app: string, o: { clientId: string; clientSecret?: string; account?: string }): Promise<Obj> {
-    const account = o.account ?? accountOf(await this.apps.get(app));
-    const detail = await call(this.raw, 'tools', 'apps_get_account', { path: at(app, account) });
-    const body: Obj = { revision: detail.revision, settings: { clientId: o.clientId } };
-    if (o.clientSecret) body.secretValues = { clientSecret: o.clientSecret };
-    return call(this.raw, 'tools', 'apps_change_account', { path: at(app, account), body });
+  /** A new client secret for the team's own client; every account on it keeps it. */
+  async replaceSecret(credential: string, clientSecret: string): Promise<Obj> {
+    return call(this.raw, 'tools', 'apps_set_app_credential_secret', { path: { credential_id: credential }, body: { clientSecret } });
+  }
+
+  /** Signs the app's account (its default unless `account`) in with one of the team's credentials, or with null,
+   * Ops AI's app. The account signs in again. */
+  async set(app: string, credential: string | null, { account }: { account?: string } = {}): Promise<Obj> {
+    const found = account ?? accountOf(await this.apps.get(app));
+    const detail = await call(this.raw, 'tools', 'apps_get_account', { path: at(app, found) });
+    return call(this.raw, 'tools', 'apps_change_account', { path: at(app, found), body: { revision: detail.revision, credentialId: credential } });
   }
 
   /** Test with my account: where to send the browser; `finish` hands back what the sign-in page was given. */
@@ -124,7 +135,7 @@ export class Accounts {
   }
 
   /** Another account of an app the team has: a sandbox, which test runs use, or another named one; `fields` are a
-   * plugin account's turn-on fields (credentials, clientId...). */
+   * plugin account's turn-on fields (credentialId, credentials, signIn...). */
   add(app: string, name: string, { sandbox = false, ...fields }: { sandbox?: boolean; [field: string]: unknown } = {}): Promise<Obj> {
     return call(this.raw, 'tools', 'apps_add_account', { path: { app_id: app }, body: { name, sandbox, ...fields } });
   }

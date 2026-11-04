@@ -6,11 +6,10 @@ import { useForm } from 'react-hook-form';
 import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { AppCredentialPicker } from '@/components/connections/app-credential-picker';
 import { appHref } from '@/components/connections/systems-grid';
 import { useSignInWindow } from '@/components/connections/sign-in';
-import { CopyButton } from '@/components/shared/copy-button';
 import { DialogShell } from '@/components/shared/dialog-shell';
-import { FormField } from '@/components/shared/form-field';
 import { FormTextField } from '@/components/shared/form-text-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Badge } from '@/components/ui/badge';
@@ -18,8 +17,6 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Form } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTeam } from '@/hooks/use-team';
 import {
   type AccountBody,
@@ -34,8 +31,6 @@ import {
 import { draftFor, newAccountBody, pluginGroups, turnOnBody, type KindField, type Kinds } from '@/lib/connect-plan';
 import { fieldErrors, schemaForFields } from '@/lib/field-schema';
 
-type App = 'platform' | 'own';
-
 /** A plugin the Connect window connects: one that signs in with an account, through Ops AI's app or the team's own. */
 export function connectsInWindow(card: SystemCard, kinds: Kinds | undefined): boolean {
   const kind = kinds?.kinds.find((k) => k.id === (card.authKind ?? card.plugin?.kinds[0]));
@@ -45,17 +40,20 @@ export function connectsInWindow(card: SystemCard, kinds: Kinds | undefined): bo
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /**
- * The one Connect window for an app that signs in with an account: which app credential (Ops AI's app or
- * the team's own client, reused when the app already has one), the access it asks for, then Authorize. The sign-in
+ * The one Connect window for an app that signs in with an account: which app credential it signs in with (Ops AI's
+ * app or one the team made under Credentials, the account's own when it has one), the access it asks for, then
+ * Authorize. No client is typed here. The sign-in
  * window opens on the click and closes once access is allowed; the account's first test then runs in the background.
  * `another` adds a second named account of an app the team has connected; `sandbox` adds its sandbox account, which
- * test runs use, asking what the first connect asked. Cancel removes what the window made.
+ * test runs use, asking what the first connect asked. `credential` starts it on one app credential (null for Ops AI's
+ * app), as Connect account on a credential's page does. Cancel removes what the window made.
  */
 export function ConnectWindow({
   card,
   kinds,
   another = false,
   sandbox = false,
+  credential,
   open,
   onOpenChange,
 }: {
@@ -63,6 +61,7 @@ export function ConnectWindow({
   kinds: Kinds;
   another?: boolean;
   sandbox?: boolean;
+  credential?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -78,30 +77,23 @@ export function ConnectWindow({
   // Another account of the app: added beside the default one, never through the app's turn-on.
   const adding = another || sandbox;
 
-  // The app credential the team's connection already signs in with, as the app's card names it.
-  const existing = card.connectionId ? card.credential : null;
-  const [newClient, setNewClient] = React.useState(false);
-  // A sandbox signs in elsewhere, so it asks for its app credential as the first connect did.
-  const reusing = Boolean(card.connectionId) && !newClient && !sandbox;
-  // Ops AI's own client exists only where the install set it up; without it the team's own is the one way to sign in.
+  // The app credential the team's connection already signs in with, as the app's card names it; a sandbox signs in
+  // elsewhere, so it picks its own.
+  const reusing = Boolean(card.connectionId) && !sandbox;
+  // Ops AI's own client exists only where the install set it up; without it a team credential is the one way in.
   const managed = card.managedClient ?? Boolean(plugin?.platformApp);
-  const [app, setApp] = React.useState<App>(managed ? 'platform' : 'own');
-  const chosen: App = reusing ? (existing?.type === 'own' ? 'own' : 'platform') : newClient ? 'own' : app;
-  const typing = !reusing && chosen === 'own';
-  // The fields this window asks, as the API describes them: the team's own client when it brings one, and the plugin's
-  // own settings (Salesforce's sign-in address) when the app is first connected; kept after. A sandbox asks the ones
-  // each account keeps its own, as the team's settings stay the app's.
+  const held = reusing && card.credential?.type === 'own' ? (card.credential.id ?? null) : null;
+  const [client, setClient] = React.useState<string | null>(credential !== undefined ? credential : held);
+  // The plugin's own settings (Salesforce's sign-in address) when the app is first connected; kept after. A sandbox
+  // asks the ones each account keeps its own, as the team's settings stay the app's.
   const asked = reusing ? [] : (plugin?.settings ?? []).filter((x) => !x.locked && (!sandbox || x.perAccount));
-  const fields: KindField[] = [
-    ...(plugin && kind ? pluginGroups(kind, kinds, plugin, typing ? 'own' : 'platform').main.filter((f) => f.name === 'clientId' || f.name === 'clientSecret') : []),
-    ...asked.map((x) => ({ name: x.name, label: x.label, secret: x.secret, required: !x.default, advanced: Boolean(x.default), default: x.default })),
-  ];
+  const fields: KindField[] = asked.map((x) => ({ name: x.name, label: x.label, secret: x.secret, required: !x.default, advanced: Boolean(x.default), default: x.default }));
   const schema = schemaForFields(fields);
   const form = useForm<Record<string, string>>({
-    defaultValues: { clientId: '', clientSecret: '', accountName: '', ...Object.fromEntries((plugin?.settings ?? []).map((x) => [x.name, x.default ?? ''])) },
+    defaultValues: { accountName: '', ...Object.fromEntries((plugin?.settings ?? []).map((x) => [x.name, x.default ?? ''])) },
   });
   // Settings with a default wait under More options, so the default path stays the app credential and Authorize.
-  const needed = fields.filter((f) => f.name !== 'clientId' && f.name !== 'clientSecret' && !f.advanced);
+  const needed = fields.filter((f) => !f.advanced);
   const tuned = fields.filter((f) => f.advanced);
 
   // Whose account it is and its name sit under More options; another account or a sandbox opens with them showing.
@@ -163,6 +155,10 @@ export function ConnectWindow({
     const values = form.getValues();
     const errors = fieldErrors(schema.safeParse(values));
     form.clearErrors();
+    if (!managed && client === null) {
+      setError(`Pick the app credential ${card.name} signs in with.`);
+      return;
+    }
     if (Object.keys(errors).length) {
       for (const [name, msg] of Object.entries(errors)) form.setError(name, { type: 'schema', message: msg });
       // A field folded under More options opens it, so its error is seen.
@@ -174,25 +170,19 @@ export function ConnectWindow({
     setError(null);
     setWaiting(true);
     try {
-      const app = typing ? 'own' : 'platform';
-      const draft = draftFor(pluginGroups(kind, kinds, plugin, app));
-      if (typing) {
-        draft.settings.clientId = values.clientId.trim();
-        draft.secrets.clientSecret = values.clientSecret;
-      }
+      const draft = draftFor(pluginGroups(kind, kinds, plugin));
       for (const x of asked.filter((a) => a.perAccount)) draft.settings[x.name] = values[x.name] ?? '';
       const teamSettings = Object.fromEntries(asked.filter((a) => !a.perAccount).map((a) => [a.name, values[a.name] ?? '']));
       const accountName = (values.accountName ?? '').trim() || suggested;
       const offered = team ? (plugin.signIn.includes('person_or_team') ? 'person_or_team' : undefined) : plugin.signIn.includes('person') ? 'person' : undefined;
       let id: string;
       if (adding) {
-        const body = newAccountBody(kind, plugin, app, draft, accountName, sandbox, offered) as AccountBody;
+        const body = newAccountBody(kind, plugin, client, draft, accountName, sandbox, offered) as AccountBody;
         const account = await addAccount.mutateAsync({ appId: card.id, body });
         id = account.id;
         made.current = { id, turnedOn: false };
       } else {
-        // A later turn-on that names no client keeps the app credential the team's default account already has.
-        const body = { ...turnOnBody(kind, plugin, app, draft, teamSettings, !card.connectionId, offered), accountName } as TeamAppBody;
+        const body = { ...turnOnBody(kind, plugin, client, draft, teamSettings, !card.connectionId, offered), accountName } as TeamAppBody;
         const view = await setTeamApp.mutateAsync({ appId: card.id, body });
         id = String(view.connectionId ?? card.connectionId ?? '');
         made.current = { id: card.connectionId ? null : id, turnedOn: true };
@@ -216,7 +206,6 @@ export function ConnectWindow({
     <DialogShell
       open={open}
       onOpenChange={(o) => (o ? onOpenChange(o) : void cancel())}
-      // Wider than the default: the client fields sit side by side, and the return address reads in full.
       size="md"
       title={sandbox ? `Add a ${card.name} sandbox account` : another ? `Connect another ${card.name} account` : `Connect ${card.name}`}
       description={`Choose how Ops AI signs in to ${card.name}, then allow access.`}
@@ -235,62 +224,13 @@ export function ConnectWindow({
     >
       <Form {...form}>
       <div className="flex min-w-0 flex-col gap-4">
-        {reusing ? (
-          <div className="flex flex-col gap-1 rounded-md border p-3 text-sm" data-testid="connect-window-reuse">
-            <p>
-              Continuing with <span className="font-medium">{existing?.name ?? `${card.name}’s app credential`}</span>
-            </p>
-            <p className="text-xs text-muted-foreground">{chosen === 'own' ? 'Your own app' : 'Ops AI’s app'}</p>
-            <Button type="button" variant="link" size="sm" className="h-auto justify-start p-0" onClick={() => setNewClient(true)} data-testid="connect-window-new-client">
-              Use a new client of your own
-            </Button>
-          </div>
-        ) : newClient ? null : !managed ? (
-          <div className="flex flex-col gap-1 rounded-md border p-3 text-sm" data-testid="connect-window-own-only">
-            <p>{card.name} signs in with your team’s own app: register one with {card.name} and give its client ID and secret.</p>
-            {card.mayManage && <p className="text-xs text-muted-foreground">Ops AI’s app is not set up for this install. An install admin sets it in the install’s configuration.</p>}
-          </div>
-        ) : (
-          <Tabs value={app} onValueChange={(v) => setApp(v as App)}>
-            <TabsList className="w-full" data-testid="connect-window-app">
-              {/* Ops AI's app is offered once an account admin has set it up for this plugin. */}
-              <TabsTrigger value="platform" className="flex-1" disabled={!plugin.platformApp} data-testid="connect-window-app-platform">
-                Ops AI’s app
-              </TabsTrigger>
-              <TabsTrigger value="own" className="flex-1" data-testid="connect-window-app-own">
-                Your own app
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        )}
+        <AppCredentialPicker app={card.id} value={client} onChange={setClient} platform={managed && Boolean(plugin.platformApp)} id="connect-window-app" testId="connect-window-app" />
 
         {needed.map(setting)}
 
-        {typing && (
-          <div className="flex flex-col gap-3" data-testid="connect-window-client">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FormTextField control={form.control} name="clientId" label="Client ID" testId="connect-window-client-id" />
-              <FormTextField control={form.control} name="clientSecret" label="Client secret" type="password" hint="Sealed when saved; never shown again." testId="connect-window-client-secret" />
-            </div>
-            {kinds.redirectUri && (
-              <FormField id="connect-return" label="Return address" hint={`Register it on your ${card.name} app.`}>
-                <div className="flex min-w-0 items-center gap-1">
-                  <Input id="connect-return" readOnly value={kinds.redirectUri} className="font-mono text-xs" />
-                  <CopyButton text={kinds.redirectUri} />
-                </div>
-              </FormField>
-            )}
-            {card.docsUrl && (
-              <a href={card.docsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm underline-offset-4 hover:underline">
-                Where to find these for {card.name} <ExternalLink className="size-3.5" />
-              </a>
-            )}
-          </div>
-        )}
-
         {plugin.scopes.length > 0 && (
           <div className="flex flex-col gap-1.5" data-testid="connect-window-scopes">
-            <p className="text-sm text-muted-foreground">{chosen === 'own' ? `Your ${card.name} app asks for:` : `Ops AI’s ${card.name} app gets access to:`}</p>
+            <p className="text-sm text-muted-foreground">{client ? `Your ${card.name} app asks for:` : `Ops AI’s ${card.name} app gets access to:`}</p>
             <div className="flex flex-wrap gap-1.5">
               {plugin.scopes.map((s) => (
                 <Badge key={s} variant="outline" className="font-mono">

@@ -215,8 +215,11 @@ export function reduce(s: DialogState, a: Action): DialogState {
   }
 }
 
-/** Which app a plugin that signs in uses: the platform's, set up once by an account admin, or the team's own. */
-export type App = 'platform' | 'own';
+/**
+ * The OAuth client a plugin's account signs in with: the id of one of the team's app credentials (made under
+ * Credentials), `null` for Ops AI's app, or `undefined` to keep the one the account has (a later turn-on).
+ */
+export type Client = string | null | undefined;
 
 /** What the connect dialog reads from a plugin's app card (`GET /v1/apps`). */
 export interface PluginSpec {
@@ -227,16 +230,13 @@ export interface PluginSpec {
   signIn?: string[];
 }
 
-const CLIENT_ID: KindField = { name: 'clientId', label: 'Client ID', secret: false, required: true, advanced: false };
-const CLIENT_SECRET: KindField = { name: 'clientSecret', label: 'Client secret', secret: true, required: true, advanced: false };
-
 /**
- * A plugin account's groups of fields. A kind that signs in asks for the team's own app (client ID and secret) unless
- * the platform's app is chosen, plus the settings each account keeps its own (a sandbox's sign-in address); any other
- * kind asks for its own fields, which the plugin keeps as the account's credentials. The system's address and test
- * address come from the plugin, so they are never asked.
+ * A plugin account's groups of fields. A kind that signs in asks only for the settings each account keeps its own (a
+ * sandbox's sign-in address): its OAuth client is an app credential, picked, never typed here. Any other kind asks
+ * for its own fields, which the plugin keeps as the account's credentials. The system's address and test address come
+ * from the plugin, so they are never asked.
  */
-export function pluginGroups(kind: Kind, kinds: Kinds, plugin: PluginSpec, app: App, saved = false): FieldGroups {
+export function pluginGroups(kind: Kind, kinds: Kinds, plugin: PluginSpec, saved = false): FieldGroups {
   // An account already set keeps its saved values, which it does not send back: its fields start blank and a blank
   // one is left out of the save, so saving without retyping never resets a value to its default.
   const perAccount: KindField[] = plugin.settings
@@ -246,28 +246,28 @@ export function pluginGroups(kind: Kind, kinds: Kinds, plugin: PluginSpec, app: 
         ? { name: s.name, label: s.label, secret: s.secret, required: false, advanced: false, default: null, help: 'Blank keeps the saved value.' }
         : { name: s.name, label: s.label, secret: s.secret, required: !s.default, advanced: false, default: s.default },
     );
-  const client = saved ? [CLIENT_ID, CLIENT_SECRET].map((f) => ({ ...f, required: false, help: 'Blank keeps the saved value.' })) : [CLIENT_ID, CLIENT_SECRET];
-  if (kind.signsIn) return { main: [...(app === 'own' ? client : []), ...perAccount], more: [] };
-  // A field the plugin fixes (how its key is sent) is never asked: what a team typed would replace it.
-  const asked = kind.fields.filter((f) => !plugin.fixed.includes(f.name));
+  if (kind.signsIn) return { main: perAccount, more: [] };
+  // A field the plugin fixes (how its key is sent) is never asked: what a team typed would replace it. Nor is the
+  // OAuth client of a kind that fetches a token with it: that is an app credential, picked.
+  const asked = kind.fields.filter((f) => !plugin.fixed.includes(f.name) && !(kind.holdsToken && CLIENT_FIELDS.includes(f.name)));
   return { main: [...asked.filter((f) => !f.advanced), ...perAccount], more: [...asked.filter((f) => f.advanced), ...kinds.certificate] };
 }
+
+// The OAuth client's fields, an app credential's: never typed into an account.
+const CLIENT_FIELDS = ['clientId', 'clientSecret'];
 
 const filled = (o: Record<string, string>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v.trim() !== ''));
 
 /**
- * One plugin account's own keys from a draft: the settings it keeps its own, the team's app when its own is chosen,
- * and for a kind that does not sign in the kind's fields as credentials.
+ * One plugin account's own keys from a draft: the settings it keeps its own, the app credential it signs in with when
+ * one is picked (a kind that signs in or fetches a token), and for a kind that does not sign in the kind's fields as
+ * credentials.
  */
-export function pluginKeys(kind: Kind, plugin: PluginSpec, app: App, draft: Draft): Record<string, unknown> {
+export function pluginKeys(kind: Kind, plugin: PluginSpec, client: Client, draft: Draft): Record<string, unknown> {
   const own = new Set(plugin.settings.filter((s) => s.perAccount).map((s) => s.name));
   const keys: Record<string, unknown> = { settings: filled(Object.fromEntries(Object.entries(draft.settings).filter(([k]) => own.has(k)))) };
-  if (kind.signsIn) {
-    if (app === 'own')
-      Object.assign(keys, { clientId: draft.settings.clientId, ...(draft.secrets.clientSecret ? { clientSecret: draft.secrets.clientSecret } : {}) });
-  } else {
-    keys.credentials = filled({ ...Object.fromEntries(Object.entries(draft.settings).filter(([k]) => !own.has(k))), ...draft.secrets });
-  }
+  if (!kind.signsIn) keys.credentials = filled({ ...Object.fromEntries(Object.entries(draft.settings).filter(([k]) => !own.has(k))), ...draft.secrets });
+  if ((kind.signsIn || kind.holdsToken) && client !== undefined) keys.credentialId = client;
   return keys;
 }
 
@@ -275,13 +275,13 @@ export function pluginKeys(kind: Kind, plugin: PluginSpec, app: App, draft: Draf
 export function turnOnBody(
   kind: Kind,
   plugin: PluginSpec,
-  app: App,
+  client: Client,
   draft: Draft,
   team: Record<string, string>,
   first: boolean,
   signIn?: string,
 ): Record<string, unknown> {
-  const keys = pluginKeys(kind, plugin, app, draft);
+  const keys = pluginKeys(kind, plugin, client, draft);
   // The kind and whose account calls use are chosen at the first turn-on, when the team's default account is made.
   return {
     enabled: true,
@@ -293,6 +293,6 @@ export function turnOnBody(
 }
 
 /** The `POST /v1/apps/plugin:{id}/accounts` body for another account of the plugin's app, a sandbox or a named one. */
-export function newAccountBody(kind: Kind, plugin: PluginSpec, app: App, draft: Draft, name: string, sandbox: boolean, signIn?: string): Record<string, unknown> {
-  return { name, sandbox, kind: kind.id, ...(signIn ? { signIn } : {}), ...pluginKeys(kind, plugin, app, draft) };
+export function newAccountBody(kind: Kind, plugin: PluginSpec, client: Client, draft: Draft, name: string, sandbox: boolean, signIn?: string): Record<string, unknown> {
+  return { name, sandbox, kind: kind.id, ...(signIn ? { signIn } : {}), ...pluginKeys(kind, plugin, client, draft) };
 }

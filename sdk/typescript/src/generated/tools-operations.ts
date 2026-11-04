@@ -131,6 +131,17 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "apps_get_app_credential": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/app-credentials/{credential_id}",
+    "pathParams": [
+      "credential_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "apps_give_own_credentials": {
     "body": "json",
     "headers": [],
@@ -157,7 +168,9 @@ export const toolsOperations = {
     "method": "GET",
     "path": "/v1/app-credentials",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "app"
+    ],
     "stream": false
   },
   "apps_list_apps": {

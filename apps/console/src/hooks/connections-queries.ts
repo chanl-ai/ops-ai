@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
-import type { AccountRef, AppCredentialInput, SignInAccount } from '@/lib/types/connections';
+import type { AccountRef, SignInAccount } from '@/lib/types/connections';
 import { useTeamQuery } from './team-query';
 
 const KEY = ['connections'] as const;
@@ -40,14 +40,6 @@ export const useGiveOwn = () =>
   useConnectionMutation((i: { connectionId: string; credentials: Record<string, string> }) => api.connections.giveOwn(i.connectionId, { credentials: i.credentials }));
 export const useDisconnect = () => useConnectionMutation((connectionId: string) => api.connections.disconnect(connectionId));
 
-/** The team's own client for an app; the Apps pages and Credentials read again after it. */
-export function useCreateAppCredential() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (i: AppCredentialInput) => api.connections.createAppCredential(i),
-    onSuccess: () => void Promise.all([qc.invalidateQueries({ queryKey: KEY }), qc.invalidateQueries({ queryKey: ['systems'] })]),
-  });
-}
 /** Test with my account: its start (where to sign in) and its finish (the result, kept as the credential's status). */
 export const useStartCredentialCheck = () => useMutation({ mutationFn: (ref: AccountRef) => api.connections.startCredentialCheck(ref) });
 export function useFinishCredentialCheck(ref: AccountRef | null) {

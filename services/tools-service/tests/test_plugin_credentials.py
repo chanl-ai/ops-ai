@@ -35,7 +35,7 @@ from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.store.secrets import SecretStore
 
-from .conftest import CONSOLE_URL, build_app, credentials, response_checker
+from .conftest import CONSOLE_URL, build_app, credentials, response_checker, team_credential
 from .plugin_desk import plugin as desk
 from .test_personal_sign_in import SETTINGS, AnyUrl, module
 from .test_plugins import ID
@@ -110,7 +110,10 @@ async def test_a_team_with_no_app_of_its_own_signs_in_with_the_platforms(rig: Ri
 
 async def test_a_teams_own_app_wins_over_the_platforms(rig: Rig, tenant: str) -> None:
     client, connections, _ = rig
-    own = {"enabled": True, "clientId": "team-client-id", "clientSecret": TEAM_SECRET}
+    own = {
+        "enabled": True,
+        "credentialId": await team_credential(client, team_admin(tenant), APP, "team-client-id", TEAM_SECRET),
+    }
     on = await client.put(f"/v1/apps/{APP}/team", json=own, headers=team_admin(tenant))
     assert on.status_code == 200, on.text
     conn = await _account(connections, tenant, on.json()["data"]["connectionId"])
@@ -160,7 +163,10 @@ async def test_ops_ais_secret_is_set_only_by_the_install_and_no_read_shows_it(ri
 
 async def test_a_teams_own_client_is_kept_once_in_app_credentials(rig: Rig, engine: AsyncEngine, tenant: str) -> None:
     client, _, _ = rig
-    own = {"enabled": True, "clientId": "team-client-id", "clientSecret": TEAM_SECRET}
+    own = {
+        "enabled": True,
+        "credentialId": await team_credential(client, team_admin(tenant), APP, "team-client-id", TEAM_SECRET),
+    }
     on = await client.put(f"/v1/apps/{APP}/team", json=own, headers=team_admin(tenant))
     assert on.status_code == 200, on.text
     conn_id = on.json()["data"]["connectionId"]

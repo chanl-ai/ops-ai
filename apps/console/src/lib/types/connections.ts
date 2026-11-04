@@ -131,32 +131,6 @@ export interface ConnectionRequired {
   expiresAt?: string;
 }
 
-/** One row of Apps › Credentials: how one of the team's apps signs in, never its secret. */
-export interface AppCredentialRow {
-  /** The account the credential is set on. */
-  id: string;
-  name: string;
-  /** The app as the Apps page names it: `plugin:<id>`, or a custom app's connection id. */
-  app: string;
-  appName: string;
-  type: 'ops_ai' | 'own';
-  permissions: string[];
-  accounts: number;
-  status: 'working' | 'not_tested' | 'failing';
-  created: string;
-}
-
-/** The team's own OAuth client for one of its apps, as the New app credential window sends it. */
-export interface AppCredentialInput {
-  app: string;
-  clientId: string;
-  clientSecret: string;
-  /** Among the app's own; left out, all of them. */
-  scopes?: string[];
-  /** The app's account to set it on; left out, the app's default account. */
-  account?: string;
-}
-
 /** Test with my account: whether signing in through the app credential worked, and as whom. */
 export interface CredentialCheck {
   health: { status: 'ok' | 'failed'; account?: string | null; message?: string | null; at: string; by: string };

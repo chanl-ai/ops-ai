@@ -57,8 +57,8 @@ class AccountIn(_In):
     sandbox: bool = False
     # A plugin's settings this account keeps its own, such as a sandbox's sign-in address.
     settings: dict[str, Any] = Field(default_factory=dict[str, Any])
-    client_id: str | None = Field(default=None, max_length=500)
-    client_secret: str | None = Field(default=None, max_length=2000)
+    # The team's app credential (GET /v1/app-credentials) the account signs in with; left out, Ops AI's app.
+    credential_id: str | None = Field(default=None, min_length=1, max_length=64)
     sign_in: str | None = None
     kind: str | None = Field(default=None, max_length=50)
     # The kind's own fields and the client certificate's (auth/kinds.py), secret parts included. A secret part is
@@ -79,6 +79,9 @@ class AccountPatchIn(_In):
     category: str | None = Field(default=None, max_length=80)
     description: str | None = Field(default=None, max_length=300)
     docs_url: str | None = Field(default=None, max_length=500, pattern=r"^https://\S+$")
+    # The team's app credential the account signs in with instead of the one it has; null puts it on Ops AI's app.
+    # Its accounts sign in again.
+    credential_id: str | None = Field(default=None, min_length=1, max_length=64)
     # The kind's plain settings and the client certificate's (GET /v1/connection-kinds lists them).
     settings: dict[str, Any] | None = None
     # Secret parts by field name; one left out keeps its stored value.
@@ -314,6 +317,8 @@ class AccountDetail(AccountRow):
     certificate: SigningCertificate | None = None
     # The plugin whose platform app the account signs in with (c-565); null on the team's own app.
     platform_app: str | None = None
+    # The team's app credential it signs in with; null on Ops AI's app or a kind with no OAuth client.
+    credential_id: str | None = None
     # An app from a plugin: its settings here as a call reads them, and for a secret one only whether it is set.
     plugin_settings: dict[str, Any] | None = None
     plugin_secrets: dict[str, bool] | None = None

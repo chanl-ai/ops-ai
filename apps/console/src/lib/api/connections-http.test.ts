@@ -26,11 +26,10 @@ test('every connections call is a route tools-service serves', async () => {
     c.mine(true),
     c.giveOwn('conn_1', { credentials: { key: 'k' } }),
     c.disconnect('conn_1'),
-    c.createAppCredential({ app: 'plugin:salesforce', clientId: 'id', clientSecret: 's' }),
     c.startCredentialCheck(account),
     c.finishCredentialCheck(account, { state: 's', code: 'c' }),
   ]);
   const missing = calls.filter((call) => !served.some((s) => s.method === call.method && s.path.test(call.path)));
-  assert.equal(calls.length, 11);
+  assert.equal(calls.length, 10);
   assert.deepEqual(missing, []);
 });

@@ -75,6 +75,13 @@ def error(r: httpx.Response) -> dict[str, Any]:
     return dict(found or {})
 
 
+def credential(gw: httpx.Client, who: dict[str, str], plugin: str, client_id: str, secret: str | None = None) -> str:
+    """The team's own OAuth client for `plugin`, made under Credentials with no account; its id, which a turn-on names
+    as credentialId."""
+    body = {"app": f"plugin:{plugin}", "clientId": client_id, **({"clientSecret": secret} if secret else {})}
+    return str((data(kept(gw.post("/v1/app-credentials", json=body, headers=who))) or {}).get("id") or "cred_missing")
+
+
 def turn_on(gw: httpx.Client, who: dict[str, str], plugin: str, **body: Any) -> httpx.Response:
     return kept(gw.put(f"/v1/apps/plugin:{plugin}/team", json={"enabled": True, **body}, headers=who))
 
@@ -190,7 +197,12 @@ with ExitStack() as stack:
     )  # fmt: skip
 
     # 7. S3: a Zoom-style token call sends the client as basic auth, never in the form, and the call runs.
-    zoom = turn_on(gw, priya, "test.fields-zoom", clientId="multi-zoom", clientSecret=CLIENTS["multi-zoom"])
+    zoom = turn_on(
+        gw,
+        priya,
+        "test.fields-zoom",
+        credentialId=credential(gw, priya, "test.fields-zoom", "multi-zoom", CLIENTS["multi-zoom"]),
+    )
     zoomed = call(gw, "fields_zoom_get_record", {"id": "rec-1042"})
     asked = [r for r in fake.state()["token_requests"] if r["client"] == "multi-zoom"]
     check(
@@ -202,8 +214,7 @@ with ExitStack() as stack:
 
     # 8. S3 and S4: the team's sign-in address carries the plugin's parameters and not one of the platform's own is
     # replaced; the lookup after sign-in finds the site, and the call reaches it.
-    sites_on = turn_on(gw, priya, "test.fields-sites", signIn="person_or_team", clientId="multi-app",
-                       clientSecret=CLIENTS["multi-app"])  # fmt: skip
+    sites_on = turn_on(gw, priya, "test.fields-sites", signIn="person_or_team", credentialId=credential(gw, priya, "test.fields-sites", "multi-app", CLIENTS["multi-app"]))  # fmt: skip
     sites_id = str((data(sites_on) or {}).get("connectionId") or "con_missing")
     # The team's account signs the calls a run makes with nobody behind it (the team backup).
     sites = f"/v1/apps/plugin:test.fields-sites/accounts/{sites_id}"
@@ -281,7 +292,10 @@ with ExitStack() as stack:
         gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-584"}, headers=sam)
     gw.post("/v1/egress/ranges", json={"value": sf["range"], "note": "uc-584"}, headers=sam)
     login = sf["authorize_url"].rsplit("/", 1)[0]
-    team_on = {"settings": {"login_url": login}, "clientId": "ops-ai-acme", "clientSecret": "s3"}
+    team_on = {
+        "settings": {"login_url": login},
+        "credentialId": credential(gw, priya, "opsai.salesforce", "ops-ai-acme", "s3"),
+    }
     turned = turn_on(gw, priya, "opsai.salesforce", **team_on)
     sf_id = str((data(turned) or {}).get("connectionId") or "con_missing")
     _, sf_done = sign_in(gw, sf["sign_in"], priya, at("opsai.salesforce", sf_id), "acme.integration")

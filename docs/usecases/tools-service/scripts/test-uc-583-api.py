@@ -71,6 +71,13 @@ def error(r: httpx.Response) -> dict[str, Any]:
     return dict(found or {})
 
 
+def credential(gw: httpx.Client, who: dict[str, str], plugin: str, client_id: str, secret: str | None = None) -> str:
+    """The team's own OAuth client for `plugin`, made under Credentials with no account; its id, which a turn-on names
+    as credentialId."""
+    body = {"app": f"plugin:{plugin}", "clientId": client_id, **({"clientSecret": secret} if secret else {})}
+    return str((data(kept(gw.post("/v1/app-credentials", json=body, headers=who))) or {}).get("id") or "cred_missing")
+
+
 def turn_on(gw: httpx.Client, who: dict[str, str], plugin: str, **body: Any) -> httpx.Response:
     return kept(gw.put(f"/v1/apps/plugin:{plugin}/team", json={"enabled": True, **body}, headers=who))
 
@@ -151,7 +158,13 @@ with ExitStack() as stack:
     # S1. An Entra app proves itself with its certificate: no client secret is sent, and the call runs.
     pair = entra["pair"]
     signed = {"clientAuth": "private_key_jwt", "signingCertificate": pair.cert, "signingKey": pair.key}
-    on = turn_on(gw, priya, "test.entra", clientId=entra["client_id"], credentials=signed)
+    on = turn_on(
+        gw,
+        priya,
+        "test.entra",
+        credentialId=credential(gw, priya, "test.entra", entra["client_id"]),
+        credentials=signed,
+    )
     entra_id = made(on, "test.entra")
     tested = health(gw, priya, entra_id)
     called = call(gw, "entra_get_record")
@@ -168,10 +181,10 @@ with ExitStack() as stack:
 
     # S2. Service accounts whose grant is the signed JWT: Google (scopes as a claim) and DocuSign (acting as a user).
     g_pair = google["pair"]
-    g_on = turn_on(gw, priya, "test.google", clientId=google["client_id"],
+    g_on = turn_on(gw, priya, "test.google", credentialId=credential(gw, priya, "test.google", google["client_id"]),
                    credentials={"scopeIn": "claim", "signingKey": g_pair.key})  # fmt: skip
     d_pair = docusign["pair"]
-    d_on = turn_on(gw, priya, "test.docusign", clientId=docusign["client_id"],
+    d_on = turn_on(gw, priya, "test.docusign", credentialId=credential(gw, priya, "test.docusign", docusign["client_id"]),
                    credentials={"subject": "user-5c0e2a", "audience": "account-d.docusign.com",
                                 "signingCertificate": d_pair.cert, "signingKey": d_pair.key})  # fmt: skip
     g_call, d_call = call(gw, "google_get_record"), call(gw, "docusign_get_record")
@@ -208,7 +221,7 @@ with ExitStack() as stack:
     # Then through the platform: a team uploads a pair the app was never registered with.
     other = m["unregistered"]
     before = len(requests_to(fake, "entra"))
-    wrong_on = turn_on(gw, wanjiru, "test.entra", clientId=entra["client_id"],
+    wrong_on = turn_on(gw, wanjiru, "test.entra", credentialId=credential(gw, wanjiru, "test.entra", entra["client_id"]),
                        credentials={"clientAuth": "private_key_jwt", "signingCertificate": other.cert,
                                     "signingKey": other.key})  # fmt: skip
     wrong_id = made(wrong_on, "test.entra")
@@ -226,13 +239,13 @@ with ExitStack() as stack:
     )  # fmt: skip
 
     # S4. The pair at save, the certificate on every read, and an expired one.
-    mixed = turn_on(gw, wanjiru, "test.google", clientId=google["client_id"],
+    mixed = turn_on(gw, wanjiru, "test.google", credentialId=credential(gw, wanjiru, "test.google", google["client_id"]),
                     credentials={"signingCertificate": entra["pair"].cert, "signingKey": g_pair.key})  # fmt: skip
     read = connection(gw, priya, entra_id)
     shown = read.get("certificate") or {}
     expiring = make_pair("ops-ai-acme-app", days=-1)
     old_before = len(fake.state()["token_requests"])
-    old_on = turn_on(gw, wanjiru, "test.docusign", clientId=docusign["client_id"],
+    old_on = turn_on(gw, wanjiru, "test.docusign", credentialId=credential(gw, wanjiru, "test.docusign", docusign["client_id"]),
                      credentials={"subject": "user-5c0e2a", "audience": "account-d.docusign.com",
                                   "signingCertificate": expiring.cert, "signingKey": expiring.key})  # fmt: skip
     old_id = made(old_on, "test.docusign")

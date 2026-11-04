@@ -22,7 +22,7 @@ from ops_tools.store.egress import EgressStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
 
-from .conftest import build_app, response_checker
+from .conftest import build_app, response_checker, team_credential
 from .plugin_desk import plugin as desk
 from .plugin_kinds.kinds_header_key import plugin as header_key
 from .test_plugin_credentials import INSTALL
@@ -94,7 +94,9 @@ async def test_a_module_and_the_connection_it_uses_are_one_card(
 
 async def test_a_plugins_connection_is_part_of_the_plugins_card(client: httpx.AsyncClient, tenant: str) -> None:
     on = await client.put(
-        f"/v1/apps/plugin:{ID}/team", json={"enabled": True, "clientId": "app"}, headers=admin(tenant)
+        f"/v1/apps/plugin:{ID}/team",
+        json={"enabled": True, "credentialId": await team_credential(client, admin(tenant), f"plugin:{ID}")},
+        headers=admin(tenant),
     )
     conn_id = on.json()["data"]["connectionId"]
     cards = await systems(client, tenant)
@@ -155,7 +157,9 @@ async def test_an_apps_page_is_one_answer_with_its_card_connection_tools_and_who
     """The app's page (c-607) shows its accounts, tools, skills, usage and settings from one answer, so the console
     never joins the systems, connection, module and plugin lists itself; another team's app is not found."""
     on = await client.put(
-        f"/v1/apps/plugin:{ID}/team", json={"enabled": True, "clientId": "app"}, headers=admin(tenant)
+        f"/v1/apps/plugin:{ID}/team",
+        json={"enabled": True, "credentialId": await team_credential(client, admin(tenant), f"plugin:{ID}")},
+        headers=admin(tenant),
     )
     assert on.status_code == 200, on.text
     got = await client.get(f"/v1/apps/plugin:{ID}", headers=admin(tenant))
@@ -207,7 +211,9 @@ async def test_the_apps_grid_lists_no_built_in_app_or_connection_made_for_a_tool
 
 async def _turned_on(client: httpx.AsyncClient, tenant: str) -> str:
     on = await client.put(
-        f"/v1/apps/plugin:{ID}/team", json={"enabled": True, "clientId": "app"}, headers=admin(tenant)
+        f"/v1/apps/plugin:{ID}/team",
+        json={"enabled": True, "credentialId": await team_credential(client, admin(tenant), f"plugin:{ID}")},
+        headers=admin(tenant),
     )
     assert on.status_code == 200, on.text
     return str(on.json()["data"]["connectionId"])

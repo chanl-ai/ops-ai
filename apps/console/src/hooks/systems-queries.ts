@@ -91,6 +91,8 @@ export const useTestAccount = () =>
   useSystemsMutation((a: AccountRef & { account?: 'team' | 'self' }) =>
     sdk((ops) => ops.raw.tools.apps_test_account({ path: path(a), body: { account: a.account ?? 'team' } })),
   );
+/** Ends the team account's sign-in on an account (POST …/sign-out); it stays, and signs in again with Reconnect. */
+export const useSignOutTeam = () => useSystemsMutation((a: AccountRef) => sdk((ops) => ops.raw.tools.apps_sign_out({ path: path(a) })));
 export const useStartSignIn = () =>
   useMutation({
     mutationFn: (a: AccountRef & { account: 'team' | 'self' }) =>
@@ -111,8 +113,19 @@ export const useAppUsers = (appId: string | null) =>
  * its permissions, how many accounts signed in through it, and its state from the last Test with my account.
  */
 export type AppCredential = Data<'apps_list_app_credentials'>[number];
-export const useAppCredentials = () =>
-  useTeamQuery({ queryKey: [...SYSTEMS, 'app-credentials'], queryFn: () => sdk((ops) => ops.raw.tools.apps_list_app_credentials()) });
+/** `app` keeps one app's credentials (a picker's), filtered by the API. */
+export const useAppCredentials = (app?: string) =>
+  useTeamQuery({
+    queryKey: [...SYSTEMS, 'app-credentials', app ?? null],
+    queryFn: () => sdk((ops) => ops.raw.tools.apps_list_app_credentials(app ? { query: { app } } : undefined)),
+  });
+/** One app credential's page (GET /v1/app-credentials/{id}): its row and the accounts signing in with it, joined. */
+export type AppCredentialDetail = Data<'apps_get_app_credential'>;
+export const useAppCredential = (id: string) =>
+  useTeamQuery({ queryKey: [...SYSTEMS, 'app-credentials', 'one', id], queryFn: () => sdk((ops) => ops.raw.tools.apps_get_app_credential({ path: { credential_id: id } })) });
+/** The team's own client for an app (POST /v1/app-credentials), made with no account; answers its page. */
+export const useCreateAppCredential = () =>
+  useSystemsMutation((body: Args<'apps_create_app_credential'>['body']) => sdk((ops) => ops.raw.tools.apps_create_app_credential({ body })));
 /** Replaces the client secret of the team's own app credential (PUT /v1/app-credentials/{id}/secret); sealed on save. */
 export const useSetCredentialSecret = () =>
   useSystemsMutation((a: Args<'apps_set_app_credential_secret'>) => sdk((ops) => ops.raw.tools.apps_set_app_credential_secret(a)));

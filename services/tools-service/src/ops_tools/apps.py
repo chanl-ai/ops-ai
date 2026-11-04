@@ -9,6 +9,7 @@ part of the plugin's card, so no app shows twice. Every read is the caller's tea
 
 # No `from __future__ import annotations`: FastAPI resolves the `Depends(caller)` annotations at import.
 
+import uuid
 from collections import Counter
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, cast
@@ -46,7 +47,7 @@ from .modules.tool_users import ToolUsers
 from .plugins.host import PluginHost, fixed_fields, module_id_of, per_account, plugin_id_of
 from .plugins.routes import PluginAccounts, TeamPluginIn
 from .plugins.templates import view_of
-from .store.connections import ConnectionStore, plugin_app, plugin_of
+from .store.connections import plugin_app, plugin_of
 from .store.modules import ModuleStore
 from .store.team_defaults import TeamDefaults
 
@@ -90,6 +91,8 @@ REMOVED = "This app is no longer installed, so its tools are off. An admin insta
 
 
 class CardCredential(Out):
+    # The team's app credential's id (its page under Credentials); none on Ops AI's app.
+    id: str | None = None
     name: str
     type: Literal["ops_ai", "own"]
 
@@ -140,36 +143,59 @@ CHECKED = "credential_checked"
 
 
 class AppCredential(Out):
-    """How one of the team's accounts signs in (c-616 C0): Ops AI's app or the team's own OAuth client, never its
-    secret."""
+    """One OAuth client the team's apps sign in with: one of the team's own (app_credentials, made under Credentials)
+    or Ops AI's app for an app whose accounts use it. Never its secret."""
 
-    # The account the credential is set on; the Credentials page opens it.
+    # The team's credential's id; `ops-ai:<app>` for Ops AI's app of one app.
     id: str
-    # The team's own client's row (app_credentials), whose secret Replace changes; none on Ops AI's app.
-    credential_id: str | None = None
     name: str
     app: str
     app_name: str
     type: Literal["ops_ai", "own"]
-    sandbox: bool = False
+    # The client id; none for Ops AI's app, which the install keeps.
+    client_id: str | None = None
     permissions: list[str]
-    # Accounts signed in through it: the team account and each person's.
+    # The team's accounts signing in with it.
     accounts: int
     status: CredentialStatus
-    created: str
+    created: str | None = None
+    created_by: str | None = None
+
+
+class CredentialAccount(Out):
+    """An account signing in with an app credential, as its page lists it."""
+
+    id: str
+    name: str
+    sandbox: bool = False
+    state: AccountState
+    status: str
+    state_reason: str | None = None
+    # Who signs in on it: the team account, each person, or each person with the team's as backup.
+    sign_in: Literal["team", "person", "person_or_team"]
+    # When the team account last signed in; none before it has.
+    connected_at: str | None = None
+
+
+class AppCredentialDetail(AppCredential):
+    accounts_list: list[CredentialAccount]
+    # The address to register with the app's sign-in.
+    redirect_uri: str | None = None
+    updated: str | None = None
 
 
 class AppCredentialIn(In):
-    """The team's own OAuth app for one of its apps (the New app credential window)."""
+    """The team's own OAuth app for one of its apps (the New app credential window); no account needed."""
 
     # The app as the Apps page names it: `plugin:<id>` for an app from a plugin, the account's id for a custom app.
     app: str = Field(min_length=1, max_length=200)
+    # What the Credentials page lists it as; left out, "<app> credentials".
+    name: str | None = Field(default=None, min_length=1, max_length=200)
     client_id: str = Field(min_length=1, max_length=500)
-    client_secret: str = Field(min_length=1, max_length=2000)
+    # Left out for a public client, or one that proves itself with a signed assertion (each account's signing pair).
+    client_secret: str | None = Field(default=None, min_length=1, max_length=2000)
     # The permissions to ask for, among the app's own; left out, all of them. A plugin's required ones are always asked.
     scopes: list[Annotated[str, Field(min_length=1, max_length=200)]] | None = Field(default=None, max_length=100)
-    # The app's account to set it on; left out, the app's default account.
-    account: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 class CredentialSecretIn(In):
@@ -600,32 +626,52 @@ def card_credential(conn: dict[str, Any] | None) -> dict[str, Any] | None:
     if conn is None or kind_of(str(conn["auth_kind"])).field("clientId") is None:
         return None
     name = str(conn.get("account_name") or conn["name"])
-    return {"name": name, "type": "ops_ai" if conn.get("platform_app") else "own"}
+    own = not conn.get("platform_app")
+    return {"id": conn.get("credential_id") if own else None, "name": name, "type": "own" if own else "ops_ai"}
 
 
-async def credential_row(
-    store: ConnectionStore, conn: dict[str, Any], app: str, app_name: str, plugin: Plugin | None
+OPS_AI = "ops-ai:"
+
+
+def credential_secret(credential_id: str) -> str:
+    """The team secret's name holding an app credential's client secret."""
+    return f"APP_{credential_id.upper()}_CLIENT_SECRET"
+
+
+def _status(audits: list[dict[str, Any]]) -> CredentialStatus:
+    """The last Test with my account of any account on the credential: working, failing, or not tested."""
+    checked = next((x for x in audits if x["action"] == CHECKED), None)
+    said = str(cast(dict[str, Any], (checked or {}).get("detail") or {}).get("status") or "")
+    return "working" if said == "ok" else "failing" if said == "failed" else "not_tested"
+
+
+async def _row(
+    apps: Apps, who: Caller, cred: dict[str, Any] | None, card: dict[str, Any], accounts: list[dict[str, Any]]
 ) -> dict[str, Any]:
-    """One app credential as the Credentials page lists it: whose OAuth app, its permissions, the accounts signed in
-    through it and the last Test with my account. No secret is read."""
-    scopes = str(cast(dict[str, Any], conn.get("settings") or {}).get("scopes") or "").split()
+    """One credential's row: the team's own (`cred`) or, with none, Ops AI's app of `card`'s app."""
+    plugin = _plugin(apps, card)
+    scopes = str((cred or {}).get("scopes") or "").split()
     if not scopes and plugin is not None:
         scopes = [sc.id for sc in plugin.manifest.connection.scopes]
-    tokens = await store.tokens(conn["tenant_id"], str(conn["id"]))
-    checked = next((a for a in await store.audit(conn["tenant_id"], str(conn["id"])) if a["action"] == CHECKED), None)
-    said = str(cast(dict[str, Any], (checked or {}).get("detail") or {}).get("status") or "")
+    store = apps.connections.store
+    audits = sorted(
+        [x for a in accounts for x in await store.audit(who.tenant_id, str(a["id"]))],
+        key=lambda x: x["at"],
+        reverse=True,
+    )
+    own = cred is not None
     return {
-        "id": str(conn["id"]),
-        "name": str(conn.get("account_name") or conn["name"]),
-        "app": app,
-        "appName": app_name,
-        "type": "ops_ai" if conn.get("platform_app") else "own",
-        "sandbox": bool(conn.get("sandbox")),
-        "credentialId": conn.get("credential_id"),
+        "id": str(cred["id"]) if own else f"{OPS_AI}{card['id']}",
+        "name": str(cred["name"]) if own else "Ops AI's app",
+        "app": str(card["id"]),
+        "appName": str(card["name"]),
+        "type": "own" if own else "ops_ai",
+        "clientId": cred["client_id"] if own else None,
         "permissions": scopes,
-        "accounts": len(tokens),
-        "status": "working" if said == "ok" else "failing" if said == "failed" else "not_tested",
-        "created": conn["created_at"].isoformat(),
+        "accounts": len(accounts),
+        "status": _status(audits),
+        "created": cred["created_at"].isoformat() if own else None,
+        "createdBy": cred["created_by"] if own else None,
     }
 
 
@@ -633,82 +679,148 @@ def _plugin(apps: Apps, card: dict[str, Any]) -> Plugin | None:
     return apps.plugins.plugins.get(str(card.get("pluginId"))) if apps.plugins and card.get("pluginId") else None
 
 
+def _signs_in_with_client(conn: dict[str, Any]) -> bool:
+    return kind_of(str(conn["auth_kind"])).field("clientId") is not None
+
+
 async def add_app_credential(apps: Apps, who: Caller, i: AppCredentialIn) -> dict[str, Any]:
-    """The team's own client on one of an app's accounts, its secret sealed through the credential port with the
-    account's other secrets. An account on Ops AI's app moves to the team's own, and a client id saved with no secret
-    yet is completed; one that already holds the team's own client and secret keeps it, as changing it is an edit of
-    the account's settings, never a second credential beside it."""
+    """The team's own OAuth client for one of its apps, with no account: its secret is sealed as the team's, marked
+    as the credential's, and an account picks the credential when it is connected (credentialId)."""
     apps.connections.check(who, "manage", what="app credentials")
     card = await apps.card(who, i.app)
-    store = apps.connections.store
-    account = i.account or card.get("connectionId")
-    conn = await apps.connections.account_of(who, str(card["id"]), str(account)) if account else None
-    if conn is None:
-        raise Conflict(
-            f"Set {card['name']} up for the team first; its credential comes with it.", code="app_not_set_up"
-        )
-    if kind_of(str(conn["auth_kind"])).field("clientId") is None:
+    if card["kind"] not in ("plugin", "connection"):
         raise ValidationFailed(f"{card['name']} signs in with no OAuth app.", code="no_app_credential")
-    stored = cast(dict[str, Any], conn.get("settings") or {})
-    if stored.get("clientId") and not conn.get("platform_app") and "clientSecret" in (conn.get("secrets") or {}):
-        raise Conflict(f"{card['name']} already signs in with the team's own app.", code="credential_exists")
     plugin = _plugin(apps, card)
     scopes = i.scopes
     if plugin is not None:
+        kinds = [kind_of(k) for k in plugin.manifest.connection.kinds]
+        if not any(k.field("clientId") is not None for k in kinds):
+            raise ValidationFailed(f"{card['name']} signs in with no OAuth app.", code="no_app_credential")
         offered = plugin.manifest.connection.scopes
         unknown = sorted(set(scopes or []) - {sc.id for sc in offered})
         if unknown:
             raise ValidationFailed(f"{card['name']} asks for no {', '.join(unknown)}.", details={"field": "scopes"})
         wanted = set(scopes) if scopes is not None else {sc.id for sc in offered}
         scopes = [sc.id for sc in offered if sc.required or sc.id in wanted]
-    settings: dict[str, Any] = {"clientId": i.client_id, **({"scopes": " ".join(scopes)} if scopes is not None else {})}
-    await apps.connections.change(
-        who,
-        str(conn["id"]),
-        {"revision": int(conn["revision"]), "settings": settings, "secret_values": {"clientSecret": i.client_secret}},
+    else:
+        app = await apps.connections.account_of(who, str(card["id"]), str(card["connectionId"]))
+        if not _signs_in_with_client(app):
+            raise ValidationFailed(f"{card['name']} signs in with no OAuth app.", code="no_app_credential")
+    now = apps.connections.clock()
+    made = f"cred_{uuid.uuid4().hex[:12]}"
+    secret = credential_secret(made) if i.client_secret else None
+    if secret and not await apps.connections.secrets.create(
+        who.tenant_id, who.team.id, secret, str(i.client_secret), actor=who.name, at=now, credential_id=made
+    ):
+        raise Conflict("Try again; that credential id was just taken.")
+    await apps.connections.store.add_credential(
+        {
+            "tenant_id": who.tenant_id,
+            "id": made,
+            "team_id": who.team.id,
+            "app_id": str(card["id"]),
+            "name": (i.name or "").strip() or f"{card['name']} credentials",
+            "client_id": i.client_id.strip(),
+            "scopes": " ".join(scopes) if scopes is not None else None,
+            "secret_name": secret,
+            "created_by": who.name,
+            "created_at": now,
+            "updated_by": who.name,
+            "updated_at": now,
+        }
     )
-    fresh = await store.get(who.tenant_id, str(conn["id"]))
-    assert fresh is not None
-    return await credential_row(store, fresh, str(card["id"]), str(card["name"]), plugin)
+    return await app_credential(apps, who, made)
 
 
 async def replace_credential_secret(apps: Apps, who: Caller, credential_id: str, secret: str) -> dict[str, Any]:
-    """A new client secret for the team's own app credential, sealed through the credential port; the client id,
-    permissions and every account on it stay. Ops AI's app has no row here, so it is never changed this way."""
+    """A new client secret for the team's own app credential, sealed as the team's; the client id, permissions and
+    every account on it stay, and the next sign-in of each uses it. Ops AI's app is the install's, never changed
+    here."""
     apps.connections.check(who, "manage", what="app credentials")
     store = apps.connections.store
-    conn = await store.credential_account(who.tenant_id, credential_id)
-    if conn is None:
+    cred = await store.credential(who.tenant_id, credential_id)
+    if cred is None or cred["team_id"] != who.team.id:
         raise NotFound(f"App credential {credential_id}")
-    await apps.connections.change(
-        who,
-        str(conn["id"]),
-        {
-            "revision": int(conn["revision"]),
-            "settings": dict(conn.get("settings") or {}),
-            "secret_values": {"clientSecret": secret},
-        },
-    )
-    card = next((c for c in await apps.cards(who) if c["id"] == conn["app_id"]), None)
-    fresh = await store.get(who.tenant_id, str(conn["id"]))
-    assert fresh is not None
-    app, name = (str(card["id"]), str(card["name"])) if card else (str(conn["app_id"]), str(conn["name"]))
-    return await credential_row(store, fresh, app, name, _plugin(apps, card) if card else None)
+    now = apps.connections.clock()
+    name = str(cred.get("secret_name") or credential_secret(credential_id))
+    resolver = apps.connections.secrets
+    if await resolver.rotate(who.tenant_id, who.team.id, name, secret, actor=who.name, at=now) is None:
+        await resolver.create(
+            who.tenant_id, who.team.id, name, secret, actor=who.name, at=now, credential_id=credential_id
+        )
+    await store.touch_credential(who.tenant_id, credential_id, actor=who.name, at=now)
+    return await app_credential(apps, who, credential_id)
 
 
-async def app_credentials(apps: Apps, who: Caller) -> list[dict[str, Any]]:
-    """Each account of the team's apps that signs in through an OAuth app, with how (c-616 C0): only a person who
-    manages the team's apps reads them, and no secret is read."""
+Held = tuple[dict[str, Any] | None, dict[str, Any], list[dict[str, Any]]]
+
+
+async def _credentials(apps: Apps, who: Caller) -> list[Held]:
+    """Each of the team's credentials with its app's card and its accounts, then Ops AI's app of each app whose
+    accounts sign in with it; an app no longer listed is left out."""
     apps.connections.check(who, "manage", what="app credentials")
     store = apps.connections.store
     cards = {str(c["id"]): c for c in await apps.cards(who)}
-    rows: list[dict[str, Any]] = []
+    creds = await store.team_credentials(who.tenant_id, who.team.id)
+    on = await store.credential_accounts(who.tenant_id, [str(c["id"]) for c in creds])
+    out: list[Held] = []
+    for cred in creds:
+        card = cards.get(str(cred["app_id"]))
+        if card is not None:
+            out.append((cred, card, [a for a in on if a["credential_id"] == cred["id"]]))
+    platform: dict[str, list[dict[str, Any]]] = {}
     for conn in await apps.connections.team_rows(who):
-        card = cards.get(str(conn["app_id"]))
-        if card is None or kind_of(str(conn["auth_kind"])).field("clientId") is None:
-            continue
-        rows.append(await credential_row(store, conn, str(card["id"]), str(card["name"]), _plugin(apps, card)))
-    return rows
+        if conn.get("platform_app") and _signs_in_with_client(conn):
+            platform.setdefault(str(conn["app_id"]), []).append(conn)
+    out += [(None, cards[app], accounts) for app, accounts in platform.items() if app in cards]
+    return out
+
+
+async def app_credentials(apps: Apps, who: Caller, app: str | None = None) -> list[dict[str, Any]]:
+    """The team's app credentials and Ops AI's app of each app using it, of one app when `app` is given: only a person
+    who manages the team's apps reads them, and no secret is read."""
+    held = [x for x in await _credentials(apps, who) if app is None or x[1]["id"] == app]
+    return [await _row(apps, who, cred, card, accounts) for cred, card, accounts in held]
+
+
+async def app_credential(apps: Apps, who: Caller, credential_id: str) -> dict[str, Any]:
+    """One credential's page: its row, and each account signing in with it with its state, joined here."""
+    found = next(
+        (
+            x
+            for x in await _credentials(apps, who)
+            if (str(x[0]["id"]) if x[0] else f"{OPS_AI}{x[1]['id']}") == credential_id
+        ),
+        None,
+    )
+    if found is None:
+        raise NotFound(f"App credential {credential_id}")
+    cred, card, accounts = found
+    states = await apps.states(who.tenant_id, accounts)
+    tokens = await apps.connections.store.team_tokens(who.tenant_id, [str(a["id"]) for a in accounts])
+    listed: list[dict[str, Any]] = []
+    for a in accounts:
+        state, status, why = states[str(a["id"])]
+        at = (tokens.get(str(a["id"])) or {}).get("refreshed_at")
+        listed.append(
+            {
+                "id": str(a["id"]),
+                "name": str(a.get("account_name") or a["name"]),
+                "sandbox": bool(a.get("sandbox")),
+                "state": state,
+                "status": status,
+                "stateReason": why,
+                "signIn": a.get("sign_in") or "team",
+                "connectedAt": at.isoformat() if at else None,
+            }
+        )
+    kinds = apps.connections.kinds()
+    return {
+        **await _row(apps, who, cred, card, accounts),
+        "accountsList": listed,
+        "redirectUri": kinds.get("redirectUri"),
+        "updated": cred["updated_at"].isoformat() if cred else None,
+    }
 
 
 async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
@@ -880,26 +992,35 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
         return ok(await apps.add_custom(who, body), 201)
 
     @r.get("/v1/app-credentials", response_model=Envelope[list[AppCredential]])
-    async def list_app_credentials(who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """The team's app credentials, for the Credentials page under Apps (c-616 C0): each account's type,
-        permissions, accounts and the last Test with my account. Team admins only; no secret."""
-        return ok([AppCredential(**c).model_dump(by_alias=True) for c in await app_credentials(apps, who)])
+    async def list_app_credentials(  # pyright: ignore[reportUnusedFunction]
+        who: Annotated[Caller, Depends(caller)], app: Annotated[str | None, Query(max_length=200)] = None
+    ) -> JSONResponse:
+        """The team's app credentials and Ops AI's app of each app using it, for the Credentials page and the pickers
+        that name one (`app` keeps one app's): type, client id, permissions, accounts on it and the last Test with my
+        account. Team admins only; no secret."""
+        return ok([AppCredential(**c).model_dump(by_alias=True) for c in await app_credentials(apps, who, app)])
 
-    @r.post("/v1/app-credentials", response_model=Envelope[AppCredential], status_code=201)
+    @r.post("/v1/app-credentials", response_model=Envelope[AppCredentialDetail], status_code=201)
     async def create_app_credential(  # pyright: ignore[reportUnusedFunction]
         body: AppCredentialIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
-        """Adds the team's own OAuth app to one of its apps' accounts: client id, secret and permissions. Team admins
-        only; the answer is the Credentials page's row, with no secret."""
-        return ok(AppCredential(**await add_app_credential(apps, who, body)).model_dump(by_alias=True), 201)
+        """Adds the team's own OAuth app for one of its apps: name, client id, secret and permissions, with no account
+        needed; an account picks it by credentialId when connected. Team admins only; the answer has no secret."""
+        return ok(AppCredentialDetail(**await add_app_credential(apps, who, body)).model_dump(by_alias=True), 201)
 
-    @r.put("/v1/app-credentials/{credential_id}/secret", response_model=Envelope[AppCredential])
+    @r.get("/v1/app-credentials/{credential_id}", response_model=Envelope[AppCredentialDetail])
+    async def get_app_credential(credential_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """One app credential's page: its app, client id, permissions, who made it and the accounts signing in with it,
+        each with its state. `ops-ai:<app>` is Ops AI's app of one app. Team admins only; no secret."""
+        return ok(AppCredentialDetail(**await app_credential(apps, who, credential_id)).model_dump(by_alias=True))
+
+    @r.put("/v1/app-credentials/{credential_id}/secret", response_model=Envelope[AppCredentialDetail])
     async def set_app_credential_secret(  # pyright: ignore[reportUnusedFunction]
         credential_id: str, body: CredentialSecretIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
         """Replaces the client secret of the team's own app credential. Team admins only; the answer has no secret."""
         row = await replace_credential_secret(apps, who, credential_id, body.client_secret)
-        return ok(AppCredential(**row).model_dump(by_alias=True))
+        return ok(AppCredentialDetail(**row).model_dump(by_alias=True))
 
     @r.get("/v1/apps/{app_id}", response_model=Envelope[AppPage])
     async def get_app(app_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

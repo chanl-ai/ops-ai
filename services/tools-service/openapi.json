@@ -154,6 +154,17 @@
               }
             ]
           },
+          "credentialId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credentialid"
+          },
           "description": {
             "anyOf": [
               {
@@ -409,29 +420,18 @@
         "additionalProperties": false,
         "description": "Another account of an app the team has (c-608): a sandbox, or a second org of the same system. On a plugin's\napp it takes the first account's contract (the kind, whose account calls use, the OAuth app and the credentials);\non a custom app it signs in with the app's kind, with the kind's fields given in `credentials`.",
         "properties": {
-          "clientId": {
+          "credentialId": {
             "anyOf": [
               {
-                "maxLength": 500,
+                "maxLength": 64,
+                "minLength": 1,
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Clientid"
-          },
-          "clientSecret": {
-            "anyOf": [
-              {
-                "maxLength": 2000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Clientsecret"
+            "title": "Credentialid"
           },
           "credentials": {
             "additionalProperties": {
@@ -502,6 +502,19 @@
               }
             ],
             "title": "Category"
+          },
+          "credentialId": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credentialid"
           },
           "description": {
             "anyOf": [
@@ -821,7 +834,7 @@
       },
       "AppCredential": {
         "additionalProperties": false,
-        "description": "How one of the team's accounts signs in (c-616 C0): Ops AI's app or the team's own OAuth client, never its\nsecret.",
+        "description": "One OAuth client the team's apps sign in with: one of the team's own (app_credentials, made under Credentials)\nor Ops AI's app for an app whose accounts use it. Never its secret.",
         "properties": {
           "accounts": {
             "title": "Accounts",
@@ -835,11 +848,7 @@
             "title": "Appname",
             "type": "string"
           },
-          "created": {
-            "title": "Created",
-            "type": "string"
-          },
-          "credentialId": {
+          "clientId": {
             "anyOf": [
               {
                 "type": "string"
@@ -848,7 +857,29 @@
                 "type": "null"
               }
             ],
-            "title": "Credentialid"
+            "title": "Clientid"
+          },
+          "created": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created"
+          },
+          "createdBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Createdby"
           },
           "id": {
             "title": "Id",
@@ -864,11 +895,6 @@
             },
             "title": "Permissions",
             "type": "array"
-          },
-          "sandbox": {
-            "default": false,
-            "title": "Sandbox",
-            "type": "boolean"
           },
           "status": {
             "enum": [
@@ -896,29 +922,139 @@
           "type",
           "permissions",
           "accounts",
-          "status",
-          "created"
+          "status"
         ],
         "title": "AppCredential",
         "type": "object"
       },
-      "AppCredentialIn": {
+      "AppCredentialDetail": {
         "additionalProperties": false,
-        "description": "The team's own OAuth app for one of its apps (the New app credential window).",
         "properties": {
-          "account": {
+          "accounts": {
+            "title": "Accounts",
+            "type": "integer"
+          },
+          "accountsList": {
+            "items": {
+              "$ref": "#/components/schemas/CredentialAccount"
+            },
+            "title": "Accountslist",
+            "type": "array"
+          },
+          "app": {
+            "title": "App",
+            "type": "string"
+          },
+          "appName": {
+            "title": "Appname",
+            "type": "string"
+          },
+          "clientId": {
             "anyOf": [
               {
-                "maxLength": 64,
-                "minLength": 1,
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Account"
+            "title": "Clientid"
           },
+          "created": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created"
+          },
+          "createdBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Createdby"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "redirectUri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirecturi"
+          },
+          "status": {
+            "enum": [
+              "working",
+              "not_tested",
+              "failing"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "ops_ai",
+              "own"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "updated": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "app",
+          "appName",
+          "type",
+          "permissions",
+          "accounts",
+          "status",
+          "accountsList"
+        ],
+        "title": "AppCredentialDetail",
+        "type": "object"
+      },
+      "AppCredentialIn": {
+        "additionalProperties": false,
+        "description": "The team's own OAuth app for one of its apps (the New app credential window); no account needed.",
+        "properties": {
           "app": {
             "maxLength": 200,
             "minLength": 1,
@@ -932,10 +1068,30 @@
             "type": "string"
           },
           "clientSecret": {
-            "maxLength": 2000,
-            "minLength": 1,
-            "title": "Clientsecret",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clientsecret"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
           },
           "scopes": {
             "anyOf": [
@@ -957,8 +1113,7 @@
         },
         "required": [
           "app",
-          "clientId",
-          "clientSecret"
+          "clientId"
         ],
         "title": "AppCredentialIn",
         "type": "object"
@@ -1808,6 +1963,17 @@
       "CardCredential": {
         "additionalProperties": false,
         "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -2430,6 +2596,80 @@
         "title": "ConnectionRef",
         "type": "object"
       },
+      "CredentialAccount": {
+        "additionalProperties": false,
+        "description": "An account signing in with an app credential, as its page lists it.",
+        "properties": {
+          "connectedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connectedat"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "sandbox": {
+            "default": false,
+            "title": "Sandbox",
+            "type": "boolean"
+          },
+          "signIn": {
+            "enum": [
+              "team",
+              "person",
+              "person_or_team"
+            ],
+            "title": "Signin",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "connected",
+              "not_signed_in",
+              "expired",
+              "refused",
+              "revoked"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "stateReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statereason"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "state",
+          "status",
+          "signIn"
+        ],
+        "title": "CredentialAccount",
+        "type": "object"
+      },
       "CredentialCheck": {
         "additionalProperties": false,
         "properties": {
@@ -2827,11 +3067,11 @@
         "title": "Envelope[AllowList]",
         "type": "object"
       },
-      "Envelope_AppCredential_": {
+      "Envelope_AppCredentialDetail_": {
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/AppCredential"
+            "$ref": "#/components/schemas/AppCredentialDetail"
           },
           "success": {
             "const": true,
@@ -2843,7 +3083,7 @@
           "success",
           "data"
         ],
-        "title": "Envelope[AppCredential]",
+        "title": "Envelope[AppCredentialDetail]",
         "type": "object"
       },
       "Envelope_AppPage_": {
@@ -7789,6 +8029,17 @@
             "title": "Createdby",
             "type": "string"
           },
+          "credentialId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credentialid"
+          },
           "lastUsedAt": {
             "anyOf": [
               {
@@ -8661,29 +8912,18 @@
             ],
             "title": "Accountname"
           },
-          "clientId": {
+          "credentialId": {
             "anyOf": [
               {
-                "maxLength": 500,
+                "maxLength": 64,
+                "minLength": 1,
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Clientid"
-          },
-          "clientSecret": {
-            "anyOf": [
-              {
-                "maxLength": 2000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Clientsecret"
+            "title": "Credentialid"
           },
           "credentials": {
             "additionalProperties": {
@@ -10550,9 +10790,26 @@
     },
     "/v1/app-credentials": {
       "get": {
-        "description": "The team's app credentials, for the Credentials page under Apps (c-616 C0): each account's type,\npermissions, accounts and the last Test with my account. Team admins only; no secret.",
+        "description": "The team's app credentials and Ops AI's app of each app using it, for the Credentials page and the pickers\nthat name one (`app` keeps one app's): type, client id, permissions, accounts on it and the last Test with my\naccount. Team admins only; no secret.",
         "operationId": "apps_list_app_credentials",
         "parameters": [
+          {
+            "in": "query",
+            "name": "app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "App"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
@@ -10747,7 +11004,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "Adds the team's own OAuth app to one of its apps' accounts: client id, secret and permissions. Team admins\nonly; the answer is the Credentials page's row, with no secret.",
+        "description": "Adds the team's own OAuth app for one of its apps: name, client id, secret and permissions, with no account\nneeded; an account picks it by credentialId when connected. Team admins only; the answer has no secret.",
         "operationId": "apps_create_app_credential",
         "parameters": [
           {
@@ -10830,7 +11087,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_AppCredential_"
+                  "$ref": "#/components/schemas/Envelope_AppCredentialDetail_"
                 }
               }
             },
@@ -10954,6 +11211,214 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/app-credentials/{credential_id}": {
+      "get": {
+        "description": "One app credential's page: its app, client id, permissions, who made it and the accounts signing in with it,\neach with its state. `ops-ai:<app>` is Ops AI's app of one app. Team admins only; no secret.",
+        "operationId": "apps_get_app_credential",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "credential_id",
+            "required": true,
+            "schema": {
+              "title": "Credential Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AppCredentialDetail_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not available on this service yet"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The source could not be reached"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Get App Credential",
+        "tags": [
+          "apps"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/app-credentials/{credential_id}/secret": {
       "put": {
         "description": "Replaces the client secret of the team's own app credential. Team admins only; the answer has no secret.",
@@ -11048,7 +11513,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_AppCredential_"
+                  "$ref": "#/components/schemas/Envelope_AppCredentialDetail_"
                 }
               }
             },

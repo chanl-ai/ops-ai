@@ -25,7 +25,7 @@ from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
 
-from .conftest import build_app, response_checker
+from .conftest import build_app, response_checker, team_credential
 from .plugin_desk import plugin as desk
 from .test_plugin_credentials import INSTALL
 from .test_plugins import ID
@@ -86,15 +86,16 @@ def admin(tenant: str, team: str = TEAM) -> dict[str, str]:
 
 async def connected(w: World, tenant: str, team: str = TEAM) -> str:
     """The team's first Desk account, on with the team's own app; its connection id."""
+    credential = await team_credential(w.client, admin(tenant, team), APP)
     on = await w.client.put(
-        f"/v1/apps/plugin:{ID}/team", json={"enabled": True, "clientId": "app"}, headers=admin(tenant, team)
+        f"/v1/apps/plugin:{ID}/team", json={"enabled": True, "credentialId": credential}, headers=admin(tenant, team)
     )
     assert on.status_code == 200, on.text
     return str(on.json()["data"]["connectionId"])
 
 
 async def another(w: World, tenant: str, name: str, team: str = TEAM) -> httpx.Response:
-    body = {"name": name, "clientId": "eu-app"}
+    body = {"name": name, "credentialId": await team_credential(w.client, admin(tenant, team), APP, "eu-app")}
     return await w.client.post(f"/v1/apps/plugin:{ID}/accounts", json=body, headers=admin(tenant, team))
 
 
@@ -208,7 +209,7 @@ async def test_the_first_turn_on_names_the_teams_account(world: World, tenant: s
     # The Connect window asks for the account's name (c-616); without it the account takes the app's title.
     on = await world.client.put(
         f"/v1/apps/plugin:{ID}/team",
-        json={"enabled": True, "clientId": "app", "accountName": "Billing desk"},
+        json={"enabled": True, "accountName": "Billing desk"},
         headers=admin(tenant),
     )
     assert on.status_code == 200, on.text

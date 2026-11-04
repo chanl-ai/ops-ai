@@ -22,7 +22,7 @@ async def app_state(r: Rig, tenant: str) -> str:
 
 
 async def test_a_passing_test_after_a_failed_one_reads_connected(rig: Rig, tenant: str) -> None:  # noqa: F811
-    on = await turn_on(rig, tenant, "test.client", clientId=CLIENT, clientSecret=CLIENT_SECRET)
+    on = await turn_on(rig, tenant, "test.client", client=(CLIENT, CLIENT_SECRET))
     connection_id = str(on.json()["data"]["connectionId"])
     assert (await call_as_team(rig, tenant, "test.client")).ok
     url = f"{await account_url(rig, tenant, connection_id)}/test"

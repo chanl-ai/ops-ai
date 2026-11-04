@@ -110,14 +110,14 @@ test('a plugin that fixes how its key is sent never asks for it, so the key goes
     settings: [{ name: 'base_url', label: 'System address', default: 'https://api.multi.test', secret: false, perAccount: false, locked: false }],
     fixed: ['name', 'placement'],
   };
-  const groups = pluginGroups(apiKey, KINDS, plugin, 'own');
+  const groups = pluginGroups(apiKey, KINDS, plugin);
   assert.deepEqual(
     [...groups.main, ...groups.more].map((f) => f.name),
     ['key', 'clientCertificate'],
   );
   let s = initialState(draftFor(groups), null);
   s = reduce(s, { type: 'secret', name: 'key', value: 'desk-key-1' });
-  const body = turnOnBody(apiKey, plugin, 'own', s.draft, { base_url: 'https://api.multi.test' }, true);
+  const body = turnOnBody(apiKey, plugin, undefined, s.draft, { base_url: 'https://api.multi.test' }, true);
   assert.deepEqual(body, {
     enabled: true,
     sandbox: false,
@@ -127,33 +127,30 @@ test('a plugin that fixes how its key is sent never asks for it, so the key goes
   });
 });
 
-test('a plugin that signs in sends the team app only when its own is chosen, and a sandbox its own sign-in address', () => {
+test('a plugin that signs in never asks for its client and names the picked app credential, and a sandbox its own sign-in address', () => {
   const oauth = kind('oauth2_auth_code', { signsIn: true, fields: [field('clientId', { required: true }), field('clientSecret', { secret: true })] });
   const plugin: PluginSpec = {
     settings: [{ name: 'login_url', label: 'Sign-in address', default: null, secret: false, perAccount: true, locked: false }],
     fixed: [],
   };
-  const own = pluginGroups(oauth, KINDS, plugin, 'own');
+  const groups = pluginGroups(oauth, KINDS, plugin);
   assert.deepEqual(
-    own.main.map((f) => f.name),
-    ['clientId', 'clientSecret', 'login_url'],
-  );
-  assert.deepEqual(
-    pluginGroups(oauth, KINDS, plugin, 'platform').main.map((f) => f.name),
+    groups.main.map((f) => f.name),
     ['login_url'],
   );
-  let s = initialState(draftFor(own), 'con_1');
-  s = reduce(s, { type: 'setting', name: 'clientId', value: 'uat-app' });
+  let s = initialState(draftFor(groups), 'con_1');
   s = reduce(s, { type: 'setting', name: 'login_url', value: 'https://test.login.example' });
-  assert.deepEqual(newAccountBody(oauth, plugin, 'own', s.draft, 'Salesforce sandbox', true), {
+  assert.deepEqual(newAccountBody(oauth, plugin, 'cred_uat', s.draft, 'Salesforce sandbox', true), {
     name: 'Salesforce sandbox',
     sandbox: true,
     kind: 'oauth2_auth_code',
     settings: { login_url: 'https://test.login.example' },
-    clientId: 'uat-app',
+    credentialId: 'cred_uat',
   });
-  const platform = turnOnBody(oauth, plugin, 'platform', s.draft, {}, false);
-  assert.equal('clientId' in platform, false, 'the platform app was chosen, yet the team client ID went out');
+  assert.equal(turnOnBody(oauth, plugin, null, s.draft, {}, false).credentialId, null, 'Ops AI’s app is named as no credential');
+  const kept = turnOnBody(oauth, plugin, undefined, s.draft, {}, false);
+  assert.equal('credentialId' in kept, false, 'a later turn-on that picks nothing would change the account’s app');
+  assert.equal('clientId' in kept || 'clientSecret' in kept, false, 'a client was typed into a turn-on');
 });
 
 test('an account signed in through the dialog is remembered, so Save opens no second sign-in for it', () => {

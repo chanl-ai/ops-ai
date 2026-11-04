@@ -118,6 +118,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "apps_get_app_credential": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/app-credentials/{credential_id}",
+        "pathParams": ["credential_id"],
+        "query": [],
+        "stream": False,
+    },
     "apps_give_own_credentials": {
         "body": "json",
         "headers": [],
@@ -142,7 +151,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/app-credentials",
         "pathParams": [],
-        "query": [],
+        "query": ["app"],
         "stream": False,
     },
     "apps_list_apps": {
@@ -677,15 +686,21 @@ class Operations:
         "Health Background"
         return self._t.call(SERVICE, OPERATIONS["health_health_background"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def apps_list_app_credentials(self) -> list[AppCredential]:
+    def apps_list_app_credentials(self, *, app: str | None = None) -> list[AppCredential]:
         "List App Credentials"
-        return self._t.call(SERVICE, OPERATIONS["apps_list_app_credentials"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["apps_list_app_credentials"], {}, {"app": app}, {}, None)  # type: ignore[no-any-return]
 
-    def apps_create_app_credential(self, body: AppCredentialIn) -> AppCredential:
+    def apps_create_app_credential(self, body: AppCredentialIn) -> AppCredentialDetail:
         "Create App Credential"
         return self._t.call(SERVICE, OPERATIONS["apps_create_app_credential"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def apps_set_app_credential_secret(self, credential_id: str, body: CredentialSecretIn) -> AppCredential:
+    def apps_get_app_credential(self, credential_id: str) -> AppCredentialDetail:
+        "Get App Credential"
+        return self._t.call(
+            SERVICE, OPERATIONS["apps_get_app_credential"], {"credential_id": credential_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def apps_set_app_credential_secret(self, credential_id: str, body: CredentialSecretIn) -> AppCredentialDetail:
         "Set App Credential Secret"
         return self._t.call(
             SERVICE, OPERATIONS["apps_set_app_credential_secret"], {"credential_id": credential_id}, {}, {}, body
@@ -1138,15 +1153,21 @@ class AsyncOperations:
         "Health Background"
         return await self._t.call(SERVICE, OPERATIONS["health_health_background"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def apps_list_app_credentials(self) -> list[AppCredential]:
+    async def apps_list_app_credentials(self, *, app: str | None = None) -> list[AppCredential]:
         "List App Credentials"
-        return await self._t.call(SERVICE, OPERATIONS["apps_list_app_credentials"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(SERVICE, OPERATIONS["apps_list_app_credentials"], {}, {"app": app}, {}, None)  # type: ignore[no-any-return]
 
-    async def apps_create_app_credential(self, body: AppCredentialIn) -> AppCredential:
+    async def apps_create_app_credential(self, body: AppCredentialIn) -> AppCredentialDetail:
         "Create App Credential"
         return await self._t.call(SERVICE, OPERATIONS["apps_create_app_credential"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    async def apps_set_app_credential_secret(self, credential_id: str, body: CredentialSecretIn) -> AppCredential:
+    async def apps_get_app_credential(self, credential_id: str) -> AppCredentialDetail:
+        "Get App Credential"
+        return await self._t.call(
+            SERVICE, OPERATIONS["apps_get_app_credential"], {"credential_id": credential_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def apps_set_app_credential_secret(self, credential_id: str, body: CredentialSecretIn) -> AppCredentialDetail:
         "Set App Credential Secret"
         return await self._t.call(
             SERVICE, OPERATIONS["apps_set_app_credential_secret"], {"credential_id": credential_id}, {}, {}, body

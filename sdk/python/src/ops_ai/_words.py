@@ -79,7 +79,8 @@ class Apps:
         return cast(dict[str, Any], self._raw.tools.apps_get_app(app))
 
     def turn_on(self, app: str, **fields: Any) -> dict[str, Any]:
-        """Turns a plugin's app on for the team; `fields` are the turn-on's (accountName, credentials, signIn...)."""
+        """Turns a plugin's app on for the team; `fields` are the turn-on's (accountName, credentialId, credentials,
+        signIn...). Leaving credentialId out signs in with Ops AI's app."""
         plugin_of(app)
         return cast(dict[str, Any], self._raw.tools.apps_set_team_app(app, {"enabled": True, **fields}))
 
@@ -112,43 +113,51 @@ class Apps:
 
 
 class Credentials:
-    """How an app signs in: Ops AI's app, or the team's own client."""
+    """How an app signs in: Ops AI's app, or one of the team's own clients (app credentials)."""
 
     def __init__(self, raw: Any, apps: Apps) -> None:
         self._raw, self._apps = raw, apps
 
     def list(self) -> list[dict[str, Any]]:
-        """Each app's credential: Ops AI's app or the team's own client, its permissions, accounts and last test."""
+        """The team's app credentials and Ops AI's app of each app using it: permissions, accounts and last test."""
         return cast(list[dict[str, Any]], self._raw.tools.apps_list_app_credentials())
+
+    def get(self, credential: str) -> dict[str, Any]:
+        """One app credential with the accounts signing in with it."""
+        return cast(dict[str, Any], self._raw.tools.apps_get_app_credential(credential))
 
     def create(
         self,
         app: str,
         *,
         client_id: str,
-        client_secret: str,
+        client_secret: str | None = None,
+        name: str | None = None,
         scopes: list[str] | None = None,
-        account: str | None = None,
     ) -> dict[str, Any]:
-        """Adds the team's own client to an app the team set up: its client id, secret and permissions (all when left
-        out), on the app's default account or `account`. The answer is the credential's row; it never carries the
-        secret."""
-        body: dict[str, Any] = {"app": app, "clientId": client_id, "clientSecret": client_secret}
+        """The team's own client for an app: its client id, secret (none for a public client or one that signs an
+        assertion) and permissions (all when left out), with no account needed. Accounts pick it by its id (`set`, or
+        credentialId when connected); no answer carries the secret."""
+        body: dict[str, Any] = {"app": app, "clientId": client_id}
+        if client_secret is not None:
+            body["clientSecret"] = client_secret
+        if name is not None:
+            body["name"] = name
         if scopes is not None:
             body["scopes"] = scopes
-        if account is not None:
-            body["account"] = account
         return cast(dict[str, Any], self._raw.tools.apps_create_app_credential(body))
 
-    def set(
-        self, app: str, *, client_id: str, client_secret: str | None = None, account: str | None = None
-    ) -> dict[str, Any]:
-        """The team's own client on the app's account; the secret goes in once and no answer carries it."""
+    def replace_secret(self, credential: str, client_secret: str) -> dict[str, Any]:
+        """A new client secret for the team's own client; every account on it keeps it."""
+        body = {"clientSecret": client_secret}
+        return cast(dict[str, Any], self._raw.tools.apps_set_app_credential_secret(credential, body))
+
+    def set(self, app: str, credential: str | None, *, account: str | None = None) -> dict[str, Any]:
+        """Signs the app's account (its default unless `account`) in with one of the team's credentials, or with None,
+        Ops AI's app. The account signs in again."""
         account = account or _account(self._apps.get(app))
         detail = cast(dict[str, Any], self._raw.tools.apps_get_account(app, account))
-        body: dict[str, Any] = {"revision": detail["revision"], "settings": {"clientId": client_id}}
-        if client_secret:
-            body["secretValues"] = {"clientSecret": client_secret}
+        body: dict[str, Any] = {"revision": detail["revision"], "credentialId": credential}
         return cast(dict[str, Any], self._raw.tools.apps_change_account(app, account, body))
 
     def test(self, app: str, *, account: str | None = None) -> dict[str, Any]:
@@ -171,7 +180,7 @@ class Accounts:
 
     def add(self, app: str, name: str, *, sandbox: bool = False, **fields: Any) -> dict[str, Any]:
         """Another account of an app the team has: a sandbox, which test runs use, or another named one; `fields` are
-        a plugin account's turn-on fields (credentials, clientId...)."""
+        a plugin account's turn-on fields (credentialId, credentials, signIn...)."""
         body = {"name": name, "sandbox": sandbox, **fields}
         return cast(dict[str, Any], self._raw.tools.apps_add_account(app, body))
 
@@ -307,14 +316,35 @@ class AsyncCredentials:
     async def list(self) -> list[dict[str, Any]]:
         return cast(list[dict[str, Any]], await self._raw.tools.apps_list_app_credentials())
 
-    async def set(
-        self, app: str, *, client_id: str, client_secret: str | None = None, account: str | None = None
+    async def get(self, credential: str) -> dict[str, Any]:
+        return cast(dict[str, Any], await self._raw.tools.apps_get_app_credential(credential))
+
+    async def create(
+        self,
+        app: str,
+        *,
+        client_id: str,
+        client_secret: str | None = None,
+        name: str | None = None,
+        scopes: list[str] | None = None,
     ) -> dict[str, Any]:
+        body: dict[str, Any] = {"app": app, "clientId": client_id}
+        if client_secret is not None:
+            body["clientSecret"] = client_secret
+        if name is not None:
+            body["name"] = name
+        if scopes is not None:
+            body["scopes"] = scopes
+        return cast(dict[str, Any], await self._raw.tools.apps_create_app_credential(body))
+
+    async def replace_secret(self, credential: str, client_secret: str) -> dict[str, Any]:
+        body = {"clientSecret": client_secret}
+        return cast(dict[str, Any], await self._raw.tools.apps_set_app_credential_secret(credential, body))
+
+    async def set(self, app: str, credential: str | None, *, account: str | None = None) -> dict[str, Any]:
         account = account or _account(await self._apps.get(app))
         detail = cast(dict[str, Any], await self._raw.tools.apps_get_account(app, account))
-        body: dict[str, Any] = {"revision": detail["revision"], "settings": {"clientId": client_id}}
-        if client_secret:
-            body["secretValues"] = {"clientSecret": client_secret}
+        body: dict[str, Any] = {"revision": detail["revision"], "credentialId": credential}
         return cast(dict[str, Any], await self._raw.tools.apps_change_account(app, account, body))
 
     async def test(self, app: str, *, account: str | None = None) -> dict[str, Any]:

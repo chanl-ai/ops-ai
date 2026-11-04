@@ -1,10 +1,10 @@
 'use client';
 
 import * as React from 'react';
-import { Copy } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { AccountFields } from '@/components/connections/account-fields';
+import { AppCredentialPicker } from '@/components/connections/app-credential-picker';
 import { WhoSignsIn, type SignIn } from '@/components/connections/who-signs-in';
 import { useSignInWindow, type SignInWindow } from '@/components/connections/sign-in';
 import { DialogShell } from '@/components/shared/dialog-shell';
@@ -13,7 +13,6 @@ import { LoadingButton } from '@/components/shared/loading-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   type AccountBody,
@@ -34,21 +33,20 @@ import {
   pluginGroups,
   reduce,
   turnOnBody,
-  type App,
   type Kind,
   type Kinds,
   type SavedAccount,
 } from '@/lib/connect-plan';
 import type { AccountRef } from '@/lib/types/connections';
-import { cn } from '@/lib/utils';
 
 type PluginInfo = NonNullable<SystemCard['plugin']>;
 
 const message = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong');
 
 /**
- * The connect dialog's form for a plugin's app: its sign-in kind, the platform's app or the team's own, and the
- * account's keys. `sandbox` adds the app's sandbox account, which test runs use, with the same keys asked.
+ * The connect dialog's form for a plugin's app: its sign-in kind, the app credential it signs in with (Ops AI's app or
+ * one the team made under Credentials), and the account's keys. `sandbox` adds the app's sandbox account, which test
+ * runs use, with the same keys asked.
  */
 export function PluginConnectForm({
   open,
@@ -70,7 +68,8 @@ export function PluginConnectForm({
   const offered = kinds.kinds.filter((k) => plugin.kinds.includes(k.id));
   const [kindId, setKindId] = React.useState(card.authKind ?? plugin.kinds[0]);
   const kind = offered.find((k) => k.id === kindId) ?? offered[0];
-  const [app, setApp] = React.useState<App>(plugin.platformApp ? 'platform' : 'own');
+  // The default account keeps the app credential it has until another is picked; a new sandbox starts on Ops AI's app.
+  const [client, setClient] = React.useState<string | null>(!sandbox && card.credential?.type === 'own' ? (card.credential.id ?? null) : null);
   const [accountName, setAccountName] = React.useState(`${card.name} sandbox`);
   // Whose account calls use, asked only before the team's default account exists and when the plugin offers a choice.
   const offeredWho = plugin.signIn ?? ['team'];
@@ -78,7 +77,7 @@ export function PluginConnectForm({
   const asksWho = !sandbox && kind.perPerson && offeredWho.length > 1 && !card.connectionId;
   // Editing the default account: its keys are saved, and a blank field keeps its value. A new sandbox has none yet.
   const editing = !sandbox && Boolean(card.connectionId);
-  const groupsFor = (k: Kind, a: App) => pluginGroups(k, kinds, plugin, a, editing);
+  const groupsFor = (k: Kind) => pluginGroups(k, kinds, plugin, editing);
   // What the account saved: its own settings and which of the plugin's secrets are set. The plugin's settings it keeps
   // its own (a sign-in address) start blank, and a blank one keeps its value.
   const saved: SavedAccount | null =
@@ -91,7 +90,7 @@ export function PluginConnectForm({
     Object.fromEntries(teamFields.map((s) => [s.name, savedTeam[s.name] != null ? String(savedTeam[s.name]) : card.connectionId ? '' : (s.default ?? '')])),
   );
   const [team, setTeam] = React.useState(first);
-  const [state, dispatch] = React.useReducer(reduce, initialState(draftFor(groupsFor(kind, app), saved), editing ? (card.connectionId ?? null) : null, editing));
+  const [state, dispatch] = React.useReducer(reduce, initialState(draftFor(groupsFor(kind), saved), editing ? (card.connectionId ?? null) : null, editing));
   // The sign-in window open, and whether Save opened it, so the dialog closes once it works.
   const opened = React.useRef<{ closes: boolean } | null>(null);
   const turnedOn = React.useRef(plugin.teamOn);
@@ -109,13 +108,15 @@ export function PluginConnectForm({
   const signIn = useStartSignIn();
   const remove = useDeleteAccount();
 
-  const groups = groupsFor(kind, app);
-  const ready = complete(state.draft, groups) && (!sandbox || Boolean(accountName.trim()));
+  const groups = groupsFor(kind);
+  // A kind that signs in or fetches a token names its OAuth client: Ops AI's app, or one of the team's credentials.
+  const picks = kind.signsIn || kind.holdsToken;
+  const ready = complete(state.draft, groups) && (!sandbox || Boolean(accountName.trim())) && (!picks || Boolean(plugin.platformApp) || client !== null);
   const ref = (accountId: string): AccountRef => ({ appId: card.id, accountId });
 
-  const reshape = (nextKind: Kind, nextApp: App) => {
+  const reshape = (nextKind: Kind) => {
     typedSince.current = true;
-    dispatch({ type: 'reset', draft: draftFor(groupsFor(nextKind, nextApp), saved), connectionId: state.connectionId });
+    dispatch({ type: 'reset', draft: draftFor(groupsFor(nextKind), saved), connectionId: state.connectionId });
   };
 
   const runTest = React.useCallback(
@@ -164,14 +165,14 @@ export function PluginConnectForm({
       // typed values stay in the draft for that.
       if (state.connectionId && !typedSince.current) return state.connectionId;
       if (state.connectionId) await remove.mutateAsync(ref(state.connectionId));
-      const made = await addAccount.mutateAsync({ appId: card.id, body: newAccountBody(kind, plugin, app, draft, accountName.trim(), true) as AccountBody });
+      const made = await addAccount.mutateAsync({ appId: card.id, body: newAccountBody(kind, plugin, client, draft, accountName.trim(), true) as AccountBody });
       typedSince.current = false;
       dispatch({ type: 'created', connectionId: made.id });
       return made.id;
     } else {
       const view = await setTeamApp.mutateAsync({
         appId: card.id,
-        body: turnOnBody(kind, plugin, app, draft, team, !state.connectionId, asksWho ? who : undefined) as TeamAppBody,
+        body: turnOnBody(kind, plugin, client, draft, team, !state.connectionId, asksWho ? who : undefined) as TeamAppBody,
       });
       id = String(view.connectionId ?? '');
       if (!state.connectionId) dispatch({ type: 'created', connectionId: id, made: !turnedOn.current });
@@ -284,7 +285,7 @@ export function PluginConnectForm({
             <FormField id="plugin-kind" label="How it signs in">
               <Select
                 value={kind.id}
-                onValueChange={(v) => (setKindId(v), reshape(offered.find((k) => k.id === v) ?? kind, app))}
+                onValueChange={(v) => (setKindId(v), reshape(offered.find((k) => k.id === v) ?? kind))}
                 disabled={Boolean(state.connectionId)}
               >
                 <SelectTrigger id="plugin-kind" className="w-full">
@@ -309,58 +310,16 @@ export function PluginConnectForm({
 
         {asksWho && <WhoSignsIn value={who} onChange={setWho} offered={offeredWho} />}
 
-        {kind.signsIn && (
+        {picks && (
           <div className="flex flex-col gap-3">
-            <RadioGroup
-              value={app}
-              onValueChange={(v) => (setApp(v as App), reshape(kind, v as App))}
-              className="grid gap-2 sm:grid-cols-2"
-              aria-label="Which app the team signs in with"
-              data-testid="plugin-app"
-            >
-              {(
-                [
-                  {
-                    value: 'platform',
-                    label: 'The platform’s app',
-                    hint: 'Set up once by an account admin. Nothing to register.',
-                    disabled: !plugin.platformApp,
-                  },
-                  { value: 'own', label: 'Our own app', hint: `Register an app with ${card.name} and enter its client ID and secret.`, disabled: false },
-                ] as const
-              ).map((o) => (
-                <label
-                  key={o.value}
-                  htmlFor={`app-${o.value}`}
-                  className={cn(
-                    'flex items-start gap-3 rounded-md border p-3',
-                    o.disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
-                    app === o.value && 'border-primary bg-primary/5',
-                  )}
-                >
-                  <RadioGroupItem value={o.value} id={`app-${o.value}`} disabled={o.disabled} className="mt-0.5" />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium">{o.label}</span>
-                    <span className="block text-xs text-muted-foreground">{o.disabled ? 'No account admin has set it up yet.' : o.hint}</span>
-                  </span>
-                </label>
-              ))}
-            </RadioGroup>
-            {app === 'own' && kinds.redirectUri && (
-              <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
-                <span className="text-muted-foreground">Return address to register:</span>
-                <code className="min-w-0 break-all">{kinds.redirectUri}</code>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => void navigator.clipboard.writeText(kinds.redirectUri ?? '').then(() => toast.success('Copied'))}
-                  aria-label="Copy the return address"
-                >
-                  <Copy />
-                </Button>
-              </div>
-            )}
+            <AppCredentialPicker
+              app={card.id}
+              value={client}
+              onChange={(c) => ((typedSince.current = true), setClient(c))}
+              platform={Boolean(plugin.platformApp)}
+              id="plugin-app"
+              testId="plugin-app"
+            />
             {plugin.scopes.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 text-sm">
                 <span className="text-muted-foreground">It asks for:</span>

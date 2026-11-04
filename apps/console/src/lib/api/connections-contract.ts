@@ -1,4 +1,4 @@
-import type { AccountRef, AppCredentialInput, AppCredentialRow, AuthKind, CredentialCheck, MyConnection, SignedInAccount, SignInAccount, SignInStart } from '@/lib/types/connections';
+import type { AccountRef, AuthKind, CredentialCheck, MyConnection, SignedInAccount, SignInAccount, SignInStart } from '@/lib/types/connections';
 
 /**
  * An app's account sign-ins (tools-service): starting and finishing one, each person's own sign-in, and the team's
@@ -20,7 +20,6 @@ export interface ConnectionsApi {
   /** Ends the caller's own sign-in, asking the system to revoke it; the next call asks them to connect again. */
   disconnect(id: string): Promise<void>;
   /** Adds the team's own OAuth app to one of its apps; team admins only. 409 when the app takes no client or has one. */
-  createAppCredential(input: AppCredentialInput): Promise<AppCredentialRow>;
   /** Test with my account: where the admin signs in through the app credential; nothing is kept but the result. */
   startCredentialCheck(ref: AccountRef): Promise<SignInStart>;
   /** Finishes Test with my account with the code and state the sign-in returned. */

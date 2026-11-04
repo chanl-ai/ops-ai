@@ -120,7 +120,9 @@ try {
       // Set-up through the API, as the api layer's steps 1-8 do.
       for (const host of fake.info.hosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-588' });
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: fake.info.range, note: 'uc-588' });
-      const person = await call(tools, 'PUT', '/v1/apps/plugin:test.person/team', priya, { enabled: true, signIn: 'person', clientId: 'multi-app', clientSecret: fake.info.clients['multi-app'] });
+      // The team's own client is made under Credentials, with no account, and the turn-on picks it.
+      const own = await call(tools, 'POST', '/v1/app-credentials', priya, { app: 'plugin:test.person', clientId: 'multi-app', clientSecret: fake.info.clients['multi-app'] });
+      const person = await call(tools, 'PUT', '/v1/apps/plugin:test.person/team', priya, { enabled: true, signIn: 'person', credentialId: own.data?.id });
       const keyed = await call(tools, 'PUT', '/v1/apps/plugin:test.header-key/team', priya, { enabled: true, credentials: { key: fake.info.secrets.key } });
       await call(tools, 'POST', `/v1/apps/plugin:test.header-key/accounts/${keyed.data?.connectionId}/test`, priya, { account: 'team' });
       // Each person brings their own key to this one; the team gives none.

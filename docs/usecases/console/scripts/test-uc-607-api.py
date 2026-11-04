@@ -87,8 +87,8 @@ with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
 
     # 29. An app where each person signs in with their own account: with no team account, James signs in with his own
     # and his call runs as him, through the app's own address.
-    client = {"clientId": "multi-app", "clientSecret": w.m["clients"]["multi-app"]}
-    person_app = w.turn_on("admin", "test.person", signIn="person", **client)
+    person_client = w.credential("admin", "test.person", "multi-app", w.m["clients"]["multi-app"])
+    person_app = w.turn_on("admin", "test.person", signIn="person", credentialId=person_client)
     signed = w.sign_in("builder", "plugin:test.person", person_app, "james.own")
     ran = w.call("person_get_record", args={"id": "r-1"}, acting_for="j.richardson@harborpine.example")
     answer = ((data(ran) or {}).get("output") or {}) if ran.status_code == 200 else {}

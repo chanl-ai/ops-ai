@@ -41,7 +41,7 @@ from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.store.secrets import SecretStore
 
-from .conftest import CONSOLE_URL, build_app, credentials, response_checker
+from .conftest import CONSOLE_URL, build_app, credentials, response_checker, team_credential
 from .test_plugins import AllowAll
 from .test_review_decisions import introspect, jwks, person
 
@@ -157,7 +157,13 @@ def admin(tenant: str) -> dict[str, str]:
     return person(tenant, "Priya Shah", {TEAM: "admin"})
 
 
-async def turn_on(rig: Rig, tenant: str, plugin: str, **body: Any) -> httpx.Response:
+async def turn_on(
+    rig: Rig, tenant: str, plugin: str, *, client: tuple[str, str] | None = None, **body: Any
+) -> httpx.Response:
+    """The plugin turned on for the team; `client` (id, secret) is the team's own OAuth app, made under Credentials
+    first and picked by credentialId."""
+    if client is not None:
+        body["credentialId"] = await team_credential(rig.client, admin(tenant), f"plugin:{plugin}", *client)
     return await rig.client.put(f"/v1/apps/plugin:{plugin}/team", json={"enabled": True, **body}, headers=admin(tenant))
 
 
@@ -255,7 +261,7 @@ def test_the_sdk_knows_which_methods_hold_a_persons_token() -> None:
 async def test_a_client_credentials_plugin_fetches_its_token_and_gets_a_new_one_after_expiry(
     rig: Rig, tenant: str
 ) -> None:
-    on = await turn_on(rig, tenant, "test.client", clientId=CLIENT, clientSecret=CLIENT_SECRET)
+    on = await turn_on(rig, tenant, "test.client", client=(CLIENT, CLIENT_SECRET))
     assert on.status_code == 200, on.text
     health = await health_of(rig, tenant, str(on.json()["data"]["connectionId"]))
     assert health["status"] == "ok", health
@@ -269,20 +275,10 @@ async def test_a_client_credentials_plugin_fetches_its_token_and_gets_a_new_one_
     assert all(r.get("client_id") == CLIENT and r.get("scope") == "api" for r in rig.system.token_requests)
 
 
-async def test_the_dialogs_client_id_in_credentials_turns_a_client_credentials_plugin_on(rig: Rig, tenant: str) -> None:
-    """The connect dialog sends a client-credentials app as the kind's fields, inside `credentials`, as it does every
-    other kind's (c-580 PM test: refused as client_missing, so no such plugin could be turned on from the console)."""
-    on = await turn_on(rig, tenant, "test.client", credentials={"clientId": CLIENT, "clientSecret": CLIENT_SECRET})
-    assert on.status_code == 200, on.text
-    assert (await call_as_team(rig, tenant, "test.client")).ok
-    assert [r.get("client_id") for r in rig.system.token_requests] == [CLIENT], rig.system.token_requests
-    assert CLIENT_SECRET not in on.text
-
-
 async def test_a_sign_in_address_the_plugin_fixes_is_refused_rather_than_typed_over(rig: Rig, tenant: str) -> None:
     """A typed token address would replace the plugin's, and the client secret would go to it."""
     moved = await turn_on(
-        rig, tenant, "test.client", clientId=CLIENT, clientSecret=CLIENT_SECRET,
+        rig, tenant, "test.client", client=(CLIENT, CLIENT_SECRET),
         credentials={"tokenUrl": "https://elsewhere.test/token"},
     )  # fmt: skip
     assert moved.status_code == 400 and "tokenUrl" in moved.text, moved.text
@@ -308,7 +304,7 @@ async def test_a_cancelled_connect_leaves_nothing_and_the_next_turn_on_makes_a_n
 async def test_a_wrong_client_secret_fails_at_the_token_fetch_and_the_connection_needs_reconnecting(
     rig: Rig, tenant: str
 ) -> None:
-    on = await turn_on(rig, tenant, "test.client", clientId=CLIENT, clientSecret="not-the-secret")
+    on = await turn_on(rig, tenant, "test.client", client=(CLIENT, "not-the-secret"))
     assert on.status_code == 200, on.text
     refused = await call_as_team(rig, tenant, "test.client")
     assert not refused.ok and refused.output["error"]["code"] == "AUTH_FAILED", refused.output
@@ -371,7 +367,7 @@ async def test_a_python_tool_cannot_return_the_credential_it_was_signed_in_with(
 async def test_test_connection_gets_a_new_token_once_when_the_system_refuses_the_one_held(
     rig: Rig, tenant: str
 ) -> None:
-    on = await turn_on(rig, tenant, "test.client", clientId=CLIENT, clientSecret=CLIENT_SECRET)
+    on = await turn_on(rig, tenant, "test.client", client=(CLIENT, CLIENT_SECRET))
     connection_id = str(on.json()["data"]["connectionId"])
     assert (await health_of(rig, tenant, connection_id))["status"] == "ok"
     rig.system.expire()

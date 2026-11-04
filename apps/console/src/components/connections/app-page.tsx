@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { AppCredentialPicker } from '@/components/connections/app-credential-picker';
 import { Bot, ChevronDown, CircleCheck, ExternalLink, FileText, FlaskConical, KeyRound, Plug, Plus, RefreshCw, Sparkles, Users, Workflow } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -784,12 +785,12 @@ function SettingsTab({ app, kinds, onSetUp }: { app: AppData; kinds?: Kinds; onS
   const test = useTestAccount();
   const setTeamApp = useSetTeamApp();
   const kind = kinds?.kinds.find((k) => k.id === conn?.authKind);
-  const [own, setOwn] = React.useState({ clientId: '', clientSecret: '' });
+  const [own, setOwn] = React.useState<string | null | undefined>(undefined);
   if (!conn) return null;
   const account = { appId: app.card.id, accountId: conn.id };
   const teamSigned = Boolean(conn.signedIn);
   const everyone = conn.signIn !== 'team';
-  const platform = Boolean(conn.platformApp);
+  const platform = !conn.credentialId;
   const keysSet = Object.keys(conn.settings).length > 0 || Object.values(conn.secrets).some((v) => v.set) || teamSigned;
   const flip = (on: boolean) =>
     change.mutate(
@@ -820,14 +821,14 @@ function SettingsTab({ app, kinds, onSetUp }: { app: AppData; kinds?: Kinds; onS
             <ChevronDown className="size-4 text-muted-foreground" />
           </CollapsibleTrigger>
           <CollapsibleContent className="flex flex-col gap-3 border-t p-4" data-testid="app-credentials">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FormField id="own-client-id" label="Client ID">
-                <Input id="own-client-id" value={own.clientId} onChange={(e) => setOwn((o) => ({ ...o, clientId: e.target.value }))} />
-              </FormField>
-              <FormField id="own-client-secret" label="Client secret">
-                <Input id="own-client-secret" type="password" autoComplete="off" value={own.clientSecret} onChange={(e) => setOwn((o) => ({ ...o, clientSecret: e.target.value }))} placeholder="Sealed on save" />
-              </FormField>
-            </div>
+            <AppCredentialPicker
+              app={app.card.id}
+              value={own === undefined ? (conn.credentialId ?? null) : own}
+              onChange={setOwn}
+              platform={Boolean(app.card.plugin?.platformApp)}
+              id="own-credential"
+              testId="app-own-credential"
+            />
             {kinds?.redirectUri && (
               <p className="text-sm">
                 <span className="text-muted-foreground">Return address to register: </span>
@@ -839,10 +840,10 @@ function SettingsTab({ app, kinds, onSetUp }: { app: AppData; kinds?: Kinds; onS
               <LoadingButton
                 size="sm"
                 isLoading={setTeamApp.isPending}
-                disabled={!own.clientId.trim()}
+                disabled={own === undefined || own === (conn.credentialId ?? null)}
                 onClick={() =>
                   setTeamApp.mutate(
-                    { appId: app.card.id, body: { enabled: true, sandbox: false, clientId: own.clientId.trim(), ...(own.clientSecret ? { clientSecret: own.clientSecret } : {}) } },
+                    { appId: app.card.id, body: { enabled: true, sandbox: false, credentialId: own ?? null } },
                     { onSuccess: () => toast.success('Saved: sign in again with your own app'), onError: (e) => toast.error('Couldn’t save the app', { description: e.message }) },
                   )
                 }

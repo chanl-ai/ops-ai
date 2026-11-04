@@ -30,7 +30,6 @@ from ops_tools.store.connections import (
     app_credentials,
     connect_links,
     connection_audit,
-    connection_environments,
     connection_tokens,
     connections,
     oauth_states,
@@ -44,10 +43,9 @@ ROOT = Path(__file__).resolve().parents[3]
 PASSWORD = "credential-lock-test"
 TEAM_A, TEAM_B = "team_cards", "team_ops"
 CONNECTION = "con_lock"
-# The thirteen tables of apps.html "Credentials: today and after", by chain and the role its transactions run as.
+# The twelve tables of apps.html "Credentials: today and after", by chain and the role its transactions run as.
 TOOLS = (
     connection_tokens,
-    connection_environments,
     oauth_states,
     connect_links,
     tool_secrets,

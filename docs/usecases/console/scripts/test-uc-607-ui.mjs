@@ -246,7 +246,7 @@ try {
           await first.close();
           check(
             '3 one Connect window: Ops AI’s app or your own, the access asked for and Authorize; the sign-in window opens at once on the console’s connect page; a refusal shows in both windows and Authorize works again',
-            /Ops AI’s app/.test(said) && /Your own app/.test(said) && /gets access to/.test(said) && button === 'Connect' && !/Authorize with/.test(said) && /More options/.test(said) && folded &&
+            /Ops AI’s/.test(said) && /App credential/.test(said) && /Add one under Credentials/.test(said) && /gets access to/.test(said) && button === 'Connect' && !/Authorize with/.test(said) && /More options/.test(said) && folded &&
               new URL(openedAt).pathname === '/connections/connect' && new URL(openedAt).searchParams.get('app') === 'Person desk' &&
               deniedShown && closeOffered && /not given/.test(told) && again,
             { said, button, folded, openedAt, deniedShown, closeOffered, told, again },
@@ -796,9 +796,9 @@ try {
           // Off for the team: the catalog offers Connect for it again.
           await page.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           const offered = await page.getByTestId(`connect-${APP}`).waitFor({ timeout: 60_000 }).then(() => true, () => false);
-          // Connect on an app turned off opens the one Connect window, continuing with the app credential it had.
+          // Connect on an app turned off opens the one Connect window, on the app credential it had (Ops AI's app here).
           await page.getByTestId(`connect-${APP}`).click();
-          const smallAgain = await page.getByTestId('connect-window-reuse').waitFor({ timeout: 30_000 }).then(async () => /Continuing with/.test(await page.getByTestId('connect-window-reuse').innerText()), () => false);
+          const smallAgain = await page.getByTestId('connect-window-app').waitFor({ timeout: 30_000 }).then(async () => /Ops AI’s app/.test(await page.getByTestId('connect-window-app').innerText()), () => false);
           await page.keyboard.press('Escape');
           check(
             '13b Priya turns the app off: the window names the agent using its tools first, and the catalog then offers Connect, continuing with its app credential',
@@ -960,12 +960,15 @@ try {
         for (let i = 0; i < 20 && !((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).some((c) => c.pluginId === 'test.entra'); i++) await page.waitForTimeout(1000);
         await step("17 a certificate app connects in the window, and its Settings show the certificate's thumbprint and expiry, never its key", async () => {
           await page.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          // The app's own client is made under Credentials (no secret: it signs an assertion), then picked here.
+          const entraCredential = (await call(tools, 'POST', '/v1/app-credentials', priya, { app: 'plugin:test.entra', clientId: entraFake.entra.clientId })).data?.id;
           await page.getByTestId('connect-plugin:test.entra').click();
           const window_ = page.getByTestId('connect-dialog');
           await window_.waitFor({ timeout: 30_000 });
+          await window_.getByTestId('plugin-app').click({ timeout: 30_000 });
+          await page.getByTestId(`plugin-app-option-${entraCredential}`).click();
           const section = window_.getByTestId('account-fields');
-          await section.locator('#account-clientId').waitFor({ timeout: 30_000 });
-          await section.locator('#account-clientId').fill(entraFake.entra.clientId);
+          await section.waitFor({ timeout: 30_000 });
           await section.getByRole('button', { name: 'More settings' }).click();
           await section.locator('#account-clientAuth').click();
           await page.getByRole('option', { name: 'private_key_jwt' }).click();
@@ -1055,30 +1058,36 @@ try {
         const SF = 'plugin:opsai.salesforce';
         /** The app's accounts, its default first, each with its last test, as its page reads them. */
         const sfAccounts = async () => (await call(tools, 'GET', `/v1/apps/${encodeURIComponent(SF)}`, priya)).data?.accounts ?? [];
+        /** The team's own client, made under Credentials with no account, as the Connect window then offers it. */
+        const credentialFor = async (clientId, clientSecret) =>
+          (await call(tools, 'POST', '/v1/app-credentials', priya, { app: SF, name: `Salesforce ${clientId}`, clientId, clientSecret })).data?.id;
         /**
-         * The team's own app in the Connect window, its sign-in address and Authorize, allowed as `user`. The first
-         * connect also checks that empty client fields say so in place; a sandbox account opens the same window from
-         * the app page. Answers the account's first test, which runs after the sign-in, in the background.
+         * The team's own app picked in the Connect window, its sign-in address and Authorize, allowed as `user`. The
+         * first connect also checks that Authorize with no app credential picked says so and opens no sign-in window;
+         * a sandbox account opens the same window from the app page. Answers the account's first test, which runs
+         * after the sign-in, in the background.
          */
         const ownWindow = async (values, user, { sandbox = false } = {}) => {
           const window_ = page.getByTestId('connect-window');
           await window_.waitFor({ timeout: 30_000 });
-          if (await window_.getByTestId('connect-window-app-own').count()) await window_.getByTestId('connect-window-app-own').click();
+          const picker = window_.getByTestId('connect-window-app');
           if (!sandbox) {
-            // Authorize with the client fields empty: each says what it needs in place, and no sign-in window opens.
+            // No client is typed in the window: it is picked from the team's app credentials, with a link to add one.
+            const typed = await window_.getByTestId('connect-window-client-id').count();
+            const add = await window_.getByTestId('connect-window-app-add').getAttribute('href').catch(() => null);
             let opened = false;
             const onPopup = () => (opened = true);
+            const unpicked = /Pick an app credential/.test(await picker.innerText());
             page.on('popup', onPopup);
-            await window_.getByTestId('connect-window-authorize').click();
-            const idError = await window_.getByTestId('connect-window-client-id-error').innerText({ timeout: 10_000 }).catch(() => '');
-            const secretError = await window_.getByTestId('connect-window-client-secret-error').innerText({ timeout: 10_000 }).catch(() => '');
+            if (unpicked) await window_.getByTestId('connect-window-authorize').click();
+            const error = unpicked ? await window_.getByTestId('connect-window-error').innerText({ timeout: 10_000 }).catch(() => '') : '';
             await page.waitForTimeout(500);
             page.off('popup', onPopup);
             await shoot(page, 'connect-required');
-            check('43 an empty required field shows its error in place, and Authorize opens no sign-in window', /Enter the client ID/.test(idError) && /Enter the client secret/.test(secretError) && !opened, { idError, secretError, opened });
+            check('43 the Connect window types no client: it picks an app credential, links to Credentials to add one, and Authorize with none picked says so and opens no sign-in window', typed === 0 && add === '/integrations/credentials' && (!unpicked || (/Pick the app credential/.test(error) && !opened)), { typed, add, unpicked, error, opened });
           }
-          await window_.getByTestId('connect-window-client-id').fill(values.clientId);
-          await window_.getByTestId('connect-window-client-secret').fill(values.clientSecret);
+          await picker.click();
+          await page.getByTestId(`connect-window-app-option-${values.credential}`).click();
           // A sandbox opens with More options showing, its name and sign-in address among them.
           if (!(await window_.getByTestId('connect-window-setting-login_url').isVisible())) await window_.getByTestId('connect-window-more').click();
           await window_.getByTestId('connect-window-setting-login_url').fill(values.login_url);
@@ -1100,13 +1109,16 @@ try {
         };
         const loginUrl = sf.authorize_url.replace(/\/authorize$/, '');
         await step("19 Salesforce's own app on each account: the live one in the Connect window, a sandbox account from the app page, each on its own instance", async () => {
+          // Both clients are made under Credentials first, so the window's list has them when it opens.
+          const liveCredential = await credentialFor('ops-ai-acme', 'acme-connected-app-secret');
+          const sandboxCredential = await credentialFor('acme-sandbox-app', 'acme-sandbox-secret');
           await page.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await page.getByTestId('connect-plugin:opsai.salesforce').click();
-          const live = await ownWindow({ clientId: 'ops-ai-acme', clientSecret: 'acme-connected-app-secret', login_url: loginUrl }, 'priya.live');
+          const live = await ownWindow({ credential: liveCredential, login_url: loginUrl }, 'priya.live');
           await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(SF)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await page.getByTestId('app-add-sandbox').click({ timeout: 60_000 });
           const suggested = await page.getByTestId('connect-window-name').getAttribute('placeholder').catch(() => null);
-          const sandbox = await ownWindow({ clientId: 'acme-sandbox-app', clientSecret: 'acme-sandbox-secret', login_url: sf.sandbox_login }, 'priya.sandbox', { sandbox: true });
+          const sandbox = await ownWindow({ credential: sandboxCredential, login_url: sf.sandbox_login }, 'priya.sandbox', { sandbox: true });
           await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(SF)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await page.getByTestId('app-accounts').waitFor({ timeout: 60_000 });
           const rows = ((await page.getByTestId('app-accounts').innerText()) ?? '').replace(/\s+/g, ' ');

@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- tools-service, stamped at tools_0063_health_slot
+-- tools-service, stamped at tools_0064_team_credentials
 CREATE TABLE gateway_calls (
 	id VARCHAR(64) NOT NULL, 
 	tool VARCHAR(64) NOT NULL, 
@@ -170,7 +170,9 @@ CREATE TABLE app_credentials (
 	id VARCHAR(64) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
 	app_id VARCHAR(120) NOT NULL, 
+	name VARCHAR(200) NOT NULL, 
 	client_id VARCHAR(500) NOT NULL, 
+	scopes VARCHAR(2000) NULL, 
 	secret_name VARCHAR(200) NULL, 
 	created_by VARCHAR(200) NOT NULL, 
 	created_at DATETIMEOFFSET NOT NULL, 
@@ -269,6 +271,7 @@ CREATE TABLE tool_secrets (
 	template_id VARCHAR(120) NULL, 
 	protection VARCHAR(16) NULL, 
 	connection_id VARCHAR(64) NULL, 
+	credential_id VARCHAR(64) NULL, 
 	CONSTRAINT tool_secrets_pkey PRIMARY KEY (tenant_id, team_id, name)
 );
 GO
@@ -538,5 +541,5 @@ CREATE TABLE alembic_version_tools (
     CONSTRAINT alembic_version_tools_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0063_health_slot');
+INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0064_team_credentials');
 GO

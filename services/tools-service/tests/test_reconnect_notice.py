@@ -33,7 +33,7 @@ async def notices(r: Rig, tenant: str) -> list[dict[str, Any]]:
 
 
 async def test_a_refused_team_account_names_the_app_to_reconnect_and_tells_admins_once(rig: Rig, tenant: str) -> None:  # noqa: F811
-    on = await turn_on(rig, tenant, "test.client", clientId=CLIENT, clientSecret="not-the-secret")
+    on = await turn_on(rig, tenant, "test.client", client=(CLIENT, "not-the-secret"))
     connection_id = str(on.json()["data"]["connectionId"])
     refused = await call_as_team(rig, tenant, "test.client")
     error = refused.output["error"]
@@ -56,11 +56,11 @@ async def test_a_refused_team_account_names_the_app_to_reconnect_and_tells_admin
 
 
 async def test_a_fixed_and_again_refused_account_tells_admins_again(rig: Rig, tenant: str) -> None:  # noqa: F811
-    await turn_on(rig, tenant, "test.client", clientId=CLIENT, clientSecret="not-the-secret")
+    await turn_on(rig, tenant, "test.client", client=(CLIENT, "not-the-secret"))
     await call_as_team(rig, tenant, "test.client")
-    await turn_on(rig, tenant, "test.client", clientId=CLIENT, clientSecret=CLIENT_SECRET)
+    await turn_on(rig, tenant, "test.client", client=(CLIENT, CLIENT_SECRET))
     assert (await call_as_team(rig, tenant, "test.client")).ok
-    await turn_on(rig, tenant, "test.client", clientId=CLIENT, clientSecret="wrong-again")
+    await turn_on(rig, tenant, "test.client", client=(CLIENT, "wrong-again"))
     # The held token is turned down, so the gateway asks for a new one with the wrong secret.
     rig.system.expire()
     await call_as_team(rig, tenant, "test.client")
@@ -68,7 +68,7 @@ async def test_a_fixed_and_again_refused_account_tells_admins_again(rig: Rig, te
 
 
 async def test_an_ended_team_sign_in_reads_expired_not_never_signed_in(rig: Rig, tenant: str) -> None:  # noqa: F811
-    on = await turn_on(rig, tenant, "test.person", signIn="team", clientId="person-app")
+    on = await turn_on(rig, tenant, "test.person", signIn="team", client=("person-app", "person-app-secret"))
     assert on.status_code == 200, on.text
     connection_id = str(on.json()["data"]["connectionId"])
     # A sign-in that gave no refresh token, whose token ended a minute ago.
@@ -85,7 +85,7 @@ async def test_an_ended_team_sign_in_reads_expired_not_never_signed_in(rig: Rig,
 
 
 async def test_a_team_account_never_signed_in_is_not_reported_as_needing_a_reconnect(rig: Rig, tenant: str) -> None:  # noqa: F811
-    await turn_on(rig, tenant, "test.person", signIn="team", clientId="person-app")
+    await turn_on(rig, tenant, "test.person", signIn="team", client=("person-app", "person-app-secret"))
     failed = await call_as_team(rig, tenant, "test.person")
     assert failed.output["error"]["code"] == "NOT_SIGNED_IN", failed.output
     assert "reconnecting" not in failed.output["error"]["message"]

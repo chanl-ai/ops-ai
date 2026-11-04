@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
 import { KeyRound, Plus } from 'lucide-react';
 import { toast } from 'sonner';
@@ -20,11 +21,20 @@ import { Input } from '@/components/ui/input';
 import { type AppCredential, useAppCredentials, useSetCredentialSecret } from '@/hooks/systems-queries';
 import { shortDate } from '@/lib/format';
 
-const STATUS: Record<AppCredential['status'], string> = { working: 'Working', not_tested: 'Not tested', failing: 'Failing' };
-/** The plugin an app credential belongs to (its app is plugin:<id>); a custom app has none, and no secret to replace here. */
+export const CREDENTIAL_STATUS: Record<AppCredential['status'], string> = { working: 'Working', not_tested: 'Not tested', failing: 'Failing' };
+/** An app credential's page under Credentials. */
+export const credentialHref = (id: string) => `/integrations/credentials/${encodeURIComponent(id)}`;
 
 const columns = (onEdit: (c: AppCredential) => void): ColumnDef<AppCredential>[] => [
-  { accessorKey: 'name', header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />, cell: ({ row }) => <span className="font-medium">{row.original.name}</span> },
+  {
+    accessorKey: 'name',
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
+    cell: ({ row }) => (
+      <Link href={credentialHref(row.original.id)} className="font-medium underline-offset-4 hover:underline" data-testid={`app-credential-open-${row.original.id}`}>
+        {row.original.name}
+      </Link>
+    ),
+  },
   {
     id: 'app',
     accessorFn: (c) => c.appName,
@@ -48,14 +58,14 @@ const columns = (onEdit: (c: AppCredential) => void): ColumnDef<AppCredential>[]
     cell: ({ row }) => <span className="tabular-nums" title={row.original.permissions.join(' ')}>{row.original.permissions.length}</span>,
   },
   { accessorKey: 'accounts', header: ({ column }) => <DataTableColumnHeader column={column} title="Accounts" />, cell: ({ row }) => <span className="tabular-nums">{row.original.accounts}</span> },
-  { accessorKey: 'status', header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />, cell: ({ row }) => <Badge variant="outline" data-status={row.original.status}>{STATUS[row.original.status]}</Badge> },
-  { accessorKey: 'created', header: ({ column }) => <DataTableColumnHeader column={column} title="Created" />, cell: ({ row }) => <span className="text-sm text-muted-foreground">{shortDate(row.original.created)}</span> },
+  { accessorKey: 'status', header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />, cell: ({ row }) => <Badge variant="outline" data-status={row.original.status}>{CREDENTIAL_STATUS[row.original.status]}</Badge> },
+  { accessorKey: 'created', header: ({ column }) => <DataTableColumnHeader column={column} title="Created" />, cell: ({ row }) => <span className="text-sm text-muted-foreground">{row.original.created ? shortDate(row.original.created) : '—'}</span> },
   {
     id: 'actions',
     header: () => null,
     // Only the team's own client has a secret to replace; Ops AI's app is the platform's.
     cell: ({ row }) =>
-      row.original.type === 'own' && row.original.credentialId ? (
+      row.original.type === 'own' ? (
         <Button size="sm" variant="ghost" onClick={() => onEdit(row.original)} data-testid={`app-credential-edit-${row.original.id}`}>
           Edit
         </Button>
@@ -64,12 +74,13 @@ const columns = (onEdit: (c: AppCredential) => void): ColumnDef<AppCredential>[]
 ];
 
 /**
- * App credentials (U4): the OAuth clients the team's apps sign in with, Ops AI's own app or the team's, from
- * GET /v1/app-credentials. Edit replaces the team's own client secret (PUT /v1/app-credentials/{id}/secret), sealed on
- * save; Ops AI's app is the install's and has none to replace here.
+ * App credentials (U4): the OAuth clients the team's apps sign in with, the team's own and Ops AI's app of each app
+ * using it, from GET /v1/app-credentials. A row opens the credential's page; Edit replaces the team's own client
+ * secret (PUT /v1/app-credentials/{id}/secret), sealed on save. Ops AI's app is the install's and has none here.
  */
 export function AppCredentialsPanel() {
   const creds = useAppCredentials();
+  const router = useRouter();
   const [editing, setEditing] = React.useState<AppCredential | null>(null);
   const [adding, setAdding] = React.useState(false);
   const cols = React.useMemo(() => columns(setEditing), []);
@@ -87,7 +98,7 @@ export function AppCredentialsPanel() {
       </div>
       <DataTableWithViews
         columns={cols}
-        data={creds.data}
+        data={creds.data.map((c) => ({ ...c, onRowClick: () => router.push(credentialHref(c.id)), href: credentialHref(c.id), rowTestId: `app-credential-row-${c.id}` }))}
         getRowId={(c) => c.id}
         searchColumn="name"
         searchPlaceholder="Search app credentials…"
@@ -100,7 +111,8 @@ export function AppCredentialsPanel() {
   );
 }
 
-function EditSecretDialog({ credential, onClose }: { credential: AppCredential | null; onClose: () => void }) {
+/** Replaces the team's own client secret of an app credential; every account on it keeps it. */
+export function EditSecretDialog({ credential, onClose }: { credential: Pick<AppCredential, 'id' | 'name'> | null; onClose: () => void }) {
   const set = useSetCredentialSecret();
   const [secret, setSecret] = React.useState('');
   React.useEffect(() => {
@@ -122,9 +134,9 @@ function EditSecretDialog({ credential, onClose }: { credential: AppCredential |
             isLoading={set.isPending}
             disabled={!secret.trim()}
             onClick={() =>
-              credential?.credentialId &&
+              credential &&
               set.mutate(
-                { path: { credential_id: credential.credentialId }, body: { clientSecret: secret.trim() } },
+                { path: { credential_id: credential.id }, body: { clientSecret: secret.trim() } },
                 { onSuccess: () => (toast.success(`Saved the client secret of ${credential.name}`), onClose()), onError: (e) => toast.error('Couldn’t save the client secret', { description: e.message }) },
               )
             }

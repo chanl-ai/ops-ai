@@ -21,7 +21,7 @@ from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
 
-from .conftest import build_app, response_checker
+from .conftest import build_app, response_checker, team_credential
 from .plugin_desk import plugin as desk
 from .test_plugin_credentials import team_admin
 from .test_plugins import ID
@@ -53,7 +53,9 @@ async def rig(
 async def test_a_removed_plugin_keeps_its_card_and_says_it_is_no_longer_installed(rig: Rig, tenant: str) -> None:
     client, host = rig
     on = await client.put(
-        f"/v1/apps/plugin:{ID}/team", json={"enabled": True, "clientId": "app"}, headers=team_admin(tenant)
+        f"/v1/apps/plugin:{ID}/team",
+        json={"enabled": True, "credentialId": await team_credential(client, team_admin(tenant), f"plugin:{ID}")},
+        headers=team_admin(tenant),
     )
     assert on.status_code == 200, on.text
     conn_id = on.json()["data"]["connectionId"]

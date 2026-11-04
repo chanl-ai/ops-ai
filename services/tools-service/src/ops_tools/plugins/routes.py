@@ -13,7 +13,7 @@ from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 from ops_plugin_sdk import Plugin
@@ -32,6 +32,9 @@ from ..modules.tool_users import ToolUsers
 from ..store.connections import PLUGIN_APP
 from .host import PluginHost, fixed_fields, per_account, readable, render, sign_in_fixed
 
+# The OAuth app's own fields: an app credential's, made under Credentials, never typed into an account.
+CLIENT_FIELDS = ("clientId", "clientSecret")
+
 
 class _Wire(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
@@ -40,9 +43,9 @@ class _Wire(BaseModel):
 class TeamPluginIn(_Wire):
     enabled: bool
     settings: dict[str, Any] = Field(default_factory=dict[str, Any])
-    # The OAuth app the team signs in with; needed for the first turn-on of a plugin that signs in.
-    client_id: str | None = Field(default=None, max_length=500)
-    client_secret: str | None = Field(default=None, max_length=2000)
+    # The team's app credential (GET /v1/app-credentials) the account signs in with; left out of the first turn-on,
+    # Ops AI's app, and of a later one, the account keeps the app it has. Null puts it on Ops AI's app.
+    credential_id: str | None = Field(default=None, min_length=1, max_length=64)
     sign_in: str | None = None
     # Which of the plugin's sign-in kinds the team's account uses, the first it lists when left out (c-588). It is
     # chosen at the first turn-on only: an account's kind never changes.
@@ -58,16 +61,6 @@ class TeamPluginIn(_Wire):
     account_name: str | None = Field(default=None, min_length=1, max_length=200)
     # Whether the first account is a sandbox, which only test runs use.
     sandbox: bool = False
-
-    @model_validator(mode="after")
-    def _app_in_credentials(self) -> "TeamPluginIn":
-        """The connect dialog sends a client-credentials app as the kind's fields, inside `credentials` (c-580): the
-        client id and secret given there are the app's, as when given at the top level."""
-        if self.client_id is None and (cid := self.credentials.pop("clientId", None)):
-            self.client_id = cid
-        if self.client_secret is None and (secret := self.credentials.pop("clientSecret", None)):
-            self.client_secret = secret
-        return self
 
 
 class InputChanges(_Wire):
@@ -208,7 +201,7 @@ class PluginAccounts:
             connection_id = await self.connect(
                 who, plugin, settings, own, body, account_name=body.account_name, sandbox=body.sandbox
             )
-        elif body.enabled and (body.client_id or body.client_secret or body.credentials or body.kind or own):
+        elif body.enabled and ("credential_id" in body.model_fields_set or body.credentials or body.kind or own):
             await self.keys(who, plugin, str(connection_id), settings, body, own=own)
         await self.host.bindings.put(
             who.tenant_id,
@@ -251,8 +244,7 @@ class PluginAccounts:
         settings = self._team_settings(plugin, dict(b.get("settings") or {}), {})
         given = TeamPluginIn(
             enabled=True,
-            client_id=body.client_id,
-            client_secret=body.client_secret,
+            credential_id=body.credential_id,
             sign_in=body.sign_in,
             kind=body.kind,
             credentials=dict(body.credentials),
@@ -280,6 +272,12 @@ class PluginAccounts:
         fixed = {"baseUrl", "testPath", *fixed_fields(plugin.manifest)}
         for k, v in given.items():
             f = kind.field(k)
+            if k in CLIENT_FIELDS and f is not None:
+                raise ValidationFailed(
+                    f"{f.label} is the OAuth app's: add it under Credentials and name it as credentialId.",
+                    code="client_in_credentials",
+                    details={"field": f"credentials.{k}"},
+                )
             if f is not None and k in fixed:
                 raise ValidationFailed(
                     f"{k} is set by {plugin.manifest.title} itself, not typed.",
@@ -323,7 +321,7 @@ class PluginAccounts:
             for f in kind.requires({**plain, **sign_in_fixed(plugin.manifest)}, each_person=each_person)
             if f.secret and f.name not in secret and not (kind.holds_token and f.name == "clientSecret")
         ]
-        if kind.holds_token and not body.client_id and self._ops_client_id(m.id) is None:
+        if kind.holds_token and not body.credential_id and self._ops_client_id(m.id) is None:
             raise ValidationFailed(
                 f"Give the OAuth app's client id to turn {m.title} on; this install has no app of its own for it.",
                 code="client_missing",
@@ -389,22 +387,32 @@ class PluginAccounts:
         keys: dict[str, Any] = dict(before)
         endpoint = render(m.endpoint, merged)
         platform_id: str | None = None
+        client: dict[str, Any] = {}
+        # The OAuth client is the account's credential (credential_id) or Ops AI's app (platform_app), never a setting.
+        keys.pop("clientId", None)
         if kind.holds_token:
-            # A later turn-on that names no app keeps the team's own; else the platform's.
-            keep_own = not body.client_id and not body.client_secret and bool(before.get("clientId"))
-            keep_own = keep_own and not (conn or {}).get("platform_app")
-            if not body.client_id and not keep_own:
-                platform_id = self._ops_client_id(m.id)
-            client_id = body.client_id or (before.get("clientId") if keep_own else platform_id)
-            if not client_id:
+            # A later turn-on that names no credential keeps the one the account has; else Ops AI's app.
+            held = (conn or {}).get("credential_id") if not (conn or {}).get("platform_app") else None
+            chosen = body.credential_id if "credential_id" in body.model_fields_set else held
+            cred = await self.connections.store.credential(who.tenant_id, chosen) if chosen else None
+            if chosen and (cred is None or cred["team_id"] != who.team.id or cred["app_id"] != f"{PLUGIN_APP}{m.id}"):
                 raise ValidationFailed(
-                    f"Give the OAuth app's client id to turn {m.title} on; this install has no app of its own for it.",
-                    code="client_missing",
+                    f"Pick one of the team's app credentials for {m.title}.",
+                    code="credential_not_found",
+                    details={"field": "credentialId"},
                 )
-            # Ops AI's app is named by the account (platform_app), never copied into it.
-            keys |= ({} if platform_id is not None else {"clientId": client_id}) | {
-                "scopes": " ".join(s.id for s in c.scopes)
-            }
+            if cred is None:
+                platform_id = self._ops_client_id(m.id)
+                if platform_id is None:
+                    raise ValidationFailed(
+                        f"Add an app credential for {m.title} under Credentials and pick it; this install has no app "
+                        "of its own for it.",
+                        code="client_missing",
+                    )
+            elif chosen != held:
+                client = {"credential_id": chosen}
+            scopes = str((cred or {}).get("scopes") or "") or " ".join(s.id for s in c.scopes)
+            keys |= {"scopes": scopes}
             for key, template in (
                 ("authorizeUrl", c.authorize_url),
                 ("tokenUrl", c.token_url),
@@ -439,11 +447,10 @@ class PluginAccounts:
         if platform_id is not None:
             await self.connections.use_platform_app(who, connection_id, m.id, keys, plugin_settings=mine)
             return
-        values = {**secret, **({"clientSecret": body.client_secret} if body.client_secret else {})}
         await self.connections.change(
             who,
             connection_id,
-            {"revision": int(conn["revision"]) if conn else 1, "settings": keys, "secret_values": values},
+            {"revision": int(conn["revision"]) if conn else 1, "settings": keys, "secret_values": secret, **client},
             plugin_settings=mine,
         )
 

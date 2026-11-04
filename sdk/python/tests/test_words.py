@@ -64,16 +64,16 @@ def test_a_tool_runs_on_the_module_that_holds_it_and_mock_says_mock() -> None:
     assert body(seen[-1])["mode"] == "real"
 
 
-def test_the_teams_own_client_goes_on_the_apps_account_with_its_revision() -> None:
+def test_an_account_picks_the_teams_credential_by_its_id_with_its_revision() -> None:
     seen: list[httpx.Request] = []
     answers = {
         ("GET", "apps/plugin:desk"): {**PAGE, "connection": {"id": "con_team"}},
         ("GET", "apps/plugin:desk/accounts/con_team"): {"revision": 4},
     }
-    client(answers, seen).credentials.set("plugin:desk", client_id="own-app", client_secret="s3")
+    client(answers, seen).credentials.set("plugin:desk", "cred_bank")
     put = seen[-1]
     assert (put.method, put.url.path) == ("PATCH", "/api/tools/v1/apps/plugin:desk/accounts/con_team")
-    assert body(put) == {"revision": 4, "settings": {"clientId": "own-app"}, "secretValues": {"clientSecret": "s3"}}
+    assert body(put) == {"revision": 4, "credentialId": "cred_bank"}
 
 
 def test_usage_is_the_calls_rows_not_the_envelope() -> None:
@@ -119,7 +119,7 @@ def test_credentials_create_posts_the_app_its_client_and_secret_to_the_app_crede
 
 def test_a_sandbox_account_is_added_as_a_sandbox_under_its_app() -> None:
     seen: list[httpx.Request] = []
-    client({}, seen).accounts.add("plugin:desk", "Desk sandbox", sandbox=True, clientId="uat-app")
+    client({}, seen).accounts.add("plugin:desk", "Desk sandbox", sandbox=True, credentialId="cred_uat")
     made = seen[-1]
     assert (made.method, made.url.path) == ("POST", "/api/tools/v1/apps/plugin:desk/accounts")
-    assert body(made) == {"name": "Desk sandbox", "sandbox": True, "clientId": "uat-app"}
+    assert body(made) == {"name": "Desk sandbox", "sandbox": True, "credentialId": "cred_uat"}

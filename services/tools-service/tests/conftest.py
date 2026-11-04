@@ -252,6 +252,22 @@ def service_headers(tenant: str, service: str = "agents", scopes: list[str] | No
     return {"Authorization": f"Bearer {token}"}
 
 
+async def team_credential(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    app: str,
+    client_id: str = "app",
+    client_secret: str = "team-app-secret",
+    **more: Any,
+) -> str:
+    """The team's own OAuth client of `app` (`plugin:<id>`), made under Credentials with no account; its id, which a
+    turn-on or a new account names as credentialId."""
+    body = {"app": app, "clientId": client_id, "clientSecret": client_secret, **more}
+    r = await client.post("/v1/app-credentials", json=body, headers=headers)
+    assert r.status_code == 201, r.text
+    return str(r.json()["data"]["id"])
+
+
 async def grant(engine: AsyncEngine, tenant: str, module_id: str, approval_id: str) -> None:
     """Test setup: a workflow's access request approved, as its system workflow's apply step would leave it (c-257;
     that path is tested in test_apply_tool_access and agents-service's gateway tests)."""

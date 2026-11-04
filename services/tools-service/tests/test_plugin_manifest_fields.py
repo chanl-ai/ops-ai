@@ -37,7 +37,7 @@ from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.store.secrets import SecretStore
 
-from .conftest import CONSOLE_URL, build_app, credentials, response_checker
+from .conftest import CONSOLE_URL, build_app, credentials, response_checker, team_credential
 from .test_personal_sign_in import JAMES_P, SETTINGS, client, personal_connection, system
 from .test_plugins import AllowAll
 from .test_review_decisions import introspect, jwks, person
@@ -246,7 +246,13 @@ def admin(tenant: str) -> dict[str, str]:
     return person(tenant, "Priya Shah", {TEAM: "admin"})
 
 
-async def turn_on(c: httpx.AsyncClient, tenant: str, plugin: str, **body: Any) -> httpx.Response:
+async def turn_on(
+    c: httpx.AsyncClient, tenant: str, plugin: str, *, client: tuple[str, str] | None = None, **body: Any
+) -> httpx.Response:
+    """The plugin turned on for the team; `client` (id, secret) is the team's own OAuth app, made under Credentials
+    first and picked by credentialId."""
+    if client is not None:
+        body["credentialId"] = await team_credential(c, admin(tenant), f"plugin:{plugin}", *client)
     return await c.put(f"/v1/apps/plugin:{plugin}/team", json={"enabled": True, **body}, headers=admin(tenant))
 
 
@@ -254,7 +260,7 @@ async def test_a_plugins_token_call_sends_the_client_as_basic_auth_and_never_in_
     desk_rig: tuple[Any, TokenDesk], tenant: str
 ) -> None:
     (c, host, _, http), desk = desk_rig
-    on = await turn_on(c, tenant, "test.fields-zoom", clientId=ZOOM, clientSecret=ZOOM_SECRET)
+    on = await turn_on(c, tenant, "test.fields-zoom", client=(ZOOM, ZOOM_SECRET))
     assert on.status_code == 200, on.text
     await host.ensure(tenant, datetime.now(UTC))
     module = await host.store.get(tenant, module_id_of(host.plugins["test.fields-zoom"].manifest))
@@ -272,11 +278,9 @@ async def test_how_the_client_is_sent_and_the_sign_in_parameters_are_the_plugins
     desk_rig: tuple[Any, TokenDesk], tenant: str
 ) -> None:
     (c, _, store, _), _ = desk_rig
-    typed = await turn_on(
-        c, tenant, "test.fields-zoom", clientId=ZOOM, clientSecret=ZOOM_SECRET, credentials={"clientAuth": "body"}
-    )
+    typed = await turn_on(c, tenant, "test.fields-zoom", client=(ZOOM, ZOOM_SECRET), credentials={"clientAuth": "body"})
     assert typed.status_code == 400 and "clientAuth" in typed.text, typed.text
-    on = await turn_on(c, tenant, "test.fields-sites", clientId="multi-app", clientSecret="app-secret")
+    on = await turn_on(c, tenant, "test.fields-sites", client=("multi-app", "app-secret"))
     assert on.status_code == 200, on.text
     conn = await store.get(tenant, str(on.json()["data"]["connectionId"]))
     assert conn is not None
@@ -326,7 +330,7 @@ def sites(answer: httpx.Response) -> tuple[httpx.AsyncClient, list[httpx.Request
 
 async def signed_in_sites(desk_rig: tuple[Any, TokenDesk], tenant: str) -> tuple[PluginHost, str]:
     (c, host, _, _), _ = desk_rig
-    on = await turn_on(c, tenant, "test.fields-sites", clientId="multi-app", clientSecret="app-secret")
+    on = await turn_on(c, tenant, "test.fields-sites", client=("multi-app", "app-secret"))
     assert on.status_code == 200, on.text
     host.policy = AllowAll()  # type: ignore[assignment]
     await host.ensure(tenant, datetime.now(UTC))

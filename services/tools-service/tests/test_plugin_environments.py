@@ -16,6 +16,7 @@ from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
 
+from .conftest import team_credential
 from .plugin_desk import plugin as desk
 from .test_plugin_credentials import (  # noqa: F401  # pyright: ignore[reportUnusedImport]
     APP,
@@ -37,10 +38,14 @@ def desk_host(engine: AsyncEngine) -> PluginHost:
     )
 
 
-async def _sandbox(client: httpx.AsyncClient, tenant: str, **body: str) -> httpx.Response:
-    return await client.post(
-        f"/v1/apps/{APP}/accounts", json={"name": "UAT", "sandbox": True, **body}, headers=team_admin(tenant)
-    )
+async def _own(client: httpx.AsyncClient, tenant: str, client_id: str, secret: str = TEAM_SECRET) -> dict[str, str]:
+    """The body part naming the team's own OAuth app `client_id`, made under Credentials first."""
+    return {"credentialId": await team_credential(client, team_admin(tenant), APP, client_id, secret)}
+
+
+async def _sandbox(client: httpx.AsyncClient, tenant: str, client_id: str, secret: str = TEAM_SECRET) -> httpx.Response:
+    body = {"name": "UAT", "sandbox": True, **await _own(client, tenant, client_id, secret)}
+    return await client.post(f"/v1/apps/{APP}/accounts", json=body, headers=team_admin(tenant))
 
 
 async def test_a_sandbox_account_keeps_its_own_app_and_the_live_account_keeps_its(
@@ -51,12 +56,12 @@ async def test_a_sandbox_account_keeps_its_own_app_and_the_live_account_keeps_it
     admin = team_admin(tenant)
     on = await client.put(
         f"/v1/apps/{APP}/team",
-        json={"enabled": True, "clientId": "prod-app", "clientSecret": TEAM_SECRET},
+        json={"enabled": True, **await _own(client, tenant, "prod-app")},
         headers=admin,
     )
     assert on.status_code == 200, on.text
     live_id = on.json()["data"]["connectionId"]
-    made = await _sandbox(client, tenant, clientId="uat-app", clientSecret="uat-secret-41")
+    made = await _sandbox(client, tenant, "uat-app", "uat-secret-41")
     assert made.status_code == 201, made.text
     sandbox_id = made.json()["data"]["id"]
     assert sandbox_id != live_id
@@ -78,10 +83,12 @@ async def test_a_sandbox_sign_in_leaves_the_live_accounts_instance_and_hosts_apa
 ) -> None:
     client, connections, _ = rig
     on = await client.put(
-        f"/v1/apps/{APP}/team", json={"enabled": True, "clientId": "prod-app"}, headers=team_admin(tenant)
+        f"/v1/apps/{APP}/team",
+        json={"enabled": True, **await _own(client, tenant, "prod-app")},
+        headers=team_admin(tenant),
     )
     live_id = str(on.json()["data"]["connectionId"])
-    made = await _sandbox(client, tenant, clientId="uat-app")
+    made = await _sandbox(client, tenant, "uat-app")
     assert made.status_code == 201, made.text
     sandbox_id = str(made.json()["data"]["id"])
     host = desk_host(engine)
@@ -126,11 +133,15 @@ async def test_a_new_account_never_calls_the_instance_a_removed_one_signed_in_to
     admin = team_admin(tenant)
     host = desk_host(engine)
     await host.ensure(tenant, datetime.now(UTC))
-    first = await client.put(f"/v1/apps/{APP}/team", json={"enabled": True, "clientId": "prod-app"}, headers=admin)
+    first = await client.put(
+        f"/v1/apps/{APP}/team", json={"enabled": True, **await _own(client, tenant, "prod-app")}, headers=admin
+    )
     old = str(first.json()["data"]["connectionId"])
     await host.on_token(tenant, old, {"instance_url": LIVE})
     assert (await client.delete(f"/v1/apps/{APP}/accounts/{old}", headers=admin)).status_code in (200, 204)
-    again = await client.put(f"/v1/apps/{APP}/team", json={"enabled": True, "clientId": "prod-app"}, headers=admin)
+    again = await client.put(
+        f"/v1/apps/{APP}/team", json={"enabled": True, **await _own(client, tenant, "prod-app")}, headers=admin
+    )
     assert again.status_code == 200 and again.json()["data"]["connectionId"] != old, again.text
     module = await ModuleStore(engine).get(tenant, module_id_of(desk.manifest))
     assert module is not None
@@ -155,7 +166,9 @@ async def test_a_plugin_tools_address_is_none_until_the_sign_in_names_its_instan
     admin = team_admin(tenant)
     host = desk_host(engine)
     await host.ensure(tenant, datetime.now(UTC))
-    on = await client.put(f"/v1/apps/{APP}/team", json={"enabled": True, "clientId": "prod-app"}, headers=admin)
+    on = await client.put(
+        f"/v1/apps/{APP}/team", json={"enabled": True, **await _own(client, tenant, "prod-app")}, headers=admin
+    )
     live_id = str(on.json()["data"]["connectionId"])
     path = f"/v1/tool-modules/{module_id_of(desk.manifest)}"
     before = (await client.get(path, headers=admin)).json()["data"]

@@ -1,5 +1,5 @@
 """The team's app credentials in one answer (c-616 C0, the Credentials page), by failure mode: an app on Ops AI's app
-reads as the team's own or the other way round; the accounts signed in through it are not counted; its status
+reads as the team's own or the other way round; the accounts signing in with it are not counted; its status
 ignores the last Test with my account; an app with no OAuth app of its own (a key) is listed; a secret comes back; and
 someone who cannot manage the team's apps reads them. Rig: test_app_accounts."""
 
@@ -29,21 +29,24 @@ async def credentials(w: World, tenant: str) -> list[dict[str, object]]:
 
 async def test_the_teams_own_client_lists_its_app_permissions_accounts_and_status(world: World, tenant: str) -> None:  # noqa: F811
     conn = await connected(world, tenant)
+    held = await world.store.get(tenant, conn)
+    assert held is not None
     [row] = await credentials(world, tenant)
     assert {k: row[k] for k in ("id", "name", "app", "appName", "type", "permissions", "accounts", "status")} == {
-        "id": conn,
-        "name": "Desk",
+        "id": held["credential_id"],
+        "name": "Desk credentials",
         "app": f"plugin:{ID}",
         "appName": "Desk",
         "type": "own",
         "permissions": ["api"],
-        "accounts": 0,
+        "accounts": 1,
         "status": "not_tested",
     }, row
     assert str(row["created"]).startswith(str(datetime.now(UTC).year)), row
+    # Accounts counts the accounts signing in with it, not each sign-in on them.
     await signed(world, tenant, conn, "https://acme.my.desk.test")
     await signed(world, tenant, conn, "https://acme.my.desk.test", person_id="usr_james")
-    assert (await credentials(world, tenant))[0]["accounts"] == 2
+    assert (await credentials(world, tenant))[0]["accounts"] == 1
 
 
 async def test_an_app_that_signs_in_with_a_key_has_no_app_credential(world: World, tenant: str) -> None:  # noqa: F811

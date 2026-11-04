@@ -78,6 +78,13 @@ def error(r: httpx.Response) -> dict[str, Any]:
     return dict(found or {})
 
 
+def credential(gw: httpx.Client, who: dict[str, str], plugin: str, client_id: str, secret: str | None = None) -> str:
+    """The team's own OAuth client for `plugin`, made under Credentials with no account; its id, which a turn-on names
+    as credentialId."""
+    body = {"app": f"plugin:{plugin}", "clientId": client_id, **({"clientSecret": secret} if secret else {})}
+    return str((data(kept(gw.post("/v1/app-credentials", json=body, headers=who))) or {}).get("id") or "cred_missing")
+
+
 def turn_on(gw: httpx.Client, who: dict[str, str], plugin: str, **body: Any) -> httpx.Response:
     r = kept(gw.put(f"/v1/apps/plugin:{plugin}/team", json={"enabled": True, **body}, headers=who))
     if r.status_code == 200 and (made := (data(r) or {}).get("connectionId")):
@@ -166,7 +173,9 @@ with ExitStack() as stack:
         )  # fmt: skip
 
     # 7. OAuth client credentials: the token comes from the plugin's token address; after it expires, a new one.
-    cc_on = turn_on(gw, priya, "test.client", clientId="multi-cc", clientSecret=CLIENTS["multi-cc"])
+    cc_on = turn_on(
+        gw, priya, "test.client", credentialId=credential(gw, priya, "test.client", "multi-cc", CLIENTS["multi-cc"])
+    )
     cc_id = str((data(cc_on) or {}).get("connectionId") or "con_missing")
     cc_health = health(gw, priya, cc_id)
     first = call(gw, "client_get_record", args={"id": "rec-1042"})
@@ -184,7 +193,11 @@ with ExitStack() as stack:
     # 8. Each person signs in with their own account; Test connection as each reaches the system as that person; a
     # call with nobody behind it gets no one's account.
     person_on = turn_on(
-        gw, priya, "test.person", signIn="person", clientId="multi-app", clientSecret=CLIENTS["multi-app"]
+        gw,
+        priya,
+        "test.person",
+        signIn="person",
+        credentialId=credential(gw, priya, "test.person", "multi-app", CLIENTS["multi-app"]),
     )
     person_id = str((data(person_on) or {}).get("connectionId") or "con_missing")
     signed = [sign_in_own(gw, m, james, person_id, "james.person"), sign_in_own(gw, m, maya, person_id, "maya.person")]
@@ -234,7 +247,7 @@ with ExitStack() as stack:
     bad_key_id = str((data(bad_key) or {}).get("connectionId") or "con_missing")
     bad_key_health = health(gw, wanjiru, bad_key_id)
     bad_key_call = call(gw, "header_key_get_record", team="team_platform", args={"id": "rec-1042"})
-    bad_cc = turn_on(gw, wanjiru, "test.client", clientId="multi-cc", clientSecret=WRONG)
+    bad_cc = turn_on(gw, wanjiru, "test.client", credentialId=credential(gw, wanjiru, "test.client", "multi-cc", WRONG))
     bad_cc_id = str((data(bad_cc) or {}).get("connectionId") or "con_missing")
     bad_cc_call = call(gw, "client_get_record", team="team_platform", args={"id": "rec-1042"})
     bad_cc_status = (data(kept(gw.get(f"{account(bad_cc_id)}", headers=wanjiru))) or {}).get("status")

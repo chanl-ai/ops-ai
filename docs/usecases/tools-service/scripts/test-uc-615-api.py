@@ -31,15 +31,17 @@ with apps_stack(ops_ai_apps={"test.person": "multi-zoom"}) as w:
         first,
     )
 
-    # 2. The team's own client id and secret, on the account; read back with no secret.
+    # 2. The team's own client id and secret, made under Credentials, then picked by the account; read back with no
+    # secret.
     path = account_path(APP, account)
-    own = {"settings": {"clientId": "multi-app"}, "secretValues": {"clientSecret": secret}}
-    saved = w.kept(w.gw.patch(path, json={"revision": first.get("revision"), **own}, headers=admin))
+    own = w.credential("admin", "test.person", "multi-app", secret)
+    saved = w.kept(w.gw.patch(path, json={"revision": first.get("revision"), "credentialId": own}, headers=admin))
     read = team_account(w, account)
     check(
         "2 the team's own app credential is saved: Ops AI's app is no longer used, the client is multi-app, and no "
         "answer carries the secret",
         saved.status_code == 200
+        and read.get("credentialId") == own
         and not read.get("platformApp")
         and (read.get("settings") or {}).get("clientId") == "multi-app"
         and not any(secret in t for t in w.seen),

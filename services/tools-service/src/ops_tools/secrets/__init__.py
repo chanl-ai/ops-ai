@@ -45,12 +45,21 @@ class SecretResolver:
         at: datetime,
         template: dict[str, str] | None = None,
         connection_id: str | None = None,
+        credential_id: str | None = None,
     ) -> bool:
         """False when the team already has the name: nothing is written, and the value put for it is dropped."""
         context = context_of(tenant_id, name)
         ref = await self.credentials.put(value, context=context)
         made = await self.store.create(
-            tenant_id, team_id, name, ref, actor=actor, at=at, template=template, connection_id=connection_id
+            tenant_id,
+            team_id,
+            name,
+            ref,
+            actor=actor,
+            at=at,
+            template=template,
+            connection_id=connection_id,
+            credential_id=credential_id,
         )
         if not made:
             await self.credentials.delete(ref, context=context)

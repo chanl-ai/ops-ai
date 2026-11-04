@@ -95,6 +95,18 @@ class Walk:
                 return r
         return r
 
+    def credential(self, role: str, plugin: str, client_id: str, client_secret: str) -> str:
+        """The team's own OAuth client for `plugin`, made under Credentials with no account; returns its id, which a
+        turn-on or an account names as credentialId."""
+        r = self.kept(
+            self.gw.post(
+                "/v1/app-credentials",
+                headers=self.who[role],
+                json={"app": f"plugin:{plugin}", "clientId": client_id, "clientSecret": client_secret},
+            )
+        )
+        return str((data(r) or {}).get("id") or "cred_missing") if r.status_code == 201 else "cred_missing"
+
     def turn_on(self, role: str, plugin: str, **body: Any) -> str:
         """Turns `plugin` on for the role's team; returns the team account's id (its connection)."""
         r = self.kept(

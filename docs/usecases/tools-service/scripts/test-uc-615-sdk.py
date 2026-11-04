@@ -15,18 +15,21 @@ with apps_stack(ops_ai_apps={"test.person": "multi-zoom"}) as w:
     account = w.turn_on("admin", "test.person", signIn="team")
     check("set-up: the person desk is on for the team account", account != "con_missing", account)
 
-    # 6. Set through the SDK's credentials.set, and the team account then holds the team's client, with no secret shown.
+    # 6. Made through the SDK's credentials.create with no account, then picked with credentials.set: the team account
+    # then holds the team's client, with no secret shown.
     ops = signed_sdk("admin")
-    saved = attempt(ops, "credentials", "set", APP, client_id="multi-app", client_secret=secret)
+    made = attempt(ops, "credentials", "create", APP, client_id="multi-app", client_secret=secret) or {}
+    saved = attempt(ops, "credentials", "set", APP, made.get("id"))
     held = data(w.gw.get(account_path(APP, account), headers=w.who["admin"])) or {}
     check(
-        "6 the SDK's credentials.set puts the team's own client on the app, Ops AI's app is no longer used, and the "
-        "answer has no secret",
+        "6 the SDK's credentials.create makes the team's own client and credentials.set puts the app on it: Ops AI's "
+        "app is no longer used, and no answer has the secret",
         saved is not None
+        and held.get("credentialId") == made.get("id")
         and (held.get("settings") or {}).get("clientId") == "multi-app"
         and not held.get("platformApp")
-        and secret not in str(saved),
-        (target("K1"), {"saved": saved, "account": held}),
+        and secret not in str(saved) + str(made),
+        (target("K1"), {"made": made, "saved": saved, "account": held}),
     )
 
 finish()
