@@ -53,7 +53,6 @@ import {
   useTestAccount,
 } from '@/hooks/systems-queries';
 import { useCopyResource, usePluginDocumentTypes, usePluginTemplates } from '@/hooks/plugin-update-queries';
-import { useFlag } from '@/hooks/flag-queries';
 import { useCanBuild } from '@/hooks/me-queries';
 import type { Kinds } from '@/lib/connect-plan';
 import { plural, shortDate } from '@/lib/format';
@@ -122,9 +121,6 @@ export function AppPageView({ appId }: { appId: string }) {
   const [connecting, setConnecting] = React.useState(false);
   const [another, setAnother] = React.useState(false);
   const [sandboxing, setSandboxing] = React.useState(false);
-  // Several named accounts of one app and sandbox accounts are behind their install flags; off, neither shows.
-  const several = useFlag('several_accounts');
-  const sandboxes = useFlag('sandbox_accounts');
 
   const test = useTestAccount();
   const signInWindow = useSignInWindow({
@@ -153,7 +149,7 @@ export function AppPageView({ appId }: { appId: string }) {
   const signsIn = Boolean(kind?.signsIn) && conn?.signIn !== 'team';
   const accounts = data.accounts ?? [];
   // A team admin adds the app's sandbox account, which test runs use, once the app has its first account.
-  const addsSandbox = sandboxes && card.mayManage && Boolean(conn) && installed && !card.sandboxId;
+  const addsSandbox = card.mayManage && Boolean(conn) && installed && !card.sandboxId;
 
   const signIn = (account: 'self' | 'team', accountId = conn?.id) => {
     if (!accountId) return;
@@ -215,9 +211,9 @@ export function AppPageView({ appId }: { appId: string }) {
               signsIn={signsIn}
               onSignIn={signIn}
               actions={
-                addsSandbox || (several && conn?.mayManage) ? (
+                addsSandbox || conn?.mayManage ? (
                   <span className="flex flex-wrap gap-2">
-                    {several && conn?.mayManage && (
+                    {conn?.mayManage && (
                       <Button size="sm" variant="outline" onClick={() => setAnother(true)} data-testid="app-connect-another">
                         <Plus />
                         Add account

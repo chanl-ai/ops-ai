@@ -1788,7 +1788,7 @@ export interface components {
              * Name
              * @enum {string}
              */
-            name: "mcp_gateway" | "tool_search" | "plugin_updates" | "several_accounts" | "sandbox_accounts";
+            name: "mcp_gateway" | "tool_search" | "plugin_updates";
             /** On */
             on: boolean;
         };

@@ -1,7 +1,6 @@
 """A team keeps several named accounts of one app, by failure mode: a second account replaces the first; a
 sign-in on the second account settles the first's instance; a call naming an account runs with another, or with
-another team's; a person's call ignores the account they pinned; and with several_accounts off, a second account
-can still be made or named."""
+another team's; and a person's call ignores the account they pinned."""
 
 from __future__ import annotations
 
@@ -69,7 +68,6 @@ async def world(
         {},
         [Loaded("desk", desk, None)],
         store,
-        accounts=True,
     )
     users = StaticToolUsers()
     app = build_app(engine, seed, tenant, auth=auth, install_clients=INSTALL, plugins=host, users=users)
@@ -177,16 +175,6 @@ async def test_a_persons_call_uses_the_account_they_pinned_else_their_newest_sig
     assert pinned.status_code == 200, pinned.text
     assert await used() == first
     assert await shown() == {"Desk": True, "EU org": False}
-
-
-async def test_with_several_accounts_off_a_second_account_cannot_be_made_or_named(world: World, tenant: str) -> None:
-    world.host.accounts = False
-    await connected(world, tenant)
-    made = await another(world, tenant, "EU org")
-    assert (made.status_code, made.json()["error"]["code"]) == (400, "one_account"), made.text
-    r = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, run="production", account="Desk")
-    assert r is not None and r.module is not None
-    assert r.module.get("account_missing"), r.module
 
 
 async def test_a_plugin_tools_page_names_the_teams_account_not_no_connection(

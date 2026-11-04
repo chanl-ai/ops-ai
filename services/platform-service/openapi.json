@@ -1630,9 +1630,7 @@
             "enum": [
               "mcp_gateway",
               "tool_search",
-              "plugin_updates",
-              "several_accounts",
-              "sandbox_accounts"
+              "plugin_updates"
             ],
             "title": "Name",
             "type": "string"

@@ -12435,7 +12435,7 @@
     },
     "/v1/apps/{app_id}/accounts": {
       "post": {
-        "description": "Another account of one of the team's apps: a sandbox, which test runs use, or another named account\n(with several_accounts on). The first stays the default.",
+        "description": "Another account of one of the team's apps: a sandbox, which test runs use, or another named account\n(a second org of the same system). The first stays the default.",
         "operationId": "apps_add_account",
         "parameters": [
           {

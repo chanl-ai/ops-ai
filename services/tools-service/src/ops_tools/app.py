@@ -65,7 +65,7 @@ class RunContext(_Wire):
     # The kind of run the call is made in: live runs send production, everything else test. Absent is test,
     # so a caller that does not say never reaches a live account's write unseen.
     environment: RunKind | None = None
-    # One of the team's accounts of the tool's app, by name (with several_accounts on); none uses the default.
+    # One of the team's accounts of the tool's app, by name; none uses the default.
     account: str | None = Field(default=None, min_length=1, max_length=200)
 
 

@@ -9,8 +9,8 @@ Tools, Skills, Sign-in and secrets, Usage and Settings. The catalog reads `GET /
 `GET /v1/apps/{id}`, each already joined, so the console never joins lists itself.
 
 The walk runs on its own stack with the test plugins of `services/tools-service/tests/plugin_kinds` and the fake
-system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account name it is given. The install turns on
-`several_accounts` for steps 11-13; `docs/usecases/lib/agents_call.py` makes step 12's calls as agents-service does.
+system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account name it is given;
+`docs/usecases/lib/agents_call.py` makes step 12's calls as agents-service does.
 
 ## Stories
 
@@ -29,7 +29,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | S3 | A person presses Connect my account, allows access, and the page reads Connected as their account; a tool the agent then calls runs with it, shown on Usage | ui | 5-7 | 7 |
 | S4 | Ops AI's own tools show as Built in apps that open the page managing them | ui | 8 | 8 |
 | S5 | The app's tabs show its tools by title, its sign-ins with no secret, and its Settings with the one sign-in switch and the default account's keys | ui | 9 | 9 |
-| S6 | With several_accounts on, an admin connects another account of the app under its own name; both are listed and the first stays the default | ui | 11 | 11 |
+| S6 | An admin connects another account of the app under its own name; both are listed and the first stays the default | ui | 11 | 11 |
 | S7 | A call naming an account runs with it, a call naming none with the default, and an unknown name is refused | ui | 12 | 12 |
 | S8 | A person signed in to two accounts reads with their newest, and Make my default picks the other | ui | 13 | 13 |
 | S9 | Add custom app: a refused key says Failed with the app's 401, the right one Working with 200, and the key is sealed (from uc-580) | ui | 14 | 14 |

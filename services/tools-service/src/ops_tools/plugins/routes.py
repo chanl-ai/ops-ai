@@ -233,15 +233,11 @@ class PluginAccounts:
             await self.host.take_installed(who.tenant_id, who.team.id, plugin)
 
     async def add_account(self, who: Caller, app_id: str, body: AccountIn) -> str:
-        """Another account of a plugin's app the team has connected: a sandbox (always), or a second org of the same
-        system with several_accounts on, made with the first's contract. The first stays the default."""
+        """Another account of a plugin's app the team has connected, a test account or another live one (a second org
+        of the same system), made with the first's contract. The first stays the default."""
         self.manages(who)
         plugin = self.plugin(app_id)
         m = plugin.manifest
-        if not body.sandbox and not self.host.accounts:
-            raise ValidationFailed(
-                "This install keeps one live account per app; add a sandbox account instead.", code="one_account"
-            )
         b = await self.host.bindings.get(who.tenant_id, who.team.id, m.id)
         if b is None or not b["enabled"] or not b.get("connection_id"):
             raise ValidationFailed(f"Connect {m.title} first; another account comes after it.", code="no_first_account")

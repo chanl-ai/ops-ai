@@ -168,7 +168,7 @@ export interface paths {
         /**
          * Add Account
          * @description Another account of one of the team's apps: a sandbox, which test runs use, or another named account
-         *     (with several_accounts on). The first stays the default.
+         *     (a second org of the same system). The first stays the default.
          */
         post: operations["apps_add_account"];
         delete?: never;

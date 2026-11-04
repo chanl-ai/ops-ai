@@ -1089,7 +1089,7 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
         app_id: str, body: AccountIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
         """Another account of one of the team's apps: a sandbox, which test runs use, or another named account
-        (with several_accounts on). The first stays the default."""
+        (a second org of the same system). The first stays the default."""
         return ok(await apps.add_account(who, app_id, body), 201)
 
     return r

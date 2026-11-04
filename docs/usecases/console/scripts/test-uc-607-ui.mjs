@@ -22,8 +22,6 @@ const LOGIN_HOST = 'login.multi.test';
 const KINDS = join(ROOT, 'services/tools-service/tests/plugin_kinds');
 const FOLDERS = readdirSync(KINDS).filter((n) => n.startsWith('kinds_')).map((n) => join(KINDS, n));
 process.env.OPS_PLUGINS = 'true';
-// Several named accounts of one app are behind their install flag; this walk turns it on.
-process.env.OPS_FLAGS = 'several_accounts,sandbox_accounts';
 process.env.OPS_PLUGIN_PATHS = JSON.stringify(FOLDERS);
 
 // The fake model: the request asks for Person desk's read tool, and the answer names the account the record was read as.

@@ -325,8 +325,6 @@ class PluginHost:
     # The plugin_updates flag: each team runs the plugin version it took. Off, the row is written once and
     # every call reads the installed manifest, as before.
     versions: bool = False
-    # The several_accounts flag: a team keeps several named accounts of one app, and a call may name one.
-    accounts: bool = False
     _written: set[str] = field(default_factory=set[str])
 
     @classmethod
@@ -341,7 +339,6 @@ class PluginHost:
         http: httpx.AsyncClient | None = None,
         policy: EgressPolicy | None = None,
         versions: bool = False,
-        accounts: bool = False,
     ) -> PluginHost:
         """Reads every installed plugin once, at start, and the developer's plugin folders; a failed one is left out and
         logged with why, where the install's admin reads it."""
@@ -358,7 +355,6 @@ class PluginHost:
             http=http,
             policy=policy,
             versions=versions,
-            accounts=accounts,
         )
 
     @classmethod
@@ -386,7 +382,6 @@ class PluginHost:
             http=http,
             policy=policy,
             versions=flags.on("plugin_updates"),
-            accounts=flags.on("several_accounts"),
         )
 
     @property
@@ -628,17 +623,13 @@ class PluginHost:
         if account:
             # A call naming an account uses that account of the team's, never another team's; an unknown name
             # is refused rather than falling back to the default, so a step never acts in the wrong org.
-            named = await self.account_named(tenant_id, team_id, plugin, account) if self.accounts else None
+            named = await self.account_named(tenant_id, team_id, plugin, account)
             if named is None:
-                why = (
-                    f"{plugin.manifest.title} has no account named {account} in this team."
-                    if self.accounts
-                    else "This install keeps one account per app; a call cannot name one."
-                )
+                why = f"{plugin.manifest.title} has no account named {account} in this team."
                 return {**module, "account_missing": why, "connection_id": None, "egress_hosts": []}
             b = {**b, "connection_id": named["id"]}
         else:
-            if person and self.accounts:
+            if person:
                 # A call naming no account, for a person signed in to several: the one they pinned, else their
                 # newest live sign-in; with none of their own, the team's default.
                 chosen = await self.person_default(tenant_id, team_id, plugin, person)
