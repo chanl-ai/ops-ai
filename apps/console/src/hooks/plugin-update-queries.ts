@@ -16,19 +16,19 @@ import { useTeamQuery } from './team-query';
 type Tools = OpsAI['raw']['tools'];
 type Agents = OpsAI['raw']['agents'];
 
-export type PluginUpdate = Awaited<ReturnType<Tools['plugins_plugin_update']>>;
+export type PluginUpdate = Awaited<ReturnType<Tools['apps_plugin_update']>>;
 export type ToolChange = PluginUpdate['tools'][number];
 export type ToolUses = Awaited<ReturnType<Agents['agents_list_tool_uses']>>;
 
-const update = (pluginId: string) => ['plugins', pluginId, 'update'] as const;
+const update = (appId: string) => ['apps', appId, 'update'] as const;
 
-/** The review for one plugin: the team's version, the installed one, and each new, changed and removed tool. */
-export const usePluginUpdate = (pluginId: string) => {
+/** The review for one plugin's app (`plugin:<id>`): the team's version, the installed one, and each changed tool. */
+export const usePluginUpdate = (appId: string) => {
   // The route answers 404 while the install's plugin_updates flag is off; asking then only logs a 404 on every app page.
   const on = useFlag('plugin_updates');
   return useTeamQuery({
-    queryKey: update(pluginId),
-    queryFn: () => sdk((ops) => ops.raw.tools.plugins_plugin_update({ path: { plugin_id: pluginId } })),
+    queryKey: update(appId),
+    queryFn: () => sdk((ops) => ops.raw.tools.apps_plugin_update({ path: { app_id: appId } })),
     enabled: on,
   });
 };
@@ -78,11 +78,10 @@ export const usePluginTemplates = (source: string) =>
   });
 
 /** Takes the installed version with the digest the review was read at; a review replaced since is refused (409). */
-export function useTakePluginUpdate(pluginId: string) {
+export function useTakePluginUpdate(appId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (digest: string) =>
-      sdk((ops) => ops.raw.tools.plugins_take_plugin_update({ path: { plugin_id: pluginId }, body: { digest } })),
-    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: update(pluginId) }), qc.invalidateQueries({ queryKey: ['plugins'] })]),
+    mutationFn: (digest: string) => sdk((ops) => ops.raw.tools.apps_take_plugin_update({ path: { app_id: appId }, body: { digest } })),
+    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: ['apps'] }), qc.invalidateQueries({ queryKey: ['systems'] })]),
   });
 }

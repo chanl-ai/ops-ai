@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-03",
+  "title": "Tools lists every tool, with who uses it",
+  "description": "Tools now lists each tool on its own row with its app, kind, access and status, and the agents and workflows that use it; the tool sets a team built move to Custom tools, and Logs sits beside them. A tool's page shows its Used by too.",
+  "tag": "improved"
+}

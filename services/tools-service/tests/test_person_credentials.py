@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import base64
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast, get_args
@@ -68,6 +68,7 @@ async def _connection(store: ConnectionStore, tenant: str, kind: str, sign_in: s
     row: dict[str, Any] = {
         "tenant_id": tenant,
         "id": cid,
+        "app_id": cid,
         "team_id": TEAM,
         "name": "Ledger",
         "auth_kind": kind,
@@ -81,7 +82,7 @@ async def _connection(store: ConnectionStore, tenant: str, kind: str, sign_in: s
         "updated_at": now,
     }
     assert await store.create(row, actor="t", at=now)
-    await store.change(tenant, cid, 1, {}, actor="t", at=now, environment=("test", PLAIN[kind], {}))
+    await store.change(tenant, cid, 1, {"settings": PLAIN[kind], "secrets": {}}, actor="t", at=now)
     return cid
 
 
@@ -117,7 +118,7 @@ async def test_each_persons_call_carries_their_own_secret_and_the_log_says_perso
     store, tokens, auth = _rig(engine)
     conn = await _connection(store, tenant, kind)
     for who, values in OWN[kind].items():
-        await tokens.store_own(tenant, conn, "test", who, values)
+        await tokens.store_own(tenant, conn, who, values)
     james, maya = await _call(auth, tenant, conn, JAMES), await _call(auth, tenant, conn, MAYA)
     expect = {"api_key": ("key-james", "key-maya"), "basic": ("james:pw-james", "maya:pw-maya")}
     assert (_signed(kind, james), _signed(kind, maya)) == expect.get(kind, ("tok-james", "tok-maya"))
@@ -129,19 +130,21 @@ async def test_each_persons_call_carries_their_own_secret_and_the_log_says_perso
 async def test_a_person_with_no_key_gets_a_link_naming_the_fields_to_give(engine: AsyncEngine, tenant: str) -> None:
     store, tokens, auth = _rig(engine)
     conn = await _connection(store, tenant, "basic")
-    await tokens.store_own(tenant, conn, "test", MAYA.sub, OWN["basic"][MAYA.sub])
+    await tokens.store_own(tenant, conn, MAYA.sub, OWN["basic"][MAYA.sub])
     with pytest.raises(AuthFailed) as e:
         await _call(auth, tenant, conn, JAMES)
     d = e.value.details
     assert e.value.code == "CONNECTION_NOT_LINKED" and d["reason"] == "not_connected", d
     assert (d["authKind"], d["personFields"]) == ("basic", ["username", "password"])
+    # The account is found under its app: the console's Connect my account opens it there.
+    assert d["appId"] == conn, d
     assert str(d["connectUrl"]).startswith(f"{CONSOLE_URL}/connections/connect?")
 
 
 async def test_a_call_with_nobody_behind_it_uses_nobodys_key(engine: AsyncEngine, tenant: str) -> None:
     store, tokens, auth = _rig(engine)
     conn = await _connection(store, tenant, "api_key")
-    await tokens.store_own(tenant, conn, "test", JAMES.sub, OWN["api_key"][JAMES.sub])
+    await tokens.store_own(tenant, conn, JAMES.sub, OWN["api_key"][JAMES.sub])
     with pytest.raises(AuthFailed) as e:
         await _call(auth, tenant, conn, None)
     assert e.value.code == "CONNECTION_NOT_LINKED" and e.value.details["reason"] == "no_person"
@@ -208,14 +211,14 @@ async def client(
 async def _ledger(client: httpx.AsyncClient, tenant: str, sign_in: str = "person") -> str:
     admin = person(tenant, "Priya Shah", {TEAM: "admin"})
     made = await client.post(
-        "/v1/connections", json={"name": "Ledger", "authKind": "api_key", "signIn": sign_in}, headers=admin
+        "/v1/apps", json={"name": "Ledger", "authKind": "api_key", "signIn": sign_in}, headers=admin
     )
     assert made.status_code == 201, made.text
     conn = str(made.json()["data"]["id"])
     body: dict[str, Any] = {"revision": 1, "settings": {"baseUrl": BASE, "name": "X-Api-Key", "testPath": "/me"}}
     if sign_in == "team":
         body["secretValues"] = {"key": "key-team"}
-    put = await client.put(f"/v1/connections/{conn}/environments/test", json=body, headers=admin)
+    put = await client.patch(f"/v1/apps/{conn}/accounts/{conn}", json=body, headers=admin)
     # On a person connection the team sets the address and how the key is sent, and no key of its own.
     assert put.status_code == 200, put.text
     return conn
@@ -224,8 +227,8 @@ async def _ledger(client: httpx.AsyncClient, tenant: str, sign_in: str = "person
 async def _give(
     client: httpx.AsyncClient, tenant: str, conn: str, who: tuple[str, dict[str, str]], **fields: str
 ) -> httpx.Response:
-    body = {"environment": "test", "credentials": fields}
-    return await client.put(f"/v1/me/connections/{conn}/credentials", json=body, headers=person(tenant, *who))
+    body = {"credentials": fields}
+    return await client.put(f"/v1/me/accounts/{conn}/credentials", json=body, headers=person(tenant, *who))
 
 
 async def test_each_person_gives_their_own_key_and_tests_with_it_and_nobody_sees_it(
@@ -237,15 +240,13 @@ async def test_each_person_gives_their_own_key_and_tests_with_it_and_nobody_sees
     assert given.json()["data"]["method"] == "API key" and "key-james" not in given.text
     assert (await _give(client, tenant, conn, MAYA_P, key="key-maya")).status_code == 200
     for who, key in ((JAMES_P, "key-james"), (MAYA_P, "key-maya")):
-        tested = await client.post(
-            f"/v1/connections/{conn}/test", json={"environment": "test"}, headers=person(tenant, *who)
-        )
+        tested = await client.post(f"/v1/apps/{conn}/accounts/{conn}/test", json={}, headers=person(tenant, *who))
         assert tested.status_code == 200 and tested.json()["data"]["health"]["status"] == "ok", tested.text
         assert ledger.seen[-1] == key
-    mine = await client.get("/v1/me/connections", headers=person(tenant, *JAMES_P))
+    mine = await client.get("/v1/me/accounts", headers=person(tenant, *JAMES_P))
     rows = mine.json()["data"]
-    assert [(r["connectionId"], r["method"]) for r in rows] == [(conn, "API key")], rows
-    detail = await client.get(f"/v1/connections/{conn}", headers=person(tenant, "Priya Shah", {TEAM: "admin"}))
+    assert [(r["connectionId"], r["appId"], r["method"]) for r in rows] == [(conn, conn, "API key")], rows
+    detail = await client.get(f"/v1/apps/{conn}/accounts/{conn}", headers=person(tenant, "Priya Shah", {TEAM: "admin"}))
     assert "key-james" not in detail.text and "key-maya" not in detail.text
 
 
@@ -255,21 +256,15 @@ async def test_a_wrong_key_fails_for_that_person_alone_and_disconnect_asks_again
     conn = await _ledger(client, tenant)
     await _give(client, tenant, conn, JAMES_P, key="key-wrong")
     await _give(client, tenant, conn, MAYA_P, key="key-maya")
-    james = await client.post(
-        f"/v1/connections/{conn}/test", json={"environment": "test"}, headers=person(tenant, *JAMES_P)
-    )
+    james = await client.post(f"/v1/apps/{conn}/accounts/{conn}/test", json={}, headers=person(tenant, *JAMES_P))
     assert james.json()["data"]["health"]["status"] != "ok", james.text
-    maya = await client.post(
-        f"/v1/connections/{conn}/test", json={"environment": "test"}, headers=person(tenant, *MAYA_P)
-    )
+    maya = await client.post(f"/v1/apps/{conn}/accounts/{conn}/test", json={}, headers=person(tenant, *MAYA_P))
     assert maya.json()["data"]["health"]["status"] == "ok", maya.text
     admin = person(tenant, "Priya Shah", {TEAM: "admin"})
-    assert (await client.get(f"/v1/connections/{conn}", headers=admin)).json()["data"]["status"] == "healthy"
-    gone = await client.delete(
-        f"/v1/me/connections/{conn}", params={"environment": "test"}, headers=person(tenant, *JAMES_P)
-    )
+    assert (await client.get(f"/v1/apps/{conn}/accounts/{conn}", headers=admin)).json()["data"]["status"] == "healthy"
+    gone = await client.delete(f"/v1/me/accounts/{conn}", headers=person(tenant, *JAMES_P))
     assert gone.status_code == 204, gone.text
-    assert (await client.get("/v1/me/connections", headers=person(tenant, *JAMES_P))).json()["data"] == []
+    assert (await client.get("/v1/me/accounts", headers=person(tenant, *JAMES_P))).json()["data"] == []
 
 
 async def test_a_field_the_method_lacks_or_a_team_connection_is_refused_and_nothing_kept(
@@ -283,7 +278,7 @@ async def test_a_field_the_method_lacks_or_a_team_connection_is_refused_and_noth
     team = await _ledger(client, tenant, sign_in="team")
     refused = await _give(client, tenant, team, JAMES_P, key="key-james")
     assert refused.status_code == 400 and refused.json()["error"]["code"] == "sign_in_unsupported", refused.text
-    assert (await client.get("/v1/me/connections", headers=person(tenant, *JAMES_P))).json()["data"] == []
+    assert (await client.get("/v1/me/accounts", headers=person(tenant, *JAMES_P))).json()["data"] == []
 
 
 async def test_a_plugin_turned_on_for_each_persons_key_holds_its_card_details_and_asks_the_team_for_no_key(
@@ -293,15 +288,17 @@ async def test_a_plugin_turned_on_for_each_persons_key_holds_its_card_details_an
     on = await plugin_turn_on(rig, tenant, "test.person-key", signIn="person")
     assert on.status_code == 200, on.text
     conn = str(on.json()["data"]["connectionId"])
-    detail = (await rig.client.get(f"/v1/connections/{conn}", headers=admin(tenant))).json()["data"]
+    detail = (await rig.client.get(f"/v1/apps/plugin:test.person-key/accounts/{conn}", headers=admin(tenant))).json()[
+        "data"
+    ]
     assert (detail["signIn"], detail["category"], detail["docsUrl"]) == (
         "person",
         "Service desk",
         "https://docs.multi.test/keys",
     ), detail
     given = await rig.client.put(
-        f"/v1/me/connections/{conn}/credentials",
-        json={"environment": "production", "credentials": {"key": "key-james"}},
+        f"/v1/me/accounts/{conn}/credentials",
+        json={"credentials": {"key": "key-james"}},
         headers=person(tenant, "James Richardson", {PLUGIN_TEAM: "builder"}),
     )
     assert given.status_code == 200 and given.json()["data"]["method"] == "API key", given.text
@@ -313,11 +310,11 @@ async def test_your_connections_offers_every_app_you_can_connect_and_its_form(
     conn = await _ledger(client, tenant)
     await _ledger(client, tenant, sign_in="team")
     james = person(tenant, *JAMES_P)
-    before = (await client.get("/v1/me/connections", params={"every": "true"}, headers=james)).json()["data"]
+    before = (await client.get("/v1/me/accounts", params={"every": "true"}, headers=james)).json()["data"]
     assert [(r["connectionId"], r["connected"], r["personFields"]) for r in before] == [(conn, False, ["key"])], before
-    assert (await client.get("/v1/me/connections", headers=james)).json()["data"] == []
+    assert (await client.get("/v1/me/accounts", headers=james)).json()["data"] == []
     await _give(client, tenant, conn, JAMES_P, key="key-james")
-    after = (await client.get("/v1/me/connections", params={"every": "true"}, headers=james)).json()["data"]
+    after = (await client.get("/v1/me/accounts", params={"every": "true"}, headers=james)).json()["data"]
     assert [(r["connectionId"], r["connected"], r["method"]) for r in after] == [(conn, True, "API key")], after
 
 
@@ -333,7 +330,7 @@ def test_the_console_knows_every_reason_a_call_is_refused_for_a_missing_sign_in(
 
 
 class AllowLedger:
-    async def check_url(self, tenant_id: str, url: str) -> str:
+    async def check_url(self, tenant_id: str, url: str, also: Iterable[str] = ()) -> str:
         return "ledger.bank.test"
 
 
@@ -342,8 +339,8 @@ async def test_a_call_the_system_refuses_with_a_persons_key_asks_for_it_again_an
 ) -> None:
     store, tokens, auth = _rig(engine)
     conn = await _connection(store, tenant, "api_key")
-    await tokens.store_own(tenant, conn, "test", JAMES.sub, {"key": "key-wrong"})
-    await tokens.store_own(tenant, conn, "test", MAYA.sub, OWN["api_key"][MAYA.sub])
+    await tokens.store_own(tenant, conn, JAMES.sub, {"key": "key-wrong"})
+    await tokens.store_own(tenant, conn, MAYA.sub, OWN["api_key"][MAYA.sub])
     seen: list[str] = []
 
     async def answer(request: httpx.Request) -> httpx.Response:
@@ -379,7 +376,7 @@ async def test_a_call_the_system_refuses_with_a_persons_key_asks_for_it_again_an
     found = await store.get(tenant, conn)
     assert found is not None and found["status"] == "healthy"
     # A new key clears the mark.
-    await tokens.store_own(tenant, conn, "test", JAMES.sub, OWN["api_key"][JAMES.sub])
+    await tokens.store_own(tenant, conn, JAMES.sub, OWN["api_key"][JAMES.sub])
     assert _signed("api_key", await _call(auth, tenant, conn, JAMES)) == "key-james"
 
 
@@ -388,16 +385,14 @@ async def test_your_connections_shows_a_refused_key_with_its_reason_and_asks_for
 ) -> None:
     conn = await _ledger(client, tenant)
     await _give(client, tenant, conn, JAMES_P, key="key-wrong")
-    tested = await client.post(
-        f"/v1/connections/{conn}/test", json={"environment": "test"}, headers=person(tenant, *JAMES_P)
-    )
+    tested = await client.post(f"/v1/apps/{conn}/accounts/{conn}/test", json={}, headers=person(tenant, *JAMES_P))
     assert tested.json()["data"]["health"]["status"] != "ok", tested.text
-    rows = (await client.get("/v1/me/connections", params={"every": "true"}, headers=person(tenant, *JAMES_P))).json()[
+    rows = (await client.get("/v1/me/accounts", params={"every": "true"}, headers=person(tenant, *JAMES_P))).json()[
         "data"
     ]
     assert [(r["refused"], "401" in (r["refusedReason"] or "")) for r in rows] == [(True, True)], rows
     await _give(client, tenant, conn, JAMES_P, key="key-james")
-    rows = (await client.get("/v1/me/connections", params={"every": "true"}, headers=person(tenant, *JAMES_P))).json()[
+    rows = (await client.get("/v1/me/accounts", params={"every": "true"}, headers=person(tenant, *JAMES_P))).json()[
         "data"
     ]
     assert [r["refused"] for r in rows] == [False], rows

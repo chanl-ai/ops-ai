@@ -29,6 +29,7 @@ DEFAULTS: dict[str, Any] = {
     "stepUp": False,
     "publishReview": {},
     "chatThreadsOwnerOnly": True,
+    "egressNewHosts": "ask_security",
     "securityTeamAddsSecrets": False,
     "memoryRetentionDays": None,
     "reviewSlaHours": 8,
@@ -43,7 +44,6 @@ DEFAULTS: dict[str, Any] = {
     # Per team and on unless a team turns it off: {} names no team, so every team masks.
     "aiStepsMaskPersonalData": {},
     # No plugin is on until the platform admin turns it on for the install.
-    "plugins": {},
 }
 # The AI uses: the one documented exception to open defaults, off until a team turns them on.
 OFF_UNTIL_ON = ("aiSteps", "taskAssist", "checkBeforeSend", "pageImages")

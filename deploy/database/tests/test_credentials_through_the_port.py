@@ -17,7 +17,6 @@ CIPHER = re.compile(r"\.(encrypt|decrypt)\(|\bAesGcmCipher\(")
 # reads that value through the port.
 MAY_NAME = {
     "services/tools-service/src/ops_tools/store/secrets.py": "keeps tool_secrets",
-    "services/tools-service/src/ops_tools/store/plugin_app_keys.py": "keeps plugin_app_keys, through the port",
     "services/tools-service/src/ops_tools/store/connections.py": "keeps connection_tokens and oauth_states",
     "services/tools-service/src/ops_tools/auth/tokens.py": "puts and reads tokens and person sign-ins",
     "services/tools-service/src/ops_tools/connections/service.py": "puts and reads a sign-in's verifier",

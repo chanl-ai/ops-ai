@@ -9,7 +9,7 @@ team can add as its own copies. An App signs in with an Account: the team's, or 
 
 ## The Apps menu
 
-Open **Apps** in the sidebar. Four tabs sit at the top of every page in the menu.
+Open **Data Hub › Apps** in the sidebar. Four tabs sit at the top of every page in the menu.
 
 | Tab | What it holds |
 |---|---|
@@ -33,14 +33,32 @@ Open **Apps** in the sidebar. Four tabs sit at the top of every page in the menu
 An App is **Connected** only once an Account has signed in or a test has passed; saving settings alone does not count.
 A team admin turns an App on.
 
+### The first time a team turns on a plugin's App
+
+An App a plugin brings ([plugins guide](plugins.md)) needs two things before its card offers Connect, and its first
+Connect window asks for more than the steps above.
+
+| Who | What | Where |
+|---|---|---|
+| Platform admin | Installs the plugin (its folder in the plugins folder, or pinned in the image); it is then offered to every team. Settings fixed for every team come from the install config | `OPS_PLUGINS_DIR`, `deploy/plugins.json`, `OPS_PLUGIN_LOCKED` |
+| Security admin | Lists the App's hosts, so its sign-in and calls may leave | **Settings › Security › Egress**, Add host (and Add range for a host on a private network) |
+| Team admin | Presses **Connect** | The window shows the App's settings (such as its API address), whose account calls use (the team's, each person's, or each person's with the team's as backup), the OAuth app (Ops AI's, or your own with its client ID and secret and the return address to register), and its sign-in address. **Save and connect the team account** opens the App's sign-in page |
+
+The App's page is **Data Hub › Apps** then the App's name, at `/integrations/apps/plugin:<plugin id>`. One Connect is
+enough to use it everywhere: test runs and live runs both sign in with the account you connected.
+
 ## Accounts: the team's and your own
 
 The App's page lists its Accounts.
 
 | Account | What it is |
 |---|---|
-| Team account | Anyone in the team can run Tools as it. The **Default** Account answers every call that names no other |
+| Team account | Anyone in the team can run Tools as it. The **Default** Account answers every live call that names no other |
 | Your account | Your own sign-in. Tools you run, and agents acting for you, use it. Press **Connect my account** to add it |
+| Sandbox account | Marked **Sandbox**. Test runs use it: an agent's Test panel, a draft, and **Real** on a Tool's page. Live runs never do. Press **Add a sandbox account** to add one, for example a Salesforce sandbox org |
+
+Without a sandbox account, a test run signs in with the live account. It can read, but every write it makes waits for
+a person to approve it first, so testing never changes live data unseen.
 
 - **Connect another account** adds a second Account of the same App, under its own name, for example a second region.
   A step or a call names it to use it.
@@ -69,8 +87,8 @@ team, and **New tool** makes one of your own:
    such as `/accounts/{id}`.
 2. Write the request on the Tool's page and press **Run** in **Mock**: it answers from the Tool's mock answers and sends
    nothing.
-3. Once the Tool is published, **Real** sends the request through the App's Account and shows exactly what was sent,
-   with every key hidden.
+3. Once the Tool is published, **Real** sends the request as a test run, through the App's sandbox account when it has
+   one, else its live account, and shows exactly what was sent, with every key hidden.
 
 A key typed into a Tool's own header is refused when you save: the App's Account signs every call. A viewer can open a
 Tool's page and run it, but not change it.

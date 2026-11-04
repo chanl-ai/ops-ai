@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import socket
 import ssl
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any
 
 import httpx
@@ -31,7 +31,7 @@ OP: dict[str, Any] = {"name": "get_thing", "method": "GET", "path": "/thing", "h
 
 
 class Allow:
-    async def check_url(self, tenant_id: str, url: str) -> str:
+    async def check_url(self, tenant_id: str, url: str, also: Iterable[str] = ()) -> str:
         return HOST
 
 

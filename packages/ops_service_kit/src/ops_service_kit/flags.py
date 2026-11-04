@@ -13,7 +13,7 @@ from typing import Literal
 
 # The names, as a type, so the platform answer's schema and the console's generated types carry them; a test keeps
 # this and FLAGS equal.
-FlagName = Literal["mcp_gateway", "tool_search", "plugin_updates", "several_accounts"]
+FlagName = Literal["mcp_gateway", "tool_search", "plugin_updates", "several_accounts", "sandbox_accounts"]
 
 
 @dataclass(frozen=True)
@@ -44,6 +44,11 @@ FLAGS: tuple[Flag, ...] = (
         name="several_accounts",
         description="A team keeps several named accounts of one app, and a tool or step names the one it uses.",
         remove_when="Several accounts per app are released to every install.",
+    ),
+    Flag(
+        name="sandbox_accounts",
+        description="A team admin adds a sandbox account to an app, which test runs sign in with.",
+        remove_when="Sandbox accounts are released to every install.",
     ),
 )
 

@@ -77,12 +77,9 @@ try {
       const priya = as(await tokenFor('p.shah@harborpine.example'), 'team_ops');
 
       // Set-up through the API, as the api layer's step 1 does; then the team's version as 0.1.0 left it.
-      await call(platform, 'PUT', '/v1/policies/plugins', sam, { value: { [ID]: { enabled: true } } });
       for (const host of fake.info.hosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-609' });
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: fake.info.range, note: 'uc-609' });
-      let listed = await call(tools, 'GET', '/v1/plugins', priya);
-      for (let i = 0; i < 40 && !(listed.data?.plugins ?? []).some((p) => p.installOn); i++) await new Promise((r) => setTimeout(r, 500)), (listed = await call(tools, 'GET', '/v1/plugins', priya));
-      const on = await call(tools, 'PUT', `/v1/plugins/${ID}/team`, priya, { enabled: true, credentials: { token: fake.info.secrets.token } });
+      const on = await call(tools, 'PUT', `/v1/apps/plugin:${ID}/team`, priya, { enabled: true, credentials: { token: fake.info.secrets.token } });
       const old = declared();
       const sql = `UPDATE plugin_bindings SET version = '0.1.0', digest = '${old.digest}', declarations = '${JSON.stringify(old.declarations).replaceAll("'", "''")}' WHERE team_id = 'team_ops' AND plugin_id = '${ID}'`;
       execFileSync('psql', [`postgresql://ops:ops@localhost:${process.env.OPS_PG_PORT ?? 5477}/${DB}`, '-c', sql], { encoding: 'utf8' });
@@ -91,7 +88,7 @@ try {
       for (let i = 0; i < 40 && granted.status === 400; i++) await new Promise((r) => setTimeout(r, 1000)), (granted = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds: ['fields_post_message'] }));
       // The team's copy of the desk's agent template, so the review can say which version it came from.
       const copy = await call(agents, 'POST', `/v1/resources/${encodeURIComponent(`plugin:${ID}:desk-helper`)}/copies`, priya, {});
-      const review = await call(tools, 'GET', `/v1/plugins/${ID}/team/update`, priya);
+      const review = await call(tools, 'GET', `/v1/apps/plugin:${ID}/update`, priya);
       check(
         'setup: team ops runs 0.1.0 with 0.2.0 installed, and its agent holds post_message',
         on.status === 200 && review.data?.available === true && review.data?.version === '0.1.0' && granted.status === 200 && copy.status === 201,
@@ -141,7 +138,7 @@ try {
         await step('11 taking the update makes 0.2.0 the team\'s version and the notice goes', async () => {
           await page.getByTestId('app-update-take').click();
           await page.getByTestId('app-update').waitFor({ state: 'detached', timeout: 30_000 });
-          const after = await call(tools, 'GET', `/v1/plugins/${ID}/team/update`, priya);
+          const after = await call(tools, 'GET', `/v1/apps/plugin:${ID}/update`, priya);
           await page.screenshot({ path: join(SHOTS, 'update-taken-1280.png'), fullPage: true });
           check("11 taking the update makes 0.2.0 the team's version and the notice goes", after.data?.version === '0.2.0' && after.data?.available === false, after.text);
         }, page);

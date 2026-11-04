@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-03",
+  "title": "Logs on every tool and app",
+  "description": "A tool's page and an app's page each have a Logs tab listing their calls, with whose account each ran as. A run waiting for a person's own account shows that task on its page, where the person connects their account or an admin runs it as the team account.",
+  "tag": "improved"
+}

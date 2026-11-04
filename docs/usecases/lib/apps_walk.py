@@ -2,9 +2,10 @@
 
 One stack per script: platform-service with the dev seed's own roles, tools-service with plugins on and the nine test
 plugins of services/tools-service/tests/plugin_kinds, and the fake system of fake_multi_auth.py. Every test plugin is
-turned on for the install and the fake's hosts are allowed before a script's first step.
+installed, so every team sees it, and the fake's hosts are allowed before a script's first step.
 
-Writes use today's routes (`/v1/plugins`, `/v1/connections`). The page read is `GET /v1/apps/{id}`. A check whose
+Every call goes through the Apps API: an app under `/v1/apps/{app}` and each of its accounts under
+`/v1/apps/{app}/accounts/{id}` (a plugin's app is `plugin:<id>`, a custom app's id is its first account's). A check whose
 behaviour is not built yet names the task it waits on in its detail (`target: waits on D2`), so a failing run says
 which steps are targets.
 """
@@ -38,7 +39,6 @@ from usecase_harness import (
     platform,
     service_headers,
     tools,
-    until,
 )
 
 AUTH = {
@@ -66,6 +66,11 @@ def app_path(app: str) -> str:
     return f"/v1/apps/{quote(app, safe=':')}"
 
 
+def account_path(app: str, account: str) -> str:
+    """`/v1/apps/<app>/accounts/<account>`: an account is found only under its own app."""
+    return f"{app_path(app)}/accounts/{quote(account, safe='')}"
+
+
 @dataclass
 class Walk:
     api: httpx.Client
@@ -90,38 +95,40 @@ class Walk:
                 return r
         return r
 
+    def credential(self, role: str, plugin: str, client_id: str, client_secret: str) -> str:
+        """The team's own OAuth client for `plugin`, made under Credentials with no account; returns its id, which a
+        turn-on or an account names as credentialId."""
+        r = self.kept(
+            self.gw.post(
+                "/v1/app-credentials",
+                headers=self.who[role],
+                json={"app": f"plugin:{plugin}", "clientId": client_id, "clientSecret": client_secret},
+            )
+        )
+        return str((data(r) or {}).get("id") or "cred_missing") if r.status_code == 201 else "cred_missing"
+
     def turn_on(self, role: str, plugin: str, **body: Any) -> str:
         """Turns `plugin` on for the role's team; returns the team account's id (its connection)."""
-        r = self.kept(self.gw.put(f"/v1/plugins/{plugin}/team", headers=self.who[role], json={"enabled": True, **body}))
+        r = self.kept(
+            self.gw.put(f"/v1/apps/plugin:{plugin}/team", headers=self.who[role], json={"enabled": True, **body})
+        )
         return str((data(r) or {}).get("connectionId") or "con_missing") if r.status_code == 200 else "con_missing"
 
     def test(self, role: str, app: str, account: str, *, as_who: str = "self") -> dict[str, Any]:
         """Test connection on one account of `app`, as the role or (`as_who="team"`) as the team account."""
-        _ = app
         r = self.kept(
-            self.gw.post(
-                f"/v1/connections/{account}/test",
-                headers=self.who[role],
-                json={"environment": "production", "account": as_who},
-            )
+            self.gw.post(f"{account_path(app, account)}/test", headers=self.who[role], json={"account": as_who})
         )
         return dict((data(r) or {}).get("health") or {"status": f"http {r.status_code}", "text": r.text[:200]})
 
     def sign_in(self, role: str, app: str, account: str, user: str) -> int:
         """Plays a person's browser through the fake's sign-in page for their own account on `account`."""
-        _ = app
-        started = self.kept(
-            self.gw.post(
-                f"/v1/connections/{account}/sign-in",
-                headers=self.who[role],
-                json={"environment": "production"},
-            )
-        )
+        started = self.kept(self.gw.post(f"{account_path(app, account)}/sign-in", headers=self.who[role], json={}))
         url = (data(started) or {}).get("authorizeUrl", "") if started.status_code == 200 else ""
         back = self.m["sign_in"](url, user) if url else {}
         done = self.kept(
             self.gw.post(
-                f"/v1/connections/{account}/sign-in/complete",
+                f"{account_path(app, account)}/sign-in/complete",
                 headers=self.who[role],
                 json={"state": back.get("state", ""), "code": back.get("code", "")},
             )
@@ -148,30 +155,20 @@ class Walk:
 
 @contextmanager
 def apps_stack(tools_env: dict[str, str] | None = None, ops_ai_apps: dict[str, str] | None = None) -> Generator[Walk]:
-    """The stack, every test plugin on for the install. `ops_ai_apps` names, per plugin, the fake's OAuth client that
-    is Ops AI's own app for it: its client id goes in the install policy and the account admin seals its secret."""
+    """The stack with every test plugin installed. `ops_ai_apps` names, per plugin, the fake's OAuth client that is
+    Ops AI's own app for it, passed to tools-service as install config (OPS_PLUGIN_CLIENTS)."""
     with ExitStack() as stack:
         m = stack.enter_context(multi_auth())
         api, inner = stack.enter_context(platform())
-        gw = stack.enter_context(tools({**m["settings"], **AUTH, **PLUGINS, **(tools_env or {})}))
+        apps = ops_ai_apps or {}
+        # Ops AI's own app per plugin is the install's, from its config, as a deployment sets it.
+        clients = {p: {"id": c, "secret": m["clients"][c]} for p, c in apps.items()}
+        installed = {"OPS_PLUGIN_CLIENTS": json.dumps(clients)} if clients else {}
+        gw = stack.enter_context(tools({**m["settings"], **AUTH, **PLUGINS, **installed, **(tools_env or {})}))
         who = {role: as_role(api, role, TEAM_OF[role]) for role in ROLES}
         me = data(api.get("/v1/me", headers=who["admin"])) or {}
         tenant = str(me.get("tenantId") or (me.get("principal") or {}).get("tenantId") or "")
         walk = Walk(api=api, inner=inner, gw=gw, m=m, who=who, tenant=tenant)
-        loaded = data(gw.get("/v1/plugins", headers=who["admin"])) or {}
-        ids = [p["id"] for p in loaded.get("plugins", [])]
-        apps = ops_ai_apps or {}
-        policy = {i: {"enabled": True} | ({"client": {"id": apps[i]}} if i in apps else {}) for i in ids}
-        api.put("/v1/policies/plugins", json={"value": policy}, headers=who["security"])
-        until(
-            lambda: all(p["installOn"] for p in (data(gw.get("/v1/plugins", headers=who["admin"])) or {})["plugins"]),
-            timeout=30,
-        )
-        for plugin, client in apps.items():
-            body = {"clientSecret": m["clients"][client]}
-            # The policy reaches tools-service through a short cache; the plugin's app secret waits for it.
-            path = f"/v1/plugins/{plugin}/app-secret"
-            until(lambda p=path, b=body: gw.put(p, json=b, headers=who["security"]).status_code == 200)
         for h in m["hosts"]:
             gw.post("/v1/egress/hosts", json={"value": h, "note": "apps"}, headers=who["security"])
         gw.post("/v1/egress/ranges", json={"value": m["range"], "note": "apps"}, headers=who["security"])

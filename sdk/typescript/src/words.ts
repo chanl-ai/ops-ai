@@ -3,8 +3,9 @@
  * `usage`, each a few methods over the generated operations, which call the services' routes as they are. The Python
  * SDK has the same layer (sdk/python/src/ops_ai/_words.py).
  *
- * An app is named by its id on the Apps page: `plugin:<plugin id>`, `builtin:<name>`, or a custom app's connection id.
- * An account is a connection id (the team account, or another named one).
+ * An app is named by its id on the Apps page: `plugin:<plugin id>`, `builtin:<name>`, or a custom app's id. An app's
+ * accounts are the team account and any other named one, a sandbox among them (the account a test run uses); an
+ * account method left without `account` acts on the app's default account.
  */
 import type { Raw, Resource } from './client.js';
 
@@ -23,14 +24,6 @@ export function pluginOf(app: string): string {
 // which the card's `state` says; `status` is the account's display status.
 const connected = (card: Obj) => card.kind === 'builtin' || card.state === 'connected';
 
-/** The environment a run uses: the one given, else test when the app's account is set for it, else production when
- * that is. The page lists every environment, set or not. */
-function environmentOf(page: Obj, given?: string): string {
-  if (given) return given;
-  const envs = page.connection?.environments ?? {};
-  return envs.production?.set && !envs.test?.set ? 'production' : 'test';
-}
-
 function accountOf(page: Obj): string {
   if (!page.connection) throw new TypeError(`${page.card?.id} has no account yet; connect it first`);
   return String(page.connection.id);
@@ -39,110 +32,141 @@ function accountOf(page: Obj): string {
 const call = (raw: Raw, service: 'tools' | 'agents' | 'documents', id: string, args: Obj = {}): Promise<any> =>
   (raw[service] as unknown as Record<string, (a: Obj) => Promise<any>>)[id]!(args);
 
+const at = (app: string, account: string) => ({ app_id: app, account_id: account });
+
 export class Apps {
   constructor(private readonly raw: Raw) {}
 
   /** The Apps page's cards; `connected` keeps only the connected ones (true) or only the rest (false). */
   async list({ connected: only }: { connected?: boolean } = {}): Promise<Obj[]> {
-    const cards = (await call(this.raw, 'tools', 'connections_list_systems')) as Obj[];
+    const cards = (await call(this.raw, 'tools', 'apps_list_apps')) as Obj[];
     return cards.filter((c) => only === undefined || connected(c) === only);
   }
 
   get(app: string): Promise<Obj> {
-    return call(this.raw, 'tools', 'connections_get_app', { path: { app_id: app } });
+    return call(this.raw, 'tools', 'apps_get_app', { path: { app_id: app } });
   }
 
   turnOn(app: string, fields: Obj = {}): Promise<Obj> {
-    return call(this.raw, 'tools', 'plugins_set_team_plugin', { path: { plugin_id: pluginOf(app) }, body: { enabled: true, ...fields } });
+    pluginOf(app);
+    return call(this.raw, 'tools', 'apps_set_team_app', { path: { app_id: app }, body: { enabled: true, ...fields } });
   }
 
   turnOff(app: string): Promise<Obj> {
-    return call(this.raw, 'tools', 'plugins_set_team_plugin', { path: { plugin_id: pluginOf(app) }, body: { enabled: false } });
+    pluginOf(app);
+    return call(this.raw, 'tools', 'apps_set_team_app', { path: { app_id: app }, body: { enabled: false } });
   }
 
   /** The team's agents and workflows that use the app's tools: what turning it off stops. */
   users(app: string): Promise<Obj> {
-    return call(this.raw, 'tools', 'plugins_app_users', { path: { plugin_id: pluginOf(app) } });
+    pluginOf(app);
+    return call(this.raw, 'tools', 'apps_app_users', { path: { app_id: app } });
   }
 
-  /** A custom app (rest, openapi or mcp): its connection, holding the base address and the key its tools use. */
+  /** A custom app (rest, openapi or mcp) as its first account, holding the base address and the key its tools use. */
   async addCustom(
     kind: string,
     name: string,
-    o: { baseAddress: string; authKind?: string; settings?: Obj; secrets?: Record<string, string>; environment?: string },
+    o: { baseAddress: string; authKind?: string; settings?: Obj; secrets?: Record<string, string> },
   ): Promise<Obj> {
-    if (kind === 'mcp') return call(this.raw, 'tools', 'connections_connect_mcp', { body: { name, url: o.baseAddress } });
-    const made = await call(this.raw, 'tools', 'connections_create_connection', { body: { name, authKind: o.authKind ?? 'none' } });
-    return call(this.raw, 'tools', 'connections_set_environment', {
-      path: { connection_id: made.id, environment: o.environment ?? 'test' },
+    if (kind === 'mcp') return call(this.raw, 'tools', 'apps_add_app', { body: { name, serverUrl: o.baseAddress } });
+    const made = await call(this.raw, 'tools', 'apps_add_app', { body: { name, authKind: o.authKind ?? 'none' } });
+    return call(this.raw, 'tools', 'apps_change_account', {
+      path: at(made.id, made.id),
       body: { revision: made.revision, settings: { ...(o.settings ?? {}), baseUrl: o.baseAddress }, secretValues: o.secrets ?? {} },
     });
   }
 }
 
-/** How an app signs in: Ops AI's app, or the team's own client. */
+/** How an app signs in: Ops AI's app, or one of the team's own clients (app credentials). */
 export class Credentials {
   constructor(private readonly raw: Raw, private readonly apps: Apps) {}
 
-  /** Each app's credential: Ops AI's app or the team's own client, its permissions, accounts and last test. */
+  /** The team's app credentials and Ops AI's app of each app using it: permissions, accounts and last test. */
   async list(): Promise<Obj[]> {
-    return call(this.raw, 'tools', 'connections_list_app_credentials', {});
+    return call(this.raw, 'tools', 'apps_list_app_credentials', {});
   }
 
-  async set(app: string, o: { clientId: string; clientSecret?: string; environment?: string }): Promise<Obj> {
-    const account = accountOf(await this.apps.get(app));
-    const detail = await call(this.raw, 'tools', 'connections_get_connection', { path: { connection_id: account } });
-    const body: Obj = { revision: detail.revision, settings: { clientId: o.clientId } };
-    if (o.clientSecret) body.secretValues = { clientSecret: o.clientSecret };
-    return call(this.raw, 'tools', 'connections_set_environment', {
-      path: { connection_id: account, environment: o.environment ?? 'production' }, body,
-    });
+  /** One app credential with the accounts signing in with it. */
+  async get(credential: string): Promise<Obj> {
+    return call(this.raw, 'tools', 'apps_get_app_credential', { path: { credential_id: credential } });
+  }
+
+  /** The team's own client for an app: its client id, secret and permissions (all when left out), with no account
+   * needed. Accounts pick it by its id (`set`, or credentialId when connected); no answer carries the secret. */
+  async create(app: string, o: { clientId: string; clientSecret?: string; name?: string; scopes?: string[] }): Promise<Obj> {
+    const body: Obj = { app, clientId: o.clientId };
+    if (o.clientSecret) body.clientSecret = o.clientSecret;
+    if (o.name) body.name = o.name;
+    if (o.scopes) body.scopes = o.scopes;
+    return call(this.raw, 'tools', 'apps_create_app_credential', { body });
+  }
+
+  /** A new client secret for the team's own client; every account on it keeps it. */
+  async replaceSecret(credential: string, clientSecret: string): Promise<Obj> {
+    return call(this.raw, 'tools', 'apps_set_app_credential_secret', { path: { credential_id: credential }, body: { clientSecret } });
+  }
+
+  /** Signs the app's account (its default unless `account`) in with one of the team's credentials, or with null,
+   * Ops AI's app. The account signs in again. */
+  async set(app: string, credential: string | null, { account }: { account?: string } = {}): Promise<Obj> {
+    const found = account ?? accountOf(await this.apps.get(app));
+    const detail = await call(this.raw, 'tools', 'apps_get_account', { path: at(app, found) });
+    return call(this.raw, 'tools', 'apps_change_account', { path: at(app, found), body: { revision: detail.revision, credentialId: credential } });
   }
 
   /** Test with my account: where to send the browser; `finish` hands back what the sign-in page was given. */
-  async test(app: string, { environment = 'production' } = {}): Promise<Obj> {
-    const account = accountOf(await this.apps.get(app));
-    return call(this.raw, 'tools', 'connections_check_credential', { path: { connection_id: account }, body: { environment } });
+  async test(app: string, { account }: { account?: string } = {}): Promise<Obj> {
+    const found = account ?? accountOf(await this.apps.get(app));
+    return call(this.raw, 'tools', 'apps_check_credential', { path: at(app, found), body: {} });
   }
 
-  async finish(app: string, o: { state: string; code: string }): Promise<Obj> {
-    const account = accountOf(await this.apps.get(app));
-    return call(this.raw, 'tools', 'connections_check_credential', { path: { connection_id: account }, body: o });
+  async finish(app: string, o: { state: string; code: string; account?: string }): Promise<Obj> {
+    const found = o.account ?? accountOf(await this.apps.get(app));
+    return call(this.raw, 'tools', 'apps_check_credential', { path: at(app, found), body: { state: o.state, code: o.code } });
   }
 }
 
 export class Accounts {
-  constructor(private readonly raw: Raw) {}
+  constructor(private readonly raw: Raw, private readonly apps: Apps) {}
+
+  private async account(app: string, account?: string): Promise<string> {
+    return account ?? accountOf(await this.apps.get(app));
+  }
+
+  /** Another account of an app the team has: a sandbox, which test runs use, or another named one; `fields` are a
+   * plugin account's turn-on fields (credentialId, credentials, signIn...). */
+  add(app: string, name: string, { sandbox = false, ...fields }: { sandbox?: boolean; [field: string]: unknown } = {}): Promise<Obj> {
+    return call(this.raw, 'tools', 'apps_add_account', { path: { app_id: app }, body: { name, sandbox, ...fields } });
+  }
 
   /** Where to send the browser to sign in: the caller's own account, or (`team`) the team account. */
-  connect(account: string, { environment = 'production', team = false } = {}): Promise<Obj> {
-    const body = { environment, account: team ? 'team' : 'self' };
-    return call(this.raw, 'tools', 'connections_start_sign_in', { path: { connection_id: account }, body });
+  async connect(app: string, { account, team = false }: { account?: string; team?: boolean } = {}): Promise<Obj> {
+    const body = { account: team ? 'team' : 'self' };
+    return call(this.raw, 'tools', 'apps_start_sign_in', { path: at(app, await this.account(app, account)), body });
   }
 
-  test(account: string, { environment = 'production', team = false } = {}): Promise<Obj> {
-    const body = { environment, account: team ? 'team' : 'self' };
-    return call(this.raw, 'tools', 'connections_test_connection', { path: { connection_id: account }, body });
+  async test(app: string, { account, team = false }: { account?: string; team?: boolean } = {}): Promise<Obj> {
+    const body = { account: team ? 'team' : 'self' };
+    return call(this.raw, 'tools', 'apps_test_account', { path: at(app, await this.account(app, account)), body });
   }
 
-  makeDefault(account: string): Promise<Obj> {
-    return call(this.raw, 'tools', 'connections_pin_default', { path: { connection_id: account } });
+  makeDefault(app: string, account: string): Promise<Obj> {
+    return call(this.raw, 'tools', 'apps_pin_default', { path: at(app, account) });
   }
 
   /** The caller's own accounts on every app. */
   mine(): Promise<Obj[]> {
-    return call(this.raw, 'tools', 'connections_my_connections');
+    return call(this.raw, 'tools', 'apps_my_accounts');
   }
 
-  /** The caller's own key on an app each person signs in to. */
-  setKey(account: string, key: string, { environment = 'production' } = {}): Promise<Obj> {
-    return call(this.raw, 'tools', 'connections_give_own_credentials', {
-      path: { connection_id: account }, body: { environment, credentials: { key } },
-    });
+  /** The caller's own key on an account each person signs in to. */
+  setKey(account: string, key: string): Promise<Obj> {
+    return call(this.raw, 'tools', 'apps_give_own_credentials', { path: { account_id: account }, body: { credentials: { key } } });
   }
 
-  remove(account: string, { environment }: { environment?: string } = {}): Promise<unknown> {
-    return call(this.raw, 'tools', 'connections_disconnect', { path: { connection_id: account }, query: { environment } });
+  remove(account: string): Promise<unknown> {
+    return call(this.raw, 'tools', 'apps_disconnect', { path: { account_id: account } });
   }
 }
 
@@ -172,9 +196,9 @@ export class Tools {
       module = found.find((m: Obj) => (m.operations ?? []).some((o: Obj) => o.name === tool))?.id;
     }
     if (!module) throw new TypeError(`no tool named ${tool} on ${app}`);
-    return call(this.raw, 'tools', 'tool_modules_run_tool', {
-      path: { module_id: module, operation: tool }, body: { mode: real ? 'real' : 'mock', input, environment: environmentOf(page, environment) },
-    });
+    // Left out, a Real run is a test run: the app's sandbox account when it has one.
+    const body: Obj = { mode: real ? 'real' : 'mock', input, ...(environment ? { environment } : {}) };
+    return call(this.raw, 'tools', 'tool_modules_run_tool', { path: { module_id: module, operation: tool }, body });
   }
 }
 

@@ -18,7 +18,7 @@ with apps_stack() as w, agents(gateway_url=str(w.gw.base_url).rstrip("/"), env=A
     made = api.post("/v1/agents", json={"name": "Records helper", "role": "Reads records"}, headers=builder)
     agent_id = str((data(made) or {}).get("id") or "")
     api.patch(f"/v1/agents/{agent_id}", json={"toolIds": ["header_key_get_record"]}, headers=builder)
-    users = w.kept(w.gw.get("/v1/plugins/test.header-key/team/users", headers=admin))
+    users = w.kept(w.gw.get(f"{app_path(APP)}/used-by", headers=admin))
     check(
         "1 before turning the desk off, its users name the agent Records helper and the tool it holds",
         made.status_code == 201
@@ -31,7 +31,7 @@ with apps_stack() as w, agents(gateway_url=str(w.gw.base_url).rstrip("/"), env=A
     )
 
     # 2. Turned off, the desk reads off for the team.
-    off = w.kept(w.gw.put("/v1/plugins/test.header-key/team", json={"enabled": False}, headers=admin))
+    off = w.kept(w.gw.put("/v1/apps/plugin:test.header-key/team", json={"enabled": False}, headers=admin))
     after = data(w.kept(w.gw.get(app_path(APP), headers=admin))) or {}
     check(
         "2 turned off, the desk reads off for the team",
@@ -43,8 +43,8 @@ with apps_stack() as w, agents(gateway_url=str(w.gw.base_url).rstrip("/"), env=A
     keyed = w.turn_on("admin", "test.person-key", signIn="person")
     james_key = w.m["person_keys"]["james"]
     w.gw.put(
-        f"/v1/me/connections/{keyed}/credentials",
-        json={"environment": "production", "credentials": {"key": james_key}},
+        f"/v1/me/accounts/{keyed}/credentials",
+        json={"credentials": {"key": james_key}},
         headers=builder,
     )
     before = (data(w.gw.get(app_path(KEYED), headers=admin)) or {}).get("peopleCount")

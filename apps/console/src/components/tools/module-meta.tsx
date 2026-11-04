@@ -56,7 +56,7 @@ export function ModuleTypeBadge({ type }: { type: ModuleType }) {
  * Who owns a set of tools, in words: an installed app's tools are filed under the owner "Plugins" by the plugin host
  * (tools-service plugins/host.py), which is no team, so they read as coming with the app.
  */
-export const ownerText = (team: string) => (team === 'Plugins' ? 'Comes with the app' : `Owner ${team}`);
+export const ownerText = (team: string) => (team === 'Plugins' ? 'Comes with the app' : `Owned by ${team}`);
 
 export function ModuleMark({ name, className }: { name: string; className?: string }) {
   const letters = name

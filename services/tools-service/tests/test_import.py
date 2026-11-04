@@ -109,7 +109,7 @@ async def test_an_imported_operation_runs_only_once_its_secret_is_set(
 async def test_create_from_a_source_takes_the_document_not_the_caller(bank_api: Api, engine: Any) -> None:
     await _listed(bank_api)
     # The module's own connection, made here: the dev seed makes connections only where its modules use them.
-    made = await bank_api.client.post("/v1/connections", json={"name": "Statements", "authKind": "api_key"})
+    made = await bank_api.client.post("/v1/apps", json={"name": "Statements", "authKind": "api_key"})
     assert made.status_code == 201, made.text
     forged: dict[str, Any] = {
         "name": "get_account",

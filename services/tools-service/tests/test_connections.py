@@ -1,6 +1,6 @@
-"""Connections through the real routes with people signed in on platform-style tokens: who may change one,
-secret parts written once and never read back, a stale write storing nothing, a connection in use kept, and a sign-in
-finished once, by the person who started it, before it expires."""
+"""A custom app's accounts through the real routes with people signed in on platform-style tokens: who may
+change one, secret parts written once and never read back, a stale write storing nothing, an account in use kept, and a
+sign-in finished once, by the person who started it, before it expires."""
 
 from __future__ import annotations
 
@@ -51,17 +51,21 @@ def admin(tenant: str) -> dict[str, str]:
 
 
 async def _made(c: httpx.AsyncClient, who: dict[str, str], kind: str = "api_key") -> dict[str, Any]:
-    res = await c.post("/v1/connections", json={"name": "Core banking API", "authKind": kind}, headers=who)
+    res = await c.post("/v1/apps", json={"name": "Core banking API", "authKind": kind}, headers=who)
     assert res.status_code == 201, res.text
     return res.json()["data"]
 
 
+def _at(account: dict[str, Any]) -> str:
+    return f"/v1/apps/{account['appId']}/accounts/{account['id']}"
+
+
 async def test_only_someone_who_manages_connections_changes_one(client: httpx.AsyncClient, tenant: str) -> None:
     builder = person(tenant, "James Richardson", {TEAM: "builder"})
-    refused = await client.post("/v1/connections", json={"name": "x", "authKind": "api_key"}, headers=builder)
+    refused = await client.post("/v1/apps", json={"name": "x", "authKind": "api_key"}, headers=builder)
     assert refused.status_code == 403, refused.text
     service = await client.post(
-        "/v1/connections",
+        "/v1/apps",
         json={"name": "x", "authKind": "api_key"},
         headers={**service_headers(tenant), "X-Team-Id": TEAM},
     )
@@ -73,13 +77,13 @@ async def test_only_someone_who_manages_connections_changes_one(client: httpx.As
         "settings": {"name": "X-Api-Key", "baseUrl": BASE},
         "secretValues": {"key": "k-1"},
     }
-    put = await client.put(f"/v1/connections/{conn['id']}/environments/test", json=body, headers=builder)
+    put = await client.patch(_at(conn), json=body, headers=builder)
     assert put.status_code == 403, put.text
     # Every member reads them, and is told whether they may manage them.
-    read = await client.get(f"/v1/connections/{conn['id']}", headers=builder)
+    read = await client.get(_at(conn), headers=builder)
     assert read.status_code == 200 and read.json()["data"]["mayManage"] is False
-    listed = await client.get("/v1/connections", headers=builder)
-    assert [r["id"] for r in listed.json()["data"]["data"]] == [conn["id"]] or conn["id"] in str(listed.json())
+    listed = await client.get("/v1/apps", headers=builder)
+    assert conn["id"] in {c["id"] for c in listed.json()["data"]}, listed.text
 
 
 async def test_a_secret_part_is_written_once_and_never_read_back(client: httpx.AsyncClient, tenant: str) -> None:
@@ -90,14 +94,13 @@ async def test_a_secret_part_is_written_once_and_never_read_back(client: httpx.A
         "settings": {"name": "X-Api-Key", "baseUrl": BASE},
         "secretValues": {"key": "k-secret-1"},
     }
-    put = await client.put(f"/v1/connections/{conn['id']}/environments/test", json=body, headers=who)
+    put = await client.patch(_at(conn), json=body, headers=who)
     assert put.status_code == 200, put.text
     detail = put.json()["data"]
-    assert detail["environments"]["test"]["secrets"]["key"]["set"] is True
-    assert detail["environments"]["production"]["set"] is False
+    assert detail["secrets"]["key"]["set"] is True
     assert "k-secret-1" not in put.text
     secrets = (await client.get("/v1/secrets", headers=who)).json()["data"]
-    part = next(s for s in secrets if s["name"] == secret_name(conn["id"], "test", "key"))
+    part = next(s for s in secrets if s["name"] == secret_name(conn["id"], "key"))
     assert part["connectionId"] == conn["id"] and "k-secret-1" not in str(secrets)
     for method, path, payload in (
         ("post", f"/v1/secrets/{part['name']}/rotate", {"value": "other"}),
@@ -115,42 +118,42 @@ async def test_a_stale_write_stores_no_value(client: httpx.AsyncClient, tenant: 
         "settings": {"username": "ops", "baseUrl": BASE},
         "secretValues": {"password": "p-1"},
     }
-    assert (
-        await client.put(f"/v1/connections/{conn['id']}/environments/test", json=first, headers=who)
-    ).status_code == 200
+    assert (await client.patch(_at(conn), json=first, headers=who)).status_code == 200
+    held = await client.get("/v1/secrets", headers=who)
+    version = next(s["version"] for s in held.json()["data"] if s["name"] == secret_name(conn["id"], "password"))
     stale = {
         "revision": conn["revision"],
         "settings": {"username": "ops", "baseUrl": BASE},
         "secretValues": {"password": "p-2"},
     }
-    lost = await client.put(f"/v1/connections/{conn['id']}/environments/production", json=stale, headers=who)
+    lost = await client.patch(_at(conn), json=stale, headers=who)
     assert lost.status_code == 409 and lost.json()["error"]["code"] == "stale_version", lost.text
-    names = [s["name"] for s in (await client.get("/v1/secrets", headers=who)).json()["data"]]
-    assert secret_name(conn["id"], "production", "password") not in names
+    after = (await client.get("/v1/secrets", headers=who)).json()["data"]
+    assert next(s["version"] for s in after if s["name"] == secret_name(conn["id"], "password")) == version
 
 
 async def test_settings_are_checked_against_the_kind(client: httpx.AsyncClient, tenant: str) -> None:
     who = admin(tenant)
     conn = await _made(client, who, "oauth2_client_credentials")
-    path = f"/v1/connections/{conn['id']}/environments/test"
+    path = _at(conn)
     plain_secret = {
         "revision": 1,
         "settings": {"tokenUrl": "https://x.test/t", "clientId": "c", "clientSecret": "s", "baseUrl": BASE},
     }
-    assert (await client.put(path, json=plain_secret, headers=who)).status_code == 400
+    assert (await client.patch(path, json=plain_secret, headers=who)).status_code == 400
     unknown = {
         "revision": 1,
         "settings": {"tokenUrl": "https://x.test/t", "clientId": "c", "colour": "red", "baseUrl": BASE},
     }
-    assert (await client.put(path, json=unknown, headers=who)).status_code == 400
+    assert (await client.patch(path, json=unknown, headers=who)).status_code == 400
     http = {
         "revision": 1,
         "settings": {"tokenUrl": "http://x.test/t", "clientId": "c", "baseUrl": BASE},
         "secretValues": {"clientSecret": "s"},
     }
-    assert (await client.put(path, json=http, headers=who)).status_code == 400
+    assert (await client.patch(path, json=http, headers=who)).status_code == 400
     no_secret = {"revision": 1, "settings": {"tokenUrl": "https://x.test/t", "clientId": "c", "baseUrl": BASE}}
-    assert (await client.put(path, json=no_secret, headers=who)).status_code == 400
+    assert (await client.patch(path, json=no_secret, headers=who)).status_code == 400
 
 
 async def test_a_connection_in_use_is_not_deleted(client: httpx.AsyncClient, tenant: str) -> None:
@@ -177,9 +180,9 @@ async def test_a_connection_in_use_is_not_deleted(client: httpx.AsyncClient, ten
         "/v1/tool-modules", json=body, headers=person(tenant, "James Richardson", {TEAM: "builder"})
     )
     assert made.status_code == 201, made.text
-    refused = await client.delete(f"/v1/connections/{conn['id']}", headers=who)
+    refused = await client.delete(_at(conn), headers=who)
     assert refused.status_code == 409 and refused.json()["error"]["details"]["modules"] == ["Ledger"], refused.text
-    detail = (await client.get(f"/v1/connections/{conn['id']}", headers=who)).json()["data"]
+    detail = (await client.get(_at(conn), headers=who)).json()["data"]
     assert detail["usedBy"] == [{"id": made.json()["data"]["id"], "name": "Ledger"}]
 
 
@@ -196,22 +199,22 @@ async def _signing_in(client: httpx.AsyncClient, tenant: str) -> tuple[dict[str,
         "clientId": "ops-console",
         "baseUrl": BASE,
     }
-    put = await client.put(
-        f"/v1/connections/{conn['id']}/environments/test", json={"revision": 1, "settings": settings}, headers=who
-    )
+    put = await client.patch(_at(conn), json={"revision": 1, "settings": settings}, headers=who)
     assert put.status_code == 200, put.text
-    started = await client.post(f"/v1/connections/{conn['id']}/sign-in", json={"environment": "test"}, headers=who)
+    started = await client.post(f"{_at(conn)}/sign-in", json={}, headers=who)
     assert started.status_code == 200, started.text
     url = str(started.json()["data"]["authorizeUrl"])
     query = {k: v[0] for k, v in parse_qs(urlsplit(url).query).items()}
     assert url.startswith(AUTHORIZE) and query["code_challenge_method"] == "S256" and len(query["code_challenge"]) == 43
     assert query["redirect_uri"].endswith("/connections/sign-in/return")
+    # The return page finishes the sign-in under the account's app.
+    assert started.json()["data"]["appId"] == conn["appId"], started.text
     return conn, query["state"]
 
 
 async def test_a_sign_in_is_finished_once_by_who_started_it(client: httpx.AsyncClient, tenant: str) -> None:
     conn, state = await _signing_in(client, tenant)
-    path = f"/v1/connections/{conn['id']}/sign-in/complete"
+    path = f"{_at(conn)}/sign-in/complete"
     other = person(tenant, "Maya Okafor", {TEAM: "admin"})
     stolen = await client.post(path, json={"state": state, "code": "c"}, headers=other)
     assert stolen.status_code == 400 and stolen.json()["error"]["code"] == "sign_in_expired", stolen.text
@@ -234,7 +237,6 @@ async def test_an_expired_sign_in_is_refused(client: httpx.AsyncClient, tenant: 
             "tenant_id": tenant,
             "state_hash": hashlib.sha256(b"old-state-0123456789").hexdigest(),
             "connection_id": conn["id"],
-            "environment": "test",
             "person_id": "usr_priya|priya@bank.example",
             "verifier_ct": "x",
             "redirect_uri": "https://console.bank.test/connections/sign-in/return",
@@ -243,7 +245,7 @@ async def test_an_expired_sign_in_is_refused(client: httpx.AsyncClient, tenant: 
         now=now - timedelta(minutes=20),
     )
     res = await client.post(
-        f"/v1/connections/{conn['id']}/sign-in/complete",
+        f"{_at(conn)}/sign-in/complete",
         json={"state": "old-state-0123456789", "code": "c"},
         headers=admin(tenant),
     )
@@ -258,23 +260,10 @@ async def test_a_team_reads_only_its_own_connections_an_all_scope_team_included(
     cards = person(tenant, "Carla Cards", {"team_cards": "admin"})
     theirs = await _made(client, cards)
     platform = admin(tenant)
-    listed = (await client.get("/v1/connections", params={"pageSize": 100}, headers=platform)).json()["data"]["data"]
+    listed = (await client.get("/v1/apps", headers=platform)).json()["data"]
     assert theirs["id"] not in {c["id"] for c in listed}, listed
-    read = await client.get(f"/v1/connections/{theirs['id']}", headers=platform)
+    read = await client.get(_at(theirs), headers=platform)
     assert read.status_code == 404 and "team_cards" not in read.text, read.text
-
-
-async def test_a_connection_made_available_to_another_team_stays_its_own(
-    client: httpx.AsyncClient, tenant: str
-) -> None:
-    """`availableTo` let another team's modules sign in with this team's connection; an old caller still sending
-    it is answered and the field ignored."""
-    body = {"name": "Shared ledger", "authKind": "api_key", "availableTo": ["team_cards"]}
-    made = await client.post("/v1/connections", json=body, headers=admin(tenant))
-    assert made.status_code == 201 and made.json()["data"]["availableTo"] == [], made.text
-    cards = person(tenant, "Carla Cards", {"team_cards": "admin"})
-    read = await client.get(f"/v1/connections/{made.json()['data']['id']}", headers=cards)
-    assert read.status_code == 404, read.text
 
 
 async def test_each_team_holding_a_seeded_module_signs_in_with_its_own_connection(
@@ -302,8 +291,8 @@ async def test_a_connection_made_each_person_with_the_team_as_backup_has_the_bac
     """The console's and a plugin's create send only `signIn`; made as person_or_team with the backup off, a workflow
     run with nobody behind it was refused CONNECTION_NOT_LINKED though the team account was signed in."""
     body = {"name": "Case desk", "authKind": "oauth2_auth_code", "signIn": "person_or_team"}
-    made = await client.post("/v1/connections", json=body, headers=admin(tenant))
+    made = await client.post("/v1/apps", json=body, headers=admin(tenant))
     assert made.status_code == 201, made.text
     assert made.json()["data"]["signIn"] == "person_or_team" and made.json()["data"]["teamBackup"] is True, made.text
-    team_only = await client.post("/v1/connections", json={**body, "signIn": "team"}, headers=admin(tenant))
+    team_only = await client.post("/v1/apps", json={**body, "signIn": "team"}, headers=admin(tenant))
     assert team_only.json()["data"]["teamBackup"] is False, team_only.text

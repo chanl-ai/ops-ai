@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import json
 import re
 import sys
 from dataclasses import dataclass
@@ -99,6 +100,10 @@ def _paging(tool: Tool, request: Request, where: str) -> list[Problem]:
         out.append(Problem(where, "a token rule names the parameter the token is sent back as (param)"))
     if paging.rule == "offset" and not (paging.limit and paging.items):
         out.append(Problem(where, "an offset rule names the answer's list (items) and the page size (limit)"))
+    if paging.rule == "page" and not paging.limit:
+        out.append(Problem(where, "a page rule names the page size (limit)"))
+    if paging.rule == "link_header" and (paging.next or paging.items):
+        out.append(Problem(where, "a link_header rule reads the Link header and names no answer field"))
     return out
 
 
@@ -160,6 +165,46 @@ def _headers(manifest: Manifest, headers: dict[str, str], where: str) -> list[Pr
     return out
 
 
+def _quoted_inputs(body: str) -> list[str]:
+    """The `{{input}}`s a JSON body template puts inside a JSON string, where its own quotes would break the JSON."""
+    found: list[str] = []
+    in_string = escaped = False
+    i = 0
+    while i < len(body):
+        c = body[i]
+        if in_string and (m := QUERY_VAR.match(body, i)):
+            found.append(m.group(1))
+            i = m.end()
+            continue
+        if escaped:
+            escaped = False
+        elif c == "\\" and in_string:
+            escaped = True
+        elif c == '"':
+            in_string = not in_string
+        i += 1
+    return found
+
+
+def _body_problems(tool: Tool, body: str, where: str) -> list[Problem]:
+    """A JSON body is sent with each `{{input}}` written as JSON, quotes included: one inside quotes, one naming no
+    input, or a template that is not JSON once the inputs are written in would send a body the system cannot read."""
+    out = [
+        Problem(where, f"{{{{{name}}}}} sits inside quotes in the body; it is written as JSON, so leave it bare")
+        for name in _quoted_inputs(body)
+    ]
+    out += [
+        Problem(where, f"{{{{{name}}}}} in the body names no input")
+        for name in QUERY_VAR.findall(body)
+        if name not in tool.input
+    ]
+    try:
+        json.loads(QUERY_VAR.sub("null", body))
+    except ValueError:
+        out.append(Problem(where, "the body is not JSON once each {{input}} is written in"))
+    return out
+
+
 def _request_text(tool: Tool, request: Request, where: str) -> list[Problem]:
     """A secret reference anywhere a request is built from, and the form body's own rules."""
     texts = [request.path, request.body or "", *request.query.values(), *(request.form or {}).values()]
@@ -168,6 +213,8 @@ def _request_text(tool: Tool, request: Request, where: str) -> list[Problem]:
         for t in texts
         for m in SECRET_REF.findall(t)
     ]
+    if request.body is not None:
+        out += _body_problems(tool, request.body, where)
     if request.form is not None:
         if request.body is not None:
             out.append(Problem(where, "a request has a JSON body or a form, not both"))

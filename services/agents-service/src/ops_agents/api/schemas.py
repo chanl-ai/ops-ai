@@ -354,6 +354,40 @@ class Tool(Out):
     approval: str | None
 
 
+class ToolApp(Out):
+    id: str
+    name: str
+
+
+class ToolUserRef(Out):
+    id: str
+    name: str
+
+
+class ToolUsedBy(Out):
+    agents: list[ToolUserRef]
+    workflows: list[ToolUserRef]
+
+
+class ToolRow(Tool):
+    """One tool on the Tools page, joined here: the app it belongs to, what kind of tool it is, whether the person
+    asking can run it now, and the team's agents and workflows that use it."""
+
+    # The app the tool's set belongs to; a builder's own tool set is its own app (`module:<id>`). None for a workflow
+    # or an agent offered as a tool.
+    app: ToolApp | None
+    kind: Literal["app", "custom", "workflow", "agent"]
+    # ready; needs_approval (its calls wait for an approver); app_not_connected (the team account is not signed in);
+    # needs_your_sign_in (the app signs each person in and the person asking has not).
+    status: Literal["ready", "needs_approval", "app_not_connected", "needs_your_sign_in"]
+    used_by: ToolUsedBy
+
+
+class ToolList(ListResult[ToolRow]):
+    # The name of each app `facets.app` counts, by its id, so the App filter reads names the API joined.
+    app_names: dict[str, str]
+
+
 class ModelAlias(Out):
     """A chat alias an agent may name. Clearance and prices come from models-service; without it the runtime's own
     alias is listed by name alone."""
@@ -1011,6 +1045,8 @@ class ConnectWait(Out):
 
     app: str
     connection_id: str | None = None
+    # The account's app, under which Connect my account opens it.
+    app_id: str | None = None
     # The person whose account the run waits for: the run's starter.
     person: str | None = None
     team_account: bool = False

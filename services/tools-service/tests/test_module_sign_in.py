@@ -26,7 +26,7 @@ system = test_personal_sign_in.system
 
 async def made(c: httpx.AsyncClient, tenant: str, sign_in: str) -> str:
     r = await c.post(
-        "/v1/connections",
+        "/v1/apps",
         json={"name": f"CRM {sign_in}", "authKind": "oauth2_auth_code", "signIn": sign_in},
         headers=person(tenant, "Priya Shah", {TEAM: "admin"}),
     )
@@ -78,7 +78,7 @@ async def test_a_module_takes_only_a_connection_whose_sign_in_it_supports(
 async def test_an_operation_that_needs_a_person_never_takes_the_team_backup(engine: AsyncEngine, tenant: str) -> None:
     store, tokens, auth = rig(engine)
     conn = await connection(store, tenant, "person_or_team", backup=True)
-    await tokens.store_answer(tenant, conn, "test", {"access_token": "at-team", "expires_in": 3600}, SHARED)
+    await tokens.store_answer(tenant, conn, {"access_token": "at-team", "expires_in": 3600}, SHARED)
     with pytest.raises(AuthFailed) as e:
         await auth.prepare(module(tenant, conn), "test", tool="crm_update", actor="t", needs_person=True)
     assert e.value.code == "CONNECTION_NOT_LINKED" and e.value.details["reason"] == "needs_person"

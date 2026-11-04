@@ -20,7 +20,7 @@ from ops_plugin_sdk.manifest import SIGN_IN_KINDS
 from ops_tools.auth import STRATEGIES, Prepared, StrategyInput
 from ops_tools.auth.kinds import BY_ID
 from ops_tools.auth.tokens import AuthFailed, ClientProof, Tokens
-from ops_tools.store.connections import ConnectionStore
+from ops_tools.store.connections import SHARED, ConnectionStore
 
 from .conftest import credentials
 from .test_assertion import pair, parts
@@ -32,7 +32,7 @@ BASE = "https://graph.microsoft.test"
 
 
 async def made(c: httpx.AsyncClient, who: dict[str, str], kind: str) -> dict[str, Any]:
-    res = await c.post("/v1/connections", json={"name": "Partner bank API", "authKind": kind}, headers=who)
+    res = await c.post("/v1/apps", json={"name": "Partner bank API", "authKind": kind}, headers=who)
     assert res.status_code == 201, res.text
     return res.json()["data"]
 
@@ -41,7 +41,7 @@ async def save(
     c: httpx.AsyncClient, who: dict[str, str], conn: dict[str, Any], settings: dict[str, Any], secrets: dict[str, str]
 ) -> httpx.Response:
     body = {"revision": conn["revision"], "settings": {"baseUrl": BASE, **settings}, "secretValues": secrets}
-    return await c.put(f"/v1/connections/{conn['id']}/environments/production", json=body, headers=who)
+    return await c.patch(f"/v1/apps/{conn['id']}/accounts/{conn['id']}", json=body, headers=who)
 
 
 async def test_a_certificate_client_saves_with_its_signing_pair_and_no_client_secret(
@@ -54,7 +54,7 @@ async def test_a_certificate_client_saves_with_its_signing_pair_and_no_client_se
     settings = {"tokenUrl": TOKEN_URL, "clientId": "ops-ai-acme", "clientAuth": "private_key_jwt"}
     saved = await save(client, who, conn, {**settings, "signingCertificate": cert_pem}, {"signingKey": key_pem})
     assert saved.status_code == 200, saved.text
-    assert key_pem not in (await client.get(f"/v1/connections/{conn['id']}", headers=who)).text
+    assert key_pem not in (await client.get(f"/v1/apps/{conn['id']}/accounts/{conn['id']}", headers=who)).text
 
 
 async def test_a_certificate_client_without_its_signing_key_is_refused_naming_it(
@@ -119,7 +119,7 @@ async def test_a_token_request_sends_a_signed_assertion_and_no_client_secret(eng
     tokens, conn = await tokens_for(engine, tenant, seen)
     key_pem, cert_pem, cert = pair()
     proof = ClientProof(secret="never-sent", signing_key=key_pem, signing_certificate=cert_pem)
-    got = await tokens.access(tenant, conn, "test", SIGNED_CLIENT, proof, grant="client_credentials")
+    got = await tokens.access(tenant, conn, SIGNED_CLIENT, proof, grant="client_credentials")
     assert got.access == "at-1"
     form = seen[0]
     assert form["client_assertion_type"] == "urn:ietf:params:oauth:client-assertion-type:jwt-bearer", form
@@ -135,7 +135,7 @@ async def test_a_signed_client_with_no_key_is_refused_before_any_request(engine:
     seen: list[dict[str, str]] = []
     tokens, conn = await tokens_for(engine, tenant, seen)
     with pytest.raises(AuthFailed, match="Signing key"):
-        await tokens.access(tenant, conn, "test", SIGNED_CLIENT, ClientProof(secret="s"), grant="client_credentials")
+        await tokens.access(tenant, conn, SIGNED_CLIENT, ClientProof(secret="s"), grant="client_credentials")
     assert seen == []
 
 
@@ -149,7 +149,7 @@ async def test_a_signed_service_account_asks_with_the_jwt_as_its_grant(engine: A
         "scopes": "drive.readonly",
         "scopeIn": "claim",
     }
-    await tokens.access(tenant, conn, "test", google, ClientProof(signing_key=key_pem), grant="jwt_bearer")
+    await tokens.access(tenant, conn, google, ClientProof(signing_key=key_pem), grant="jwt_bearer")
     form = seen[0]
     assert set(form) == {"grant_type", "assertion"}, form
     assert form["grant_type"] == "urn:ietf:params:oauth:grant-type:jwt-bearer"
@@ -165,7 +165,9 @@ async def test_a_signed_service_account_asks_with_the_jwt_as_its_grant(engine: A
         "scopes": "signature impersonation",
     }
     seen.clear()
-    await tokens.access(tenant, conn, "production", docusign, ClientProof(signing_key=key_pem), grant="jwt_bearer")
+    # The first call's token would answer the second: drop it so the second signs its own assertion.
+    await ConnectionStore(engine).forget_token(tenant, conn, SHARED)
+    await tokens.access(tenant, conn, docusign, ClientProof(signing_key=key_pem), grant="jwt_bearer")
     claims = parts(seen[0]["assertion"])[1]
     assert (claims["sub"], claims["aud"]) == ("user-guid", "account-d.docusign.com") and "scope" not in claims
     assert seen[0]["scope"] == "signature impersonation"
@@ -178,8 +180,8 @@ async def test_a_call_on_a_signed_service_account_carries_its_token_and_scrubs_t
     tokens, conn = await tokens_for(engine, tenant, seen)
     key_pem, _, _ = pair()
     settings = {"tokenUrl": TOKEN_URL, "clientId": "svc@acme.iam.test", "scopes": "files.read"}
-    i = StrategyInput(tenant, conn, "test", settings, {"signingKey": key_pem}, tokens, None)
-    p = Prepared(conn, "test")
+    i = StrategyInput(tenant, conn, settings, {"signingKey": key_pem}, tokens, None)
+    p = Prepared(conn)
     await STRATEGIES["oauth2_jwt_bearer"](i, p)
     assert p.headers["Authorization"] == "Bearer at-1" and p.renewable
     assert seen[0]["assertion"] in p.values and "at-1" in p.values
@@ -213,9 +215,9 @@ async def test_a_read_shows_the_certificates_thumbprint_and_expiry_and_never_the
     conn = await made(client, who, "oauth2_client_credentials")
     saved = await save(client, who, conn, {**SIGNED_CLIENT, "signingCertificate": cert_pem}, {"signingKey": key_pem})
     assert saved.status_code == 200, saved.text
-    read = await client.get(f"/v1/connections/{conn['id']}", headers=who)
+    read = await client.get(f"/v1/apps/{conn['id']}/accounts/{conn['id']}", headers=who)
     assert key_pem not in read.text
-    shown = read.json()["data"]["environments"]["production"]["certificate"]
+    shown = read.json()["data"]["certificate"]
     assert shown["thumbprint"] == hashlib.sha256(cert.public_bytes(serialization.Encoding.DER)).hexdigest(), shown
     assert shown["subject"] == "CN=ops-ai-acme" and shown["expiresSoon"] is True and shown["notAfter"], shown
 
@@ -227,9 +229,9 @@ async def test_an_expired_signing_certificate_is_refused_before_any_request_as_t
     tokens, conn = await tokens_for(engine, tenant, seen)
     key_pem, cert_pem, _ = pair(days=-1)
     settings = {**SIGNED_CLIENT, "signingCertificate": cert_pem}
-    i = StrategyInput(tenant, conn, "test", settings, {"signingKey": key_pem}, tokens, None)
+    i = StrategyInput(tenant, conn, settings, {"signingKey": key_pem}, tokens, None)
     with pytest.raises(AuthFailed, match="signing certificate expired on 2026-10-29") as e:
-        await STRATEGIES["oauth2_client_credentials"](i, Prepared(conn, "test"))
+        await STRATEGIES["oauth2_client_credentials"](i, Prepared(conn))
     assert e.value.side == "upstream" and seen == []
 
 
@@ -238,9 +240,9 @@ async def test_a_refresh_sends_the_signed_assertion_and_no_client_secret(engine:
     tokens, conn = await tokens_for(engine, tenant, seen)
     key_pem, cert_pem, _ = pair()
     # A sign-in whose token is already inside the refresh window.
-    await tokens.store_answer(tenant, conn, "test", {"access_token": "at-0", "refresh_token": "rt-0", "expires_in": 5})
+    await tokens.store_answer(tenant, conn, {"access_token": "at-0", "refresh_token": "rt-0", "expires_in": 5})
     proof = ClientProof(secret="never-sent", signing_key=key_pem, signing_certificate=cert_pem)
-    await tokens.access(tenant, conn, "test", SIGNED_CLIENT, proof, grant="none")
+    await tokens.access(tenant, conn, SIGNED_CLIENT, proof, grant="none")
     form = seen[0]
     assert form["grant_type"] == "refresh_token" and form["refresh_token"] == "rt-0", form
     assert form["client_assertion_type"] == "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"

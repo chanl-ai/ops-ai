@@ -55,6 +55,12 @@ class Policies:
                 # How the Policies page draws it and names it, so a new policy needs no console change.
                 "kind": p.kind,
                 "title": p.title,
+                **(
+                    {"choices": [{"value": v, "title": t, "description": d} for v, t, d in p.choices]}
+                    if p.choices
+                    else {}
+                ),
+                **({"note": p.note} if p.note else {}),
             }
             for p in POLICIES
         ]

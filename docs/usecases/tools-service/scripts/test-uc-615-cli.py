@@ -4,7 +4,7 @@ The api layer's stack; the team admin runs `ops apps credential` from the repo, 
 
 from __future__ import annotations
 
-from apps_walk import apps_stack, ops_cli, target
+from apps_walk import account_path, apps_stack, ops_cli, target
 from usecase_harness import check, data, finish
 
 APP = "plugin:test.person"
@@ -14,17 +14,16 @@ with apps_stack(ops_ai_apps={"test.person": "multi-zoom"}) as w:
     account = w.turn_on("admin", "test.person", signIn="team")
     check("set-up: the person desk is on for the team account", account != "con_missing", account)
 
-    # 7. Set from standard input; the environment then holds the team's client, and the secret is in no output.
+    # 7. Set from standard input, and the team account then holds the team's client, and the secret is in no output.
     code, out = ops_cli(
         "admin", "apps", "credential", "set", APP, "--client-id", "multi-app", "--client-secret", "-", stdin=secret
     )
-    detail = data(w.gw.get(f"/v1/connections/{account}", headers=w.who["admin"])) or {}
-    env = (detail.get("environments") or {}).get("production") or {}
+    held = data(w.gw.get(account_path(APP, account), headers=w.who["admin"])) or {}
     check(
         "7 `ops apps credential set` takes the secret on standard input, puts the team's client on the app, and the "
         "secret is in no output",
-        code == 0 and (env.get("settings") or {}).get("clientId") == "multi-app" and secret not in str(out),
-        (target("L1"), {"set": (code, out), "env": env}),
+        code == 0 and (held.get("settings") or {}).get("clientId") == "multi-app" and secret not in str(out),
+        (target("L1"), {"set": (code, out), "account": held}),
     )
 
 finish()

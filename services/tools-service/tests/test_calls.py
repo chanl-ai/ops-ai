@@ -18,7 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_service_kit.contract import response_checker
 from ops_service_kit.ids import input_hash, new_id
 from ops_store import isolation
-from ops_tools.environments import CONNECTION_ENVIRONMENTS
 from ops_tools.modules.seed import blank, load, open_connection
 from ops_tools.store import CallLog
 from ops_tools.store.connections import ConnectionStore
@@ -95,23 +94,21 @@ def bank_module(tenant: str, suffix: str) -> dict[str, Any]:
 
 
 async def on_its_connection(engine: AsyncEngine, module: dict[str, Any], base: str) -> dict[str, Any]:
-    """The module on a connection of its own that signs nothing in and holds `base` in every environment: where a
-    module's address lives."""
+    """The module on an account of its own that signs nothing in and holds `base`: where a module's address lives
+    ."""
     now = datetime.now(UTC)
-    row, envs = open_connection(
+    row = open_connection(
         tenant_id=module["tenant_id"], team_id=module["team_id"], connection_id=f"con_{module['id']}",
         name=module["display_name"], base=base, me="test", at=now,
     )  # fmt: skip
     with isolation.scope(module["tenant_id"], module["team_id"]):
-        await ConnectionStore(engine).create(row, actor="test", at=now, environments=envs)
+        await ConnectionStore(engine).create(row, actor="test", at=now)
     return {**module, "connection_id": row["id"]}
 
 
 async def move_address(engine: AsyncEngine, tenant: str, module_id: str, team: str, base: str) -> None:
     with isolation.scope(tenant, team):
-        await ConnectionStore(engine).set_base(
-            tenant, f"con_{module_id}", base, CONNECTION_ENVIRONMENTS, actor="test", at=datetime.now(UTC)
-        )
+        await ConnectionStore(engine).set_base(tenant, f"con_{module_id}", base, actor="test", at=datetime.now(UTC))
 
 
 @dataclass

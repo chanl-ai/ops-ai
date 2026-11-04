@@ -11,12 +11,11 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { isRequired, type EnvDraft, type Environment, type FieldGroups, type KindField } from '@/lib/connect-plan';
+import { isRequired, type Draft, type FieldGroups, type KindField } from '@/lib/connect-plan';
 
-/** One environment's section of the connect dialog: its fields, More settings, its test button and last result. */
-export function EnvSection({
-  env,
-  label,
+/** An account's keys in the connect dialog: its fields, More settings, its test button and last result. */
+export function AccountFields({
+  label = 'Keys',
   draft,
   groups,
   busy,
@@ -26,9 +25,8 @@ export function EnvSection({
   onTest,
   testLabel = 'Run test',
 }: {
-  env: Environment;
-  label: string;
-  draft: EnvDraft;
+  label?: string;
+  draft: Draft;
   groups: FieldGroups;
   busy: boolean;
   canTest: boolean;
@@ -38,7 +36,7 @@ export function EnvSection({
   testLabel?: string;
 }) {
   const input = (f: KindField) => {
-    const id = `${env}-${f.name}`;
+    const id = `account-${f.name}`;
     if (f.pem) {
       const set = f.secret ? onSecret : onSetting;
       const value = (f.secret ? draft.secrets[f.name] : draft.settings[f.name]) ?? '';
@@ -82,12 +80,12 @@ export function EnvSection({
     return <Input id={id} value={draft.settings[f.name] ?? ''} onChange={(e) => onSetting(f.name, e.target.value)} />;
   };
   const field = (f: KindField) => (
-    <FormField key={f.name} id={`${env}-${f.name}`} label={f.label} optional={!isRequired(f, draft.settings)} hint={f.help ?? undefined} className={f.pem ? 'sm:col-span-2' : undefined}>
+    <FormField key={f.name} id={`account-${f.name}`} label={f.label} optional={!isRequired(f, draft.settings)} hint={f.help ?? undefined} className={f.pem ? 'sm:col-span-2' : undefined}>
       {input(f)}
     </FormField>
   );
   return (
-    <section className="flex min-w-0 flex-col gap-3 rounded-lg border p-4" data-testid={`env-${env}`} aria-label={label}>
+    <section className="flex min-w-0 flex-col gap-3 rounded-lg border p-4" data-testid="account-fields" aria-label={label}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">{label}</h3>
         <LoadingButton
@@ -97,7 +95,7 @@ export function EnvSection({
           onClick={onTest}
           isLoading={draft.status === 'testing'}
           disabled={!canTest || busy}
-          data-testid={`test-${env}`}
+          data-testid="account-test"
         >
           {testLabel}
         </LoadingButton>
@@ -114,7 +112,7 @@ export function EnvSection({
           <CollapsibleContent className="grid gap-3 pt-2 sm:grid-cols-2">{groups.more.map(field)}</CollapsibleContent>
         </Collapsible>
       )}
-      {draft.health && <HealthLine health={draft.health} testId={`health-${env}`} who={false} />}
+      {draft.health && <HealthLine health={draft.health} testId="account-health" who={false} />}
     </section>
   );
 }

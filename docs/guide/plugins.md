@@ -24,6 +24,118 @@ The manifest file is `plugin.yaml`. The Salesforce example lives at `plugins/sal
 | Templates | `src/ops_plugin_salesforce/templates/` | Agents, skills, workflows and document types the manifest lists under `templates`; a team adds its own copy from the App's Resources tab |
 | Tests | `tests/test_tools.py` | Each tool against a fake of the system, through the SDK's runner |
 
+## Start a new plugin
+
+The smallest plugin is four files: a package file, a manifest, the line that loads the manifest, and one test. This one
+signs in with an API key and has one read tool. Make the folder anywhere, then check and test it from the ops-ai
+checkout, as below.
+
+```
+ticketdesk/
+  pyproject.toml
+  src/ops_plugin_ticketdesk/__init__.py
+  src/ops_plugin_ticketdesk/plugin.yaml
+  tests/test_tools.py
+```
+
+`pyproject.toml` names the package and the entry point tools-service finds it by:
+
+```toml
+[project]
+name = "ops-plugin-ticketdesk"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = ["ops-plugin-sdk"]
+
+[project.entry-points."ops_ai.plugins"]
+ticketdesk = "ops_plugin_ticketdesk:plugin"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ops_plugin_ticketdesk"]
+```
+
+`src/ops_plugin_ticketdesk/__init__.py` loads the manifest beside it:
+
+```python
+from ops_plugin_sdk import Plugin
+
+plugin = Plugin.beside(__file__)
+```
+
+`src/ops_plugin_ticketdesk/plugin.yaml` is the plugin itself (every field is in The manifest, below):
+
+```yaml
+schema: ops-ai/plugin@2
+id: acme.ticketdesk
+title: Ticket desk
+version: 0.1.0
+sdk: "1"
+
+connection:
+  kinds: [api_key]
+  api_key: { placement: header, name: X-Api-Key }
+  sign_in: [team]
+  health_check: { path: /me }
+
+settings:
+  api_url: { type: string, default: "https://api.ticketdesk.example", title: API address }
+
+egress: ["{api_url}"]
+endpoint: "{api_url}"
+
+tools:
+  - name: get_ticket
+    title: Get a ticket
+    description: One ticket by its number, with its subject and status
+    access: read
+    input:
+      number: { type: integer, description: "The ticket number, such as 4182" }
+    request:
+      method: GET
+      path: "/tickets/{number}"
+```
+
+`tests/test_tools.py` calls the tool against a fake of the system, as tools-service would:
+
+```python
+import httpx
+from ops_plugin_ticketdesk import plugin
+
+from ops_plugin_sdk.testing import Fake, call
+
+SETTINGS = {"api_url": "https://api.ticketdesk.test"}
+
+
+def test_get_ticket_sends_the_number_in_its_path() -> None:
+    seen: list[httpx.Request] = []
+
+    def desk(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"number": 4182, "subject": "Printer jam", "status": "open"})
+
+    client = Fake(httpx.Client(transport=httpx.MockTransport(desk)), "k-1")
+    out = call(plugin, "get_ticket", {"number": 4182}, SETTINGS, client)
+    assert seen[-1].url.path == "/tickets/4182"
+    assert out["status"] == "open"
+```
+
+Then, from the ops-ai checkout:
+
+```
+uv run ops plugin validate ../ticketdesk
+uv run ops plugin test ../ticketdesk
+```
+
+`validate` prints `OK acme.ticketdesk 0.1.0: 1 tools, 0 knowledge sources, 0 templates` and `test` prints `1 passed`.
+The test runner sends the key as a bearer token whatever `connection.api_key` names, so assert the key's header on a
+local stack (Try a plugin on a local stack), not in the test. To see it in the console, install it (Install a plugin)
+and connect it from Apps. Salesforce and GitHub in the plugins repository are the fuller examples: OAuth sign-in,
+paging, knowledge sources and templates.
+
 ## The manifest
 
 | Field | What it says |
@@ -37,7 +149,7 @@ The manifest file is `plugin.yaml`. The Salesforce example lives at `plugins/sal
 | `connection.after_sign_in` | One lookup after sign-in that fills a setting (Salesforce's instance from UserInfo); see Headers, forms and sign-in steps |
 | `connection.client_auth`, `authorize_params` | How the OAuth client is sent on the token call, and extra parameters on the sign-in address |
 | `connection.health_check` | The path Test connection calls |
-| `settings` | Values a team sets. `default`, `lockable` (the platform admin can fix it for every team), and `from_token` or `after_sign_in` (only the sign-in sets it) |
+| `settings` | Values a team sets. `default`, `lockable` (the install can fix it for every team, `OPS_PLUGIN_LOCKED`), and `from_token` or `after_sign_in` (only the sign-in sets it) |
 | `headers` | Headers on every request the plugin makes, a Python tool's too; a tool's own `headers` add to them |
 | `egress` | The hosts a tool may reach, usually a setting such as `{instance_url}` |
 | `endpoint` | The base address every request template is relative to |
@@ -57,19 +169,24 @@ its operation name.
 |---|---|---|
 | `path` | `{input}` for a path segment, URL-encoded; give the input a `pattern` so a value cannot change the path | `"/repos/{owner}/{repo}/issues/{number}"` |
 | `query` | A map of parameter names to text; `{{input}}` is checked and written by its `enum` or `format` (below), and text with no `{{...}}` is sent as written | `{state: "{{state}}", per_page: "50"}` |
-| `body` | One string of JSON. Each `{{input}}` is written as JSON, quotes included, so it is never put inside quotes | `'{"body": {{body}}}'` sends `{"body": "Seen again on \"Leeds\"."}`; `"{{fields}}"` sends a whole object input |
+| `body` | One string of JSON. Each `{{input}}` is written as JSON, quotes included, so it is never put inside quotes; validate refuses one in quotes, one naming no input, and a body that is not JSON once the inputs are written in | `'{"body": {{body}}}'` sends `{"body": "Seen again on \"Leeds\"."}`; `"{{fields}}"` sends a whole object input |
 | `form` | A map for a form-encoded body (Headers, forms and sign-in steps) | Slack's `chat.postMessage` |
 
 
 ## Paging and queries
 
-A listing tool says how it reaches its next page in `request.paging`, with one of three rules:
+A listing tool says how it reaches its next page in `request.paging`, with one of five rules:
 
 | Rule | Fields | Example |
 |---|---|---|
 | `link` | `next`: the answer field holding the next page's address | Salesforce's `nextRecordsUrl`, Graph's `@odata.nextLink` |
+| `link_header` | none: the next page's address is the answer's `Link` header, `rel="next"` | GitHub, GitLab |
 | `token` | `next`: the answer field holding a token; `param`: the parameter it is sent back as | Salesforce UI API's `nextPageToken`, sent as `pageToken` |
 | `offset` | `items`: the answer's list; `limit`: the page size; `offset_param` and `limit_param` when not `offset` and `limit` | Salesforce's `parameterizedSearch`, with `limit_param: overallLimit` |
+| `page` | `limit`: the page size; `param` (default `page`) and `limit_param` (default `limit`); `start`, the first page's number (default 1); `items` when the list is not the whole answer | An API that takes `page=2&per_page=50` |
+
+With `offset` and `page`, a page shorter than `limit` is the last. A list answer that pages is returned as
+`{records: [...], next_cursor}` while there is a next page, and as the list on the last one.
 
 An agent's call gets one page and a `next_cursor`, and asks again with the cursor alone for the next. tools-service
 seals the cursor to the tenant, the connection and the tool, so a caller cannot change it or use it on another tool. A
@@ -181,12 +298,10 @@ Fake(client, token))`, where `client` is an `httpx.Client` bound to a fake of th
 `httpx.MockTransport(handler)` with a handler that answers like the system (`tests/test_tools.py` in Salesforce,
 `tests/fake_github.py` in GitHub).
 
-`testing.call` differs from tools-service in two ways a test should know:
-
-| tools-service | `testing.call` |
-|---|---|
-| Fills an input's `default` when a call leaves it out | Sends the template with the input empty, so test a default on a local stack (below) |
-| Sends the plugin's and the tool's `headers` | Sends only the bearer token, so assert headers on the manifest (`plugin.manifest.headers`) |
+`testing.call` builds the request with the same kit functions tools-service uses: each input left out as its
+`default`, the plugin's and the tool's `headers` (a header naming an unset setting left out), then the bearer token,
+which wins a name they share. A paged tool answers one page and a `next_cursor` that is the page state as plain JSON,
+which a test passes back as `{"cursor": ...}`.
 
 ## Try a plugin on a local stack
 
@@ -197,10 +312,10 @@ names are and to trust that certificate. GitHub's `tests/fake_github.py` does th
 
 | Step | How |
 |---|---|
-| 1. Start the stack with sign-in and fakes | `make up AUTH=platform DEMO_MODEL=fake`; in a lane add `OPS_STACK_FAKES=1` (CONTRIBUTING, Lanes) |
-| 2. Install the plugin | `uv run ops plugin install <plugin folder>`, then `make restart SVC=tools` and `make restart SVC=kb` |
+| 1. Start the stack with sign-in and fakes | `make up AUTH=platform DEMO_MODEL=fake` |
+| 2. Install the plugin | `uv run ops plugin install <plugin folder>`, then `make restart SVC=tools` and `make restart SVC=kb`, each with `AUTH=platform` |
 | 3. Serve the fake | `uv run --directory services/tools-service python <plugin>/tests/fake_github.py --dir .run/fake-github`; it prints its address, certificate and host map |
-| 4. Point tools-service at it | Write `OPS_EGRESS_EXTRA_CA=<certificate>` and `OPS_EGRESS_RESOLVE='{"github.test":"<address>","api.github.test":"<address>"}'` to `.run/demo-addons.env` (`.run/isolated/demo-addons.env` in a lane), then `make restart SVC=tools`. The stack reads that file after `.env` on every restart, and the map is used in development only |
+| 4. Point tools-service at it | Write `OPS_EGRESS_EXTRA_CA=<certificate>` and `OPS_EGRESS_RESOLVE='{"github.test":"<address>","api.github.test":"<address>"}'` to `.run/demo-addons.env` (`.run/isolated/demo-addons.env` on an `ISOLATED=1` stack), then `make restart SVC=tools`. The stack reads that file after `.env` on every restart, and the map is used in development only |
 | 5. Allow the hosts | As a Security admin, Settings › Security › Egress: Add host for each name, and Add range for `<address>/32` |
 | 6. Turn it on and connect | Turn a plugin on, below, then the App's Connect window (apps.md) with the fake's client id and secret, and the system's settings pointed at the fake's names |
 
@@ -208,11 +323,10 @@ A person's browser opens the sign-in page at the fake's name too, which no DNS a
 host to the fake's address, as `scripts/demo-salesforce/walk.mjs` does with `context.route`; by hand, add the names to
 `/etc/hosts` with the fake's address and accept its certificate once.
 
-To have an agent call a plugin's tool in chat, the stack's fake model needs a rule for the message, and its rules are
-the stack's own (models.md, The test model). Without one, point the chat alias at a real model for the turn
-(`make demo-model MODEL=gpt-5-nano`, then `MODEL=fake`); each turn that calls a tool is two model calls. `make
-demo-model` acts on the shared stack's models-service even inside a lane; in a lane run
-`OPS_MODELS_PORT=<8730 plus the lane's offset> MODEL=gpt-5-nano uv run python scripts/demo_model.py` instead.
+To have an agent call a plugin's tool in chat on the fake model, grant the tool to the agent and send
+`call <tool> {json}`, such as `call github_list_issues {"owner": "acme-logistics", "repo": "dispatch-api"}`: the fake
+calls that tool with that JSON object as its input, then replies with the gist of the result (models.md, The test model). No real
+model is needed.
 
 ## Install a plugin
 
@@ -234,27 +348,46 @@ uv run ops plugin remove opsai.salesforce
 Compose mounts the checkout's `plugins/` read-only at `/plugins` in tools and kb (`OPS_PLUGINS_HOST_DIR` names another
 host folder), so `ops plugin install --into <that folder>` then a restart of both is the whole install.
 
-tools-service and kb-service load every plugin when they start. A plugin that fails validation is listed under `failed` at
-`GET /v1/plugins` with its error, and every other plugin still loads.
+### Plugins in a built image
+
+The release image (`deploy/fly/Dockerfile`) ships the plugins `deploy/plugins.json` pins, in `/app/plugins`, which is
+its `OPS_PLUGINS_DIR`. Each pin names a GitHub repository, a full commit and the plugin's folder in it:
+
+```json
+{"source": "https://github.com/chanl-ai/ops-ai-plugins", "ref": "<40-character commit>", "path": "plugins/salesforce"}
+```
+
+The build fetches each commit, validates the plugin as `ops plugin install` does and stops on any problem. A branch or
+tag is refused, so an image built twice from the same commit holds the same plugins. To ship a newer plugin, change its
+`ref` and rebuild; mounting another folder at `OPS_PLUGINS_DIR` replaces the baked ones. To bake them into a folder
+yourself: `uv run python deploy/images/bake_plugins.py --into ./plugins`.
+
+tools-service and kb-service load every plugin when they start. A plugin that fails validation is left out and logged
+at start as `plugin_failed` with its error, and every other plugin still loads.
 
 ## Turn a plugin on
 
 An install with no plugin loads nothing: the plugin routes answer 404 and kb-service refuses a plugin source
-(`tools_unavailable`). A plugin that loaded is still off until two people turn it on. The platform admin's switch is
-an API call; until it is set, the Apps catalog reads "No apps yet" for the plugin. The team's switch, its settings
-and its sign-in are the App's Connect window in the console (apps.md, Turn an App on); the calls below are the same
-steps for a script.
+(`tools_unavailable`). A plugin that loaded is offered to every team: installing it is the platform admin's decision,
+and taking it out of the plugins folder is how it is withdrawn. The team's switch, its settings and its sign-in are the App's Connect window in the console (apps.md,
+Turn an App on); the calls below are the same steps for a script.
+
+Ops AI's own OAuth app for a plugin, which every team uses unless it brings its own, comes only from the install
+config. Register the app once with the vendor and set its client in the deploy's secret store:
+`OPS_PLUGIN_CLIENTS='{"opsai.salesforce": {"id": "<client id>", "secret": "<client secret>"}}'`. tools-service reads
+it at start and never writes the secret to the database; no route sets or shows it. A team's own client is kept once,
+in `app_credentials`, and the accounts that sign in with it point at that row.
 
 | Who | Call | What it does |
 |---|---|---|
-| Platform admin (`settings.manage`) | platform-service `PUT /v1/policies/plugins` with `{value: {"opsai.salesforce": {enabled: true, locked: {api_version: "61.0"}}}}` | Allows it for the install and fixes any lockable setting; off again stops every team's calls within seconds |
-| Account admin (`settings.manage`) | the policy entry's `client: {id}`, then tools-service `PUT /v1/plugins/opsai.salesforce/app-secret` with `{clientSecret}` | Sets up the platform's own OAuth app once for every team; the secret is sealed at the account and no read returns it |
-| Team admin (`connections.manage`) | tools-service `PUT /v1/plugins/opsai.salesforce/team` with `{enabled, settings, signIn, kind, credentials, clientId, clientSecret}` | Turns it on for the team and makes the team's connection, whole, for its sign-in kind (below); off again keeps the connection and settings |
-| Security | tools-service `POST /v1/egress/hosts` | Adds the system's hosts to the workspace's allow-list, as for any outside system |
-| Team admin | `POST /v1/connections/{id}/sign-in`, then `/sign-in/complete` | Signs the team in; `from_token` settings are read from the token answer here |
+| Platform admin | install config `OPS_PLUGIN_LOCKED='{"opsai.salesforce": {"api_version": "61.0"}}'`, then restart tools-service | Fixes a lockable setting for every team; taking the plugin out of the plugins folder stops every team's calls, which then read "no longer installed" |
+| Team admin (`connections.manage`) | tools-service `PUT /v1/apps/plugin:opsai.salesforce/team` with `{enabled, settings, signIn, kind, credentials, clientId, clientSecret}` | Turns it on for the team and makes the team's default account, whole, for its sign-in kind (below); off again keeps the account and settings |
+| Team admin | `POST /v1/apps/plugin:opsai.salesforce/accounts` with `{name, sandbox: true, ...}` and the same sign-in fields | Adds a sandbox account (a Salesforce sandbox org, for example). Test runs use it; live runs never do. Its sign-in address and the instance its sign-in names are its own |
+| Security | nothing for the plugin's own hosts | The hosts in the manifest's `egress` (rendered with the team's settings) are reached by that plugin's sign-in, token, test and tool requests without listing; no other call reaches them unlisted. Private, loopback, link-local and metadata addresses stay refused |
+| Team admin | `POST /v1/apps/plugin:opsai.salesforce/accounts/{id}/sign-in`, then `/sign-in/complete` | Signs the team in; `from_token` settings are read from the token answer here and kept on that account |
 
-The first turn-on makes the connection in one call, whatever the plugin's kind. `kind` picks one of the plugin's
-`connection.kinds` (the first when left out) and cannot change once the connection exists (`kind_fixed`).
+The first turn-on makes the account in one call, whatever the plugin's kind. `kind` picks one of the plugin's
+`connection.kinds` (the first when left out) and cannot change once the account exists (`kind_fixed`).
 `credentials` holds the kind's own fields: a key is sealed and never answered back, and a later turn-on that sends one
 part replaces only that part. Test connection reads the manifest's `health_check` for every kind.
 
@@ -290,9 +423,9 @@ never serves anyone else.
 
 On a connection each person signs in to, a key, password or token kind asks each person for their own: the
 team gives the address and how the key is sent, and no key of its own. A person gives theirs with
-`PUT /v1/me/connections/{id}/credentials` and `{environment, credentials: {key}}` (`{username, password}` for `basic`,
+`PUT /v1/me/accounts/{id}/credentials` and `{credentials: {key}}` (`{username, password}` for `basic`,
 `{token}` for `bearer`), from the chat card that asks for it or from My accounts; it is sealed in their own row and
-never answered back. `GET /v1/me/connections?every=true` lists every connection of the team a person can connect, with
+never answered back. `GET /v1/me/accounts?every=true` lists every account of the team a person can connect, with
 `connected`, the method and the fields to give. A call acting for a person with no key is refused
 `CONNECTION_NOT_LINKED` naming `authKind` and `personFields`, so the console asks for the key in place; a call with
 nobody behind it is refused with reason `no_person`. A wrong key fails that person's call with the system's 401 and
@@ -312,8 +445,8 @@ every team calls the installed manifest. On, each team runs the plugin version i
 | The team's version | Its binding records the version, a digest of the tool declarations (the plugin-wide headers and each tool's manifest entry) and the declarations. A team takes the installed version when it turns the plugin on |
 | An upgrade | The operator installs the new package and restarts tools-service. The account's tool row follows it, keeping each tool's id and a dropped tool as a switched-off row. Nothing changes for a team until it takes the update |
 | Calls and lists | Built from the team's version: a changed tool keeps its request and inputs, a dropped one still answers and stays listed, a new one is neither listed nor callable. A Python tool always runs the installed package's function |
-| The review | `GET /v1/plugins/{id}/team/update`: both versions, and each new, changed and removed tool with its inputs added, removed and changed. agents-service's `GET /v1/tool-uses?tools=` names the team's agents and workflows that use each one |
-| Taking it | `POST /v1/plugins/{id}/team/update` with the installed digest the review was read at; another upgrade since then answers 409 `update_changed`. Keeping the current version is not taking it |
+| The review | `GET /v1/apps/plugin:{id}/update`: both versions, and each new, changed and removed tool with its inputs added, removed and changed. agents-service's `GET /v1/tool-uses?tools=` names the team's agents and workflows that use each one |
+| Taking it | `POST /v1/apps/plugin:{id}/update` with the installed digest the review was read at; another upgrade since then answers 409 `update_changed`. Keeping the current version is not taking it |
 
 Not versioned per team: the sign-in (addresses, scopes, the lookup after sign-in), the endpoint and the egress hosts,
 which are the installed version's. uc-609 (`make usecase-test UC=uc-609`) runs an upgrade from 0.1.0 to 0.2.0 across a
@@ -339,8 +472,7 @@ limit to Stripe in test mode.
 
 | Gap | Today |
 |---|---|
-| The platform admin's switch in the console | `PUT /v1/policies/plugins` only; the team's switch and sign-in are the App's Connect window |
-| Paging by a `Link` header or by page number | No rule reads them (GitHub, GitLab); such a list tool returns one page |
+| A console page for the install's plugins and locked settings | Install config only (`OPS_PLUGINS_DIR`, `OPS_PLUGIN_LOCKED`); the team's switch and sign-in are the App's Connect window |
 | An end-to-end use case in a plugin's own repository | A plugin repository has `ops plugin test`; end-to-end proof is ops-ai's use cases below, or a walk through Try a plugin on a local stack |
 | Per-person access lists | Stored on the binding, not enforced |
 | Adding a plugin knowledge source from the console | kb-service API only; the source page syncs and shows it |

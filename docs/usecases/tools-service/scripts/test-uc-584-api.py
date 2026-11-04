@@ -1,6 +1,6 @@
 """uc-584, api layer: docs/usecases/tools-service/plugin-manifest-fields.md, stories S1 to S4.
 
-Part one: platform-service signs the seeded people in and holds the install switch; tools-service runs with plugins on
+Part one: platform-service signs the seeded people in; tools-service runs with plugins on
 and the three test plugins in services/tools-service/tests/plugin_fields (OPS_PLUGIN_PATHS); the fake system
 (docs/usecases/lib/fake_multi_auth.py) shows the headers it was sent, takes chat messages only as a form, counts
 transfers, refuses the Zoom-style client unless it comes as basic auth, records each sign-in address and answers the
@@ -32,7 +32,6 @@ from usecase_harness import (
     service_headers,
     signed_in,
     tools,
-    until,
 )
 from usecase_harness import ROOT as REPO
 
@@ -76,18 +75,30 @@ def error(r: httpx.Response) -> dict[str, Any]:
     return dict(found or {})
 
 
+def credential(gw: httpx.Client, who: dict[str, str], plugin: str, client_id: str, secret: str | None = None) -> str:
+    """The team's own OAuth client for `plugin`, made under Credentials with no account; its id, which a turn-on names
+    as credentialId."""
+    body = {"app": f"plugin:{plugin}", "clientId": client_id, **({"clientSecret": secret} if secret else {})}
+    return str((data(kept(gw.post("/v1/app-credentials", json=body, headers=who))) or {}).get("id") or "cred_missing")
+
+
 def turn_on(gw: httpx.Client, who: dict[str, str], plugin: str, **body: Any) -> httpx.Response:
-    return kept(gw.put(f"/v1/plugins/{plugin}/team", json={"enabled": True, **body}, headers=who))
+    return kept(gw.put(f"/v1/apps/plugin:{plugin}/team", json={"enabled": True, **body}, headers=who))
+
+
+def at(plugin: str, conn: str) -> str:
+    """A plugin's account lives under its app."""
+    return f"/v1/apps/plugin:{plugin}/accounts/{conn}"
 
 
 def sign_in(
-    gw: httpx.Client, browser: Any, who: dict[str, str], conn: str, user: str, *, account: str = "self"
+    gw: httpx.Client, browser: Any, who: dict[str, str], path: str, user: str, *, account: str = "self"
 ) -> tuple[httpx.Response, httpx.Response]:
-    started = gw.post(f"/v1/connections/{conn}/sign-in", json={"environment": "production", "account": account},
-                      headers=who)  # fmt: skip
+    """Plays the browser through the sign-in of the account at `path`."""
+    started = gw.post(f"{path}/sign-in", json={"account": account}, headers=who)
     back = browser((data(started) or {}).get("authorizeUrl", ""), user) if started.status_code == 200 else {}
     done = gw.post(
-        f"/v1/connections/{conn}/sign-in/complete",
+        f"{path}/sign-in/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=who,
     )
@@ -113,21 +124,16 @@ with ExitStack() as stack:
     TENANT["id"] = str((priya_session.get("principal") or {}).get("tenantId") or priya_session.get("tenantId") or "")
     james = bearer(signed_in(api, "j.richardson@harborpine.example"), "team_ops")
 
-    # 1. The three test plugins load and are on for the install; Security lists the fake's hosts.
-    loaded = data(gw.get("/v1/plugins", headers=priya)) or {}
-    ids = sorted(p["id"] for p in loaded.get("plugins", []))
-    policy = api.put("/v1/policies/plugins", json={"value": {i: {"enabled": True} for i in ids}}, headers=sam)
-    until(
-        lambda: all(p["installOn"] for p in (data(gw.get("/v1/plugins", headers=priya)) or {}).get("plugins", [])),
-        timeout=30,
-    )
+    # 1. The three test plugins load; Security lists the fake's hosts.
+    loaded = data(gw.get("/v1/apps", headers=priya)) or []
+    ids = sorted(str(c["pluginId"]) for c in loaded if c.get("kind") == "plugin")
     for h in m["hosts"]:
         gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-584"}, headers=sam)
     gw.post("/v1/egress/ranges", json={"value": m["range"], "note": "uc-584"}, headers=sam)
     check(
-        "1 the three test plugins load and the platform admin turns them on",
-        ids == ["test.fields", "test.fields-sites", "test.fields-zoom"] and policy.status_code == 200,
-        {"ids": ids, "failed": loaded.get("failed"), "policy": policy.text[:200]},
+        "1 the three test plugins load",
+        {"test.fields", "test.fields-sites", "test.fields-zoom"} <= set(ids),
+        {"ids": ids},
     )
 
     # 2. S1: a data tool carries the plugin's header and its own, beside the team's token, unchanged.
@@ -191,7 +197,12 @@ with ExitStack() as stack:
     )  # fmt: skip
 
     # 7. S3: a Zoom-style token call sends the client as basic auth, never in the form, and the call runs.
-    zoom = turn_on(gw, priya, "test.fields-zoom", clientId="multi-zoom", clientSecret=CLIENTS["multi-zoom"])
+    zoom = turn_on(
+        gw,
+        priya,
+        "test.fields-zoom",
+        credentialId=credential(gw, priya, "test.fields-zoom", "multi-zoom", CLIENTS["multi-zoom"]),
+    )
     zoomed = call(gw, "fields_zoom_get_record", {"id": "rec-1042"})
     asked = [r for r in fake.state()["token_requests"] if r["client"] == "multi-zoom"]
     check(
@@ -203,14 +214,14 @@ with ExitStack() as stack:
 
     # 8. S3 and S4: the team's sign-in address carries the plugin's parameters and not one of the platform's own is
     # replaced; the lookup after sign-in finds the site, and the call reaches it.
-    sites_on = turn_on(gw, priya, "test.fields-sites", signIn="person_or_team", clientId="multi-app",
-                       clientSecret=CLIENTS["multi-app"])  # fmt: skip
+    sites_on = turn_on(gw, priya, "test.fields-sites", signIn="person_or_team", credentialId=credential(gw, priya, "test.fields-sites", "multi-app", CLIENTS["multi-app"]))  # fmt: skip
     sites_id = str((data(sites_on) or {}).get("connectionId") or "con_missing")
     # The team's account signs the calls a run makes with nobody behind it (the team backup).
-    held = data(gw.get(f"/v1/connections/{sites_id}", headers=priya)) or {}
-    gw.patch(f"/v1/connections/{sites_id}", json={"revision": held.get("revision", 1), "teamBackup": True},
+    sites = f"/v1/apps/plugin:test.fields-sites/accounts/{sites_id}"
+    held = data(gw.get(sites, headers=priya)) or {}
+    gw.patch(sites, json={"revision": held.get("revision", 1), "teamBackup": True},
              headers=priya)  # fmt: skip
-    started, done = sign_in(gw, m["sign_in"], priya, sites_id, "priya.team", account="team")
+    started, done = sign_in(gw, m["sign_in"], priya, at("test.fields-sites", sites_id), "priya.team", account="team")
     authorize = (fake.state()["authorize_requests"] or [{}])[-1]
     reached = call(gw, "fields_sites_get_record", {"id": "rec-1042"})
     check(
@@ -225,8 +236,8 @@ with ExitStack() as stack:
 
     # 9. S4: James signs in with his own account, which reaches another site: refused, and no token kept for him.
     httpx.post(f"{m['control']}/site", json={"id": "site-other"}, verify=False, headers={"Host": "api.multi.test"})
-    _, refused = sign_in(gw, m["sign_in"], james, sites_id, "james.person")
-    mine = data(kept(gw.get("/v1/me/connections", headers=james))) or []
+    _, refused = sign_in(gw, m["sign_in"], james, at("test.fields-sites", sites_id), "james.person")
+    mine = data(kept(gw.get("/v1/me/accounts", headers=james))) or []
     still = call(gw, "fields_sites_get_record", {"id": "rec-1042"})
     check(
         "9 James's own sign-in on another site is refused as signed in to another site, holds no token for him, and "
@@ -240,9 +251,9 @@ with ExitStack() as stack:
     # 10. S4: a lookup naming a site that would change the address fails the team's sign-in and moves nothing; the
     # team admin's next sign-in replaces the site.
     httpx.post(f"{m['control']}/site", json={"id": "../admin?x=1"}, verify=False, headers={"Host": "api.multi.test"})
-    _, bad = sign_in(gw, m["sign_in"], priya, sites_id, "priya.team", account="team")
+    _, bad = sign_in(gw, m["sign_in"], priya, at("test.fields-sites", sites_id), "priya.team", account="team")
     httpx.post(f"{m['control']}/site", json={"id": "site-other"}, verify=False, headers={"Host": "api.multi.test"})
-    _, moved = sign_in(gw, m["sign_in"], priya, sites_id, "priya.team", account="team")
+    _, moved = sign_in(gw, m["sign_in"], priya, at("test.fields-sites", sites_id), "priya.team", account="team")
     now = call(gw, "fields_sites_get_record", {"id": "rec-1042"})
     check(
         "10 a lookup naming ../admin?x=1 fails the sign-in, and the team admin's own sign-in then moves the team to "
@@ -277,15 +288,17 @@ with ExitStack() as stack:
     priya = bearer(priya_session, "team_ops")
     TENANT["id"] = str((priya_session.get("principal") or {}).get("tenantId") or priya_session.get("tenantId") or "")
     sfake = sf["fake"]
-    api.put("/v1/policies/plugins", json={"value": {"opsai.salesforce": {"enabled": True}}}, headers=sam)
     for h in sf["hosts"]:
         gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-584"}, headers=sam)
     gw.post("/v1/egress/ranges", json={"value": sf["range"], "note": "uc-584"}, headers=sam)
     login = sf["authorize_url"].rsplit("/", 1)[0]
-    team_on = {"settings": {"login_url": login}, "clientId": "ops-ai-acme", "clientSecret": "s3"}
+    team_on = {
+        "settings": {"login_url": login},
+        "credentialId": credential(gw, priya, "opsai.salesforce", "ops-ai-acme", "s3"),
+    }
     turned = turn_on(gw, priya, "opsai.salesforce", **team_on)
     sf_id = str((data(turned) or {}).get("connectionId") or "con_missing")
-    _, sf_done = sign_in(gw, sf["sign_in"], priya, sf_id, "acme.integration")
+    _, sf_done = sign_in(gw, sf["sign_in"], priya, at("opsai.salesforce", sf_id), "acme.integration")
 
     # 12. S4: Salesforce's instance comes from UserInfo after sign-in, and query-all sends its batch size.
     found = call(gw, "salesforce_find_cases_with_deleted", {"status": "Escalated"})

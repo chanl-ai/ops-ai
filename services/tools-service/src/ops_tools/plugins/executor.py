@@ -34,7 +34,7 @@ from ops_plugin_sdk.manifest import Tool
 
 from ..auth import AuthFailed, Prepared
 from ..egress import EgressDenied, for_tenant
-from ..executor import scrubbed_values
+from ..executor import Trial, scrubbed_values
 from ..graph_mailbox import CursorRefused, CursorSeal
 from ..secrets import scrub
 
@@ -71,9 +71,11 @@ class PluginExecutor:
         args: dict[str, Any],
         *,
         actor: str,
-        environment: str | None,
+        environment: str,
         acting_for: ActingForPerson | None,
+        trial: Trial | None = None,
     ) -> ToolOutcome:
+        """`trial` is a tool page's Real run: a data tool's request as sent is kept on it for the page to show."""
         plugin = self.host.by_module(module)
         if plugin is None:
             return _failure("PLUGIN_DISABLED", f"{module['display_name']} is not installed on this service.")
@@ -81,7 +83,9 @@ class PluginExecutor:
         # The team's version of the tool, so a query or paged tool runs as the team's version declared it.
         tool = self.host.tool_for(module, plugin, name)
         if tool is not None and tool.request is not None:
-            return await self._data(tool, module, op, args, actor=actor, environment=environment, acting_for=acting_for)
+            return await self._data(
+                tool, module, op, args, actor=actor, environment=environment, acting_for=acting_for, trial=trial
+            )
         if tool is None or tool.function is None:
             return _failure("PLUGIN_FAILED", f"{op['name']} has no Python function in {plugin.manifest.id}.")
         try:
@@ -117,7 +121,7 @@ class PluginExecutor:
             if policy is None:
                 raise PluginEgressDenied("This gateway has no egress policy, so it calls no external system.")
             try:
-                await policy.check_url(tenant, url)
+                await policy.check_url(tenant, url, allowed)
             except EgressDenied as e:
                 raise PluginEgressDenied(str(e)) from e
             # The plugin's headers first, then the connection's, which win over a name they share.
@@ -130,7 +134,7 @@ class PluginExecutor:
                 json=body,
                 headers=headers,
                 timeout=DEADLINE_S,
-                extensions=for_tenant(tenant, prepared.certificate if prepared else None),
+                extensions=for_tenant(tenant, prepared.certificate if prepared else None, allowed),
             )
             if r.status_code == 401:
                 raise NeedsReconnect(f"{urlsplit(url).hostname} refused the connection's sign-in.")
@@ -188,8 +192,9 @@ class PluginExecutor:
         args: dict[str, Any],
         *,
         actor: str,
-        environment: str | None,
+        environment: str,
         acting_for: ActingForPerson | None,
+        trial: Trial | None = None,
     ) -> ToolOutcome:
         req = tool.request
         assert req is not None
@@ -215,7 +220,7 @@ class PluginExecutor:
         except InputRefused as e:
             return _failure("INVALID_INPUT", str(e), 422, OURS)
         target, call = module, op
-        if state is not None and paging is not None and paging.rule == "link":
+        if state is not None and paging is not None and paging.rule in paged.FOLLOWS_LINK:
             followed = paged.follow(str(module["endpoint"]), str(state.get("link") or ""))
             if followed is None:
                 return _failure("INVALID_INPUT", "This cursor holds no page address this plugin can follow.", 422, OURS)
@@ -224,16 +229,23 @@ class PluginExecutor:
                 {**op, "method": "GET", "path": followed[1], "body": None},
             )
             sent = {}
-        offset = int(sent.get(paging.offset_param, 0)) if paging is not None and paging.rule == "offset" else 0
+        asked = dict(sent)
         found: dict[str, Any] = {}
 
-        def on_answer(answer: Any) -> Any:
-            shown, nxt = paged.next_page(paging, answer, offset)
+        def on_answer(answer: Any, headers: Mapping[str, str]) -> Any:
+            shown, nxt = paged.next_page(paging, answer, asked, headers)
             found.update(nxt)
             return shown
 
         out = await self.http.run(
-            target, call, sent, actor=actor, environment=environment, acting_for=acting_for, on_answer=on_answer
+            target,
+            call,
+            sent,
+            actor=actor,
+            environment=environment,
+            acting_for=acting_for,
+            on_answer=on_answer,
+            trial=trial,
         )
         if not out.ok or not found:
             return out

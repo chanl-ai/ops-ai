@@ -206,7 +206,7 @@ export function AddModuleDialog({
         }
       })();
       // With an app picked, the module is named after it; the request is a path on the app's address.
-      const app = connections.data?.data.find((c) => c.id === connectionId)?.name;
+      const app = connections.data?.find((c) => c.id === connectionId)?.name;
       const label = kind === 'http' ? (app ?? host.charAt(0).toUpperCase() + host.slice(1)) : (found?.system ?? '');
       await onCreate({
         name: kind === 'http' ? kebab(app ?? host) : (found?.suggestedName ?? kebab(label)),
@@ -273,8 +273,8 @@ export function AddModuleDialog({
           {!append && kind !== 'mcp' && (
             <FormField id="import-app" label="App" optional hint="Its address and sign-in come from the app, so an HTTP request is a path on it. Add a custom app for one not listed.">
               <ConnectionSelect
-                value={connectionId ? { id: connectionId, name: connections.data?.data.find((c) => c.id === connectionId)?.name ?? '' } : null}
-                options={connections.data?.data.map((c) => ({ id: c.id, name: c.name, status: c.status as IntegrationStatus }))}
+                value={connectionId ? { id: connectionId, name: connections.data?.find((c) => c.id === connectionId)?.name ?? '' } : null}
+                options={connections.data?.map((c) => ({ id: c.id, name: c.name, status: c.status as IntegrationStatus }))}
                 loading={connections.isPending}
                 onChange={setConnectionId}
               />

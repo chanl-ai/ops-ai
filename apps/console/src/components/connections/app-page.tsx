@@ -1,19 +1,26 @@
 'use client';
 
 import * as React from 'react';
-import { Bot, ChevronDown, CircleCheck, ExternalLink, FileText, FlaskConical, Globe, KeyRound, Plug, Plus, RefreshCw, Sparkles, Workflow } from 'lucide-react';
+import { AppCredentialPicker } from '@/components/connections/app-credential-picker';
+import { Bot, ChevronDown, CircleCheck, ExternalLink, FileText, FlaskConical, KeyRound, Plug, Plus, RefreshCw, Sparkles, Users, Workflow } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import type { ColumnDef } from '@tanstack/react-table';
 
-import { AppsTabs } from '@/components/connections/apps-tabs';
-import { ConnectSmallDialog, connectsSmall } from '@/components/connections/connect-small-dialog';
+import { ConnectWindow, connectsInWindow } from '@/components/connections/connect-window';
+import { HealthLine } from '@/components/connections/health-line';
+import { AppStateBadge } from '@/components/connections/systems-grid';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ConnectSystemDialog, type ConnectMode } from '@/components/connections/connect-system-dialog';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
+import { ToolCallsView } from '@/components/tools/tool-calls-view';
+import { GrantToAgentDialog } from '@/components/tools/grant-to-agent-dialog';
+import { UsedByCell } from '@/components/tools/used-by';
 import { ListEmpty } from '@/components/shared/query-states';
-import { CONNECTED_MESSAGE, openSignIn, type ConnectedMessage } from '@/components/connections/sign-in';
+import { useSignInWindow } from '@/components/connections/sign-in';
 import { PageLayout } from '@/components/page-layout';
 import { PluginUpdatePanel } from '@/components/connections/plugin-update-panel';
 import { DialogShell } from '@/components/shared/dialog-shell';
@@ -29,28 +36,29 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
+import { ScrollTabsList } from '@/components/shared/setting/scroll-tabs';
 import {
   type AppPage as AppData,
+  type SystemCard,
   useAddAccount,
   useApp,
   useAppUsers,
-  useChangeConnection,
+  useChangeAccount,
   useConnectionKinds,
   usePinDefault,
-  useSetTeamPlugin,
+  useSetTeamApp,
   useSignOutMine,
   useStartSignIn,
-  useTestEnvironment,
+  useTestAccount,
 } from '@/hooks/systems-queries';
-import { useSession } from '@/hooks/auth-queries';
 import { useCopyResource, usePluginDocumentTypes, usePluginTemplates } from '@/hooks/plugin-update-queries';
 import { useFlag } from '@/hooks/flag-queries';
-import { keyed, leading, type Kinds } from '@/lib/connect-plan';
-import { plural, relativeTime, shortDate } from '@/lib/format';
+import { useCanBuild } from '@/hooks/me-queries';
+import type { Kinds } from '@/lib/connect-plan';
+import { plural, shortDate } from '@/lib/format';
 
 type Connection = NonNullable<AppData['connection']>;
-type Env = Connection['environments'][string];
 
 const initials = (name: string) =>
   name
@@ -87,11 +95,10 @@ function AccountState({ status }: { status: 'connected' | 'expired' | 'unsigned'
   );
 }
 
-/** An environment's state from its last test. */
-function EnvState({ env }: { env?: Env }) {
-  if (!env?.set) return <Badge variant="outline">Not set</Badge>;
-  if (env.health?.status === 'failed') return <Badge variant="outline" className="border-destructive/40 bg-destructive/10 text-destructive">Failing</Badge>;
-  if (env.health?.status === 'ok')
+/** The default account's keys, by their last test. */
+function KeysState({ health }: { health: Connection['health'] }) {
+  if (health?.status === 'failed') return <Badge variant="outline" className="border-destructive/40 bg-destructive/10 text-destructive">Failing</Badge>;
+  if (health?.status === 'ok')
     return (
       <Badge variant="outline" className={OK}>
         <CircleCheck />
@@ -102,72 +109,72 @@ function EnvState({ env }: { env?: Env }) {
 }
 
 /**
- * One app's page: who you are signed in as and one button to connect your own
- * account, the team's account, then Tools, Skills, Sign-in and secrets, Usage and Settings. Everything comes from one
- * answer, GET /v1/apps/{id}.
+ * One app's page: a header with its one main action (Connect, Connected as, or Reconnect), then the tabs. Accounts
+ * holds the team's shared logins, the sandbox among them; People holds each person's own sign-in. Everything comes
+ * from one answer, GET /v1/apps/{id}.
  */
 export function AppPageView({ appId }: { appId: string }) {
   const app = useApp(appId);
-  const { session } = useSession();
   const kinds = useConnectionKinds();
   const start = useStartSignIn();
-  const signOut = useSignOutMine();
-  const opened = React.useRef<Window | null>(null);
-  const [dialog, setDialog] = React.useState<{ mode: ConnectMode; environment?: string } | null>(null);
-  // The Connect window, opened from the Not connected state: the small one when the app signs in through Ops AI's app.
+  const [dialog, setDialog] = React.useState<{ mode: ConnectMode } | null>(null);
+  // The Connect window, opened from the header's Connect: the small one when the app signs in through an OAuth app.
   const [connecting, setConnecting] = React.useState(false);
   const [another, setAnother] = React.useState(false);
-  const pin = usePinDefault();
-  // Several named accounts of one app are behind the several_accounts install flag; off, one account.
+  const [sandboxing, setSandboxing] = React.useState(false);
+  // Several named accounts of one app and sandbox accounts are behind their install flags; off, neither shows.
   const several = useFlag('several_accounts');
+  const sandboxes = useFlag('sandbox_accounts');
 
-  React.useEffect(() => {
-    const onMessage = (e: MessageEvent<ConnectedMessage>) => {
-      if (e.origin !== window.location.origin || e.data?.type !== CONNECTED_MESSAGE || e.source !== opened.current) return;
-      opened.current = null;
-      toast.success(e.data.account ? `Connected as ${e.data.account}` : `${e.data.connection} is connected`);
+  const test = useTestAccount();
+  const signInWindow = useSignInWindow({
+    onConnected: (m) => {
+      toast.success(m.account ? `Connected as ${m.account}` : `${m.connection} is connected`);
       void app.refetch();
-    };
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [app]);
+      // Connected once access is allowed; the first test runs after, and a failure shows on the account's row.
+      const asked = signedInAs.current;
+      if (asked === 'team') test.mutate({ appId, accountId: m.connectionId }, { onSettled: () => void app.refetch() });
+    },
+    onFailed: (why) => toast.error('The sign-in did not finish', { description: why }),
+  });
+  const signedInAs = React.useRef<'self' | 'team' | null>(null);
 
   if (app.isPending || kinds.isPending) return <RecordSkeleton />;
   if (app.isError) return <QueryError what="this app" error={app.error} onRetry={() => app.refetch()} retrying={app.isFetching} />;
   const data = app.data;
-  const card = data.card;
+  const card = data.card as SystemCard;
   const conn = data.connection;
   const all = kinds.data as Kinds | undefined;
   const kind = all?.kinds.find((k) => k.id === conn?.authKind);
-  const envs = all ? keyed(all) : [];
-  const set = envs.filter((e) => conn?.environments[e.id]?.set).map((e) => e.id);
-  const environment = (all && leading(all, set)) ?? set[0] ?? 'production';
-  // Connected means an account signed in or a key passed its test (the app answer's state), not settings saved.
-  const connected = card.state ? card.state === 'connected' || card.state === 'expired' || card.state === 'refused' : set.length > 0;
-  // People connect their own account only where the connection lets them; a team-only one shows its account alone.
+  // A built-in app runs inside Ops AI: it has no accounts to sign in, so no Accounts, People or Connect.
+  const builtIn = card.kind === 'builtin' || card.kind === 'module';
+  const installed = Boolean(card.appState) && card.appState !== 'not_installed';
+  // People connect their own account only where the connection lets them; a team-only one shows its accounts alone.
   const signsIn = Boolean(kind?.signsIn) && conn?.signIn !== 'team';
+  const accounts = data.accounts ?? [];
+  // A team admin adds the app's sandbox account, which test runs use, once the app has its first account.
+  const addsSandbox = sandboxes && card.mayManage && Boolean(conn) && installed && !card.sandboxId;
 
-  type Account = NonNullable<AppData['accounts']>[number];
-  // The page's answer lists the team's accounts, the default first; an older answer without them shows the one.
-  const accounts: Account[] = data.accounts?.length
-    ? data.accounts
-    : conn && connected
-      ? [{ id: conn.id, name: conn.name, default: true, state: conn.status === 'needs_reconnect' ? 'expired' : 'connected', status: conn.status, statusDetail: conn.statusDetail, mine: data.me.connected, account: data.me.account, pinned: false }]
-      : [];
+  const signIn = (account: 'self' | 'team', accountId = conn?.id) => {
+    if (!accountId) return;
+    // Opened in the click, before the call that starts the sign-in, so a pop-up blocker lets it through.
+    const w = signInWindow.open(card.name, card.logo);
+    if (!w) return;
+    signedInAs.current = account;
+    const run = () =>
+      start.mutate({ appId, accountId, account }, { onSuccess: (s) => w.go(s, { appId, accountId }), onError: (e) => w.fail(e.message) });
+    w.retry(run);
+    run();
+  };
 
-  const signIn = (account: 'self' | 'team', connectionId = conn?.id) =>
-    connectionId &&
-    start.mutate(
-      { connectionId, environment, account },
-      {
-        onSuccess: (s) => void (opened.current = openSignIn(s, connectionId)),
-        onError: (e) => toast.error('Couldn’t start the sign-in', { description: e.message }),
-      },
-    );
-
-  // The person's own account is a row of Accounts (the final Apps design): Connected as them, or Not signed in.
-  const me = { connected: data.me.connected, account: data.me.account, email: session?.user.email };
-  const tabs: [string, string][] = [['tools', 'Tools'], ['resources', 'Resources'], ['secrets', 'Secrets'], ['usage', 'Usage'], ['settings', 'Settings']];
+  const tabs: [string, string][] = [
+    ...(builtIn ? [] : ([['accounts', 'Accounts'], ['people', 'People']] as [string, string][])),
+    ['tools', 'Tools'],
+    ['resources', 'Resources'],
+    ['secrets', 'Secrets'],
+    ['logs', 'Logs'],
+    ['settings', 'Settings'],
+  ];
 
   return (
     <PageLayout
@@ -175,145 +182,64 @@ export function AppPageView({ appId }: { appId: string }) {
       title={card.name}
       description={`${plural(card.toolsCount, 'tool')}${card.kindLabel ? ` · ${card.kindLabel}` : ''}`}
       breadcrumbs={[{ label: 'Apps', href: '/integrations' }, { label: card.name }]}
-      // The Apps menu's tabs and a way back to the catalog, as the app page's frame draws them (Apps (final) group 4).
       backHref="/integrations"
-      tabs={<AppsTabs />}
-      badge={
-        connected ? (
-          <Badge variant="outline" className={OK} data-testid="app-status">
-            <CircleCheck />
-            Connected
-          </Badge>
-        ) : (
-          <Badge variant="outline" data-testid="app-status">
-            Not connected
-          </Badge>
+      badge={<AppStateBadge card={card} testId="app-status" />}
+      actions={
+        builtIn || card.appState === 'removed' ? undefined : (
+          <HeaderAction
+            app={data}
+            signsIn={Boolean(kind?.signsIn)}
+            onConnect={() => setConnecting(true)}
+            onSignIn={signIn}
+            onEdit={() => setDialog({ mode: 'edit' })}
+            starting={start.isPending}
+          />
         )
       }
-      contentClassName="flex flex-col gap-4"
+      contentClassName="flex min-w-0 flex-col gap-4"
     >
-      {card.kind === 'plugin' && <PluginUpdatePanel pluginId={card.id.replace(/^plugin:/, '')} name={card.name} />}
-      <Section
-        title="Accounts"
-        description="Calls use the default account unless a step names another. Each person may connect their own."
-        flush
-        actions={
-          several && conn?.mayManage ? (
-            <Button size="sm" variant="outline" onClick={() => setAnother(true)} data-testid="app-connect-another">
-              <Plus />
-              Connect another account
-            </Button>
-          ) : undefined
-        }
-      >
-        {!conn || (!connected && !signsIn) ? (
-          // Connect comes first: an app has no account until someone signs in or a key passes its test. Where each
-          // person signs in with their own account, their row shows even before any team account exists.
-          <div className="p-4" data-testid="app-not-connected">
-            <ListEmpty
-              icon={Plug}
-              noun="accounts"
-              filtered={false}
-              description={`${card.name} has no account yet. Connect signs one in; calls stay off until then.`}
-              createLabel={card.mayManage ? `Connect ${card.name}` : undefined}
-              onCreate={card.mayManage ? () => setConnecting(true) : undefined}
+      {card.appState === 'removed' && (
+        <Alert variant="destructive" data-testid="app-removed">
+          <AlertTitle>{`${card.name} is no longer installed`}</AlertTitle>
+          <AlertDescription>{card.appStateReason}</AlertDescription>
+        </Alert>
+      )}
+      {card.kind === 'plugin' && card.appState !== 'removed' && <PluginUpdatePanel appId={card.id} name={card.name} />}
+      <Tabs defaultValue={tabs[0][0]} className="min-w-0">
+        {/* Seven tabs are wider than a phone: the row scrolls sideways inside its box instead of clipping the last. */}
+        <ScrollTabsList tabs={tabs.map(([value, label]) => ({ value, label }))} testId="app-tabs-row" triggerTestId={(v) => `app-tab-${v}`} />
+        {!builtIn && (
+          <TabsContent value="accounts">
+            <AccountsTab
+              app={data}
+              signsIn={signsIn}
+              onSignIn={signIn}
+              actions={
+                addsSandbox || (several && conn?.mayManage) ? (
+                  <span className="flex flex-wrap gap-2">
+                    {several && conn?.mayManage && (
+                      <Button size="sm" variant="outline" onClick={() => setAnother(true)} data-testid="app-connect-another">
+                        <Plus />
+                        Add account
+                      </Button>
+                    )}
+                    {addsSandbox && (
+                      <Button size="sm" variant="outline" onClick={() => setSandboxing(true)} data-testid="app-add-sandbox">
+                        <FlaskConical />
+                        Add a sandbox account
+                      </Button>
+                    )}
+                  </span>
+                ) : undefined
+              }
             />
-          </div>
-        ) : (
-          <Rows testId="app-accounts">
-            {accounts.map((a) => (
-              <Row
-                key={a.id}
-                wrap
-                leading={<Logo name={card.name} logo={card.logo} />}
-                title={
-                  <span className="flex flex-wrap items-center gap-2" data-testid={`account-${a.name}`}>
-                    {a.name}
-                    {a.default && <Badge variant="secondary">Default</Badge>}
-                    <AccountState status={a.state === 'expired' || a.state === 'refused' || a.state === 'revoked' ? 'expired' : a.state === 'not_signed_in' ? 'unsigned' : 'connected'} />
-                    {a.pinned && accounts.length > 1 && <Badge variant="outline">Your default</Badge>}
-                    <span className="text-xs text-muted-foreground">Team account</span>
-                  </span>
-                }
-                description={a.mine ? `Connected as ${a.account ?? 'you'}` : (a.statusDetail ?? undefined)}
-                trailing={
-                  conn.mayManage && (a.state === 'expired' || a.state === 'refused' || a.status === 'needs_reconnect') && a.default ? (
-                    // Reconnect is the team account signing in again on the app's own page; nothing is typed.
-                    <Button size="sm" onClick={() => signIn('team', a.id)} data-testid="app-reconnect">
-                      <RefreshCw />
-                      Reconnect
-                    </Button>
-                  ) : conn.mayManage && a.state === 'not_signed_in' && !a.mine ? (
-                    // A team account made but never signed in (an earlier window closed, or the app turned off and on).
-                    <Button size="sm" onClick={() => signIn('team', a.id)} data-testid="app-sign-in-team">
-                      <ExternalLink />
-                      Sign in
-                    </Button>
-                  ) : a.mine && !a.pinned && accounts.length > 1 ? (
-                    <LoadingButton
-                      size="sm"
-                      variant="outline"
-                      isLoading={pin.isPending && pin.variables === a.id}
-                      onClick={() => pin.mutate(a.id, { onSuccess: () => void app.refetch(), onError: (e) => toast.error('Couldn’t make it your default', { description: e.message }) })}
-                      data-testid={`account-pin-${a.name}`}
-                    >
-                      Make my default
-                    </LoadingButton>
-                  ) : !a.mine && signsIn && !a.default ? (
-                    <Button size="sm" variant="outline" onClick={() => signIn('self', a.id)} data-testid={`account-connect-${a.name}`}>
-                      <ExternalLink />
-                      Connect my account
-                    </Button>
-                  ) : undefined
-                }
-              />
-            ))}
-            {signsIn && (
-              <Row
-                wrap
-                leading={<Logo name={card.name} logo={card.logo} />}
-                title={
-                  <span className="flex flex-wrap items-center gap-2" data-testid="app-me">
-                    {me.connected ? `Connected as ${me.account ?? 'you'}` : (me.email ?? 'Your account')}
-                    <AccountState status={me.connected ? 'connected' : 'unsigned'} />
-                    <span className="text-xs text-muted-foreground">Your account</span>
-                  </span>
-                }
-                description={me.connected ? undefined : 'Connect my account to use it'}
-                trailing={
-                  me.connected ? (
-                    <LoadingButton
-                      size="sm"
-                      variant="ghost"
-                      isLoading={signOut.isPending}
-                      onClick={() => signOut.mutate({ connectionId: conn.id, environment }, { onError: (e) => toast.error('Couldn’t disconnect', { description: e.message }) })}
-                      data-testid="app-disconnect"
-                    >
-                      Disconnect
-                    </LoadingButton>
-                  ) : (
-                    <LoadingButton size="sm" isLoading={start.isPending} onClick={() => signIn('self')} data-testid="app-connect-me">
-                      <ExternalLink />
-                      Connect my account
-                    </LoadingButton>
-                  )
-                }
-              />
-            )}
-          </Rows>
+          </TabsContent>
         )}
-      </Section>
-      <Tabs defaultValue="tools">
-        {/* The five tabs are wider than a phone: the row scrolls sideways instead of clipping the last one. */}
-        <div className="max-w-full overflow-x-auto [scrollbar-width:thin]" data-testid="app-tabs-row">
-        <TabsList className="w-max">
-          {tabs.map(([value, label]) => (
-            <TabsTrigger key={value} value={value} data-testid={`app-tab-${value}`}>
-              {label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-        </div>
+        {!builtIn && (
+          <TabsContent value="people">
+            <PeopleTab app={data} signsIn={signsIn} onConnectMine={() => signIn('self')} starting={start.isPending} />
+          </TabsContent>
+        )}
         <TabsContent value="tools">
           <ToolsTab app={data} />
         </TabsContent>
@@ -321,44 +247,66 @@ export function AppPageView({ appId }: { appId: string }) {
           <ResourcesTab app={data} />
         </TabsContent>
         <TabsContent value="secrets">
-          <SecretsTab conn={conn} envs={envs} onReconnect={() => setDialog({ mode: 'edit' })} />
+          <SecretsTab app={data} onReconnect={() => setDialog({ mode: 'edit' })} />
         </TabsContent>
-        <TabsContent value="usage">
-          <UsageTab app={data} />
+        <TabsContent value="logs">
+          {/* The same call log as Tool calls, fixed to this app's tools. */}
+          <div className="flex flex-col gap-2" data-testid="app-logs">
+            <ToolCallsView fixed={{ moduleId: card.moduleIds }} totals={false} emptyText={`No call of ${card.name}’s tools yet.`} />
+          </div>
         </TabsContent>
         <TabsContent value="settings">
-          <SettingsTab app={data} kinds={all} onSetUp={(e) => setDialog({ mode: 'edit', environment: e })} />
+          <SettingsTab app={data} kinds={all} onSetUp={() => setDialog({ mode: 'edit' })} />
         </TabsContent>
       </Tabs>
       {dialog && conn && (
         <ConnectSystemDialog
-          // A plugin's environment is set up with the plugin's own fields (its sign-in address, the team's own app).
-          target={card.kind === 'plugin' && card.plugin ? { kind: 'plugin', card } : { kind: 'connection', connectionId: conn.id }}
+          // A plugin's account is set up with the plugin's own fields (its sign-in address, the team's own app).
+          target={card.kind === 'plugin' && card.plugin ? { kind: 'plugin', card } : { kind: 'account', account: { appId, accountId: conn.id } }}
           mode={dialog.mode}
-          environment={dialog.environment}
           open
           onOpenChange={(o) => !o && (setDialog(null), void app.refetch())}
         />
       )}
-      {another && card.pluginId && (
+      {another && card.pluginId && all && connectsInWindow(card, all) ? (
+        <ConnectWindow card={card} kinds={all} another open onOpenChange={(o) => !o && (setAnother(false), void app.refetch())} />
+      ) : another && card.pluginId ? (
         <AnotherAccountDialog
           app={card.name}
-          pluginId={card.pluginId}
+          appId={appId}
           signInOptions={card.plugin?.signIn ?? []}
           onClose={() => setAnother(false)}
-          onMade={(id) => {
+          onMade={() => {
             setAnother(false);
             void app.refetch();
-            if (kind?.signsIn) signIn('team', id);
           }}
         />
-      )}
-      {connecting &&
-        (all && connectsSmall(card, all) ? (
-          <ConnectSmallDialog card={card} kinds={all} open onOpenChange={(o) => !o && (setConnecting(false), void app.refetch())} />
+      ) : null}
+      {sandboxing &&
+        conn &&
+        (all && connectsInWindow(card, all) ? (
+          <ConnectWindow card={card} kinds={all} sandbox open onOpenChange={(o) => !o && (setSandboxing(false), void app.refetch())} />
         ) : (
           <ConnectSystemDialog
-            target={card.kind === 'plugin' && card.plugin ? { kind: 'plugin', card } : conn ? { kind: 'connection', connectionId: conn.id } : { kind: 'module', moduleId: card.moduleIds[0] ?? '', name: card.name }}
+            // The same fields as the app's first connect, made as one more account of the app.
+            target={card.kind === 'plugin' && card.plugin ? { kind: 'plugin', card, sandbox: true } : { kind: 'sandbox', appId, name: card.name, authKind: conn.authKind }}
+            mode="connect"
+            open
+            onOpenChange={(o) => !o && (setSandboxing(false), void app.refetch())}
+          />
+        ))}
+      {connecting &&
+        (all && connectsInWindow(card, all) ? (
+          <ConnectWindow card={card} kinds={all} open onOpenChange={(o) => !o && (setConnecting(false), void app.refetch())} />
+        ) : (
+          <ConnectSystemDialog
+            target={
+              card.kind === 'plugin' && card.plugin
+                ? { kind: 'plugin', card }
+                : conn
+                  ? { kind: 'account', account: { appId, accountId: conn.id } }
+                  : { kind: 'module', moduleId: card.moduleIds[0] ?? '', name: card.name }
+            }
             mode="connect"
             open
             onOpenChange={(o) => !o && (setConnecting(false), void app.refetch())}
@@ -368,8 +316,278 @@ export function AppPageView({ appId }: { appId: string }) {
   );
 }
 
-type AppTool = AppData['tools'][number];
-type AppRun = AppData['usage'][number];
+type Account = NonNullable<AppData['accounts']>[number];
+const BROKEN = new Set(['expired', 'refused', 'revoked']);
+const accountStatus = (a: Pick<Account, 'state'>) => (BROKEN.has(a.state) ? 'expired' : a.state === 'not_signed_in' ? 'unsigned' : 'connected');
+
+/**
+ * The header's one main action, from the team account's state: Connect while it is not signed in, Reconnect once its
+ * sign-in expired, was refused or its test failed, and "Connected as …" once it works. Someone who does not manage the
+ * team's apps reads that a team admin connects it. On an app each person signs in to, the caller's own sign-in is the
+ * action once the team account works.
+ */
+function HeaderAction({
+  app,
+  signsIn,
+  onConnect,
+  onSignIn,
+  onEdit,
+  starting,
+}: {
+  app: AppData;
+  signsIn: boolean;
+  onConnect: () => void;
+  onSignIn: (account: 'self' | 'team', accountId?: string) => void;
+  onEdit: () => void;
+  starting: boolean;
+}) {
+  const { card, connection: conn, me } = app;
+  const team = (app.accounts ?? []).find((a) => a.default);
+  const installed = Boolean(card.appState) && card.appState !== 'not_installed';
+  const teamTestFailed = team?.test?.status === 'failed' || (card.appState === 'test_failed' && conn?.signIn === 'team');
+  const broken = Boolean(team && (BROKEN.has(team.state) || teamTestFailed));
+  const unsigned = !conn || !installed || !team || team.state === 'not_signed_in';
+  // Where each person signs in with their own account and nobody signs in for the team, the caller's own is the action.
+  if (installed && conn?.signIn === 'person') {
+    if (!me.connected)
+      return (
+        <LoadingButton size="sm" isLoading={starting} onClick={() => onSignIn('self')} data-testid="app-connect-me">
+          <ExternalLink />
+          Connect my account
+        </LoadingButton>
+      );
+    if (card.appState === 'test_failed')
+      return (
+        <Button size="sm" onClick={() => onSignIn('self')} data-testid="app-reconnect">
+          <RefreshCw />
+          Reconnect
+        </Button>
+      );
+    return <ConnectedAs who={me.account} />;
+  }
+  if ((broken || unsigned) && !card.mayManage)
+    return (
+      <span className="text-sm text-muted-foreground" data-testid="app-admin-connects">
+        A team admin connects this
+      </span>
+    );
+  if (broken)
+    return (
+      <Button size="sm" onClick={() => (signsIn ? onSignIn('team', team?.id) : onEdit())} data-testid="app-reconnect">
+        <RefreshCw />
+        Reconnect
+      </Button>
+    );
+  if (unsigned)
+    return conn && installed && team && signsIn ? (
+      // A team account made but never signed in (an earlier window closed, or the app turned off and on).
+      <LoadingButton size="sm" isLoading={starting} onClick={() => onSignIn('team', team.id)} data-testid="app-sign-in-team">
+        <ExternalLink />
+        Connect
+      </LoadingButton>
+    ) : (
+      <Button size="sm" onClick={onConnect} data-testid="app-connect">
+        <Plug />
+        Connect
+      </Button>
+    );
+  return <ConnectedAs who={conn?.signedIn?.account ?? team?.name} />;
+}
+
+function ConnectedAs({ who }: { who?: string | null }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-sm" data-testid="app-connected-as">
+      <CircleCheck className="size-4 text-success-text" />
+      {who ? `Connected as ${who}` : 'Connected'}
+    </span>
+  );
+}
+
+/** Accounts: the team's shared logins, the default first and a sandbox marked, with Add account. */
+function AccountsTab({
+  app,
+  signsIn,
+  onSignIn,
+  actions,
+}: {
+  app: AppData;
+  signsIn: boolean;
+  onSignIn: (account: 'self' | 'team', accountId?: string) => void;
+  actions?: React.ReactNode;
+}) {
+  const { card, connection: conn } = app;
+  const accounts = app.accounts ?? [];
+  const failure = card.appState === 'test_failed' ? (card.appStateReason ?? 'no reason given') : null;
+  // A row's failed test: the account's own when the answer carries it, else the app's for its default account.
+  const testFailed = (a: Account) => (a.test?.status === 'failed' ? a.test.message || 'no reason given' : a.default ? failure : null);
+  return (
+    <Section title="Accounts" description="Calls use the default account unless a step names another." flush actions={actions}>
+      {!conn || !accounts.length ? (
+        <div className="p-4" data-testid="app-not-connected">
+          <ListEmpty icon={Plug} noun="accounts" filtered={false} description={`${card.name} has no account yet. Calls stay off until one is connected.`} />
+        </div>
+      ) : (
+        <Rows testId="app-accounts">
+          {accounts.map((a) => (
+            <Row
+              key={a.id}
+              wrap
+              leading={<Logo name={card.name} logo={card.logo} />}
+              title={
+                <span className="flex flex-wrap items-center gap-2" data-testid={`account-${a.name}`}>
+                  {a.name}
+                  {a.default && <Badge variant="secondary">Default</Badge>}
+                  {a.sandbox && (
+                    <Badge variant="outline" data-testid={`account-sandbox-${a.name}`}>
+                      Sandbox
+                    </Badge>
+                  )}
+                  <AccountState status={accountStatus(a)} />
+                </span>
+              }
+              description={
+                testFailed(a) ? (
+                  <span className="text-warning-text" data-testid={a.default ? 'app-test-failed' : `account-test-failed-${a.name}`}>
+                    Signed in, but a test call failed: {testFailed(a)}
+                  </span>
+                ) : (
+                  (a.statusDetail ?? undefined)
+                )
+              }
+              trailing={
+                testFailed(a) && a.mine && conn.signIn !== 'team' ? (
+                  // The person's own sign-in failed its test: they sign in again as themselves.
+                  <Button size="sm" onClick={() => onSignIn('self', a.id)} data-testid={`account-reconnect-mine-${a.name}`}>
+                    <RefreshCw />
+                    Reconnect
+                  </Button>
+                ) : a.default ? undefined : conn.mayManage && (BROKEN.has(a.state) || a.status === 'needs_reconnect' || testFailed(a)) ? (
+                  // The default account's Reconnect and Connect are the header's; another account's are on its row.
+                  <Button size="sm" onClick={() => onSignIn('team', a.id)} data-testid={`account-reconnect-${a.name}`}>
+                    <RefreshCw />
+                    Reconnect
+                  </Button>
+                ) : conn.mayManage && a.state === 'not_signed_in' && !a.mine ? (
+                  <Button size="sm" onClick={() => onSignIn('team', a.id)} data-testid={`account-sign-in-${a.name}`}>
+                    <ExternalLink />
+                    Sign in
+                  </Button>
+                ) : !a.mine && signsIn ? (
+                  <Button size="sm" variant="outline" onClick={() => onSignIn('self', a.id)} data-testid={`account-connect-${a.name}`}>
+                    <ExternalLink />
+                    Connect my account
+                  </Button>
+                ) : undefined
+              }
+            />
+          ))}
+        </Rows>
+      )}
+    </Section>
+  );
+}
+
+const PERSON_STATE = {
+  connected: { label: 'Connected', className: OK },
+  expired: { label: 'Expired', className: 'border-warning/40 bg-warning/10 text-warning-text' },
+  refused: { label: 'Refused', className: 'border-destructive/40 bg-destructive/10 text-destructive' },
+} as const;
+
+/**
+ * People: each person who signed in with their own login, on which account, when, and its state, as the API joins
+ * them (a team admin reads everyone's, anyone else their own). The caller connects or disconnects their own here and,
+ * holding several, picks which one their calls use when a step names no account.
+ */
+function PeopleTab({ app, signsIn, onConnectMine, starting }: { app: AppData; signsIn: boolean; onConnectMine: () => void; starting: boolean }) {
+  const { card, connection: conn, me } = app;
+  const signOut = useSignOutMine();
+  const pin = usePinDefault();
+  const people = app.people ?? [];
+  // On an app only each person signs in to, the header carries Connect my account; here it is the second way in.
+  const connectsHere = signsIn && !me.connected && conn?.signIn !== 'person';
+  return (
+    <Section
+      title="People"
+      description={signsIn ? 'Each person who signed in with their own login. Calls they start run as them.' : `Every call signs in as a team account; nobody signs in to ${card.name} with their own login.`}
+      flush
+      actions={
+        connectsHere ? (
+          <LoadingButton size="sm" isLoading={starting} onClick={onConnectMine} data-testid="app-connect-me">
+            <ExternalLink />
+            Connect my account
+          </LoadingButton>
+        ) : undefined
+      }
+    >
+      {signsIn && (
+        <p className="border-b px-4 py-3 text-sm" data-testid="app-me-state">
+          {me.connected ? `Connected as ${me.account ?? 'you'}` : 'You have not connected your own account.'}
+        </p>
+      )}
+      {people.length ? (
+        <Rows testId="app-people">
+          {people.map((p) => (
+            <Row
+              key={`${p.accountId}:${p.personId}`}
+              wrap
+              leading={<Logo name={p.account ?? p.personId} />}
+              title={
+                <span className="flex flex-wrap items-center gap-2" data-testid={`person-${p.personId}`}>
+                  {p.account ?? p.personId}
+                  {p.mine && <Badge variant="secondary">You</Badge>}
+                  <Badge variant="outline" className={PERSON_STATE[p.state].className}>
+                    {PERSON_STATE[p.state].label}
+                  </Badge>
+                  {p.default && <Badge variant="outline">{p.mine ? 'Your default' : 'Default'}</Badge>}
+                </span>
+              }
+              description={
+                p.testFailed ? (
+                  <span className="text-warning-text">Signed in, but a test call failed: {p.testFailed}</span>
+                ) : (
+                  `${p.accountName}${p.since ? ` · signed in ${shortDate(p.since)}` : ''}`
+                )
+              }
+              trailing={
+                p.mine && conn ? (
+                  <span className="flex flex-wrap gap-2">
+                    {/* One of several of the caller's own sign-ins that their calls do not use yet. */}
+                    {p.default === false && p.state === 'connected' && (
+                      <LoadingButton
+                        size="sm"
+                        variant="outline"
+                        isLoading={pin.isPending && pin.variables?.accountId === p.accountId}
+                        onClick={() => pin.mutate({ appId: card.id, accountId: p.accountId }, { onError: (e) => toast.error('Couldn’t make it your default', { description: e.message }) })}
+                        data-testid={`account-pin-${p.accountName}`}
+                      >
+                        Make my default
+                      </LoadingButton>
+                    )}
+                    <LoadingButton
+                      size="sm"
+                      variant="ghost"
+                      isLoading={signOut.isPending && signOut.variables === p.accountId}
+                      onClick={() => signOut.mutate(p.accountId, { onError: (e) => toast.error('Couldn’t disconnect', { description: e.message }) })}
+                      data-testid={p.accountId === conn.id ? 'app-disconnect' : `person-disconnect-${p.accountName}`}
+                    >
+                      Disconnect
+                    </LoadingButton>
+                  </span>
+                ) : undefined
+              }
+            />
+          ))}
+        </Rows>
+      ) : (
+        <div className="p-4">
+          <ListEmpty icon={Users} noun="people" filtered={false} description="Nobody has signed in with their own login yet." />
+        </div>
+      )}
+    </Section>
+  );
+}
+
+type AppTool = AppData['tools'][number] & { onGrant?: (t: AppTool) => void };
 
 const TOOL_COLUMNS: ColumnDef<AppTool>[] = [
   {
@@ -386,25 +604,53 @@ const TOOL_COLUMNS: ColumnDef<AppTool>[] = [
     header: ({ column }) => <DataTableColumnHeader column={column} title="Access" />,
     cell: ({ row }) => <Badge variant={row.original.access === 'write' ? 'default' : 'secondary'}>{row.original.access === 'write' ? 'Write' : 'Read'}</Badge>,
   },
+  {
+    id: 'usedBy',
+    header: 'Used by',
+    cell: ({ row }) =>
+      row.original.usedBy ? (
+        <UsedByCell usedBy={row.original.usedBy} testId={`app-tool-used-by-${row.original.name}`} />
+      ) : (
+        <span className="text-xs text-muted-foreground" data-testid={`app-tool-used-by-${row.original.name}`}>
+          Not known right now
+        </span>
+      ),
+  },
+  {
+    id: 'grant',
+    cell: ({ row }) =>
+      row.original.onGrant ? (
+        <Button size="sm" variant="outline" onClick={() => row.original.onGrant?.(row.original)} data-testid={`app-tool-grant-${row.original.name}`}>
+          <Bot />
+          Grant to agent
+        </Button>
+      ) : null,
+    enableHiding: false,
+  },
 ];
 
+/** The app's tools by title, who uses each, and Grant to agent for someone who builds agents. */
 function ToolsTab({ app }: { app: AppData }) {
+  const canBuild = useCanBuild();
+  const [granting, setGranting] = React.useState<AppTool | null>(null);
+  const rows = React.useMemo(() => app.tools.map((t): AppTool => ({ ...t, onGrant: canBuild ? setGranting : undefined })), [app.tools, canBuild]);
   return (
     <div className="flex flex-col gap-2" data-testid="app-tools">
       <div>
-        <h3 className="text-sm font-semibold">Installed tools</h3>
+        <h3 className="text-sm font-semibold">Tools</h3>
         <p className="text-sm text-muted-foreground">
           {plural(app.tools.length, 'tool')}, shared by every team that connects {app.card.name}.
         </p>
       </div>
       <DataTableWithViews
         columns={TOOL_COLUMNS}
-        data={app.tools}
+        data={rows}
         getRowId={(t) => t.name}
         searchColumn="title"
         searchPlaceholder="Filter tools"
         emptyState={<ListEmpty icon={KeyRound} noun="tools" filtered={false} description={`${app.card.name} has no tools.`} />}
       />
+      <GrantToAgentDialog tool={granting && { id: granting.name, title: granting.title }} onOpenChange={(o) => !o && setGranting(null)} />
     </div>
   );
 }
@@ -491,26 +737,38 @@ function ResourcesTab({ app }: { app: AppData }) {
   );
 }
 
-function SecretsTab({ conn, envs, onReconnect }: { conn: AppData['connection']; envs: { id: string; label: string }[]; onReconnect: () => void }) {
-  const rows = envs.flatMap((e) => {
-    const env = conn?.environments[e.id];
-    if (!env?.set) return [];
-    const sealed = Object.entries(env.secrets ?? {}).filter(([, v]) => (v as { set?: boolean })?.set);
-    return [
-      ...(env.signedIn ? [{ key: `${e.id}-team`, title: `App credential · ${env.platformApp ? 'Ops AI’s app' : 'Your own app'} · ${e.label}`, description: `Signed in${env.signedIn.account ? ` as ${env.signedIn.account}` : ''} · refreshes on use` }] : []),
-      ...sealed.map(([name]) => ({ key: `${e.id}-${name}`, title: `${name} · ${e.label}`, description: 'Sealed' })),
-    ];
-  });
+/**
+ * Secrets: which app credential the app signs in with (Ops AI's app, or the team's own under Credentials) and the
+ * secrets its tools use. Values are never shown.
+ */
+function SecretsTab({ app, onReconnect }: { app: AppData; onReconnect: () => void }) {
+  const conn = app.connection;
+  const credential = app.card.credential;
+  const sealed = Object.entries(conn?.secrets ?? {}).filter(([field, v]) => v.set && field !== 'clientSecret');
   return (
     <Section title="Secrets" description="The app credential it signs in with, and the secrets its tools use. Values are never shown." flush>
       <Rows testId="app-secrets">
-        {rows.length ? (
-          rows.map((r) => <Row key={r.key} leading={<KeyRound className="size-4 text-muted-foreground" />} title={r.title} description={r.description} />)
-        ) : (
-          <Row title="Nothing saved yet" />
+        {credential && (
+          <Row
+            wrap
+            leading={<KeyRound className="size-4 text-muted-foreground" />}
+            title={<span data-testid="app-credential-name">{`App credential · ${credential.type === 'ops_ai' ? 'Ops AI’s app' : credential.name}`}</span>}
+            description={conn?.signedIn ? `Signed in${conn.signedIn.account ? ` as ${conn.signedIn.account}` : ''} · refreshes on use` : 'Not signed in yet'}
+            trailing={
+              <Button size="sm" variant="ghost" asChild>
+                <Link href="/integrations/credentials" data-testid="app-credential-link">
+                  Credentials
+                </Link>
+              </Button>
+            }
+          />
         )}
+        {sealed.map(([name]) => (
+          <Row key={name} leading={<KeyRound className="size-4 text-muted-foreground" />} title={name} description="Sealed" />
+        ))}
+        {!credential && !sealed.length && <Row title="Nothing saved yet" />}
       </Rows>
-      {conn?.mayManage && rows.length > 0 && (
+      {conn?.mayManage && (credential || sealed.length > 0) && (
         <div className="border-t p-3">
           <Button size="sm" variant="outline" onClick={onReconnect}>
             Replace keys or sign in again
@@ -521,75 +779,22 @@ function SecretsTab({ conn, envs, onReconnect }: { conn: AppData['connection']; 
   );
 }
 
-const RUN_COLUMNS: ColumnDef<AppRun>[] = [
-  {
-    id: 'tool',
-    accessorFn: (r) => r.title ?? r.target,
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Tool" />,
-    cell: ({ row }) => <span className="font-medium">{row.original.title ?? row.original.target}</span>,
-  },
-  {
-    // Whose account the call ran as (the call log's runAs): a person's own, or the team account.
-    id: 'as',
-    accessorFn: (r) => (r.runAs?.kind === 'person' ? (r.runAs.email ?? '') : 'Team account'),
-    header: ({ column }) => <DataTableColumnHeader column={column} title="As" />,
-    cell: ({ row }) =>
-      row.original.runAs?.kind === 'person' ? (
-        <span>{row.original.runAs.email}</span>
-      ) : (
-        <Badge variant="secondary">Team account</Badge>
-      ),
-  },
-  {
-    accessorKey: 'status',
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
-    cell: ({ row }) => (
-      <Badge variant="outline" className={row.original.status === 'ok' ? OK : 'border-destructive/40 bg-destructive/10 text-destructive'}>
-        {row.original.status === 'ok' ? 'Succeeded' : 'Failed'}
-      </Badge>
-    ),
-  },
-  {
-    accessorKey: 'latencyMs',
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Duration" />,
-    cell: ({ row }) => `${row.original.latencyMs} ms`,
-  },
-  {
-    accessorKey: 'at',
-    header: ({ column }) => <DataTableColumnHeader column={column} title="When" />,
-    cell: ({ row }) => relativeTime(row.original.at),
-  },
-];
-
-function UsageTab({ app }: { app: AppData }) {
-  return (
-    <div className="flex flex-col gap-2" data-testid="app-usage">
-      <p className="text-sm text-muted-foreground">This team’s runs of {app.card.name}’s tools, newest first, each with whom it ran as.</p>
-      <DataTableWithViews
-        columns={RUN_COLUMNS}
-        data={app.usage}
-        getRowId={(r) => r.id}
-        emptyState={<ListEmpty icon={KeyRound} noun="runs" filtered={false} description="No runs yet." />}
-      />
-    </div>
-  );
-}
-
-function SettingsTab({ app, kinds, onSetUp }: { app: AppData; kinds?: Kinds; onSetUp: (environment: string) => void }) {
+function SettingsTab({ app, kinds, onSetUp }: { app: AppData; kinds?: Kinds; onSetUp: () => void }) {
   const conn = app.connection;
-  const change = useChangeConnection();
-  const test = useTestEnvironment();
-  const setPlugin = useSetTeamPlugin();
+  const change = useChangeAccount();
+  const test = useTestAccount();
+  const setTeamApp = useSetTeamApp();
   const kind = kinds?.kinds.find((k) => k.id === conn?.authKind);
-  const envs = kinds ? keyed(kinds) : [];
-  const [own, setOwn] = React.useState({ clientId: '', clientSecret: '' });
+  const [own, setOwn] = React.useState<string | null | undefined>(undefined);
   if (!conn) return null;
-  const teamSigned = envs.some((e) => conn.environments[e.id]?.signedIn);
+  const account = { appId: app.card.id, accountId: conn.id };
+  const teamSigned = Boolean(conn.signedIn);
   const everyone = conn.signIn !== 'team';
-  const platform = Boolean(conn.environments.production?.platformApp ?? conn.environments.test?.platformApp);
+  const platform = !conn.credentialId;
+  const keysSet = Object.keys(conn.settings).length > 0 || Object.values(conn.secrets).some((v) => v.set) || teamSigned;
   const flip = (on: boolean) =>
     change.mutate(
-      { path: { connection_id: conn.id }, body: { revision: conn.revision, signIn: on ? (teamSigned ? 'person_or_team' : 'person') : 'team', teamBackup: on && teamSigned } },
+      { ...account, body: { revision: conn.revision, signIn: on ? (teamSigned ? 'person_or_team' : 'person') : 'team', teamBackup: on && teamSigned } },
       { onError: (e) => toast.error('Couldn’t change who signs in', { description: e.message }) },
     );
   return (
@@ -616,14 +821,14 @@ function SettingsTab({ app, kinds, onSetUp }: { app: AppData; kinds?: Kinds; onS
             <ChevronDown className="size-4 text-muted-foreground" />
           </CollapsibleTrigger>
           <CollapsibleContent className="flex flex-col gap-3 border-t p-4" data-testid="app-credentials">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FormField id="own-client-id" label="Client ID">
-                <Input id="own-client-id" value={own.clientId} onChange={(e) => setOwn((o) => ({ ...o, clientId: e.target.value }))} />
-              </FormField>
-              <FormField id="own-client-secret" label="Client secret">
-                <Input id="own-client-secret" type="password" autoComplete="off" value={own.clientSecret} onChange={(e) => setOwn((o) => ({ ...o, clientSecret: e.target.value }))} placeholder="Sealed on save" />
-              </FormField>
-            </div>
+            <AppCredentialPicker
+              app={app.card.id}
+              value={own === undefined ? (conn.credentialId ?? null) : own}
+              onChange={setOwn}
+              platform={Boolean(app.card.plugin?.platformApp)}
+              id="own-credential"
+              testId="app-own-credential"
+            />
             {kinds?.redirectUri && (
               <p className="text-sm">
                 <span className="text-muted-foreground">Return address to register: </span>
@@ -634,11 +839,11 @@ function SettingsTab({ app, kinds, onSetUp }: { app: AppData; kinds?: Kinds; onS
             <div>
               <LoadingButton
                 size="sm"
-                isLoading={setPlugin.isPending}
-                disabled={!own.clientId.trim()}
+                isLoading={setTeamApp.isPending}
+                disabled={own === undefined || own === (conn.credentialId ?? null)}
                 onClick={() =>
-                  setPlugin.mutate(
-                    { path: { plugin_id: app.card.pluginId ?? '' }, body: { enabled: true, environment: 'production', clientId: own.clientId.trim(), ...(own.clientSecret ? { clientSecret: own.clientSecret } : {}) } },
+                  setTeamApp.mutate(
+                    { appId: app.card.id, body: { enabled: true, sandbox: false, credentialId: own ?? null } },
                     { onSuccess: () => toast.success('Saved: sign in again with your own app'), onError: (e) => toast.error('Couldn’t save the app', { description: e.message }) },
                   )
                 }
@@ -650,68 +855,59 @@ function SettingsTab({ app, kinds, onSetUp }: { app: AppData; kinds?: Kinds; onS
           </CollapsibleContent>
         </Collapsible>
       )}
-      <Section title="Environments" description="Test runs use Test; live runs use Production." flush>
-        <Rows testId="app-envs">
-          {envs.map((e) => {
-            const env = conn.environments[e.id];
-            return (
-              <Row
-                key={e.id}
-                wrap
-                leading={e.production ? <Globe className="size-4 text-muted-foreground" /> : <FlaskConical className="size-4 text-muted-foreground" />}
-                title={
-                  <span className="flex flex-wrap items-center gap-2" data-testid={`app-env-${e.id}`} data-status={env?.set ? (env.health?.status ?? 'untested') : 'unset'}>
-                    {e.label} <EnvState env={env} />
-                  </span>
-                }
-                description={env?.health?.at ? [`Checked ${relativeTime(env.health.at)}`, env.health.httpStatus, env.health.message].filter(Boolean).join(' · ') : env?.set ? 'Not tested yet' : 'Not set'}
-                trailing={
-                  conn.mayManage ? (
-                    env?.set ? (
-                      <span className="flex flex-wrap gap-2">
-                        <LoadingButton
-                          size="sm"
-                          variant="outline"
-                          isLoading={test.isPending && test.variables?.environment === e.id}
-                          onClick={() => test.mutate({ connectionId: conn.id, environment: e.id }, { onError: (x) => toast.error(`Couldn’t test ${e.label}`, { description: x.message }) })}
-                          data-testid={`app-test-${e.id}`}
-                        >
-                          Test
-                        </LoadingButton>
-                        {/* Keys and sign-in settings change in the Connect window, one environment at a time. */}
-                        <Button size="sm" variant="ghost" onClick={() => onSetUp(e.id)} data-testid={`app-edit-${e.id}`}>
-                          Edit
-                        </Button>
-                      </span>
-                    ) : (
-                      <Button size="sm" variant="outline" onClick={() => onSetUp(e.id)} data-testid={`app-setup-${e.id}`}>
-                        Set up {e.label.toLowerCase()}
-                      </Button>
-                    )
-                  ) : undefined
-                }
-              >
-                {/* A test the service refused (a 400 before anything is sent) says why on the row; nothing else would. */}
-                {test.isError && test.variables?.environment === e.id && (
-                  <p className="text-sm text-destructive" data-testid={`app-env-error-${e.id}`}>
-                    {test.error.message}
-                  </p>
-                )}
-                {env?.certificate && (
-                  // A signed client's certificate: its thumbprint and expiry, never its key (the key is never sent back).
-                  <p className="flex flex-wrap items-center gap-2 text-sm" data-testid={`app-certificate-${e.id}`}>
-                    <span className="text-muted-foreground">Signing certificate</span>
-                    <code className="min-w-0 break-all text-xs">{env.certificate.thumbprint}</code>
-                    <span>expires {shortDate(env.certificate.notAfter)}</span>
-                    {env.certificate.expiresSoon && <Badge variant="outline">Expires soon</Badge>}
-                  </p>
-                )}
-              </Row>
-            );
-          })}
+      <Section title="Keys" description="The default account’s settings and keys. Each account keeps its own." flush>
+        <Rows testId="app-keys">
+          <Row
+            wrap
+            leading={<KeyRound className="size-4 text-muted-foreground" />}
+            title={
+              <span className="flex flex-wrap items-center gap-2" data-testid="app-keys-state" data-status={keysSet ? (conn.health?.status ?? 'untested') : 'unset'}>
+                {conn.name} {keysSet ? <KeysState health={conn.health} /> : <Badge variant="outline">Not set</Badge>}
+              </span>
+            }
+            description={conn.health ? undefined : keysSet ? 'Not tested yet' : 'Not set'}
+            trailing={
+              conn.mayManage ? (
+                <span className="flex flex-wrap gap-2">
+                  {keysSet && (
+                    <LoadingButton
+                      size="sm"
+                      variant="outline"
+                      isLoading={test.isPending}
+                      onClick={() => test.mutate(account, { onError: (x) => toast.error(`Couldn’t test ${conn.name}`, { description: x.message }) })}
+                      data-testid="app-test"
+                    >
+                      Test
+                    </LoadingButton>
+                  )}
+                  {/* Keys and sign-in settings change in the Connect window, on the account. */}
+                  <Button size="sm" variant={keysSet ? 'ghost' : 'outline'} onClick={onSetUp} data-testid="app-edit">
+                    {keysSet ? 'Edit' : 'Set up'}
+                  </Button>
+                </span>
+              ) : undefined
+            }
+          >
+            {conn.health && <HealthLine health={conn.health} />}
+            {/* A test the service refused (a 400 before anything is sent) says why on the row; nothing else would. */}
+            {test.isError && (
+              <p className="text-sm text-destructive" data-testid="app-keys-error">
+                {test.error.message}
+              </p>
+            )}
+            {conn.certificate && (
+              // A signed client's certificate: its thumbprint and expiry, never its key (the key is never sent back).
+              <p className="flex flex-wrap items-center gap-2 text-sm" data-testid="app-certificate">
+                <span className="text-muted-foreground">Signing certificate</span>
+                <code className="min-w-0 break-all text-xs">{conn.certificate.thumbprint}</code>
+                <span>expires {shortDate(conn.certificate.notAfter)}</span>
+                {conn.certificate.expiresSoon && <Badge variant="outline">Expires soon</Badge>}
+              </p>
+            )}
+          </Row>
         </Rows>
       </Section>
-      {app.card.pluginId && conn.mayManage && <TurnOffSection name={app.card.name} pluginId={app.card.pluginId} />}
+      {app.card.pluginId && conn.mayManage && <TurnOffSection name={app.card.name} appId={app.card.id} />}
     </div>
   );
 }
@@ -720,10 +916,10 @@ function SettingsTab({ app, kinds, onSetUp }: { app: AppData; kinds?: Kinds; onS
  * Turn off (group K): stops the app's tools for this team, keeping its accounts and what the team added. The window
  * names every agent and workflow using its tools first, read when it opens; when the service cannot tell, it says so.
  */
-function TurnOffSection({ name, pluginId }: { name: string; pluginId: string }) {
+function TurnOffSection({ name, appId }: { name: string; appId: string }) {
   const [open, setOpen] = React.useState(false);
-  const users = useAppUsers(open ? pluginId : null);
-  const setPlugin = useSetTeamPlugin();
+  const users = useAppUsers(open ? appId : null);
+  const setTeamApp = useSetTeamApp();
   const listed = [...(users.data?.agents ?? []).map((a) => ({ ...a, what: 'agent' as const })), ...(users.data?.workflows ?? []).map((w) => ({ ...w, what: 'workflow' as const }))];
   return (
     <Section title="Turn off" flush>
@@ -746,11 +942,11 @@ function TurnOffSection({ name, pluginId }: { name: string; pluginId: string }) 
             </Button>
             <LoadingButton
               variant="destructive"
-              isLoading={setPlugin.isPending}
+              isLoading={setTeamApp.isPending}
               disabled={users.isPending || users.isError}
               onClick={() =>
-                setPlugin.mutate(
-                  { path: { plugin_id: pluginId }, body: { enabled: false, environment: 'production' } },
+                setTeamApp.mutate(
+                  { appId, body: { enabled: false, sandbox: false } },
                   { onSuccess: () => (setOpen(false), toast.success(`${name} is off for this team`)), onError: (e) => toast.error(`Couldn’t turn off ${name}`, { description: e.message }) },
                 )
               }
@@ -793,18 +989,18 @@ function TurnOffSection({ name, pluginId }: { name: string; pluginId: string }) 
 
 
 /**
- * Connect another account: a second org or a second account of the same app, under its own name, with the
- * first's contract; the system's own page then asks to allow access for it. Calls keep the default unless they name it.
+ * Connect another account: a second org or a second account of the same app, under its own name, with the first's
+ * contract; the system's own page then asks to allow access for it. Calls keep the default unless they name it.
  */
-function AnotherAccountDialog({ app, pluginId, signInOptions, onClose, onMade }: { app: string; pluginId: string; signInOptions: string[]; onClose: () => void; onMade: (id: string) => void }) {
+function AnotherAccountDialog({ app, appId, signInOptions, onClose, onMade }: { app: string; appId: string; signInOptions: string[]; onClose: () => void; onMade: (id: string) => void }) {
   const add = useAddAccount();
   const [name, setName] = React.useState('');
   const save = () =>
     add.mutate(
       {
-        path: { plugin_id: pluginId },
+        appId,
         // Each person may connect their own account of it too, when the app offers that, as for the first.
-        body: { enabled: true, name: name.trim(), environment: 'production', ...(signInOptions.includes('person_or_team') ? { signIn: 'person_or_team' } : {}) },
+        body: { name: name.trim(), sandbox: false, ...(signInOptions.includes('person_or_team') ? { signIn: 'person_or_team' } : {}) },
       },
       { onSuccess: (made) => onMade(String(made.id)), onError: (e) => toast.error('Couldn’t add the account', { description: e.message }) },
     );

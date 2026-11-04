@@ -48,6 +48,9 @@ tool_secrets = sa.Table(
     # The connection whose secret part this is; written through the connection, listed as belonging to it,
     # never rotated or deleted on its own. Null for a secret a person added on the Secrets page.
     sa.Column("connection_id", sa.String(64)),
+    # The team's app credential whose client secret this is: changed with the credential under Credentials, never on
+    # its own, and not listed as a value tools reference. Null for every other secret.
+    sa.Column("credential_id", sa.String(64)),
     # Held to its team by the database: only a transaction run as ROLE in the row's team reads it.
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
@@ -106,8 +109,8 @@ class SecretStore:
         limit: int,
         template_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        """One page of the team's secrets whose name contains `search`, by name; the ciphertext is not selected, and
-        LIMIT and OFFSET run in the query."""
+        """One page of the team's secrets whose name contains `search`, by name, leaving out accounts' secret parts;
+        the ciphertext is not selected, and LIMIT and OFFSET run in the query."""
         cols = [c for c in tool_secrets.c if c.name != "ciphertext"]
         q = (
             sa.select(*cols)
@@ -128,7 +131,14 @@ class SecretStore:
 
     @staticmethod
     def _matching(tenant_id: str, team_id: str, search: str, template_id: str | None = None) -> sa.ColumnElement[bool]:
-        named = sa.and_(_of(tenant_id, team_id), contains(tool_secrets.c.name, search))
+        # An account's secret parts (an OAuth client secret, an API key) are its sign-in, kept and changed on the
+        # account; the Secrets list holds only values tools reference.
+        named = sa.and_(
+            _of(tenant_id, team_id),
+            tool_secrets.c.connection_id.is_(None),
+            tool_secrets.c.credential_id.is_(None),
+            contains(tool_secrets.c.name, search),
+        )
         return named if template_id is None else sa.and_(named, tool_secrets.c.template_id == template_id)
 
     async def create(
@@ -142,12 +152,16 @@ class SecretStore:
         at: datetime,
         template: dict[str, str] | None = None,
         connection_id: str | None = None,
+        credential_id: str | None = None,
     ) -> bool:
         """False when the team already has the name (nothing written). `template` carries the provisioner's
-        `template_id` and `protection`; `connection_id` marks a connection's secret part."""
+        `template_id` and `protection`; `connection_id` marks a connection's secret part, and
+        `credential_id` an app credential's client secret."""
         row = {"tenant_id": tenant_id, "team_id": team_id, "name": name, "ciphertext": ref, "version": 1}
         if connection_id is not None:
             row["connection_id"] = connection_id
+        if credential_id is not None:
+            row["credential_id"] = credential_id
         row |= template or {}
         async with self._tx() as c:
             try:

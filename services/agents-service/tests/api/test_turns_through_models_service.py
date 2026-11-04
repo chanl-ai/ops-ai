@@ -25,7 +25,7 @@ from ops_agent_kernel.models import ModelsServiceModels
 from ops_agents.api.app import create_app
 from ops_agents.api.deps import Runtime
 from ops_agents.api.model_ledger import LedgerSource
-from ops_agents.store.graphs import metadata
+from ops_agents.store.base import metadata
 from ops_agents.store.model_calls import ModelCallLedger
 from ops_agents.store.usage import UsageLedger
 from ops_metering import PriceTable

@@ -39,6 +39,7 @@ async def keyed(store: ConnectionStore, tenant: str, team: str) -> str:
     row: dict[str, Any] = {
         "tenant_id": tenant,
         "id": conn,
+        "app_id": conn,
         "team_id": team,
         "name": "Ledger",
         "auth_kind": "api_key",
@@ -53,7 +54,7 @@ async def keyed(store: ConnectionStore, tenant: str, team: str) -> str:
     }
     assert await store.create(row, actor="t", at=now)
     plain = {"baseUrl": "https://ledger.bank.test", "name": "X-Api-Key"}
-    await store.change(tenant, conn, 1, {}, actor="t", at=now, environment=("production", plain, {}))
+    await store.change(tenant, conn, 1, {"settings": plain, "secrets": {}}, actor="t", at=now)
     return conn
 
 
@@ -72,7 +73,7 @@ async def test_a_removed_member_loses_their_accounts_on_that_teams_apps_only(
     tokens = Tokens(store, credentials(), None, None)  # pyright: ignore[reportArgumentType]
     ops, cards = await keyed(store, tenant, OPS), await keyed(store, tenant, CARDS)
     for conn, person in ((ops, JAMES), (ops, MAYA), (cards, JAMES)):
-        await tokens.store_own(tenant, conn, "production", person, {"key": f"key-{person}"})
+        await tokens.store_own(tenant, conn, person, {"key": f"key-{person}"})
     app = build_app(engine, seed, tenant)
     app.include_router(platform_events_router(member_removed_handlers(store, credentials())))
     body = {"name": "member.removed", "key": "mem_1:t", "teamId": OPS, "payload": {"personId": JAMES}}

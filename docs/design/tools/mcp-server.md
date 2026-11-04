@@ -1,7 +1,9 @@
 # Tools MCP server
 
-Status: proposed design. Slice 1 (read tools over MCP with an API key, test only) is built and proven by
-[uc-410](../../usecases/tools-service/mcp-server.md); the rest is not built unless the "Slices and state" table says so.
+Status: proposed design. Slice 1 (read tools over MCP with an API key) is built, one address per team, and proven
+by [uc-410](../../usecases/tools-service/mcp-server.md): every call over it is a test run, which uses an app's sandbox
+account when the team has one. The addresses below that name an environment are the earlier design; the rest is not
+built unless the "Slices and state" table says so.
 
 ## The problem
 

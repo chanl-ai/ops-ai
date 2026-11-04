@@ -14,7 +14,7 @@ from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from .flags import Flags
@@ -50,6 +50,13 @@ def _secrets_dir() -> Path | None:
     another folder; none when the folder does not exist."""
     folder = Path(os.environ.get("OPS_SECRETS_DIR") or "/run/secrets")
     return folder if folder.is_dir() else None
+
+
+class PluginClient(BaseModel):
+    """An OAuth client the install registered with a plugin's vendor: its id and its secret."""
+
+    id: str = Field(min_length=1)
+    secret: SecretStr
 
 
 class Settings(BaseSettings):
@@ -153,7 +160,16 @@ class Settings(BaseSettings):
     # Plugin package folders tools-service loads beside the plugins folder, for a developer trying a plugin on a
     # local stack before it is packaged: OPS_PLUGIN_PATHS='["/path/to/src/ops_plugin_x"]'. Empty everywhere else.
     plugin_paths: list[str] = Field(default_factory=list[str])
-    # The most text one call to agents-service's AI step route reads: the kernel caps a step at two
+    # The install's own OAuth client for each plugin, registered once with the vendor and used by every team that does
+    # not bring its own: OPS_PLUGIN_CLIENTS='{"opsai.salesforce": {"id": "...", "secret": "..."}}', set from the
+    # deploy's secret store. A client id and secret an account admin saves in the console take its place.
+    plugin_clients: dict[str, PluginClient] = Field(default_factory=dict[str, PluginClient])
+    # Settings fixed for every team of a plugin, which no team can change: OPS_PLUGIN_LOCKED='{"opsai.salesforce":
+    # {"api_version": "61.0"}}'. An installed plugin is offered to every team; each team turns it on for itself.
+    plugin_locked: dict[str, dict[str, str | int | float | bool]] = Field(
+        default_factory=dict[str, dict[str, str | int | float | bool]]
+    )
+    # The most text one call to agents-service's AI step route reads (tick 31): the kernel caps a step at two
     # model calls, so this bounds what one outside call can spend.
     ai_step_max_text_chars: int = Field(default=50_000, ge=1)
     # AI step route calls a team may make in a minute: the model key's budget is the service's, not the team's.
@@ -357,6 +373,8 @@ class Settings(BaseSettings):
                 "files:edit",
                 "knowledge:view",
                 "tools:view",
+                # connections:view: the Tools page's app state for the person it lists for, claimed only on that read.
+                "connections:view",
                 "deployments:run",
                 "settings:view",
                 "documents:view",

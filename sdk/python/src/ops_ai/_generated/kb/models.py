@@ -17,6 +17,22 @@ class AttachIn(TypedDict):
     sourceIds: list[str]
 
 
+class BackgroundProcessOut(TypedDict, closed=True):
+    does: str
+    doneHour: int
+    everySeconds: float | None
+    instances: int
+    key: str
+    lastError: str | None
+    lastErrorAt: float | None
+    lastRunAt: float | None
+    nextRunAt: float | None
+    service: str
+    state: Literal["running", "late", "stopped", "not_reported"]
+    title: str
+    waiting: int | None
+
+
 class ChangeViewCounts(TypedDict, closed=True):
     conflicts: int
     mine: int
@@ -480,6 +496,10 @@ class AddedDocuments(TypedDict, closed=True):
     files: list[AddedFile]
     run: SyncRun
     sourceId: str
+
+
+class BackgroundHealthOut(TypedDict, closed=True):
+    processes: list[BackgroundProcessOut]
 
 
 class EnvelopeAddedDocuments(TypedDict, closed=True):

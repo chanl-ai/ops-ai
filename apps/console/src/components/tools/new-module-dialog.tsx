@@ -103,8 +103,8 @@ export function NewModuleDialog({ open, onOpenChange, onCreate, creating }: { op
         </FormField>
         <FormField id="nm-app" label="App" hint="Its address and sign-in come from the app. Add a custom app for one not listed.">
           <ConnectionSelect
-            value={connectionId ? { id: connectionId, name: connections.data?.data.find((c) => c.id === connectionId)?.name ?? '' } : null}
-            options={connections.data?.data.map((c) => ({ id: c.id, name: c.name, status: c.status as IntegrationStatus }))}
+            value={connectionId ? { id: connectionId, name: connections.data?.find((c) => c.id === connectionId)?.name ?? '' } : null}
+            options={connections.data?.map((c) => ({ id: c.id, name: c.name, status: c.status as IntegrationStatus }))}
             loading={connections.isPending}
             onChange={setConnectionId}
           />

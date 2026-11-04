@@ -1,6 +1,6 @@
 // uc-395 a tool presents a client certificate from its connection, ui layer:
-// docs/usecases/tools-service/connections-certificate.md. Priya, an Operations admin, presses Test the team account on a
-// connection holding a client certificate for the bank stand-in's certificate-only listener, and it works. The ui
+// docs/usecases/tools-service/connections-certificate.md. Priya, an Operations admin, presses Test on the Keys row of an
+// app whose account holds a client certificate for the bank stand-in's certificate-only listener, and it works. The ui
 // harness's core bank hands back its certificate-only host and the CA and client certificate's files.
 import { check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { readFileSync } from 'node:fs';
@@ -17,15 +17,15 @@ await withUiStack(
     await allowBank(stack.bank);
     const pem = Object.fromEntries(Object.entries(mtls).map(([k, v]) => [k, readFileSync(v, 'utf8')]));
     const P = await as(PRIYA);
-    const environment = { settings: { clientCertificate: pem.client_cert, trustedCa: pem.ca }, secretValues: { clientKey: pem.client_key } };
-    const conn = await connection(P, `uc395 certificate ${RUN}`, 'none', { production: environment }, { baseUrl: `https://${mtlsHost}`, testPath: '/auth/mtls' });
+    const keys = { settings: { clientCertificate: pem.client_cert, trustedCa: pem.ca }, secretValues: { clientKey: pem.client_key } };
+    const conn = await connection(P, `uc395 certificate ${RUN}`, 'none', { live: keys }, { baseUrl: `https://${mtlsHost}`, testPath: '/auth/mtls' });
 
     const browser = await chromium.launch();
     const errors = [];
     try {
       const page = await consoleSignIn(browser, consoleUrl, PRIYA, PASSWORD, errors);
-      const t = await testTeamAccount(page, consoleUrl, conn.id);
-      check('5 Test the team account presents the certificate and works, answered 200; the key never shows', t.status === 'ok' && /\b200\b/.test(t.said) && !t.page.includes('PRIVATE KEY'), t.said);
+      const t = await testTeamAccount(page, consoleUrl, conn);
+      check('5 Test presents the certificate and works, answered 200; the key never shows', t.status === 'ok' && /\b200\b/.test(t.said) && !t.page.includes('PRIVATE KEY'), t.said);
       check('no page errors', errors.length === 0, errors);
     } finally {
       await browser.close();

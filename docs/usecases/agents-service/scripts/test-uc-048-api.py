@@ -59,7 +59,7 @@ def module(gw: Any) -> tuple[str, str]:
 
 
 def offered(api: Any) -> dict[str, dict[str, Any]]:
-    return {t["id"]: t for t in data(api.get("/v1/tools", headers=TEAM))}
+    return {t["id"]: t for t in data(api.get("/v1/tools", params={"pageSize": 200}, headers=TEAM))["data"]}
 
 
 def chat(api: Any, thread: str, content: str) -> list[dict[str, Any]]:

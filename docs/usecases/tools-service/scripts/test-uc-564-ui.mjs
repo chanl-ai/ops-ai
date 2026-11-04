@@ -1,7 +1,7 @@
 // uc-564 A team turns on the Salesforce plugin, ui layer: docs/usecases/tools-service/a-team-turns-on-the-salesforce.md,
 // stories S2 (steps 13-15) and S3 (steps 16-19, 30). The demo stack with the fake Salesforce (docs/usecases/lib/fake_salesforce.py)
 // and plugins on (OPS_PLUGINS), loading the Salesforce plugin from the ops-ai-plugins repository beside ops-ai. Set-up goes
-// through the API as the api layer proved it: the install switch, the team switch and the team's sign-in. James asks the
+// through the API as the api layer proved it: the hosts, the team switch and the team's sign-in. James asks the
 // case helper about a case in chat and to escalate it; the approval card names the field the change writes and its new
 // value, the write waits in Human Tasks until Maya approves it there, and only then does Salesforce record it.
 // Priya syncs a knowledge source read through the plugin's two tools from the source's page: every article first, nothing
@@ -14,6 +14,7 @@ import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 
 import { AGENTS_PORT, KB_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { writeApprovalsOn } from '../../lib/workflow_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -127,16 +128,17 @@ try {
       const james = as(await tokenFor('j.richardson@harborpine.example'), 'team_ops');
       const maya = as(await tokenFor('m.okafor@harborpine.example'), 'team_ops');
 
-      // Set-up through the API, as the api layer's steps 1-6 do: install switch, hosts, team switch, the team's sign-in.
-      const installed = await call(platform, 'PUT', '/v1/policies/plugins', sam, { value: { [PLUGIN]: { enabled: true } } });
+      // Set-up through the API, as the api layer's steps 2-6 do: hosts, team switch, the team's sign-in.
       for (const host of sf.info.hosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-564' });
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: sf.info.range, note: 'uc-564' });
       const login = sf.info.authorize_url.replace(/\/authorize$/, '');
-      const on = await call(tools, 'PUT', `/v1/plugins/${PLUGIN}/team`, priya, { enabled: true, settings: { login_url: login }, clientId: 'ops-ai-acme', clientSecret: 'acme-connected-app-secret' });
+      // The team's own client is made under Credentials, with no account, and the turn-on picks it.
+      const own = await call(tools, 'POST', '/v1/app-credentials', priya, { app: `plugin:${PLUGIN}`, clientId: 'ops-ai-acme', clientSecret: 'acme-connected-app-secret' });
+      const on = await call(tools, 'PUT', `/v1/apps/plugin:${PLUGIN}/team`, priya, { enabled: true, settings: { login_url: login }, credentialId: own.data?.id });
       const connectionId = on.data?.connectionId;
-      const started = await call(tools, 'POST', `/v1/connections/${connectionId}/sign-in`, priya, { environment: 'production' });
+      const started = await call(tools, 'POST', `/v1/apps/plugin:${PLUGIN}/accounts/${connectionId}/sign-in`, priya, { account: 'team' });
       const back = started.data?.authorizeUrl ? await signInAt(started.data.authorizeUrl, 'acme.integration') : {};
-      const signed = await call(tools, 'POST', `/v1/connections/${connectionId}/sign-in/complete`, priya, { state: back.state ?? '', code: back.code ?? '' });
+      const signed = await call(tools, 'POST', `/v1/apps/plugin:${PLUGIN}/accounts/${connectionId}/sign-in/complete`, priya, { state: back.state ?? '', code: back.code ?? '' });
 
       // The knowledge base the source fills, and the case helper holding the plugin's case tools and that base.
       const made = await call(kb, 'POST', '/v1/knowledge-bases', priya, { name: 'Salesforce articles', owner: 'p.shah@harborpine.example' });
@@ -148,9 +150,9 @@ try {
       const asked = await call(agents, 'POST', `/v1/agents/${agent.id}/publish-requests`, priya, { version: patched.data?.version, note: 'uc-564' });
       const live = asked.data?.status === 'pending' ? await call(agents, 'POST', `/v1/publish-requests/${asked.data.id}/decision`, maya, { decision: 'approved' }) : asked;
       check(
-        'setup: Salesforce is on for the install and the team, the team signed in, and the case helper holds its tools',
-        installed.status === 200 && on.status === 200 && signed.status === 200 && !!base.id && patched.status === 200 && live.status < 300,
-        { installed: installed.text, on: on.text, signed: signed.status, base: made.text, patched: patched.text, live: live.text },
+        'setup: Salesforce is on for the team, the team signed in, and the case helper holds its tools',
+        on.status === 200 && signed.status === 200 && !!base.id && patched.status === 200 && live.status < 300,
+        { on: on.text, signed: signed.status, base: made.text, patched: patched.text, live: live.text },
       );
       const thread = async (kbIds = []) => (await call(agents, 'POST', '/chat/threads', james, { agentId: agent.id, kbIds })).data?.id;
 
@@ -197,6 +199,8 @@ try {
 
         let reviewId;
         await step('14 asked to escalate it, the card names the tool by its title and shows the field it changes; the change waits and Salesforce is unchanged', async () => {
+          // Approvals are off unless a team turns them on (2026-11-01); this team holds its tool writes for a person.
+          await writeApprovalsOn('team_ops');
           await send('Escalate case 00044818.');
           const card = page.locator('section').filter({ hasText: /salesforce_update_record|Update record|Escalated/ }).last();
           await card.waitFor({ timeout: 90_000 });

@@ -37,6 +37,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "health_health_background": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/health/background",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "items_get_item": {
         "body": None,
         "headers": [],
@@ -338,6 +347,10 @@ class Operations:
         "Health"
         return self._t.call(SERVICE, OPERATIONS["health_health"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def health_health_background(self) -> BackgroundHealthOut:
+        "Health Background"
+        return self._t.call(SERVICE, OPERATIONS["health_health_background"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
     def items_get_item(self, item_id: str) -> ItemWithDetail:
         "Get Item"
         return self._t.call(SERVICE, OPERATIONS["items_get_item"], {"item_id": item_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -571,6 +584,10 @@ class AsyncOperations:
     async def health_health(self) -> Health:
         "Health"
         return await self._t.call(SERVICE, OPERATIONS["health_health"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def health_health_background(self) -> BackgroundHealthOut:
+        "Health Background"
+        return await self._t.call(SERVICE, OPERATIONS["health_health_background"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def items_get_item(self, item_id: str) -> ItemWithDetail:
         "Get Item"

@@ -97,7 +97,13 @@ class ErrorEnvelope(TypedDict, closed=True):
 
 class FlagOut(TypedDict, closed=True):
     description: str
-    name: Literal["mcp_gateway", "tool_search", "plugin_updates", "several_accounts"]
+    name: Literal[
+        "mcp_gateway",
+        "tool_search",
+        "plugin_updates",
+        "several_accounts",
+        "sandbox_accounts",
+    ]
     on: bool
 
 
@@ -293,18 +299,26 @@ class PersonName(TypedDict, closed=True):
     name: str
 
 
+class PolicyChoice(TypedDict, closed=True):
+    description: str
+    title: str
+    value: str
+
+
 class PolicyIn(TypedDict, closed=True):
-    value: bool | int | float | dict[str, Any] | list[str] | None
+    value: bool | int | float | str | dict[str, Any] | list[str] | None
 
 
 class PolicyOut(TypedDict, closed=True):
     changedBy: str
-    default: bool | int | float | dict[str, Any] | None
+    choices: NotRequired[list[PolicyChoice] | None]
+    default: bool | int | float | str | dict[str, Any] | list[str] | None
     effect: str
     key: str
-    kind: Literal["bool", "floor", "days", "hours", "publish_modes", "plugins", "names"]
+    kind: Literal["bool", "floor", "days", "hours", "publish_modes", "names", "choice"]
+    note: NotRequired[str | None]
     title: str
-    value: bool | int | float | dict[str, Any] | None
+    value: bool | int | float | str | dict[str, Any] | list[str] | None
 
 
 Domain: TypeAlias = str

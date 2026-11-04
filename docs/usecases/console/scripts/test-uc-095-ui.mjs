@@ -20,7 +20,7 @@ await withUiStack(
   async (consoleUrl) => {
     const J = as(await tokenFor('j.richardson@harborpine.example'), 'team_ops');
     const agent = await json(await fetch(`${agentsUrl}/v1/agents`, { method: 'POST', headers: J, body: JSON.stringify({ name: `Holds desk ${TAG}`, role: 'Explains payment holds' }) }));
-    const offered = (await json(await fetch(`${agentsUrl}/v1/tools`, { headers: J }))).map((t) => t.id ?? t.name);
+    const offered = (await json(await fetch(`${agentsUrl}/v1/tools?pageSize=200`, { headers: J }))).data.map((t) => t.id ?? t.name);
     check('the tool Hold review needs is in the directory', offered.includes('lookup_account'), offered);
 
     const browser = await chromium.launch();

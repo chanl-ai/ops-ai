@@ -21,17 +21,17 @@ from ops_tools.executor import HttpExecutor
 from ops_tools.graph_mailbox import CursorSeal
 from ops_tools.plugins.executor import PluginExecutor
 from ops_tools.plugins.host import PluginHost, module_of
-from ops_tools.plugins.switches import InstallSwitches
 from ops_tools.registry import ToolRegistry
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
 
 from .plugin_pager import plugin as pager
-from .test_plugins import AllowAll, Policy
+from .test_plugins import AllowAll
 
 KEY = b"k" * 32
 INSTANCE = "https://alpha.my.pager.test"
 LINK_2 = "/api/query/01gPAGE2"
+ISSUES_2 = f"{INSTANCE}/api/issues?state=open&page=2"
 
 
 def answer(request: httpx.Request) -> httpx.Response:
@@ -47,6 +47,18 @@ def answer(request: httpx.Request) -> httpx.Response:
         offset = int(query.get("offset", ["0"])[0])
         rows = [{"Id": f"s{i}"} for i in range(3)][offset : offset + 2]
         return httpx.Response(200, json={"searchRecords": rows})
+    if path == "/api/issues":
+        page = query.get("page", ["1"])[0]
+        if page == "1":
+            nxt = "https://evil.example/api/issues?page=2" if query.get("state") == ["all"] else ISSUES_2
+            links = f'<{nxt}>; rel="next", <{INSTANCE}/api/issues?page=9>; rel="last"'
+            return httpx.Response(200, json=[{"n": 1}], headers={"Link": links})
+        first = f'<{INSTANCE}/api/issues?page=1>; rel="first"'
+        return httpx.Response(200, json=[{"n": int(page)}], headers={"Link": first})
+    if path == "/api/pages":
+        page, size = int(query["page"][0]), int(query["per_page"][0])
+        rows = [{"p": i} for i in range(1, 4)][(page - 1) * size : page * size]
+        return httpx.Response(200, json=rows)
     return httpx.Response(404, json={"error": path})
 
 
@@ -58,8 +70,7 @@ class Rig:
             self.seen.append(request)
             return answer(request)
 
-        switches = InstallSwitches(Policy({"test.pager": {"enabled": True}}))
-        plugins = PluginHost(store, PluginBindings(engine), switches, [Loaded("pager", pager, None)])
+        plugins = PluginHost(store, PluginBindings(engine), {}, [Loaded("pager", pager, None)])
         http = HttpExecutor(httpx.AsyncClient(transport=httpx.MockTransport(record)), AllowAll())  # type: ignore[arg-type]
         self.executor = PluginExecutor(plugins, http, KEY)
         self.tenant = tenant
@@ -79,7 +90,7 @@ class Rig:
 
     async def call(self, tool: str, args: dict[str, Any]) -> Any:
         op = self.ops[f"pager_{tool}"]
-        return await self.executor.run(self.module, op, args, actor="t", environment=None, acting_for=None)
+        return await self.executor.run(self.module, op, args, actor="t", environment="test", acting_for=None)
 
     def sent(self, i: int = -1) -> dict[str, list[str]]:
         return parse_qs(self.seen[i].url.query.decode())
@@ -91,7 +102,9 @@ def rig(engine: AsyncEngine, store: ModuleStore, tenant: str) -> Rig:
 
 
 def test_a_tool_that_pages_or_checks_its_inputs_runs_through_the_plugin_executor(rig: Rig) -> None:
-    assert {rig.ops[f"pager_{t}"]["executor"] for t in ("find_cases", "list_view", "search")} == {"plugin"}
+    assert {rig.ops[f"pager_{t}"]["executor"] for t in ("find_cases", "list_view", "search", "issues", "pages")} == {
+        "plugin"
+    }
     cursor = next(f for f in rig.ops["pager_find_cases"]["input"] if f["name"] == "cursor")
     assert cursor["required"] is False
 
@@ -139,7 +152,10 @@ async def test_a_changed_cursor_or_one_from_another_tool_is_refused(rig: Rig) ->
     first = await rig.call("find_cases", {"status": "Escalated"})
     cursor = str(first.output["next_cursor"])
     other = CursorSeal(KEY, rig.tenant, "con_a", "pager_list_view").close(json.dumps({"link": LINK_2}))
-    for bad in (cursor[:-2] + "xx", other):
+    # A character changed mid-cursor: the last ones can be base64 padding bits, which decode to the same bytes.
+    mid = len(cursor) // 2
+    changed = cursor[:mid] + ("A" if cursor[mid] != "A" else "B") + cursor[mid + 1 :]
+    for bad in (changed, other):
         out = await rig.call("find_cases", {"cursor": bad})
         assert not out.ok and out.output["error"]["code"] == "INVALID_INPUT", out
     assert len(rig.seen) == 1
@@ -181,6 +197,30 @@ async def test_an_offset_page_ends_on_a_short_page(rig: Rig) -> None:
     assert "next_cursor" not in second.output
 
 
+async def test_a_link_header_page_follows_rel_next_alone_and_only_to_the_plugins_hosts(rig: Rig) -> None:
+    """GitHub and GitLab name the next page in a Link header, not in the answer: without the rule a list stopped at
+    page one."""
+    first = await rig.call("issues", {})
+    assert first.ok and first.output["records"] == [{"n": 1}] and first.output["next_cursor"], first
+    assert rig.sent() == {"state": ["open"]}
+    second = await rig.call("issues", {"cursor": first.output["next_cursor"]})
+    assert second.ok and second.output == [{"n": 2}], second
+    assert str(rig.seen[-1].url) == ISSUES_2
+    elsewhere = await rig.call("issues", {"state": "all"})
+    out = await rig.call("issues", {"cursor": elsewhere.output["next_cursor"]})
+    assert not out.ok and out.output["error"]["code"] == "EGRESS_DENIED", out
+    assert len(rig.seen) == 3
+
+
+async def test_a_numbered_page_keeps_its_query_and_ends_on_a_short_page(rig: Rig) -> None:
+    first = await rig.call("pages", {"state": "all"})
+    assert first.ok and first.output["records"] == [{"p": 1}, {"p": 2}], first
+    assert rig.sent() == {"state": ["all"], "page": ["1"], "per_page": ["2"]}
+    second = await rig.call("pages", {"cursor": first.output["next_cursor"]})
+    assert second.ok and second.output == [{"p": 3}], second
+    assert rig.sent() == {"state": ["all"], "page": ["2"], "per_page": ["2"]}
+
+
 class Keys:
     async def lookup(self, _tenant: str, _team: str | None, names: list[str], **_: Any) -> dict[str, str]:
         return dict.fromkeys(names, "s3cr3t-value")
@@ -200,7 +240,7 @@ async def test_the_answer_hook_sees_the_answer_only_after_secrets_are_scrubbed()
         "timeout_ms": 5000,
     }
     seen: list[Any] = []
-    out = await http.run(module, op, {}, on_answer=lambda a: seen.append(a) or a)
+    out = await http.run(module, op, {}, on_answer=lambda a, _h: seen.append(a) or a)
     assert out.ok and seen and "s3cr3t-value" not in json.dumps(seen), seen
 
 
@@ -213,7 +253,7 @@ async def test_a_failing_answer_hook_fails_the_call_cleanly() -> None:
         "timeout_ms": 5000,
     }
 
-    def broken(_: Any) -> Any:
+    def broken(_: Any, _headers: Any) -> Any:
         raise KeyError("next")
 
     out = await http.run(module, {"name": "get", "method": "GET", "path": "/thing"}, {}, on_answer=broken)
@@ -225,8 +265,7 @@ async def test_a_plugin_tools_title_is_listed_with_it(
 ) -> None:
     bindings = PluginBindings(engine)
     await bindings.put(tenant, "team_a", "test.pager", enabled=True, connection_id="con_a", settings={}, by="t")
-    switches = InstallSwitches(Policy({"test.pager": {"enabled": True}}))
-    plugins = PluginHost(store, bindings, switches, [Loaded("pager", pager, None)])
+    plugins = PluginHost(store, bindings, {}, [Loaded("pager", pager, None)])
     monkeypatch.setattr(reg, "acting_team", lambda: "team_a")
     rows = {t["name"]: t for t in await ToolRegistry(local_catalog, store, plugins).grantable(tenant)}
     assert rows["pager_find_cases"]["title"] == "Find cases", rows.get("pager_find_cases")

@@ -1,6 +1,6 @@
 """uc-609, api layer: docs/usecases/tools-service/plugin-updates.md, stories S1 to S4.
 
-platform-service signs the seeded people in and holds the install switch; agents-service holds the team's agents;
+platform-service signs the seeded people in; agents-service holds the team's agents;
 tools-service runs with plugins on and the plugin_updates flag on, first with the fields desk at 0.1.0
 (services/tools-service/tests/plugin_fields/fields_desk), then restarted on the same database with it at 0.2.0
 (services/tools-service/tests/plugin_versions/fields_desk): find takes pending and moves, post_message moves, transfer
@@ -29,7 +29,6 @@ from usecase_harness import (
     service_headers,
     signed_in,
     tools,
-    until,
 )
 from usecase_harness import ROOT as REPO
 
@@ -71,7 +70,7 @@ def reached(fake: Any) -> str:
 
 
 def review(gw: httpx.Client, who: dict[str, str]) -> dict[str, Any]:
-    return dict(data(gw.get(f"/v1/plugins/{ID}/team/update", headers=who)) or {})
+    return dict(data(gw.get(f"/v1/apps/plugin:{ID}/update", headers=who)) or {})
 
 
 with ExitStack() as stack:
@@ -87,16 +86,12 @@ with ExitStack() as stack:
 
     with tools({**base, "OPS_PLUGIN_PATHS": json.dumps([str(V1)])}) as gw:
         # 1. Both teams turn the fields desk on at 0.1.0; each records the version it took.
-        api.put("/v1/policies/plugins", json={"value": {ID: {"enabled": True}}}, headers=sam)
-        until(
-            lambda: all(p["installOn"] for p in (data(gw.get("/v1/plugins", headers=priya)) or {}).get("plugins", []))
-        )
         for h in m["hosts"]:
             gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-609"}, headers=sam)
         gw.post("/v1/egress/ranges", json={"value": m["range"], "note": "uc-609"}, headers=sam)
         on = [
             gw.put(
-                f"/v1/plugins/{ID}/team",
+                f"/v1/apps/plugin:{ID}/team",
                 json={"enabled": True, "credentials": {"token": SECRETS["token"]}},
                 headers=who,
             )
@@ -191,9 +186,9 @@ with ExitStack() as stack:
         )
 
         # 7. A review another upgrade replaced is refused; the take records 0.2.0.
-        stale = gw.post(f"/v1/plugins/{ID}/team/update", json={"digest": "0" * 64}, headers=priya)
+        stale = gw.post(f"/v1/apps/plugin:{ID}/update", json={"digest": "0" * 64}, headers=priya)
         taken = gw.post(
-            f"/v1/plugins/{ID}/team/update", json={"digest": (r.get("installed") or {}).get("digest")}, headers=priya
+            f"/v1/apps/plugin:{ID}/update", json={"digest": (r.get("installed") or {}).get("digest")}, headers=priya
         )
         check(
             "7 a stale review is refused with update_changed, and taking the update records 0.2.0 with nothing waiting",

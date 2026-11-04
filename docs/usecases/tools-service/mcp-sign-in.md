@@ -16,7 +16,7 @@ with the connection's token, refreshed for the same resource after a 401.
 | S2 | After one sign-in the server's tools are listed with their inputs and a module keeps them | api | 3-4 | 4 |
 | S3 | A tool call runs with the connection's token, and after the server refuses it one refresh lets the call succeed | api | 5 | 5 |
 | S4 | A registered client the bank gave is used as given, with no second registration | api | 6 | 6 |
-| S5 | An admin sets the server's connection to each person's account, signs in once through the pop-up, and Test connection works | ui | 7-8 | 8 |
+| S5 | An admin sets the server's app to each person's own account, signs in once through the pop-up from her row, and Test works with her account | ui | 7-8 | 8 |
 
 ## Preconditions
 
@@ -37,18 +37,17 @@ with the connection's token, refreshed for the same resource after a 401.
 | 4 | List the tools with the connection; create a module | Both tools with the inputs the server declares; the operation keeps them |
 | 5 | Call a tool; the server stops honouring the token; call again | Runs with the registered client's token; one refresh, and the call succeeds |
 | 6 | Add the server with the bank's registered client | Used as given, its secret a secret part, no second registration |
-| 7 | In the console as an Operations admin, set the connection to each person's own account and press Connect your account | The pop-up signs in and closes; People connected lists her |
-| 8 | Press Test connection | Working, 200, with her own account |
+| 7 | In the console as an Operations admin, open the app's page, turn on Settings › Everyone signs in with their own account, and press Connect my account on her row | The pop-up signs in and closes; her row says Connected as her |
+| 8 | Press Test on Settings › Keys | Working, 200, with her own account |
 
-The ui layer adds the server through the API, since the console's connect dialog runs on the mock only. The connection
-page has no button to sign the team account in, so the ui story signs in with the person's own account.
+The ui layer adds the server through the API, as the api layer does, and signs in with the person's own account.
 
 ## Acceptance layers
 
 | Layer | Script | State |
 |---|---|---|
 | api | `tools-service/scripts/test-uc-396-api.py` | passing, `ISOLATED=1 make usecase-test UC=uc-396 LAYER=api` (2026-10-19) |
-| ui | `tools-service/scripts/test-uc-396-ui.mjs` | passing |
+| ui | `tools-service/scripts/test-uc-396-ui.mjs` | failing at step 8 (2026-11-03): an MCP app's base address is the server's own, path included (`connections/service.py:619`), so the test path `/auth/oauth` is read at `/mcp/screening/auth/oauth` and the stand-in answers 404; steps 7 pass |
 
 ## Non-vacuous check
 

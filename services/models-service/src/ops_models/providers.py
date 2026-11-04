@@ -13,7 +13,7 @@ import json
 import re
 from collections.abc import AsyncIterator, Iterator, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 from urllib.parse import quote
 
 import httpx
@@ -60,9 +60,24 @@ def _words(messages: list[dict[str, Any]]) -> int:
 _CALL = re.compile(r"\bcall (\w+)")
 
 
+def _call_arguments(rest: str) -> dict[str, Any] | None:
+    """The JSON object right after `call <tool>`; empty when nothing JSON-like follows, None when it does not parse to
+    an object."""
+    rest = rest.lstrip()
+    if not rest.startswith(("{", "[")):
+        return {}
+    try:
+        found, _ = json.JSONDecoder().raw_decode(rest)
+    except ValueError:
+        return None
+    return cast(dict[str, Any], found) if isinstance(found, dict) else None
+
+
 class ScriptedProvider:
     """Replies with a fixed sentence; token counts are word counts, so tests can predict cost. When the request offers
-    tools and the last message is a user turn saying `call <tool>`, it calls that tool with empty arguments instead."""
+    tools and the last message is a user turn saying `call <tool>`, it calls that tool instead: with the JSON object
+    written right after the name (`call github_list_issues {"owner": "acme"}`), else with no arguments. A `{` or `[`
+    after the name that is not one JSON object is answered as text naming the problem, not called with nothing."""
 
     def _answer(self, model_id: str, body: dict[str, Any]) -> Completion:
         messages: list[dict[str, Any]] = list(body.get("messages") or [])
@@ -71,12 +86,17 @@ class ScriptedProvider:
         functions: list[dict[str, Any]] = [t.get("function") or {} for t in tools]
         offered = {str(f.get("name")) for f in functions}
         last = messages[-1] if messages else {}
-        wanted = _CALL.search(str(last.get("content") or "")) if last.get("role") == "user" else None
+        said = str(last.get("content") or "")
+        wanted = _CALL.search(said) if last.get("role") == "user" else None
         if wanted and wanted.group(1) in offered:
+            arguments = _call_arguments(said[wanted.end() :])
+            if arguments is None:
+                text = f"call {wanted.group(1)}: the arguments after its name must be one JSON object"
+                return Completion(text, prompt_tokens, len(text.split()))
             call = {
                 "id": "call_scripted_1",
                 "type": "function",
-                "function": {"name": wanted.group(1), "arguments": "{}"},
+                "function": {"name": wanted.group(1), "arguments": json.dumps(arguments)},
             }
             return Completion(None, prompt_tokens, 1, [call])
         text = f"scripted reply from {model_id}"

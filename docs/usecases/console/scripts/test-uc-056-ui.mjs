@@ -35,7 +35,7 @@ await withUiStack(
     const mid = await publish(`Statements ${TAG}`, OP);
     await publish(`Balances ${TAG}`, KEPT);
     await new Promise((r) => setTimeout(r, 31_000)); // agents-service keeps each tenant's tool list for 30 seconds
-    const catalogue = await json(await fetch(`${agentsUrl}/v1/tools`, { headers: J }));
+    const catalogue = (await json(await fetch(`${agentsUrl}/v1/tools?pageSize=200`, { headers: J }))).data;
     const tool = catalogue.find((t) => t.name === OP);
     const kept = catalogue.find((t) => t.name === KEPT);
     if (!tool || !kept) throw new Error(`setup: ${OP} or ${KEPT} is not in agents-service's catalogue (${catalogue.length} tools)`);

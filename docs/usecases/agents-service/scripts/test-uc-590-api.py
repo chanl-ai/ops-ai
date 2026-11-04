@@ -1,7 +1,7 @@
 """uc-590, api layer: docs/usecases/agents-service/plugin-templates.md, stories S1 to S4 (steps 1 to 11).
 
 tools-service runs with plugins on and the test plugin (services/tools-service/tests/plugin_templates/templates_desk);
-with no platform-service its install switch is on for every plugin, and the team switch is Priya's to turn for
+installed, it is there for every team with no admin step, and the team switch is Priya's to turn for
 team_ops. agents-service reads its operations and templates from that tools-service; documents-service sits beside a
 files-service. Platform sign-in throughout, as a deployment runs: a dev session acts in no team, and templates are
 installed into one, so the install refuses it. No model call."""
@@ -75,15 +75,9 @@ def main() -> None:
     ):
         OPS.update(bearer(signed_in(accounts, "p.shah@harborpine.example"), "team_ops"))
         OTHER.update(bearer(signed_in(accounts, "w.kamau@harborpine.example"), "team_platform"))
-        sam = bearer(signed_in(accounts, "s.adeyemi@harborpine.example"), "team_security")
-        # 1. The platform admin turns the plugin on for the install, Priya for team_ops; team_platform leaves it off.
-        install_on = accounts.put("/v1/policies/plugins", json={"value": {PLUGIN: {"enabled": True}}}, headers=sam)
-        on = gw.put(f"/v1/plugins/{PLUGIN}/team", json={"enabled": True}, headers=OPS)
-        check(
-            "1 the plugin is on for the install and for team_ops",
-            install_on.status_code == 200 and on.status_code == 200,
-            {"install": said(install_on), "team": said(on)},
-        )
+        # 1. Priya turns the plugin on for team_ops; team_platform leaves it off.
+        on = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json={"enabled": True}, headers=OPS)
+        check("1 the plugin is on for team_ops", on.status_code == 200, {"team": said(on)})
 
         # 2. team_ops sees the four templates, none installed; team_platform sees none.
         mine = listed(api, OPS) + listed(docs, OPS)

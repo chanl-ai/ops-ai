@@ -4,8 +4,8 @@ import * as React from 'react';
 import { ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { CONNECTED_MESSAGE, openSignIn, type ConnectedMessage } from '@/components/connections/sign-in';
-import { EnvSection } from '@/components/connections/env-section';
+import { useSignInWindow } from '@/components/connections/sign-in';
+import { AccountFields } from '@/components/connections/account-fields';
 import { PluginConnectForm } from '@/components/connections/plugin-connect-form';
 import type { SignIn } from '@/components/connections/who-signs-in';
 import { DialogShell } from '@/components/shared/dialog-shell';
@@ -17,79 +17,79 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  type ConnectionDetail,
+  type AccountDetail,
   type SystemCard,
+  useAccountDetail,
+  useAddAccount,
+  useAddApp,
   useBindModule,
-  useChangeConnection,
-  useConnectionDetail,
+  useChangeAccount,
   useConnectionKinds,
-  useCreateConnection,
-  useDeleteConnection,
-  useSetEnvironment,
+  useDeleteAccount,
   useStartSignIn,
-  useTestEnvironment,
+  useTestAccount,
 } from '@/hooks/systems-queries';
-import {
-  complete,
-  draftFor,
-  environmentBody,
-  fieldsFor,
-  initialState,
-  keyed,
-  leading,
-  ordered,
-  planFor,
-  reduce,
-  type EnvDraft,
-  type Environment,
-  type Kind,
-  type Kinds,
-  type SavedEnvironment,
-} from '@/lib/connect-plan';
+import { accountBody, complete, draftFor, fieldsFor, initialState, planFor, reduce, type Kind, type Kinds, type SavedAccount } from '@/lib/connect-plan';
+import type { AccountRef } from '@/lib/types/connections';
 
+/**
+ * What the dialog connects: an account already there, a module's first app, a plugin's app, a new custom app, or a
+ * custom app's sandbox account (`app` names it, its sign-in kind is the app's).
+ */
 export type ConnectTarget =
-  { kind: 'connection'; connectionId: string } | { kind: 'module'; moduleId: string; name: string } | { kind: 'plugin'; card: SystemCard } | { kind: 'new' };
+  | { kind: 'account'; account: AccountRef }
+  | { kind: 'module'; moduleId: string; name: string }
+  | { kind: 'plugin'; card: SystemCard; sandbox?: boolean }
+  | { kind: 'new' }
+  | { kind: 'sandbox'; appId: string; name: string; authKind: string };
 
 export type ConnectMode = 'connect' | 'edit' | 'reconnect';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong');
 
 /**
- * The one dialog that connects, edits and reconnects a system: the fields come from the system's sign-in kind
- * (`GET /v1/connection-kinds`), one section per environment, each saved and tested on its own before the connection is
- * called working; a sealed key reads as set and is replaced only by typing a new one. A new system that is cancelled
- * after a test made it is deleted. A kind whose `signsIn` is set ends with someone signing in, in a window of its own.
+ * The one dialog that connects, edits and reconnects an app's account: the fields come from the app's sign-in kind
+ * (`GET /v1/connection-kinds`), saved on the account and tested before it is called working; a sealed key reads as set
+ * and is replaced only by typing a new one. An account made here and then cancelled is deleted. A kind whose `signsIn`
+ * is set ends with someone signing in, in a window of its own.
  */
 export function ConnectSystemDialog({
   target,
   mode,
-  environment,
   open,
   onOpenChange,
   onConnected,
 }: {
   target: ConnectTarget;
   mode: ConnectMode;
-  environment?: Environment;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConnected?: (c: ConnectionDetail) => void;
+  onConnected?: (c: AccountDetail) => void;
 }) {
   const kinds = useConnectionKinds();
-  const existingId = target.kind === 'connection' ? target.connectionId : null;
-  const detail = useConnectionDetail(open ? existingId : null);
-  const loading = kinds.isPending || (existingId != null && detail.isPending);
+  // A plugin's default account is read too, so its Edit starts from the settings saved on it; a new sandbox has none.
+  const existing: AccountRef | null =
+    target.kind === 'account'
+      ? target.account
+      : target.kind === 'plugin' && !target.sandbox && target.card.connectionId
+        ? { appId: target.card.id, accountId: target.card.connectionId }
+        : null;
+  const detail = useAccountDetail(open ? existing : null);
+  const loading = kinds.isPending || (existing != null && detail.isPending);
   const failed = kinds.isError ? kinds : detail.isError ? detail : null;
 
-  // The one Connect window: one environment at a time, small; who signs in and the other environment are on
-  // the app page's Settings, so nothing here repeats them.
-  const title = existingId
+  // Who signs in is on the app page's Settings, so nothing here repeats it.
+  const title = existing
     ? `${mode === 'reconnect' ? 'Reconnect' : 'Connect'} ${detail.data?.name ?? 'the app'}`
     : target.kind === 'module'
       ? `Connect ${target.name}`
       : target.kind === 'plugin'
-        ? `Connect ${target.card.name}`
-        : 'Add custom app';
+        ? target.sandbox
+          ? `Add a ${target.card.name} sandbox account`
+          : `Connect ${target.card.name}`
+        : target.kind === 'sandbox'
+          ? `Add a ${target.name} sandbox account`
+          : 'Add custom app';
   const description =
     mode === 'edit' ? 'A saved key stays unless you type a new one. It is tested before it is called working.' : 'It is tested before it is called working.';
   if (failed || loading || !kinds.data) {
@@ -107,30 +107,25 @@ export function ConnectSystemDialog({
     );
   }
   if (target.kind === 'plugin') {
-    return <PluginConnectForm open={open} card={target.card} kinds={kinds.data as Kinds} first={environment ?? keyed(kinds.data as Kinds).find((e) => e.production)?.id} onClose={() => onOpenChange(false)} />;
+    return <PluginConnectForm open={open} card={target.card} sandbox={target.sandbox} kinds={kinds.data as Kinds} detail={detail.data ?? null} onClose={() => onOpenChange(false)} />;
   }
   return (
     <ConnectForm
-      // Keyed by the connection only: the dialog's own saves refetch it, and a remount would drop the form mid-test.
-      key={existingId ?? target.kind}
+      // Keyed by the account only: the dialog's own saves refetch it, and a remount would drop the form mid-test.
+      key={existing?.accountId ?? target.kind}
       open={open}
       title={title}
       description={description}
       target={target}
       kinds={kinds.data as Kinds}
       detail={detail.data ?? null}
-      first={environment ?? keyed(kinds.data as Kinds).find((e) => e.production)?.id}
       onClose={() => onOpenChange(false)}
       onConnected={onConnected}
     />
   );
 }
 
-function sectionsFor(kind: Kind, kinds: Kinds, detail: ConnectionDetail | null): Record<Environment, EnvDraft> {
-  const groups = fieldsFor(kind, kinds);
-  const saved = (env: Environment) => (detail?.environments as Record<string, SavedEnvironment> | undefined)?.[env] ?? null;
-  return Object.fromEntries(keyed(kinds).map((e) => [e.id, draftFor(e.id, groups, saved(e.id))]));
-}
+const draftOf = (kind: Kind, kinds: Kinds, detail: AccountDetail | null) => draftFor(fieldsFor(kind, kinds), (detail as SavedAccount | null) ?? null);
 
 function ConnectForm({
   open,
@@ -139,7 +134,6 @@ function ConnectForm({
   target,
   kinds,
   detail,
-  first,
   onClose,
   onConnected,
 }: {
@@ -148,22 +142,24 @@ function ConnectForm({
   description: string;
   target: ConnectTarget;
   kinds: Kinds;
-  detail: ConnectionDetail | null;
-  first?: Environment;
+  detail: AccountDetail | null;
   onClose: () => void;
-  onConnected?: (c: ConnectionDetail) => void;
+  onConnected?: (c: AccountDetail) => void;
 }) {
-  const [name, setName] = React.useState(target.kind === 'module' ? target.name : '');
-  const [kindId, setKindId] = React.useState(detail?.authKind ?? kinds.kinds.find((k) => k.id === 'api_key')?.id ?? kinds.kinds[0]?.id ?? 'none');
+  const sandbox = target.kind === 'sandbox';
+  const [name, setName] = React.useState(target.kind === 'module' ? target.name : sandbox ? `${target.name} sandbox` : '');
+  const [kindId, setKindId] = React.useState(
+    detail?.authKind ?? (sandbox ? target.authKind : undefined) ?? kinds.kinds.find((k) => k.id === 'api_key')?.id ?? kinds.kinds[0]?.id ?? 'none',
+  );
   const kind = kinds.kinds.find((k) => k.id === kindId) ?? kinds.kinds[0];
   const plan = planFor(kind);
   const groups = fieldsFor(kind, kinds);
   // Who signs in is set on the app page's Settings; a new app starts with the team account.
   const who: SignIn = (detail?.signIn as SignIn | undefined) ?? 'team';
-  const [state, dispatch] = React.useReducer(reduce, initialState(sectionsFor(kind, kinds, detail), detail?.id ?? null));
+  const [state, dispatch] = React.useReducer(reduce, initialState(draftOf(kind, kinds, detail), detail?.id ?? null, Boolean(detail)));
   const revision = React.useRef(detail?.revision ?? 0);
-  const latest = React.useRef<ConnectionDetail | null>(detail);
-  const opened = React.useRef<{ window: Window | null; environment: Environment } | null>(null);
+  const latest = React.useRef<AccountDetail | null>(detail);
+  const opened = React.useRef(false);
   const connected = React.useRef(onConnected);
   const close = React.useRef(onClose);
   React.useEffect(() => {
@@ -171,15 +167,18 @@ function ConnectForm({
     close.current = onClose;
   }, [onConnected, onClose]);
 
-  const create = useCreateConnection();
+  const create = useAddApp();
+  const add = useAddAccount();
   const bind = useBindModule();
-  const setEnv = useSetEnvironment();
-  const test = useTestEnvironment();
-  const change = useChangeConnection();
-  const remove = useDeleteConnection();
+  const test = useTestAccount();
+  const change = useChangeAccount();
+  const remove = useDeleteAccount();
   const signIn = useStartSignIn();
 
-  const keep = (c: ConnectionDetail) => {
+  /** The account the dialog writes to, once it has one. */
+  const ref = (): AccountRef => ({ appId: target.kind === 'sandbox' ? target.appId : (latest.current?.appId ?? ''), accountId: state.connectionId ?? '' });
+
+  const keep = (c: AccountDetail) => {
     revision.current = c.revision;
     latest.current = c;
     return c;
@@ -188,38 +187,37 @@ function ConnectForm({
   const pickKind = (id: string) => {
     setKindId(id);
     const k = kinds.kinds.find((x) => x.id === id) ?? kind;
-    dispatch({
-      type: 'reset',
-      sections: sectionsFor(k, kinds, null),
-      connectionId: state.connectionId,
-    });
+    dispatch({ type: 'reset', draft: draftOf(k, kinds, null), connectionId: state.connectionId });
   };
 
-  React.useEffect(() => {
-    const onMessage = (e: MessageEvent<ConnectedMessage>) => {
-      const waiting = opened.current;
-      if (e.origin !== window.location.origin || e.data?.type !== CONNECTED_MESSAGE || !waiting || e.source !== waiting.window) return;
-      opened.current = null;
-      dispatch({ type: 'signed-in', environment: waiting.environment });
-      toast.success(`${e.data.connection} is connected with the team account`);
+  const signInWindow = useSignInWindow({
+    onConnected: (m) => {
+      if (!opened.current) return;
+      opened.current = false;
+      dispatch({ type: 'signed-in' });
+      toast.success(`${m.connection} is connected with the team account`);
       // Save opened this window, so the account signing in is the last step: the dialog closes.
       dispatch({ type: 'done' });
       if (latest.current) connected.current?.(latest.current);
       close.current();
-    };
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, []);
+    },
+    onFailed: (why) => {
+      if (!opened.current) return;
+      opened.current = false;
+      dispatch({ type: 'failed', message: why });
+    },
+  });
 
-  /** The connection to save into: the one open, or a new one made from the name and kind on the first save. */
-  const ensure = async (): Promise<string> => {
-    if (state.connectionId) return state.connectionId;
+  /**
+   * The account to save into: the one open, or one made on the first save, a new app's first account from the name
+   * and kind, or a sandbox account of the app.
+   */
+  const ensure = async (): Promise<AccountRef> => {
+    if (state.connectionId) return ref();
     const made = keep(
-      await create.mutateAsync({
-        name: name.trim(),
-        authKind: kind.id,
-        signIn: kind.perPerson ? who : 'team',
-      }),
+      target.kind === 'sandbox'
+        ? await add.mutateAsync({ appId: target.appId, body: { name: name.trim(), sandbox: true } })
+        : await create.mutateAsync({ name: name.trim(), authKind: kind.id, signIn: kind.perPerson ? who : 'team', sandbox: false }),
     );
     dispatch({ type: 'created', connectionId: made.id });
     if (target.kind === 'module')
@@ -227,77 +225,65 @@ function ConnectForm({
         moduleId: target.moduleId,
         connectionId: made.id,
       });
-    return made.id;
+    // A sandbox belongs to the app the dialog was opened for; a new app's id is its first account's, as answered.
+    return { appId: target.kind === 'sandbox' ? target.appId : made.appId, accountId: made.id };
   };
 
-  const save = async (id: string, env: Environment) => {
-    const draft = state.sections[env];
+  const save = async (a: AccountRef) => {
+    const draft = state.draft;
     if (draft.status !== 'dirty' && draft.status !== 'testing' && draft.status !== 'saving') return;
-    const saved = keep(
-      await setEnv.mutateAsync({
-        connectionId: id,
-        environment: env,
-        body: environmentBody(draft, revision.current),
-      }),
-    );
-    const secrets = (saved.environments as Record<string, SavedEnvironment>)[env]?.secrets ?? {};
+    const saved = keep(await change.mutateAsync({ ...a, body: accountBody(draft, revision.current) }));
     dispatch({
       type: 'saved',
-      environment: env,
-      secretSet: Object.fromEntries(Object.entries(secrets).map(([k, v]) => [k, Boolean((v as { set?: boolean })?.set)])),
+      secretSet: Object.fromEntries(Object.entries(saved.secrets).map(([k, v]) => [k, Boolean((v as { set?: boolean })?.set)])),
     });
   };
 
-  const runTest = async (env: Environment) => {
+  const runTest = async () => {
     if (state.busy) return;
-    dispatch({ type: 'start', environment: env, status: 'testing' });
+    dispatch({ type: 'start', status: 'testing' });
     try {
-      const id = await ensure();
-      await save(id, env);
-      const tested = keep(await test.mutateAsync({ connectionId: id, environment: env }));
-      dispatch({
-        type: 'tested',
-        environment: env,
-        health: (tested.environments as Record<string, SavedEnvironment>)[env]?.health ?? tested.health ?? null,
-      });
+      const a = await ensure();
+      await save(a);
+      const tested = keep(await test.mutateAsync(a));
+      dispatch({ type: 'tested', health: tested.health ?? null });
     } catch (e) {
-      dispatch({ type: 'failed', environment: env, message: message(e) });
+      dispatch({ type: 'failed', message: message(e) });
     }
   };
 
-  // One environment: the one asked for, else the leading one (production when the install has it).
-  const envs = ordered(kinds, first).slice(0, 1);
-  const ready = envs.map((e) => e.id).filter((id) => complete(state.sections[id], groups));
-  const canSave = plan.kind === 'none' || ready.length > 0;
+  const ready = complete(state.draft, groups);
+  const canSave = plan.kind === 'none' || ready;
   const named = Boolean(state.connectionId) || Boolean(name.trim());
 
   const finish = async () => {
     if (state.busy) return;
-    const env = leading(kinds, ready) ?? envs[0].id;
-    dispatch({ type: 'start', environment: env, status: 'saving' });
+    // A sign-in window opens in the click, before any call, so a pop-up blocker lets it through.
+    const signsInNow = plan.kind === 'account' && !state.signedIn;
+    const w = signsInNow ? signInWindow.open(latest.current?.name ?? name) : null;
+    if (signsInNow && !w) return;
+    dispatch({ type: 'start', status: 'saving' });
     try {
-      const id = await ensure();
-      for (const e of ready) await save(id, e);
+      const a = await ensure();
+      if (ready) await save(a);
       if (detail && kind.perPerson && who !== detail.signIn) {
-        keep(
-          await change.mutateAsync({
-            path: { connection_id: id },
-            body: {
-              revision: revision.current,
-              signIn: who,
-              teamBackup: who === 'person_or_team',
-            },
+        keep(await change.mutateAsync({ ...a, body: { revision: revision.current, signIn: who, teamBackup: who === 'person_or_team' } }));
+      }
+      if (w) {
+        const begin = async () => {
+          const start = await signIn.mutateAsync({ ...a, account: 'team' });
+          opened.current = true;
+          w.go(start, a);
+          dispatch({ type: 'signing-in' });
+        };
+        // Try again in the window starts the same sign-in again, on the account already saved.
+        w.retry(() =>
+          void begin().catch((e: unknown) => {
+            w.fail(message(e));
+            dispatch({ type: 'failed', message: message(e) });
           }),
         );
-      }
-      if (plan.kind === 'account' && !state.signedIn.includes(env)) {
-        const start = await signIn.mutateAsync({
-          connectionId: id,
-          environment: env,
-          account: 'team',
-        });
-        opened.current = { window: openSignIn(start, id), environment: env };
-        dispatch({ type: 'signing-in' });
+        await begin();
         return;
       }
       dispatch({ type: 'done' });
@@ -305,7 +291,8 @@ function ConnectForm({
       if (latest.current) onConnected?.(latest.current);
       onClose();
     } catch (e) {
-      dispatch({ type: 'failed', environment: env, message: message(e) });
+      w?.fail(message(e));
+      dispatch({ type: 'failed', message: message(e) });
     }
   };
 
@@ -317,9 +304,9 @@ function ConnectForm({
             moduleId: target.moduleId,
             connectionId: null,
           });
-        await remove.mutateAsync(state.connectionId);
+        await remove.mutateAsync(ref());
       } catch (e) {
-        toast.error('Couldn’t remove the new app', {
+        toast.error(sandbox ? 'Couldn’t remove the new sandbox account' : 'Couldn’t remove the new app', {
           description: message(e),
         });
       }
@@ -343,7 +330,7 @@ function ConnectForm({
           <LoadingButton
             type="button"
             onClick={() => void finish()}
-            isLoading={state.busy && !Object.values(state.sections).some((d) => d.status === 'testing')}
+            isLoading={state.busy && state.draft.status !== 'testing'}
             disabled={!named || !canSave || state.busy}
             data-testid="connect-submit"
           >
@@ -355,9 +342,11 @@ function ConnectForm({
       <div className="flex min-w-0 flex-col gap-5">
         {!detail && (
           <div className="grid gap-4">
-            <FormField id="system-name" label="App name">
+            <FormField id="system-name" label={sandbox ? 'Account name' : 'App name'}>
               <Input id="system-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Claims core" disabled={Boolean(state.connectionId)} />
             </FormField>
+            {/* A sandbox account signs in the way its app does. */}
+            {!sandbox && (
             <FormField id="system-kind" label="How it signs in">
               <Select value={kindId} onValueChange={pickKind} disabled={Boolean(state.connectionId)}>
                 <SelectTrigger id="system-kind" className="w-full">
@@ -372,40 +361,22 @@ function ConnectForm({
                 </SelectContent>
               </Select>
             </FormField>
+            )}
           </div>
         )}
 
         {plan.kind === 'none' ? (
           <p className="text-sm text-muted-foreground">{kind.label}: nothing to enter. Calls go to the app’s address with no sign-in.</p>
         ) : (
-          envs.map(({ id: env, label }) => (
-            <EnvSection
-              key={env}
-              env={env}
-              label={label}
-              draft={state.sections[env]}
-              groups={groups}
-              busy={state.busy}
-              canTest={named && complete(state.sections[env], groups)}
-              onSetting={(n, v) =>
-                dispatch({
-                  type: 'setting',
-                  environment: env,
-                  name: n,
-                  value: v,
-                })
-              }
-              onSecret={(n, v) =>
-                dispatch({
-                  type: 'secret',
-                  environment: env,
-                  name: n,
-                  value: v,
-                })
-              }
-              onTest={() => void runTest(env)}
-            />
-          ))
+          <AccountFields
+            draft={state.draft}
+            groups={groups}
+            busy={state.busy}
+            canTest={named && ready}
+            onSetting={(n, v) => dispatch({ type: 'setting', name: n, value: v })}
+            onSecret={(n, v) => dispatch({ type: 'secret', name: n, value: v })}
+            onTest={() => void runTest()}
+          />
         )}
 
         {state.phase === 'signing-in' && (

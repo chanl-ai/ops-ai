@@ -127,25 +127,22 @@ def stack_values(tmp_path: Path, *args: str, env: dict[str, str]) -> dict[str, s
     return dict(line.split("=", 1) for line in out.stdout.splitlines())
 
 
-def test_no_two_lanes_share_a_port(tmp_path: Path) -> None:
-    taken: dict[str, str] = {}
-    for lane in range(6):
-        for name, port in stack_values(tmp_path, f"OPS_LANE={lane}", env={}).items():
-            if not name.endswith("_PORT") or name == "OPS_GATEWAY_PORT":  # the gateway is tools-service's own port
-                continue
-            assert port not in taken, f"lane {lane} {name} and {taken[port]} both take {port}"
-            taken[port] = f"lane {lane} {name}"
+def test_the_isolated_stack_shares_no_port_with_the_shared_one(tmp_path: Path) -> None:
+    shared, isolated = stack_values(tmp_path, env={}), stack_values(tmp_path, "ISOLATED=1", env={})
+    ports = {n: p for n, p in shared.items() if n.endswith("_PORT") and n != "OPS_GATEWAY_PORT"}
+    clash = {n: p for n, p in isolated.items() if n in ports and p in ports.values()}
+    assert not clash, clash
 
 
-def test_a_lane_reaches_its_own_models_service_whatever_the_copied_env_names(tmp_path: Path) -> None:
+def test_the_isolated_stack_reaches_its_own_models_service_whatever_the_copied_env_names(tmp_path: Path) -> None:
     shared = {"OPS_MODELS_URL": "http://127.0.0.1:8730", "OPS_MODELS_FAKE_OPENAI_URL": "http://127.0.0.1:8746/v1"}
-    values = stack_values(tmp_path, "OPS_LANE=3", env=shared)
+    values = stack_values(tmp_path, "ISOLATED=1", env=shared)
     assert values["OPS_MODELS_URL"] == f"http://127.0.0.1:{values['OPS_MODELS_PORT']}" != shared["OPS_MODELS_URL"]
     assert values["OPS_MODELS_FAKE_OPENAI_URL"] == f"http://127.0.0.1:{values['OPS_FAKE_OPENAI_PORT']}/v1"
 
 
 def test_a_test_cannot_stop_or_migrate_the_shared_stack() -> None:
     for goal in ("db-down", "down", "migrate", "reset-db"):
-        out = dry_run(goal, "OPS_LANE=0", "CONFIRM=yes", env={"PYTEST_CURRENT_TEST": "probe"})
+        out = dry_run(goal, "CONFIRM=yes", env={"PYTEST_CURRENT_TEST": "probe"})
         assert out.returncode != 0 and "refused" in out.stderr, (goal, out.stdout + out.stderr)
         assert "compose" not in out.stdout, (goal, out.stdout)

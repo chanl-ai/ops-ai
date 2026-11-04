@@ -5,9 +5,10 @@ calls)."""
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, Any
 
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, Query, Response
@@ -16,6 +17,7 @@ from fastapi.responses import JSONResponse
 
 from ops_access import can
 from ops_identity import Auth, CurrentCaller, CurrentTenantCaller, ServiceClient, install_auth
+from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.http import (
     Envelope,
     ListResult,
@@ -27,6 +29,8 @@ from ops_service_kit.http import (
     operation_id,
 )
 from ops_service_kit.settings import Settings
+from ops_store.background import LOCAL as LOCAL_BEATS
+from ops_store.background import report as background_report
 from ops_store.team_scope import acting_team_of, set_acting_team
 
 from .agents import AgentDirectory, AgentsUsage
@@ -187,6 +191,11 @@ def create_kb_app(
         if not await reachable(engine):
             return JSONResponse({"status": "degraded", "reason": "database"}, status_code=503)
         return {"status": "ok"}
+
+    @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
+    async def health_background() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+        """This service's background processes and their state; counts and error types only, no record's data."""
+        return {"processes": background_report(await LOCAL_BEATS.read(), "kb", time.time())}
 
     kbs = APIRouter(prefix="/v1/knowledge-bases", tags=["knowledge-bases"], responses=errors)
 

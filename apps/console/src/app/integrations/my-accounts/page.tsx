@@ -9,14 +9,14 @@ import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { EmptyState } from '@/components/shared/empty-state';
 import { QueryError } from '@/components/shared/query-states';
 import { Row, Rows, Section } from '@/components/shared/surface';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AppsTabs } from '@/components/connections/apps-tabs';
 import { OwnCredentialsForm } from '@/components/connections/own-credentials-form';
-import { openSignIn } from '@/components/connections/sign-in';
+import { useSignInWindow } from '@/components/connections/sign-in';
 import { DialogShell } from '@/components/shared/dialog-shell';
-import { useConnectionKinds, useDisconnect, useMyConnections, useStartSignIn } from '@/hooks/connections-queries';
+import { useConnectionKinds, useDisconnect, useMyConnections, useRefreshMine, useStartSignIn } from '@/hooks/connections-queries';
 import { useTeam } from '@/hooks/use-team';
 import { shortDate } from '@/lib/format';
 import type { MyConnection } from '@/lib/types/connections';
@@ -29,17 +29,29 @@ function useNoun(c: MyConnection): string {
   return (fields.find((f) => f.name === secret)?.label ?? c.personFields.at(-1) ?? 'key').toLowerCase();
 }
 
-/** An OAuth connection the person has not connected: their own sign-in opens in a window, as from the chat. */
+/**
+ * An OAuth account the person has not connected: their own sign-in opens in a window, as from the chat. Starting it
+ * needs the account's app, so the button waits for a row that names it.
+ */
 function ConnectButton({ c, label = 'Connect' }: { c: MyConnection; label?: string }) {
-  const start = useStartSignIn(c.connectionId);
+  const start = useStartSignIn();
+  const refresh = useRefreshMine();
+  const signIn = useSignInWindow({
+    onConnected: () => (toast.success(`${c.connection} is connected`), refresh()),
+    onFailed: (why) => toast.error(`Couldn’t connect ${c.connection}`, { description: why }),
+  });
   return (
     <Button
       size="sm"
-      onClick={async () => {
-        const begun = await start.mutateAsync({ environment: c.environment });
-        openSignIn(begun, c.connectionId);
+      onClick={() => {
+        // Opened in the click, before the call that starts the sign-in, so a pop-up blocker lets it through.
+        if (!c.appId) return;
+        const account = { appId: c.appId, accountId: c.connectionId };
+        const w = signIn.open(c.connection);
+        if (!w) return;
+        start.mutate({ ...account, account: 'self' }, { onSuccess: (s) => w.go(s, account), onError: (e) => w.fail(e.message) });
       }}
-      disabled={start.isPending}
+      disabled={start.isPending || !c.appId}
       data-testid={`connect-${c.connectionId}`}
     >
       {label}
@@ -69,7 +81,7 @@ function Controls({ c, onEnd, onGive }: { c: MyConnection; onEnd: () => void; on
       ) : (
         <Badge variant="secondary">Connected</Badge>
       )}
-      {c.refused && !keyed && <ConnectButton c={c} label="Reconnect" />}
+      {(c.refused || c.test?.status === 'failed') && !keyed && <ConnectButton c={c} label="Reconnect" />}
       {keyed && (
         <Button variant="outline" size="sm" onClick={onGive} data-testid={`replace-own-${c.connectionId}`}>
           Replace {noun}
@@ -88,21 +100,24 @@ function describe(c: MyConnection): string {
   if (c.refused) {
     const when = c.refusedAt ? ` ${shortDate(c.refusedAt)}` : '';
     const what = c.personFields.length ? `refused${when}` : `sign-in expired${when}`;
-    return [c.method, what, c.refusedReason, c.environment].filter(Boolean).join(' · ');
+    return [c.method, what, c.refusedReason].filter(Boolean).join(' · ');
   }
+  // Signed in, but the test call after it failed: the account stays connected and says why.
+  if (c.test?.status === 'failed') return `Signed in, but a test call failed: ${c.test.message || 'no reason given'}`;
   // A sign-in reads as the My accounts frame: whom it is connected as and since when; a key keeps its method first.
-  if (!c.personFields.length) return [`Connected as ${c.account ?? 'an unnamed account'}${c.since ? ` on ${shortDate(c.since)}` : ''}`, c.environment].join(' · ');
+  if (!c.personFields.length) return `Connected as ${c.account ?? 'an unnamed account'}${c.since ? ` on ${shortDate(c.since)}` : ''}`;
   const when = c.since ? `set ${shortDate(c.since)}` : null;
-  return [c.method, c.account, when, c.environment].filter(Boolean).join(' · ');
+  return [c.method, c.account, when].filter(Boolean).join(' · ');
 }
 
 /**
- * My accounts (in the Apps menu): every app of the current team that this person may connect
- * as themselves, each with its state and the control its method takes; the list and each state come from the service.
+ * My accounts (in the Apps menu): the apps this person connected with their own login, each
+ * with its logo, when, its state and the control its method takes; the list and each state come from the service.
+ * An app they have not connected is connected from its page or from a chat that asks for it.
  */
 function MyAccountsPage() {
   const { team } = useTeam();
-  const mine = useMyConnections(true);
+  const mine = useMyConnections();
   const disconnect = useDisconnect();
   const [ending, setEnding] = React.useState<MyConnection | null>(null);
   const [giving, setGiving] = React.useState<MyConnection | null>(null);
@@ -119,18 +134,29 @@ function MyAccountsPage() {
   ) : mine.isError ? (
     <QueryError what="your accounts" onRetry={() => void mine.refetch()} retrying={mine.isFetching} error={mine.error} testId="my-connections-error" />
   ) : !mine.data.length ? (
-    <EmptyState icon={Plug} title="You haven’t connected any apps yet" description="Connect my account on an app’s page, or from a chat that asks for it." testId="my-connections-empty" />
+    <EmptyState
+      icon={Plug}
+      title="None yet"
+      description="Connect my account on an app’s page, or from a chat that asks for it."
+      action={{ label: 'Go to Apps', href: '/integrations' }}
+      testId="my-connections-empty"
+    />
   ) : (
     <Rows testId="my-connections">
       {mine.data.map((c) => (
         <Row
-          key={`${c.connectionId}:${c.environment}`}
+          key={c.connectionId}
           wrap
-          leading={<Plug className="size-4 text-muted-foreground" />}
+          leading={
+            <Avatar className="size-8 rounded-md">
+              {c.logo && <AvatarImage src={c.logo} alt="" />}
+              <AvatarFallback className="rounded-md text-xs font-semibold">{c.app.slice(0, 2).toUpperCase()}</AvatarFallback>
+            </Avatar>
+          }
           title={
             <span className="flex flex-wrap items-center gap-2">
-              {c.connection}
-              {c.environment === 'test' && <Badge variant="outline">Test</Badge>}
+              {c.app}
+              {c.sandbox && <Badge variant="outline">Sandbox</Badge>}
             </span>
           }
           description={describe(c)}
@@ -145,7 +171,6 @@ function MyAccountsPage() {
       icon={UserRound}
       title="My accounts"
       description={`The apps you connected with your own account in ${team?.name ?? 'this team'}. Tools you run, and agents acting for you, use them.`}
-      tabs={<AppsTabs />}
     >
       <Section flush>{body}</Section>
       <DialogShell
@@ -159,7 +184,6 @@ function MyAccountsPage() {
           <OwnCredentialsForm
             connectionId={giving.connectionId}
             connection={giving.connection}
-            environment={giving.environment}
             authKind={giving.authKind}
             personFields={giving.personFields}
             docsUrl={giving.docsUrl}
@@ -184,7 +208,7 @@ function MyAccountsPage() {
         isLoading={disconnect.isPending}
         onConfirm={async () => {
           if (!ending) return;
-          await disconnect.mutateAsync({ connectionId: ending.connectionId, environment: ending.environment });
+          await disconnect.mutateAsync(ending.connectionId);
           toast.success(`Disconnected from ${ending.connection}`);
           setEnding(null);
         }}

@@ -76,7 +76,7 @@ await withUiStack(
 
       // 1. The module list warns that a secret its operations read is not set.
       await step('1 the module list says one secret is not set', async () => {
-        await page.goto(`${consoleUrl}/tools`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await page.goto(`${consoleUrl}/tools/custom`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const warn = page.getByTestId(`unset-secrets-${id}`);
         const shown = await warn.waitFor({ timeout: 60_000 }).then(() => true, () => false);
         check('1 the module list says one secret is not set', shown && (await warn.innerText()) === '1 secret not set', { shown, text: shown ? await warn.innerText() : null });
@@ -161,7 +161,7 @@ await withUiStack(
         await sheet(READ);
         await policy();
         const set = await page.getByTestId('op-secrets').getByText('Set', { exact: true }).waitFor({ timeout: 30_000 }).then(() => true, () => false);
-        await page.goto(`${consoleUrl}/tools`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await page.goto(`${consoleUrl}/tools/custom`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByRole('row', { name: new RegExp(`Rates ${TAG}`) }).waitFor({ timeout: 60_000 });
         const warning = await page.getByTestId(`unset-secrets-${id}`).count();
         check('7 setting the secret clears both warnings', set && warning === 0, { set, warning });

@@ -206,16 +206,19 @@ how the platform is secured, how to deploy and run it, and which parts are built
       <li><a href="#overview"><span class="n">1</span>Overview</a></li>
       <li><a href="#system-components"><span class="n">2</span>System components</a></li>
       <li><a href="#how-work-flows"><span class="n">3</span>How work flows</a></li>
-      <li><a href="#apps"><span class="n">4</span>Apps</a></li>
-      <li><a href="#data-and-database"><span class="n">5</span>Data and database</a></li>
-      <li><a href="#security-and-governance"><span class="n">6</span>Security and governance</a></li>
-      <li><a href="#models"><span class="n">7</span>Models</a></li>
-      <li><a href="#deployment-options"><span class="n">8</span>Deployment options</a></li>
-      <li><a href="#install"><span class="n">9</span>Install</a></li>
-      <li><a href="#operate"><span class="n">10</span>Operate</a></li>
-      <li><a href="#azure-sql"><span class="n">11</span>Azure SQL</a></li>
-      <li><a href="#whats-built-today"><span class="n">12</span>What's built today</a></li>
-      <li><a href="#support"><span class="n">13</span>Support</a></li>
+      <li><a href="#build-with-ops-ai"><span class="n">4</span>Build with Ops AI</a></li>
+      <li><a href="#workflows"><span class="n">5</span>Workflows</a></li>
+      <li><a href="#agents"><span class="n">6</span>Agents</a></li>
+      <li><a href="#apps"><span class="n">7</span>Apps</a></li>
+      <li><a href="#data-and-database"><span class="n">8</span>Data and database</a></li>
+      <li><a href="#security-and-governance"><span class="n">9</span>Security and governance</a></li>
+      <li><a href="#models"><span class="n">10</span>Models</a></li>
+      <li><a href="#deployment-options"><span class="n">11</span>Deployment options</a></li>
+      <li><a href="#install"><span class="n">12</span>Install</a></li>
+      <li><a href="#operate"><span class="n">13</span>Operate</a></li>
+      <li><a href="#azure-sql"><span class="n">14</span>Azure SQL</a></li>
+      <li><a href="#whats-built-today"><span class="n">15</span>What's built today</a></li>
+      <li><a href="#support"><span class="n">16</span>Support</a></li>
     </ol>
   </nav>
 
@@ -348,7 +351,8 @@ console image is about 440 MB.</p>
 <p>Three flows cover most of what Ops AI does: a person chats with an agent that wants to change something, a workflow
 pauses for a person and resumes days later, and an email becomes cases that people decide. In each one the same three
 rules hold: a write waits for an approval bound to its exact input, every outside call leaves through a gateway, and a
-run&#39;s state is saved after every step so a crash or a restart loses nothing.</p>
+run&#39;s state is saved after every step so a crash or a restart loses nothing. Developers who want runnable folders start
+at <a href="#build-with-ops-ai">build-with-ops-ai.md</a>.</p>
 <h3 id="how-work-flows-a-chat-turn-with-a-tool-approval">A chat turn with a tool approval</h3>
 <p>A member of the operations team asks the team&#39;s agent to place a hold on an account. Reading is free; the hold is a
 write, so the agent drafts it and a person approves it before anything reaches the core system.</p>
@@ -396,13 +400,183 @@ Each debtor gets a case whatever happens to the others, and an unmatched debtor 
 and a customer summary built from the core system and an agent.</p>
 </section>
 
+<section id="build-with-ops-ai" aria-labelledby="build-with-ops-ai-h">
+<h2 id="build-with-ops-ai-h"><span class="n">4</span>Build with Ops AI</h2>
+<p>A developer starts with one message, one search, and one read. Agents and workflows come next. The two public bridges come after those. Approvals, roles and evaluations come last.</p>
+<h3 id="build-with-ops-ai-the-ladder">The ladder</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Level</th><th>What you do</th><th>Folder</th></tr></thead>
+<tbody>
+<tr><td>Chat</td><td>Send one message and read the reply</td><td><code>examples/chat/01-ask-once/</code></td></tr>
+<tr><td>Knowledge</td><td>Add one page and search it</td><td><code>examples/knowledge/01-search-a-page/</code></td></tr>
+<tr><td>Tool</td><td>Call one read operation</td><td><code>examples/tools/01-find-a-customer/</code></td></tr>
+<tr><td>Agent</td><td>Ask a published agent</td><td><code>examples/agents/01-answer-from-instructions/</code></td></tr>
+<tr><td>Workflow</td><td>Validate and run three nodes</td><td><code>examples/workflows/01-normalize-a-request/</code></td></tr>
+<tr><td>Workflow asks agent</td><td>An Agent step calls a published agent</td><td><code>examples/compositions/01-workflow-asks-agent/</code></td></tr>
+<tr><td>Agent starts workflow</td><td>Chat calls a published workflow</td><td><code>examples/compositions/02-agent-starts-workflow/</code></td></tr>
+</tbody></table></div>
+<p>Full manuals: <a href="#workflows">workflows.md</a> and <a href="#agents">agents.md</a>. Architecture and trust rules stay in <a href="#how-work-flows">how-work-flows.md</a>.</p>
+<h3 id="build-with-ops-ai-two-bridges">Two bridges</h3>
+<p>Agents and workflows stay separate systems. They meet only through public APIs.</p>
+<p>A workflow Agent step names a published agent and maps the prompt. The workflow receives the agent&#39;s final answer.</p>
+<p>An agent&#39;s published tool list may contain <code>workflow:&lt;id&gt;</code>. A call starts that workflow&#39;s live version on behalf of the signed-in person.</p>
+<p>The first composition folders use the citing agent and the three-node workflow. Money movement and human review come later.</p>
+<h3 id="build-with-ops-ai-one-checkout">One checkout</h3>
+<div class="cmd"><pre><code>make install
+make up DEMO_MODEL=fake
+make sample-team</code></pre></div>
+<p>Then one folder-local command:</p>
+<div class="cmd"><pre><code>uv run python examples/workflows/01-normalize-a-request/setup.py
+ops workflows validate examples/workflows/01-normalize-a-request
+ops workflows test examples/workflows/01-normalize-a-request</code></pre></div>
+<h3 id="build-with-ops-ai-artifact-words">Artifact words</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Word</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td>Example</td><td>A teaching folder under <code>examples/</code></td></tr>
+<tr><td>Seed</td><td>Demo data a local stack starts with</td></tr>
+<tr><td>Use case</td><td>Acceptance evidence under <code>docs/usecases/</code></td></tr>
+<tr><td>Guide</td><td>These pages</td></tr>
+</tbody></table></div>
+<p>Seeds are not the developer catalog. The generated <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/skills/wf-builder/examples.md">wf-builder seed page</a> is seed topology.</p>
+<p>Example helpers and comments name the folder or the published id. They do not cite a card or a board slice. A public checkout has no board.</p>
+<h3 id="build-with-ops-ai-surfaces">Surfaces</h3>
+<p>Python, TypeScript and <code>ops</code> expose the same lifecycle: validate, apply, publish, run in test mode, inspect, evaluate an agent. Replay, workflow evaluation and the Agent Run API stay <span class="b b-plan">Planned</span> on <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/developer-surface-coverage.md">developer-surface-coverage.md</a>.</p>
+</section>
+
+<section id="workflows" aria-labelledby="workflows-h">
+<h2 id="workflows-h"><span class="n">5</span>Workflows</h2>
+<p>A workflow is a reviewed typed graph. A developer authors YAML, validates it, stores a draft, publishes a version, and starts a test run. The console can show the same graph. It is not required.</p>
+<h3 id="workflows-lifecycle">Lifecycle</h3>
+<div class="cmd"><pre><code>ops workflows validate workflow.yaml
+ops workflows apply workflow.yaml
+ops workflows publish &lt;id&gt; --note &quot;Ready&quot;
+ops workflows run &lt;id&gt; --input input.json --wait
+ops workflows inspect &lt;run-id&gt;</code></pre></div>
+<p>Python:</p>
+<div class="cmd"><pre><code>from ops_ai import OpsAI
+
+ops = OpsAI()
+check = ops.workflows.validate(&quot;workflow.yaml&quot;)
+check.raise_for_errors()
+draft = ops.workflows.apply(&quot;workflow.yaml&quot;)
+ops.workflows.publish(draft[&quot;workflowId&quot;], note=&quot;Ready&quot;)
+run = ops.workflows.run(draft[&quot;workflowId&quot;], input={&quot;customerEmail&quot;: &quot;ada@example.test&quot;}, wait=True)</code></pre></div>
+<p>TypeScript uses the same method names on <code>ops.workflows</code> with a parsed object or JSON.</p>
+<p>New runs default to <code>mode=&quot;test&quot;</code>. Live effects need <code>mode=&quot;live&quot;</code> or <code>--live</code>.</p>
+<h3 id="workflows-what-a-definition-is">What a definition is</h3>
+<p>Schema v2 JSON or YAML: <code>id</code>, <code>name</code>, <code>nodes[]</code>, <code>connections[]</code>. Each node has <code>type</code>, <code>typeVersion</code>, <code>parameters</code>, and a stable <code>id</code>. Connections name those ids and ports.</p>
+<p><code>GET /v1/workflows/node-types</code> lists types, ports and parameter schemas. <code>ops workflows types</code> prints the same catalog.</p>
+<h3 id="workflows-debugging">Debugging</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Failure</th><th>Where it appears</th><th>What to do</th></tr></thead>
+<tbody>
+<tr><td>Invalid graph</td><td><code>validate</code> checks, each with <code>path</code>, <code>code</code>, <code>message</code>, <code>suggestion</code></td><td>Fix the named node or field</td></tr>
+<tr><td>Draft not live</td><td>409 <code>not_live</code> on a live run</td><td>Publish first</td></tr>
+<tr><td>Step refused</td><td><code>run.error</code> and <code>run.failure.nodeId</code></td><td>Fix the tool, mapping or input</td></tr>
+<tr><td>Waiting on a person</td><td><code>status=waiting</code> and <code>taskId</code></td><td><code>ops workflows decide &lt;task-id&gt; approve</code></td></tr>
+<tr><td>Start schema</td><td>422 on <code>POST /v1/runs</code></td><td>Send the request trigger&#39;s required fields</td></tr>
+</tbody></table></div>
+<p><code>ops workflows replay</code> and <code>fork</code> are <span class="b b-plan">Planned</span>. <code>ops workflows retry</code> retries a stuck run from its last recorded step.</p>
+<h3 id="workflows-examples">Examples</h3>
+<p>Copy a folder from <code>examples/workflows/</code>. Pass the folder to the generic commands. The product does not list these folders.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Folder</th><th>Outcome</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td><code>01-normalize-a-request</code></td><td>Map support fields to a canonical shape</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>02-route-a-support-message</code></td><td>Classify a message onto a queue</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>03-email-customer-enrichment</code></td><td>Enrich a support email from read tools</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>04-draft-and-approve-a-reply</code></td><td>Draft a reply; approve sends, reject or timeout does not</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>05-reconcile-invoice-and-po</code></td><td>Merge two records and review disagreement</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>06-read-a-claim-and-open-a-case</code></td><td>Extract a claim and open a case</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>07-calculate-and-approve-a-hold</code></td><td>Cap, approve and place a hold</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>08-one-child-per-record</code></td><td>Trigger child workflows</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>09-wait-for-verification</code></td><td>Resume when a verification result arrives</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>10-schedule-an-sla-follow-up</code></td><td>Wait until a date, then a human task</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>11-purge-after-file-deleted</code></td><td>Purge derived data on <code>file.deleted</code> (system, event-started)</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>12-roles-refuse-a-start</code></td><td>Same W2 start refused without the cell, then passed with it</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>13-transform-a-record</code></td><td>Map one input field onto an output field</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>14-filter-a-list</code></td><td>Keep items that match a field predicate</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>15-retrieve-from-knowledge</code></td><td>Search the handbook and take found or notFound</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>16-send-a-message</code></td><td>Reply on the channel that started the run</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>17-repeat-until-done</code></td><td>Loop until a predicate holds, or stop at the cap</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>18-ask-a-person</code></td><td>Time out an ask with a zero deadline</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>19-fire-on-a-clock</code></td><td>A due tick starts one run</td><td><span class="b b-ok">Built</span></td></tr>
+</tbody></table></div>
+<p>Node coverage: <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/workflow-example-coverage.md">workflow-example-coverage.md</a>.</p>
+<h4 id="workflows-example-1-normalize-a-support-request">Example 1 — Normalize a support request</h4>
+<p>An app posts <code>customerEmail</code>, <code>subject</code> and <code>message</code>. Set fields emits <code>customer.email</code>, <code>title</code>, <code>body</code> and <code>source</code>. A missing email fails start validation.</p>
+<div class="cmd"><pre><code>ops workflows validate examples/workflows/01-normalize-a-request
+ops workflows apply examples/workflows/01-normalize-a-request
+ops workflows run normalize_support_request --input examples/workflows/01-normalize-a-request/fixtures/valid.json --wait</code></pre></div>
+<div class="cmd"><pre><code>ops.workflows.run(
+    &quot;normalize_support_request&quot;,
+    input={&quot;customerEmail&quot;: &quot;ada@example.test&quot;, &quot;subject&quot;: &quot;Card&quot;, &quot;message&quot;: &quot;Where is my refund?&quot;},
+    wait=True,
+)</code></pre></div>
+<p>Nodes: <code>ops.trigger.request</code> → <code>ops.data.set</code> → <code>ops.flow.end</code>. No model, tool or person.</p>
+<h4 id="workflows-example-2-route-an-inbound-support-message">Example 2 — Route an inbound support message</h4>
+<p>Classify text onto a queue with one <code>ops.ai.classify</code> call. Categories are billing, technical and cancellation. Below the 0.6 floor the run leaves by <code>otherwise</code> and ends as <code>other</code>. A model answer outside the schema ends as <code>classify_failed</code>.</p>
+<div class="cmd"><pre><code>ops workflows validate examples/workflows/02-route-a-support-message
+ops workflows apply examples/workflows/02-route-a-support-message
+ops workflows run route_support_message --input examples/workflows/02-route-a-support-message/fixtures/billing.json --test --wait</code></pre></div>
+<div class="cmd"><pre><code>ops.workflows.run(
+    &quot;route_support_message&quot;,
+    input={&quot;text&quot;: &quot;I was charged twice this month.&quot;},
+    mode=&quot;test&quot;,
+    wait=True,
+)</code></pre></div>
+<p>Nodes: <code>ops.trigger.request</code> → <code>ops.ai.classify</code> → <code>ops.flow.end</code>. No tool, write or saved agent.</p>
+<p>The first roles lesson reuses this start: <a href="https://github.com/chanl-ai/ops-ai/blob/main/examples/workflows/12-roles-refuse-a-start/">12-roles-refuse-a-start</a>. A signed-in person without <code>workflows.edit</code> gets <code>403 role_required</code>. The same start succeeds for a person who has the cell. People are chosen through <code>can()</code>, not a role name.</p>
+<h4 id="workflows-later-examples">Later examples</h4>
+<p>Examples 2–11 live in the same tree. Each README points here. Example 2 spends one classify call. Example 3 fans an email into extract and a customer search, joins them, and asks a saved agent for a structured recommendation. Example 4 drafts a reply, waits for a person, and expires to <code>escalated</code> when the review times out. Example 7 is the hold path, also startable from assistant chat and from <code>workflow:calculate_account_hold</code>. Example 11 is the shipped system workflow on <code>file.deleted</code>: delete a file; do not start it by hand.</p>
+<p>AI nodes declare why they exist, their input, instruction, schema, model alias and fallback port in the folder README and in <code>evaluation.yaml</code> when present.</p>
+<h3 id="workflows-start-surfaces">Start surfaces</h3>
+<p>Request, hosted form (members-only in the console; a signed public link only when the embed app&#39;s origin is set), batch, mailbox, service event, parent workflow, Ops Assistant start card, specialist agent <code>workflow:&lt;id&gt;</code>, and a scoped API key are built. Signed webhook, schedule and poll stay <span class="b b-plan">Planned</span>.</p>
+</section>
+
+<section id="agents" aria-labelledby="agents-h">
+<h2 id="agents-h"><span class="n">6</span>Agents</h2>
+<p>An agent is a reviewed model configuration. It chooses steps inside allowed tools, knowledge, skills, guardrails and budgets. A workflow remains a typed graph. The two meet only through the public bridges on <a href="#build-with-ops-ai">build-with-ops-ai.md</a>.</p>
+<h3 id="agents-lifecycle">Lifecycle</h3>
+<div class="cmd"><pre><code>ops agents validate resources/agent.yaml
+ops agents apply resources/agent.yaml
+ops agents publish &lt;id&gt; --note &quot;Ready&quot;
+ops agents chat &lt;id&gt; --message &quot;What documents open a business account?&quot;
+ops agents test &lt;id&gt; --message &quot;What documents open a business account?&quot;</code></pre></div>
+<div class="cmd"><pre><code>from ops_ai import OpsAI
+
+ops = OpsAI()
+ops.agents.apply(&quot;resources/agent.yaml&quot;)
+ops.agents.chat(&quot;ag_guide&quot;, &quot;What documents open a business account?&quot;)</code></pre></div>
+<p><code>ops agents eval</code> scores dataset cases on a published agent. Stream, wait and background runs stay <span class="b b-plan">Planned</span> until the Agent Run API ships.</p>
+<h3 id="agents-examples">Examples</h3>
+<p>Foundation chat, search and the read tool come first. These folders reuse those resources.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Folder</th><th>Outcome</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td><code>01-answer-from-instructions</code></td><td>Ask one question</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>02-cite-the-handbook</code></td><td>Answer with a citation</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>03-look-up-a-customer</code></td><td>Call the read tool</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>04-draft-a-note-for-approval</code></td><td>Write waits for approval</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>05-follow-a-checklist</code></td><td>Skills and a blocked topic</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>06-narrow-one-conversation</code></td><td>Thread overrides</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>11-eval-a-known-customer</code></td><td>Score A3 look-up cases</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>07-start-customer-hold</code></td><td>workflow tool from chat</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>08-run-in-three-modes</code></td><td>Start stream, wait and background</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>09-delegate-to-a-specialist</code></td><td>Agent as a tool</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td><code>10-morning-held-wires</code></td><td>Scheduled job</td><td><span class="b b-ok">Built</span></td></tr>
+</tbody></table></div>
+<p>Coverage: <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/agent-example-coverage.md">agent-example-coverage.md</a>.</p>
+</section>
+
 <section id="apps" aria-labelledby="apps-h">
-<h2 id="apps-h"><span class="n">4</span>Apps</h2>
+<h2 id="apps-h"><span class="n">7</span>Apps</h2>
 <p>An App is something outside Ops AI that your agents and workflows work with. Each App brings Tools, the actions an agent
 or a workflow step can take with it, and some also bring Resources: agents, skills, workflows and document types your
 team can add as its own copies. An App signs in with an Account: the team&#39;s, or a person&#39;s own.</p>
 <h3 id="apps-the-apps-menu">The Apps menu</h3>
-<p>Open <strong>Apps</strong> in the sidebar. Four tabs sit at the top of every page in the menu.</p>
+<p>Open <strong>Data Hub › Apps</strong> in the sidebar. Four tabs sit at the top of every page in the menu.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Tab</th><th>What it holds</th></tr></thead>
 <tbody>
@@ -424,14 +598,29 @@ team can add as its own copies. An App signs in with an Account: the team&#39;s,
 </tbody></table></div>
 <p>An App is <strong>Connected</strong> only once an Account has signed in or a test has passed; saving settings alone does not count.
 A team admin turns an App on.</p>
+<h4 id="apps-the-first-time-a-team-turns-on-a-plugin39s-app">The first time a team turns on a plugin&#39;s App</h4>
+<p>An App a plugin brings (<a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/plugins.md">plugins guide</a>) needs two things before its card offers Connect, and its first
+Connect window asks for more than the steps above.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Who</th><th>What</th><th>Where</th></tr></thead>
+<tbody>
+<tr><td>Platform admin</td><td>Installs the plugin (its folder in the plugins folder, or pinned in the image); it is then offered to every team. Settings fixed for every team come from the install config</td><td><code>OPS_PLUGINS_DIR</code>, <code>deploy/plugins.json</code>, <code>OPS_PLUGIN_LOCKED</code></td></tr>
+<tr><td>Security admin</td><td>Lists the App&#39;s hosts, so its sign-in and calls may leave</td><td><strong>Settings › Security › Egress</strong>, Add host (and Add range for a host on a private network)</td></tr>
+<tr><td>Team admin</td><td>Presses <strong>Connect</strong></td><td>The window shows the App&#39;s settings (such as its API address), whose account calls use (the team&#39;s, each person&#39;s, or each person&#39;s with the team&#39;s as backup), the OAuth app (Ops AI&#39;s, or your own with its client ID and secret and the return address to register), and its sign-in address. <strong>Save and connect the team account</strong> opens the App&#39;s sign-in page</td></tr>
+</tbody></table></div>
+<p>The App&#39;s page is <strong>Data Hub › Apps</strong> then the App&#39;s name, at <code>/integrations/apps/plugin:&lt;plugin id&gt;</code>. One Connect is
+enough to use it everywhere: test runs and live runs both sign in with the account you connected.</p>
 <h3 id="apps-accounts-the-team39s-and-your-own">Accounts: the team&#39;s and your own</h3>
 <p>The App&#39;s page lists its Accounts.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Account</th><th>What it is</th></tr></thead>
 <tbody>
-<tr><td>Team account</td><td>Anyone in the team can run Tools as it. The <strong>Default</strong> Account answers every call that names no other</td></tr>
+<tr><td>Team account</td><td>Anyone in the team can run Tools as it. The <strong>Default</strong> Account answers every live call that names no other</td></tr>
 <tr><td>Your account</td><td>Your own sign-in. Tools you run, and agents acting for you, use it. Press <strong>Connect my account</strong> to add it</td></tr>
+<tr><td>Sandbox account</td><td>Marked <strong>Sandbox</strong>. Test runs use it: an agent&#39;s Test panel, a draft, and <strong>Real</strong> on a Tool&#39;s page. Live runs never do. Press <strong>Add a sandbox account</strong> to add one, for example a Salesforce sandbox org</td></tr>
 </tbody></table></div>
+<p>Without a sandbox account, a test run signs in with the live account. It can read, but every write it makes waits for
+a person to approve it first, so testing never changes live data unseen.</p>
 <ul>
 <li><strong>Connect another account</strong> adds a second Account of the same App, under its own name, for example a second region.
 A step or a call names it to use it.</li>
@@ -456,8 +645,8 @@ team, and <strong>New tool</strong> makes one of your own:</p>
 such as <code>/accounts/{id}</code>.</li>
 <li>Write the request on the Tool&#39;s page and press <strong>Run</strong> in <strong>Mock</strong>: it answers from the Tool&#39;s mock answers and sends
 nothing.</li>
-<li>Once the Tool is published, <strong>Real</strong> sends the request through the App&#39;s Account and shows exactly what was sent,
-with every key hidden.</li>
+<li>Once the Tool is published, <strong>Real</strong> sends the request as a test run, through the App&#39;s sandbox account when it has
+one, else its live account, and shows exactly what was sent, with every key hidden.</li>
 </ol>
 <p>A key typed into a Tool&#39;s own header is refused when you save: the App&#39;s Account signs every call. A viewer can open a
 Tool&#39;s page and run it, but not change it.</p>
@@ -506,7 +695,7 @@ that uses its Tools before anything stops. The App&#39;s Accounts and the Resour
 </section>
 
 <section id="data-and-database" aria-labelledby="data-and-database-h">
-<h2 id="data-and-database-h"><span class="n">5</span>Data and database</h2>
+<h2 id="data-and-database-h"><span class="n">8</span>Data and database</h2>
 <p>Ops AI keeps everything in one PostgreSQL database. Each of the seven services owns its own tables, applies its own
 migration history and connects with its own login, which can read and write rows in that service&#39;s tables and nothing
 else. File bytes live outside the database, on a volume or in object storage.</p>
@@ -583,7 +772,7 @@ may not update or delete. A tamper-evident hash chain and export to WORM storage
 </section>
 
 <section id="security-and-governance" aria-labelledby="security-and-governance-h">
-<h2 id="security-and-governance-h"><span class="n">6</span>Security and governance</h2>
+<h2 id="security-and-governance-h"><span class="n">9</span>Security and governance</h2>
 <p>Ops AI is built so that software can draft any change and only a person can let one through. The controls below are
 layered: who you are (sign-in), what you may do in a team (roles), what a single write needs (approvals), where a call
 may go (the gateways and the allow-list), and what is kept as evidence (audit).</p>
@@ -621,6 +810,7 @@ delete, run, decide, manage). Every check in every service goes through that gri
 <tbody>
 <tr><td>The six built-in roles, seeded per tenant, and the grid behind them</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>A page that shows each role&#39;s grid and why an action is refused</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td>Example: W2 start refused without the cell, then passed with it</td><td><span class="b b-ok">Built</span> (<a href="https://github.com/chanl-ai/ops-ai/blob/main/examples/workflows/12-roles-refuse-a-start/">12-roles-refuse-a-start</a>)</td></tr>
 <tr><td>Custom roles built from the grid</td><td><span class="b b-plan">Planned</span></td></tr>
 </tbody></table></div>
 <h3 id="security-and-governance-approvals">Approvals</h3>
@@ -643,12 +833,12 @@ credentials and open no connections of their own.</p>
 <thead><tr><th>Control</th><th>What holds</th><th>Status</th></tr></thead>
 <tbody>
 <tr><td>Registry</td><td>Operations come from tool modules: imported from OpenAPI 3.0 or 3.1, discovered from an MCP server, or written by a builder. A module&#39;s major change opens a Security review; calls keep the published shape until the new version is published</td><td><span class="b b-ok">Built</span></td></tr>
-<tr><td>Connections</td><td>How the platform signs in to a system, per test and production: API key, basic or bearer, OAuth client credentials, OAuth authorization code with PKCE, either OAuth kind proving the app with a signed client assertion instead of a secret, a signed service-account JWT grant (DocuSign, Google), client certificate (mutual TLS). The signing key is sealed like a client secret and never read back; reads show the certificate&#39;s thumbprint and expiry. Tokens are stored encrypted and refreshed one at a time</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td>Connections</td><td>How the platform signs in to a system, one account at a time: API key, basic or bearer, OAuth client credentials, OAuth authorization code with PKCE, either OAuth kind proving the app with a signed client assertion instead of a secret, a signed service-account JWT grant (DocuSign, Google), client certificate (mutual TLS). The signing key is sealed like a client secret and never read back; reads show the certificate&#39;s thumbprint and expiry. Tokens are stored encrypted and refreshed one at a time</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Each person signing in to a system with their own account</td><td>A run would use only the token of the person it acts for</td><td><span class="b b-plan">Planned</span></td></tr>
-<tr><td>Test and production</td><td>Live runs and chats call production; tests call the test environment, and writes in a test always answer from the operation&#39;s mock</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td>Test and live runs</td><td>Live runs and chats use an app&#39;s default account; test runs use its sandbox account when it has one, and writes in a test always answer from the operation&#39;s mock</td><td><span class="b b-ok">Built</span> sandbox accounts are behind a feature flag</td></tr>
 <tr><td>Outbound allow-list</td><td>HTTPS only, to hosts on your tenant&#39;s list. Every address a host resolves to is checked inside the connection, so DNS cannot be used to redirect a call. Private ranges are allowed only when listed; loopback, link-local and cloud metadata addresses never. No redirects are followed and no cookies kept. The list starts empty: nothing is reachable until a Security admin adds a host</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Your internal certificate authority</td><td>Trusted for outbound calls when you provide its certificate</td><td><span class="b b-ok">Built</span></td></tr>
-<tr><td>MCP for AI assistants</td><td>Your team&#39;s read tools served over MCP through the same gateway, to a person or an API key of that team</td><td><span class="b b-part">Partial</span> reads only, test environment</td></tr>
+<tr><td>MCP for AI assistants</td><td>Your team&#39;s read tools served over MCP through the same gateway, to a person or an API key of that team</td><td><span class="b b-part">Partial</span> reads only, as test runs</td></tr>
 <tr><td>Code tools</td><td>Transforms and formulas run in a bounded child process with no network or files; no general code runtime</td><td><span class="b b-part">Partial</span></td></tr>
 </tbody></table></div>
 <h3 id="security-and-governance-secrets">Secrets</h3>
@@ -658,6 +848,7 @@ credentials and open no connections of their own.</p>
 <tr><td>Credentials for your systems</td><td>Entered once by a Security admin in the console; encrypted with AES-256-GCM under <code>OPS_SECRETS_KEY</code>, bound to the tenant and the credential&#39;s name; never returned by any API; scrubbed from answers and logs; every create, rotate, delete and use audited; limited to the teams it is shared with</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>The model provider&#39;s key</td><td>Saved by an account admin on Settings &gt; Model providers, encrypted by the AI gateway and read by it alone at call time; no team sees it. Outside development the AI gateway refuses provider keys from its environment</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Storage credentials</td><td>Sealed with the same key</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td>Where credential values are kept</td><td>Every value above, and each person&#39;s own sign-ins and the model provider keys, is written and read through one credential store; each row keeps only its reference. By default (<code>OPS_CREDENTIAL_STORE=sealed</code>) the reference is the value sealed into the row, so nothing is held outside the database. Keeping values in your own key vault is a new adapter behind the same store, with no change to tables or callers</td><td>Store built; vault adapter planned</td></tr>
 <tr><td>Installation keys</td><td>One signing key per service, the sign-in token key, the approval key and the secrets key, generated at install. Each service receives only the keys it uses; each may be a file under <code>/run/secrets</code></td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>A hardware or cloud key manager for these keys</td><td></td><td><span class="b b-plan">Planned</span></td></tr>
 </tbody></table></div>
@@ -689,7 +880,7 @@ Details and status are in <a href="#data-and-database-the-audit-trail">Data and 
 </section>
 
 <section id="models" aria-labelledby="models-h">
-<h2 id="models-h"><span class="n">7</span>Models</h2>
+<h2 id="models-h"><span class="n">10</span>Models</h2>
 <p>Every model call in Ops AI, from an agent&#39;s turn, a workflow&#39;s AI step or a document read, goes through one internal
 service: the AI gateway (models-service). It knows which key is calling, what that key may still spend, which model a
 name points at, and how sensitive the data is that the model may receive. Services hold a model key; none holds your
@@ -739,10 +930,19 @@ refused by an alias not cleared for them, and every call records how many it car
 fixed rules: plain text, or a tool call when a rule matches the message. It calls no provider and costs nothing. Use
 it to try the platform before your model endpoint is ready, and for automated checks; it is not for production. The
 automated use cases of each release run on it, so no real model call is made in testing.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>It answers</th><th>When</th></tr></thead>
+<tbody>
+<tr><td>A rule&#39;s tool call or text</td><td>The person&#39;s message matches a rule&#39;s <code>when</code> pattern and the rule&#39;s tool is offered. A development stack reads its rules from <code>services/models-service/seed/demo-fake-openai/script.json</code>; each rule is <code>{when, tool, arguments}</code> or <code>{when, text}</code>, with <code>after</code> and <code>result</code> to chain a step after a tool&#39;s result</td></tr>
+<tr><td>A call of the tool named</td><td>No rule matches and the message says <code>call &lt;tool&gt;</code> for a tool the agent holds: <code>call &lt;tool&gt; {json}</code> calls it with that JSON object as its input, <code>call &lt;tool&gt;</code> alone with none. Arguments that are not one JSON object are answered as text saying so</td></tr>
+<tr><td>The gist of a tool&#39;s result</td><td>The last message is a tool&#39;s result and no rule follows it</td></tr>
+<tr><td>A sentence naming the agent and the message</td><td>Anything else</td></tr>
+</tbody></table></div>
+<p>A new tool needs no rule to be tried: <code>call &lt;tool&gt; {json}</code> in a chat with an agent that holds it.</p>
 </section>
 
 <section id="deployment-options" aria-labelledby="deployment-options-h">
-<h2 id="deployment-options-h"><span class="n">8</span>Deployment options</h2>
+<h2 id="deployment-options-h"><span class="n">11</span>Deployment options</h2>
 <p>The same images run in every layout. What changes is how they are started, how secrets reach them and where the bytes
 of files are kept. PostgreSQL is always yours, outside the containers.</p>
 <div class="table-wrap"><table>
@@ -792,7 +992,7 @@ workload and watch the work queue and database load (<a href="#operate-what-to-w
 </section>
 
 <section id="install" aria-labelledby="install-h">
-<h2 id="install-h"><span class="n">9</span>Install</h2>
+<h2 id="install-h"><span class="n">12</span>Install</h2>
 <p>One script installs Ops AI on a machine with Docker from a clone of the repository, asks a few questions, checks the
 result, and later upgrades, backs up, restores and reports on the same install (<a href="#operate">Operate</a>). It pulls the
 published images by default; a release&#39;s offline image file, or a build from source, serves a machine with no
@@ -877,6 +1077,7 @@ start. Change it, then restart the services (<code>./install.sh</code> on a runn
 <tr><td><code>mcp_gateway</code></td><td>The address outside assistants (Claude, Cursor, Copilot) use to reach a team&#39;s tools, <code>/mcp/{env}/{team}</code>, and the console&#39;s MCP channel. Off, <code>/mcp</code> answers 404 <code>feature_off</code></td></tr>
 <tr><td><code>tool_search</code></td><td>Agents with more tools than <code>OPS_TOOL_SEARCH_ABOVE</code> search for the one they need</td></tr>
 <tr><td><code>several_accounts</code></td><td>A team connects several named accounts of one app (a second Salesforce org), and a tool or step names the one it uses. Off, each app has one account and naming one is refused</td></tr>
+<tr><td><code>sandbox_accounts</code></td><td>A team admin adds a sandbox account to an app from its page, which test runs sign in with. Off, the app page offers no sandbox account</td></tr>
 </tbody></table></div>
 <p>The list above is a copy for reading; the registry is <code>packages/ops_service_kit/src/ops_service_kit/flags.py</code>, and
 <code>docker compose</code>, the Kubernetes overlay (<code>ops-origin</code>) and Fly (<code>[env]</code>) each pass <code>OPS_FLAGS</code> to every service. A name
@@ -973,7 +1174,7 @@ machine: they name the mirror&#39;s file URLs, so do not commit them.</p>
 </section>
 
 <section id="operate" aria-labelledby="operate-h">
-<h2 id="operate-h"><span class="n">10</span>Operate</h2>
+<h2 id="operate-h"><span class="n">13</span>Operate</h2>
 <p>How to check, upgrade, back up, restore and scale an Ops AI install. The install script&#39;s commands come first; the
 manual commands after them are the fallback, and the ones Kubernetes uses.</p>
 <p>Run the script&#39;s commands from the clone the install ran in; they read its settings from <code>ops-ai.env</code> there. In the
@@ -1101,7 +1302,7 @@ own versioning or replication.</p>
 </section>
 
 <section id="azure-sql" aria-labelledby="azure-sql-h">
-<h2 id="azure-sql-h"><span class="n">11</span>Azure SQL</h2>
+<h2 id="azure-sql-h"><span class="n">14</span>Azure SQL</h2>
 <div class="note warn"><p>Ops AI does not run on Azure SQL Database or SQL Server yet. The scripts below are ready for your DBA to review now,
 so the review can run in parallel with the remaining work. Install on PostgreSQL today; Azure Database for
 PostgreSQL Flexible Server is supported.</p>
@@ -1144,7 +1345,7 @@ sqlcmd -b -U ops_migrator -d ops -i grants.sql</code></pre></div>
 </section>
 
 <section id="whats-built-today" aria-labelledby="whats-built-today-h">
-<h2 id="whats-built-today-h"><span class="n">12</span>What's built today</h2>
+<h2 id="whats-built-today-h"><span class="n">15</span>What's built today</h2>
 <h3 id="whats-built-today-agents-and-chat">Agents and chat</h3>
 <div class="table-wrap"><table>
 <thead><tr><th>Capability</th><th>Status</th></tr></thead>
@@ -1185,7 +1386,7 @@ sqlcmd -b -U ops_migrator -d ops -i grants.sql</code></pre></div>
 <tr><td>Team mailboxes over IMAP, Gmail or Microsoft 365, with replies over SMTP, Microsoft Graph or a mail API, each message read once</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>A REST API for other systems, with API keys scoped to a team</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>A task API: another system opens a typed human task and reads the decision</td><td><span class="b b-ok">Built</span></td></tr>
-<tr><td>AI assistants calling the team&#39;s tools over MCP</td><td><span class="b b-part">Partial</span> read tools in the test environment</td></tr>
+<tr><td>AI assistants calling the team&#39;s tools over MCP</td><td><span class="b b-part">Partial</span> read tools, as test runs that use an app&#39;s sandbox account when it has one</td></tr>
 <tr><td>Webhooks to tell another system a run finished or is waiting</td><td><span class="b b-plan">Planned</span> callers poll today</td></tr>
 </tbody></table></div>
 <h3 id="whats-built-today-files-and-documents">Files and documents</h3>
@@ -1207,7 +1408,7 @@ sqlcmd -b -U ops_migrator -d ops -i grants.sql</code></pre></div>
 <thead><tr><th>Capability</th><th>Status</th></tr></thead>
 <tbody>
 <tr><td>Tool modules from OpenAPI 3.0 and 3.1, from an MCP server, or written in the console; versions and a Security review for major changes</td><td><span class="b b-ok">Built</span></td></tr>
-<tr><td>Connections per test and production: API key, basic, bearer, OAuth client credentials, OAuth authorization code, an app&#39;s signed client assertion in place of a secret, a signed service-account grant, client certificate</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td>App accounts, with a sandbox account for test runs: API key, basic, bearer, OAuth client credentials, OAuth authorization code, an app&#39;s signed client assertion in place of a secret, a signed service-account grant, client certificate</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Each person connecting their own Account of an App, used by the Tools they run and the agents acting for them</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>The Apps menu: the catalog, Connect in a small window, each App&#39;s page with its Accounts, Tools, Resources, Secrets, Usage and Settings, Credentials, My accounts, and Turn off (<a href="#apps">Apps</a>)</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>A run waiting for a person&#39;s own Account is a Human Task: Connect my account, or Run as the team account</td><td><span class="b b-ok">Built</span></td></tr>
@@ -1259,7 +1460,7 @@ sqlcmd -b -U ops_migrator -d ops -i grants.sql</code></pre></div>
 </section>
 
 <section id="support" aria-labelledby="support-h">
-<h2 id="support-h"><span class="n">13</span>Support</h2>
+<h2 id="support-h"><span class="n">16</span>Support</h2>
 <div class="table-wrap"><table>
 <thead><tr><th>Item</th><th>Detail</th></tr></thead>
 <tbody>

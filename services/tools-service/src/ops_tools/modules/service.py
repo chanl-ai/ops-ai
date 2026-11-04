@@ -16,7 +16,7 @@ import copy
 import json
 import re
 import time
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -43,7 +43,7 @@ from .. import mcp, transform
 from ..auth import Authenticator, AuthFailed, may_use
 from ..connections.records import auth_of, connection_base, module_auth, ref_of, sign_in_of, status_of
 from ..egress import EgressDenied, EgressPolicy, egress_client, for_tenant
-from ..environments import CONNECTION_ENVIRONMENTS, TEST
+from ..environments import TEST
 from ..executor import Trial, masked, secret_names
 from ..held_hosts import HostHeld, refused
 from ..limits import amount_refusal
@@ -60,7 +60,7 @@ from .executions import call_row
 from .policy import PublishPolicy, RequesterMayDecide, ToolsMode
 from .review_events import ACCESS_REQUESTED, access_event
 from .reviews import ReviewOpener
-from .seed import blank, kind_of, major_of, open_connection
+from .seed import blank, kind_of, major_of, open_connection, tool_title
 from .workflows import StaticWorkflows, WorkflowDirectory
 
 Traffic = dict[tuple[str, str | None], dict[str, Any]]
@@ -318,9 +318,12 @@ def sign_in_fits(module_sign_in: str, conn: dict[str, Any]) -> None:
 
 class ModuleService:
     # A plugin tool's display name, set once the plugin host is up (`PluginHost.title_of`); other modules have none.
-    titles: Callable[[dict[str, Any], str], str | None] | None = None
+    titles: Callable[[Mapping[str, Any], str], str | None] | None = None
     # The team's connection for a plugin's module (`PluginHost.team_connection`), set once the plugin host is up.
     team_connections: Callable[[str, str, Aggregate], Awaitable[str | None]] | None = None
+    # Whether a plugin tool's address waits for its account's sign-in (`PluginHost.awaits_sign_in`), set once the
+    # plugin host is up: the account then holds the sign-in host, which is not the tool's address.
+    awaits_sign_in: Callable[[Aggregate, dict[str, Any]], bool] | None = None
     # A tool page's Real run (`GatewayCalls.console_run`), set by create_gateway_app: Real goes through the gateway's
     # checks, never a path of its own.
     real_runs: Callable[..., Awaitable[dict[str, Any]]] | None = None
@@ -462,6 +465,7 @@ class ModuleService:
             state = "approved"
         workflows = {a["workflow_id"]: {"id": a["workflow_id"], "name": a["workflow_name"]} for a in active}
         status = status_of(conn, now) if conn else ""
+        waiting = conn is not None and self.awaits_sign_in is not None and self.awaits_sign_in(m, conn)
         row: dict[str, Any] = {
             "id": m["id"],
             "name": m["name"],
@@ -473,7 +477,7 @@ class ModuleService:
             "version": m["version"],
             "major": major_of(m["version"]),
             "ownerTeam": m["owner_team"],
-            "endpoint": connection_base(conn) if conn else "",
+            "endpoint": None if waiting else connection_base(conn) if conn else "",
             "operationCount": len(ops),
             "accessClasses": [acc for acc in ACCESS_ORDER if any(o["access"] == acc for o in ops)],
             "approvalState": state,
@@ -483,7 +487,7 @@ class ModuleService:
             # A connection that is revoked, expired or failing makes the system unreachable from the gateway.
             "reachable": m["reachable"] and status not in ("revoked", "needs_reconnect", "error"),
             "drift": m["drift"],
-            "connection": ref_of(conn, now) if conn else None,
+            "connection": ({**ref_of(conn, now), "baseUrl": None} if waiting else ref_of(conn, now)) if conn else None,
             "signIn": sign_in_of(m.get("sign_in")),
             "updatedAt": _iso(m["updated_at"]),
         }
@@ -535,7 +539,7 @@ class ModuleService:
                 seen[a["workflow_id"]] = a
         owner: dict[str, Any] = {
             "id": OWNER_CONTEXT,
-            "label": "Module owner, no case",
+            "label": "Owner, no case",
             "workflowId": "",
             "workflowName": "",
             "caseId": SAMPLE_CASE,
@@ -904,7 +908,7 @@ class ModuleService:
         }
 
     def _title(self, module: dict[str, Any] | None, tool: str) -> str | None:
-        return self.titles(module, tool) if self.titles is not None and module is not None else None
+        return tool_title(module, tool, self.titles) if module is not None else None
 
     async def executions(
         self,
@@ -913,7 +917,7 @@ class ModuleService:
         page: int,
         page_size: int,
         tool: str | None,
-        module_id: str | None,
+        module_ids: list[str] | None,
         thread_id: str | None,
         decision: str | None,
         key: str | None = None,
@@ -922,8 +926,8 @@ class ModuleService:
         sent under one idempotency key: how a workflow run reconciles a write after a crash."""
         mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self._sees(who, m)}
         scope = None if not who.verified and who.team.scope == "all" else list(mods)
-        if module_id is not None:
-            scope = [module_id] if scope is None or module_id in scope else []
+        if module_ids is not None:
+            scope = [m for m in module_ids if scope is None or m in scope]
         if key is not None:
             # A lookup by key shows a claim as it stands: one still running past its expiry reads as lost.
             await self.calls.expire_running(tenant_id=who.tenant_id, key=key)
@@ -1224,18 +1228,27 @@ class ModuleService:
         return conn
 
     async def _held_unless_listed(self, who: Caller, host: str | None, app: str) -> None:
-        """An app's address on a host the tenant has not listed asks the Security team instead of failing,
-        before anything is saved: HostHeld with the task's run key while it waits, its reason once it was refused.
-        Roles decide: a caller who may manage the egress list is not asked, and the host is listed
-        in their name, audited. Without Reviews or an egress policy the store's own check refuses the host."""
+        """An app's address on a host the tenant has not listed, decided by the account's egressNewHosts policy before
+        anything is saved. Under `any_public` the host passes as it is. A caller who may manage the egress list, or
+        any builder under `builders`, lists it in their own name, audited. Under `block` it is refused. Otherwise it
+        asks the Security team: HostHeld with the task's run key while it waits, its reason once refused.
+        Without Reviews or an egress policy the call-time check refuses the host."""
         if not host or self.egress is None or self.reviews is None:
             return
-        if await self.egress.store.host_allowed(who.tenant_id, host):
+        if await self.egress.host_passes(who.tenant_id, host):
             return
-        if who.principal is not None and self._manages_egress(who):
+        mode = await self.egress.new_hosts.mode(who.tenant_id) if self.egress.new_hosts else "ask_security"
+        manages = who.principal is not None and self._manages_egress(who)
+        if manages or (mode == "builders" and who.principal is not None):
             note = f"Listed when {app} first named it"
             await self.egress.store.add(who.tenant_id, "host", host, actor=who.name, note=note, at=self.clock())
             return
+        if mode == "block":
+            raise ValidationFailed(
+                f"{host} is not an allowed address, and this account adds no new ones from here. Ask the Security "
+                "team to add it on the Egress page.",
+                code="egress_denied",
+            )
         task = await self.reviews.open_host(
             who.credentials, tenant_id=who.tenant_id, team_id=who.team.id, host=host, app=app
         )
@@ -1251,14 +1264,14 @@ class ModuleService:
         return True
 
     async def _open_connection(self, who: Caller, name: str, base: str, team_id: str | None = None) -> dict[str, Any]:
-        """The connection a custom module with none of its own keeps its address on: no sign-in, the address
-        in every environment, so a call reads it as it reads any app's. Empty until the first tool names one."""
+        """The account a custom module with none of its own keeps its address on: no sign-in, so a call reads
+        it as it reads any app's. Empty until the first tool names one."""
         now = self.clock()
-        row, environments = open_connection(
+        row = open_connection(
             tenant_id=who.tenant_id, team_id=team_id or who.team.id, connection_id=new_id("con"), name=name, base=base,
             me=who.name, at=now,
         )  # fmt: skip
-        if not await self.connections.create(row, actor=who.name, at=now, environments=environments):
+        if not await self.connections.create(row, actor=who.name, at=now):
             raise Conflict("Try again; that connection id was just taken.")
         made = await self.connections.get(who.tenant_id, str(row["id"]))
         assert made is not None
@@ -1269,8 +1282,7 @@ class ModuleService:
         where it names none, refused where it names another system."""
         held = connection_base(conn)
         if not held:
-            envs = list(cast(dict[str, Any], conn.get("environments") or {})) or [TEST]
-            await self.connections.set_base(who.tenant_id, conn["id"], address, envs, actor=who.name, at=self.clock())
+            await self.connections.set_base(who.tenant_id, conn["id"], address, actor=who.name, at=self.clock())
         elif held.rstrip("/") != address.rstrip("/"):
             # One connection holds one address: a second system, or another path on the same host, is its own app.
             raise ValidationFailed(f"{conn['name']} serves {held}; this source is {address}. Pick its own connection.")
@@ -1386,9 +1398,7 @@ class ModuleService:
             conn = await self._open_connection(who, m["display_name"], origin, m["team_id"])
             m.update(connection_id=conn["id"], auth=module_auth(conn))
         elif not connection_base(conn):
-            await self.connections.set_base(
-                who.tenant_id, conn["id"], origin, CONNECTION_ENVIRONMENTS, actor=who.name, at=self.clock()
-            )
+            await self.connections.set_base(who.tenant_id, conn["id"], origin, actor=who.name, at=self.clock())
         host = urlsplit(origin).hostname
         if host and host not in m["egress_hosts"]:
             m["egress_hosts"] = [*m["egress_hosts"], host]
@@ -2299,8 +2309,11 @@ class ModuleService:
         else:
             trial.note("Answered from the example" if example else "Answered from the mock response")
         raw = out["output"]
-        out["rawResponse"] = raw
-        if template and out["status"] < 400 and not example:
+        # A plugin tool's Real answer comes back shaped by the gateway, which alone holds the team's settings its
+        # transform reads; the answer before it is the trial's.
+        shaped_by_gateway = sandbox and str(m.get("template_id") or "").startswith("plugin:")
+        out["rawResponse"] = trial.raw if shaped_by_gateway and trial.raw is not None else raw
+        if template and out["status"] < 400 and not example and not shaped_by_gateway:
             shaped, failed = await transform.apply(template, raw)
             # After the transform, as the gateway scrubs after its own: a template can repeat what it was given.
             out["output"] = scrub(shaped, trial.used)

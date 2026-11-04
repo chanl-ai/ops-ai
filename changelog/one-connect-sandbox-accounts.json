@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-03",
+  "title": "One Connect is enough, with sandbox accounts for testing",
+  "description": "An app's account no longer has separate Test and Production settings, so one Connect works for test runs and live runs. Add a sandbox account to an app and test runs use it, while live runs never do.",
+  "tag": "improved"
+}

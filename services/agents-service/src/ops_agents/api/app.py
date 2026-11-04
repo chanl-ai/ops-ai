@@ -24,7 +24,7 @@ from ops_agent_kernel.ports import KernelPorts
 from ops_agents.activities.catalog import load_catalog
 from ops_agents.activities.gateway import GatewayClient, GatewayReplySender, GatewayToolExecutor
 from ops_agents.activities.knowledge import KbService, Knowledge, NoKnowledgeService
-from ops_agents.activities.tool_directory import CatalogTools, ToolDirectory, ToolsOperations
+from ops_agents.activities.tool_directory import CatalogTools, ToolDirectory, ToolsApps, ToolsOperations
 from ops_agents.activities.tools import LocalReplySender, LocalToolExecutor, ReplySender
 from ops_agents.graphs import agent_wrapper
 from ops_agents.graphs.checkpointer import open_checkpointer
@@ -349,6 +349,13 @@ def create_app(
         if gateway_client is not None:
             gateway_client.renewer = ApprovalRenewal(rt)
             gateway_client.people = CallPeople.on(acting_for_tokens(settings, gateway_client.http), db)
+            if gateway_http is not None:
+                # The Tools page's app states, on a client of its own: only this read claims connections:view.
+                apps_client = ServiceClient.for_settings(
+                    settings, gateway_http, service="agents", audience="tools",
+                    scopes=["tools:view", "connections:view"], tenant=current_tenant, team=current_team, timeout=30,
+                )  # fmt: skip
+                rt.app_states = ToolsApps(apps_client, gateway_client.people.tokens)
         # Published versions and the registry are database rows: they load, list and publish with no model key.
         rt.graph_store = GraphStore(db)
         async with AsyncExitStack() as stack:

@@ -91,10 +91,6 @@ export const NOUNS = {
   threads: { service: 'agents', list: 'threads_list_threads', get: 'threads_thread_state', create: 'threads_create_thread' },
   cases: { service: 'agents', list: 'cases_list_cases', get: 'cases_get_case', create: 'cases_open_case' },
   tools: { service: 'tools', list: 'tool_modules_list_modules', get: 'tool_modules_get_module' },
-  connections: {
-    service: 'tools', list: 'connections_list_connections', get: 'connections_get_connection',
-    create: 'connections_create_connection',
-  },
   knowledge: {
     service: 'kb', list: 'knowledge_bases_list_knowledge_bases', get: 'knowledge_bases_get_knowledge_base',
     create: 'knowledge_bases_create_knowledge_base',
@@ -246,7 +242,6 @@ export class OpsAI {
   readonly threads: Resource;
   readonly cases: Resource;
   readonly tools: Tools;
-  readonly connections: Resource;
   readonly knowledge: Knowledge;
   readonly files: Files;
   readonly runs: Runs;
@@ -273,10 +268,9 @@ export class OpsAI {
     this.apps = new Apps(this.raw);
     this.tools = new Tools(this.raw, this.apps, new Resource(t, NOUNS.tools));
     this.credentials = new Credentials(this.raw, this.apps);
-    this.accounts = new Accounts(this.raw);
+    this.accounts = new Accounts(this.raw, this.apps);
     this.resources = new Resources(this.raw);
     this.usage = new Usage(this.raw);
-    this.connections = new Resource(t, NOUNS.connections);
     this.knowledge = new Knowledge(t, this.raw);
     this.files = new Files(t, this.raw);
     this.runs = new Runs(t, this.raw);

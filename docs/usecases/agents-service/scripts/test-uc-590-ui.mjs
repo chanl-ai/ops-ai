@@ -1,6 +1,6 @@
 // uc-590 a team adds an app's resources as its own copies, ui layer: docs/usecases/agents-service/plugin-templates.md.
 // The ui stack with plugins on and the templates desk (services/tools-service/tests/plugin_templates/
-// templates_desk), turned on for the install by Sam and for Operations by Priya through the API. Priya opens the app's
+// templates_desk), turned on for Operations by Priya through the API. Priya opens the app's
 // Resources tab: the agent, skill, workflow and document type each offer Add to team. Adding the agent opens its copy;
 // back on the tab it reads Added and Open lands on the same copy; adding the document type opens its copy in Document
 // types. Screenshots go to evidenceDir('590', 'uc').
@@ -26,13 +26,9 @@ const call = async (base, method, path, headers, body) => {
 
 await withUiStack(
   async (consoleUrl) => {
-    const sam = as(await tokenFor('s.adeyemi@harborpine.example'), 'team_security');
     const priya = as(await tokenFor('p.shah@harborpine.example'), 'team_ops');
-    const install = await call(platform, 'PUT', '/v1/policies/plugins', sam, { value: { [PLUGIN]: { enabled: true } } });
-    let team = await call(tools, 'PUT', `/v1/plugins/${PLUGIN}/team`, priya, { enabled: true, environment: 'production' });
-    // tools-service reads the install policy on its next look; the team switch waits for it.
-    for (let i = 0; i < 20 && team.status !== 200; i++) await new Promise((r) => setTimeout(r, 1000)), (team = await call(tools, 'PUT', `/v1/plugins/${PLUGIN}/team`, priya, { enabled: true, environment: 'production' }));
-    check('0 set-up: the templates desk is on for the install and for Operations', install.status === 200 && team.status === 200, { install: install.text, team: team.text });
+    const team = await call(tools, 'PUT', `/v1/apps/${encodeURIComponent(APP)}/team`, priya, { enabled: true });
+    check('0 set-up: the templates desk is on for Operations', team.status === 200, { team: team.text });
 
     const browser = await chromium.launch();
     const errors = [];

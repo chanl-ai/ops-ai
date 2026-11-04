@@ -1,6 +1,7 @@
-"""What the connection use cases share: the bank stand-in's hosts allowed, a connection set up per environment
-as a person sets it in the console, a published one-operation module that signs in through it, and a call made the way
-agents-service makes one. Every setup call's status is checked, so a refused setup fails the use case."""
+"""What the connection use cases share: the bank stand-in's hosts allowed, a custom app with its live account and,
+where asked, a sandbox account, set up as a person sets them in the console, a published one-operation module that
+signs in through it, and a call made the way agents-service makes one. Every setup call's status is checked, so a
+refused setup fails the use case."""
 
 from __future__ import annotations
 
@@ -20,27 +21,48 @@ def allow_bank(gw: httpx.Client, bank: dict[str, Any], *hosts: str) -> None:
 
 
 def clean(gw: httpx.Client, prefix: str) -> None:
-    """Leaves nothing from an earlier run on a kept database: the modules first, then the connections they used."""
+    """Leaves nothing from an earlier run on a kept database: the modules first, then the apps they used, each app's
+    other accounts before its first."""
     for m in data(gw.get("/v1/tool-modules", params={"search": prefix, "pageSize": 50}))["data"]:
         gw.delete(f"/v1/tool-modules/{m['id']}")
-    for c in data(gw.get("/v1/connections", params={"search": prefix, "pageSize": 50}))["data"]:
-        gw.delete(f"/v1/connections/{c['id']}")
+    for card in data(gw.get("/v1/apps")) or []:
+        if card.get("kind") != "connection" or prefix.lower() not in str(card.get("name", "")).lower():
+            continue
+        app = str(card["id"])
+        accounts = (data(gw.get(f"/v1/apps/{app}")) or {}).get("accounts") or []
+        for a in sorted(accounts, key=lambda a: a["id"] == app):
+            gw.delete(f"/v1/apps/{app}/accounts/{a['id']}")
+
+
+def at(account: dict[str, Any]) -> str:
+    """An account's address under its app."""
+    return f"/v1/apps/{account['appId']}/accounts/{account['id']}"
+
+
+def _keys(gw: httpx.Client, account: dict[str, Any], body: dict[str, Any], base_url: str, what: str) -> dict[str, Any]:
+    given = {**body, "settings": {"baseUrl": base_url, **(body.get("settings") or {})}}
+    res = gw.patch(at(account), json={"revision": account["revision"], **given})
+    check(f"{what} set (200)", res.status_code == 200, res.text[:300])
+    return data(res) or account
 
 
 def connection(
-    gw: httpx.Client, name: str, kind: str, environments: dict[str, dict[str, Any]], *, base_url: str
+    gw: httpx.Client, name: str, kind: str, accounts: dict[str, dict[str, Any]], *, base_url: str
 ) -> dict[str, Any]:
-    """A connection with each environment's `{"settings": ..., "secretValues": ...}` set, as a person sets them, each
-    bound to `base_url`, the system its credentials may go to."""
-    made = gw.post("/v1/connections", json={"name": name, "authKind": kind})
-    check(f"connection {name} created (201)", made.status_code == 201, made.text[:300])
-    conn = data(made)
-    for env, body in environments.items():
-        given = {**body, "settings": {"baseUrl": base_url, **(body.get("settings") or {})}}
-        res = gw.put(f"/v1/connections/{conn['id']}/environments/{env}", json={"revision": conn["revision"], **given})
-        check(f"connection {name} {env} set (200)", res.status_code == 200, res.text[:300])
-        conn = data(res) or conn
-    return conn
+    """A custom app and its accounts, each `{"settings": ..., "secretValues": ...}` set as a person sets them and bound
+    to `base_url`, the system its credentials may go to: `live` is the app's first account, `sandbox` a sandbox account
+    beside it (the one test runs use). With only a sandbox, the app's first account is that sandbox. The answer is the
+    first account, with the sandbox account under `sandboxAccount` when both were made."""
+    only_sandbox = "live" not in accounts
+    made = gw.post("/v1/apps", json={"name": name, "authKind": kind, "sandbox": only_sandbox})
+    check(f"app {name} created (201)", made.status_code == 201, made.text[:300])
+    first = _keys(gw, data(made), accounts["sandbox" if only_sandbox else "live"], base_url, f"app {name}")
+    if only_sandbox or "sandbox" not in accounts:
+        return first
+    added = gw.post(f"/v1/apps/{first['id']}/accounts", json={"name": f"{name} sandbox", "sandbox": True})
+    check(f"app {name} sandbox account added (201)", added.status_code == 201, added.text[:300])
+    sandbox = _keys(gw, data(added), accounts["sandbox"], base_url, f"app {name} sandbox")
+    return {**first, "sandboxAccount": sandbox}
 
 
 def module(
@@ -69,8 +91,9 @@ def module(
     made = gw.post("/v1/tool-modules", json=body)
     check(f"module {name} created (201)", made.status_code == 201, made.text[:300])
     m = data(made)
-    if at_once:
-        op = m["operations"][0]
+    op = m["operations"][0]
+    # Approvals are off unless a tool turns them on, so a write made here usually runs at once already.
+    if at_once and op.get("requiresApproval"):
         res = gw.patch(f"/v1/tool-modules/{m['id']}/operations/{op['id']}", json={"requiresApproval": False})
         check(f"module {name} runs at once", res.status_code == 200, res.text[:300])
     asked = gw.post(f"/v1/tool-modules/{m['id']}/reviews", json={"note": "connection use case"})

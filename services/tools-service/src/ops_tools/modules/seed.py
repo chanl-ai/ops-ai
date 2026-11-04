@@ -10,6 +10,7 @@ agents-service's Reviews.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta
 from typing import Any, Literal, cast
 
@@ -18,7 +19,6 @@ from ops_store import isolation
 from ops_store.team_scope import acting_as
 
 from ..connections.records import auth_of, connection_base, seed_rows
-from ..environments import CONNECTION_ENVIRONMENTS, TEST
 from ..store.connections import ConnectionStore
 from ..store.egress import EgressStore
 from ..store.modules import Aggregate, ModuleStore, StaleModuleError
@@ -199,15 +199,15 @@ TOOL_ORIGIN = "tool"
 
 def open_connection(
     *, tenant_id: str, team_id: str, connection_id: str, name: str, base: str, me: str, at: datetime
-) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
-    """The connection a custom module with none of its own keeps its address on, and its settings per
-    environment: no sign-in, the address in every environment, none until a first tool names one."""
-    row = {
+) -> dict[str, Any]:
+    """The account a custom module with none of its own keeps its address on: no sign-in, the address its
+    calls go to, none until a first tool names one."""
+    return {
         "tenant_id": tenant_id, "id": connection_id, "team_id": team_id, "name": name.strip(), "auth_kind": "none",
-        "sign_in": "team", "status": "healthy", "status_detail": None, "origin": TOOL_ORIGIN, "revision": 1,
-        "created_by": me, "created_at": at, "updated_by": me, "updated_at": at,
+        "sign_in": "team", "status": "healthy", "status_detail": None, "origin": TOOL_ORIGIN, "app_id": connection_id,
+        "settings": {"baseUrl": base} if base else {}, "secrets": {}, "revision": 1, "created_by": me,
+        "created_at": at, "updated_by": me, "updated_at": at,
     }  # fmt: skip
-    return row, ({e: {"baseUrl": base} for e in CONNECTION_ENVIRONMENTS} if base else {})
 
 
 def blank(
@@ -321,6 +321,7 @@ BUILT_IN: list[dict[str, Any]] = [
         "name": "Knowledge bases",
         "module": "knowledge-search",
         "operations": ["search_knowledge"],
+        "titles": {"search_knowledge": "Search knowledge"},
         "description": "Searches the team's knowledge bases and answers with citations.",
         "href": "/knowledge",
     },
@@ -329,6 +330,7 @@ BUILT_IN: list[dict[str, Any]] = [
         "name": "Mailboxes",
         "module": "platform-tools",
         "operations": ["send_reply", "send_acknowledgement"],
+        "titles": {"send_reply": "Send a reply", "send_acknowledgement": "Send an acknowledgement"},
         "description": "Sends replies and acknowledgements from the team's mailboxes.",
         "href": "/channels/email",
     },
@@ -338,6 +340,7 @@ BUILT_IN: list[dict[str, Any]] = [
         "name": "Files",
         "module": "platform-tools",
         "operations": ["read_file"],
+        "titles": {"read_file": "Read a file"},
         "description": "Reads the text of files the team uploaded.",
         "href": "/files",
     },
@@ -346,10 +349,26 @@ BUILT_IN: list[dict[str, Any]] = [
         "name": "Document types",
         "module": "platform-tools",
         "operations": ["read_document"],
+        "titles": {"read_document": "Read a document"},
         "description": "Reads a document's fields with one of the team's document types.",
         "href": "/files/document-types",
     },
 ]
+
+
+_BUILT_IN_TITLES: dict[str, str] = {op: t for app in BUILT_IN for op, t in app["titles"].items()}
+_BUILT_IN_MODULES = {str(app["module"]) for app in BUILT_IN}
+
+
+def tool_title(
+    module: Mapping[str, Any], operation: str, plugin_title: Callable[[Mapping[str, Any], str], str | None] | None
+) -> str | None:
+    """What people see in place of a tool's name: a built-in app's title from BUILT_IN, a plugin tool's from its
+    manifest (`plugin_title`, the plugin host's), and none for a team's own tool."""
+    built_in = str(module.get("template_id") or "").startswith("builtin:") or module.get("name") in _BUILT_IN_MODULES
+    if built_in and (title := _BUILT_IN_TITLES.get(operation)):
+        return title
+    return plugin_title(module, operation) if plugin_title is not None else None
 
 
 def template_of(app: dict[str, Any]) -> str:
@@ -696,10 +715,8 @@ async def load(
             agg["connection_id"] = made["id"]
             held = await connections.get(tenant_id, str(made["id"]))
             if agg.get("endpoint") and held is not None and not connection_base(held):
-                # The demo's integrations hold no keys; their test environment holds the module's address.
-                await connections.set_base(
-                    tenant_id, str(made["id"]), str(agg["endpoint"]), [TEST], actor="dev seed", at=now
-                )
+                # The demo's integrations hold no keys; the account holds the module's address.
+                await connections.set_base(tenant_id, str(made["id"]), str(agg["endpoint"]), actor="dev seed", at=now)
         built_in = {str(app["module"]) for app in BUILT_IN}
         for agg in mods:
             if agg.get("connection_id") or agg["team_id"] is None or not agg.get("endpoint"):
@@ -708,11 +725,11 @@ async def load(
                 # A built-in app's module under its older name is the platform's, shown as the built-in app.
                 continue
             # Its id is the one tools_0056 gives an existing module's, so a dev database it already ran on keeps one.
-            made, envs = open_connection(
+            made = open_connection(
                 tenant_id=tenant_id, team_id=agg["team_id"], connection_id=f"con_{agg['id']}",
                 name=agg["display_name"], base=str(agg["endpoint"]), me="dev seed", at=now,
             )  # fmt: skip
-            await connections.create(made, actor="dev seed", at=now, environments=envs)
+            await connections.create(made, actor="dev seed", at=now)
             agg["connection_id"] = made["id"]
     # A module may only name listed hosts, so the seed lists the hosts its modules call first.
     egress = EgressStore(store.engine)

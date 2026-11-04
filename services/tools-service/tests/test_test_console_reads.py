@@ -146,24 +146,30 @@ async def test_the_panels_default_context_is_the_owner_even_with_a_workflow_wait
     assert (first["id"], out["decision"]) == ("owner", "allow"), out
 
 
-async def test_a_real_run_uses_the_environment_the_person_picked(g: Gateway, engine: AsyncEngine) -> None:
-    """Real ran on test whatever the page said; it now signs in with the picked environment's key."""
+async def test_a_real_run_signs_in_with_the_sandbox_account_in_a_test_and_the_live_one_in_a_live_run(
+    g: Gateway, engine: AsyncEngine
+) -> None:
+    """Real ran on whichever account the page did not pick; a test run now signs in with the app's sandbox
+    account and a live run with its live account."""
     store = ModuleStore(engine)
     m = await store.get(g.tenant, MODULE)
     assert m is not None
-    made = (
-        await g.client.post("/v1/connections", json={"name": "Ledger", "authKind": "api_key"}, headers=TEAM)
+    live = (await g.client.post("/v1/apps", json={"name": "Ledger", "authKind": "api_key"}, headers=TEAM)).json()[
+        "data"
+    ]
+    sandbox = (
+        await g.client.post(f"/v1/apps/{live['id']}/accounts", json={"name": "Sandbox", "sandbox": True}, headers=TEAM)
     ).json()["data"]
-    for env, key in (("test", "k-test"), ("production", "k-prod")):
-        fresh = (await g.client.get(f"/v1/connections/{made['id']}", headers=TEAM)).json()["data"]
+    for account, key in ((live, "k-prod"), (sandbox, "k-test")):
+        fresh = (await g.client.get(f"/v1/apps/{live['id']}/accounts/{account['id']}", headers=TEAM)).json()["data"]
         body = {
             "revision": fresh["revision"],
             "settings": {"name": "X-Api-Key", "baseUrl": "https://bank.test/v1"},
             "secretValues": {"key": key},
         }
-        put = await g.client.put(f"/v1/connections/{made['id']}/environments/{env}", json=body, headers=TEAM)
+        put = await g.client.patch(f"/v1/apps/{live['id']}/accounts/{account['id']}", json=body, headers=TEAM)
         assert put.status_code == 200, put.text
-    await store.put({**m, "connection_id": made["id"]}, expected_revision=m["revision"])
+    await store.put({**m, "connection_id": live["id"]}, expected_revision=m["revision"])
     body = {"operation": g.tool("get_account"), "contextId": "owner", "target": "sandbox", "input": {"accountId": "A"}}
     for env, key in (("production", "k-prod"), ("test", "k-test")):
         r = await g.client.post(f"{BASE}/test", json={**body, "environment": env}, headers=TEAM)

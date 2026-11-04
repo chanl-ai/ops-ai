@@ -33,10 +33,10 @@ with ExitStack() as stack:
     )
 
     # 2. Added by its address: the sign-in is found from the server and a client registered with it.
-    made = gw.post("/v1/connections/mcp", json={"serverUrl": server, "name": "uc396 compliance screening"})
-    check("2 the MCP connection is made (201)", made.status_code == 201, made.text[:300])
+    made = gw.post("/v1/apps", json={"serverUrl": server, "name": "uc396 compliance screening"})
+    check("2 the MCP app is made (201)", made.status_code == 201, made.text[:300])
     conn = data(made) or {}
-    env = conn.get("environments", {}).get("test", {}).get("settings", {})
+    env = conn.get("settings", {})
     check(
         "2 it signs in with an account at the server's authorization server, for the server as its resource",
         conn.get("authKind") == "oauth2_auth_code"
@@ -47,9 +47,9 @@ with ExitStack() as stack:
     )
     check("2 a client was registered once", bank_control(bank, "/oauth2/stats").get("registered") == 1, "registration")
 
-    # 3. Someone who manages connections signs in once.
-    path = f"/v1/connections/{conn.get('id')}"
-    started = data(gw.post(f"{path}/sign-in", json={"environment": "test"})) or {}
+    # 3. Someone who manages the team's apps signs in once.
+    path = f"/v1/apps/{conn.get('id')}/accounts/{conn.get('id')}"
+    started = data(gw.post(f"{path}/sign-in", json={})) or {}
     url = urlsplit(started.get("authorizeUrl", ""))
     asked = {k: v[0] for k, v in parse_qs(url.query).items()}
     check("3 the sign-in names the server as its resource", asked.get("resource") == server, asked)
@@ -58,7 +58,7 @@ with ExitStack() as stack:
     done = gw.post(f"{path}/sign-in/complete", json={"state": back.get("state", ""), "code": back.get("code", "")})
     check("3 the sign-in finishes (200)", done.status_code == 200, done.text[:300])
 
-    # 4. With the connection, the tools are listed with their inputs.
+    # 4. With the account, the tools are listed with their inputs.
     source = {"kind": "mcp", "url": server, "connectionId": conn.get("id")}
     found = gw.post("/v1/tool-modules/discover", json=source)
     ops = {o["name"]: [f["name"] for f in o["input"]] for o in (data(found) or {}).get("operations", [])}
@@ -91,7 +91,7 @@ with ExitStack() as stack:
         published["operations"],
     )
 
-    # 5. An agent's or a workflow's call runs through the same executor, with the connection's token.
+    # 5. An agent's or a workflow's call runs through the same executor, with the account's token.
     first = call(gw, "check_sanctions", environment="test", key="s1", args={"name": "Ada Chen"})
     check(
         "5 the MCP tool runs with the signed-in client's token",
@@ -111,10 +111,10 @@ with ExitStack() as stack:
 
     # 6. The bank's registered client is used as given, with no registration.
     given = gw.post(
-        "/v1/connections/mcp",
+        "/v1/apps",
         json={"serverUrl": server, "name": "uc396 registered", "clientId": "ops-console", "clientSecret": "ac-secret"},
     )
-    test_settings = (data(given) or {}).get("environments", {}).get("test", {})
+    test_settings = data(given) or {}
     check(
         "6 a registered client is used as given and its secret kept as a secret part",
         given.status_code == 201

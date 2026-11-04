@@ -1,7 +1,7 @@
 import type { OpsApi } from './contract';
 import { DEFAULT_USER_ID, DEMO_PASSWORD, DEMO_TOTP, USERS } from './mock/auth/seed';
 import { createCasesOnlyHttp, createChatOnlyHttp, createHttpApi, createKnowledgeOnlyHttp, createRegistryOnlyHttp,
-  createRegistryToolsList, createToolsOnlyHttp } from './http';
+  createRegistryToolsDirectory, createRegistryToolsList, createToolsOnlyHttp } from './http';
 import { createMockApi } from './mock';
 import { createMockAuthProvider } from './mock/auth';
 import { createNoNotifications } from './notifications-none';
@@ -53,7 +53,7 @@ function createApi(): OpsApi {
     api = { ...api, cases: { ...api.cases, runs, run, runState, startRun, startable }, reviews };
   }
   // The tool list is the registry's directory; tool writes have no route there and stay on the mock (createRegistryToolsList).
-  if (registryUrl) api = { ...api, ...createRegistryOnlyHttp(registryUrl), tools: { ...api.tools, list: createRegistryToolsList(registryUrl) } };
+  if (registryUrl) api = { ...api, ...createRegistryOnlyHttp(registryUrl), tools: { ...api.tools, list: createRegistryToolsList(registryUrl), ...createRegistryToolsDirectory(registryUrl) } };
   // The chat loader and the iframe it opens are served by the embed app.
   if (embedUrl) api = { ...api, widgetDeployments: { ...api.widgetDeployments, scriptUrl: () => `${embedUrl.replace(/\/$/, '')}/embed/v1.js` } };
   // A link form's page is the embed app's too.

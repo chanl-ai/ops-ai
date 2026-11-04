@@ -7,17 +7,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useConnectionKinds, useGiveOwn } from '@/hooks/connections-queries';
-import type { ConnectionEnvironment } from '@/lib/types/connections';
 
 /**
- * A person's own key, password or token for a connection each person signs in to: one field per person field
+ * A person's own key, password or token for an account each person signs in to: one field per person field
  * the connection's kind names, labelled as the service labels it. Nothing typed is shown back: secret fields are
  * password inputs with autocomplete off, and every field is cleared once sent.
  */
 export function OwnCredentialsForm({
   connectionId,
   connection,
-  environment,
   authKind,
   personFields,
   docsUrl,
@@ -28,7 +26,6 @@ export function OwnCredentialsForm({
 }: {
   connectionId: string;
   connection: string;
-  environment: ConnectionEnvironment;
   authKind?: string;
   personFields: string[];
   docsUrl?: string | null;
@@ -48,7 +45,7 @@ export function OwnCredentialsForm({
     e.preventDefault();
     if (!ready) return;
     try {
-      await give.mutateAsync({ connectionId, environment, credentials: values });
+      await give.mutateAsync({ connectionId, credentials: values });
       onDone?.();
     } finally {
       setValues({});

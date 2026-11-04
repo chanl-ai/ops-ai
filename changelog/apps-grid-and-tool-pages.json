@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-03",
+  "title": "Apps grid, menu and tool pages",
+  "description": "Apps uses the standard list with Connected and Available views, one action per card and its account count, and Credentials and personal accounts sit in the sidebar. Tools filters by kind in its tabs, and a tool page shows its title, its app and where it runs.",
+  "tag": "improved"
+}

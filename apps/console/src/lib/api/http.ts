@@ -1,4 +1,4 @@
-import type { Tool } from '@/lib/types/domain';
+import type { GrantableTool, Tool } from '@/lib/types/domain';
 import type { ListParams } from '@/lib/types/query';
 
 import { optionsQs } from './options';
@@ -157,6 +157,15 @@ export function createRegistryToolsList(baseUrl: string): OpsApi['tools']['list'
   };
 }
 
+/** The tools list and one tool's row on agents-service's `GET /v1/tools`, where agents' grants and workflows' steps are. */
+export function createRegistryToolsDirectory(baseUrl: string): Pick<OpsApi['tools'], 'directory' | 'one'> {
+  const { get } = createTransport(`${baseUrl}/v1`);
+  return {
+    directory: (p) => get(`/tools?${qs(p)}`),
+    one: (id) => get(`/tools/${encodeURIComponent(id)}`),
+  };
+}
+
 export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' | 'workflows' | 'engine' | 'channels' | 'skills' | 'guardrails' | 'widgets' | 'widgetDeployments' | 'forms' | 'batches' | 'caseRecords' | 'activity' | 'overview'> {
   const { agents, workflows, engine, channels, skills, guardrails, widgets, widgetDeployments, forms, batches, caseRecords, activity, overview } = createHttpApi(`${baseUrl}/v1`);
   const { bulkUpdate: _au, bulkRemove: _ar, ...agentCalls } = agents;
@@ -237,7 +246,9 @@ export function createHttpApi(baseUrl: string): OpsApi {
       requestPublish: (id, version, note) => send('POST', `/agents/${id}/publish-requests`, { version, note }),
       publishPreview: (id, version) => get(`/agents/${id}/publish-preview?version=${version}`),
       setPaused: (id, paused) => send('POST', `/agents/${id}/paused`, { paused }),
-      grantableTools: () => get('/tools'),
+      // GET /tools answers one page of the Tools page's rows (each a grantable tool with its app and users): the agent
+      // page reads the largest page the route serves.
+      grantableTools: () => get<{ data: GrantableTool[] }>('/tools?pageSize=200').then((r) => r.data),
       toolOptions: (p) => get(`/tools/options?${optionsQs(p)}`),
       modelAliases: () => get('/model-aliases'),
       bulkUpdate: (ids, patch) => send('POST', '/agents/bulk-update', { ids, patch }),
@@ -318,6 +329,8 @@ export function createHttpApi(baseUrl: string): OpsApi {
       test: (id, input) => send('POST', `/tools/${id}/test`, { input }),
       bulkUpdate: (ids, patch) => send('POST', '/tools/bulk-update', { ids, patch }),
       bulkRemove: (ids) => send('POST', '/tools/bulk-delete', { ids }),
+      directory: (p) => get(`/tools?${qs(p)}`),
+      one: (id) => get(`/tools/${encodeURIComponent(id)}`),
     },
     deployments: {
       list: (p) => get(`/deployments?${qs(p)}`),

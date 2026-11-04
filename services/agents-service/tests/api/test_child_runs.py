@@ -15,7 +15,7 @@ from sqlalchemy.pool import StaticPool
 from ops_agents.api.app import create_app
 from ops_agents.api.child_runs import ChildRuns
 from ops_agents.api.deps import Runtime
-from ops_agents.store.graphs import metadata
+from ops_agents.store.base import metadata
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, sse_events
 

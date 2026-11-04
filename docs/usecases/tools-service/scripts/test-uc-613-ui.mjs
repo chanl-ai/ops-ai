@@ -56,7 +56,7 @@ await withUiStack(
       if (!decided.ok) throw new Error(`setup: approval answered ${decided.status}: ${await decided.text()}`);
     }
     const granted = (await data(await fetch(`${agents}/v1/agents/${AGENT}`, { headers: J }), 'agent again')).toolIds;
-    const offered = (await data(await fetch(`${agents}/v1/tools`, { headers: J }), 'tools')).map((t) => t.id ?? t.name).filter((n) => /read_/.test(n));
+    const offered = (await data(await fetch(`${agents}/v1/tools?pageSize=200`, { headers: J }), 'tools')).data.map((t) => t.id ?? t.name).filter((n) => /read_/.test(n));
     const thread = await data(await fetch(`${agents}/chat/threads`, { method: 'POST', headers: J, body: JSON.stringify({ agentId: AGENT, kbIds: [] }) }), 'thread');
 
     const browser = await chromium.launch();

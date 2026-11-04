@@ -7,7 +7,8 @@ from typing import Any
 
 import pytest
 
-from ops_agents.api.routers.engine import decisions_in, files_in, started_runs
+from ops_agents.api.routers.engine import started_runs
+from ops_agents.api.run_story import decisions_in, files_in
 
 
 class _Runs:

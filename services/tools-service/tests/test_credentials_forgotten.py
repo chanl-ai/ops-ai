@@ -59,9 +59,7 @@ async def test_disconnecting_drops_the_persons_key_from_the_vault(
     tenant: str,
 ) -> None:
     conn, ref = await _james_key(client, engine, tenant)
-    gone = await client.delete(
-        f"/v1/me/connections/{conn}", params={"environment": "test"}, headers=person(tenant, *JAMES_P)
-    )
+    gone = await client.delete(f"/v1/me/accounts/{conn}", headers=person(tenant, *JAMES_P))
     assert gone.status_code == 204, gone.text
     assert not InMemoryVault().holds(ref), "a disconnected key stays in the vault"
 
@@ -72,7 +70,9 @@ async def test_deleting_a_connection_drops_every_sign_in_on_it(
     tenant: str,
 ) -> None:
     conn, ref = await _james_key(client, engine, tenant)
-    deleted = await client.delete(f"/v1/connections/{conn}", headers=person(tenant, "Priya Shah", {TEAM: "admin"}))
+    deleted = await client.delete(
+        f"/v1/apps/{conn}/accounts/{conn}", headers=person(tenant, "Priya Shah", {TEAM: "admin"})
+    )
     assert deleted.status_code == 204, deleted.text
     assert not InMemoryVault().holds(ref), "a deleted connection's sign-ins stay in the vault"
 

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-03",
+  "title": "App accounts and tool calls say whose account ran",
+  "description": "The team account row no longer shows your own sign-in, your own row keeps your email, and a tool call's details say which account it ran as without internal ids. An app with no account for an environment now says who connects one.",
+  "tag": "improved"
+}

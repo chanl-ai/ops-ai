@@ -56,7 +56,7 @@ only as a form body behind a Bearer key.
 
 | Layer | Script | State |
 |---|---|---|
-| ui | `tools-service/scripts/test-uc-611-ui.mjs` | written |
+| ui | `tools-service/scripts/test-uc-611-ui.mjs` | passing, `make usecase-test UC=uc-611 LAYER=ui` (2026-11-03), 12 checks |
 | api | `tools-service/scripts/test-uc-611-api.py` | written; 11-13 target: wait on S4 and D3 |
 | sdk | `tools-service/scripts/test-uc-611-sdk.py` | target: waits on P1, S4 and K1 |
 

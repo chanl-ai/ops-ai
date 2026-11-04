@@ -104,22 +104,23 @@ try {
       const sam = as(await tokenFor('s.adeyemi@harborpine.example'), 'team_security');
       const priya = as(await tokenFor('p.shah@harborpine.example'), 'team_ops');
 
-      // Set-up through the API, as uc-564's api layer does: install switch, hosts, team switch, the team's sign-in.
-      const installed = await call(platform, 'PUT', '/v1/policies/plugins', sam, { value: { [PLUGIN]: { enabled: true } } });
+      // Set-up through the API, as uc-564's api layer does: hosts, team switch, the team's sign-in.
       for (const host of sf.info.hosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-581' });
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: sf.info.range, note: 'uc-581' });
       const login = sf.info.authorize_url.replace(/\/authorize$/, '');
-      const on = await call(tools, 'PUT', `/v1/plugins/${PLUGIN}/team`, priya, { enabled: true, settings: { login_url: login }, clientId: 'ops-ai-acme', clientSecret: 'acme-connected-app-secret' });
+      // The team's own client is made under Credentials, with no account, and the turn-on picks it.
+      const own = await call(tools, 'POST', '/v1/app-credentials', priya, { app: `plugin:${PLUGIN}`, clientId: 'ops-ai-acme', clientSecret: 'acme-connected-app-secret' });
+      const on = await call(tools, 'PUT', `/v1/apps/plugin:${PLUGIN}/team`, priya, { enabled: true, settings: { login_url: login }, credentialId: own.data?.id });
       const connectionId = on.data?.connectionId;
-      const started = await call(tools, 'POST', `/v1/connections/${connectionId}/sign-in`, priya, { environment: 'production' });
+      const started = await call(tools, 'POST', `/v1/apps/plugin:${PLUGIN}/accounts/${connectionId}/sign-in`, priya, { account: 'team' });
       const back = started.data?.authorizeUrl ? await signInAt(started.data.authorizeUrl, 'acme.integration') : {};
-      const signed = await call(tools, 'POST', `/v1/connections/${connectionId}/sign-in/complete`, priya, { state: back.state ?? '', code: back.code ?? '' });
+      const signed = await call(tools, 'POST', `/v1/apps/plugin:${PLUGIN}/accounts/${connectionId}/sign-in/complete`, priya, { state: back.state ?? '', code: back.code ?? '' });
       const base = (await call(kb, 'POST', '/v1/knowledge-bases', priya, { name: 'Salesforce articles', owner: 'p.shah@harborpine.example' })).data ?? {};
       const agent = (await call(agents, 'POST', '/v1/agents', priya, { name: 'Case helper', role: 'Works Salesforce cases' })).data ?? {};
       check(
-        'setup: Salesforce is on for the install and the team, the team signed in, and the base and agent exist',
-        installed.status === 200 && on.status === 200 && signed.status === 200 && !!base.id && !!agent.id,
-        { installed: installed.text, on: on.text, signed: signed.status, base: base.id, agent: agent.id },
+        'setup: Salesforce is on for the team, the team signed in, and the base and agent exist',
+        on.status === 200 && signed.status === 200 && !!base.id && !!agent.id,
+        { on: on.text, signed: signed.status, base: base.id, agent: agent.id },
       );
 
       // S3: the source through kb-service's API, synced through it; its listing tool is now plain plugin data.

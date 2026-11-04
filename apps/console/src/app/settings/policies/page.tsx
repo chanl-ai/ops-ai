@@ -39,6 +39,8 @@ const SWITCH = [
 ];
 const isMap = (v: PolicyValue): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const asChoice = (v: PolicyValue) => (v === null ? 'none' : isMap(v) ? '' : String(v));
+// A choice policy (egressNewHosts) keeps its option's value as text, whatever it looks like.
+const isChoice = (p: WorkspacePolicy) => kindOf(p) === 'choice' && Boolean(p.choices?.length);
 const fromChoice = (c: string): PolicyValue => (c === 'none' ? null : c === 'true' ? true : c === 'false' ? false : Number(c));
 // A row from before kinds were served is read from its value's shape.
 const kindOf = (p: WorkspacePolicy): PolicyKind =>
@@ -51,9 +53,11 @@ const defaultLabel = (p: WorkspacePolicy) => {
   const unit = UNITS[kindOf(p)];
   if (isTeamSwitch(p)) return 'Off for every team';
   if (kindOf(p) === 'names') return 'No app listed';
+  if (isChoice(p)) return p.choices?.find((c) => c.value === p.default)?.title ?? String(p.default);
   if (isMap(p.default)) return 'Review major changes';
   if (typeof p.default === 'boolean') return p.default ? 'On' : 'Off';
   if (p.default === null || Array.isArray(p.default)) return unit ? 'No limit' : 'None';
+  if (typeof p.default === 'string') return p.default;
   return unit ? `${p.default} ${unit}` : `${Math.round(p.default * 100)}%`;
 };
 
@@ -88,7 +92,7 @@ function PolicyCard({ policy, cells, sample, teamId }: { policy: WorkspacePolicy
   }, [teamNames]);
   const save = async () => {
     try {
-      const value: PolicyValue = names ? picked : per ? modes : unit ? (draft.trim() === '' || draft === 'none' ? null : Number(draft)) : fromChoice(draft);
+      const value: PolicyValue = names ? picked : per ? modes : isChoice(policy) ? draft : unit ? (draft.trim() === '' || draft === 'none' ? null : Number(draft)) : fromChoice(draft);
       await set.mutateAsync({ key: policy.key, value, teamId });
       toast.success(`Saved ${titleOf(policy)}`, { description: 'New requests follow it. Open ones keep the rule they were made under.' });
     } catch (e) {
@@ -128,6 +132,21 @@ function PolicyCard({ policy, cells, sample, teamId }: { policy: WorkspacePolicy
         <div className="flex items-center gap-2">
           <Input type="number" min={1} value={draft === 'none' ? '' : draft} onChange={(e) => setDraft(e.target.value)} placeholder={policy.default === null ? 'e.g. 90' : undefined} aria-label={`${titleOf(policy)} in ${unit}`} className="w-40 bg-card" />
           <span className="text-sm text-muted-foreground">{unit}</span>
+        </div>
+      ) : isChoice(policy) ? (
+        <div className="flex flex-col gap-2">
+          <ChoiceCards
+            name={policy.key}
+            label={titleOf(policy)}
+            choices={(policy.choices ?? []).map((c) => ({ value: c.value, title: c.title, description: c.description ?? '' }))}
+            value={draft}
+            onChange={setDraft}
+          />
+          {policy.note && (
+            <p className="text-xs text-muted-foreground" data-testid={`policy-${policy.key}-note`}>
+              {policy.note}
+            </p>
+          )}
         </div>
       ) : (
         <ChoiceCards name={policy.key} label={titleOf(policy)} choices={kind === 'floor' ? FLOOR : SWITCH} value={draft} onChange={setDraft} />
@@ -210,7 +229,7 @@ export default function PoliciesPage() {
       ) : (
         <div className="flex flex-col gap-4" data-testid="policy-cards">
           {/* The install's plugins are switched through the API; they have no editor on this page yet. */}
-          {policies.data.filter((p) => p.kind !== 'plugins').map((p) => (
+          {policies.data.map((p) => (
             <React.Fragment key={p.key}>
               <PolicyCard policy={p} cells={editor.data?.cells ?? {}} sample={sample} teamId={team?.id ?? ''} />
               {/* The words Check before sending reads, right after the switch that turns it on. */}

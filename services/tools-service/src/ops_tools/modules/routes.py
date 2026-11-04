@@ -65,7 +65,8 @@ def executions_router(service: ModuleService, directory: Directory) -> APIRouter
         page: Annotated[int, Query(ge=1)] = 1,
         page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 50,
         tool: str | None = None,
-        module_id: Annotated[str | None, Query(alias="moduleId")] = None,
+        # Repeatable: an app with several tool sets lists the calls of all of them in one page.
+        module_ids: Annotated[list[str] | None, Query(alias="moduleId", max_length=50)] = None,
         thread: str | None = None,
         decision: Annotated[str | None, Query(pattern="^(allow|deny)$")] = None,
         key: Annotated[str | None, Query(max_length=200)] = None,
@@ -75,7 +76,7 @@ def executions_router(service: ModuleService, directory: Directory) -> APIRouter
             page=page,
             page_size=page_size,
             tool=tool,
-            module_id=module_id,
+            module_ids=module_ids,
             thread_id=thread,
             decision=decision,
             key=key,

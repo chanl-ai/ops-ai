@@ -4784,6 +4784,17 @@
             "title": "App",
             "type": "string"
           },
+          "appId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appid"
+          },
           "connectionId": {
             "anyOf": [
               {
@@ -7555,6 +7566,44 @@
         "title": "Envelope[ThreadState]",
         "type": "object"
       },
+      "Envelope_ToolList_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ToolList"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ToolList]",
+        "type": "object"
+      },
+      "Envelope_ToolRow_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ToolRow"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ToolRow]",
+        "type": "object"
+      },
       "Envelope_Union_DryRun__BatchStarted__": {
         "additionalProperties": false,
         "properties": {
@@ -8243,29 +8292,6 @@
           "data"
         ],
         "title": "Envelope[list[ThreadView]]",
-        "type": "object"
-      },
-      "Envelope_list_Tool__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/Tool"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[list[Tool]]",
         "type": "object"
       },
       "Envelope_list_Version__": {
@@ -18608,90 +18634,23 @@
         "title": "ThreadView",
         "type": "object"
       },
-      "Tool": {
+      "ToolApp": {
         "additionalProperties": false,
-        "description": "A published tools-service operation an agent may be granted (`server` is its module's name), or a published\nworkflow (`workflow:<id>`, access `workflow`, server `Workflows`).",
         "properties": {
-          "access": {
-            "enum": [
-              "read",
-              "write",
-              "workflow"
-            ],
-            "title": "Access",
-            "type": "string"
-          },
-          "approval": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Approval"
-          },
-          "description": {
-            "title": "Description",
-            "type": "string"
-          },
           "id": {
             "title": "Id",
             "type": "string"
           },
-          "inputSchema": {
-            "additionalProperties": true,
-            "title": "Inputschema",
-            "type": "object"
-          },
-          "moduleId": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Moduleid"
-          },
           "name": {
             "title": "Name",
             "type": "string"
-          },
-          "requiresApproval": {
-            "title": "Requiresapproval",
-            "type": "boolean"
-          },
-          "server": {
-            "title": "Server",
-            "type": "string"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
           }
         },
         "required": [
           "id",
-          "name",
-          "server",
-          "moduleId",
-          "description",
-          "access",
-          "inputSchema",
-          "requiresApproval",
-          "approval"
+          "name"
         ],
-        "title": "Tool",
+        "title": "ToolApp",
         "type": "object"
       },
       "ToolCallView": {
@@ -18732,6 +18691,46 @@
           "output"
         ],
         "title": "ToolCallView",
+        "type": "object"
+      },
+      "ToolList": {
+        "additionalProperties": false,
+        "properties": {
+          "appNames": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Appnames",
+            "type": "object"
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ToolRow"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets",
+          "appNames"
+        ],
+        "title": "ToolList",
         "type": "object"
       },
       "ToolModuleDiff": {
@@ -18942,6 +18941,154 @@
         "title": "ToolModuleReviewRef",
         "type": "object"
       },
+      "ToolRow": {
+        "additionalProperties": false,
+        "description": "One tool on the Tools page, joined here: the app it belongs to, what kind of tool it is, whether the person\nasking can run it now, and the team's agents and workflows that use it.",
+        "properties": {
+          "access": {
+            "enum": [
+              "read",
+              "write",
+              "workflow"
+            ],
+            "title": "Access",
+            "type": "string"
+          },
+          "app": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolApp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "approval": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inputSchema": {
+            "additionalProperties": true,
+            "title": "Inputschema",
+            "type": "object"
+          },
+          "kind": {
+            "enum": [
+              "app",
+              "custom",
+              "workflow",
+              "agent"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "moduleId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moduleid"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "requiresApproval": {
+            "title": "Requiresapproval",
+            "type": "boolean"
+          },
+          "server": {
+            "title": "Server",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "needs_approval",
+              "app_not_connected",
+              "needs_your_sign_in"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "usedBy": {
+            "$ref": "#/components/schemas/ToolUsedBy"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "server",
+          "moduleId",
+          "description",
+          "access",
+          "inputSchema",
+          "requiresApproval",
+          "approval",
+          "app",
+          "kind",
+          "status",
+          "usedBy"
+        ],
+        "title": "ToolRow",
+        "type": "object"
+      },
+      "ToolUsedBy": {
+        "additionalProperties": false,
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUserRef"
+            },
+            "title": "Agents",
+            "type": "array"
+          },
+          "workflows": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUserRef"
+            },
+            "title": "Workflows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "agents",
+          "workflows"
+        ],
+        "title": "ToolUsedBy",
+        "type": "object"
+      },
       "ToolUser": {
         "additionalProperties": false,
         "properties": {
@@ -18968,6 +19115,25 @@
           "name"
         ],
         "title": "ToolUser",
+        "type": "object"
+      },
+      "ToolUserRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "ToolUserRef",
         "type": "object"
       },
       "TypeRef": {
@@ -48225,26 +48391,41 @@
     },
     "/v1/tools": {
       "get": {
-        "description": "`access` (repeatable: read, write, workflow) keeps those kinds only, so a page asking for workflow tools does not\nfilter the whole directory itself.",
+        "description": "The Tools page: one row per tool with its app, kind, status and users, searched, filtered (`app`, `kind`,\n`status`, each repeatable) and paged here. Facets count every row the search matches, before the filters, and\n`appNames` names each app the app facet counts.",
         "operationId": "agents_list_tools",
         "parameters": [
           {
             "in": "query",
-            "name": "access",
+            "name": "page",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access"
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Pagesize",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "Search",
+              "type": "string"
             }
           },
           {
@@ -48317,7 +48498,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_list_Tool__"
+                  "$ref": "#/components/schemas/Envelope_ToolList_"
                 }
               }
             },
@@ -48651,6 +48832,194 @@
           }
         },
         "summary": "Tool Options",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/tools/{tool_id}": {
+      "get": {
+        "description": "One tool as its row on the Tools page reads; declared after /options so that path is not read as a tool.",
+        "operationId": "agents_get_tool",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tool_id",
+            "required": true,
+            "schema": {
+              "title": "Tool Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ToolRow_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Get Tool",
         "tags": [
           "Agents"
         ],

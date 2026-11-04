@@ -21,9 +21,8 @@ def main() -> None:
         tools({**AUTH, **PLUGINS}) as gw,
         agents(gateway_url=str(gw.base_url).rstrip("/"), env=AUTH),
     ):
-        security, admin = as_role(accounts, "security"), as_role(accounts, "admin", "team_ops")
-        accounts.put("/v1/policies/plugins", json={"value": {PLUGIN: {"enabled": True}}}, headers=security)
-        on = gw.put(f"/v1/plugins/{PLUGIN}/team", json={"enabled": True}, headers=admin)
+        admin = as_role(accounts, "admin", "team_ops")
+        on = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json={"enabled": True}, headers=admin)
         check("set-up: the plugin is on for team_ops", on.status_code == 200, on.text[:200])
 
         # 23. ops resources list and add, as the team admin.

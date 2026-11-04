@@ -85,19 +85,15 @@ async def _apply(
     modules: ModuleStore, connections: ConnectionStore, module: dict[str, Any], conn: dict[str, Any], move: Move
 ) -> None:
     at = datetime.now(UTC)
-    envs: dict[str, dict[str, Any]] = conn.get("environments") or {}
-    names = list(envs) or ["test", "production"]
     secrets = {"key": move.secret} if move.kind == "api_key" else {"token": move.secret}
-    revision = int(conn["revision"])
-    for n, env in enumerate(names):
-        settings = dict((envs.get(env) or {}).get("settings") or {})
-        if move.kind == "api_key":
-            settings["name"] = move.header
-        values = {"auth_kind": move.kind} if n == 0 else {}
-        await connections.change(
-            str(module["tenant_id"]), str(conn["id"]), revision + n, values, actor=MOVED_BY, at=at,
-            environment=(env, settings, secrets), detail={"header": move.header},
-        )  # fmt: skip
+    settings = dict(conn.get("settings") or {})
+    if move.kind == "api_key":
+        settings["name"] = move.header
+    await connections.change(
+        str(module["tenant_id"]), str(conn["id"]), int(conn["revision"]),
+        {"auth_kind": move.kind, "settings": settings, "secrets": secrets}, actor=MOVED_BY, at=at,
+        detail={"header": move.header},
+    )  # fmt: skip
     moved = await connections.get(str(module["tenant_id"]), str(conn["id"])) or conn
     baseline = module.get("baseline")
     await modules.put(

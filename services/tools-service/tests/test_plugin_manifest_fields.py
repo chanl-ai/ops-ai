@@ -26,25 +26,20 @@ from ops_service_kit.settings import Settings
 from ops_tools.auth import Authenticator, Prepared
 from ops_tools.auth.tokens import Tokens
 from ops_tools.connections.connect_links import ConnectLinks
-from ops_tools.connections.service import ConnectionService
 from ops_tools.executor import HttpExecutor
 from ops_tools.gateway_calls import _before_policy  # pyright: ignore[reportPrivateUsage]
-from ops_tools.modules.directory import Directory
 from ops_tools.plugins.executor import PluginExecutor
 from ops_tools.plugins.host import PluginHost, SignInRefused, module_id_of, module_of, settle_at_sign_in
-from ops_tools.plugins.routes import plugins_router
-from ops_tools.plugins.switches import InstallSwitches
 from ops_tools.registry import Resolved, ToolRegistry
 from ops_tools.secrets import SecretResolver
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.modules import ModuleStore
-from ops_tools.store.plugin_app_keys import PluginAppKeys
 from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.store.secrets import SecretStore
 
-from .conftest import CONSOLE_URL, build_app, credentials, response_checker
+from .conftest import CONSOLE_URL, build_app, credentials, response_checker, team_credential
 from .test_personal_sign_in import JAMES_P, SETTINGS, client, personal_connection, system
-from .test_plugins import AllowAll, Policy
+from .test_plugins import AllowAll
 from .test_review_decisions import introspect, jwks, person
 
 # pytest finds a fixture by its name in this module, so the personal sign-in rig is imported for its last test.
@@ -59,7 +54,7 @@ class TeamSignIn:
     """The connection's sign-in as the authenticator gives it: a bearer token the call must carry unchanged."""
 
     async def prepare(self, *_: Any, **__: Any) -> Prepared:
-        return Prepared("con_a", "production", headers={"Authorization": f"Bearer {TOKEN}"}, values=[TOKEN])
+        return Prepared("con_a", headers={"Authorization": f"Bearer {TOKEN}"}, values=[TOKEN])
 
 
 class Rig:
@@ -70,7 +65,7 @@ class Rig:
         self.bindings = PluginBindings(engine)
         loaded = discover(found=[], folders=[str(FOLDER)])
         assert all(item.ok for item in loaded), [item.error for item in loaded]
-        self.host = PluginHost(store, self.bindings, InstallSwitches(Policy({ID: {"enabled": True}})), loaded)
+        self.host = PluginHost(store, self.bindings, {}, loaded)
         self.registry = ToolRegistry(local_catalog, store, self.host)
         upstream = httpx.AsyncClient(transport=httpx.MockTransport(self._answer))
         self.http = HttpExecutor(upstream, AllowAll(), auth=TeamSignIn())  # type: ignore[arg-type]
@@ -225,25 +220,13 @@ async def desk_rig(engine: AsyncEngine, seed: dict[str, Any], tenant: str) -> As
     )
     desk = TokenDesk()
     upstream = httpx.AsyncClient(transport=httpx.MockTransport(desk.answer))
-    app = build_app(engine, seed, tenant, auth=auth, upstream=upstream)
     vault = credentials()
     store = ConnectionStore(engine)
     tokens = Tokens(store, vault, upstream, AllowAll())  # type: ignore[arg-type]
-    directory = Directory.from_seed(seed, datetime.now(UTC))
-    connections = ConnectionService(
-        store,
-        SecretResolver(SecretStore(engine), vault),
-        vault,
-        tokens,
-        directory,
-        egress=None,
-        console_url=CONSOLE_URL,
-    )
     loaded = discover(found=[], folders=[str(p) for p in sorted(FOLDER.parent.glob("fields_*"))])
     assert all(item.ok for item in loaded), [item.error for item in loaded]
-    policy = {item.plugin.manifest.id: {"enabled": True} for item in loaded if item.plugin}
-    host = PluginHost(ModuleStore(engine), PluginBindings(engine), InstallSwitches(Policy(policy)), loaded, store)
-    app.include_router(plugins_router(host, connections, directory, PluginAppKeys(engine, vault)))
+    host = PluginHost(ModuleStore(engine), PluginBindings(engine), {}, loaded, store)
+    app = build_app(engine, seed, tenant, auth=auth, upstream=upstream, plugins=host)
     authenticator = Authenticator(
         store, SecretResolver(SecretStore(engine), vault), tokens, ConnectLinks(store, CONSOLE_URL)
     )
@@ -263,15 +246,21 @@ def admin(tenant: str) -> dict[str, str]:
     return person(tenant, "Priya Shah", {TEAM: "admin"})
 
 
-async def turn_on(c: httpx.AsyncClient, tenant: str, plugin: str, **body: Any) -> httpx.Response:
-    return await c.put(f"/v1/plugins/{plugin}/team", json={"enabled": True, **body}, headers=admin(tenant))
+async def turn_on(
+    c: httpx.AsyncClient, tenant: str, plugin: str, *, client: tuple[str, str] | None = None, **body: Any
+) -> httpx.Response:
+    """The plugin turned on for the team; `client` (id, secret) is the team's own OAuth app, made under Credentials
+    first and picked by credentialId."""
+    if client is not None:
+        body["credentialId"] = await team_credential(c, admin(tenant), f"plugin:{plugin}", *client)
+    return await c.put(f"/v1/apps/plugin:{plugin}/team", json={"enabled": True, **body}, headers=admin(tenant))
 
 
 async def test_a_plugins_token_call_sends_the_client_as_basic_auth_and_never_in_the_form(
     desk_rig: tuple[Any, TokenDesk], tenant: str
 ) -> None:
     (c, host, _, http), desk = desk_rig
-    on = await turn_on(c, tenant, "test.fields-zoom", clientId=ZOOM, clientSecret=ZOOM_SECRET)
+    on = await turn_on(c, tenant, "test.fields-zoom", client=(ZOOM, ZOOM_SECRET))
     assert on.status_code == 200, on.text
     await host.ensure(tenant, datetime.now(UTC))
     module = await host.store.get(tenant, module_id_of(host.plugins["test.fields-zoom"].manifest))
@@ -289,16 +278,14 @@ async def test_how_the_client_is_sent_and_the_sign_in_parameters_are_the_plugins
     desk_rig: tuple[Any, TokenDesk], tenant: str
 ) -> None:
     (c, _, store, _), _ = desk_rig
-    typed = await turn_on(
-        c, tenant, "test.fields-zoom", clientId=ZOOM, clientSecret=ZOOM_SECRET, credentials={"clientAuth": "body"}
-    )
+    typed = await turn_on(c, tenant, "test.fields-zoom", client=(ZOOM, ZOOM_SECRET), credentials={"clientAuth": "body"})
     assert typed.status_code == 400 and "clientAuth" in typed.text, typed.text
-    on = await turn_on(c, tenant, "test.fields-sites", clientId="multi-app", clientSecret="app-secret")
+    on = await turn_on(c, tenant, "test.fields-sites", client=("multi-app", "app-secret"))
     assert on.status_code == 200, on.text
     conn = await store.get(tenant, str(on.json()["data"]["connectionId"]))
     assert conn is not None
-    env = conn["environments"]["production"]["settings"]
-    assert parse_qs(env["authorizeParams"]) == {"audience": ["api.multi.test"], "prompt": ["consent"]}, env
+    keys = conn["settings"]
+    assert parse_qs(keys["authorizeParams"]) == {"audience": ["api.multi.test"], "prompt": ["consent"]}, keys
 
 
 async def test_a_connections_sign_in_parameters_reach_the_sign_in_address_and_never_replace_the_platforms(
@@ -309,9 +296,7 @@ async def test_a_connections_sign_in_parameters_reach_the_sign_in_address_and_ne
         client, tenant,
         {**SETTINGS, "authorizeParams": "audience=api.bank.test&prompt=consent&state=evil&redirect_uri=https://evil.test&Client_Id=x"},
     )  # fmt: skip
-    started = await client.post(
-        f"/v1/connections/{conn}/sign-in", json={"environment": "test"}, headers=person(tenant, *JAMES_P)
-    )
+    started = await client.post(f"/v1/apps/{conn}/accounts/{conn}/sign-in", json={}, headers=person(tenant, *JAMES_P))
     assert started.status_code == 200, started.text
     query = parse_qs(urlsplit(str(started.json()["data"]["authorizeUrl"])).query)
     assert query["audience"] == ["api.bank.test"] and query["prompt"] == ["consent"], query
@@ -345,7 +330,7 @@ def sites(answer: httpx.Response) -> tuple[httpx.AsyncClient, list[httpx.Request
 
 async def signed_in_sites(desk_rig: tuple[Any, TokenDesk], tenant: str) -> tuple[PluginHost, str]:
     (c, host, _, _), _ = desk_rig
-    on = await turn_on(c, tenant, "test.fields-sites", clientId="multi-app", clientSecret="app-secret")
+    on = await turn_on(c, tenant, "test.fields-sites", client=("multi-app", "app-secret"))
     assert on.status_code == 200, on.text
     host.policy = AllowAll()  # type: ignore[assignment]
     await host.ensure(tenant, datetime.now(UTC))
@@ -363,7 +348,7 @@ async def test_the_lookup_fills_the_site_with_the_new_token_and_calls_reach_it(
 ) -> None:
     host, conn = await signed_in_sites(desk_rig, tenant)
     host.http, seen = sites(httpx.Response(200, json=[{"id": "site-7f3a", "name": "Harbor desk"}]))
-    await host.on_token(tenant, conn, {"access_token": "at-team"}, "production")
+    await host.on_token(tenant, conn, {"access_token": "at-team"})
     assert seen and str(seen[0].url) == "https://api.multi.test/sites/accessible"
     assert seen[0].headers["authorization"] == "Bearer at-team"
     assert await endpoint_of(host, tenant) == "https://api.multi.test/sites/site-7f3a"
@@ -374,13 +359,13 @@ async def test_a_persons_sign_in_on_another_site_is_refused_and_the_team_keeps_i
 ) -> None:
     host, conn = await signed_in_sites(desk_rig, tenant)
     host.http, _ = sites(httpx.Response(200, json=[{"id": "site-7f3a"}]))
-    await host.on_token(tenant, conn, {"access_token": "at-team"}, "production")
+    await host.on_token(tenant, conn, {"access_token": "at-team"})
     host.http, _ = sites(httpx.Response(200, json=[{"id": "site-other"}]))
     with pytest.raises(SignInRefused) as refused:
-        await host.on_token(tenant, conn, {"access_token": "at-james"}, "production", own=True)
+        await host.on_token(tenant, conn, {"access_token": "at-james"}, own=True)
     assert refused.value.code == "another_site"
     assert await endpoint_of(host, tenant) == "https://api.multi.test/sites/site-7f3a"
-    await host.on_token(tenant, conn, {"access_token": "at-team-2"}, "production")
+    await host.on_token(tenant, conn, {"access_token": "at-team-2"})
     assert await endpoint_of(host, tenant) == "https://api.multi.test/sites/site-other"
 
 
@@ -400,6 +385,6 @@ async def test_a_lookup_that_fails_redirects_or_names_another_host_fails_the_sig
     host, conn = await signed_in_sites(desk_rig, tenant)
     host.http, _ = sites(answer)
     with pytest.raises(SignInRefused) as refused:
-        await host.on_token(tenant, conn, {"access_token": "at-team"}, "production")
+        await host.on_token(tenant, conn, {"access_token": "at-team"})
     assert refused.value.code == code, refused.value
-    assert (await host.own_settings(tenant, conn)).get("production", {}).get("site_id") is None
+    assert (await host.own_settings(tenant, conn)).get("site_id") is None

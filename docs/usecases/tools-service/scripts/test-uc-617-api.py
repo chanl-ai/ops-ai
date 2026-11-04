@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
-from apps_walk import AUTH, app_path, apps_stack, target
+from apps_walk import AUTH, account_path, app_path, apps_stack, target
 from usecase_harness import TOOLS_PORT, agents, check, data, engine_worker, finish, until
 
 APP = "plugin:test.client"
@@ -19,7 +19,8 @@ with (
     engine_worker("uc-617", AUTH | {"OPS_GATEWAY_URL": f"http://127.0.0.1:{TOOLS_PORT}"}),
 ):
     # 1. A team account the app refuses shows Refused.
-    account = w.turn_on("admin", "test.client", clientId="multi-cc", clientSecret="wrong-secret-0000")
+    wrong = w.credential("admin", "test.client", "multi-cc", "wrong-secret-0000")
+    account = w.turn_on("admin", "test.client", credentialId=wrong)
     failed = w.call("client_get_record", args={"id": "rec-1042"})
     page = data(w.kept(w.gw.get(app_path(APP), headers=w.who["admin"]))) or {}
     team = next((a for a in page.get("accounts") or [] if a.get("id") == account), {})
@@ -114,8 +115,8 @@ with (
     desk = data(w.kept(w.gw.get(app_path("plugin:test.person-key"), headers=w.who["admin"]))) or {}
     given = w.kept(
         w.gw.put(
-            f"/v1/me/connections/{(desk.get('card') or {}).get('connectionId')}/credentials",
-            json={"environment": "production", "credentials": {"key": w.m["person_keys"]["james"]}},
+            f"/v1/me/accounts/{(desk.get('card') or {}).get('connectionId')}/credentials",
+            json={"credentials": {"key": w.m["person_keys"]["james"]}},
             headers=w.who["builder"],
         )
     )
@@ -128,18 +129,18 @@ with (
 
     # 3d. On a desk whose team account backs its people, Priya (connections.run) runs her own waiting run as the team
     # account, and it reads the record with the team's token.
-    backed = w.turn_on(
-        "admin", "test.person", signIn="person_or_team", clientId="multi-app", clientSecret=w.m["clients"]["multi-app"]
-    )
-    revision = (data(w.gw.get(f"/v1/connections/{backed}", headers=w.who["admin"])) or {}).get("revision")
+    own = w.credential("admin", "test.person", "multi-app", w.m["clients"]["multi-app"])
+    backed = w.turn_on("admin", "test.person", signIn="person_or_team", credentialId=own)
+    backed_path = account_path("plugin:test.person", backed)
+    revision = (data(w.gw.get(backed_path, headers=w.who["admin"])) or {}).get("revision")
     w.gw.patch(
-        f"/v1/connections/{backed}",
+        backed_path,
         json={"revision": revision, "signIn": "person_or_team", "teamBackup": True},
         headers=w.who["admin"],
     )
     team = w.gw.post(
-        f"/v1/connections/{backed}/sign-in",
-        json={"environment": "production", "account": "team"},
+        f"{backed_path}/sign-in",
+        json={"account": "team"},
         headers=w.who["admin"],
     )
     back = (
@@ -148,7 +149,7 @@ with (
         else {}
     )
     signed = w.gw.post(
-        f"/v1/connections/{backed}/sign-in/complete",
+        f"{backed_path}/sign-in/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=w.who["admin"],
     )
@@ -187,11 +188,11 @@ with (
     # 4. An app's first address on a host nobody listed is held for a Security admin, nothing saved.
     # James (builder) holds no Security role, so his hosts wait for Security; Sam (Security admin) lists his own (4c).
     def custom_app(name: str, base: str, role: str = "builder") -> str:
-        made = w.kept(w.gw.post("/v1/connections", json={"name": name, "authKind": "none"}, headers=w.who[role]))
+        made = w.kept(w.gw.post("/v1/apps", json={"name": name, "authKind": "none"}, headers=w.who[role]))
         app_id = str((data(made) or {}).get("id") or "con_missing")
         w.kept(
-            w.gw.put(
-                f"/v1/connections/{app_id}/environments/production",
+            w.gw.patch(
+                f"/v1/apps/{app_id}/accounts/{app_id}",
                 json={"revision": (data(made) or {}).get("revision") or 1, "settings": {"baseUrl": base}},
                 headers=w.who[role],
             )

@@ -28,7 +28,7 @@ api, ui. Guide: `docs/guide/plugins.md`, Plugin updates.
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | The platform admin turns the fields desk on; Priya and Wanjiru turn it on for their teams with its token | Each team's review reads 0.1.0 with nothing waiting |
+| 1 | Priya and Wanjiru turn the fields desk on for their teams with its token | Each team's review reads 0.1.0 with nothing waiting |
 | 2 | tools-service restarts with 0.2.0 installed; a run in team ops calls post_message, transfer and find (open) | The fake saw `/fields/chat.postMessage`, one transfer, and find at `/fields/search` |
 | 3 | The run calls find with `pending`, and close_case | Both refused, close_case naming the update; the fake received nothing |
 | 4 | Priya lists team ops' tools | `fields_transfer` is listed, `fields_close_case` is not |
@@ -54,4 +54,4 @@ api, ui. Guide: `docs/guide/plugins.md`, Plugin updates.
 | Layer | Script | Result |
 |---|---|---|
 | api | `tools-service/scripts/test-uc-609-api.py` | passing (2026-11-01), 8 checks |
-| ui | `tools-service/scripts/test-uc-609-ui.mjs` | passing (2026-11-01), 6 checks |
+| ui | `tools-service/scripts/test-uc-609-ui.mjs` | passing (2026-11-03), 6 checks |

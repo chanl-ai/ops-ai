@@ -81,6 +81,8 @@ class SecretMeta(Out):
     protection: Literal["system", "managed"] | None = None
     # The connection this secret is a part of: it is set, replaced and removed on the connection, never here.
     connection_id: str | None = None
+    # The app credential whose client secret this is: it is replaced under Credentials, never here.
+    credential_id: str | None = None
 
 
 class SecretList(ListResult[SecretMeta]):
@@ -128,6 +130,7 @@ def _meta(row: dict[str, Any], users: dict[str, list[dict[str, Any]]] | None = N
         "templateId": row.get("template_id"),
         "protection": row.get("protection"),
         "connectionId": row.get("connection_id"),
+        "credentialId": row.get("credential_id"),
     }
     for key, col in (("rotatedAt", "rotated_at"), ("lastUsedAt", "last_used_at")):
         if row.get(col):
@@ -204,6 +207,12 @@ def secrets_router(
                 f"{row['name']} belongs to a connection. Replace or remove it on that connection.",
                 code="connection_secret",
                 details={"connectionId": row["connection_id"]},
+            )
+        if row.get("credential_id"):
+            raise Conflict(
+                f"{row['name']} is an app credential's client secret. Replace it under Credentials.",
+                code="credential_secret",
+                details={"credentialId": row["credential_id"]},
             )
 
     @contextmanager

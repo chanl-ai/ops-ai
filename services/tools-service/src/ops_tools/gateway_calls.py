@@ -125,11 +125,11 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
         return None
     op, module = resolved.operation, resolved.module
     if module.get("sign_in_needed"):
-        # Each person signs in, and this environment has no instance yet: the plugin is on. Refused as a
+        # Each person signs in, and the account has no instance yet: the plugin is on. Refused as a
         # missing sign-in, not as the plugin being off, so the tool page does not say the team admin must sign in.
         return 403, "CONNECTION_NOT_LINKED", str(module["sign_in_needed"]), []
     if module.get("instance_missing"):
-        # The team account has not signed in for this environment. The plugin is on.
+        # The team account has not signed in yet. The plugin is on.
         return 403, "NOT_SIGNED_IN", str(module["instance_missing"]), []
     if module.get("plugin_off"):
         # A plugin off for the install or the team: refused before approval, so no write waits for a person.
@@ -251,13 +251,14 @@ class GatewayCalls:
         def elapsed() -> int:
             return round((time.monotonic() - started) * 1000)
 
-        # The call's environment, live or test, picks a plugin's instance before anything runs.
-        environment = str(req.run_context.get("environment") or TEST)
+        # The run the call is made in, live (production) or test; the registry picks the account it signs in with
+        # from it (connections.records.account_for).
+        run = str(req.run_context.get("environment") or TEST)
         resolved = await self.registry.resolve(
             req.tool,
             tenant_id=caller.tenant_id,
             team_id=caller.team_id,
-            environment=environment,
+            run=run,
             account=req.run_context.get("account"),
             person=req.acting_for.sub if req.acting_for else None,
         )
@@ -282,7 +283,8 @@ class GatewayCalls:
             "created_at": now_iso(),
             "module_id": resolved.module["id"] if resolved and resolved.module else None,
             "approval_token_id": _token_ref(req.approval_token),
-            "environment": ctx.get("environment") or TEST,
+            # The run the call was made in; connection_id names the account it signed in with.
+            "environment": run,
             "connection_id": resolved.module.get("connection_id") if resolved and resolved.module else None,
             "channel": channel,
             "client_name": client_name,
@@ -348,6 +350,9 @@ class GatewayCalls:
                 self.app_writes_wait is not None
                 and await self.app_writes_wait(caller.tenant_id, caller.team_id, module)
             )
+            # A test run on an app with no sandbox account signs in with its live one (connections.records
+            # account_for); its writes then wait for a person, so testing never changes live data unseen.
+            or (run == TEST and bool((module or {}).get("connection_id")) and not (module or {}).get("sandbox"))
         )
         # When approval is on, roles decide: a person holding the approver role in the team is not
         # asked, and the log names them as the write's approver; anyone else needs an approval token.

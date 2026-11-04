@@ -29,7 +29,7 @@ forms and sign-in steps.
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | The platform admin turns the three test plugins on; Security lists the fake's hosts | All three load and read as on |
+| 1 | tools-service starts with the three test plugins; Security lists the fake's hosts | All three load |
 | 2 | Priya turns on the fields desk with its token; a run calls `fields_search` | The fake saw `X-Api-Version: 2026-10`, `ConsistencyLevel: eventual` and the team's token |
 | 3 | A run calls `fields_echo`, a Python tool | Its request carried `X-Api-Version`; the answer holds no token |
 | 4 | Priya sets `api_version` to `{{OPS_SECRETS_KEY}}`; a run calls `fields_search` | `PLUGIN_DISABLED` naming `api_version`; the fake received nothing |

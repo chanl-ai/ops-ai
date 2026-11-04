@@ -1,4 +1,5 @@
-"""uc-390 a tool signs in with an API key from its connection, in a header or the query, by environment, api layer:
+"""uc-390 a tool signs in with an API key from its app's account, in a header or the query, the sandbox account's in a
+test run, api layer:
 docs/usecases/tools-service/connections-api-key.md. tools-service with the core bank stand-in behind it; calls are sent
 as agents-service sends them. No model call."""
 
@@ -25,69 +26,68 @@ with ExitStack() as stack:
     bare = call(gw, "uc390_bare")
     check("1 with no connection the bank refuses the call (401)", bare.get("ok") is False, bare)
 
-    # 2. A connection holding a test and a production key, sent as the X-Api-Key header.
+    # 2. An app with a live account and a sandbox account, each with its own key, sent as the X-Api-Key header.
     header = connection(
         gw,
         "uc390 header key",
         "api_key",
         {
-            "test": {"settings": {"name": "X-Api-Key"}, "secretValues": {"key": TEST_KEY}},
-            "production": {"settings": {"name": "X-Api-Key"}, "secretValues": {"key": PROD_KEY}},
+            "sandbox": {"settings": {"name": "X-Api-Key"}, "secretValues": {"key": TEST_KEY}},
+            "live": {"settings": {"name": "X-Api-Key"}, "secretValues": {"key": PROD_KEY}},
         },
         base_url=BANK_BASE,
     )
-    shown = data(gw.get(f"/v1/connections/{header['id']}"))
+    shown = [data(gw.get(f"/v1/apps/{header['id']}/accounts/{a['id']}")) for a in (header, header["sandboxAccount"])]
     check(
-        "2 the connection says its key is set for both environments and never shows it",
-        all(shown["environments"][e]["secrets"]["key"]["set"] for e in ("test", "production"))
-        and TEST_KEY not in str(shown)
-        and PROD_KEY not in str(shown),
-        shown["environments"],
+        "2 each account says its key is set and never shows it",
+        all(s["secrets"]["key"]["set"] for s in shown) and TEST_KEY not in str(shown) and PROD_KEY not in str(shown),
+        shown,
     )
     made = module(gw, "uc390-header", url, header["id"])
     check("2 the module's operation carries no key header", made["operations"][0]["headers"] == [], made["operations"])
     test = call(gw, "uc390_header", environment="test")
     check(
-        "2 a test call carries the test key in the header",
+        "2 a test call carries the sandbox account's key in the header",
         test.get("ok") and test["output"] == {"via": "header", "environment": "test"},
         test,
     )
     live = call(gw, "uc390_header", environment="production")
     check(
-        "2 a live call carries the production key",
+        "2 a live call carries the live account's key",
         live.get("ok") and live["output"] == {"via": "header", "environment": "production"},
         live,
     )
     unsaid = call(gw, "uc390_header")
     check(
-        "2 a call that names no environment uses test, never production",
+        "2 a call that names no run is a test run, never the live account",
         unsaid.get("ok") and unsaid["output"]["environment"] == "test",
         unsaid,
     )
 
-    # 3. The same kind sent in the query, test only: production is not set, so a live call is refused, not sent bare.
+    # 3. The same kind sent in the query, on an app whose only account is a sandbox: a live call is refused, not sent
+    # bare.
     query = connection(
         gw,
         "uc390 query key",
         "api_key",
-        {"test": {"settings": {"placement": "query", "name": "api_key"}, "secretValues": {"key": TEST_KEY}}},
+        {"sandbox": {"settings": {"placement": "query", "name": "api_key"}, "secretValues": {"key": TEST_KEY}}},
         base_url=BANK_BASE,
     )
     module(gw, "uc390-query", url, query["id"])
     q = call(gw, "uc390_query", environment="test")
     check(
-        "3 the key goes in the query when the connection says so",
+        "3 the key goes in the query when the account says so",
         q.get("ok") and q["output"] == {"via": "query", "environment": "test"},
         q,
     )
     unset = call(gw, "uc390_query", environment="production")
     check(
-        "3 a live call on a connection with no production key is refused as not set",
+        "3 a live call on an app with only a sandbox account is refused as not set",
         unset.get("ok") is False and unset["output"]["error"]["code"] == "CONNECTION_NOT_SET",
         unset,
     )
 
-    # 4. The call log keeps the environment and the connection, and no key.
+    # 4. The call log keeps the run and the account, and no key.
     rows = data(gw.get("/v1/executions", params={"tool": "uc390_header", "pageSize": 20}))
     check("4 no key appears in the call log", TEST_KEY not in str(rows) and PROD_KEY not in str(rows), rows)
 finish()

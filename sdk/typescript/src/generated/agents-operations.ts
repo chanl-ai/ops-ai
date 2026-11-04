@@ -218,6 +218,17 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "agents_get_tool": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/tools/{tool_id}",
+    "pathParams": [
+      "tool_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "agents_get_widget": {
     "body": null,
     "headers": [],
@@ -322,7 +333,9 @@ export const agentsOperations = {
     "path": "/v1/tools",
     "pathParams": [],
     "query": [
-      "access"
+      "page",
+      "pageSize",
+      "search"
     ],
     "stream": false
   },

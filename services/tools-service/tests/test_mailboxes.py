@@ -191,4 +191,4 @@ async def test_test_connection_reports_the_newest_message_or_the_step_that_faile
     env.connection["host"] = "mail.elsewhere.test"
     d = (await env.post("test")).json()["data"]
     assert d["ok"] is False and [s["state"] for s in d["steps"]] == ["failed", "skipped", "skipped"]
-    assert "allow-list" in d["error"]
+    assert "mail.elsewhere.test is not an allowed address yet" in d["error"]

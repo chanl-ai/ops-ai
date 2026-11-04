@@ -960,8 +960,8 @@ export function KindEmpty({ text }: { text: string }) {
 
 export function KindError({ text, onRetry }: { text: string; onRetry?: () => void }) {
   return (
-    <Card className="border-destructive/40 py-4" role="alert" data-state="error">
-      <CardContent className="flex flex-col items-start gap-2 text-sm">
+    <Card className="border-destructive/40" role="alert" data-state="error">
+      <CardContent className="flex flex-col items-start gap-2 pt-6 text-sm">
         <span className="font-medium text-destructive">{text}</span>
         <span className="text-muted-foreground">The service did not answer in time.</span>
         {onRetry && (

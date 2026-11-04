@@ -5,14 +5,13 @@ through a worker, so whom each tool call acts for comes from the run's starter. 
 
 from __future__ import annotations
 
-import json
 import os
 import signal
 import subprocess
 import time
 from collections.abc import Callable, Generator
 from contextlib import ExitStack, contextmanager
-from typing import Any
+from typing import Any, cast
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -99,21 +98,43 @@ def until(what: Callable[[], Any], timeout: float = 60) -> Any:
     return None
 
 
-def run(api: httpx.Client, who: dict[str, str], key: str, status: str = "Awaiting documents") -> dict[str, Any]:
-    """Starts the workflow as `who` and returns the finished run with its update step."""
+def start(api: httpx.Client, who: dict[str, str], key: str, status: str = "Awaiting documents") -> str:
+    """Starts the workflow as `who`; the run's id."""
     res = api.post(
         "/v1/runs", json={"workflowId": "uc558_case_update", "input": {"status": status}, "runKey": key}, headers=who
     )
     check(f"run {key} is accepted (202)", res.status_code == 202, res.text[:300])
-    run_id = str((data(res) or {}).get("runId", "wfrun_missing"))
+    return str((data(res) or {}).get("runId", "wfrun_missing"))
 
-    def finished() -> dict[str, Any] | None:
+
+def settle(api: httpx.Client, who: dict[str, str], run_id: str, *, done: bool = False) -> dict[str, Any]:
+    """The run once it finished, or (unless `done`) once it waits: a run whose person has not connected waits for them
+    to connect, naming the app's account and the event their connecting reports."""
+    ends = ("succeeded", "failed") if done else ("succeeded", "failed", "waiting")
+
+    def settled() -> dict[str, Any] | None:
         r = data(api.get(f"/v1/runs/{run_id}", headers=who)) or {}
-        return r if r.get("status") in ("succeeded", "failed") else None
+        return r if r.get("status") in ends else None
 
-    done = until(finished) or {}
-    step = next((s for s in done.get("steps", []) if s.get("nodeId") == "update"), {})
-    return {"outcome": done.get("outcome"), "step": step, "text": json.dumps(step)}
+    found = until(settled) or data(api.get(f"/v1/runs/{run_id}", headers=who)) or {}
+    step = next((s for s in found.get("steps", []) if s.get("nodeId") == "update"), {})
+    waiting = cast(dict[str, Any], (found.get("waiting") or {}).get("payload") or {})
+    return {
+        "id": run_id,
+        "outcome": found.get("outcome"),
+        "status": found.get("status"),
+        "step": step,
+        "waits": waiting,
+    }
+
+
+def run(api: httpx.Client, who: dict[str, str], key: str, status: str = "Awaiting documents") -> dict[str, Any]:
+    return settle(api, who, start(api, who, key, status))
+
+
+def waits_to_connect(r: dict[str, Any], conn_id: str) -> bool:
+    w = r["waits"]
+    return r["status"] == "waiting" and w.get("event") == "app_account.connected" and w.get("connectionId") == conn_id
 
 
 def link_of(step_text: str) -> str:
@@ -126,12 +147,12 @@ def link_of(step_text: str) -> str:
 
 def connect(gw: httpx.Client, sf: dict[str, Any], who: dict[str, str], link: str, account: str) -> httpx.Response:
     """Opens a connect link as `who`, signs in to Salesforce as `account`, and finishes the sign-in."""
-    opened = gw.post("/v1/connections/connect-links/sign-in", json={"link": link}, headers=who)
+    opened = gw.post("/v1/connect-links/sign-in", json={"link": link}, headers=who)
     if opened.status_code != 200:
         return opened
     back = sf["sign_in"](data(opened)["authorizeUrl"], account)
     return gw.post(
-        f"/v1/connections/{data(opened)['connectionId']}/sign-in/complete",
+        f"/v1/apps/{data(opened)['connectionId']}/accounts/{data(opened)['connectionId']}/sign-in/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=who,
     )
@@ -139,10 +160,10 @@ def connect(gw: httpx.Client, sf: dict[str, Any], who: dict[str, str], link: str
 
 def own_sign_in(gw: httpx.Client, sf: dict[str, Any], who: dict[str, str], connection_id: str, account: str) -> None:
     """`who` signs in their own account from the connection itself, asking only for the connection's scopes."""
-    started = gw.post(f"/v1/connections/{connection_id}/sign-in", json={"environment": "production"}, headers=who)
+    started = gw.post(f"/v1/apps/{connection_id}/accounts/{connection_id}/sign-in", json={}, headers=who)
     back = sf["sign_in"]((data(started) or {}).get("authorizeUrl", ""), account) if started.status_code == 200 else {}
     done = gw.post(
-        f"/v1/connections/{connection_id}/sign-in/complete",
+        f"/v1/apps/{connection_id}/accounts/{connection_id}/sign-in/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=who,
     )
@@ -155,7 +176,7 @@ def editors(sf: dict[str, Any]) -> list[str]:
 
 with ExitStack() as stack:
     sf = stack.enter_context(salesforce())
-    api, _ = stack.enter_context(platform())
+    api, inner = stack.enter_context(platform())
     stack.enter_context(
         tools(
             {**sf["settings"], **AUTH, "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}", "OPS_CONSOLE_URL": CONSOLE}
@@ -178,7 +199,7 @@ with ExitStack() as stack:
         [r.text[:120] for r in allowed],
     )
     made = gw.post(
-        "/v1/connections",
+        "/v1/apps",
         json={"name": "Salesforce claims (uc-558)", "authKind": "oauth2_auth_code", "signIn": "person"},
     )
     check("the Salesforce connection is created (201)", made.status_code == 201, made.text[:300])
@@ -195,8 +216,8 @@ with ExitStack() as stack:
         },
         "secretValues": {"clientSecret": "kestrel-connected-app-secret"},
     }
-    put = gw.put(
-        f"/v1/connections/{conn.get('id', 'conn_missing')}/environments/production",
+    put = gw.patch(
+        f"/v1/apps/{conn.get('id', 'conn_missing')}/accounts/{conn.get('id', 'conn_missing')}",
         json={"revision": conn.get("revision"), **app},
     )
     check("its production OAuth app is set (200)", put.status_code == 200, put.text[:300])
@@ -244,41 +265,67 @@ with ExitStack() as stack:
 
     stack.enter_context(worker())
 
-    # 1. James has not connected: the call is refused with a link made for him; nothing reaches Salesforce.
-    first = run(agents_api, james, "uc558-james-1")
-    james_link = link_of(first["text"])
+    def acting_for(email: str, key: str) -> httpx.Response:
+        """A call as agents-service makes one for a chat with `email`: the acting-for token platform-service signs for
+        that person, never a person named in the body."""
+        minted = inner.post(
+            "/v1/acting-for-tokens",
+            json={"email": email},
+            headers=service_headers("platform", service="agents", team="team_ops"),
+        )
+        headers = service_headers("tools", service="agents", team="team_ops")
+        headers["X-Acting-For"] = str((data(minted) or {}).get("token") or "")
+        body = {
+            "tool": "uc558_update_case",
+            "input": {"status": "Awaiting documents"},
+            "key": key,
+            "runContext": {"act": "chat:uc558", "environment": "production"},
+        }
+        return httpx.post(f"{GW}/v1/calls", json=body, headers=headers, timeout=30)
+
+    conn_id = str(conn.get("id"))
+
+    # 1. James has not connected: his run waits for him to, naming the app's account; nothing reaches Salesforce.
+    james_run = run(agents_api, james, "uc558-james-1")
     check(
-        "1 James's run is refused with CONNECTION_NOT_LINKED and a connect link, and nothing reaches Salesforce",
-        "CONNECTION_NOT_LINKED" in first["text"] and bool(james_link) and editors(sf) == [],
-        first,
+        "1 James's run waits for him to connect his own account, and nothing reaches Salesforce",
+        waits_to_connect(james_run, conn_id) and editors(sf) == [],
+        james_run,
     )
 
-    # 2. Ravi cannot finish James's link.
-    stolen = gw.post("/v1/connections/connect-links/sign-in", json={"link": james_link}, headers=ravi)
+    # 2. A call acting for James is refused with a link made for him alone; Ravi cannot finish it.
+    asked = acting_for("j.richardson@harborpine.example", "uc558-james-chat")
+    james_link = link_of(asked.text)
+    check(
+        "2 a call acting for James is refused CONNECTION_NOT_LINKED with a connect link",
+        "CONNECTION_NOT_LINKED" in asked.text and bool(james_link) and editors(sf) == [],
+        asked.text[:300],
+    )
+    stolen = gw.post("/v1/connect-links/sign-in", json={"link": james_link}, headers=ravi)
     check(
         "2 Ravi opening James's link is refused (connect_link_not_yours)",
         stolen.status_code == 404 and "connect_link_not_yours" in stolen.text,
         (stolen.status_code, stolen.text[:200]),
     )
 
-    # 3. James connects his own account.
+    # 3. James connects his own account with the link.
     joined = connect(gw, sf, james, james_link, "handler@kestrel.example")
-    shown = data(gw.get(f"/v1/connections/{conn.get('id')}", headers=priya)) or {}
+    shown = data(gw.get(f"/v1/apps/{conn_id}/accounts/{conn_id}", headers=priya)) or {}
     people = shown.get("people") or []
     check(
-        "3 James finishes his own sign-in, and the connection lists his sign-in, not a team one",
+        "3 James finishes his own sign-in, and the account lists his sign-in, not a team one",
         joined.status_code == 200 and [p.get("account") for p in people] == ["handler@kestrel.example"],
         (joined.status_code, joined.text[:200], people),
     )
 
-    # 4. The same run now updates the case with James's token.
-    second = run(agents_api, james, "uc558-james-2")
+    # 4. His connecting resumes the waiting run, which updates the case with James's token.
+    second = settle(agents_api, james, james_run["id"], done=True)
     # The call log is keyed by the call's idempotency key, which the run's step attempt names.
     call_key = ((second.get("step") or {}).get("attempts") or [{}])[-1].get("key") or "none"
     calls = (data(gw.get("/v1/executions", params={"key": call_key}, headers=priya)) or {}).get("data") or []
     logged = calls[0] if calls else {}
     check(
-        "4 James's run updates the case as handler@kestrel.example, logged as person, acting for James",
+        "4 James's run goes on and updates the case as handler@kestrel.example, logged as person, acting for James",
         second["outcome"] == "updated"
         and editors(sf) == ["handler@kestrel.example"]
         and logged.get("credential") == "person"
@@ -287,23 +334,22 @@ with ExitStack() as stack:
     )
 
     # 5. Wanjiru never gets James's token.
-    wanjiru_first = run(agents_api, wanjiru, "uc558-wanjiru-1")
-    wanjiru_link = link_of(wanjiru_first["text"])
+    wanjiru_run = run(agents_api, wanjiru, "uc558-wanjiru-1", "Escalated")
     check(
-        "5 Wanjiru's run asks Wanjiru to connect; James's token is not used for her",
-        "CONNECTION_NOT_LINKED" in wanjiru_first["text"]
-        and bool(wanjiru_link)
-        and editors(sf) == ["handler@kestrel.example"],
-        wanjiru_first,
+        "5 Wanjiru's run waits for Wanjiru to connect; James's token is not used for her",
+        waits_to_connect(wanjiru_run, conn_id) and editors(sf) == ["handler@kestrel.example"],
+        wanjiru_run,
     )
 
-    # 6. Wanjiru connects and her run carries her own token.
+    # 6. Wanjiru connects with the link a call for her answers (it asks for cases.write too), and her waiting run
+    # carries her own token.
+    wanjiru_link = link_of(acting_for("w.kamau@harborpine.example", "uc558-wanjiru-chat").text)
     connect(gw, sf, wanjiru, wanjiru_link, "supervisor@kestrel.example")
-    wanjiru_second = run(agents_api, wanjiru, "uc558-wanjiru-2", "Escalated")
+    wanjiru_done = settle(agents_api, wanjiru, wanjiru_run["id"], done=True)
     check(
-        "6 Wanjiru's run records supervisor@kestrel.example as the editor",
-        wanjiru_second["outcome"] == "updated" and editors(sf)[-1:] == ["supervisor@kestrel.example"],
-        (wanjiru_second, editors(sf)),
+        "6 Wanjiru's run goes on and records supervisor@kestrel.example as the editor",
+        wanjiru_done["outcome"] == "updated" and editors(sf)[-1:] == ["supervisor@kestrel.example"],
+        (wanjiru_done, editors(sf)),
     )
 
     # 7. A person named only in the body chooses no token.
@@ -334,8 +380,10 @@ with ExitStack() as stack:
 
     # 8. Test connection as Priya, with her own account.
     own_sign_in(gw, sf, priya, str(conn.get("id")), "admin@kestrel.example")
-    tested = gw.post(f"/v1/connections/{conn.get('id')}/test", json={"environment": "production"}, headers=priya)
-    health = (data(gw.get(f"/v1/connections/{conn.get('id')}", headers=priya)) or {}).get("health") or {}
+    tested = gw.post(f"/v1/apps/{conn.get('id')}/accounts/{conn.get('id')}/test", json={}, headers=priya)
+    health = (data(gw.get(f"/v1/apps/{conn.get('id')}/accounts/{conn.get('id')}", headers=priya)) or {}).get(
+        "health"
+    ) or {}
     check(
         "8 Test connection reads userinfo and stores the result on the connection",
         tested.status_code == 200 and health.get("status") == "ok",
@@ -354,15 +402,17 @@ with ExitStack() as stack:
         headers=service_headers("tools", team="team_ops"),
         timeout=30,
     )
-    revision = (data(gw.get(f"/v1/connections/{conn.get('id')}", headers=priya)) or {}).get("revision")
+    revision = (data(gw.get(f"/v1/apps/{conn.get('id')}/accounts/{conn.get('id')}", headers=priya)) or {}).get(
+        "revision"
+    )
     backup = gw.patch(
-        f"/v1/connections/{conn.get('id')}",
+        f"/v1/apps/{conn.get('id')}/accounts/{conn.get('id')}",
         json={"revision": revision, "signIn": "person_or_team", "teamBackup": True},
         headers=priya,
     )
     team = gw.post(
-        f"/v1/connections/{conn.get('id')}/sign-in",
-        json={"environment": "production", "account": "team"},
+        f"/v1/apps/{conn.get('id')}/accounts/{conn.get('id')}/sign-in",
+        json={"account": "team"},
         headers=priya,
     )
     back = (
@@ -371,7 +421,7 @@ with ExitStack() as stack:
         else {}
     )
     gw.post(
-        f"/v1/connections/{conn.get('id')}/sign-in/complete",
+        f"/v1/apps/{conn.get('id')}/accounts/{conn.get('id')}/sign-in/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=priya,
     )
@@ -418,25 +468,28 @@ with ExitStack() as stack:
         (marked.text[:200], person_only.text[:300]),
     )
 
-    # 10. Priya signed in from the connection itself (step 8), its scopes only; a write needing cases.write asks again.
-    priya_first = run(agents_api, priya, "uc558-priya-1")
+    # 10. Priya signed in from the account itself (step 8), its scopes only; a write needing cases.write asks again.
+    priya_chat = acting_for("p.shah@harborpine.example", "uc558-priya-chat")
+    priya_run = run(agents_api, priya, "uc558-priya-1")
     check(
-        "10 Priya's run without cases.write is asked to connect again (insufficient_scope)",
-        "CONNECTION_NOT_LINKED" in priya_first["text"] and "insufficient_scope" in priya_first["text"],
-        priya_first,
+        "10 Priya's write without cases.write is asked to connect again (insufficient_scope), and her run waits",
+        "CONNECTION_NOT_LINKED" in priya_chat.text
+        and "insufficient_scope" in priya_chat.text
+        and waits_to_connect(priya_run, conn_id),
+        (priya_chat.text[:300], priya_run),
     )
 
     # 11. James's own connections, then Disconnect.
-    mine = data(gw.get("/v1/me/connections", headers=james)) or []
+    mine = data(gw.get("/v1/me/accounts", headers=james)) or []
     listed = [c for c in mine if c.get("connectionId") == conn.get("id")]
-    gone = gw.delete(f"/v1/me/connections/{conn.get('id')}", params={"environment": "production"}, headers=james)
+    gone = gw.delete(f"/v1/me/accounts/{conn.get('id')}", headers=james)
     again = run(agents_api, james, "uc558-james-3")
     check(
         "11 James sees his Salesforce sign-in, disconnects it, and his next run asks him to connect again",
         bool(listed)
         and listed[0].get("account") == "handler@kestrel.example"
         and gone.status_code == 204
-        and "CONNECTION_NOT_LINKED" in again["text"],
+        and waits_to_connect(again, conn_id),
         (listed, gone.status_code, again),
     )
 

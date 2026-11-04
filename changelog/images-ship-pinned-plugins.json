@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-03",
+  "title": "Release images ship their pinned apps",
+  "description": "The release image now holds the apps the install pins, each at an exact version and checked when the image is built, so staging and production offer Salesforce without copying anything by hand.",
+  "tag": "improved"
+}

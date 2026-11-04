@@ -27,14 +27,13 @@ from ops_models.store import tables as models_tables
 from ops_store import isolation
 from ops_store.schema import isolation_kind
 from ops_tools.store.connections import (
+    app_credentials,
     connect_links,
     connection_audit,
-    connection_environments,
     connection_tokens,
     connections,
     oauth_states,
 )
-from ops_tools.store.plugin_app_keys import plugin_app_keys
 from ops_tools.store.secrets import secret_audit, tool_secrets
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -44,14 +43,13 @@ ROOT = Path(__file__).resolve().parents[3]
 PASSWORD = "credential-lock-test"
 TEAM_A, TEAM_B = "team_cards", "team_ops"
 CONNECTION = "con_lock"
-# The thirteen tables of apps.html "Credentials: today and after", by chain and the role its transactions run as.
+# The twelve tables of apps.html "Credentials: today and after", by chain and the role its transactions run as.
 TOOLS = (
     connection_tokens,
-    connection_environments,
     oauth_states,
     connect_links,
     tool_secrets,
-    plugin_app_keys,
+    app_credentials,
     connections,
     connection_audit,
     secret_audit,
@@ -175,7 +173,7 @@ async def _count(url: URL, login: str, role: str | None, *, tenant: str, team: s
 
 
 def test_every_credential_table_is_held_to_its_team_or_tenant_by_the_database(scratch: URL) -> None:
-    assert len(TOOLS) + len(MODELS_LOCKED) + len(MODELS_INSTALL) == 13
+    assert len(TOOLS) + len(MODELS_LOCKED) + len(MODELS_INSTALL) == 12
     unmarked = [t.name for t in (*TOOLS, *MODELS_LOCKED) if isolation_kind(t) not in ("team", "tenant")]
     assert unmarked == [], f"not held by the database: {unmarked}"
     tenant, elsewhere = f"t_{uuid.uuid4().hex[:8]}", f"t_{uuid.uuid4().hex[:8]}"

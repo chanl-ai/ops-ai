@@ -10,6 +10,22 @@ const SEED: WorkspacePolicy[] = [
   { key: 'memoryRetentionDays', value: null, default: null, changedBy: 'chat.manage', effect: 'How long agents keep what they remember about each person. Unset: kept until the person removes it.' },
   { key: 'reviewSlaHours', value: 8, default: 8, changedBy: 'reviews.manage', effect: 'How long a publish review may wait, in wall-clock hours, before it shows as overdue.' },
   { key: 'securityTeamAddsSecrets', value: false, default: false, changedBy: 'settings.manage', effect: "Only the security team adds secrets. Off: builders add and use their own team's secrets." },
+  {
+    key: 'egressNewHosts',
+    kind: 'choice',
+    title: 'New app addresses',
+    value: 'ask_security',
+    default: 'ask_security',
+    changedBy: 'settings.manage',
+    effect: 'What happens the first time a tool calls an address no app has used before.',
+    choices: [
+      { value: 'ask_security', title: 'Ask Security', description: 'The call waits until the security team allows the address.' },
+      { value: 'builders', title: 'Allowed for builders', description: 'An address a builder sets on an app is allowed; others ask Security.' },
+      { value: 'any_public', title: 'Any public host', description: 'Any public address is allowed at once.' },
+      { value: 'block', title: 'Block', description: 'Only addresses already allowed are called; others are refused.' },
+    ],
+    note: 'Private addresses are never allowed, whatever is chosen.',
+  },
 ];
 
 /** Sample policies for a console with no platform-service: a page over them says so and stores nothing. */

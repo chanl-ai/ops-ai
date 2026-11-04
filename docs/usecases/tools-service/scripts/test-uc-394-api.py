@@ -11,7 +11,7 @@ from contextlib import ExitStack
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
-from connection_calls import allow_bank, bank_control, call, clean, connection, module
+from connection_calls import allow_bank, at, bank_control, call, clean, connection, module
 from usecase_harness import AGENTS_PORT, TOOLS_PORT, agents, check, core_bank, data, finish, tools
 
 CONSOLE = "https://console.bank.test"
@@ -34,7 +34,7 @@ with ExitStack() as stack:
         "uc394 crm",
         "oauth2_auth_code",
         {
-            "test": {
+            "sandbox": {
                 "settings": {
                     "authorizeUrl": f"{base}/oauth2/authorize",
                     "tokenUrl": f"{base}/oauth2/token",
@@ -47,7 +47,7 @@ with ExitStack() as stack:
         base_url=BANK_BASE,
     )
     module(gw, "uc394-read", f"{base}/auth/oauth", conn["id"])
-    path = f"/v1/connections/{conn['id']}"
+    path = at(conn)
 
     # 1. Before anyone signs in, a call is refused, never sent without a token.
     before = call(gw, "uc394_read", environment="test", key="b1")
@@ -58,13 +58,13 @@ with ExitStack() as stack:
     )
     shown = data(gw.get(path))
     check(
-        "1 the connection names the redirect address to register",
+        "1 the account names the redirect address to register",
         shown["redirectUri"] == f"{CONSOLE}/connections/sign-in/return",
         shown["redirectUri"],
     )
 
     # 2. Sign-in starts: the browser goes to the system with a PKCE challenge, and comes back with a code and the state.
-    started = gw.post(f"{path}/sign-in", json={"environment": "test"})
+    started = gw.post(f"{path}/sign-in", json={})
     check("2 sign-in starts (200)", started.status_code == 200, started.text[:300])
     url = urlsplit(data(started)["authorizeUrl"])
     asked = {k: v[0] for k, v in parse_qs(url.query).items()}
@@ -86,9 +86,9 @@ with ExitStack() as stack:
         stolen.text[:300],
     )
     done = gw.post(f"{path}/sign-in/complete", json=finish_body)
-    signed = (data(done) or {}).get("environments", {}).get("test", {}).get("signedIn") or {}
+    signed = (data(done) or {}).get("signedIn") or {}
     check("3 the person who started finishes it (200)", done.status_code == 200, done.text[:300])
-    check("3 the connection says which account signed in", signed.get("account") == "svc-lending@bank.test", signed)
+    check("3 the account says who signed in", signed.get("account") == "svc-lending@bank.test", signed)
     check("3 no token is shown", "at_" not in done.text and "rt_" not in done.text, "token in the detail")
     replay = gw.post(f"{path}/sign-in/complete", json=finish_body)
     check(
@@ -111,7 +111,7 @@ with ExitStack() as stack:
     check("4 each call refreshed the token and both refreshes were accepted", stats["refresh_token"] == 2, stats)
 
     # 5. Signing out stops tools at once.
-    out = gw.post(f"{path}/sign-out", json={"environment": "test"})
+    out = gw.post(f"{path}/sign-out")
     after = call(gw, "uc394_read", environment="test", key="c3")
     check(
         "5 after sign-out the call is refused NOT_SIGNED_IN",

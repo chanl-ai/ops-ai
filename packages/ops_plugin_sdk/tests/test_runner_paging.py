@@ -74,3 +74,75 @@ def test_a_page_address_on_another_host_is_refused(run: tuple[Plugin, Fake, list
     with pytest.raises(EgressDenied):
         call(p, "find_cases", {"cursor": json.dumps(cursor)}, SETTINGS, fake)
     assert seen == []
+
+
+HEADER_PAGED = """
+  - name: issues
+    access: read
+    input: { state: { type: string, enum: [open, all], required: false, default: open } }
+    request:
+      method: GET
+      path: /issues
+      query: { state: "{{state}}" }
+      paging: { rule: link_header }
+  - name: pages
+    access: read
+    input: { state: { type: string, enum: [open, all] } }
+    request:
+      method: GET
+      path: /pages
+      query: { state: "{{state}}" }
+      paging: { rule: page, limit: 2, limit_param: per_page }
+"""
+ISSUES_2 = "https://alpha.my.desk.test/api/v1/issues?state=open&page=2"
+
+
+def numbered(request: httpx.Request) -> httpx.Response:
+    q = request.url.params
+    if request.url.path == "/api/v1/issues":
+        if q.get("page") is None:
+            nxt = "https://evil.example/x" if q.get("state") == "all" else ISSUES_2
+            return httpx.Response(200, json=[{"n": 1}], headers={"Link": f'<{nxt}>; rel="next"'})
+        return httpx.Response(200, json=[{"n": 2}])
+    page, size = int(q["page"]), int(q["per_page"])
+    return httpx.Response(200, json=[{"p": i} for i in range(1, 4)][(page - 1) * size : page * size])
+
+
+@pytest.fixture
+def header_run(tmp_path: Path) -> tuple[Plugin, Fake, list[httpx.Request]]:
+    root = plugin(tmp_path, with_tools(HEADER_PAGED))
+    seen: list[httpx.Request] = []
+
+    def record(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return numbered(request)
+
+    return (
+        Plugin.beside(str(root / "__init__.py")),
+        Fake(httpx.Client(transport=httpx.MockTransport(record)), "t"),
+        seen,
+    )
+
+
+def test_a_link_header_page_follows_rel_next_and_only_to_the_plugins_hosts(
+    header_run: tuple[Plugin, Fake, list[httpx.Request]],
+) -> None:
+    p, fake, seen = header_run
+    first = call(p, "issues", {}, SETTINGS, fake)
+    assert first["records"] == [{"n": 1}] and first["next_cursor"], first
+    second = call(p, "issues", {"cursor": first["next_cursor"]}, SETTINGS, fake)
+    assert second == [{"n": 2}] and str(seen[-1].url) == ISSUES_2
+    elsewhere = call(p, "issues", {"state": "all"}, SETTINGS, fake)
+    with pytest.raises(EgressDenied):
+        call(p, "issues", {"cursor": elsewhere["next_cursor"]}, SETTINGS, fake)
+
+
+def test_a_numbered_page_keeps_its_query_and_ends_on_a_short_page(
+    header_run: tuple[Plugin, Fake, list[httpx.Request]],
+) -> None:
+    p, fake, seen = header_run
+    first = call(p, "pages", {"state": "all"}, SETTINGS, fake)
+    assert first["records"] == [{"p": 1}, {"p": 2}]
+    assert dict(seen[-1].url.params) == {"state": "all", "page": "1", "per_page": "2"}
+    second = call(p, "pages", {"cursor": first["next_cursor"]}, SETTINGS, fake)
+    assert second == [{"p": 3}] and dict(seen[-1].url.params) == {"state": "all", "page": "2", "per_page": "2"}

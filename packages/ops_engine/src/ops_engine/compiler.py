@@ -483,6 +483,8 @@ def connect_wait(output: Any) -> dict[str, Any] | None:
         "key": str(named["key"]),
         "app": d.get("connection"),
         "connectionId": d.get("connectionId"),
+        # The account's app, under which the person's Connect my account opens it.
+        "appId": d.get("appId"),
         "teamAccount": bool(d.get("teamAccount")),
     }
 
@@ -531,6 +533,7 @@ async def gateway_call(call: NodeCall) -> Outcome:
             timeout_seconds=0,
             app=app,
             connectionId=wait.get("connectionId"),
+            appId=wait.get("appId"),
             teamAccount=wait.get("teamAccount"),
         )
         if woke.get("teamAccount"):

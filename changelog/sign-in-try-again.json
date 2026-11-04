@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-03",
+  "title": "A failed sign-in can be tried again",
+  "description": "When connecting an app fails or access is not given, the sign-in window offers Try again, which starts the same sign-in in the same window, and a blocked address now says who allows it.",
+  "tag": "improved"
+}

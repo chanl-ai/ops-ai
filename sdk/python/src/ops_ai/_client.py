@@ -75,12 +75,6 @@ NOUNS: dict[str, Noun] = {
     "threads": Noun("agents", list="threads_list_threads", get="threads_thread_state", create="threads_create_thread"),
     "cases": Noun("agents", list="cases_list_cases", get="cases_get_case", create="cases_open_case"),
     "tools": Noun("tools", list="tool_modules_list_modules", get="tool_modules_get_module"),
-    "connections": Noun(
-        "tools",
-        list="connections_list_connections",
-        get="connections_get_connection",
-        create="connections_create_connection",
-    ),
     "knowledge": Noun(
         "kb",
         list="knowledge_bases_list_knowledge_bases",
@@ -295,9 +289,7 @@ class OpsAI:
         self.config = Config.resolve(**config)
         self._t = Transport(self.config, http)
         self.raw = Raw(self._t)
-        self.teams, self.threads, self.cases, self.connections = (
-            Resource(self.raw, NOUNS[n]) for n in ("teams", "threads", "cases", "connections")
-        )
+        self.teams, self.threads, self.cases = (Resource(self.raw, NOUNS[n]) for n in ("teams", "threads", "cases"))
         self.knowledge = Knowledge(self.raw, NOUNS["knowledge"])
         self.files = Files(self.raw, NOUNS["files"])
         self.runs = Runs(self.raw, NOUNS["runs"])
@@ -307,7 +299,7 @@ class OpsAI:
         # The Apps area in the screen's words.
         self.apps = Apps(self.raw)
         self.credentials = Credentials(self.raw, self.apps)
-        self.accounts = Accounts(self.raw)
+        self.accounts = Accounts(self.raw, self.apps)
         self.tools = Tools(self.raw, self.apps, Resource(self.raw, NOUNS["tools"]))
         self.resources = Resources(self.raw)
         self.usage = Usage(self.raw)
@@ -348,8 +340,8 @@ class AsyncOpsAI:
         self.config = Config.resolve(**config)
         self._t = AsyncTransport(self.config, http)
         self.raw = AsyncRaw(self._t)
-        self.teams, self.threads, self.cases, self.connections = (
-            AsyncResource(self.raw, NOUNS[n]) for n in ("teams", "threads", "cases", "connections")
+        self.teams, self.threads, self.cases = (
+            AsyncResource(self.raw, NOUNS[n]) for n in ("teams", "threads", "cases")
         )
         self.knowledge = AsyncKnowledge(self.raw, NOUNS["knowledge"])
         self.files = AsyncFiles(self.raw, NOUNS["files"])
@@ -359,7 +351,7 @@ class AsyncOpsAI:
         self.workflows = AsyncWorkflows(self.raw, self.runs)
         self.apps = AsyncApps(self.raw)
         self.credentials = AsyncCredentials(self.raw, self.apps)
-        self.accounts = AsyncAccounts(self.raw)
+        self.accounts = AsyncAccounts(self.raw, self.apps)
         self.tools = AsyncTools(self.raw, self.apps, AsyncResource(self.raw, NOUNS["tools"]))
         self.resources = AsyncResources(self.raw)
         self.usage = AsyncUsage(self.raw)

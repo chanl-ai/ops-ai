@@ -26,7 +26,7 @@ import json
 import re
 import ssl
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import parse_qsl, quote, quote_plus, urlencode, urlsplit
@@ -40,7 +40,9 @@ from . import mcp, transform
 from .auth import Authenticator, AuthFailed, Prepared
 from .auth.tokens import scope_list
 from .egress import EgressDenied, EgressPolicy, for_tenant
+from .environments import TEST
 from .mocks import MockAnswers
+from .plugins.host import plugin_id_of
 from .registry import Resolved
 from .secrets import SecretMissing, SecretResolver, scrub
 from .tools import ToolCaller, ToolRunner
@@ -304,8 +306,8 @@ def form_fields(templates: dict[str, str], args: dict[str, Any]) -> dict[str, st
     return out
 
 
-# A call to a module whose connection names no address for the run's environment: nothing is sent.
-NO_ADDRESS = "This tool's app names no address for this environment; set it on the app's connection."
+# A call to a module whose account names no address: nothing is sent.
+NO_ADDRESS = "This tool's app names no address; set it on the app's account."
 
 
 class _Secrets:
@@ -319,7 +321,7 @@ class _Secrets:
         self,
         module: dict[str, Any],
         op: dict[str, Any],
-        environment: str | None,
+        environment: str,
         actor: str,
         *,
         trial: Trial | None = None,
@@ -339,7 +341,7 @@ class _Secrets:
             scopes=scope_list(op.get("scopes")),
         )
         if prepared is not None and trial is not None:
-            trial.note(f"Signed in through the connection ({prepared.environment})")
+            trial.note(f"Signed in through the account {prepared.connection_id}")
         return prepared
 
     async def _resolve(
@@ -423,14 +425,14 @@ class HttpExecutor(_Secrets):
         actor: str = "gateway",
         secret_values: dict[str, str] | None = None,
         trial: Trial | None = None,
-        environment: str | None = None,
+        environment: str = "test",
         acting_for: ActingForPerson | None = None,
-        on_answer: Callable[[Any], Any] | None = None,
+        on_answer: Callable[[Any, Mapping[str, str]], Any] | None = None,
     ) -> ToolOutcome:
         """With `trial` (the test console) the operation's own transform is not applied: the console applies its draft
         to `trial.raw`. `secret_values` are a test's typed values (_Secrets._resolve). `environment` is the run's (test
-        or production), which picks the connection's settings. `on_answer` sees the answer before the transform, as
-        a plugin's paging reads the next page from it (plugins/executor.py)."""
+        or production): a live run is never signed in with a sandbox account. `on_answer` sees the answer and its
+        headers before the transform, as a plugin's paging reads the next page from them (plugins/executor.py)."""
         if not module.get("endpoint"):
             return _failure("CONNECTION_NOT_SET", NO_ADDRESS)
         host = urlsplit(build_request(module, op, args).url).hostname
@@ -466,7 +468,8 @@ class HttpExecutor(_Secrets):
         # The operation's own timeout when it has one, else the module's.
         limit_ms: int = op.get("timeout_ms") or module["timeout_ms"]
         try:
-            await self.policy.check_url(module["tenant_id"], req.url)
+            # The app's own hosts (its module's) pass for its own calls, as the plugin host renders them for a plugin.
+            await self.policy.check_url(module["tenant_id"], req.url, module["egress_hosts"])
             res = await self._send(module, req, prepared, limit_ms)
             if res.status_code == 401 and prepared is not None and prepared.renewable:
                 if op.get("access") != "read":
@@ -517,12 +520,15 @@ class HttpExecutor(_Secrets):
         output = scrub(masked(output, op.get("masked_output") or []), used)
         if on_answer is not None:
             try:
-                output = on_answer(output)
+                output = on_answer(output, dict(res.headers))
             except Exception as e:  # the caller's reading of the answer: the call fails, the gateway does not
                 return _failure("ANSWER_UNREADABLE", f"The answer from {host} could not be read ({type(e).__name__}).")
         if trial is not None:
             trial.raw = output
-            return ToolOutcome(True, output)
+            # A plugin tool's transform reads the team's settings, which only the gateway holds, and its page has no
+            # draft to try; so the gateway shapes its answer here, once, as for an agent's call.
+            if plugin_id_of(module) is None:
+                return ToolOutcome(True, output)
         if op.get("response_transform"):
             # A plugin's transform also reads the team's merged settings; every other module's sees none.
             shaped, failed = await transform.apply(op["response_transform"], output, module.get("plugin_settings"))
@@ -544,7 +550,9 @@ class HttpExecutor(_Secrets):
             content=req.content,
             headers=headers,
             timeout=limit_ms / 1000,
-            extensions=for_tenant(module["tenant_id"], prepared.certificate if prepared else None),
+            extensions=for_tenant(
+                module["tenant_id"], prepared.certificate if prepared else None, module["egress_hosts"]
+            ),
         )
 
 
@@ -578,6 +586,7 @@ class McpExecutor(_Secrets):
             str(module["endpoint"]),
             headers={**headers, **(prepared.headers if prepared else {})},
             tenant_id=module["tenant_id"],
+            hosts=module["egress_hosts"],
             certificate=prepared.certificate if prepared else None,
         )
         await session.initialize()
@@ -592,7 +601,7 @@ class McpExecutor(_Secrets):
         actor: str = "gateway",
         secret_values: dict[str, str] | None = None,
         trial: Trial | None = None,
-        environment: str | None = None,
+        environment: str = "test",
     ) -> ToolOutcome:
         if not module.get("endpoint"):
             return _failure("CONNECTION_NOT_SET", NO_ADDRESS)
@@ -618,7 +627,7 @@ class McpExecutor(_Secrets):
         if trial is not None:
             trial.used = used
         try:
-            await self.policy.check_url(module["tenant_id"], url)
+            await self.policy.check_url(module["tenant_id"], url, module["egress_hosts"])
             try:
                 result = await self._call(module, op, args, headers, prepared)
             except mcp.McpError as e:
@@ -712,9 +721,10 @@ class Executor:
         secret_values: dict[str, str] | None = None,
     ) -> ToolOutcome:
         """`caller` is the verified caller the gateway decided for: every executor path acts for it alone.
-        `environment` is the run's (test or production; test when None), which picks a connection's settings. A tool
-        page's Real run passes `trial` and its typed `secret_values` through to the http and MCP executors, which fill
-        the request it shows."""
+        `environment` is the run's (test or production; test when None), which picks mock answers and the code runner's
+        mode. The account a call signs in with is the module's `connection_id`, chosen where the registry resolved it.
+        A tool page's Real run passes `trial` and its typed `secret_values` through to the http and MCP executors,
+        which fill the request it shows."""
         op, module = resolved.operation, resolved.module
         if module is not None and module["tenant_id"] != caller.tenant_id:
             raise ValueError("A module is run only for its own tenant.")
@@ -733,29 +743,32 @@ class Executor:
             return await self.code.run(
                 op, args, key=key, caller=caller, environment=environment, module_team=module.get("team_id")
             )
-        if resolved.executor in ("http", "mcp") and self.http.auth is not None:
-            # A module's address is its connection's for the run's environment, the only home it has.
-            module = await self.http.auth.addressed(module, environment)
+        # A plugin's address is rendered from its manifest by the plugin host (instance plus API path); the connection
+        # holds only the instance's origin, so only every other module takes its connection's address.
+        signs_in = environment or TEST
+        if resolved.executor in ("http", "mcp") and self.http.auth is not None and plugin_id_of(module) is None:
+            # A module's address is its account's, its only home.
+            module = await self.http.auth.addressed(module)
         if self.mocks is not None and (
             mock := await self.mocks.for_call(caller.tenant_id, str(module["id"]), op["name"], args, environment)
         ):
             return await self._mocked(module, op, mock)
         if resolved.executor == "mcp":
             return await self.mcp.run(
-                module, op, args, actor=actor, environment=environment, trial=trial, secret_values=secret_values
+                module, op, args, actor=actor, environment=signs_in, trial=trial, secret_values=secret_values
             )
         if resolved.executor == "plugin":
             if self.plugins is None:
                 return _failure("PLUGIN_DISABLED", "This gateway runs no plugins.")
             return await self.plugins.run(
-                module, op, args, actor=actor, environment=environment, acting_for=caller.acting_for
+                module, op, args, actor=actor, environment=signs_in, acting_for=caller.acting_for, trial=trial
             )
         return await self.http.run(
             module,
             op,
             args,
             actor=actor,
-            environment=environment,
+            environment=signs_in,
             acting_for=caller.acting_for,
             trial=trial,
             secret_values=secret_values,

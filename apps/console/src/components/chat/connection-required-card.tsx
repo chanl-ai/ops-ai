@@ -30,7 +30,6 @@ export function connectionRequired(call: ToolCall): (ConnectionRequired & { mess
     connectionId: e.details.connectionId,
     connection: d.connection ?? 'This system',
     reason: d.reason ?? 'not_connected',
-    environment: d.environment,
     authKind: d.authKind,
     personFields: d.personFields,
     connectUrl: d.connectUrl,
@@ -128,7 +127,6 @@ export function ConnectionRequiredCard({ call, need, onReply }: { call: ToolCall
             <OwnCredentialsForm
               connectionId={need.connectionId}
               connection={need.connection}
-              environment={need.environment ?? offered?.environment ?? 'production'}
               authKind={need.authKind}
               personFields={need.personFields ?? []}
               docsUrl={offered?.docsUrl}

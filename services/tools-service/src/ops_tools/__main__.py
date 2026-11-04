@@ -28,14 +28,15 @@ from ops_store.database import open_database
 from ops_store.schema_version import require_current_schema
 
 from .app import create_gateway_app
+from .apps import Apps, apps_router
 from .auth import Authenticator, Tokens
 from .auth.discovery import Discovery
 from .code_runs import CodeExecutor, code_signer
 from .connections.connect_links import ConnectLinks
-from .connections.routes import connections_router
+from .connections.routes import accounts_router
 from .connections.service import ConnectionService
 from .defaults import catch_up_at_start
-from .egress import EgressPolicy, OverrideResolver, egress_client, egress_transport
+from .egress import EgressPolicy, NewHosts, OverrideResolver, egress_client, egress_transport
 from .egress_routes import egress_router
 from .expression_routes import expressions_router
 from .file_tools import FileTools
@@ -57,7 +58,6 @@ from .opa import OpaClient
 from .platform_events import member_removed_handlers, team_created_handlers
 from .plugins.host import PluginHost
 from .plugins.routes import plugins_router
-from .plugins.switches import InstallSwitches
 from .plugins.templates import plugin_templates_router
 from .registry import ToolRegistry
 from .secrets import SecretResolver
@@ -70,13 +70,11 @@ from .store.egress import EgressStore
 from .store.event_relay import keep_relaying
 from .store.mocks import MockStore
 from .store.modules import ModuleStore
-from .store.plugin_app_keys import PluginAppKeys
 from .store.plugin_bindings import PluginBindings
 from .store.review_handoffs import ReviewHandoffs
 from .store.secrets import SecretStore
 from .store.send_policies import SendPolicies
 from .store.team_defaults import TeamDefaults
-from .systems import Systems, systems_router
 from .tools import LocalToolRunner, ToolCaller
 
 # This service's own migration chain: it starts only on a database that records the chain's head.
@@ -129,37 +127,36 @@ def main() -> None:
     engine = open_database(settings.database_url)
     directory = Directory.from_seed(seed, datetime.now(UTC))
     store, calls = ModuleStore(engine), CallLog(engine)
-    policy = EgressPolicy(EgressStore(engine), OverrideResolver(settings.egress_resolve))
-    ca = str(settings.egress_ca_file) if settings.egress_ca_file else None
-    # Every secret value is put and read through the credential store; rows keep only its reference.
-    credentials = credential_store(settings)
-    secrets = SecretResolver(SecretStore(engine), credentials)
-    # Connections sign calls in; their token requests go out through the same egress client as calls.
-    connection_store = ConnectionStore(engine)
-    tokens = Tokens(connection_store, credentials, egress_client(policy, ca_file=ca), policy)
-    # A call acting for someone who has not signed in hands back a link to the console page that asks them.
-    links = ConnectLinks(connection_store, settings.console_url) if settings.console_url else None
-    # The platform's own OAuth app secrets for plugins, sealed at the account; only on an install with plugins.
-    app_keys = PluginAppKeys(engine, credentials) if settings.plugins else None
-    authenticator = Authenticator(
-        connection_store, secrets, tokens, links, app_secret=app_keys.value if app_keys else None
-    )
-    agents_url = settings.agents_url or f"http://127.0.0.1:{settings.port}"
 
     def client(audience: str, base_url: str, scopes: list[str] | None = None) -> ServiceClient:
         """This service's calls to another; each names the tenant (and team) it acts for."""
         http = httpx.AsyncClient(base_url=base_url, timeout=5)
         return ServiceClient.for_settings(settings, http, service="tools", audience=audience, scopes=scopes, timeout=5)
 
-    # The install's plugins (its plugins folder, OPS_PLUGINS_DIR), read once at start: a failed one is reported on
-    # /v1/plugins and left out. With none, the plugin routes are not mounted and calls never reach a plugin.
+    # The account's egressNewHosts policy decides an unlisted host (ask Security, builders, any public host, block).
+    new_hosts = (
+        NewHosts(client("platform", settings.platform_url, ["settings:view"])) if settings.platform_url else None
+    )
+    policy = EgressPolicy(EgressStore(engine), OverrideResolver(settings.egress_resolve), new_hosts)
+    ca = str(settings.egress_ca_file) if settings.egress_ca_file else None
+    # Every secret value is put and read through the credential store; rows keep only its reference.
+    credentials = credential_store(settings)
+    secrets = SecretResolver(SecretStore(engine), credentials)
+    # Connections sign calls in; their token requests go out through the same egress client as calls.
+    # Ops AI's own OAuth client per plugin comes from the install config; the store hands it to an account on it.
+    connection_store = ConnectionStore(engine, settings.plugin_clients)
+    tokens = Tokens(connection_store, credentials, egress_client(policy, ca_file=ca), policy)
+    # A call acting for someone who has not signed in hands back a link to the console page that asks them.
+    links = ConnectLinks(connection_store, settings.console_url) if settings.console_url else None
+    authenticator = Authenticator(connection_store, secrets, tokens, links)
+    agents_url = settings.agents_url or f"http://127.0.0.1:{settings.port}"
+
+    # The install's plugins (its plugins folder, OPS_PLUGINS_DIR), read once at start: a failed one is logged
+    # (plugin_failed) and left out. With none, the plugin routes are not mounted and calls never reach a plugin.
     plugins = PluginHost.when_on(
         settings,
         store,
         PluginBindings(engine),
-        InstallSwitches(
-            client("platform", settings.platform_url, ["settings:view"]) if settings.platform_url else None
-        ),
         connection_store,
         # The lookup after a plugin's sign-in goes out through the egress client, as any call does.
         http=egress_client(policy, ca_file=ca),
@@ -185,10 +182,13 @@ def main() -> None:
         ),
         auth=authenticator,
     )
+    # A plugin's sign-in, token and test requests reach the hosts it declares without the tenant listing them.
+    tokens.plugin_hosts = plugins.connection_hosts if plugins else None
     # The call log names a plugin tool by its manifest title.
     modules.titles = plugins.title_of if plugins else None
     # A plugin tool's page names the team's own account of the app.
     modules.team_connections = plugins.team_connection if plugins else None
+    modules.awaits_sign_in = plugins.awaits_sign_in if plugins else None
     # send_reply naming a mailbox: the mailbox is read from agents-service as the call's team, its secret is
     # looked up for that team, and its host is dialled at the allow-listed address.
     # Microsoft 365 mailboxes: Graph and its token endpoint, dialled through each tenant's allow-list.
@@ -218,11 +218,14 @@ def main() -> None:
         http=egress_client(policy, ca_file=ca),
         # A plugin's connection takes its instance from the token answer.
         on_token=plugins.on_token if plugins else None,
-        app_secret=app_keys.value if app_keys else None,
+        plugin_settings=plugins.account_settings if plugins else None,
     )
+    connection_service.app_display = plugins.display_of if plugins else None
+    tool_users = AgentsToolUsers(client("agents", agents_url, ["agents:view"]))
+    apps = Apps(connection_service, store, plugins, modules, tool_users)
     app = create_gateway_app(
         opa=OpaClient(httpx.AsyncClient(base_url=settings.opa_url, timeout=5)),
-        registry=ToolRegistry(catalog, store, plugins),
+        registry=ToolRegistry(catalog, store, plugins, connection_store),
         plugins=plugins,
         # A tool page's Real run goes through this gateway's checks.
         modules=modules,
@@ -305,19 +308,17 @@ def main() -> None:
             *(
                 [
                     plugins_router(
-                        plugins,
-                        connection_service,
+                        apps.plugin_accounts,
                         directory,
-                        app_keys,
-                        users=AgentsToolUsers(client("agents", agents_url, ["agents:view"])),
+                        users=tool_users,
                     )
                 ]
-                if plugins and app_keys
+                if apps.plugin_accounts
                 else []
             ),
             *([plugin_templates_router(plugins)] if plugins else []),
-            connections_router(connection_service, directory),
-            systems_router(Systems(connection_service, store, plugins, app_keys, modules), directory),
+            accounts_router(connection_service, directory),
+            apps_router(apps, directory),
             platform_events_router(
                 {
                     **member_removed_handlers(connection_service.store, credentials),

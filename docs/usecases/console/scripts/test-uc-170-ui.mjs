@@ -99,11 +99,11 @@ await withUiStack(
       await sam.waitForTimeout(800);
 
       // A per-team list (appWritesNeedApproval): no app listed by default; the picker searches the team's apps
-      // from GET /v1/systems, says when none matches, and saves the picked app's id under the acting team.
+      // from GET /v1/apps, says when none matches, and saves the picked app's id under the acting team.
       const aw = sam.getByTestId('setting-policy-appWritesNeedApproval');
       await aw.waitFor({ timeout: 60_000 });
       const awText = (await aw.innerText()).replace(/\s+/g, ' ');
-      const systemsRead = sam.waitForResponse((r) => r.request().method() === 'GET' && /\/v1\/systems$/.test(new URL(r.url()).pathname), { timeout: 30_000 }).catch(() => null);
+      const systemsRead = sam.waitForResponse((r) => r.request().method() === 'GET' && /\/v1\/apps$/.test(new URL(r.url()).pathname), { timeout: 30_000 }).catch(() => null);
       await aw.getByRole('button', { name: /Add app/ }).click();
       const search = sam.getByPlaceholder('Search apps');
       await search.waitFor({ timeout: 30_000 });
@@ -157,7 +157,7 @@ await withUiStack(
       await browser.close();
     }
   },
-  // tools-service serves GET /v1/systems, the apps the approval policy's picker lists.
+  // tools-service serves GET /v1/apps, the apps the approval policy's picker lists.
   { platform: true, tools: {} },
 );
 

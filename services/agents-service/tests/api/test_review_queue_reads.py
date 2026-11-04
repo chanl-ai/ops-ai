@@ -34,7 +34,7 @@ async def test_the_queue_reads_only_threads_that_can_hold_a_review(
         assert said.status_code == 200, said.text
     held = (await drafted(dev_platform, james)).split("/")[3]
     resolved: list[str] = []
-    real = hitl_facade.resolve
+    real = hitl_facade.resolve  # pyright: ignore[reportPrivateImportUsage]
 
     async def counting(rt: Any, thread_id: str) -> Any:
         resolved.append(thread_id)

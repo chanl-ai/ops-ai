@@ -16,7 +16,7 @@ from sqlalchemy.pool import StaticPool
 
 from ops_agents.api.app import create_app
 from ops_agents.api.deps import Runtime
-from ops_agents.store.graphs import metadata
+from ops_agents.store.base import metadata
 from ops_agents.store.reviews import review_decisions
 from ops_service_kit.settings import Settings
 from tests.api.test_chat import new_thread, send

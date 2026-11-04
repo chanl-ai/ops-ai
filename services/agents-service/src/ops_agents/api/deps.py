@@ -12,7 +12,7 @@ from ops_agent_kernel.ports import KernelPorts
 from ops_agents.activities.catalog import Catalog
 from ops_agents.activities.gateway import GatewayClient
 from ops_agents.activities.knowledge import KnowledgeBases, NoKnowledgeService
-from ops_agents.activities.tool_directory import CatalogTools, ToolDirectory
+from ops_agents.activities.tool_directory import AppStates, CatalogTools, ToolDirectory
 from ops_agents.graphs.common import GraphDeps
 from ops_agents.graphs.definition import CompiledCache
 from ops_identity.jwks import JwksCache
@@ -56,6 +56,9 @@ class Runtime:
     tool_reviews: GatewayClient | None = None
     # The tools an agent may be granted: tools-service's registry with a gateway, the fixture catalogue without.
     tool_directory: ToolDirectory | None = None
+    # The team's apps and their state for the person asking (tools-service); none without a gateway, so the Tools page
+    # names a tool's own tool set as its app.
+    app_states: AppStates | None = None
     # The knowledge bases a thread may search: kb-service's when configured, otherwise none (every request 503s).
     knowledge_bases: KnowledgeBases | None = None
     # Told when a timer is armed or cancelled; the poller, the default, reads the timers table instead.

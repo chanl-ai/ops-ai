@@ -10,7 +10,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
@@ -45,7 +45,7 @@ MAYA = ActingForPerson(sub="usr_maya", email="maya@bank.example", name="Maya", t
 
 
 class AnyUrl:
-    async def check_url(self, tenant_id: str, url: str) -> str:
+    async def check_url(self, tenant_id: str, url: str, also: Iterable[str] = ()) -> str:
         return "login.bank.test"
 
 
@@ -63,6 +63,7 @@ async def connection(store: ConnectionStore, tenant: str, sign_in: str, *, backu
     row = {
         "tenant_id": tenant,
         "id": f"con_{sign_in}",
+        "app_id": f"con_{sign_in}",
         "team_id": TEAM,
         "name": "CRM",
         "auth_kind": "oauth2_auth_code",
@@ -76,7 +77,7 @@ async def connection(store: ConnectionStore, tenant: str, sign_in: str, *, backu
         "updated_at": now,
     }
     assert await store.create(row, actor="t", at=now)
-    await store.change(tenant, f"con_{sign_in}", 1, {}, actor="t", at=now, environment=("test", SETTINGS, {}))
+    await store.change(tenant, f"con_{sign_in}", 1, {"settings": SETTINGS, "secrets": {}}, actor="t", at=now)
     return f"con_{sign_in}"
 
 
@@ -108,7 +109,7 @@ async def test_each_persons_call_carries_their_own_token_never_anothers_or_the_t
     store, tokens, auth = rig(engine)
     conn = await connection(store, tenant, "person")
     for who, token in ((SHARED, "at-team"), (JAMES.sub, "at-james"), (MAYA.sub, "at-maya")):
-        await tokens.store_answer(tenant, conn, "test", {"access_token": token, "expires_in": 3600}, who)
+        await tokens.store_answer(tenant, conn, {"access_token": token, "expires_in": 3600}, who)
     assert await bearer(auth, tenant, conn, JAMES) == "Bearer at-james"
     assert await bearer(auth, tenant, conn, MAYA) == "Bearer at-maya"
 
@@ -118,7 +119,7 @@ async def test_a_person_with_no_sign_in_gets_a_link_made_for_them_not_the_teams_
 ) -> None:
     store, tokens, auth = rig(engine)
     conn = await connection(store, tenant, "person_or_team", backup=True)
-    await tokens.store_answer(tenant, conn, "test", {"access_token": "at-team", "expires_in": 3600})
+    await tokens.store_answer(tenant, conn, {"access_token": "at-team", "expires_in": 3600})
     with pytest.raises(AuthFailed) as e:
         await bearer(auth, tenant, conn, JAMES)
     assert e.value.code == "CONNECTION_NOT_LINKED" and e.value.details["reason"] == "not_connected"
@@ -136,7 +137,7 @@ async def test_a_call_with_nobody_behind_it_uses_the_team_account_only_where_the
     personal = await connection(store, tenant, "person")
     backed = await connection(store, tenant, "person_or_team", backup=True)
     for conn in (personal, backed):
-        await tokens.store_answer(tenant, conn, "test", {"access_token": "at-team", "expires_in": 3600})
+        await tokens.store_answer(tenant, conn, {"access_token": "at-team", "expires_in": 3600})
     with pytest.raises(AuthFailed) as e:
         await bearer(auth, tenant, personal, None)
     assert e.value.code == "CONNECTION_NOT_LINKED" and e.value.details["reason"] == "no_person"
@@ -149,14 +150,14 @@ async def test_one_persons_refused_refresh_leaves_the_connection_and_everyone_el
     store, tokens, auth = rig(engine, refusing())
     conn = await connection(store, tenant, "person")
     spent = {"access_token": "at-old", "refresh_token": "rt-old", "expires_in": 1}
-    await tokens.store_answer(tenant, conn, "test", spent, JAMES.sub)
-    await tokens.store_answer(tenant, conn, "test", {"access_token": "at-maya", "expires_in": 3600}, MAYA.sub)
+    await tokens.store_answer(tenant, conn, spent, JAMES.sub)
+    await tokens.store_answer(tenant, conn, {"access_token": "at-maya", "expires_in": 3600}, MAYA.sub)
     with pytest.raises(AuthFailed):
         await bearer(auth, tenant, conn, JAMES)
     found = await store.get(tenant, conn)
     assert found is not None and found["status"] == "healthy"
     # Kept and marked refused, so Your connections says it expired; James's next call asks him to connect.
-    held = await store.token(tenant, conn, "test", JAMES.sub)
+    held = await store.token(tenant, conn, JAMES.sub)
     assert held is not None and held["refused_at"] is not None
     with pytest.raises(AuthFailed) as again:
         await bearer(auth, tenant, conn, JAMES)
@@ -216,12 +217,12 @@ async def personal_connection(
     security = person(tenant, "Sam Adeyemi", {"team_security": "admin"})
     await client.post("/v1/egress/hosts", json={"value": "login.bank.test"}, headers=security)
     made = await client.post(
-        "/v1/connections", json={"name": name, "authKind": "oauth2_auth_code", "signIn": "person"}, headers=admin
+        "/v1/apps", json={"name": name, "authKind": "oauth2_auth_code", "signIn": "person"}, headers=admin
     )
     assert made.status_code == 201 and made.json()["data"]["signIn"] == "person", made.text
     conn = made.json()["data"]["id"]
-    put = await client.put(
-        f"/v1/connections/{conn}/environments/test", json={"revision": 1, "settings": settings}, headers=admin
+    put = await client.patch(
+        f"/v1/apps/{conn}/accounts/{conn}", json={"revision": 1, "settings": settings}, headers=admin
     )
     assert put.status_code == 200, put.text
     return str(conn)
@@ -236,14 +237,13 @@ async def test_a_connect_link_opens_only_for_its_person_once_and_never_for_anyon
     made = await ConnectLinks(store, CONSOLE_URL).make(
         tenant_id=tenant,
         connection_id=conn,
-        environment="test",
         team_id=TEAM,
         person=james,
         scopes=["cases.write"],
         reason="not_connected",
     )
     link = parse_qs(urlsplit(made["connectUrl"]).query)["link"][0]
-    path, body = "/v1/connections/connect-links/sign-in", {"link": link}
+    path, body = "/v1/connect-links/sign-in", {"link": link}
     maya = person(tenant, "Maya Okafor", {TEAM: "builder"})
     stolen = await client.post(path, json=body, headers=maya)
     assert stolen.status_code == 404 and stolen.json()["error"]["code"] == "connect_link_not_yours", stolen.text
@@ -263,11 +263,11 @@ async def test_an_expired_connect_link_starts_nothing(
     store = ConnectionStore(engine)
     past = datetime.now(UTC) - timedelta(minutes=16)
     made = await ConnectLinks(store, CONSOLE_URL, clock=lambda: past).make(
-        tenant_id=tenant, connection_id=conn, environment="test", team_id=TEAM, person=JAMES, scopes=[], reason="x"
+        tenant_id=tenant, connection_id=conn, team_id=TEAM, person=JAMES, scopes=[], reason="x"
     )
     link = parse_qs(urlsplit(made["connectUrl"]).query)["link"][0]
     r = await client.post(
-        "/v1/connections/connect-links/sign-in",
+        "/v1/connect-links/sign-in",
         json={"link": link},
         headers=person(tenant, "James Richardson", {TEAM: "builder"}),
     )
@@ -277,11 +277,9 @@ async def test_an_expired_connect_link_starts_nothing(
 async def test_a_builder_starts_their_own_sign_in_but_not_the_teams(client: httpx.AsyncClient, tenant: str) -> None:
     conn = await personal_connection(client, tenant)
     builder = person(tenant, "James Richardson", {TEAM: "builder"})
-    own = await client.post(f"/v1/connections/{conn}/sign-in", json={"environment": "test"}, headers=builder)
+    own = await client.post(f"/v1/apps/{conn}/accounts/{conn}/sign-in", json={}, headers=builder)
     assert own.status_code == 200, own.text
-    team = await client.post(
-        f"/v1/connections/{conn}/sign-in", json={"environment": "test", "account": "team"}, headers=builder
-    )
+    team = await client.post(f"/v1/apps/{conn}/accounts/{conn}/sign-in", json={"account": "team"}, headers=builder)
     assert team.status_code == 403, team.text
 
 
@@ -301,7 +299,7 @@ async def test_an_operations_scopes_are_asked_for_up_front_and_a_token_lacking_o
     asked = await link_scopes(store, tenant, first.value)
     assert asked is not None and asked["scopes"] == "openid api cases.write", asked
     granted = {"access_token": "at-james", "expires_in": 3600, "scope": "openid api refresh_token"}
-    await tokens.store_answer(tenant, conn, "test", granted, JAMES.sub)
+    await tokens.store_answer(tenant, conn, granted, JAMES.sub)
     with pytest.raises(AuthFailed) as short:
         await bearer(auth, tenant, conn, JAMES, ("cases.write",))
     assert short.value.code == "CONNECTION_NOT_LINKED" and short.value.details["reason"] == "insufficient_scope"
@@ -309,7 +307,7 @@ async def test_an_operations_scopes_are_asked_for_up_front_and_a_token_lacking_o
     assert again is not None and again["scopes"] == "openid api refresh_token cases.write", again
     assert await bearer(auth, tenant, conn, JAMES) == "Bearer at-james"
     wide = {**granted, "scope": "openid api cases.write"}
-    await tokens.store_answer(tenant, conn, "test", wide, JAMES.sub)
+    await tokens.store_answer(tenant, conn, wide, JAMES.sub)
     assert await bearer(auth, tenant, conn, JAMES, ("cases.write",)) == "Bearer at-james"
 
 
@@ -327,15 +325,15 @@ async def test_granted_scopes_fall_back_to_the_tokens_claim_then_the_request_and
     store, tokens, _ = rig(engine, httpx.AsyncClient(transport=httpx.MockTransport(answer)))
     conn = await connection(store, tenant, "person")
     claimed = {"access_token": jwt({"scp": ["api", "cases.write"]}), "expires_in": 3600}
-    await tokens.store_answer(tenant, conn, "test", claimed, JAMES.sub, requested=["openid"])
-    found = await store.token(tenant, conn, "test", JAMES.sub)
+    await tokens.store_answer(tenant, conn, claimed, JAMES.sub, requested=["openid"])
+    found = await store.token(tenant, conn, JAMES.sub)
     assert found is not None and found["scopes"] == ["api", "cases.write"], found
     spent = {"access_token": "at-old", "refresh_token": "rt-old", "expires_in": 1}
-    await tokens.store_answer(tenant, conn, "test", spent, MAYA.sub, requested=["openid", "api"])
-    found = await store.token(tenant, conn, "test", MAYA.sub)
+    await tokens.store_answer(tenant, conn, spent, MAYA.sub, requested=["openid", "api"])
+    found = await store.token(tenant, conn, MAYA.sub)
     assert found is not None and found["scopes"] == ["openid", "api"], found
-    await tokens.access(tenant, conn, "test", SETTINGS, None, grant="none", person=MAYA.sub)
-    found = await store.token(tenant, conn, "test", MAYA.sub)
+    await tokens.access(tenant, conn, SETTINGS, None, grant="none", person=MAYA.sub)
+    found = await store.token(tenant, conn, MAYA.sub)
     assert found is not None and found["rotations"] == 2 and found["scopes"] == ["openid", "api"], found
 
 
@@ -343,11 +341,11 @@ async def sign_in(
     client: httpx.AsyncClient, tenant: str, conn: str, who: tuple[str, dict[str, str]], code: str
 ) -> None:
     headers = person(tenant, *who)
-    started = await client.post(f"/v1/connections/{conn}/sign-in", json={"environment": "test"}, headers=headers)
+    started = await client.post(f"/v1/apps/{conn}/accounts/{conn}/sign-in", json={}, headers=headers)
     assert started.status_code == 200, started.text
     state = parse_qs(urlsplit(str(started.json()["data"]["authorizeUrl"])).query)["state"][0]
     done = await client.post(
-        f"/v1/connections/{conn}/sign-in/complete", json={"state": state, "code": code}, headers=headers
+        f"/v1/apps/{conn}/accounts/{conn}/sign-in/complete", json={"state": state, "code": code}, headers=headers
     )
     assert done.status_code == 200, done.text
 
@@ -369,10 +367,10 @@ async def test_a_person_lists_only_their_own_sign_ins(client: httpx.AsyncClient,
     conn = await personal_connection(client, tenant)
     await sign_in(client, tenant, conn, JAMES_P, "james")
     await sign_in(client, tenant, conn, MAYA_P, "maya")
-    mine = await client.get("/v1/me/connections", headers=person(tenant, *JAMES_P))
+    mine = await client.get("/v1/me/accounts", headers=person(tenant, *JAMES_P))
     assert mine.status_code == 200, mine.text
     rows = mine.json()["data"]
-    assert [(r["connectionId"], r["connection"], r["environment"]) for r in rows] == [(conn, "CRM", "test")], rows
+    assert [(r["connectionId"], r["connection"], r["app"]) for r in rows] == [(conn, "CRM", "CRM")], rows
     assert rows[0]["scopes"] == ["openid", "api"]
 
 
@@ -383,14 +381,14 @@ async def test_disconnect_deletes_only_the_persons_sign_in_and_revokes_it_at_the
     conn = await personal_connection(client, tenant, revoking)
     await sign_in(client, tenant, conn, JAMES_P, "james")
     await sign_in(client, tenant, conn, MAYA_P, "maya")
-    path, env = f"/v1/me/connections/{conn}", {"environment": "test"}
-    gone = await client.delete(path, params=env, headers=person(tenant, *JAMES_P))
+    path = f"/v1/me/accounts/{conn}"
+    gone = await client.delete(path, headers=person(tenant, *JAMES_P))
     assert gone.status_code == 204, gone.text
     assert [(r["token"], r.get("token_type_hint")) for r in system.revoked] == [("rt-james", "refresh_token")]
-    assert (await client.get("/v1/me/connections", headers=person(tenant, *JAMES_P))).json()["data"] == []
-    left = (await client.get("/v1/me/connections", headers=person(tenant, *MAYA_P))).json()["data"]
+    assert (await client.get("/v1/me/accounts", headers=person(tenant, *JAMES_P))).json()["data"] == []
+    left = (await client.get("/v1/me/accounts", headers=person(tenant, *MAYA_P))).json()["data"]
     assert [r["connectionId"] for r in left] == [conn], left
-    twice = await client.delete(path, params=env, headers=person(tenant, *JAMES_P))
+    twice = await client.delete(path, headers=person(tenant, *JAMES_P))
     assert twice.status_code == 404, twice.text
 
 
@@ -413,10 +411,8 @@ async def test_the_team_accounts_sign_in_asks_for_every_scope_its_operations_nee
         assert r.status_code == 200, r.text
         return parse_qs(urlsplit(str(r.json()["data"]["authorizeUrl"])).query)["scope"][0]
 
-    path = f"/v1/connections/{conn}/sign-in"
-    team = await client.post(
-        path, json={"environment": "test", "account": "team"}, headers=person(tenant, "Priya Shah", {TEAM: "admin"})
-    )
+    path = f"/v1/apps/{conn}/accounts/{conn}/sign-in"
+    team = await client.post(path, json={"account": "team"}, headers=person(tenant, "Priya Shah", {TEAM: "admin"}))
     assert scope(team) == "openid api cases.write"
-    own = await client.post(path, json={"environment": "test"}, headers=person(tenant, *JAMES_P))
+    own = await client.post(path, json={}, headers=person(tenant, *JAMES_P))
     assert scope(own) == "openid api"

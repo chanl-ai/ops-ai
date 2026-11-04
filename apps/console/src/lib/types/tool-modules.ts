@@ -35,8 +35,10 @@ export interface ToolModule {
   major: number;
   /** Team that owns the system and decides approvals. */
   ownerTeam: string;
-  /** Base URL, MCP server URL or spec URL. */
-  endpoint: string;
+  /** Base URL, MCP server URL or spec URL; null while a plugin's account waits for the sign-in that names its address. */
+  endpoint: string | null;
+  /** `plugin:<id>` for a plugin's tools, which change only with the plugin; `builtin:<app>` for a built-in app's. */
+  templateId?: string | null;
   operationCount: number;
   accessClasses: ToolAccess[];
   approvalState: ModuleApprovalState;
@@ -274,7 +276,7 @@ export interface ModuleTestInput {
   operation: string;
   contextId: string;
   /** `stub` (Mock) answers from the operation's mock and sends nothing; `sandbox` (Real) makes the call, a write
-   * included, on the published module through its connection's test sign-in. */
+   * included, on the published module as a test run, which signs in with the app's sandbox account if it has one. */
   target: 'stub' | 'sandbox';
   input: Record<string, unknown>;
   /** Test only: the gateway issues a test approval token for this exact input instead of waiting for a person. */

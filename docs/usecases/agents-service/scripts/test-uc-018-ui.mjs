@@ -51,7 +51,7 @@ await withUiStack(async (consoleUrl) => {
     check('a thread on the draft agent is refused', early.status >= 400, early.status);
 
     // Grant lookup_account from the runtime's catalogue: the picker lists GET /v1/tools and nothing else.
-    const catalogue = (await (await fetch(`${agents}/v1/tools`, { headers: TEAM })).json()).data.map((t) => t.id).sort();
+    const catalogue = (await (await fetch(`${agents}/v1/tools?pageSize=200`, { headers: TEAM })).json()).data.data.map((t) => t.id).sort();
     // The tools picker (EntityPicker) searches the runtime's catalogue on the server, a page at a time.
     const optioned = armed(page.waitForResponse((r) => r.request().method() === 'GET' && r.url().startsWith(`${agents}/v1/tools/options`), { timeout: 60_000 }));
     await page.getByTestId('agent-tools-picker').getByRole('button', { name: 'Grant tools' }).click();

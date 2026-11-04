@@ -154,17 +154,22 @@ class InputField(Strict):
 
 
 class Paging(Strict):
-    """How a listing tool reaches its next page. `link`: the answer field holding the next page's address. `token`: the
-    answer field holding a value sent back as `param`. `offset`: `limit` items a page, read from the answer's `items`
-    list, with the offset and limit sent as `offset_param` and `limit_param`; a short page is the last."""
+    """How a listing tool reaches its next page.
 
-    rule: Literal["link", "token", "offset"]
+    `link`: the answer field holding the next page's address. `link_header`: the address in the answer's `Link` header,
+    `rel="next"` (RFC 8288; GitHub, GitLab). `token`: the answer field holding a value sent back as `param`. `offset`:
+    `limit` items a page, read from the answer's `items` list, with the offset and limit sent as `offset_param` and
+    `limit_param`. `page`: pages numbered from `start`, the number sent as `param` (`page` when left out) and the size
+    `limit` as `limit_param`; `items` names the answer's list, or the answer is the list. A short page is the last."""
+
+    rule: Literal["link", "link_header", "token", "offset", "page"]
     next: str | None = None
     param: str | None = None
     limit: int | None = Field(default=None, ge=1, le=2000)
     items: str | None = None
     offset_param: str = "offset"
     limit_param: str = "limit"
+    start: int = Field(default=1, ge=0)
 
 
 class Request(Strict):

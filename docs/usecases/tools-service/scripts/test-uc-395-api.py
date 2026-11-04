@@ -8,7 +8,7 @@ from __future__ import annotations
 from contextlib import ExitStack
 from pathlib import Path
 
-from connection_calls import allow_bank, call, clean, connection, module
+from connection_calls import allow_bank, at, call, clean, connection, module
 from usecase_harness import AGENTS_PORT, TOOLS_PORT, agents, check, core_bank, data, finish, tools
 
 with ExitStack() as stack:
@@ -25,7 +25,7 @@ with ExitStack() as stack:
         gw,
         "uc395 no certificate",
         "none",
-        {"test": {"settings": {"trustedCa": pem["ca"]}}},
+        {"sandbox": {"settings": {"trustedCa": pem["ca"]}}},
         base_url=f"https://{bank['mtlsHost']}",
     )
     module(gw, "uc395-without", url, trusted_only["id"])
@@ -38,30 +38,30 @@ with ExitStack() as stack:
         without,
     )
 
-    # 2. The certificate and its key set on the connection: the handshake takes it and the call succeeds.
+    # 2. The certificate and its key set on the account: the handshake takes it and the call succeeds.
     with_cert = connection(
         gw,
         "uc395 certificate",
         "none",
         {
-            "test": {
+            "sandbox": {
                 "settings": {"clientCertificate": pem["client_cert"], "trustedCa": pem["ca"]},
                 "secretValues": {"clientKey": pem["client_key"]},
             }
         },
         base_url=f"https://{bank['mtlsHost']}",
     )
-    shown = data(gw.get(f"/v1/connections/{with_cert['id']}"))
+    shown = data(gw.get(at(with_cert)))
     check(
         "2 the private key is set and never shown",
-        shown["environments"]["test"]["secrets"]["clientKey"]["set"] and "PRIVATE KEY" not in str(shown),
-        shown["environments"]["test"]["secrets"],
+        shown["secrets"]["clientKey"]["set"] and "PRIVATE KEY" not in str(shown),
+        shown["secrets"],
     )
     module(gw, "uc395-with", url, with_cert["id"])
     ok = call(gw, "uc395_with", environment="test")
     check("2 with the certificate the system answers", ok.get("ok") is True and ok["output"] == {"mtls": True}, ok)
 
-    # 3. A connection's certificate is presented only on its own calls: the first module still fails.
+    # 3. An account's certificate is presented only on its own calls: the first module still fails.
     again = call(gw, "uc395_without", environment="test", key="again")
     check("3 the module without a certificate still fails after one was presented", again.get("ok") is False, again)
     rows = data(gw.get("/v1/executions", params={"pageSize": 50}))

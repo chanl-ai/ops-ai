@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-03",
+  "title": "Apps reach their own addresses without listing",
+  "description": "An installed app signs in and calls its own system without Security listing its addresses first, while private and cloud metadata addresses stay blocked. A new New app addresses policy lets Security choose how other new addresses are allowed: ask Security, builders, any public address, or only listed ones.",
+  "tag": "improved"
+}

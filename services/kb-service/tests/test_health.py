@@ -7,6 +7,7 @@ import httpx
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from ops_kb.app import create_kb_app
+from ops_store.background import PROCESSES
 
 
 async def test_health_is_ok_on_a_reachable_database(client: httpx.AsyncClient) -> None:
@@ -35,3 +36,12 @@ async def test_console_preflight_is_answered(client: httpx.AsyncClient) -> None:
     )
     assert r.status_code == 200, r.text
     assert r.headers.get("access-control-allow-origin") == "http://localhost:3016"
+
+
+async def test_the_background_page_can_read_the_knowledge_schedule(client: httpx.AsyncClient) -> None:
+    """agents-service's Background page reads each service's /health/background; without kb's, the knowledge
+    schedule never shows there, running or stopped."""
+    r = await client.get("/health/background")
+    assert r.status_code == 200, r.text
+    keys = [p["key"] for p in r.json()["processes"]]
+    assert keys == [p.key for p in PROCESSES if p.service == "kb" and (p.only_if is None or p.only_if())], keys

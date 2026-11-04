@@ -35,7 +35,6 @@ from usecase_harness import (
     service_headers,
     signed_in,
     tools,
-    until,
 )
 
 MANIFEST = """\
@@ -108,11 +107,11 @@ with ExitStack() as stack:
     def output(r: httpx.Response) -> dict[str, Any]:
         return dict((data(r) or {}).get("output") or {}) if r.status_code == 200 else {}
 
-    api.put("/v1/policies/plugins", json={"value": {"evidence.stripe": {"enabled": True}}}, headers=sam)
     gw.post("/v1/egress/hosts", json={"value": "api.stripe.com", "note": "uc-584 evidence"}, headers=sam)
-    until(lambda: all(p["installOn"] for p in (data(gw.get("/v1/plugins", headers=priya)) or {}).get("plugins", [])))
     on = kept(
-        gw.put("/v1/plugins/evidence.stripe/team", json={"enabled": True, "credentials": {"token": KEY}}, headers=priya)
+        gw.put(
+            "/v1/apps/plugin:evidence.stripe/team", json={"enabled": True, "credentials": {"token": KEY}}, headers=priya
+        )
     )
 
     customer = call("stripe_create_customer", {"name": "Harbor test customer", "email": "test@harborpine.example"})
@@ -136,7 +135,7 @@ with ExitStack() as stack:
 
     kept(
         gw.put(
-            "/v1/plugins/evidence.stripe/team",
+            "/v1/apps/plugin:evidence.stripe/team",
             json={"enabled": True, "settings": {"stripe_version": "1999-01-01"}},
             headers=priya,
         )

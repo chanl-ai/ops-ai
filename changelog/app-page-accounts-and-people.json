@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-03",
+  "title": "App page: Accounts and People tabs",
+  "description": "An app's page lists the team's logins under Accounts and each person's own sign-in under People, with one Connect, Reconnect or Connected as in its header. Its Tools tab shows who uses each tool, and Secrets names the app credential it signs in with.",
+  "tag": "improved"
+}

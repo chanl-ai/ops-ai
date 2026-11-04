@@ -27,7 +27,7 @@ test('connected keeps signed-in and built-in apps only', async () => {
     { id: 'plugin:crm', kind: 'plugin', state: 'not_signed_in', status: 'healthy' },
     { id: 'builtin:files', kind: 'builtin', status: 'available' },
   ];
-  const ops = client({ 'GET systems': cards });
+  const ops = client({ 'GET apps': cards });
   assert.deepEqual((await ops.apps.list({ connected: true })).map((c) => c.id), ['plugin:desk', 'builtin:files']);
 });
 
@@ -41,16 +41,18 @@ test('a tool runs on the module that holds it and Mock says mock', async () => {
   await ops.tools.run('con_desk', 'read_record', { id: 'r1' });
   const run = seen.at(-1);
   assert.equal(run.url.pathname, '/api/tools/v1/tool-modules/mod_b/operations/read_record/run');
-  assert.deepEqual(run.body, { mode: 'mock', input: { id: 'r1' }, environment: 'test' });
+  // Left to the gateway, a run is a test run: the app's sandbox account when it has one.
+  assert.deepEqual(run.body, { mode: 'mock', input: { id: 'r1' } });
 });
 
-test("the team's own client goes on the app's account with its revision", async () => {
+test("an account picks the team's credential by its id with its revision", async () => {
   const seen = [];
-  const ops = client({ 'GET apps/plugin:desk': { ...PAGE, connection: { id: 'con_team' } }, 'GET connections/con_team': { revision: 4 } }, seen);
-  await ops.credentials.set('plugin:desk', { clientId: 'own-app', clientSecret: 's3' });
+  const ops = client({ 'GET apps/plugin:desk': { ...PAGE, connection: { id: 'con_team' } }, 'GET apps/plugin:desk/accounts/con_team': { revision: 4 } }, seen);
+  await ops.credentials.set('plugin:desk', 'cred_bank');
   const put = seen.at(-1);
-  assert.equal(put.url.pathname, '/api/tools/v1/connections/con_team/environments/production');
-  assert.deepEqual(put.body, { revision: 4, settings: { clientId: 'own-app' }, secretValues: { clientSecret: 's3' } });
+  assert.equal(put.method, 'PATCH');
+  assert.equal(decodeURIComponent(put.url.pathname), '/api/tools/v1/apps/plugin:desk/accounts/con_team');
+  assert.deepEqual(put.body, { revision: 4, credentialId: 'cred_bank' });
 });
 
 test("usage is the calls' rows, not the envelope", async () => {
@@ -78,11 +80,20 @@ test('credentials.list answers the rows of the app credentials route', async () 
   assert.ok(seen.at(-1).url.pathname.endsWith('/v1/app-credentials'));
 });
 
-test('a run uses production when only production is set', async () => {
-  // The app page lists every environment with whether it is set; a listed but unset test is not one to run in.
+test('credentials.create posts the app, its client and secret to the app credentials route', async () => {
   const seen = [];
-  const environments = { test: { set: false }, production: { set: true } };
-  const page = { card: { ...PAGE.card, moduleIds: ['mod_b'] }, connection: { id: 'con_desk', environments } };
-  await client({ 'GET apps/con_desk': page }, seen).tools.run('con_desk', 'read_record', { id: 'r1' });
-  assert.equal(seen.at(-1).body.environment, 'production');
+  const row = { id: 'con_desk', app: 'plugin:desk', type: 'own' };
+  const ops = client({ 'POST app-credentials': row }, seen);
+  assert.deepEqual(await ops.credentials.create('plugin:desk', { clientId: 'bank-app', clientSecret: 's3' }), row);
+  assert.equal(seen.at(-1).method, 'POST');
+  assert.deepEqual(seen.at(-1).body, { app: 'plugin:desk', clientId: 'bank-app', clientSecret: 's3' });
+});
+
+test('a sandbox account is added as a sandbox under its app', async () => {
+  const seen = [];
+  await client({}, seen).accounts.add('plugin:desk', 'Desk sandbox', { sandbox: true, credentialId: 'cred_uat' });
+  const made = seen.at(-1);
+  assert.equal(made.method, 'POST');
+  assert.equal(decodeURIComponent(made.url.pathname), '/api/tools/v1/apps/plugin:desk/accounts');
+  assert.deepEqual(made.body, { name: 'Desk sandbox', sandbox: true, credentialId: 'cred_uat' });
 });

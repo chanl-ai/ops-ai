@@ -28,22 +28,23 @@ screens were retired with them.
 
 | Method and path | Does | Who may | File | State |
 |---|---|---|---|---|
-| GET `/v1/connection-kinds` | Each auth kind with its fields (secret or plain, required, advanced, choices, default), the fields every environment has (`common`: the system address its credentials are bound to) and the client certificate fields | signed in | `connections/routes.py` | built |
-| GET `/v1/connections` | One page by name, `search`; modules that use each joined | connections.view | `connections/routes.py` | built |
-| POST `/v1/connections` | A draft: name and auth kind, owned by the acting team | connections.manage | `connections/routes.py` | built |
-| GET · PATCH · DELETE `/v1/connections/{id}` | Detail with each environment's settings, which secret parts are set, who signed in, activity; rename or make available to teams (409 on a stale revision); delete refused 409 `connection_in_use` | view; manage | `connections/routes.py` | built |
-| PUT `/v1/connections/{id}/environments/{env}` | One environment's settings, checked against the kind, and secret parts, written once into the secret store | connections.manage (a person) | `connections/routes.py` | built |
-| POST `…/sign-in`, `…/sign-in/complete`, `…/sign-out` | Authorization code with PKCE S256: the address to send the browser to; the code and state the console hands back (once, ten minutes, the same person); forget the token | connections.manage | `connections/routes.py` | built |
-| POST `/v1/connections/mcp` | An MCP server by its address: sign-in found from the server, client registered when offered and none given, a connection named after the server | connections.manage | `connections/routes.py` | built |
+| GET `/v1/connection-kinds` | Each auth kind with its fields (secret or plain, required, advanced, choices, default), the fields every account has (`common`: the system address its credentials are bound to) and the client certificate fields | signed in | `connections/routes.py` | built |
+| GET `/v1/apps` | The team's app cards: each app's default account, its sandbox account, its state, and a plugin's details | signed in | `apps.py` | built |
+| POST `/v1/apps` | A custom app as its first account: by name with an auth kind, or an MCP server by its address (sign-in found from the server, client registered when offered and none given) | connections.manage | `apps.py` | built |
+| GET `/v1/apps/{app_id}` | One app's page: card, accounts (default first, sandbox marked), the caller's own sign-in, tools, skills, latest calls | signed in | `apps.py` | built |
+| PUT `/v1/apps/plugin:{id}/team` | A plugin's team switch and settings; the first turn-on makes the default account | connections.manage | `apps.py`, `plugins/routes.py` | built |
+| POST `/v1/apps/{app_id}/accounts` | Another account of the app: a sandbox, or another named one with several_accounts on | connections.manage | `apps.py` | built |
+| GET · PATCH · DELETE `/v1/apps/{app_id}/accounts/{id}` | An account's settings, which secret parts are set, who signed in, activity; name, sign-in, sandbox flag, settings and secret parts (409 on a stale revision); delete refused 409 `connection_in_use` | view; manage | `connections/routes.py` | built |
+| POST `…/accounts/{id}/sign-in`, `…/sign-in/complete`, `…/sign-out`, `…/test`, `…/test-credential`; PUT `…/default` | Authorization code with PKCE S256 (once, ten minutes, the same person); forget the token; Test connection; an admin's Test with my account; the caller's default account | connections.manage, or own | `connections/routes.py` | built |
+| GET `/v1/me/accounts`, PUT `/v1/me/accounts/{id}/credentials`, DELETE `/v1/me/accounts/{id}` | The caller's own sign-ins and keys | own | `connections/routes.py` | built |
+| GET · POST `/v1/app-credentials`, PUT `…/{id}/secret` | The team's own OAuth clients, one row each | connections.manage | `apps.py` | built |
 | POST `/v1/tool-modules/discover` | An MCP source with `connectionId` lists the tools with the connection's token; without sign-in, 400 `sign_in_required` | tools.create | `modules/routes.py` | built |
-| POST `/v1/calls` | `runContext.environment` added (test or production; absent is test) | service token | `app.py` | built |
-| GET `/v1/executions` | Each row adds `environment` and `connectionId` | signed in | `modules/routes.py` | built |
+| POST `/v1/calls` | `runContext.environment`, the kind of run (test or production; absent is test): a test run uses the app's sandbox account when it has one | service token | `app.py` | built |
+| GET `/v1/executions` | Each row adds the run's `environment` and the `connectionId` of the account it signed in with | signed in | `modules/routes.py` | built |
 | GET `/v1/secrets` | Each row adds `connectionId`; rotate, scope and delete of a connection's part are 409 `connection_secret` | as before | `secrets/routes.py` | built |
 | GET · POST `/v1/tool-modules/{id}/operations/{op}/mocks`, PATCH · DELETE `…/mocks/{mockId}` | An operation's mock answers in test: name, match, status, body, headers, delayMs, timeout, default | tools.view; changes tools.edit | `mock_routes.py` | built |
-| POST `/mcp/test/{team}` | MCP over streamable HTTP, stateless: `tools/list` gives the team's published reads with schemas and `readOnlyHint`; `tools/call` runs one gateway call (the function `POST /v1/calls` calls) in test; a write is refused without a person; the log row keeps `channel` mcp and the client's name | API key or person token of the team, `tools.run` | `mcp_server.py`, `gateway_calls.py` | built |
-| POST `/mcp/production/{team}` | 403 `production_off` until a team turns production on | as above | `mcp_server.py` | built |
+| POST `/mcp/{team}` | MCP over streamable HTTP, stateless: `tools/list` gives the team's published reads with schemas and `readOnlyHint`; `tools/call` runs one gateway call (the function `POST /v1/calls` calls) as a test run; a write is refused without a person; the log row keeps `channel` mcp and the client's name | API key or person token of the team, `tools.run` | `mcp_server.py`, `gateway_calls.py` | built |
 | GET `/v1/executions` | Each row adds `channel` (api or mcp) and `clientName` | signed in | `modules/executions.py` | built |
-| POST `/v1/connections/{id}/test` | Test connection: egress, token, one probe | connections.manage |   | planned |
 
 ## Data
 
@@ -51,21 +52,20 @@ All in tools-service's own chain (`tools_0028_connections`), every table keyed b
 
 | Table | Holds | Guarantee | State |
 |---|---|---|---|
-| `connections` | Name, auth kind, owning team, available-to teams, status and what the system refused, revision | Written only against the revision read (CAS) | built |
-| `connection_environments` | Per environment: plain settings and each secret field's `tool_secrets` name | Written in the connection's transaction; cascades with it | built |
-| `connection_tokens` | Access and refresh tokens (ciphertext), expiry, scopes, account, rotations; `person_id` '' for shared | Primary key (tenant, connection, environment, person); a refreshed token is stored only against the rotation it replaced (CAS), with no lock held during the token request; a caller that loses reads the winner's token | built |
+| `connections` | One account: its app (`app_id`), whether it is a sandbox, name, auth kind, owning team, plain settings and each secret field's `tool_secrets` name, the OAuth client it signs in with, status and what the system refused, revision (`tools_0062` folded the per-environment rows in) | Written only against the revision read (CAS) | built |
+| `connection_tokens` | Access and refresh tokens (ciphertext), expiry, scopes, account, rotations; `person_id` '' for shared | Primary key (tenant, connection, person); a refreshed token is stored only against the rotation it replaced (CAS), with no lock held during the token request; a caller that loses reads the winner's token | built |
 | `oauth_states` | A sign-in in progress: state hash, person, PKCE verifier (ciphertext), redirect, expiry, used | Taken once by its person and connection before it expires; expired rows pruned on each new sign-in | built |
 | `connection_audit` | Created, changed, secret set, signed in or out, refresh failed, deleted: names only | Written in the change's transaction; grows with people's changes, not with calls | built |
 | `tool_secrets.connection_id` | Marks a connection's secret part | Changed only through the connection | built |
 | `operation_mocks` | Mock answers per operation name and environment, in order, one default (`tools_0029`) | A new default clears the old one in the same transaction | built |
-| `gateway_calls.environment`, `.connection_id` | What each call used | Written with the call's row | built |
+| `gateway_calls.environment`, `.connection_id` | The kind of run and the account each call signed in with | Written with the call's row | built |
 
 ## Sequences
 
 ### A call that refreshes a token
 
 1. agents-service: `POST /v1/calls`, `environment: production`
-1. Gateway checks pass; `Authenticator.prepare` reads the connection and its production row
+1. The registry picks the account (`records.account_for`: a live run never a sandbox one); gateway checks pass; `Authenticator.prepare` reads it
 1. `Tokens.access`: read the token; inside 60 s of expiry, POST the token address with the refresh token (egress client, no lock held); store the new tokens against the rotation read, or read the winner's
 1. Send with `Authorization: Bearer`; on 401 for a read, step 3 again for that token only, then send once more
 1. Scrub every token and secret value from the answer; log environment and connection

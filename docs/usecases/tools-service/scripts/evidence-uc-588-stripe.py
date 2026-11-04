@@ -32,7 +32,6 @@ from usecase_harness import (
     service_headers,
     signed_in,
     tools,
-    until,
 )
 
 MANIFEST = """\
@@ -76,15 +75,13 @@ with ExitStack() as stack:
     tenant = str((session.get("principal") or {}).get("tenantId") or session.get("tenantId") or "")
     seen: list[str] = []
 
-    api.put("/v1/policies/plugins", json={"value": {"evidence.stripe": {"enabled": True}}}, headers=sam)
     gw.post("/v1/egress/hosts", json={"value": "api.stripe.com", "note": "uc-588 evidence"}, headers=sam)
-    until(lambda: all(p["installOn"] for p in (data(gw.get("/v1/plugins", headers=priya)) or {}).get("plugins", [])))
     on = gw.put(
-        "/v1/plugins/evidence.stripe/team", json={"enabled": True, "credentials": {"token": KEY}}, headers=priya
+        "/v1/apps/plugin:evidence.stripe/team", json={"enabled": True, "credentials": {"token": KEY}}, headers=priya
     )
     seen.append(on.text)
     connection_id = str((data(on) or {}).get("connectionId") or "con_missing")
-    tested = gw.post(f"/v1/connections/{connection_id}/test", json={"environment": "production"}, headers=priya)
+    tested = gw.post(f"/v1/apps/{connection_id}/accounts/{connection_id}/test", json={}, headers=priya)
     seen.append(tested.text)
     health = (data(tested) or {}).get("health") or {}
     headers = service_headers("tools", tenant=tenant, service="agents", team="team_ops")

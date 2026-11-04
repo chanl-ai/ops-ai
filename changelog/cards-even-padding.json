@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-03",
+  "title": "Cards no longer carry doubled padding",
+  "description": "App cards, an agent's side cards and the layout editor's blocks had padding both on the card and inside it, so they sat taller than their content. They now use the padding of their sections only.",
+  "tag": "improved"
+}

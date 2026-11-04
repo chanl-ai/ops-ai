@@ -14,6 +14,9 @@ ROOT = Path(__file__).resolve().parents[2]
 def clone(tmp_path: Path) -> Path:
     repo = tmp_path / "repo"
     subprocess.run(["git", "clone", "-q", "--shared", str(ROOT), str(repo)], check=True)
+    # A runner has no git identity, and a commit without one stops with exit 128.
+    for key, value in (("user.name", "Commit Paths Test"), ("user.email", "commit-paths@example.test")):
+        subprocess.run(["git", "config", key, value], cwd=repo, check=True)
     shutil.copy2(ROOT / "scripts" / "commit-paths.sh", repo / "scripts" / "commit-paths.sh")
     for dep in (".venv", "node_modules"):
         if (ROOT / dep).exists():

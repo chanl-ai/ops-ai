@@ -20,7 +20,7 @@ class Policy:
     effect: str
     # "bool"; "floor": a number from 0 to 1, or None for no floor; "days": a whole number of days, or None for no limit;
     # "hours": a whole number of hours; "publish_modes": one team's {area: mode}, see PUBLISH_AREAS and PUBLISH_MODES.
-    # "names": a list of names (appWritesNeedApproval: app ids).
+    # "names": a list of names (appWritesNeedApproval: app ids). "choice": one of `choices`.
     kind: str = "bool"
     # The grid cell a change needs; the security team holds it.
     changed_by: tuple[str, str] = ("settings", "manage")
@@ -31,9 +31,13 @@ class Policy:
     live: bool = False
     # A short name for the Policies page, so a new policy is drawn there with no console change.
     title: str = ""
+    # A "choice" policy's options, in order: (value, title, what it means).
+    choices: tuple[tuple[str, str, str], ...] = ()
+    # A fact no value of the policy changes, said under it on the Policies page.
+    note: str = ""
 
 
-KINDS = ("bool", "floor", "days", "hours", "publish_modes", "plugins", "names")
+KINDS = ("bool", "floor", "days", "hours", "publish_modes", "names", "choice")
 
 
 # Which publishes wait for a second person's review (moved here), per team and area:
@@ -181,14 +185,30 @@ POLICIES: tuple[Policy, ...] = (
         title="Mask personal data in AI steps",
     ),
     Policy(
-        "plugins",
-        # No plugin is on until the platform admin turns it on for the install; teams then turn it on for
-        # themselves. A plugin's entry may also lock settings every team uses ({"api_version": "61.0"}).
-        {},
-        "Which installed plugins teams may turn on, and the settings fixed for every team.",
-        kind="plugins",
+        "egressNewHosts",
+        # Asking Security is the default: a new address waits for a person who manages the egress list, as before the
+        # policy existed. A plugin's own hosts never need listing for its own calls.
+        "ask_security",
+        "What happens when an app or tool names an address the account has not allowed yet.",
+        kind="choice",
         live=True,
-        title="Plugins",
+        title="New app addresses",
+        choices=(
+            ("ask_security", "Ask Security", "A new address waits until someone on the Security team allows it."),
+            (
+                "builders",
+                "Builders allow it",
+                "Whoever builds the app or tool allows the address, recorded in their name.",
+            ),
+            ("any_public", "Any public address", "Apps and tools may call any public address without listing it."),
+            (
+                "block",
+                "Only listed addresses",
+                "A new address is refused; Security lists addresses on the Egress page.",
+            ),
+        ),
+        note="Private, loopback, link-local and cloud metadata addresses are never reached unless Security lists a "
+        "private range, and only https is called.",
     ),
     Policy(
         "securityTeamAddsSecrets",
@@ -199,15 +219,6 @@ POLICIES: tuple[Policy, ...] = (
 )
 
 BY_KEY: dict[str, Policy] = {p.key: p for p in POLICIES}
-
-
-def _app_client(value: object) -> bool:
-    """A plugin's platform OAuth app as the policy holds it: exactly {"id": a client id}."""
-    if not isinstance(value, dict):
-        return False
-    v = cast(dict[Any, Any], value)
-    cid = v.get("id")
-    return set(v) == {"id"} and isinstance(cid, str) and 0 < len(cid) <= 500
 
 
 def check_value(key: str, value: Any) -> Any:
@@ -234,32 +245,12 @@ def check_value(key: str, value: Any) -> Any:
         and all(isinstance(n, str) and 0 < len(n) <= 200 for n in cast(list[Any], value))
     ):
         return list(dict.fromkeys(cast(list[str], value)))
+    if policy.kind == "choice" and isinstance(value, str) and value in {c[0] for c in policy.choices}:
+        return value
     if policy.kind == "publish_modes" and isinstance(value, dict):
         modes = cast(dict[Any, Any], value)
         if all(a in PUBLISH_AREAS and m in PUBLISH_MODES for a, m in modes.items()):
             return {str(a): str(m) for a, m in modes.items()}
-    if policy.kind == "plugins" and isinstance(value, dict):
-        out: dict[str, Any] = {}
-        for pid, entry in cast(dict[Any, Any], value).items():
-            if not isinstance(entry, dict) or not isinstance(cast(dict[str, Any], entry).get("enabled"), bool):
-                break
-            e = cast(dict[str, Any], entry)
-            locked: object = e.get("locked") or {}
-            if set(e) - {"enabled", "locked", "client"} or not isinstance(locked, dict):
-                break
-            fixed = cast(dict[Any, Any], locked)
-            if not all(isinstance(k, str) and isinstance(v, str | int | float | bool) for k, v in fixed.items()):
-                break
-            # The platform's own OAuth app for the plugin: its client id only; the secret is sealed in
-            # tools-service at the account and never travels in a policy.
-            client: object = e.get("client")
-            if client is not None and not _app_client(client):
-                break
-            out[str(pid)] = {"enabled": e["enabled"], "locked": {str(k): v for k, v in fixed.items()}}
-            if client is not None:
-                out[str(pid)]["client"] = {"id": str(cast(dict[str, Any], client)["id"])}
-        else:
-            return out
     takes = {
         "bool": "true or false",
         "floor": "a number from 0 to 1, or null",
@@ -267,9 +258,7 @@ def check_value(key: str, value: Any) -> Any:
         "hours": "a whole number of hours from 1 to 8760",
         "names": "a list of up to 500 names, each 1 to 200 characters",
         "publish_modes": f"an object of area ({', '.join(PUBLISH_AREAS)}) to mode ({', '.join(PUBLISH_MODES)})",
-        "plugins": (
-            'an object of plugin id to {"enabled": true or false, "locked": {setting: value}, "client": {"id": text}}'
-        ),
+        "choice": f"one of {', '.join(c[0] for c in policy.choices)}",
     }
     raise ValueError(f"{key} takes {takes[policy.kind]}")
 

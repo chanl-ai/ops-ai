@@ -1,18 +1,21 @@
-"""Connections at rest: how the platform signs in to one system, per environment, with the tokens a sign-in holds.
+"""Accounts at rest: how the platform signs in to one system, each account one `connections` row, with the tokens a
+sign-in holds.
 
-A connection and its environments are one aggregate written against its `revision` (409 on a stale write), as a module
-is. Secret parts are never here: an environment names the `tool_secrets` row holding each one (`secrets`), so there is
-one secret store and one cipher path. Tokens and a sign-in's PKCE verifier are ciphertext only.
+An account is written against its `revision` (409 on a stale write), as a module is. Secret parts are never here: the
+account names the `tool_secrets` row holding each one (`secrets`), so there is one secret store and one cipher path.
+Tokens and a sign-in's PKCE verifier are ciphertext only. A sandbox account (`sandbox`) is the one a test run of its
+app uses (connections.records.account_for); `app_id` is the app it belongs to.
 
-`connection_tokens` is keyed (tenant, connection, environment, person); `person_id` is `''` for a shared token, a NOT
-NULL scope column under a plain primary key, so the key dedupes on every database. A refreshed token is stored only
+`connection_tokens` is keyed (tenant, connection, person); `person_id` is `''` for a shared token, a NOT NULL scope
+column under a plain primary key, so the key dedupes on every database. A refreshed token is stored only
 against the rotation it replaced (CAS), with no lock held while the token request is in flight; a caller that loses
 reads the winner's token.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import uuid
+from collections.abc import Mapping, Sequence
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime
 from typing import Any, ClassVar, cast
@@ -22,6 +25,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_policy import context_of
+from ops_service_kit.settings import PluginClient
 from ops_store import Guarantee, isolation
 from ops_store.outbox import add as add_event
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
@@ -56,19 +60,34 @@ connections = sa.Table(
     # nobody behind it uses the team's sign-in only while `team_backup` is on.
     sa.Column("sign_in", sa.String(16), nullable=False, server_default="team"),
     sa.Column("team_backup", sa.Boolean, nullable=False, server_default=sa.false()),
-    # The last Test connection of the environment that decides the connection: production when it is set,
-    # else test. Each environment's own last result is on its row in connection_environments.
+    # The account's last Test connection.
     sa.Column("health", sa.JSON),
     # What the console's card shows for a system connected by name: a category, one line, where its keys are.
     sa.Column("category", sa.String(80)),
     sa.Column("description", sa.String(300)),
     sa.Column("docs_url", sa.String(500)),
-    # The plugin whose account this is: a team keeps several named accounts of one app, each a connection,
-    # and the binding's connection is the default. Null for a connection made by name.
-    sa.Column("plugin_id", sa.String(120)),
+    # The app the account belongs to: `plugin:<id>` for a plugin's (a team keeps several named accounts of one
+    # app, and the binding's connection is the default), the custom app's own first account's id for a custom app's.
+    sa.Column("app_id", sa.String(120), nullable=False),
+    # The account a test run of its app uses (records.account_for); a live run never signs in with it.
+    sa.Column("sandbox", sa.Boolean, nullable=False, server_default=sa.false()),
     # The account's name, which a tool or step names to use it ("EU org"). One per team and plugin, checked when an
     # account is made: a unique index would treat nulls as equal on SQL Server, refusing a second by-name connection.
     sa.Column("account_name", sa.String(200)),
+    # The kind's plain settings (header name, username, token address, scopes, a client certificate's PEM, the base
+    # address); never the OAuth client, which is the app credential's (credential_id) or Ops AI's (platform_app).
+    sa.Column("settings", sa.JSON, nullable=False),
+    # Each secret field to the tool_secrets name holding its value.
+    sa.Column("secrets", sa.JSON, nullable=False),
+    # The plugin whose platform app the account signs in with: the install's own OAuth client, from the
+    # install config (plugin_clients); null for the team's own app. A column, not a setting, so a save that rewrites
+    # the settings (Edit keys) keeps it.
+    sa.Column("platform_app", sa.String(120)),
+    # The team's own OAuth client the account signs in with (app_credentials); null for Ops AI's app or a kind with
+    # no client. The client id and secret live only on that row, never in settings or secrets here.
+    sa.Column("credential_id", sa.String(64)),
+    # A plugin's settings the account keeps its own: its sign-in address, the instance its token named.
+    sa.Column("plugin_settings", sa.JSON),
     # "tool" for a connection the platform made to hold a custom tool's address, which the Apps grid does not
     # list; null for one a person added.
     sa.Column("origin", sa.String(16)),
@@ -78,36 +97,35 @@ connections = sa.Table(
     sa.Column("updated_by", sa.String(200), nullable=False),
     sa.Column("updated_at", _TS, nullable=False),
     sa.Index("ix_connections_team", "tenant_id", "team_id"),
+    sa.Index("ix_connections_app", "tenant_id", "team_id", "app_id"),
     # Held to its team by the database: only a transaction run as ROLE in that team reads it.
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
-connection_environments = sa.Table(
-    "connection_environments",
+# A team's own OAuth client of an app (the app credential): its client id and the name of the team secret holding its
+# client secret. The one place a team's client is kept, made under Credentials with no account; an account points at it
+# by credential_id, and the store puts both into the account it reads (settings.clientId, secrets.clientSecret) and
+# takes them out on a write. Deleting an account leaves it: other accounts may sign in with it.
+app_credentials = sa.Table(
+    "app_credentials",
     metadata,
     sa.Column("tenant_id", sa.String(64), primary_key=True),
-    sa.Column("connection_id", sa.String(64), primary_key=True),
-    # test or production.
-    sa.Column("environment", sa.String(16), primary_key=True),
-    # The connection's team, written with the row and moved with the connection.
+    sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("team_id", sa.String(64), nullable=False),
-    # The kind's plain settings (header name, username, token address, client id, scopes, a client certificate's PEM).
-    sa.Column("settings", sa.JSON, nullable=False),
-    # Each secret field to the tool_secrets name holding its value.
-    sa.Column("secrets", sa.JSON, nullable=False),
-    # This environment's last Test connection, the same shape as connections.health.
-    sa.Column("health", sa.JSON),
-    # The plugin whose platform app this environment signs in with, its secret the account's; null for the
-    # team's own app. A column, not a setting, so a save that rewrites the settings (Edit keys) keeps it.
-    sa.Column("platform_app", sa.String(120)),
-    # A plugin's settings this environment keeps its own: the sandbox's sign-in address, the instance its token
-    # named. Kept here once, where the connection's addresses are; the team's binding names the connection.
-    sa.Column("plugin_settings", sa.JSON),
+    # The app the client was registered for, as connections.app_id names it.
+    sa.Column("app_id", sa.String(120), nullable=False),
+    # What the Credentials page lists it as.
+    sa.Column("name", sa.String(200), nullable=False),
+    sa.Column("client_id", sa.String(500), nullable=False),
+    # The permissions it asks for, space-separated as an account's scopes setting is; null for all the app offers.
+    sa.Column("scopes", sa.String(2000)),
+    # The tool_secrets name in the team holding the client secret (its row's credential_id is this credential's id);
+    # null for a public client.
+    sa.Column("secret_name", sa.String(200)),
+    sa.Column("created_by", sa.String(200), nullable=False),
+    sa.Column("created_at", _TS, nullable=False),
     sa.Column("updated_by", sa.String(200), nullable=False),
     sa.Column("updated_at", _TS, nullable=False),
-    sa.ForeignKeyConstraint(
-        ["tenant_id", "connection_id"], ["connections.tenant_id", "connections.id"], ondelete="CASCADE"
-    ),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -116,7 +134,6 @@ connection_tokens = sa.Table(
     metadata,
     sa.Column("tenant_id", sa.String(64), primary_key=True),
     sa.Column("connection_id", sa.String(64), primary_key=True),
-    sa.Column("environment", sa.String(16), primary_key=True),
     # The connection's team, written with the row and moved with the connection.
     sa.Column("team_id", sa.String(64), nullable=False),
     # '' for the connection's shared token; a person's id once each person signs in (slice 14).
@@ -136,6 +153,8 @@ connection_tokens = sa.Table(
     sa.Column("refused_reason", sa.String(300)),
     # The person's default among their sign-ins to one app's accounts; none pinned means the newest live one.
     sa.Column("pinned", sa.Boolean, nullable=False, server_default=sa.false()),
+    # The account's last test, {status, message, at}: it runs right after a sign-in and never blocks it.
+    sa.Column("test", sa.JSON),
     sa.ForeignKeyConstraint(
         ["tenant_id", "connection_id"], ["connections.tenant_id", "connections.id"], ondelete="CASCADE"
     ),
@@ -149,7 +168,6 @@ oauth_states = sa.Table(
     # sha256 of the state sent to the system; the state itself is never stored.
     sa.Column("state_hash", sa.String(64), primary_key=True),
     sa.Column("connection_id", sa.String(64), nullable=False),
-    sa.Column("environment", sa.String(16), nullable=False),
     # The connection's team, written with the row.
     sa.Column("team_id", sa.String(64), nullable=False),
     # The person who started the sign-in; only they finish it.
@@ -173,7 +191,6 @@ connect_links = sa.Table(
     # sha256 of the link's token; the token itself is never stored.
     sa.Column("token_hash", sa.String(64), primary_key=True),
     sa.Column("connection_id", sa.String(64), nullable=False),
-    sa.Column("environment", sa.String(16), nullable=False),
     sa.Column("team_id", sa.String(64), nullable=False),
     # The person it was made for: only they open it.
     sa.Column("person_id", sa.String(200), nullable=False),
@@ -203,6 +220,7 @@ connection_audit = sa.Table(
     sa.Column("team_id", sa.String(64), nullable=False),
     # created, changed, secret_set, signed_in, signed_out, refresh_failed, deleted.
     sa.Column("action", sa.String(32), nullable=False),
+    # The Test or Production slot an event from before accounts had sandboxes named; null since.
     sa.Column("environment", sa.String(16)),
     sa.Column("actor", sa.String(200), nullable=False),
     sa.Column("at", _TS, nullable=False),
@@ -211,6 +229,20 @@ connection_audit = sa.Table(
     sa.Index("ix_connection_audit_connection", "tenant_id", "connection_id"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
+
+
+# A plugin's app as connections.app_id names it; a custom app's is its first account's own id.
+PLUGIN_APP = "plugin:"
+
+
+def plugin_app(plugin_id: str) -> str:
+    return f"{PLUGIN_APP}{plugin_id}"
+
+
+def plugin_of(conn: Mapping[str, Any]) -> str | None:
+    """The plugin whose account this is; None for a custom app's."""
+    app = str(conn.get("app_id") or "")
+    return app.removeprefix(PLUGIN_APP) if app.startswith(PLUGIN_APP) else None
 
 
 class StaleConnection(RuntimeError):
@@ -229,7 +261,6 @@ Row = dict[str, Any]
 # value through the store (`held_of`). A row deleted without that leaves the value in a vault for good.
 _HELD_TOKEN = (
     connection_tokens.c.connection_id,
-    connection_tokens.c.environment,
     connection_tokens.c.person_id,
     connection_tokens.c.access_ct,
     connection_tokens.c.refresh_ct,
@@ -237,9 +268,9 @@ _HELD_TOKEN = (
 _HELD_STATE = (oauth_states.c.state_hash, oauth_states.c.verifier_ct)
 
 
-def token_context(tenant_id: str, part: str, connection_id: str, environment: str, person: str) -> str:
+def token_context(tenant_id: str, part: str, connection_id: str, person: str) -> str:
     """The credential store context of a token row's `access` or `refresh` reference."""
-    return context_of(tenant_id, f"{part}/{connection_id}/{environment}/{person or 'shared'}")
+    return context_of(tenant_id, f"{part}/{connection_id}/{person or 'shared'}")
 
 
 def verifier_context(tenant_id: str, state_hash: str) -> str:
@@ -254,7 +285,7 @@ def held_of(tenant_id: str, rows: Sequence[Row]) -> list[tuple[str, str]]:
         if "state_hash" in r:
             held.append((str(r["verifier_ct"]), verifier_context(tenant_id, str(r["state_hash"]))))
             continue
-        key = (str(r["connection_id"]), str(r["environment"]), str(r["person_id"]))
+        key = (str(r["connection_id"]), str(r["person_id"]))
         for part in ("access", "refresh"):
             if r.get(f"{part}_ct"):
                 held.append((str(r[f"{part}_ct"]), token_context(tenant_id, part, *key)))
@@ -262,12 +293,15 @@ def held_of(tenant_id: str, rows: Sequence[Row]) -> list[tuple[str, str]]:
 
 
 class ConnectionStore:
-    # A change, its environments and its audit row land together (TRANSACTION) against the revision read (CAS); a
+    # A change and its audit row land together (TRANSACTION) against the revision read (CAS); a
     # token is stored against the rotation it replaced (CAS).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.CAS})
 
-    def __init__(self, engine: AsyncEngine) -> None:
+    def __init__(self, engine: AsyncEngine, install_clients: Mapping[str, PluginClient] | None = None) -> None:
+        """`install_clients` is the install config's OAuth client per plugin (plugin_clients): Ops AI's app, whose
+        client id an account on it reads."""
         self.engine = engine
+        self.install_clients = dict(install_clients or {})
 
     def _tx(self) -> AbstractAsyncContextManager[AsyncConnection]:
         """One transaction as ROLE carrying the caller's tenant and team; NoTenantError before any connection when the
@@ -283,18 +317,123 @@ class ConnectionStore:
 
     # ── Records ───────────────────────────────────────────────────────────
 
-    async def _environments(self, c: AsyncConnection, tenant_id: str, ids: list[str]) -> dict[str, dict[str, Row]]:
+    async def _credentials(self, c: AsyncConnection, tenant_id: str, ids: list[str]) -> dict[str, Row]:
         if not ids:
             return {}
-        q = connection_environments.select().where(
-            connection_environments.c.tenant_id == tenant_id,
-            connection_environments.c.connection_id.in_(ids),
-            team_visible(connection_environments),
+        t = app_credentials
+        q = t.select().where(t.c.tenant_id == tenant_id, t.c.id.in_(ids), team_visible(t))
+        return {str(r["id"]): dict(r) for r in (await c.execute(q)).mappings()}
+
+    async def credential(self, tenant_id: str, credential_id: str) -> Row | None:
+        """The team's app credential; None when it is not the team's."""
+        async with self._tx() as c:
+            return (await self._credentials(c, tenant_id, [credential_id])).get(credential_id)
+
+    async def team_credentials(self, tenant_id: str, team_id: str, app_id: str | None = None) -> list[Row]:
+        """The team's app credentials, of one app when `app_id` is given, oldest first."""
+        t = app_credentials.c
+        where = [t.tenant_id == tenant_id, t.team_id == team_id, team_visible(app_credentials)]
+        if app_id is not None:
+            where.append(t.app_id == app_id)
+        q = app_credentials.select().where(*where).order_by(t.created_at, t.id)
+        async with self._tx() as c:
+            return [dict(r) for r in (await c.execute(q)).mappings()]
+
+    async def add_credential(self, row: Row) -> None:
+        """A new app credential: tenant, id, team, app, name, client id, scopes, secret name, who and when."""
+        async with self._tx() as c:
+            await c.execute(app_credentials.insert().values(**row))
+
+    async def touch_credential(self, tenant_id: str, credential_id: str, *, actor: str, at: datetime) -> None:
+        """Records who changed the credential last (its secret, replaced in the secret store)."""
+        t = app_credentials.c
+        async with self._tx() as c:
+            await c.execute(
+                app_credentials.update()
+                .where(t.tenant_id == tenant_id, t.id == credential_id, team_visible(app_credentials))
+                .values(updated_by=actor, updated_at=at)
+            )
+
+    async def credential_accounts(self, tenant_id: str, credential_ids: list[str]) -> list[Row]:
+        """The accounts signing in with each named credential, oldest first."""
+        if not credential_ids:
+            return []
+        k = connections.c
+        q = (
+            connections.select()
+            .where(k.tenant_id == tenant_id, k.credential_id.in_(credential_ids), team_visible(connections))
+            .order_by(k.created_at, k.id)
         )
-        out: dict[str, dict[str, Row]] = {}
-        for r in (await c.execute(q)).mappings():
-            out.setdefault(str(r["connection_id"]), {})[str(r["environment"])] = dict(r)
-        return out
+        async with self._tx() as c:
+            rows = [dict(r) for r in (await c.execute(q)).mappings()]
+            return await self._read(c, tenant_id, rows, used=False)
+
+    def install_client(self, plugin_id: str) -> PluginClient | None:
+        """Ops AI's own OAuth client for a plugin, from the install config; None when the install set none."""
+        return self.install_clients.get(plugin_id)
+
+    def _with_client(self, row: Row, creds: dict[str, Row]) -> Row:
+        """The account as its readers see it: the client id of the OAuth client it signs in with in its settings, and
+        the name of the client secret in its secrets, from the team's app credential or Ops AI's app."""
+        settings, secrets = dict(row.get("settings") or {}), dict(row.get("secrets") or {})
+        cred = creds.get(str(row.get("credential_id") or ""))
+        installed = self.install_clients.get(str(row.get("platform_app") or ""))
+        if cred is not None:
+            settings["clientId"] = cred["client_id"]
+            if cred.get("scopes"):
+                # The permissions the team's client asks for are the credential's, for every account on it.
+                settings["scopes"] = cred["scopes"]
+            if cred.get("secret_name"):
+                secrets["clientSecret"] = cred["secret_name"]
+        elif installed is not None:
+            settings["clientId"] = installed.id
+        return {**row, "settings": settings, "secrets": secrets}
+
+    async def _put_client(
+        self, c: AsyncConnection, tenant_id: str, connection_id: str, fields: Row, *, actor: str, at: datetime
+    ) -> Row:
+        """Takes the OAuth client out of an account being written: on Ops AI's app it keeps none; otherwise the client
+        id and secret name go to the account's app credential (made on the first one) and the account keeps only its
+        credential_id. A write that names no secrets (a sign-in saving the instance it read) keeps the client's
+        secret as it is."""
+        if "credential_id" in fields:
+            # The account picks one of the team's credentials (or Ops AI's app): the client it reads is that one's.
+            for part, key in (("settings", "clientId"), ("secrets", "clientSecret")):
+                if part in fields:
+                    fields = {**fields, part: {k: v for k, v in dict(fields[part] or {}).items() if k != key}}
+            return fields
+        named = "secrets" in fields
+        settings, secrets = dict(fields.get("settings") or {}), dict(fields.get("secrets") or {})
+        client_id, secret_name = settings.pop("clientId", None), secrets.pop("clientSecret", None)
+        fields = {**fields, "settings": settings, **({"secrets": secrets} if named else {})}
+        k = connections.c
+        held = (
+            await c.execute(
+                sa.select(k.credential_id, k.platform_app, k.team_id, k.app_id, k.account_name, k.name).where(
+                    k.tenant_id == tenant_id, k.id == connection_id, team_visible(connections)
+                )
+            )
+        ).first()
+        if held is None:
+            raise StaleConnection(connection_id)
+        platform = fields.get("platform_app", held.platform_app)
+        if platform or not client_id:
+            return {**fields, "credential_id": None} if platform else fields
+        t = app_credentials
+        values = {"client_id": str(client_id), "updated_by": actor, "updated_at": at}
+        if named:
+            values["secret_name"] = secret_name
+        if held.credential_id:
+            await c.execute(t.update().where(t.c.tenant_id == tenant_id, t.c.id == held.credential_id).values(**values))
+            return {**fields, "credential_id": str(held.credential_id)}
+        made = f"cred_{uuid.uuid4().hex[:12]}"
+        await c.execute(
+            t.insert().values(
+                tenant_id=tenant_id, id=made, team_id=held.team_id, app_id=held.app_id,
+                name=held.account_name or held.name, created_by=actor, created_at=at, **values,
+            )
+        )  # fmt: skip
+        return {**fields, "credential_id": made}
 
     async def _used_by(self, c: AsyncConnection, tenant_id: str, ids: list[str]) -> dict[str, list[Row]]:
         """The modules pointing at each connection, joined here so a list never looks them up one by one."""
@@ -308,42 +447,43 @@ class ConnectionStore:
             out.setdefault(str(r.connection_id), []).append({"id": r.id, "name": r.display_name})
         return out
 
-    async def _whole(self, c: AsyncConnection, tenant_id: str, rows: list[Row]) -> list[Row]:
-        ids = [str(r["id"]) for r in rows]
-        envs = await self._environments(c, tenant_id, ids)
-        used = await self._used_by(c, tenant_id, ids)
-        return [{**r, "environments": envs.get(str(r["id"]), {}), "used_by": used.get(str(r["id"]), [])} for r in rows]
+    async def _read(self, c: AsyncConnection, tenant_id: str, rows: list[Row], *, used: bool = True) -> list[Row]:
+        """The rows with their OAuth client joined in (one more query) and, with `used`, the modules using them."""
+        creds = await self._credentials(c, tenant_id, [str(r["credential_id"]) for r in rows if r.get("credential_id")])
+        users = await self._used_by(c, tenant_id, [str(r["id"]) for r in rows]) if used else {}
+        return [
+            {**self._with_client(r, creds), **({"used_by": users.get(str(r["id"]), [])} if used else {})} for r in rows
+        ]
 
     async def get(self, tenant_id: str, connection_id: str) -> Row | None:
         k = connections.c
         q = connections.select().where(k.tenant_id == tenant_id, k.id == connection_id, team_visible(connections))
         async with self._tx() as c:
             row = (await c.execute(q)).mappings().first()
-            return (await self._whole(c, tenant_id, [dict(row)]))[0] if row else None
+            return (await self._read(c, tenant_id, [dict(row)]))[0] if row else None
 
-    async def accounts(self, tenant_id: str, team_id: str, plugin_id: str) -> list[Row]:
-        """The team's accounts of one app, oldest first, each whole with its environments."""
+    async def accounts(self, tenant_id: str, team_id: str, app_id: str) -> list[Row]:
+        """The team's accounts of one app, oldest first."""
         k = connections.c
         q = (
             connections.select()
-            .where(k.tenant_id == tenant_id, k.team_id == team_id, k.plugin_id == plugin_id, team_visible(connections))
+            .where(k.tenant_id == tenant_id, k.team_id == team_id, k.app_id == app_id, team_visible(connections))
             .order_by(k.created_at, k.id)
         )
         async with self._tx() as c:
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
-            return await self._whole(c, tenant_id, rows)
+            return await self._read(c, tenant_id, rows)
 
     async def by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, Row]:
-        """The named connections with their environments (one more query), without the modules using them: what a
-        module list shows of each, its base addresses included."""
+        """The named accounts, without the modules using them: what a module list shows of each, its base address
+        included."""
         if not ids:
             return {}
         k = connections.c
         q = connections.select().where(k.tenant_id == tenant_id, k.id.in_(ids), team_visible(connections))
         async with self._tx() as c:
-            rows = {str(r["id"]): dict(r) for r in (await c.execute(q)).mappings()}
-            envs = await self._environments(c, tenant_id, list(rows))
-            return {k: {**r, "environments": envs.get(k, {})} for k, r in rows.items()}
+            rows = [dict(r) for r in (await c.execute(q)).mappings()]
+            return {str(r["id"]): r for r in await self._read(c, tenant_id, rows, used=False)}
 
     @staticmethod
     def _visible(tenant_id: str, teams: list[str], search: str) -> sa.ColumnElement[bool]:
@@ -370,23 +510,24 @@ class ConnectionStore:
         )
         async with self._tx() as c:
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
-            return await self._whole(c, tenant_id, rows)
+            return await self._read(c, tenant_id, rows)
 
-    async def create(self, row: Row, *, actor: str, at: datetime, environments: dict[str, Row] | None = None) -> bool:
-        """False when the id is taken (nothing written). Each of `environments` is written with it."""
+    async def create(self, row: Row, *, actor: str, at: datetime) -> bool:
+        """False when the id is taken (nothing written). `row` carries the account's settings and secret names; an
+        OAuth client in them goes to the account's app credential."""
+        fields: Row = {"settings": row.get("settings") or {}, "secrets": row.get("secrets") or {}}
         async with self._tx() as c:
             try:
                 async with c.begin_nested():
-                    await c.execute(connections.insert().values(**row))
+                    await c.execute(connections.insert().values(**{**row, "settings": {}, "secrets": {}}))
             except IntegrityError:
                 return False
-            for name, settings in (environments or {}).items():
+            if fields["settings"] or fields["secrets"]:
+                put = await self._put_client(c, row["tenant_id"], row["id"], fields, actor=actor, at=at)
+                k = connections.c
                 await c.execute(
-                    connection_environments.insert().values(
-                        tenant_id=row["tenant_id"], connection_id=row["id"], environment=name, team_id=row["team_id"],
-                        settings=settings, secrets={}, updated_by=actor, updated_at=at,
-                    )
-                )  # fmt: skip
+                    connections.update().where(k.tenant_id == row["tenant_id"], k.id == row["id"]).values(**put)
+                )
             event = {"action": "created", "actor": actor, "at": at, "detail": {"kind": row["auth_kind"]}}
             await self._audit(c, row["tenant_id"], row["id"], event)
         return True
@@ -400,14 +541,15 @@ class ConnectionStore:
         *,
         actor: str,
         at: datetime,
-        environment: tuple[str, Row, Row] | tuple[str, Row, Row, Row] | None = None,
         action: str = "changed",
         detail: Row | None = None,
     ) -> None:
-        """Writes `values` (and one environment's settings and secret names, and any of its other columns given as a
-        fourth part, such as `platform_app`) only against the revision read, with its audit row; StaleConnection
-        otherwise."""
+        """Writes `values` (its settings and secret names, `platform_app` and `plugin_settings` among them) only
+        against the revision read, with its audit row; StaleConnection otherwise. An OAuth client in the settings goes
+        to the account's app credential."""
         async with self._tx() as c:
+            if "settings" in values or "secrets" in values or "platform_app" in values:
+                values = await self._put_client(c, tenant_id, connection_id, values, actor=actor, at=at)
             q = (
                 connections.update()
                 .where(
@@ -419,60 +561,41 @@ class ConnectionStore:
             )
             if (await c.execute(q)).rowcount != 1:
                 raise StaleConnection(connection_id)
-            env_name = None
-            if environment is not None:
-                env_name, settings, secrets, *more = environment
-                key = (
-                    connection_environments.c.tenant_id == tenant_id,
-                    connection_environments.c.connection_id == connection_id,
-                    connection_environments.c.environment == env_name,
-                )
-                fields = {"settings": settings, "secrets": secrets, **(more[0] if more else {})}
-                fields |= {"updated_by": actor, "updated_at": at}
-                if (await c.execute(connection_environments.update().where(*key).values(**fields))).rowcount == 0:
-                    await c.execute(
-                        connection_environments.insert().values(
-                            tenant_id=tenant_id,
-                            connection_id=connection_id,
-                            environment=env_name,
-                            team_id=self._team(tenant_id, connection_id),
-                            **fields,
-                        )
-                    )
             if "team_id" in values:
                 # A connection moved to another team takes its sign-in rows; only a tenant-wide caller may move one,
                 # since the policy refuses writing a row into a team the caller does not act in.
-                for t in (connection_environments, connection_tokens, oauth_states):
+                for t in (connection_tokens, oauth_states):
                     of_it = sa.and_(t.c.tenant_id == tenant_id, t.c.connection_id == connection_id)
                     await c.execute(t.update().where(of_it).values(team_id=values["team_id"]))
-            event = {"action": action, "environment": env_name, "actor": actor, "at": at, "detail": detail or {}}
+                k = connections.c
+                cred = (
+                    await c.execute(
+                        sa.select(k.credential_id).where(
+                            k.tenant_id == tenant_id, k.id == connection_id, team_visible(connections)
+                        )
+                    )
+                ).scalar()
+                if cred:
+                    a = app_credentials
+                    mine = sa.and_(a.c.tenant_id == tenant_id, a.c.id == cred)
+                    await c.execute(a.update().where(mine).values(team_id=values["team_id"]))
+            event = {"action": action, "actor": actor, "at": at, "detail": detail or {}}
             await self._audit(c, tenant_id, connection_id, event)
 
-    async def set_base(
-        self, tenant_id: str, connection_id: str, base: str, environments: Sequence[str], *, actor: str, at: datetime
-    ) -> None:
-        """Sets the app's address in each of `environments`, keeping each one's other settings."""
+    async def set_base(self, tenant_id: str, connection_id: str, base: str, *, actor: str, at: datetime) -> None:
+        """Sets the app's address on the account, keeping its other settings."""
+        k = connections.c
+        mine = (k.tenant_id == tenant_id, k.id == connection_id, team_visible(connections))
         async with self._tx() as c:
-            key = (
-                connection_environments.c.tenant_id == tenant_id,
-                connection_environments.c.connection_id == connection_id,
+            held = (await c.execute(sa.select(k.settings).where(*mine))).scalar()
+            if held is None:
+                raise StaleConnection(connection_id)
+            await c.execute(
+                connections.update()
+                .where(*mine)
+                .values(settings={**dict(held or {}), "baseUrl": base}, updated_by=actor, updated_at=at)
             )
-            read = sa.select(connection_environments).where(*key, team_visible(connection_environments))
-            held = {str(r.environment): dict(r.settings or {}) for r in (await c.execute(read)).all()}
-            for name in environments:
-                settings = {**held.get(name, {}), "baseUrl": base}
-                if name in held:
-                    q = connection_environments.update().where(*key, connection_environments.c.environment == name)
-                    await c.execute(q.values(settings=settings, updated_by=actor, updated_at=at))
-                else:
-                    await c.execute(
-                        connection_environments.insert().values(
-                            tenant_id=tenant_id, connection_id=connection_id, environment=name,
-                            team_id=self._team(tenant_id, connection_id), settings=settings, secrets={},
-                            updated_by=actor, updated_at=at,
-                        )
-                    )  # fmt: skip
-            event = {"action": "changed", "environment": None, "actor": actor, "at": at, "detail": {"baseUrl": base}}
+            event = {"action": "changed", "actor": actor, "at": at, "detail": {"baseUrl": base}}
             await self._audit(c, tenant_id, connection_id, event)
 
     async def delete(self, tenant_id: str, connection_id: str, *, actor: str, at: datetime) -> list[Row] | None:
@@ -483,8 +606,8 @@ class ConnectionStore:
             if used:
                 raise ConnectionInUse([str(u["name"]) for u in used])
             mine = (connections.c.tenant_id == tenant_id, connections.c.id == connection_id, team_visible(connections))
-            team = (await c.execute(sa.select(connections.c.team_id).where(*mine))).scalar()
-            if team is None:
+            found = (await c.execute(sa.select(connections.c.team_id).where(*mine))).first()
+            if found is None:
                 return None
             tokens_q = sa.select(*_HELD_TOKEN).where(
                 connection_tokens.c.tenant_id == tenant_id,
@@ -506,21 +629,21 @@ class ConnectionStore:
                 )
             )
             event = {"action": "deleted", "actor": actor, "at": at}
-            await self._audit(c, tenant_id, connection_id, event, team_id=str(team))
+            await self._audit(c, tenant_id, connection_id, event, team_id=str(found.team_id))
         return held
 
     async def _audit(
         self, c: AsyncConnection, tenant_id: str, connection_id: str, event: Row, *, team_id: str | None = None
     ) -> None:
-        """`event`: action, environment, actor, at and detail (names only). The row takes its connection's team, read in
-        the same statement, or `team_id` for a connection already deleted in this transaction."""
+        """`event`: action, actor, at and detail (names only). The row takes its connection's team, read in the same
+        statement, or `team_id` for a connection already deleted in this transaction."""
         team = team_id if team_id is not None else self._team(tenant_id, connection_id)
         await c.execute(
             connection_audit.insert().values(
                 tenant_id=tenant_id,
                 connection_id=connection_id,
                 team_id=team,
-                **{"environment": None, "detail": {}, **event},
+                **{"detail": {}, **event},
             )
         )
 
@@ -539,8 +662,8 @@ class ConnectionStore:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def note(self, tenant_id: str, connection_id: str, event: Row, *, report: Row | None = None) -> None:
-        """An audit row on its own (a sign-in, a sign-out, a failed refresh): action, environment, actor, at, detail.
-        `report`: a service event (connections.account_events) written in the same transaction."""
+        """An audit row on its own (a sign-in, a sign-out, a failed refresh): action, actor, at, detail. `report`: a
+        service event (connections.account_events) written in the same transaction."""
         async with self._tx() as c:
             await self._audit(c, tenant_id, connection_id, event)
             if report is not None:
@@ -576,89 +699,51 @@ class ConnectionStore:
                 await add_event(c, service_outbox, **event)
 
     async def set_health(
-        self,
-        tenant_id: str,
-        connection_id: str,
-        health: Row,
-        status: tuple[str, str | None] | None = None,
-        *,
-        decides: bool = True,
+        self, tenant_id: str, connection_id: str, health: Row, status: tuple[str, str | None] | None = None
     ) -> None:
-        """A Test connection's result on its environment's row; when that environment `decides` the connection, also
-        the connection's health and, with `status`, its status. A finding, so the revision stays."""
-        env = (
-            connection_environments.update()
-            .where(
-                connection_environments.c.tenant_id == tenant_id,
-                connection_environments.c.connection_id == connection_id,
-                connection_environments.c.environment == str(health["environment"]),
-            )
-            .values(health=health)
-        )
+        """A Test connection's result on the account and, with `status`, its status. A finding, so the revision
+        stays."""
+        values: Row = {"health": health}
+        if status is not None:
+            values |= {"status": status[0], "status_detail": status[1]}
         async with self._tx() as c:
-            await c.execute(env)
-            if not decides:
-                return
-            values: Row = {"health": health}
-            if status is not None:
-                values |= {"status": status[0], "status_detail": status[1]}
             await c.execute(
                 connections.update()
                 .where(connections.c.tenant_id == tenant_id, connections.c.id == connection_id)
                 .values(**values)
             )
 
-    async def plugin_settings(self, tenant_id: str, connection_id: str) -> dict[str, Row]:
-        """Each environment's plugin settings on the connection, by environment; one with none is left out."""
-        t = connection_environments
-        q = sa.select(t.c.environment, t.c.plugin_settings).where(
-            t.c.tenant_id == tenant_id, t.c.connection_id == connection_id, team_visible(t)
-        )
+    async def set_plugin_settings(self, tenant_id: str, connection_id: str, values: Row) -> bool:
+        """Merges `values` into the account's plugin settings (a sign-in's instance); False when there is no such
+        account. A finding of the sign-in, not a person's edit, so the revision stays."""
+        k = connections.c
+        key = (k.tenant_id == tenant_id, k.id == connection_id, team_visible(connections))
         async with self._tx() as c:
-            rows = (await c.execute(q)).all()
-        return {str(r.environment): dict(r.plugin_settings) for r in rows if r.plugin_settings}
-
-    async def set_plugin_settings(self, tenant_id: str, connection_id: str, environment: str, values: Row) -> bool:
-        """Merges `values` into the environment's plugin settings (a sign-in's instance); False when the environment
-        is not set. A finding of the sign-in, not a person's edit, so the revision stays."""
-        t = connection_environments
-        key = (
-            t.c.tenant_id == tenant_id,
-            t.c.connection_id == connection_id,
-            t.c.environment == environment,
-            team_visible(t),
-        )
-        async with self._tx() as c:
-            held = (await c.execute(sa.select(t.c.plugin_settings).where(*key))).first()
+            held = (await c.execute(sa.select(k.plugin_settings).where(*key))).first()
             if held is None:
                 return False
             merged = {**dict(held.plugin_settings or {}), **values}
-            await c.execute(t.update().where(*key).values(plugin_settings=merged))
+            await c.execute(connections.update().where(*key).values(plugin_settings=merged))
         return True
 
     # ── Tokens ────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _token_key(tenant_id: str, connection_id: str, environment: str, person: str) -> tuple[Any, ...]:
+    def _token_key(tenant_id: str, connection_id: str, person: str) -> tuple[Any, ...]:
         t = connection_tokens.c
-        return (
-            t.tenant_id == tenant_id,
-            t.connection_id == connection_id,
-            t.environment == environment,
-            t.person_id == person,
-        )
+        return (t.tenant_id == tenant_id, t.connection_id == connection_id, t.person_id == person)
 
-    async def token(self, tenant_id: str, connection_id: str, environment: str, person: str = SHARED) -> Row | None:
+    async def token(self, tenant_id: str, connection_id: str, person: str = SHARED) -> Row | None:
         q = connection_tokens.select().where(
-            *self._token_key(tenant_id, connection_id, environment, person), team_visible(connection_tokens)
+            *self._token_key(tenant_id, connection_id, person), team_visible(connection_tokens)
         )
         async with self._tx() as c:
             row = (await c.execute(q)).mappings().first()
             return dict(row) if row else None
 
-    async def team_tokens(self, tenant_id: str, connection_ids: list[str]) -> dict[str, dict[str, Row]]:
-        """The team account's token rows (never a person's) of these connections, by connection then environment: what
-        an app's state is derived from."""
+    async def team_tokens(self, tenant_id: str, connection_ids: list[str]) -> dict[str, Row]:
+        """The team account's token row (never a person's) of each of these connections: what an app's state is
+        derived from."""
         if not connection_ids:
             return {}
         q = connection_tokens.select().where(
@@ -667,11 +752,8 @@ class ConnectionStore:
             connection_tokens.c.person_id == SHARED,
             team_visible(connection_tokens),
         )
-        out: dict[str, dict[str, Row]] = {}
         async with self._tx() as c:
-            for r in (await c.execute(q)).mappings():
-                out.setdefault(str(r["connection_id"]), {})[str(r["environment"])] = dict(r)
-        return out
+            return {str(r["connection_id"]): dict(r) for r in (await c.execute(q)).mappings()}
 
     async def tokens(self, tenant_id: str, connection_id: str) -> list[Row]:
         q = connection_tokens.select().where(
@@ -686,7 +768,6 @@ class ConnectionStore:
         self,
         tenant_id: str,
         connection_id: str,
-        environment: str,
         values: Row,
         *,
         expected_rotations: int | None,
@@ -695,7 +776,7 @@ class ConnectionStore:
         """Stores a token only if the row is still as it was read: `expected_rotations` None means there was no row (an
         insert, which fails if another caller inserted first), else the rotation read (CAS). False when another caller
         stored first; nothing is written then. No lock is held while the token is fetched."""
-        key = self._token_key(tenant_id, connection_id, environment, person)
+        key = self._token_key(tenant_id, connection_id, person)
         async with self._tx() as c:
             if expected_rotations is not None:
                 q = connection_tokens.update().where(*key, connection_tokens.c.rotations == expected_rotations)
@@ -706,7 +787,6 @@ class ConnectionStore:
                         connection_tokens.insert().values(
                             tenant_id=tenant_id,
                             connection_id=connection_id,
-                            environment=environment,
                             person_id=person,
                             team_id=self._team(tenant_id, connection_id),
                             **values,
@@ -716,35 +796,37 @@ class ConnectionStore:
                 return False
             return True
 
-    async def replace_token(
-        self, tenant_id: str, connection_id: str, environment: str, values: Row, person: str = SHARED
-    ) -> None:
+    async def replace_token(self, tenant_id: str, connection_id: str, values: Row, person: str = SHARED) -> None:
         """A finished sign-in's token, whatever was held before; a refusal marked on the row before is cleared."""
-        key = self._token_key(tenant_id, connection_id, environment, person)
-        values = {"refused_at": None, "refused_reason": None, **values}
+        key = self._token_key(tenant_id, connection_id, person)
+        # A new sign-in starts untested: the test that follows it writes its own outcome.
+        values = {"refused_at": None, "refused_reason": None, "test": None, **values}
         async with self._tx() as c:
             if (await c.execute(connection_tokens.update().where(*key).values(**values))).rowcount == 0:
                 await c.execute(
                     connection_tokens.insert().values(
                         tenant_id=tenant_id,
                         connection_id=connection_id,
-                        environment=environment,
                         person_id=person,
                         team_id=self._team(tenant_id, connection_id),
                         **values,
                     )
                 )
 
-    async def mark_refused(
-        self, tenant_id: str, connection_id: str, environment: str, person: str, *, reason: str, at: datetime
-    ) -> bool:
+    async def mark_refused(self, tenant_id: str, connection_id: str, person: str, *, reason: str, at: datetime) -> bool:
         """Marks a person's own row refused by the system; False when they hold none."""
-        q = connection_tokens.update().where(*self._token_key(tenant_id, connection_id, environment, person))
+        q = connection_tokens.update().where(*self._token_key(tenant_id, connection_id, person))
         async with self._tx() as c:
             return (await c.execute(q.values(refused_at=at, refused_reason=reason[:300]))).rowcount > 0
 
+    async def set_token_test(self, tenant_id: str, connection_id: str, person: str, test: Row) -> bool:
+        """The account's last test on its own row, the team's (SHARED) or a person's; False when it holds none."""
+        q = connection_tokens.update().where(*self._token_key(tenant_id, connection_id, person))
+        async with self._tx() as c:
+            return (await c.execute(q.values(test=test))).rowcount > 0
+
     async def forget_person(self, tenant_id: str, team_id: str, person: str) -> list[Row]:
-        """Deletes every sign-in of `person`'s own on `team_id`'s connections, in every environment (they
+        """Deletes every sign-in of `person`'s own on `team_id`'s connections (S14: they
         left the team); the rows deleted (`held_of`). Their sign-ins on another team's connections and the team
         accounts stay."""
         if person == SHARED:
@@ -754,26 +836,23 @@ class ConnectionStore:
         async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q.returning(*_HELD_TOKEN))).mappings()]
 
-    async def forget_token(
-        self, tenant_id: str, connection_id: str, environment: str, person: str = SHARED
-    ) -> list[Row]:
+    async def forget_token(self, tenant_id: str, connection_id: str, person: str = SHARED) -> list[Row]:
         """The token row deleted, empty when there was none (`held_of`)."""
-        q = connection_tokens.delete().where(*self._token_key(tenant_id, connection_id, environment, person))
+        q = connection_tokens.delete().where(*self._token_key(tenant_id, connection_id, person))
         async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q.returning(*_HELD_TOKEN))).mappings()]
 
-    async def own_sign_ins(self, tenant_id: str, person: str, connection_ids: list[str], environment: str) -> list[Row]:
-        """One person's own sign-ins on these connections (an app's accounts) in one environment, newest
-        first: which they pinned and which the system refused."""
+    async def own_sign_ins(self, tenant_id: str, person: str, connection_ids: list[str]) -> list[Row]:
+        """One person's own sign-ins on these connections (an app's accounts), newest first: which they pinned
+        and which the system refused."""
         if not connection_ids:
             return []
         t = connection_tokens.c
         q = (
-            sa.select(t.connection_id, t.account, t.pinned, t.refreshed_at, t.refused_at)
+            sa.select(t.connection_id, t.account, t.pinned, t.refreshed_at, t.refused_at, t.test)
             .where(
                 t.tenant_id == tenant_id,
                 t.connection_id.in_(connection_ids),
-                t.environment == environment,
                 t.person_id == person,
                 team_visible(connection_tokens),
             )
@@ -808,7 +887,7 @@ class ConnectionStore:
         """Every person's own sign-in on the connection, oldest first; the team's shared row is not one."""
         t = connection_tokens.c
         q = (
-            sa.select(t.environment, t.person_id, t.account, t.scopes, t.refreshed_at, t.expires_at)
+            sa.select(t.person_id, t.account, t.scopes, t.refreshed_at, t.expires_at)
             .where(
                 t.tenant_id == tenant_id,
                 t.connection_id == connection_id,
@@ -816,6 +895,36 @@ class ConnectionStore:
                 team_visible(connection_tokens),
             )
             .order_by(t.refreshed_at, t.person_id)
+        )
+        async with self._tx() as c:
+            return [dict(r) for r in (await c.execute(q)).mappings()]
+
+    async def sign_ins(self, tenant_id: str, connection_ids: list[str]) -> list[Row]:
+        """Every person's own sign-in on these connections (an app's accounts), newest first, with what its state is
+        read from: whether the system refused it, and whether it can renew once it ends, and whether the person pinned
+        it. The team's row is not one."""
+        if not connection_ids:
+            return []
+        t = connection_tokens.c
+        q = (
+            sa.select(
+                t.connection_id,
+                t.person_id,
+                t.account,
+                t.pinned,
+                t.refreshed_at,
+                t.expires_at,
+                t.refused_at,
+                t.test,
+                t.refresh_ct.is_not(None).label("renews"),
+            )
+            .where(
+                t.tenant_id == tenant_id,
+                t.connection_id.in_(connection_ids),
+                t.person_id != SHARED,
+                team_visible(connection_tokens),
+            )
+            .order_by(t.refreshed_at.desc(), t.person_id)
         )
         async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
@@ -835,7 +944,7 @@ class ConnectionStore:
         return list(dict.fromkeys(str(x) for r in rows if isinstance(r, list) for x in cast(list[Any], r)))
 
     async def mine(self, tenant_id: str, team_id: str, person: str) -> list[Row]:
-        """One person's own sign-ins on the team's connections, by connection name then environment."""
+        """One person's own sign-ins on the team's connections, by connection name."""
         t, k = connection_tokens.c, connections.c
         q = (
             sa.select(
@@ -843,13 +952,15 @@ class ConnectionStore:
                 k.name,
                 k.status,
                 k.auth_kind,
-                t.environment,
+                k.sandbox,
+                k.app_id,
                 t.account,
                 t.scopes,
                 t.refreshed_at,
                 t.expires_at,
                 t.refused_at,
                 t.refused_reason,
+                t.test,
             )
             .join(connections, sa.and_(k.tenant_id == t.tenant_id, k.id == t.connection_id))
             .where(
@@ -859,21 +970,16 @@ class ConnectionStore:
                 team_visible(connection_tokens),
                 team_visible(connections),
             )
-            .order_by(k.name, t.connection_id, t.environment)
+            .order_by(k.name, t.connection_id)
         )
         async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def connectable(self, tenant_id: str, team_id: str, person: str, kinds: list[str]) -> list[Row]:
-        """Every environment of the team's connections each person signs in to with one of `kinds`, with the
-        person's own row where they have one: Your connections, connected or not, by connection name."""
-        t, k, e = connection_tokens.c, connections.c, connection_environments.c
-        own = sa.and_(
-            t.tenant_id == e.tenant_id,
-            t.connection_id == e.connection_id,
-            t.environment == e.environment,
-            t.person_id == person,
-        )
+        """Every account of the team each person signs in to with one of `kinds`, with the person's own row
+        where they have one: Your connections, connected or not, by connection name."""
+        t, k = connection_tokens.c, connections.c
+        own = sa.and_(t.tenant_id == k.tenant_id, t.connection_id == k.id, t.person_id == person)
         q = (
             sa.select(
                 k.id.label("connection_id"),
@@ -881,7 +987,8 @@ class ConnectionStore:
                 k.status,
                 k.auth_kind,
                 k.docs_url,
-                e.environment,
+                k.sandbox,
+                k.app_id,
                 t.person_id,
                 t.account,
                 t.scopes,
@@ -889,17 +996,17 @@ class ConnectionStore:
                 t.expires_at,
                 t.refused_at,
                 t.refused_reason,
+                t.test,
             )
-            .join(connection_environments, sa.and_(e.tenant_id == k.tenant_id, e.connection_id == k.id))
             .outerjoin(connection_tokens, own)
             .where(
                 k.tenant_id == tenant_id,
                 k.team_id == team_id,
                 k.sign_in != "team",
                 k.auth_kind.in_(kinds),
-                team_visible(connection_environments),
+                team_visible(connections),
             )
-            .order_by(k.name, k.id, e.environment)
+            .order_by(k.name, k.id)
         )
         async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]

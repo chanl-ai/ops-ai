@@ -1,5 +1,5 @@
 """uc-581, api layer: docs/usecases/tools-service/agents-query-salesforce-many-ways.md, stories S1 (steps 1-4) and
-S2 (steps 5-11). platform-service signs the seeded people in and holds the install switch; tools-service runs with
+S2 (steps 5-11). platform-service signs the seeded people in; tools-service runs with
 plugins on and the Salesforce plugin from the ops-ai-plugins repository beside ops-ai; the fake Salesforce
 (docs/usecases/lib/fake_salesforce.py) holds one account's cases, one of them deleted, and records every query it
 answers. Each call is a gateway read as agents-service makes it for a run. No model call."""
@@ -83,26 +83,27 @@ with ExitStack() as stack:
     TENANT["id"] = str((priya_session.get("principal") or {}).get("tenantId") or priya_session.get("tenantId") or "")
     fake = sf["fake"]
 
-    # Set-up as uc-564's steps 1-5: the install switch, Salesforce's hosts, the team switch and the team's sign-in.
-    on = api.put("/v1/policies/plugins", json={"value": {PLUGIN: {"enabled": True}}}, headers=sam)
+    # Set-up as uc-564's steps 2-5: Salesforce's hosts, the team switch and the team's sign-in.
     for h in sf["hosts"]:
         gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-581"}, headers=sam)
     gw.post("/v1/egress/ranges", json={"value": sf["range"], "note": "uc-581"}, headers=sam)
     login = sf["authorize_url"].rsplit("/", 1)[0]
-    team_on = {"enabled": True, "settings": {"login_url": login}, "clientId": "ops-ai-acme", "clientSecret": "s3"}
-    turned = gw.put(f"/v1/plugins/{PLUGIN}/team", json=team_on, headers=priya)
+    own = {"app": f"plugin:{PLUGIN}", "clientId": "ops-ai-acme", "clientSecret": "s3"}
+    credential = (data(gw.post("/v1/app-credentials", json=own, headers=priya)) or {}).get("id")
+    team_on = {"enabled": True, "settings": {"login_url": login}, "credentialId": credential}
+    turned = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json=team_on, headers=priya)
     connection_id = str((data(turned) or {}).get("connectionId") or "con_missing")
-    started = gw.post(f"/v1/connections/{connection_id}/sign-in", json={"environment": "production"}, headers=priya)
+    started = gw.post(f"/v1/apps/plugin:{PLUGIN}/accounts/{connection_id}/sign-in", json={}, headers=priya)
     back = sf["sign_in"]((data(started) or {}).get("authorizeUrl", ""), "acme.integration")
     done = gw.post(
-        f"/v1/connections/{connection_id}/sign-in/complete",
+        f"/v1/apps/plugin:{PLUGIN}/accounts/{connection_id}/sign-in/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=priya,
     )
     check(
-        "setup: Salesforce is on for the install and the team, and the team signed in",
-        on.status_code == 200 and turned.status_code == 200 and done.status_code == 200,
-        {"on": on.text[:200], "turned": turned.text[:200], "done": done.text[:200]},
+        "setup: Salesforce is on for the team, and the team signed in",
+        turned.status_code == 200 and done.status_code == 200,
+        {"turned": turned.text[:200], "done": done.text[:200]},
     )
 
     # 1. An agent asks for escalated cases changed since a date: one page and a sealed cursor, from checked inputs.

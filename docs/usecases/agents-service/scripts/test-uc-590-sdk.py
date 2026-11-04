@@ -48,10 +48,8 @@ def main() -> None:
         tools({**AUTH, **PLUGINS}) as gw,
         agents(gateway_url=str(gw.base_url).rstrip("/"), env=AUTH) as api,
     ):
-        sam = bearer(signed_in(accounts, "s.adeyemi@harborpine.example"), "team_security")
         priya = bearer(signed_in(accounts, "p.shah@harborpine.example"), "team_ops")
-        accounts.put("/v1/policies/plugins", json={"value": {PLUGIN: {"enabled": True}}}, headers=sam)
-        gw.put(f"/v1/plugins/{PLUGIN}/team", json={"enabled": True}, headers=priya)
+        gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json={"enabled": True}, headers=priya)
         ops = OpsAI.sign_in("p.shah@harborpine.example", "northfield-demo", team="team_ops", **CONN)
 
         # 21. The SDK's list matches the API's, and an install makes the copy once.

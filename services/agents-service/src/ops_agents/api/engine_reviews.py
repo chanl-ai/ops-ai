@@ -70,6 +70,7 @@ def connect_wait(payload: dict[str, Any]) -> dict[str, Any] | None:
     return {
         "app": str(payload.get("app") or ""),
         "connectionId": payload.get("connectionId"),
+        "appId": payload.get("appId"),
         "teamAccount": bool(payload.get("teamAccount")),
     }
 

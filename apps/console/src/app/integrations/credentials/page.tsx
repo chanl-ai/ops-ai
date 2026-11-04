@@ -4,7 +4,6 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { KeyRound } from 'lucide-react';
 
 import { AppCredentialsPanel } from '@/components/connections/app-credentials-panel';
-import { AppsTabs } from '@/components/connections/apps-tabs';
 import { PageLayout } from '@/components/page-layout';
 import { SecretsPanel } from '@/components/secrets/secrets-panel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -19,7 +18,7 @@ export default function CredentialsPage() {
   const pathname = usePathname();
   const tab = params.get('tab') === 'secrets' ? 'secrets' : 'apps';
   return (
-    <PageLayout icon={KeyRound} title="Credentials" description="The OAuth apps your apps sign in with, and the secret values tools use." tabs={<AppsTabs />}>
+    <PageLayout icon={KeyRound} title="Credentials" description="The OAuth apps your apps sign in with, and the secret values tools use.">
       <Tabs value={tab} onValueChange={(v) => router.replace(v === 'secrets' ? `${pathname}?tab=secrets` : pathname, { scroll: false })}>
         <TabsList>
           <TabsTrigger value="apps" data-testid="credentials-tab-apps">

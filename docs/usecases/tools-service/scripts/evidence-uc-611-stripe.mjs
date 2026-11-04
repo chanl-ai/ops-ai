@@ -42,7 +42,7 @@ await withUiStack(
     const sam = await as('s.adeyemi@harborpine.example', 'team_security');
     await fetch(`http://127.0.0.1:${TOOLS_PORT}/v1/egress/hosts`, { method: 'POST', headers: sam, body: JSON.stringify({ value: 'api.stripe.com', note: 'uc-611 evidence' }) });
     const J = await as(JAMES);
-    const conn = await connection(await as(PRIYA), `Stripe test ${RUN}`, 'bearer', { test: { secretValues: { token: KEY } } }, { baseUrl: STRIPE, testPath: '/v1/balance' });
+    const conn = await connection(await as(PRIYA), `Stripe test ${RUN}`, 'bearer', { sandbox: { secretValues: { token: KEY } } }, { baseUrl: STRIPE, testPath: '/v1/balance' });
     const mod = await send('POST', '/blank', J, { displayName: `Stripe ${RUN}`, name: `uc611-stripe-${RUN}`, type: 'http' });
     await send('PUT', `/${mod.id}/connection`, J, { connectionId: conn.id });
     await send('POST', `/${mod.id}/operations`, J, {

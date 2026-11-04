@@ -36,7 +36,7 @@ async function walk(consoleUrl, step) {
     await page.goto(`${consoleUrl}/channels/mcp`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
     await page.getByText('This page could not be found').or(page.getByTestId('channel-tab-mcp')).first().waitFor({ timeout: 90_000 });
     seen.notFound = await page.getByText('This page could not be found').count();
-    await page.goto(`${consoleUrl}/tools`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+    await page.goto(`${consoleUrl}/tools/custom`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
     await page.getByRole('tab', { name: /^Workflows/ }).or(page.getByRole('button', { name: /^Workflows/ })).first().click({ timeout: 90_000 });
     await page.getByTestId('workflow-tools').waitFor({ timeout: 60_000 });
     seen.toolsLink = await page.getByTestId('workflow-tools-manage').count();

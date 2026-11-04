@@ -11,9 +11,12 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { QueryError } from '@/components/shared/query-states';
 import { RecordSkeleton } from '@/components/shared/record-skeleton';
 import { OperationSheet } from '@/components/tools/operation-sheet';
+import { ToolTabs } from '@/components/tools/tool-tabs';
+import { UsedBySection } from '@/components/tools/used-by';
 import { RestTool } from '@/components/tools/rest-tool';
-import { baseOfApp, draftOf, patchOf, ToolWorkbench, type WorkbenchDraft } from '@/components/tools/tool-workbench';
+import { baseOfApp, draftOf, patchOf, ToolAddress, ToolWorkbench, type WorkbenchDraft } from '@/components/tools/tool-workbench';
 import { Button } from '@/components/ui/button';
+import { useToolRow } from '@/hooks/queries';
 import { useConnectionOptions } from '@/hooks/systems-queries';
 import { useSetModuleConnection, useTestModule, useToolModule, useUpdateOperation } from '@/hooks/tool-module-queries';
 import { ApiError } from '@/lib/api/contract';
@@ -26,6 +29,8 @@ export default function OperationWorkbenchPage() {
   const params = useParams<{ id: string; op: string }>();
   const name = decodeURIComponent(params.op);
   const mod = useToolModule(params.id);
+  // Who uses this tool, joined by the API: the agents granted it and the workflows that call it.
+  const usedBy = useToolRow(name);
   const test = useTestModule();
   const update = useUpdateOperation();
   const [policyOpen, setPolicyOpen] = React.useState(false);
@@ -59,6 +64,8 @@ export default function OperationWorkbenchPage() {
     );
 
   const patch = patchOf(op, base, draft);
+  // The tool's title and app, from its row in the tools list (GET /v1/tools/{id}), the same words the list shows.
+  const heading = { title: usedBy.data?.title ?? op.name, app: usedBy.data?.app ?? null, address: <ToolAddress op={op} module={m} base={base} /> };
   const stagedCall = m.pendingChanges.some((c) => c.operation === op.name && c.kind === 'schema_changed');
   const stage = (p: OperationPatch, what: string) =>
     update.mutateAsync({ id: m.id, operationId: op.id, patch: p }).then(
@@ -94,8 +101,11 @@ export default function OperationWorkbenchPage() {
     <>
       {op.executor === 'http' ? (
         <RestTool
+          tabs={<ToolTabs moduleId={m.id} operation={op.name} />}
+          aside={<UsedBySection row={usedBy} />}
           moduleId={m.id}
           moduleName={m.displayName}
+          {...heading}
           base={base}
           op={op}
           published={m.status === 'published'}
@@ -106,7 +116,7 @@ export default function OperationWorkbenchPage() {
           dirty={Object.keys(patch).length > 0}
           saveProblems={saveProblems}
           connection={m.connection}
-          connections={connections.data?.data.map((c) => ({ id: c.id, name: c.name, status: c.status as IntegrationStatus }))}
+          connections={connections.data?.map((c) => ({ id: c.id, name: c.name, status: c.status as IntegrationStatus }))}
           connectionsLoading={connections.isPending}
           settingConnection={setConnection.isPending}
           onConnectionChange={(connectionId) =>
@@ -122,8 +132,12 @@ export default function OperationWorkbenchPage() {
         />
       ) : (
       <ToolWorkbench
+        tabs={<ToolTabs moduleId={m.id} operation={op.name} />}
+        aside={<UsedBySection row={usedBy} />}
         moduleId={m.id}
         moduleName={m.displayName}
+        {...heading}
+        readOnly={Boolean(m.templateId?.startsWith('plugin:'))}
         base={base}
         op={op}
         published={m.status === 'published'}

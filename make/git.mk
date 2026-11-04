@@ -1,4 +1,4 @@
-# Git in commands a person can read: commit named files with the checks, and lanes (worktrees) for parallel work.
+# Git in commands a person can read: commit named files with the checks, and review a branch on the one stack.
 # scripts/git-rules.py refuses only what loses work or skips review (stash, hard reset, clean, --no-verify, pushes to main).
 #
 #   make commit FILES='a.py b.md' MSG='fix(tools): fill query placeholders' CHANGELOG=query-placeholders [BODY='why; what ran']
@@ -49,21 +49,15 @@ git-rules: ## Print the git rules for the shared tree and check them
 	@python3 -c "import importlib.util as u; s=u.spec_from_file_location('r','scripts/git-rules.py'); m=u.module_from_spec(s); s.loader.exec_module(m); [print('-', w, '\n  instead:', i) for _, w, i in m.RULES]"
 	@python3 scripts/git-rules.py --self-test
 
-# Lanes: worktrees beside this checkout, one per area, each on its own branch, ports and database (scripts/lane.sh).
-#   make lane NAME=backend N=1       ../ops-ai-lane-backend on a fresh branch from origin/main, ports +1000
-#   make lanes                       every lane: number, branch, stack up or down, last commit, PR
-#   make lane-next BRANCH=feat/api-own-account-run [BASE=feat/x]   inside a lane: start the next card
-#   make lane-rm NAME=backend        remove a lane whose work is pushed
-.PHONY: lane lanes lane-next lane-rm
+# One checkout, one stack: a branch is reviewed by checking it out here and restarting on it, so what runs on the
+# usual ports (console :3016) is always the branch checked out.
+#   make review BRANCH=feat/apps-salesforce
+.PHONY: review
 
-lane: ## Make a lane worktree NAME on ports +N×1000 (N 1-5)
-	@bash scripts/lane.sh add "$(NAME)" "$(N)" $(BASE)
-
-lanes: ## List the main checkout and every lane: branch, stack, last commit, PR
-	@bash scripts/lane.sh list
-
-lane-next: ## Inside a lane: start the next card on BRANCH from origin/main (or BASE), migrating the lane's database
-	@bash scripts/lane.sh next "$(BRANCH)" $(BASE)
-
-lane-rm: ## Remove lane NAME once its work is pushed
-	@bash scripts/lane.sh remove "$(NAME)"
+review: ## Check out BRANCH from origin and restart the stack on it, migrating each service first; refuses with uncommitted work
+	@[ -n "$(BRANCH)" ] || { echo "make review: name the branch, e.g. BRANCH=feat/apps-salesforce"; exit 2; }
+	@[ -z "$$(git status --porcelain --untracked-files=no)" ] || { echo "make review: commit or move your changes first; a branch switch would carry them onto $(BRANCH)"; exit 1; }
+	git fetch origin "$(BRANCH)"
+	git switch "$(BRANCH)" 2>/dev/null || git switch --track "origin/$(BRANCH)"
+	git merge --ff-only "origin/$(BRANCH)"
+	$(MAKE) restart

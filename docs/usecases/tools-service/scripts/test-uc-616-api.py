@@ -48,8 +48,8 @@ with apps_stack() as w:
     james_key = w.m["person_keys"]["james"]
     w.kept(
         w.gw.put(
-            f"/v1/me/connections/{person}/credentials",
-            json={"environment": "production", "credentials": {"key": james_key}},
+            f"/v1/me/accounts/{person}/credentials",
+            json={"credentials": {"key": james_key}},
             headers=w.who["builder"],
         )
     )

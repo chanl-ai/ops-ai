@@ -30,7 +30,6 @@ services/models-service/src/ops_models/app.py refusal images_not_cleared 1 E16
 services/models-service/src/ops_models/app.py refusal sensitivity_not_cleared 1 E16
 services/platform-service/src/ops_platform/auth.py refusal workspace_closed 1 E44
 services/tools-service/src/ops_tools/modules/service.py refusal plugin_module 1 E45
-packages/ops_access/src/ops_access/policies.py policy-default plugins={} 1 E46
 services/platform-service/src/ops_platform/store/teams.py role-name admin 1 E17
 services/platform-service/src/ops_platform/store/workspace.py role-name admin 1 E17
 services/platform-service/src/ops_platform/teams.py refusal domain_not_allowed 1 E18
@@ -40,7 +39,6 @@ services/tools-service/src/ops_tools/gateway_calls.py lock SYSTEM_TOOLS 3 E06
 services/tools-service/src/ops_tools/gateway_calls.py lock system-claim 1 E06
 services/tools-service/src/ops_tools/gateway_calls.py refusal gateway_refused 1 E16
 services/tools-service/src/ops_tools/gateway_calls.py refusal system_workflow_only 1 E06
-services/tools-service/src/ops_tools/mcp_server.py refusal production_off 1 E40
 services/tools-service/src/ops_tools/callers.py lock dev-caller 1 E09
 services/tools-service/src/ops_tools/limits.py refusal amount_over_limit 1 E16
 services/tools-service/src/ops_tools/mailboxes.py refusal egress_denied 2 E16
@@ -56,6 +54,7 @@ packages/ops_access/src/ops_access/policies.py policy-default aiSteps={} 1 E03
 packages/ops_access/src/ops_access/policies.py policy-default aiStepsMaskPersonalData={} 1 E34
 packages/ops_access/src/ops_access/policies.py policy-default chatThreadsOwnerOnly=true 1 E02
 packages/ops_access/src/ops_access/policies.py policy-default checkBeforeSend={} 1 E03
+packages/ops_access/src/ops_access/policies.py policy-default egressNewHosts="ask_security" 1 E48
 packages/ops_access/src/ops_access/policies.py policy-default extractionFloor=0.8 1 open
 packages/ops_access/src/ops_access/policies.py policy-default memoryRetentionDays=null 1 open
 packages/ops_access/src/ops_access/policies.py policy-default pageImages={} 1 E03
@@ -83,6 +82,7 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict connect_wait 0 state
 * conflict connection_in_use 0 state
 * conflict connection_secret 0 state
+* conflict credential_secret 0 state
 * conflict credential_in_use 0 state
 * conflict daily_cap 0 state
 * conflict decided_in_reviews 0 state

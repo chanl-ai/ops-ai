@@ -1,7 +1,7 @@
 """uc-564, api layer: docs/usecases/tools-service/a-team-turns-on-the-salesforce.md, stories S1 (steps 1-7) and S4
-(steps 8-12) and S6 (steps 24-28). platform-service signs the seeded people in and holds the install switch (the
-`plugins` policy); tools-service runs with plugins on (OPS_PLUGINS) and loads the Salesforce plugin from the
-ops-ai-plugins repository beside ops-ai (OPS_PLUGIN_PATHS); the fake Salesforce (docs/usecases/lib/fake_salesforce.py)
+(steps 8-12) and S6 (steps 24-28). platform-service signs the seeded people in; tools-service runs with plugins on
+(OPS_PLUGINS), loads the Salesforce plugin from the ops-ai-plugins repository beside ops-ai (OPS_PLUGIN_PATHS) and
+takes the API version every team uses from the install config (OPS_PLUGIN_LOCKED); the fake Salesforce (docs/usecases/lib/fake_salesforce.py)
 signs each team in and answers its API, recording each query and the OAuth app each sign-in used. No model call."""
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from uuid import uuid4
 
 import httpx
 from apps_layer import run_path
-from fake_salesforce import salesforce
+from fake_salesforce import LIST_VIEW_ID, salesforce
 from usecase_harness import (
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
@@ -27,6 +27,7 @@ from usecase_harness import (
     service_headers,
     signed_in,
     tools,
+    until,
 )
 from usecase_harness import ROOT as REPO
 
@@ -41,15 +42,30 @@ PLATFORM_CLIENT = "ops-ai-platform"
 PLATFORM_SECRET = "ops-ai-platform-app-secret"
 SALESFORCE = REPO.parent / "ops-ai-plugins/plugins/salesforce/src/ops_plugin_salesforce"
 PLUGINS = {"OPS_PLUGINS": "true", "OPS_PLUGIN_PATHS": json.dumps([str(SALESFORCE)])}
+# Ops AI's own OAuth app for Salesforce: the install's, from its config, as a deployment sets it.
+INSTALL_CLIENT = {"OPS_PLUGIN_CLIENTS": json.dumps({PLUGIN: {"id": PLATFORM_CLIENT, "secret": PLATFORM_SECRET}})}
+# The API version the install fixes for every team, from its config.
+LOCKED = {"OPS_PLUGIN_LOCKED": json.dumps({PLUGIN: {"api_version": "61.0"}})}
 QUERY = "SELECT Id, CaseNumber, Status FROM Case WHERE CaseNumber = '00044818'"
 
 
 TENANT: dict[str, str] = {}
+INNER: dict[str, httpx.Client] = {}
 
 
-def call(gw: httpx.Client, tool: str, args: dict[str, Any], team: str = "team_ops") -> httpx.Response:
-    """A gateway call as agents-service makes it for a run in `team`: a read, so it runs at once."""
+def call(
+    gw: httpx.Client, tool: str, args: dict[str, Any], team: str = "team_ops", acting_for: str | None = None
+) -> httpx.Response:
+    """A gateway call as agents-service makes it for a run in `team`: a read, so it runs at once. With `acting_for`
+    (an email) it carries the acting-for token platform-service signs for that person, as a run a person started."""
     headers = service_headers("tools", tenant=TENANT["id"], service="agents", team=team)
+    if acting_for:
+        minted = INNER["api"].post(
+            "/v1/acting-for-tokens",
+            json={"email": acting_for},
+            headers=service_headers("platform", tenant=TENANT["id"], service="agents", team=team),
+        )
+        headers["X-Acting-For"] = str((data(minted) or {}).get("token") or "")
     body = {"tool": tool, "input": args, "key": uuid4().hex, "runContext": {"environment": "production"}}
     return gw.post("/v1/calls", json=body, headers=headers | {"X-Team-Id": team})
 
@@ -67,8 +83,18 @@ def grantable(gw: httpx.Client, team: str = "team_ops") -> set[str]:
     return {str(r["name"]) for r in rows}
 
 
+def account(connection_id: str) -> str:
+    """One of the Salesforce app's accounts: a plugin's account lives under its app, `plugin:<id>`."""
+    return f"/v1/apps/plugin:{PLUGIN}/accounts/{connection_id}"
+
+
+def card(gw: httpx.Client, who: dict[str, str]) -> dict[str, Any]:
+    """The Salesforce card on the team's Apps grid."""
+    return next((c for c in data(gw.get("/v1/apps", headers=who)) or [] if c.get("id") == f"plugin:{PLUGIN}"), {})
+
+
 def sign_in_team(gw: httpx.Client, sf: dict[str, Any], who: dict[str, str], connection_id: str) -> httpx.Response:
-    started = gw.post(f"/v1/connections/{connection_id}/sign-in", json={"environment": "production"}, headers=who)
+    started = gw.post(f"{account(connection_id)}/sign-in", json={}, headers=who)
     back = (
         sf["sign_in"]((data(started) or {}).get("authorizeUrl", ""), "acme.integration")
         if started.status_code == 200
@@ -77,24 +103,26 @@ def sign_in_team(gw: httpx.Client, sf: dict[str, Any], who: dict[str, str], conn
     if not back.get("code"):
         print(f"sign-in gave no code: start {started.status_code} {started.text[:300]}; back {back}", flush=True)
     return gw.post(
-        f"/v1/connections/{connection_id}/sign-in/complete",
+        f"{account(connection_id)}/sign-in/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=who,
     )
 
 
-def install(api: httpx.Client, who: dict[str, str], on: bool, client: str | None = None) -> httpx.Response:
-    value: dict[str, Any] = {PLUGIN: {"enabled": on, "locked": {"api_version": "61.0"}}}
-    if client:
-        value[PLUGIN]["client"] = {"id": client}
-    return api.put("/v1/policies/plugins", json={"value": value}, headers=who)
-
-
 with ExitStack() as stack:
     sf = stack.enter_context(salesforce())
-    api, _ = stack.enter_context(platform())
+    api, INNER["api"] = stack.enter_context(platform())
     gw = stack.enter_context(
-        tools({**sf["settings"], **AUTH, **PLUGINS, "OPS_CONSOLE_URL": "https://console.acme.test"})
+        tools(
+            {
+                **sf["settings"],
+                **AUTH,
+                **PLUGINS,
+                **INSTALL_CLIENT,
+                **LOCKED,
+                "OPS_CONSOLE_URL": "https://console.acme.test",
+            }
+        )
     )
     # agents-service on the scripted model, for step 45's chat turn; its tools come from this tools-service.
     chat = stack.enter_context(agents(gateway_url=str(gw.base_url).rstrip("/"), env=AUTH))
@@ -105,28 +133,26 @@ with ExitStack() as stack:
     james = bearer(signed_in(api, "j.richardson@harborpine.example"), "team_ops")
     wanjiru = bearer(signed_in(api, "w.kamau@harborpine.example"), "team_platform")
 
-    # 1. The platform admin turns Salesforce on for the install and locks the API version; a builder cannot.
-    by_builder = install(api, james, True)
-    on = install(api, sam, True)
+    # 1. Installed, Salesforce is listed for the team with no admin step, off until the team turns it on, and the
+    # API version the install config fixes reads as locked.
+    view = card(gw, priya).get("plugin") or {}
+    locked_fields = [s.get("name") for s in view.get("settings") or [] if s.get("locked")]
     check(
-        "1 the platform admin turns Salesforce on for the install; a team builder is refused",
-        on.status_code == 200 and by_builder.status_code == 403,
-        {"admin": on.status_code, "builder": by_builder.status_code, "text": on.text[:200]},
+        "1 Salesforce is listed for the team with no install step, and its API version is fixed by the install",
+        bool(view) and view.get("teamOn") is False and "api_version" in locked_fields,
+        {"view": str(view)[:300]},
     )
 
     # 2. The team admin turns it on for the team with the team's OAuth app; a builder cannot, nor change a locked field.
     login = sf["authorize_url"].rsplit("/", 1)[0]
-    team_on = {
-        "enabled": True,
-        "settings": {"login_url": login},
-        "clientId": "ops-ai-acme",
-        "clientSecret": CLIENT_SECRET,
-    }
-    refused = gw.put(f"/v1/plugins/{PLUGIN}/team", json=team_on, headers=james)
-    turned = gw.put(f"/v1/plugins/{PLUGIN}/team", json=team_on, headers=priya)
+    own = {"app": f"plugin:{PLUGIN}", "clientId": "ops-ai-acme", "clientSecret": CLIENT_SECRET}
+    credential = (data(gw.post("/v1/app-credentials", json=own, headers=priya)) or {}).get("id")
+    team_on = {"enabled": True, "settings": {"login_url": login}, "credentialId": credential}
+    refused = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json=team_on, headers=james)
+    turned = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json=team_on, headers=priya)
     view = data(turned) or {}
     locked = gw.put(
-        f"/v1/plugins/{PLUGIN}/team", json={"enabled": True, "settings": {"api_version": "50.0"}}, headers=priya
+        f"/v1/apps/plugin:{PLUGIN}/team", json={"enabled": True, "settings": {"api_version": "50.0"}}, headers=priya
     )
     check(
         "2 the team admin turns it on, its connection is made, and a locked field cannot be changed by the team",
@@ -135,7 +161,7 @@ with ExitStack() as stack:
         and refused.status_code == 403
         and locked.status_code == 400
         and code_of(locked) == "setting_locked"
-        and view.get("settings", {}).get("api_version") == "61.0",
+        and ((view.get("plugin") or {}).get("values") or {}).get("api_version") == "61.0",
         {"turned": turned.text[:300], "builder": refused.status_code, "locked": locked.text[:200]},
     )
     connection_id = str(view.get("connectionId") or "con_missing")
@@ -149,10 +175,7 @@ with ExitStack() as stack:
     sf["fake"].bad_instance = True
     bad = sign_in_team(gw, sf, priya, connection_id)
     sf["fake"].bad_instance = False
-    still = data(gw.get("/v1/plugins", headers=priya)) or {}
-    instance = (
-        next((p for p in still.get("plugins", []) if p["id"] == PLUGIN), {}).get("settings", {}).get("instance_url")
-    )
+    instance = ((card(gw, priya).get("plugin") or {}).get("values") or {}).get("instance_url")
     check(
         "4 a sign-in whose token names a host outside Salesforce is refused and no instance is kept",
         bad.status_code == 400 and "evil.example" in bad.text and instance is None,
@@ -161,16 +184,28 @@ with ExitStack() as stack:
 
     # 5. The team signs in with its account; the instance comes from the token.
     done = sign_in_team(gw, sf, priya, connection_id)
-    after = data(gw.get("/v1/plugins", headers=priya)) or {}
-    mine = next((p for p in after.get("plugins", []) if p["id"] == PLUGIN), {})
+    mine = (card(gw, priya).get("plugin") or {}).get("values") or {}
     check(
         "5 the team signs in and the instance is read from Salesforce's token answer",
-        done.status_code == 200 and mine.get("settings", {}).get("instance_url") == sf["api_base"],
-        {"status": done.status_code, "text": done.text[:200], "settings": mine.get("settings")},
+        done.status_code == 200 and mine.get("instance_url") == sf["api_base"],
+        {"status": done.status_code, "text": done.text[:200], "settings": mine},
+    )
+
+    # 51. The team account reads connected at once, and its test runs on its own right after the sign-in.
+    def team_row() -> dict[str, Any]:
+        page = data(gw.get(f"/v1/apps/plugin:{PLUGIN}", headers=priya)) or {}
+        return next((a for a in page.get("accounts") or [] if a.get("id") == connection_id), {})
+
+    first_row = team_row()
+    team_test = until(lambda: (team_row().get("test") or {}).get("status"), timeout=20)
+    check(
+        "51 the team account is connected right after its sign-in, and its own test ran and passed",
+        first_row.get("state") == "connected" and team_test == "ok",
+        {"first": first_row, "later": team_row()},
     )
 
     # 6. Test connection runs the plugin's health check, Salesforce's limits call, and passes.
-    tested = gw.post(f"/v1/connections/{connection_id}/test", json={"environment": "production"}, headers=priya)
+    tested = gw.post(f"{account(connection_id)}/test", json={}, headers=priya)
     health = (data(tested) or {}).get("health") or {}
     check(
         "6 Test connection runs the limits call and passes",
@@ -179,7 +214,11 @@ with ExitStack() as stack:
     )
 
     # 7. The OAuth client secret is kept as a reference: no answer about the connection or the plugin shows it.
-    shown = gw.get(f"/v1/connections/{connection_id}", headers=priya).text + gw.get("/v1/plugins", headers=priya).text
+    shown = (
+        gw.get(account(connection_id), headers=priya).text
+        + gw.get("/v1/apps", headers=priya).text
+        + gw.get(f"/v1/apps/plugin:{PLUGIN}", headers=priya).text
+    )
     check("7 the client secret is never shown back", bool(shown) and CLIENT_SECRET not in shown)
 
     # 8. A read runs at once through the plugin and reaches the team's instance with the SOQL the agent gave.
@@ -193,7 +232,7 @@ with ExitStack() as stack:
     )
 
     # 9. The team admin turns it off: its tools leave the list, a call is refused; the connection is kept.
-    off = gw.put(f"/v1/plugins/{PLUGIN}/team", json={"enabled": False}, headers=priya)
+    off = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json={"enabled": False}, headers=priya)
     listed_off = grantable(gw)
     refused_off = call(gw, "salesforce_query", {"q": QUERY})
     check(
@@ -206,12 +245,13 @@ with ExitStack() as stack:
     )
 
     # 10. On again: the same connection and settings, and calls work with no new sign-in.
-    again = data(gw.put(f"/v1/plugins/{PLUGIN}/team", json={"enabled": True}, headers=priya)) or {}
+    again = data(gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json={"enabled": True}, headers=priya)) or {}
+    again_values = (again.get("plugin") or {}).get("values") or {}
     works = call(gw, "salesforce_query", {"q": QUERY})
     check(
         "10 turned on again, it keeps its connection and settings and calls work without a new sign-in",
         again.get("connectionId") == connection_id
-        and again.get("settings", {}).get("instance_url") == sf["api_base"]
+        and again_values.get("instance_url") == sf["api_base"]
         and bool(((data(works) or {}).get("output") or {}).get("records"))
         and "salesforce_query" in grantable(gw),
         {"again": again, "works": works.status_code},
@@ -240,6 +280,7 @@ with ExitStack() as stack:
     )
 
     # 42. A Real run goes through the gateway's checks with the team's account and reaches Salesforce.
+    # The team has no sandbox account, so the run signs in with its live account (step 5).
     real = gw.post(run, json={"mode": "real", "input": {"q": QUERY}}, headers=james)
     records = ((data(real) or {}).get("output") or {}).get("records") or [{}]
     check(
@@ -249,6 +290,23 @@ with ExitStack() as stack:
         and bool((data(real) or {}).get("callId"))
         and QUERY in sf["fake"].state()["queries"][sent_before:],
         ("target: waits on P1", real.text[:300]),
+    )
+
+    # 50. A paged tool with a transform runs Real from its page: the answer is shaped once, as an agent gets it, and the
+    # page shows the request that was sent.
+    view_run = run_path(module, "salesforce_list_view")
+    listed = gw.post(view_run, json={"mode": "real", "input": {"list_view": LIST_VIEW_ID}}, headers=james)
+    shown = data(listed) or {}
+    view_rows = (shown.get("output") or {}).get("records") if isinstance(shown.get("output"), dict) else None
+    sent = shown.get("request") or {}
+    check(
+        "50 a paged tool's Real run shapes its answer once and shows the request it sent",
+        listed.status_code == 200
+        and not shown.get("transformError")
+        and bool(view_rows)
+        and isinstance(view_rows[0].get("fields"), dict)
+        and LIST_VIEW_ID in str(sent.get("url") or ""),
+        {"status": listed.status_code, "answer": listed.text[:400]},
     )
 
     # 45 (S7). A grant saved while an older publish request waits is what goes live, and chat offers it at
@@ -300,17 +358,23 @@ with ExitStack() as stack:
         },
     )
 
-    # 11. The platform admin turns it off for the install: every team's calls stop within seconds, with no restart.
-    install(api, sam, False)
-    time.sleep(6)
+    # 11. The team admin turns it off for the team: a call is refused at once, with no restart; on again, it runs.
+    team_off = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json={"enabled": False}, headers=priya)
     stopped = call(gw, "salesforce_query", {"q": QUERY})
-    install(api, sam, True)
-    time.sleep(6)
+    team_back = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json={"enabled": True}, headers=priya)
     back = call(gw, "salesforce_query", {"q": QUERY})
     check(
-        "11 off for the install, calls are refused within seconds; on again, they run",
-        code_of(stopped) == "PLUGIN_DISABLED" and bool(((data(back) or {}).get("output") or {}).get("records")),
-        {"stopped": stopped.text[:200], "back": back.status_code},
+        "11 off for the team, a call is refused with PLUGIN_DISABLED; on again, it runs",
+        team_off.status_code == 200
+        and code_of(stopped) == "PLUGIN_DISABLED"
+        and team_back.status_code == 200
+        and bool(((data(back) or {}).get("output") or {}).get("records")),
+        {
+            "off": team_off.status_code,
+            "stopped": stopped.text[:200],
+            "on": team_back.status_code,
+            "back": back.status_code,
+        },
     )
 
     # 12. Nobody edits, publishes or deletes the plugin's module, the team admin included.
@@ -322,22 +386,25 @@ with ExitStack() as stack:
         {"patch": patched.text[:200], "delete": deleted.text[:200]},
     )
 
-    # 24. The platform sets up its own OAuth app once: the client id in the install switch, the secret at the account.
-    # A team's builder cannot set it.
-    by_team = gw.put(f"/v1/plugins/{PLUGIN}/app-secret", json={"clientSecret": PLATFORM_SECRET}, headers=james)
-    policy = install(api, sam, True, client=PLATFORM_CLIENT)
-    secret = gw.put(f"/v1/plugins/{PLUGIN}/app-secret", json={"clientSecret": PLATFORM_SECRET}, headers=sam)
+    # 24. Ops AI's own OAuth app is the install's: the card says the install's app signs teams in, no route sets its
+    # secret, and no answer carries the secret.
+    by_admin = gw.put(f"/v1/apps/plugin:{PLUGIN}/app-secret", json={"clientSecret": "other"}, headers=sam)
+    listed = gw.get("/v1/apps", headers=priya)
+    view = next((c for c in data(listed) or [] if c.get("id") == f"plugin:{PLUGIN}"), {})
     check(
-        "24 the platform admin sets up the platform's own OAuth app; a team's builder cannot",
-        by_team.status_code == 403 and policy.status_code == 200 and secret.status_code == 200,
-        {"builder": by_team.status_code, "policy": policy.text[:200], "secret": secret.text[:200]},
+        "24 Ops AI's own OAuth app comes from the install config; no route sets its secret",
+        by_admin.status_code in (404, 405)
+        and view.get("managedClient") is True
+        and (view.get("plugin") or {}).get("platformApp") is True
+        and PLATFORM_SECRET not in listed.text,
+        {"set": by_admin.status_code, "managed": view.get("managedClient"), "plugin": view.get("plugin")},
     )
 
     # 25. A second team turns Salesforce on with no app of its own. Until it signs in, its calls never run on another
     # team's account, though team_ops is signed in to the same instance.
     time.sleep(6)
     other = gw.put(
-        f"/v1/plugins/{PLUGIN}/team", json={"enabled": True, "settings": {"login_url": login}}, headers=wanjiru
+        f"/v1/apps/plugin:{PLUGIN}/team", json={"enabled": True, "settings": {"login_url": login}}, headers=wanjiru
     )
     other_id = str((data(other) or {}).get("connectionId") or "con_missing")
     asked = len(sf["fake"].state()["queries"])
@@ -371,15 +438,61 @@ with ExitStack() as stack:
 
     # 28. No answer shows the platform's secret, to either team or to the platform admin.
     reads = [
-        gw.get("/v1/plugins", headers=sam),
-        gw.get("/v1/plugins", headers=wanjiru),
-        gw.get(f"/v1/connections/{other_id}", headers=wanjiru),
-        gw.get("/v1/connections", headers=wanjiru),
+        gw.get("/v1/apps", headers=sam),
+        gw.get(f"/v1/apps/plugin:{PLUGIN}", headers=wanjiru),
+        gw.get(account(other_id), headers=wanjiru),
+        gw.get("/v1/apps", headers=wanjiru),
     ]
     check(
         "28 the platform's secret is never shown back",
         all(r.status_code == 200 for r in reads) and not any(PLATFORM_SECRET in r.text for r in reads),
         [r.status_code for r in reads],
+    )
+
+    # 47. A third team turns Salesforce on with each person signing in with their own account, and no team account.
+    # Before Sam signs in, his call asks for his own sign-in; it is not refused as the app being off.
+    security = bearer(signed_in(api, "s.adeyemi@harborpine.example"), "team_security")
+    mine_on = gw.put(
+        f"/v1/apps/plugin:{PLUGIN}/team",
+        json={"enabled": True, "signIn": "person", "settings": {"login_url": login}},
+        headers=security,
+    )
+    mine_id = str((data(mine_on) or {}).get("connectionId") or "con_missing")
+    before = call(gw, "salesforce_query", {"q": QUERY}, team="team_security", acting_for="s.adeyemi@harborpine.example")
+    check(
+        "47 on an app where each person signs in, a person's call before their sign-in asks them to sign in",
+        mine_on.status_code == 200 and before.status_code == 403 and code_of(before) == "CONNECTION_NOT_LINKED",
+        {"on": mine_on.text[:200], "call": before.status_code, "text": before.text[:300]},
+    )
+
+    # 48. Sam signs in with his own account; no team account exists, and the instance comes from his sign-in.
+    own = gw.post(f"{account(mine_id)}/sign-in", json={}, headers=security)
+    back = sf["sign_in"]((data(own) or {}).get("authorizeUrl", ""), "sam.own") if own.status_code == 200 else {}
+    own_done = gw.post(
+        f"{account(mine_id)}/sign-in/complete",
+        json={"state": back.get("state", ""), "code": back.get("code", "")},
+        headers=security,
+    )
+    page_mine = data(gw.get(f"/v1/apps/plugin:{PLUGIN}", headers=security)) or {}
+    accounts_mine = page_mine.get("accounts") or []
+    check(
+        "48 a person signs in with their own account before any team account exists",
+        own_done.status_code == 200 and any(a.get("id") == mine_id and a.get("mine") for a in accounts_mine),
+        {"start": own.text[:200], "done": own_done.text[:300], "accounts": accounts_mine},
+    )
+
+    # 49. His call now runs on his own account and reaches the instance his sign-in named.
+    sent_before = len(sf["fake"].state()["queries"])
+    after_own = call(
+        gw, "salesforce_query", {"q": QUERY}, team="team_security", acting_for="s.adeyemi@harborpine.example"
+    )
+    rows = ((data(after_own) or {}).get("output") or {}).get("records") or [{}]
+    check(
+        "49 the person's call runs on their own account with no team account, and reaches Salesforce",
+        after_own.status_code == 200
+        and rows[0].get("CaseNumber") == "00044818"
+        and QUERY in sf["fake"].state()["queries"][sent_before:],
+        {"status": after_own.status_code, "text": after_own.text[:300]},
     )
 
 finish()

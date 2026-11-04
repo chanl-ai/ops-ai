@@ -61,8 +61,11 @@ export const NAV: NavGroup[] = [
       // Wiki is hidden from the sidebar; its pages still answer at /wiki.
       // Knowledge bases decide what an agent searches and how; each KB page has its own tabs, so the row is flat.
       { title: 'Knowledge bases', url: '/knowledge', icon: IconDatabase },
-      // The Apps menu: the catalog, My accounts and Tools as tabs.
+      // The Apps menu (owner, 11-03): the catalog, the team's app credentials and secrets, a person's own sign-ins and
+      // the tools, each its own item rather than tabs repeated on each page.
       { title: 'Apps', url: '/integrations', icon: IconPlugConnected },
+      { title: 'Credentials', url: '/integrations/credentials', icon: IconKey },
+      { title: 'My accounts', url: '/integrations/my-accounts', icon: IconUserCheck },
       { title: 'Tools', url: '/tools', icon: IconTool },
       // Every file the platform stores, whatever brought it in (wiki, chat, mail, imports, exports), so it sits beside the Wiki rather than under it.
       { title: 'Files', url: '/files', icon: IconFolder },

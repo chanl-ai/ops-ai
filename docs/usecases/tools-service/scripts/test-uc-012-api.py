@@ -53,7 +53,7 @@ def call(gw: httpx.Client, tool: str, args: dict[str, Any]) -> httpx.Response:
 with fake_bank() as bank, agents(), tools(settings=bank.settings) as gw:
     clean(gw, bank.range)
     # The modules' own connection, holding the bank's address; the spec's key header signs the calls.
-    made_conn = gw.post("/v1/connections", json={"name": "uc012 statements", "authKind": "none"})
+    made_conn = gw.post("/v1/apps", json={"name": "uc012 statements", "authKind": "none"})
     conn = data(made_conn)["id"]
     spec = {"kind": "openapi", "specUrl": f"https://{HOST}/v1/openapi.json"}
     unlisted = gw.post("/v1/tool-modules/discover", json=spec)

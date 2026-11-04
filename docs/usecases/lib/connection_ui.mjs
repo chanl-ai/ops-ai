@@ -1,6 +1,6 @@
-// What the connection ui scripts share: a connection set up per environment through tools-service, as its api
-// layer sets one (docs/usecases/tools-service/scripts/connection_calls.py), and Test the team account pressed on the
-// connection's page. Keys are entered through the API, as the api layer sets them.
+// What the connection ui scripts share: a custom app with its live account and, where asked, a sandbox account, set up
+// through tools-service as its api layer sets one (docs/usecases/lib/connection_calls.py), and Test pressed on the
+// app page's Keys row. Keys are entered through the API, as the api layer sets them.
 import { TOOLS_PORT } from '@ops-ai/usecase-runner/harness';
 
 import { as } from './workflow_ui.mjs';
@@ -23,29 +23,41 @@ export async function allowBank(bank) {
   await send('POST', '/v1/egress/ranges', sam, { value: bank.range, note: 'connection use case' });
 }
 
-/**
- * A connection of `kind` with each environment's `{ settings, secretValues }` set as `headers`' person, bound to
- * `baseUrl` and tested at `testPath`. Throws on a refused setup, so a script fails at the step that needs it.
- */
-export async function connection(headers, name, kind, environments, { baseUrl, testPath }) {
-  const made = await send('POST', '/v1/connections', headers, { name, authKind: kind });
-  if (made.status !== 201) throw new Error(`creating ${name}: ${made.status}`);
-  let conn = made.data;
-  for (const [env, body] of Object.entries(environments)) {
-    const settings = { baseUrl, testPath, ...(body.settings ?? {}) };
-    const put = await send('PUT', `/v1/connections/${conn.id}/environments/${env}`, headers, { revision: conn.revision, ...body, settings });
-    if (put.status !== 200) throw new Error(`setting ${name} ${env}: ${put.status}`);
-    conn = put.data ?? conn;
-  }
-  return conn;
+/** An account's address under its app. */
+export const accountPath = (account) => `/v1/apps/${encodeURIComponent(account.appId)}/accounts/${encodeURIComponent(account.id)}`;
+
+async function keys(headers, account, body, { baseUrl, testPath }, what) {
+  const settings = { baseUrl, testPath, ...(body.settings ?? {}) };
+  const put = await send('PATCH', accountPath(account), headers, { revision: account.revision, ...body, settings });
+  if (put.status !== 200) throw new Error(`setting ${what}: ${put.status}`);
+  return put.data ?? account;
 }
 
-/** Opens the connection's page, presses Test the team account and returns what the Health section says. */
-export async function testTeamAccount(page, consoleUrl, id) {
-  await page.goto(`${consoleUrl}/tools/connections/${id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-  const button = page.getByTestId('test-team');
-  await button.waitFor({ timeout: 90_000 });
-  const answered = page.waitForResponse((r) => r.request().method() === 'POST' && /\/connections\/[^/]+\/test$/.test(r.url()), { timeout: 60_000 }).catch(() => undefined);
+/**
+ * A custom app of `kind` and its accounts, each `{ settings, secretValues }` set as `headers`' person, bound to
+ * `baseUrl` and tested at `testPath`: `live` is the app's first account, `sandbox` a sandbox account beside it (the one
+ * test runs use). With only a sandbox, the app's first account is that sandbox. Answers the first account, with the
+ * sandbox under `sandboxAccount` when both were made. Throws on a refused setup, so a script fails at the step that
+ * needs it.
+ */
+export async function connection(headers, name, kind, accounts, at) {
+  const onlySandbox = !accounts.live;
+  const made = await send('POST', '/v1/apps', headers, { name, authKind: kind, signIn: 'team', sandbox: onlySandbox });
+  if (made.status !== 201) throw new Error(`creating ${name}: ${made.status}`);
+  const first = await keys(headers, made.data, onlySandbox ? accounts.sandbox : accounts.live, at, name);
+  if (onlySandbox || !accounts.sandbox) return first;
+  const added = await send('POST', `/v1/apps/${encodeURIComponent(first.id)}/accounts`, headers, { name: `${name} sandbox`, sandbox: true });
+  if (added.status !== 201) throw new Error(`adding ${name}'s sandbox account: ${added.status}`);
+  return { ...first, sandboxAccount: await keys(headers, added.data, accounts.sandbox, at, `${name} sandbox`) };
+}
+
+/** Opens the app's page, presses Test on its Keys row (its default account) and returns what the row says. */
+export async function testTeamAccount(page, consoleUrl, account) {
+  await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(account.appId)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+  await page.getByTestId('app-tab-settings').click({ timeout: 90_000 });
+  const button = page.getByTestId('app-test');
+  await button.waitFor({ timeout: 60_000 });
+  const answered = page.waitForResponse((r) => r.request().method() === 'POST' && /\/accounts\/[^/]+\/test$/.test(r.url()), { timeout: 60_000 }).catch(() => undefined);
   await button.click();
   await answered;
   const health = page.getByTestId('health');

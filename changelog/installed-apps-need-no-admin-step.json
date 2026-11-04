@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-03",
+  "title": "An installed app needs no admin switch",
+  "description": "An app installed on the platform is offered to every team at once, and each team turns it on for itself. Settings fixed for every team now come from the install's configuration.",
+  "tag": "improved"
+}

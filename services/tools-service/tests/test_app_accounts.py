@@ -16,32 +16,25 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
 from ops_plugin_sdk.loader import Loaded
 from ops_service_kit.settings import Settings
-from ops_tools.auth.tokens import Tokens
-from ops_tools.connections.service import ConnectionService
-from ops_tools.modules.directory import Directory
 from ops_tools.modules.seed import load
 from ops_tools.modules.service import ModuleService
 from ops_tools.modules.tool_users import StaticToolUsers
 from ops_tools.plugins.host import PluginHost, module_id_of
-from ops_tools.plugins.routes import plugins_router
-from ops_tools.plugins.switches import InstallSwitches
 from ops_tools.registry import ToolRegistry
-from ops_tools.secrets import SecretResolver
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.modules import ModuleStore
-from ops_tools.store.plugin_app_keys import PluginAppKeys
 from ops_tools.store.plugin_bindings import PluginBindings
-from ops_tools.store.secrets import SecretStore
-from ops_tools.systems import Systems, systems_router
 
-from .conftest import CONSOLE_URL, build_app, credentials, response_checker
+from .conftest import build_app, response_checker, team_credential
 from .plugin_desk import plugin as desk
-from .test_plugins import ID, Policy
+from .test_plugin_credentials import INSTALL
+from .test_plugins import ID
 from .test_review_decisions import introspect, jwks, person
 
 TEAM = "team_platform"
 OTHER = "team_cards"
 TOOL = "desk_get_case"
+APP = f"plugin:{ID}"
 
 
 class World:
@@ -62,31 +55,24 @@ async def world(
 ) -> AsyncIterator[World]:
     await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC), catalog=catalog_tools)
     settings = Settings()
-    auth = Auth(
-        Identity(audience="tools", jwks=jwks, introspect=introspect, key_cache_s=0),
-        ServiceAuth(audience="tools", verifiers=service_verifiers(settings, "tools"), scopes=settings.service_scopes),
+    services = ServiceAuth(
+        audience="tools", verifiers=service_verifiers(settings, "tools"), scopes=settings.service_scopes
     )
-    app = build_app(engine, seed, tenant, auth=auth)
-    vault = credentials()
-    keys = PluginAppKeys(engine, vault)
-    store = ConnectionStore(engine)
-    directory = Directory.from_seed(seed, datetime.now(UTC))
-    connections = ConnectionService(
-        store, SecretResolver(SecretStore(engine), vault),
-        vault, Tokens(store, vault, None, None), directory, egress=None,
-        console_url=CONSOLE_URL, app_secret=keys.value,
-    )  # fmt: skip
+    # A service reaches the public routes too, as agents-service does asking for a person (acting for them).
+    auth = Auth(
+        Identity(audience="tools", jwks=jwks, introspect=introspect, key_cache_s=0, services=services), services
+    )
+    store = ConnectionStore(engine, INSTALL)
     host = PluginHost(
         ModuleStore(engine),
         PluginBindings(engine),
-        InstallSwitches(Policy({ID: {"enabled": True, "client": {"id": "platform-client-id"}}})),
+        {},
         [Loaded("desk", desk, None)],
         store,
         accounts=True,
     )
     users = StaticToolUsers()
-    app.include_router(plugins_router(host, connections, directory, keys, users=users))
-    app.include_router(systems_router(Systems(connections, ModuleStore(engine), host, keys), directory))
+    app = build_app(engine, seed, tenant, auth=auth, install_clients=INSTALL, plugins=host, users=users)
     hooks = {"response": [response_checker(app)]}
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://tools", event_hooks=hooks
@@ -100,25 +86,25 @@ def admin(tenant: str, team: str = TEAM) -> dict[str, str]:
 
 async def connected(w: World, tenant: str, team: str = TEAM) -> str:
     """The team's first Desk account, on with the team's own app; its connection id."""
+    credential = await team_credential(w.client, admin(tenant, team), APP)
     on = await w.client.put(
-        f"/v1/plugins/{ID}/team", json={"enabled": True, "clientId": "app"}, headers=admin(tenant, team)
+        f"/v1/apps/plugin:{ID}/team", json={"enabled": True, "credentialId": credential}, headers=admin(tenant, team)
     )
     assert on.status_code == 200, on.text
     return str(on.json()["data"]["connectionId"])
 
 
 async def another(w: World, tenant: str, name: str, team: str = TEAM) -> httpx.Response:
-    body = {"name": name, "clientId": "eu-app"}
-    return await w.client.post(f"/v1/plugins/{ID}/accounts", json=body, headers=admin(tenant, team))
+    body = {"name": name, "credentialId": await team_credential(w.client, admin(tenant, team), APP, "eu-app")}
+    return await w.client.post(f"/v1/apps/plugin:{ID}/accounts", json=body, headers=admin(tenant, team))
 
 
 async def signed(w: World, tenant: str, connection_id: str, instance: str, person_id: str = "") -> None:
     """A finished sign-in on the account: the instance its token named, and its token row (the team's or a person's)."""
-    await w.host.on_token(tenant, connection_id, {"instance_url": instance}, "production")
+    await w.host.on_token(tenant, connection_id, {"instance_url": instance})
     await w.store.replace_token(
         tenant,
         connection_id,
-        "production",
         {"access_ct": "ct", "scopes": [], "rotations": 0, "refreshed_at": datetime.now(UTC)},
         person=person_id,
     )
@@ -131,7 +117,7 @@ async def test_a_second_named_account_is_made_beside_the_first_which_stays_the_d
     made = await another(world, tenant, "EU org")
     assert made.status_code == 201, made.text
     second = made.json()["data"]
-    assert second["id"].startswith("ca_") and second["accountName"] == "EU org" and second["pluginId"] == ID
+    assert second["id"].startswith("ca_") and second["accountName"] == "EU org" and second["appId"] == APP
     page = (await world.client.get(f"/v1/apps/plugin:{ID}", headers=admin(tenant))).json()["data"]
     assert [(a["id"], a["name"], a["default"]) for a in page["accounts"]] == [
         (first, "Desk", True),
@@ -148,10 +134,8 @@ async def test_a_sign_in_on_the_second_account_settles_its_own_instance_and_a_ca
     second = (await another(world, tenant, "EU org")).json()["data"]["id"]
     await signed(world, tenant, first, "https://us.my.desk.test")
     await signed(world, tenant, second, "https://eu.my.desk.test")
-    default = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, environment="production")
-    named = await world.registry.resolve(
-        TOOL, tenant_id=tenant, team_id=TEAM, environment="production", account="EU org"
-    )
+    default = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, run="production")
+    named = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, run="production", account="EU org")
     assert default is not None and default.module is not None and named is not None and named.module is not None
     assert (default.module["connection_id"], default.module["endpoint"]) == (first, "https://us.my.desk.test/api/v1")
     assert (named.module["connection_id"], named.module["endpoint"]) == (second, "https://eu.my.desk.test/api/v1")
@@ -164,7 +148,7 @@ async def test_a_call_naming_an_account_the_team_does_not_hold_is_refused_not_de
     await connected(world, tenant, OTHER)
     assert (await another(world, tenant, "Cards org", OTHER)).status_code == 201
     for name in ("No such org", "Cards org"):
-        r = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, environment="production", account=name)
+        r = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, run="production", account=name)
         assert r is not None and r.module is not None
         assert r.module.get("account_missing") and r.module["connection_id"] is None, (name, r.module)
 
@@ -178,29 +162,29 @@ async def test_a_persons_call_uses_the_account_they_pinned_else_their_newest_sig
     await signed(world, tenant, second, "https://eu.my.desk.test", "usr_priya")
 
     async def used() -> str:
-        r = await world.registry.resolve(
-            TOOL, tenant_id=tenant, team_id=TEAM, environment="production", person="usr_priya"
-        )
+        r = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, run="production", person="usr_priya")
         assert r is not None and r.module is not None
         return str(r.module["connection_id"])
 
+    async def shown() -> dict[str, bool | None]:
+        """Her rows on the People tab: which one the page names as her default."""
+        page = (await world.client.get(f"/v1/apps/plugin:{ID}", headers=admin(tenant))).json()["data"]
+        return {p["accountName"]: p["default"] for p in page["people"] if p["mine"]}
+
     assert await used() == second  # the newest of her sign-ins
-    pinned = await world.client.put(f"/v1/connections/{first}/default", headers=admin(tenant))
+    assert await shown() == {"Desk": False, "EU org": True}
+    pinned = await world.client.put(f"/v1/apps/{APP}/accounts/{first}/default", headers=admin(tenant))
     assert pinned.status_code == 200, pinned.text
     assert await used() == first
-    page = (await world.client.get(f"/v1/apps/plugin:{ID}", headers=admin(tenant))).json()["data"]
-    assert [(a["name"], a["mine"], a["pinned"]) for a in page["accounts"]] == [
-        ("Desk", True, True),
-        ("EU org", True, False),
-    ]
+    assert await shown() == {"Desk": True, "EU org": False}
 
 
 async def test_with_several_accounts_off_a_second_account_cannot_be_made_or_named(world: World, tenant: str) -> None:
     world.host.accounts = False
     await connected(world, tenant)
     made = await another(world, tenant, "EU org")
-    assert (made.status_code, made.json()["error"]["code"]) == (404, "feature_off"), made.text
-    r = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, environment="production", account="Desk")
+    assert (made.status_code, made.json()["error"]["code"]) == (400, "one_account"), made.text
+    r = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, run="production", account="Desk")
     assert r is not None and r.module is not None
     assert r.module.get("account_missing"), r.module
 
@@ -224,10 +208,13 @@ async def test_a_plugin_tools_page_names_the_teams_account_not_no_connection(
 async def test_the_first_turn_on_names_the_teams_account(world: World, tenant: str) -> None:
     # The Connect window asks for the account's name; without it the account takes the app's title.
     on = await world.client.put(
-        f"/v1/plugins/{ID}/team",
-        json={"enabled": True, "clientId": "app", "accountName": "Billing desk"},
+        f"/v1/apps/plugin:{ID}/team",
+        json={"enabled": True, "accountName": "Billing desk"},
         headers=admin(tenant),
     )
     assert on.status_code == 200, on.text
-    detail = await world.client.get(f"/v1/connections/{on.json()['data']['connectionId']}", headers=admin(tenant))
+    detail = await world.client.get(
+        f"/v1/apps/{APP}/accounts/{on.json()['data']['connectionId']}",
+        headers=admin(tenant),
+    )
     assert detail.json()["data"]["accountName"] == "Billing desk", detail.text

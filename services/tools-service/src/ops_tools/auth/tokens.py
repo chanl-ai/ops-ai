@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -171,7 +171,13 @@ class Tokens:
         self.policy = policy
         self.clock = clock
         # One token request at a time per token in this process; across processes the store's CAS decides.
-        self._flight: dict[tuple[str, str, str], asyncio.Lock] = {}
+        self._flight: dict[tuple[str, str], asyncio.Lock] = {}
+        # The hosts a plugin's account may reach unlisted (tenant, account), set once plugins load.
+        self.plugin_hosts: Callable[[str, str], Awaitable[list[str]]] | None = None
+
+    async def hosts(self, tenant_id: str, connection_id: str) -> list[str]:
+        """The plugin's own hosts for a plugin's account; none for any other."""
+        return await self.plugin_hosts(tenant_id, connection_id) if self.plugin_hosts else []
 
     async def post(
         self,
@@ -182,17 +188,19 @@ class Tokens:
         proof: ClientProof | None,
         *,
         client: bool = True,
+        hosts: Iterable[str] = (),
     ) -> dict[str, Any]:
         """A token request: the form, with the client sent as `clientAuth` says, or not at all (`client` False, for a
-        JWT grant). Raises AuthFailed naming the host and the system's error code, never the secret."""
+        JWT grant). `hosts` are a plugin's own, reached unlisted. Raises AuthFailed naming the host and the system's
+        error code, never the secret."""
         if self.http is None or self.policy is None:
             raise AuthFailed("EGRESS_DENIED", "This gateway has no egress policy, so it fetches no token.")
         host = urlsplit(url).hostname
         body, headers = _client(form, settings, proof) if client else (form, {"Accept": "application/json"})
         try:
-            await self.policy.check_url(tenant_id, url)
+            await self.policy.check_url(tenant_id, url, hosts)
             res = await self.http.post(
-                url, data=body, headers=headers, timeout=TOKEN_TIMEOUT_S, extensions=for_tenant(tenant_id)
+                url, data=body, headers=headers, timeout=TOKEN_TIMEOUT_S, extensions=for_tenant(tenant_id, hosts=hosts)
             )
         except EgressDenied as e:
             raise AuthFailed("EGRESS_DENIED", f"The token address: {e}") from e
@@ -217,24 +225,24 @@ class Tokens:
     async def _row(
         self,
         tenant_id: str,
-        key: tuple[str, str, str],
+        key: tuple[str, str],
         answer: dict[str, Any],
         rotations: int,
         *,
         keep_refresh: str | None,
         requested: list[str],
     ) -> dict[str, Any]:
-        connection_id, environment, person = key
+        connection_id, person = key
         now = self.clock()
         expires = answer.get("expires_in")
         refresh = answer.get("refresh_token")
         return {
             "access_ct": await self.credentials.put(
-                str(answer["access_token"]), context=_context(tenant_id, "access", connection_id, environment, person)
+                str(answer["access_token"]), context=_context(tenant_id, "access", connection_id, person)
             ),
             # A system that does not rotate keeps the refresh token it gave before.
             "refresh_ct": await self.credentials.put(
-                str(refresh), context=_context(tenant_id, "refresh", connection_id, environment, person)
+                str(refresh), context=_context(tenant_id, "refresh", connection_id, person)
             )
             if isinstance(refresh, str) and refresh
             else keep_refresh,
@@ -245,11 +253,11 @@ class Tokens:
             "refreshed_at": now,
         }
 
-    async def _token(self, tenant_id: str, row: dict[str, Any], key: tuple[str, str, str]) -> Token:
-        connection_id, environment, person = key
+    async def _token(self, tenant_id: str, row: dict[str, Any], key: tuple[str, str]) -> Token:
+        connection_id, person = key
         try:
             access = await self.credentials.get(
-                str(row["access_ct"]), context=_context(tenant_id, "access", connection_id, environment, person)
+                str(row["access_ct"]), context=_context(tenant_id, "access", connection_id, person)
             )
         except CipherError as e:
             raise AuthFailed("NOT_SIGNED_IN", "The stored token no longer decrypts; sign in again.") from e
@@ -265,7 +273,6 @@ class Tokens:
         self,
         tenant_id: str,
         connection_id: str,
-        environment: str,
         settings: dict[str, Any],
         proof: ClientProof | None,
         *,
@@ -280,9 +287,9 @@ class Tokens:
         No lock is held while the token request is in flight. Calls in this process wait for one another per token, so
         they refresh once; a refresh from another process is stored against the rotation it replaced, and the one that
         loses reads the winner's token, also when the system refused its spent refresh token."""
-        key = (connection_id, environment, person)
+        key = (connection_id, person)
         async with self._flight.setdefault(key, asyncio.Lock()):
-            row = await self.store.token(tenant_id, connection_id, environment, person)
+            row = await self.store.token(tenant_id, connection_id, person)
             if self._fresh(row, stale_rotation):
                 assert row is not None
                 return await self._token(tenant_id, row, key)
@@ -290,15 +297,13 @@ class Tokens:
             try:
                 fresh = await self._fetch(tenant_id, key, row, settings, proof=proof, grant=grant)
             except AuthFailed:
-                again = await self.store.token(tenant_id, connection_id, environment, person)
+                again = await self.store.token(tenant_id, connection_id, person)
                 if again is not None and int(again["rotations"]) != read and self._fresh(again, None):
                     return await self._token(tenant_id, again, key)
                 raise
-            if not await self.store.put_token(
-                tenant_id, connection_id, environment, fresh, expected_rotations=read, person=person
-            ):
+            if not await self.store.put_token(tenant_id, connection_id, fresh, expected_rotations=read, person=person):
                 await self._forget(tenant_id, key, fresh, keep=row)
-                fresh = await self.store.token(tenant_id, connection_id, environment, person) or fresh
+                fresh = await self.store.token(tenant_id, connection_id, person) or fresh
             elif row is not None:
                 await self._forget(tenant_id, key, row, keep=fresh)
             return await self._token(tenant_id, fresh, key)
@@ -310,34 +315,34 @@ class Tokens:
             await self.credentials.delete(ref, context=context)
 
     async def _forget(
-        self, tenant_id: str, key: tuple[str, str, str], row: dict[str, Any], *, keep: dict[str, Any] | None
+        self, tenant_id: str, key: tuple[str, str], row: dict[str, Any], *, keep: dict[str, Any] | None
     ) -> None:
         """Lets the credential store drop the references a row no longer names: the token a refresh replaced, or the
         one a lost race wrote and nobody stored. A refresh token the system did not rotate is kept."""
-        connection_id, environment, person = key
+        connection_id, person = key
         for part in ("access", "refresh"):
             ref = row.get(f"{part}_ct")
             if ref and (keep is None or keep.get(f"{part}_ct") != ref):
-                context = _context(tenant_id, part, connection_id, environment, person)
+                context = _context(tenant_id, part, connection_id, person)
                 await self.credentials.delete(str(ref), context=context)
 
     async def _fetch(
         self,
         tenant_id: str,
-        key: tuple[str, str, str],
+        key: tuple[str, str],
         row: dict[str, Any] | None,
         settings: dict[str, Any],
         *,
         proof: ClientProof | None,
         grant: str,
     ) -> dict[str, Any]:
-        connection_id, environment, person = key
+        connection_id, person = key
         rotations = int(row["rotations"]) + 1 if row else 1
         refresh_ct = row.get("refresh_ct") if row else None
         if refresh_ct:
             try:
                 refresh = await self.credentials.get(
-                    str(refresh_ct), context=_context(tenant_id, "refresh", connection_id, environment, person)
+                    str(refresh_ct), context=_context(tenant_id, "refresh", connection_id, person)
                 )
             except CipherError as e:
                 raise AuthFailed("NOT_SIGNED_IN", "The stored sign-in no longer decrypts; sign in again.") from e
@@ -345,26 +350,28 @@ class Tokens:
             if settings.get("resource"):
                 # The token stays bound to the server it was issued for (RFC 8707), as the MCP spec asks.
                 form["resource"] = str(settings["resource"])
-            answer = await self.post(tenant_id, str(settings["tokenUrl"]), form, settings, proof)
+            hosts = await self.hosts(tenant_id, connection_id)
+            answer = await self.post(tenant_id, str(settings["tokenUrl"]), form, settings, proof, hosts=hosts)
             # A refresh grants what the sign-in did unless it says otherwise (RFC 6749 6).
             held = scope_list((row or {}).get("scopes"))
             return await self._row(tenant_id, key, answer, rotations, keep_refresh=str(refresh_ct), requested=held)
         if grant == "jwt_bearer":
             return await self._jwt_grant(tenant_id, key, settings, proof, rotations)
         if grant != "client_credentials":
-            raise AuthFailed("NOT_SIGNED_IN", "Nobody has signed in to this connection for this environment yet.")
+            raise AuthFailed("NOT_SIGNED_IN", "Nobody has signed in to this account yet.")
         form = {"grant_type": "client_credentials"}
         for name in ("scopes", "audience"):
             if settings.get(name):
                 form["scope" if name == "scopes" else name] = str(settings[name])
-        answer = await self.post(tenant_id, str(settings["tokenUrl"]), form, settings, proof)
+        hosts = await self.hosts(tenant_id, connection_id)
+        answer = await self.post(tenant_id, str(settings["tokenUrl"]), form, settings, proof, hosts=hosts)
         asked = str(settings.get("scopes") or "").split()
         return await self._row(tenant_id, key, answer, rotations, keep_refresh=None, requested=asked)
 
     async def _jwt_grant(
         self,
         tenant_id: str,
-        key: tuple[str, str, str],
+        key: tuple[str, str],
         settings: dict[str, Any],
         proof: ClientProof | None,
         rotations: int,
@@ -380,14 +387,14 @@ class Tokens:
         )
         if scopes and not claim:
             form["scope"] = scopes
-        answer = await self.post(tenant_id, str(settings["tokenUrl"]), form, settings, proof, client=False)
+        hosts = await self.hosts(tenant_id, key[0])
+        answer = await self.post(tenant_id, str(settings["tokenUrl"]), form, settings, proof, client=False, hosts=hosts)
         return await self._row(tenant_id, key, answer, rotations, keep_refresh=None, requested=scopes.split())
 
     async def revoke(
         self,
         tenant_id: str,
         connection_id: str,
-        environment: str,
         row: dict[str, Any],
         *,
         settings: dict[str, Any],
@@ -403,31 +410,30 @@ class Tokens:
         part, hint = ("refresh", "refresh_token") if row.get("refresh_ct") else ("access", "access_token")
         try:
             token = await self.credentials.get(
-                str(row[f"{part}_ct"]), context=_context(tenant_id, part, connection_id, environment, person)
+                str(row[f"{part}_ct"]), context=_context(tenant_id, part, connection_id, person)
             )
         except CipherError:
             return False
         body, headers = _client({"token": token, "token_type_hint": hint}, settings, proof)
+        hosts = await self.hosts(tenant_id, connection_id)
         try:
-            await self.policy.check_url(tenant_id, url)
+            await self.policy.check_url(tenant_id, url, hosts)
             res = await self.http.post(
-                url, data=body, headers=headers, timeout=TOKEN_TIMEOUT_S, extensions=for_tenant(tenant_id)
+                url, data=body, headers=headers, timeout=TOKEN_TIMEOUT_S, extensions=for_tenant(tenant_id, hosts=hosts)
             )
         except (EgressDenied, httpx.HTTPError):
             return False
         return res.status_code < 400
 
-    async def store_own(
-        self, tenant_id: str, connection_id: str, environment: str, person: str, values: dict[str, str]
-    ) -> None:
+    async def store_own(self, tenant_id: str, connection_id: str, person: str, values: dict[str, str]) -> None:
         """A person's own key, password or token for a connection each person signs in to: their row in
         connection_tokens, the fields sealed together under the person's own context, with no expiry and nothing to
         refresh. The account shown is the username, when the kind has one."""
         if person == SHARED:
             raise ValueError("a person's own credentials are never the team's row")
-        held = await self.store.token(tenant_id, connection_id, environment, person)
+        held = await self.store.token(tenant_id, connection_id, person)
         sealed = await self.credentials.put(
-            json.dumps(values), context=_context(tenant_id, "access", connection_id, environment, person)
+            json.dumps(values), context=_context(tenant_id, "access", connection_id, person)
         )
         row: dict[str, Any] = {
             "access_ct": sealed,
@@ -438,21 +444,21 @@ class Tokens:
             "rotations": int(held["rotations"]) + 1 if held else 1,
             "refreshed_at": self.clock(),
         }
-        await self.store.replace_token(tenant_id, connection_id, environment, row, person)
+        await self.store.replace_token(tenant_id, connection_id, row, person)
         if held is not None:
-            await self._forget(tenant_id, (connection_id, environment, person), held, keep=row)
+            await self._forget(tenant_id, (connection_id, person), held, keep=row)
 
     async def own(
-        self, tenant_id: str, connection_id: str, environment: str, person: str, *, row: dict[str, Any] | None = None
+        self, tenant_id: str, connection_id: str, person: str, *, row: dict[str, Any] | None = None
     ) -> dict[str, str] | None:
         """The person's own credential fields, or None when they gave none or the row no longer opens. `row`: the
         row already read for this call."""
-        row = row if row is not None else await self.store.token(tenant_id, connection_id, environment, person)
+        row = row if row is not None else await self.store.token(tenant_id, connection_id, person)
         if row is None:
             return None
         try:
             opened = await self.credentials.get(
-                str(row["access_ct"]), context=_context(tenant_id, "access", connection_id, environment, person)
+                str(row["access_ct"]), context=_context(tenant_id, "access", connection_id, person)
             )
             found = json.loads(opened)
         except (CipherError, ValueError):
@@ -465,7 +471,6 @@ class Tokens:
         self,
         tenant_id: str,
         connection_id: str,
-        environment: str,
         answer: dict[str, Any],
         person: str = SHARED,
         *,
@@ -473,11 +478,11 @@ class Tokens:
     ) -> Token:
         """Keeps the token a finished sign-in returned, replacing any held for the same row. `requested` are the scopes
         the sign-in asked for: what it granted when the answer does not say."""
-        key = (connection_id, environment, person)
-        held = await self.store.token(tenant_id, connection_id, environment, person)
+        key = (connection_id, person)
+        held = await self.store.token(tenant_id, connection_id, person)
         rotations = int(held["rotations"]) + 1 if held else 1
         values = await self._row(tenant_id, key, answer, rotations, keep_refresh=None, requested=requested or [])
-        await self.store.replace_token(tenant_id, connection_id, environment, values, person)
+        await self.store.replace_token(tenant_id, connection_id, values, person)
         if held is not None:
             await self._forget(tenant_id, key, held, keep=values)
         return await self._token(tenant_id, values, key)

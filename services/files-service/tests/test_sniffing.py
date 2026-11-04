@@ -6,6 +6,7 @@ the bytes allow, and binary bytes with no known signature are refused."""
 from __future__ import annotations
 
 import io
+import mimetypes
 import zipfile
 
 import pytest
@@ -49,6 +50,14 @@ def test_a_name_cannot_make_a_zip_a_pdf() -> None:
 def test_an_executable_declared_as_a_pdf_is_an_executable() -> None:
     proven = prove("application/pdf", "notice.pdf", EXE)
     assert "exe" in proven.extensions and "pdf" not in proven.extensions, proven
+
+
+def test_the_host_s_mime_list_does_not_change_what_the_bytes_prove(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Linux's /etc/mime.types names `.flt`, whose signature is an executable's first bytes; read from the host's list,
+    an executable proved to be an Audition filter on Linux while it proved an executable on a Mac."""
+    monkeypatch.setitem(mimetypes.types_map, ".flt", "text/vnd.ficlab.flt")
+    proven = prove("application/pdf", "notice.pdf", EXE)
+    assert "exe" in proven.extensions and proven.mime != "text/vnd.ficlab.flt", proven
 
 
 def test_binary_bytes_with_no_known_signature_are_refused() -> None:

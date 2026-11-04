@@ -125,19 +125,19 @@ async def stack(
 
 
 async def test_a_key_lists_only_its_teams_reads_with_schemas(stack: Stack) -> None:
-    async with stack.running(), stack.http("ok_lending") as http, stack.client(http, "/mcp/test/team_lending") as c:
+    async with stack.running(), stack.http("ok_lending") as http, stack.client(http, "/mcp/team_lending") as c:
         listed = {t.name: t for t in (await c.list_tools()).tools}
     assert "lookup_case" in listed
     assert "close_case" not in listed, "slice 1 lists no writes"
     assert all(t.annotations and t.annotations.read_only_hint for t in listed.values())
     assert listed["lookup_case"].input_schema["type"] == "object"
-    async with stack.running(), stack.http("ok_cards") as http, stack.client(http, "/mcp/test/team_cards") as c:
+    async with stack.running(), stack.http("ok_cards") as http, stack.client(http, "/mcp/team_cards") as c:
         other = {t.name for t in (await c.list_tools()).tools}
     assert "lookup_case" not in other, "another team's key does not see Lending Ops' module"
 
 
 async def test_a_read_runs_through_the_gateway_and_the_log_names_mcp_and_the_client(stack: Stack) -> None:
-    async with stack.running(), stack.http("ok_lending") as http, stack.client(http, "/mcp/test/team_lending") as c:
+    async with stack.running(), stack.http("ok_lending") as http, stack.client(http, "/mcp/team_lending") as c:
         result = await c.call_tool("lookup_case", {"caseId": "CASE-4112"})
     assert result.is_error is False, result
     assert result.structured_content is not None
@@ -153,7 +153,7 @@ async def test_a_read_runs_through_the_gateway_and_the_log_names_mcp_and_the_cli
 
 
 async def test_a_write_over_mcp_waits_for_a_person_even_when_declared_to_run_at_once(stack: Stack) -> None:
-    async with stack.running(), stack.http("ok_lending") as http, stack.client(http, "/mcp/test/team_lending") as c:
+    async with stack.running(), stack.http("ok_lending") as http, stack.client(http, "/mcp/team_lending") as c:
         result = await c.call_tool("close_case", {"caseId": "CASE-4112"})
     assert result.is_error is True
     assert not [x for x in stack.received if "closeCase" in str(x.get("body"))], "the bank received nothing"
@@ -162,7 +162,7 @@ async def test_a_write_over_mcp_waits_for_a_person_even_when_declared_to_run_at_
 
 
 async def test_a_tool_of_a_module_outside_the_team_is_refused_and_logged(stack: Stack) -> None:
-    async with stack.running(), stack.http("ok_cards") as http, stack.client(http, "/mcp/test/team_cards") as c:
+    async with stack.running(), stack.http("ok_cards") as http, stack.client(http, "/mcp/team_cards") as c:
         result = await c.call_tool("lookup_case", {"caseId": "CASE-4112"})
     assert result.is_error is True and result.structured_content is not None
     # Another team's operation is not found; the refusal names no owner.
@@ -174,12 +174,11 @@ async def test_a_tool_of_a_module_outside_the_team_is_refused_and_logged(stack: 
 @pytest.mark.parametrize(
     ("key", "path", "status", "code"),
     [
-        (None, "/mcp/test/team_lending", 401, "unauthorized"),
-        ("ok_nobody", "/mcp/test/team_lending", 401, "unauthorized"),
-        ("ok_lending", "/mcp/test/team_cards", 403, "team_forbidden"),
-        ("ok_lending", "/mcp/production/team_lending", 403, "production_off"),
+        (None, "/mcp/team_lending", 401, "unauthorized"),
+        ("ok_nobody", "/mcp/team_lending", 401, "unauthorized"),
+        ("ok_lending", "/mcp/team_cards", 403, "team_forbidden"),
     ],
-    ids=["no-key", "unknown-key", "other-team-url", "production"],
+    ids=["no-key", "unknown-key", "other-team-url"],
 )
 async def test_the_url_and_the_key_are_checked_before_the_protocol(
     stack: Stack, key: str | None, path: str, status: int, code: str
@@ -208,7 +207,7 @@ async def test_with_the_flag_off_the_mcp_address_says_it_is_off(
     on, and no MCP session is started."""
     app = build_app(engine, seed, tenant, mcp=True, flags=Flags())
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tools") as http:
-        r = await http.post("/mcp/test/team_lending", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        r = await http.post("/mcp/team_lending", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
     assert r.status_code == 404, r.text
     error = r.json()["error"]
     assert (error["code"], error["message"]) == ("feature_off", MCP_OFF), error

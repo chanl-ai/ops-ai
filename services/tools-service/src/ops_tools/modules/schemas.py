@@ -12,7 +12,7 @@ from pydantic.alias_generators import to_camel
 
 from ops_service_kit.http import ListResult, Out
 
-from ..environments import ConnectionEnvironment, ModuleEnvironment
+from ..environments import ModuleEnvironment, RunKind
 
 Access = Literal["read", "write"]
 ModuleType = Literal["mcp", "openapi", "http", "code"]
@@ -68,8 +68,8 @@ class ConnectionRef(Out):
     kind: str
     status: Literal["draft", "healthy", "needs_reconnect", "expiring", "revoked", "error"]
     expires_at: str | None = None
-    # The connection's base address by environment (test, production), where the module's paths go.
-    base_urls: dict[str, str] = Field(default_factory=dict[str, str])
+    # The account's base address, where the module's paths go.
+    base_url: str | None = None
 
 
 class OperationChange(Out):
@@ -100,7 +100,8 @@ class ToolModule(Out):
     version: str
     major: int
     owner_team: str
-    endpoint: str
+    # Where the tools run; null while a plugin's account waits for the sign-in that names its instance.
+    endpoint: str | None
     operation_count: int
     access_classes: list[Access]
     approval_state: Literal["draft", "approved", "needs_approval", "expiring", "expired"]
@@ -602,8 +603,8 @@ class ModuleTestIn(In):
     draft: TestDraftIn | None = None
     # Values for this one call, by secret name; never stored, logged or returned.
     secret_values: dict[str, str] | None = None
-    # Which of the connection's environments a Real run uses; test unless the person picks production.
-    environment: ConnectionEnvironment = "test"
+    # The kind of run a Real run is; test unless the person picks production.
+    environment: RunKind = "test"
 
 
 class ToolRunIn(In):
@@ -612,7 +613,9 @@ class ToolRunIn(In):
 
     mode: Literal["mock", "real"]
     input: dict[str, Any] = Field(default_factory=dict[str, Any])
-    environment: ConnectionEnvironment = "test"
+    # The kind of run a Real run is; left out, test: it uses the app's sandbox account when it has one, and a write on
+    # a live account waits for a person.
+    environment: RunKind | None = None
 
 
 class ToolRunResult(ModuleTestResult):
@@ -683,8 +686,8 @@ class ToolCallRow(Out):
     outcome: str | None = None
     # The row whose call carries the write's side effect (the claim), as opposed to a refusal or a replay of it.
     effect: bool = False
-    # The environment the call used and the connection that signed it in; absent on older rows.
-    environment: ConnectionEnvironment | None = None
+    # The kind of run the call was made in and the account that signed it in; absent on older rows.
+    environment: RunKind | None = None
     connection_id: str | None = None
     # Where the call came in: POST /v1/calls or the MCP server, and the assistant that sent an MCP call.
     channel: Literal["api", "mcp", "console"] | None = None

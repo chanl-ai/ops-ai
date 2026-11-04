@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-03",
+  "title": "An app's accounts in one list, with a Sandbox badge",
+  "description": "An app's page lists all its accounts in one place, marks sandbox accounts and offers Add a sandbox account. The Test and Production key sections are gone.",
+  "tag": "improved"
+}

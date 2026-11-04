@@ -20,8 +20,10 @@ from uuid import uuid4
 
 from apps_walk import apps_stack, ops_cli, target
 from usecase_harness import (
+    LOG_DIR,
     PLATFORM_INTERNAL_PORT,
     PLATFORM_PORT,
+    TOOLS_PORT,
     bearer,
     check,
     data,
@@ -129,9 +131,10 @@ def broken_copy(folder: Path, old: str, new: str) -> Path:
 # 20. The plugin validates.
 good = ops("plugin", "validate", str(PLUGIN))
 check(
-    "20 ops plugin validate passes the Salesforce plugin, with its tools, 1 knowledge source and 1 template",
+    "20 ops plugin validate passes the Salesforce plugin, with its tools, 1 knowledge source and its templates",
     good.returncode == 0
-    and re.search(r"OK opsai\.salesforce \S+: \d+ tools, 1 knowledge sources, 1 templates", good.stdout) is not None,
+    and re.search(r"OK opsai\.salesforce \S+: \d+ tools, 1 knowledge sources, [1-9]\d* templates", good.stdout)
+    is not None,
     {"code": good.returncode, "out": good.stdout[-300:], "err": good.stderr[-300:]},
 )
 
@@ -176,6 +179,9 @@ check(
 # 23. tools-service with a broken plugin beside Salesforce, and a Python tool that reaches too far.
 salesforce = PLUGIN / "src" / "ops_plugin_salesforce"
 folders = json.dumps([str(salesforce), str(FIXTURES / "uc564_reach"), str(FIXTURES / "uc564_broken")])
+# The install's admin reads a plugin that failed to load in tools-service's log; this run's part of it starts here.
+TOOLS_LOG = LOG_DIR / f"tools-{TOOLS_PORT}.log"
+LOG_FROM = TOOLS_LOG.stat().st_size if TOOLS_LOG.exists() else 0
 with ExitStack() as stack:
     api, _ = stack.enter_context(platform())
     gw = stack.enter_context(
@@ -187,32 +193,29 @@ with ExitStack() as stack:
     session = signed_in(api, "p.shah@harborpine.example")
     priya = bearer(session, "team_ops")
     tenant = str((session.get("principal") or {}).get("tenantId") or "")
-    api.put(
-        "/v1/policies/plugins",
-        json={"value": {"opsai.salesforce": {"enabled": True}, "test.reach": {"enabled": True}}},
-        headers=sam,
-    )
     # The workspace allows the host, so only the plugin's own list stands between its code and that host.
     gw.post("/v1/egress/hosts", json={"value": "elsewhere.example", "note": "uc-564"}, headers=sam)
-    listing = data(gw.get("/v1/plugins", headers=priya)) or {}
-    loaded = sorted(p["id"] for p in listing.get("plugins", []))
-    failed = listing.get("failed", [])
-    on = gw.put("/v1/plugins/test.reach/team", json={"enabled": True}, headers=priya)
+    cards = data(gw.get("/v1/apps", headers=priya)) or []
+    loaded = sorted(str(c["pluginId"]) for c in cards if c.get("kind") == "plugin")
+    with TOOLS_LOG.open("rb") as fh:
+        fh.seek(LOG_FROM)
+        failed = [line for line in fh.read().decode(errors="replace").splitlines() if "plugin_failed" in line]
+    on = gw.put("/v1/apps/plugin:test.reach/team", json={"enabled": True}, headers=priya)
     headers = service_headers("tools", tenant=tenant, service="agents", team="team_ops")
     body = {"tool": "reach_reach_out", "input": {}, "key": uuid4().hex, "runContext": {"environment": "production"}}
     reached = data(gw.post("/v1/calls", json=body, headers=headers)) or {}
     error = ((reached.get("output") or {}).get("error") or {}).get("code")
     check(
         "23 a broken plugin is reported as failed while Salesforce loads, and a tool's unlisted host is EGRESS_DENIED",
-        loaded == ["opsai.salesforce", "test.reach"]
-        and any(f["name"] == "uc564_broken" and "saml_magic" in f["error"] for f in failed)
+        {"opsai.salesforce", "test.reach"} <= set(loaded)
+        and "uc564_broken" not in loaded
+        and any("uc564_broken" in line and "saml_magic" in line for line in failed)
         and on.status_code == 200
         and error == "EGRESS_DENIED",
         {"loaded": loaded, "failed": failed, "on": on.text[:200], "reached": str(reached)[:300]},
     )
 
-# 29. An install with no plugin (an empty plugins folder, no developer paths) loads none and serves no plugin route,
-# though the install switch still says on.
+# 29. An install with no plugin (an empty plugins folder, no developer paths) loads none and serves no plugin route.
 with ExitStack() as stack:
     api, _ = stack.enter_context(platform())
     empty = stack.enter_context(tempfile.TemporaryDirectory(prefix="uc564-no-plugins-"))
@@ -226,21 +229,23 @@ with ExitStack() as stack:
             }
         )
     )
-    sam = bearer(signed_in(api, "s.adeyemi@harborpine.example"), "team_security")
     session = signed_in(api, "p.shah@harborpine.example")
     priya = bearer(session, "team_ops")
     tenant = str((session.get("principal") or {}).get("tenantId") or "")
-    api.put("/v1/policies/plugins", json={"value": {"opsai.salesforce": {"enabled": True}}}, headers=sam)
-    listed = gw.get("/v1/plugins", headers=priya)
-    team_on = gw.put("/v1/plugins/opsai.salesforce/team", json={"enabled": True}, headers=priya)
+    listed = gw.get("/v1/apps", headers=priya)
+    team_on = gw.put("/v1/apps/plugin:opsai.salesforce/team", json={"enabled": True}, headers=priya)
     headers = service_headers("tools", tenant=tenant, service="agents", scopes=["tools:view"], team="team_ops")
     rows = data(gw.get("/v1/grantable-operations", headers=headers | {"X-Team-Id": "team_ops"})) or []
     names = [str(r["name"]) for r in rows]
     check(
-        "29 with no plugin installed, none loads, the plugin routes answer 404 and no plugin tool can be granted",
-        listed.status_code == 404 and team_on.status_code == 404 and bool(names)
+        "29 with no plugin installed, none loads, no plugin app is listed, its routes answer 404 and no plugin tool "
+        "can be granted",
+        listed.status_code == 200
+        and not [c for c in data(listed) or [] if c.get("kind") == "plugin"]
+        and team_on.status_code == 404
+        and bool(names)
         and not any(n.startswith(("salesforce_", "reach_")) for n in names),
-        {"plugins": listed.status_code, "team": team_on.status_code, "tools": names},
+        {"apps": listed.text[:300], "team": team_on.status_code, "tools": names},
     )  # fmt: skip
 
 # 44 (group D). A builder lists an app's tools and runs one Mock and Real with `ops tools`, signed in as their

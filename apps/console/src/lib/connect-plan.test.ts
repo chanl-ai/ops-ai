@@ -2,18 +2,16 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  accountBody,
   complete,
   draftFor,
-  environmentBody,
   fieldsFor,
   initialState,
   isRequired,
-  leading,
-  ordered,
+  newAccountBody,
   planFor,
   pluginGroups,
   reduce,
-  toSave,
   turnOnBody,
   type Kind,
   type Kinds,
@@ -24,10 +22,6 @@ const field = (name: string, extra: Partial<Kind['fields'][number]> = {}) => ({ 
 const kind = (id: string, extra: Partial<Kind> = {}): Kind => ({ id, label: id, fields: [], signsIn: false, holdsToken: false, perPerson: false, ...extra });
 const KINDS: Kinds = {
   kinds: [],
-  environments: [
-    { id: 'test', label: 'Test', production: false, keys: true },
-    { id: 'production', label: 'Production', production: true, keys: true },
-  ],
   common: [field('baseUrl', { required: true }), field('testPath', { default: '/health' })],
   certificate: [field('clientCertificate', { secret: true })],
 };
@@ -55,23 +49,15 @@ test('a kind tools-service adds later gets its form from its flags and fields, w
 test('in edit, a sealed secret reads as set, counts as filled, and a blank one is never sent so it keeps its value', () => {
   const k = kind('api_key', { fields: [field('apiKey', { secret: true, required: true }), field('header', { default: 'X-Api-Key' })] });
   const groups = fieldsFor(k, KINDS);
-  const draft = draftFor('production', groups, { set: true, settings: { baseUrl: 'https://api.bank.test', header: '' }, secrets: { apiKey: { set: true } } });
+  const draft = draftFor(groups, { settings: { baseUrl: 'https://api.bank.test', header: '' }, secrets: { apiKey: { set: true } } });
   assert.equal(draft.secretSet.apiKey, true);
   assert.equal(draft.settings.header, 'X-Api-Key', 'a blank saved value falls back to the default');
   assert.equal(complete(draft, groups), true);
-  assert.deepEqual(environmentBody(draft, 4).secretValues, {});
-  const cleared = reduce(
-    reduce(initialState({ test: draft, production: draft }, 'c1'), { type: 'secret', environment: 'production', name: 'apiKey', value: 'x' }),
-    { type: 'secret', environment: 'production', name: 'apiKey', value: '' },
-  );
-  assert.deepEqual(environmentBody(cleared.sections.production, 4).secretValues, {}, 'typed then cleared would unseal the key');
-  const typed = reduce(initialState({ test: draftFor('test', groups), production: draft }, 'c1'), {
-    type: 'secret',
-    environment: 'production',
-    name: 'apiKey',
-    value: 'new-key',
-  });
-  assert.deepEqual(environmentBody(typed.sections.production, 4), {
+  assert.deepEqual(accountBody(draft, 4).secretValues, {});
+  const cleared = reduce(reduce(initialState(draft, 'c1', true), { type: 'secret', name: 'apiKey', value: 'x' }), { type: 'secret', name: 'apiKey', value: '' });
+  assert.deepEqual(accountBody(cleared.draft, 4).secretValues, {}, 'typed then cleared would unseal the key');
+  const typed = reduce(initialState(draft, 'c1', true), { type: 'secret', name: 'apiKey', value: 'new-key' });
+  assert.deepEqual(accountBody(typed.draft, 4), {
     revision: 4,
     settings: { baseUrl: 'https://api.bank.test', header: 'X-Api-Key', testPath: '/health' },
     secretValues: { apiKey: 'new-key' },
@@ -80,42 +66,20 @@ test('in edit, a sealed secret reads as set, counts as filled, and a blank one i
 
 test('a second save or test while one is under way is ignored, and a refused one frees the dialog', () => {
   const groups = fieldsFor(kind('bearer'), KINDS);
-  let s = initialState({ test: draftFor('test', groups), production: draftFor('production', groups) }, 'c1');
-  s = reduce(s, { type: 'start', environment: 'test', status: 'testing' });
-  const again = reduce(s, { type: 'start', environment: 'production', status: 'saving' });
+  let s = initialState(draftFor(groups), 'c1');
+  s = reduce(s, { type: 'start', status: 'testing' });
+  const again = reduce(s, { type: 'start', status: 'saving' });
   assert.equal(again, s);
-  assert.equal(again.sections.production.status, 'empty');
-  s = reduce(s, { type: 'saved', environment: 'test', secretSet: { token: true } });
+  assert.equal(again.draft.status, 'testing');
+  s = reduce(s, { type: 'saved', secretSet: { token: true } });
   assert.equal(s.busy, true, 'the save inside a test frees the dialog before the test answers');
-  assert.equal(s.sections.test.status, 'testing');
-  s = reduce(s, { type: 'failed', environment: 'test', message: 'refused' });
+  assert.equal(s.draft.status, 'testing');
+  s = reduce(s, { type: 'failed', message: 'refused' });
   assert.equal(s.busy, false);
   assert.equal(s.error, 'refused');
-  s = reduce(s, { type: 'start', environment: 'production', status: 'testing' });
-  s = reduce(s, { type: 'tested', environment: 'production', health: { status: 'failed', httpStatus: 401, at: 'now' } });
-  assert.equal(s.sections.production.status, 'failed');
-});
-
-test('environments are the service list: a team-named one gets a section, and the one marked production leads', () => {
-  const team: Kinds = {
-    ...KINDS,
-    environments: [
-      { id: 'dev', label: 'Dev', production: false, keys: false },
-      { id: 'mock', label: 'Mock', production: false, keys: true },
-      { id: 'uat', label: 'UAT', production: false, keys: true },
-      { id: 'live', label: 'Live', production: true, keys: true },
-    ],
-  };
-  assert.deepEqual(
-    ordered(team).map((e) => e.label),
-    ['Mock', 'UAT', 'Live'],
-  );
-  assert.deepEqual(
-    ordered(team, 'live').map((e) => e.id),
-    ['live', 'mock', 'uat'],
-  );
-  assert.equal(leading(team, ['uat', 'live']), 'live');
-  assert.equal(leading(team, ['uat', 'mock']), 'mock');
+  s = reduce(s, { type: 'start', status: 'testing' });
+  s = reduce(s, { type: 'tested', health: { status: 'failed', httpStatus: 401, at: 'now' } });
+  assert.equal(s.draft.status, 'failed');
 });
 
 test('a field required only for some settings follows them: a signed client needs its key and not its secret', () => {
@@ -126,12 +90,12 @@ test('a field required only for some settings follows them: a signed client need
   const groups = fieldsFor(k, KINDS);
   assert.equal(isRequired(secret, { clientAuth: 'body' }), true);
   assert.equal(isRequired(key, { clientAuth: 'body' }), false);
-  let s = initialState({ test: draftFor('test', groups) }, 'c1');
-  s = reduce(s, { type: 'setting', environment: 'test', name: 'baseUrl', value: 'https://idp.example' });
-  s = reduce(s, { type: 'setting', environment: 'test', name: 'clientAuth', value: 'private_key_jwt' });
-  assert.equal(complete(s.sections.test, groups), false, 'a signed client with no key counts as filled');
-  s = reduce(s, { type: 'secret', environment: 'test', name: 'signingKey', value: 'a signing key' });
-  assert.equal(complete(s.sections.test, groups), true, 'the secret it no longer needs still blocks it');
+  let s = initialState(draftFor(groups), 'c1');
+  s = reduce(s, { type: 'setting', name: 'baseUrl', value: 'https://idp.example' });
+  s = reduce(s, { type: 'setting', name: 'clientAuth', value: 'private_key_jwt' });
+  assert.equal(complete(s.draft, groups), false, 'a signed client with no key counts as filled');
+  s = reduce(s, { type: 'secret', name: 'signingKey', value: 'a signing key' });
+  assert.equal(complete(s.draft, groups), true, 'the secret it no longer needs still blocks it');
 });
 
 test('a plugin that fixes how its key is sent never asks for it, so the key goes out under the plugin header only', () => {
@@ -143,77 +107,55 @@ test('a plugin that fixes how its key is sent never asks for it, so the key goes
     ],
   });
   const plugin: PluginSpec = {
-    settings: [{ name: 'base_url', label: 'System address', default: 'https://api.multi.test', secret: false, perEnvironment: false, locked: false }],
+    settings: [{ name: 'base_url', label: 'System address', default: 'https://api.multi.test', secret: false, perAccount: false, locked: false }],
     fixed: ['name', 'placement'],
   };
-  const groups = pluginGroups(apiKey, KINDS, plugin, 'own');
+  const groups = pluginGroups(apiKey, KINDS, plugin);
   assert.deepEqual(
     [...groups.main, ...groups.more].map((f) => f.name),
     ['key', 'clientCertificate'],
   );
-  let s = initialState({ test: draftFor('test', groups) }, null);
-  s = reduce(s, { type: 'secret', environment: 'test', name: 'key', value: 'desk-key-1' });
-  const body = turnOnBody(apiKey, plugin, 'own', s.sections.test, { base_url: 'https://api.multi.test' }, true);
+  let s = initialState(draftFor(groups), null);
+  s = reduce(s, { type: 'secret', name: 'key', value: 'desk-key-1' });
+  const body = turnOnBody(apiKey, plugin, undefined, s.draft, { base_url: 'https://api.multi.test' }, true);
   assert.deepEqual(body, {
     enabled: true,
-    environment: 'test',
+    sandbox: false,
     settings: { base_url: 'https://api.multi.test' },
     kind: 'api_key',
     credentials: { key: 'desk-key-1' },
   });
 });
 
-test('a plugin that signs in sends the team app only when its own is chosen, and a sandbox address as that environment setting', () => {
+test('a plugin that signs in never asks for its client and names the picked app credential, and a sandbox its own sign-in address', () => {
   const oauth = kind('oauth2_auth_code', { signsIn: true, fields: [field('clientId', { required: true }), field('clientSecret', { secret: true })] });
   const plugin: PluginSpec = {
-    settings: [{ name: 'login_url', label: 'Sign-in address', default: null, secret: false, perEnvironment: true, locked: false }],
+    settings: [{ name: 'login_url', label: 'Sign-in address', default: null, secret: false, perAccount: true, locked: false }],
     fixed: [],
   };
-  const own = pluginGroups(oauth, KINDS, plugin, 'own');
+  const groups = pluginGroups(oauth, KINDS, plugin);
   assert.deepEqual(
-    own.main.map((f) => f.name),
-    ['clientId', 'clientSecret', 'login_url'],
-  );
-  assert.deepEqual(
-    pluginGroups(oauth, KINDS, plugin, 'platform').main.map((f) => f.name),
+    groups.main.map((f) => f.name),
     ['login_url'],
   );
-  let s = initialState({ test: draftFor('test', own) }, 'con_1');
-  s = reduce(s, { type: 'setting', environment: 'test', name: 'clientId', value: 'uat-app' });
-  s = reduce(s, { type: 'setting', environment: 'test', name: 'login_url', value: 'https://test.login.example' });
-  assert.deepEqual(turnOnBody(oauth, plugin, 'own', s.sections.test, {}, false), {
-    enabled: true,
-    environment: 'test',
+  let s = initialState(draftFor(groups), 'con_1');
+  s = reduce(s, { type: 'setting', name: 'login_url', value: 'https://test.login.example' });
+  assert.deepEqual(newAccountBody(oauth, plugin, 'cred_uat', s.draft, 'Salesforce sandbox', true), {
+    name: 'Salesforce sandbox',
+    sandbox: true,
+    kind: 'oauth2_auth_code',
     settings: { login_url: 'https://test.login.example' },
-    clientId: 'uat-app',
+    credentialId: 'cred_uat',
   });
-  const platform = turnOnBody(oauth, plugin, 'platform', s.sections.test, {}, false);
-  assert.equal('clientId' in platform, false, 'the platform app was chosen, yet the team client ID went out');
-});
-
-test('Save on the platform app turns on and signs in for the same environment, and leaves an untouched sandbox off', () => {
-  const oauth = kind('oauth2_auth_code', { signsIn: true });
-  const plugin: PluginSpec = {
-    settings: [{ name: 'login_url', label: 'Sign-in address', default: 'https://login.example', secret: false, perEnvironment: true, locked: false }],
-    fixed: [],
-  };
-  const groups = pluginGroups(oauth, KINDS, plugin, 'platform');
-  let s = initialState({ test: draftFor('test', groups), production: draftFor('production', groups) }, null);
-  // Both are ready on their defaults alone; production is the one Save completes.
-  const ready = ['test', 'production'].filter((e) => complete(s.sections[e], groups));
-  const env = leading(KINDS, ready) ?? 'test';
-  assert.equal(env, 'production');
-  assert.deepEqual(toSave(s, ready, env), ['production'], 'Save turned on an environment it then did not sign in for');
-  // A typed sandbox is saved beside it; once production is on the connection and untouched, it is not written again.
-  s = reduce(s, { type: 'setting', environment: 'test', name: 'login_url', value: 'https://test.login.example' });
-  assert.deepEqual(toSave(s, ready, env), ['production', 'test']);
-  s = reduce(reduce(s, { type: 'created', connectionId: 'con_1' }), { type: 'saved', environment: 'production', secretSet: {} });
-  assert.deepEqual(toSave(s, ready, env), ['test']);
+  assert.equal(turnOnBody(oauth, plugin, null, s.draft, {}, false).credentialId, null, 'Ops AI’s app is named as no credential');
+  const kept = turnOnBody(oauth, plugin, undefined, s.draft, {}, false);
+  assert.equal('credentialId' in kept, false, 'a later turn-on that picks nothing would change the account’s app');
+  assert.equal('clientId' in kept || 'clientSecret' in kept, false, 'a client was typed into a turn-on');
 });
 
 test('an account signed in through the dialog is remembered, so Save opens no second sign-in for it', () => {
-  let s = initialState({ production: draftFor('production', { main: [], more: [] }) }, 'con_1', ['production']);
-  assert.deepEqual(s.signedIn, []);
-  s = reduce(reduce(s, { type: 'signing-in' }), { type: 'signed-in', environment: 'production' });
-  assert.deepEqual(s.signedIn, ['production']);
+  let s = initialState(draftFor({ main: [], more: [] }), 'con_1', true);
+  assert.equal(s.signedIn, false);
+  s = reduce(reduce(s, { type: 'signing-in' }), { type: 'signed-in' });
+  assert.equal(s.signedIn, true);
 });

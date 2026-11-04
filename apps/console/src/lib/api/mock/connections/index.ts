@@ -1,7 +1,7 @@
 import { ApiError } from '../../contract';
 import type { ConnectionsApi } from '../../connections-contract';
 import { notFound, respond } from '../runtime';
-import type { AuthKind, ConnectionDetail, ConnectionEnvironment, MyConnection } from '@/lib/types/connections';
+import type { AuthKind, ConnectionStatus, MyConnection, SignInSetting } from '@/lib/types/connections';
 
 const KINDS: AuthKind[] = [
   { id: 'none', label: 'No sign-in', signsIn: false, holdsToken: false, perPerson: false },
@@ -11,72 +11,69 @@ const KINDS: AuthKind[] = [
   { id: 'oauth2_auth_code', label: 'OAuth 2.0 sign-in', signsIn: true, holdsToken: true, perPerson: true, personFields: [] },
 ];
 
+/** An account of one of the team's apps, as far as the mock's sign-ins need it. */
+interface MockAccount {
+  id: string;
+  appId: string;
+  name: string;
+  authKind: string;
+  kindLabel: string;
+  status: ConnectionStatus;
+  signIn: SignInSetting;
+  sandbox: boolean;
+}
+
 /**
- * Two connected systems with the service's sign-in rules: a kind that signs in with the team's account only refuses
- * any other setting, and a person's own sign-in is theirs alone. The mock's sign-in returns at once through the
- * console's callback, since there is no system to send the person to.
+ * Accounts of the team's apps with the service's sign-in rules: a person's own sign-in is theirs alone, on each account
+ * they may connect, a sandbox among them. The mock's sign-in returns at once through the console's callback, since
+ * there is no system to send the person to.
  */
 export function createConnectionsMock(deps: { me: string }): ConnectionsApi {
   const at = new Date(Date.now() - 86_400_000 * 12).toISOString();
-  const env = (signedIn: boolean) => ({ set: true, settings: {}, secrets: {}, signedIn: signedIn ? { account: 'ops-team@example.com', scopes: ['api'], since: at } : null });
-  const rows: ConnectionDetail[] = [
-    { id: 'conn_crm', name: 'Salesforce', teamId: 'team_ops', authKind: 'oauth2_auth_code', kindLabel: 'OAuth 2.0 sign-in', status: 'healthy', signIn: 'person_or_team', teamBackup: false, health: null, mayManage: true, revision: 3, environments: { test: env(true) }, environmentsSet: ['test'], usedBy: [{ id: 'mod_crm', name: 'Case updates' }], availableTo: [], updatedAt: at },
-    { id: 'conn_desk', name: 'Freshdesk', teamId: 'team_ops', authKind: 'api_key', kindLabel: 'API key', status: 'healthy', signIn: 'person', teamBackup: false, health: null, mayManage: true, revision: 1, environments: { production: env(false) }, environmentsSet: ['production'], usedBy: [], availableTo: [], updatedAt: at },
-    { id: 'conn_cases', name: 'Case desk', teamId: 'team_ops', authKind: 'basic', kindLabel: 'Username and password', status: 'healthy', signIn: 'person', teamBackup: false, health: null, mayManage: true, revision: 1, environments: { production: env(false) }, environmentsSet: ['production'], usedBy: [], availableTo: [], updatedAt: at },
-    { id: 'conn_itsm', name: 'ServiceNow', teamId: 'team_ops', authKind: 'oauth2_client_credentials', kindLabel: 'OAuth 2.0 client credentials', status: 'healthy', signIn: 'team', health: null, mayManage: true, revision: 1, environments: { test: env(true) }, environmentsSet: ['test'], usedBy: [], availableTo: [], updatedAt: at },
+  const rows: MockAccount[] = [
+    { id: 'conn_crm', appId: 'conn_crm', name: 'Salesforce', authKind: 'oauth2_auth_code', kindLabel: 'OAuth 2.0 sign-in', status: 'healthy', signIn: 'person_or_team', sandbox: false },
+    { id: 'conn_crm_sandbox', appId: 'conn_crm', name: 'Salesforce sandbox', authKind: 'oauth2_auth_code', kindLabel: 'OAuth 2.0 sign-in', status: 'healthy', signIn: 'person_or_team', sandbox: true },
+    { id: 'conn_desk', appId: 'conn_desk', name: 'Freshdesk', authKind: 'api_key', kindLabel: 'API key', status: 'healthy', signIn: 'person', sandbox: false },
+    { id: 'conn_cases', appId: 'conn_cases', name: 'Case desk', authKind: 'basic', kindLabel: 'Username and password', status: 'healthy', signIn: 'person', sandbox: false },
+    { id: 'conn_itsm', appId: 'conn_itsm', name: 'ServiceNow', authKind: 'oauth2_client_credentials', kindLabel: 'OAuth 2.0 client credentials', status: 'healthy', signIn: 'team', sandbox: false },
   ];
   const mine: MyConnection[] = [];
-  // One person's password the system refused, so Your connections shows the refused state.
-  const refusedRow = (): MyConnection => ({ ...own(rows[2], 'production'), account: 'j.richardson', refused: true, refusedAt: at, refusedReason: 'cases.example.com answered 401.' });
-  const find = (id: string) => rows.find((r) => r.id === id) ?? notFound(`Connection ${id}`);
-  const own = (row: ConnectionDetail, environment: ConnectionEnvironment): MyConnection => {
-    const kind = KINDS.find((k) => k.id === row.authKind);
-    return { connectionId: row.id, connection: row.name, connectionStatus: row.status, environment, method: kind?.label ?? row.kindLabel, authKind: row.authKind, personFields: kind?.personFields ?? [], connected: true, docsUrl: null, scopes: [], since: new Date().toISOString() };
+  // One person's password the system refused, so My accounts shows the refused state.
+  const refusedRow = (): MyConnection => ({ ...own(find('conn_cases')), account: 'j.richardson', refused: true, refusedAt: at, refusedReason: 'cases.example.com answered 401.' });
+  const find = (id: string) => rows.find((r) => r.id === id) ?? notFound(`Account ${id}`);
+  const under = (appId: string, id: string) => {
+    const row = find(id);
+    return row.appId === appId ? row : notFound(`Account ${id}`);
   };
-  const signIn = (id: string, environment: ConnectionEnvironment) => ({
-    authorizeUrl: `/connections/callback?code=mock&state=${encodeURIComponent(`${id}:${environment}`)}`,
+  const own = (row: MockAccount): MyConnection => {
+    const kind = KINDS.find((k) => k.id === row.authKind);
+    return { connectionId: row.id, appId: row.appId, app: row.name, connection: row.name, connectionStatus: row.status, sandbox: row.sandbox, method: kind?.label ?? row.kindLabel, authKind: row.authKind, personFields: kind?.personFields ?? [], connected: true, docsUrl: null, scopes: [], since: new Date().toISOString() };
+  };
+  const signIn = (row: MockAccount) => ({
+    authorizeUrl: `/connections/callback?code=mock&state=${encodeURIComponent(row.id)}`,
     redirectUri: '/connections/callback',
-    connectionId: id,
+    connectionId: row.id,
+    appId: row.appId,
     expiresAt: new Date(Date.now() + 600_000).toISOString(),
   });
   return {
-    get: (id) => respond(() => find(id)),
     kinds: () => respond(() => KINDS),
-    setSignIn: (id, i) =>
+    startSignIn: (a) => respond(() => signIn(under(a.appId, a.accountId))),
+    completeSignIn: (a) =>
       respond(() => {
-        const row = find(id);
-        if (i.revision !== row.revision) throw new ApiError('Someone changed this connection since you opened it. Reload to see their change.', 409);
-        if (i.signIn !== 'team' && !KINDS.find((k) => k.id === row.authKind)?.perPerson) throw new ApiError(`${row.kindLabel} signs in with the team's account only.`, 400);
-        Object.assign(row, { signIn: i.signIn, teamBackup: i.signIn === 'person_or_team' ? Boolean(i.teamBackup) : false, revision: row.revision + 1 });
-        return row;
-      }),
-    test: (id, i) =>
-      respond(() => {
-        const row = find(id);
-        const own = i.account !== 'team';
-        const linked = !own || mine.some((m) => m.connectionId === id && m.environment === i.environment);
-        row.health = linked
-          ? { status: 'ok', account: own ? 'own' : 'team', environment: i.environment, at: new Date().toISOString(), by: deps.me, httpStatus: 200, latencyMs: 180 }
-          : { status: 'failed', account: 'own', environment: i.environment, at: new Date().toISOString(), by: deps.me, code: 'CONNECTION_NOT_LINKED', message: `${row.name} needs you to connect your own account.` };
-        return row;
-      }),
-    startSignIn: (id, i) => respond(() => (find(id), signIn(id, i.environment))),
-    completeSignIn: (id, i) =>
-      respond(() => {
-        const row = find(id);
-        const environment = (i.state.split(':')[1] ?? 'test') as ConnectionEnvironment;
-        if (!mine.some((m) => m.connectionId === id && m.environment === environment)) {
-          mine.push({ ...own(row, environment), account: `${deps.me.toLowerCase().replace(/\s+/g, '.')}@example.com`, scopes: ['api'] });
+        const row = under(a.appId, a.accountId);
+        if (!mine.some((m) => m.connectionId === row.id)) {
+          mine.push({ ...own(row), account: `${deps.me.toLowerCase().replace(/\s+/g, '.')}@example.com`, scopes: ['api'] });
         }
-        return row;
+        return { id: row.id, appId: row.appId, name: row.name };
       }),
-    openConnectLink: (link) => respond(() => signIn(link.split(':')[0] || rows[0].id, 'test')),
+    openConnectLink: (link) => respond(() => signIn(rows.find((r) => r.id === link.split(':')[0]) ?? rows[0])),
     mine: (every) =>
       respond(() => {
         if (!mine.some((m) => m.connectionId === 'conn_cases')) mine.push(refusedRow());
         if (!every) return [...mine];
         const open = rows.filter((r) => r.signIn !== 'team' && KINDS.find((k) => k.id === r.authKind)?.perPerson);
-        return open.flatMap((r) => (r.environmentsSet as ConnectionEnvironment[]).map((e) => mine.find((m) => m.connectionId === r.id && m.environment === e) ?? { ...own(r, e), connected: false, since: null }));
+        return open.map((r) => mine.find((m) => m.connectionId === r.id) ?? { ...own(r), connected: false, since: null });
       }),
     giveOwn: (id, i) =>
       respond(() => {
@@ -85,17 +82,23 @@ export function createConnectionsMock(deps: { me: string }): ConnectionsApi {
         if (row.signIn === 'team' || !kind?.personFields?.length) throw new ApiError(`${row.name} signs in with the team's account.`, 400);
         const missing = kind.personFields.filter((f) => !i.credentials[f]?.trim());
         if (missing.length) throw new ApiError(`${kind.label} needs your ${missing.join(', ')}.`, 400);
-        const at = mine.findIndex((m) => m.connectionId === id && m.environment === i.environment);
-        const made: MyConnection = { ...own(row, i.environment), account: i.credentials.username ?? null, refused: false };
+        const at = mine.findIndex((m) => m.connectionId === id);
+        const made: MyConnection = { ...own(row), account: i.credentials.username ?? null, refused: false };
         if (at >= 0) mine.splice(at, 1, made);
         else mine.push(made);
         return made;
       }),
-    disconnect: (id, environment) =>
+    disconnect: (id) =>
       respond(() => {
-        const at = mine.findIndex((m) => m.connectionId === id && m.environment === environment);
+        const at = mine.findIndex((m) => m.connectionId === id);
         if (at < 0) notFound(`Your sign-in to ${id}`);
         mine.splice(at, 1);
+      }),
+    startCredentialCheck: (a) =>
+      respond(() => ({ ...signIn(rows.find((r) => r.id === a.accountId) ?? rows[0]), connectionId: a.accountId, appId: a.appId })),
+    finishCredentialCheck: (a) =>
+      respond(() => {
+        return { health: { status: 'ok' as const, account: `${deps.me.toLowerCase().replace(/\s+/g, '.')}@example.com`, at: new Date().toISOString(), by: deps.me } };
       }),
   };
 }

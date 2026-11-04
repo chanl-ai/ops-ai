@@ -19,9 +19,9 @@ from tests.conftest import sse_events
 
 
 async def directory(client: AsyncClient) -> dict[str, dict[str, Any]]:
-    r = await client.get("/v1/tools")
+    r = await client.get("/v1/tools", params={"pageSize": 200})
     assert r.status_code == 200, r.text
-    return {t["id"]: t for t in r.json()["data"]}
+    return {t["id"]: t for t in r.json()["data"]["data"]}
 
 
 async def pause(client: AsyncClient, workflow: str) -> None:
@@ -50,14 +50,14 @@ async def test_a_published_workflow_is_in_the_directory_and_a_paused_one_is_not(
     assert "workflow:dispute_email" not in await directory(client)
 
 
-async def test_access_keeps_only_the_kinds_asked_for(stack: tuple[AsyncClient, Runtime]) -> None:  # noqa: F811
+async def test_kind_keeps_only_the_kinds_asked_for(stack: tuple[AsyncClient, Runtime]) -> None:  # noqa: F811
     # The tools page lists workflow tools only; the directory answers with those, not the whole list to filter.
     client, _ = stack
-    r = await client.get("/v1/tools", params={"access": "workflow"})
+    r = await client.get("/v1/tools", params={"kind": "workflow", "pageSize": 200})
     assert r.status_code == 200, r.text
-    kinds = {t["access"] for t in r.json()["data"]}
+    kinds = {t["kind"] for t in r.json()["data"]["data"]}
     assert kinds == {"workflow"}, kinds
-    every = {t["access"] for t in (await client.get("/v1/tools")).json()["data"]}
+    every = {t["kind"] for t in (await client.get("/v1/tools", params={"pageSize": 200})).json()["data"]["data"]}
     assert every > kinds, every
 
 

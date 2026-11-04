@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-02",
+  "title": "Signing in connects an account right away",
+  "description": "An app account reads Connected as soon as its sign-in finishes. Its test runs straight after on its own, for the team account and for each person's own account, and a failed test shows as a warning on that account with the reason, instead of holding the account back.",
+  "tag": "improved"
+}

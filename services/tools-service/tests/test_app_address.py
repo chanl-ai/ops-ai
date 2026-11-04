@@ -19,16 +19,16 @@ TEAM = {"X-Team-Id": "team_platform"}
 
 async def connection(g: Gateway, base: str = ENDPOINT, key: str = "k-app") -> str:
     """The team's app: an API key in X-Api-Key, sent only to `base`."""
-    made = (
-        await g.client.post("/v1/connections", json={"name": "Ledger", "authKind": "api_key"}, headers=TEAM)
-    ).json()["data"]
-    fresh = (await g.client.get(f"/v1/connections/{made['id']}", headers=TEAM)).json()["data"]
+    made = (await g.client.post("/v1/apps", json={"name": "Ledger", "authKind": "api_key"}, headers=TEAM)).json()[
+        "data"
+    ]
+    fresh = (await g.client.get(f"/v1/apps/{made['id']}/accounts/{made['id']}", headers=TEAM)).json()["data"]
     body = {
         "revision": fresh["revision"],
         "settings": {"name": "X-Api-Key", "baseUrl": base},
         "secretValues": {"key": key},
     }
-    put = await g.client.put(f"/v1/connections/{made['id']}/environments/test", json=body, headers=TEAM)
+    put = await g.client.patch(f"/v1/apps/{made['id']}/accounts/{made['id']}", json=body, headers=TEAM)
     assert put.status_code == 200, put.text
     return str(made["id"])
 
@@ -112,13 +112,13 @@ async def test_a_sign_in_header_is_refused_on_a_module_its_connection_signs(gate
         assert r.status_code == 400 and "connection" in r.text.lower(), (value, r.text)
 
 
-async def test_a_modules_answer_names_its_connections_base_address_per_environment(gateway: Gateway) -> None:  # noqa: F811
+async def test_a_modules_answer_names_its_connections_base_address(gateway: Gateway) -> None:  # noqa: F811
     # The tool page shows where a path goes: the module has no address of its own to show.
     conn = await connection(gateway)
     made = await gateway.client.post("/v1/tool-modules", json=made_by_path(gateway, conn), headers=TEAM)
     assert made.status_code == 201, made.text
     detail = (await gateway.client.get(f"/v1/tool-modules/{made.json()['data']['id']}", headers=TEAM)).json()["data"]
-    assert detail["connection"]["baseUrls"] == {"test": ENDPOINT}, detail["connection"]
+    assert detail["connection"]["baseUrl"] == ENDPOINT, detail["connection"]
 
 
 async def test_a_custom_app_starts_from_its_connection_with_no_type_or_address(

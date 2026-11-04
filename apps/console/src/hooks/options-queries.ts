@@ -21,6 +21,16 @@ export const toolOptions: OptionSource = { key: 'tool-options', fetch: (p) => ap
 export const fileOptions: OptionSource = { key: 'file-options', fetch: (p) => api.files.options(p) };
 /** The team's active people, by email: who a task is sent to. */
 export const peopleOptions: OptionSource = { key: 'people-options', fetch: (p) => api.settings.members.options(p) };
+/** The team's agents, searched and paged by the agents list route; a page number is the cursor. */
+export const agentOptions: OptionSource = {
+  key: 'agent-options',
+  fetch: async ({ search, cursor, limit = 25, ids }) => {
+    const page = Number(cursor ?? 1);
+    const res = await api.agents.list({ page, pageSize: limit, search: ids?.length ? undefined : search, filters: {} });
+    const rows = ids?.length ? res.data.filter((a) => ids.includes(a.id)) : res.data;
+    return { data: rows.map((a) => ({ id: a.id, label: a.name, hint: a.role || null })), nextCursor: !ids?.length && res.pagination.hasNext ? String(page + 1) : null };
+  },
+};
 /** The team's workflows (both engines) under `filters`, searched and paged by the workflows list route; a page number is the cursor. */
 const workflowsWhere = (key: string, filters: WorkflowFilters = {}): OptionSource => ({
   key,
@@ -41,14 +51,14 @@ export const startableWorkflowOptions = workflowsWhere('workflow-options:startab
 /** Workflows a file can start: an email trigger, or a form with a file field; never one only other workflows start. */
 export const fileWorkflowOptions = workflowsWhere('workflow-options:files', { startable: ['true'], takesFiles: ['true'] });
 /**
- * The team's apps by the id the Apps page shows (plugin:<id>, a connection's id, module:<id>), from GET /v1/systems.
+ * The team's apps by the id the Apps page shows (plugin:<id>, a connection's id, module:<id>), from GET /v1/apps.
  * That route lists every card at once and takes no search, so the search narrows the one list it returns.
  */
 export const appOptions: OptionSource = {
   key: 'app-options',
   fetch: async ({ search, ids }) => {
     // The built-in apps stay pickable here (a mailbox reply is the write teams most often approve), off the Apps grid.
-    const cards = await sdk((ops) => ops.raw.tools.connections_list_systems({ query: { include: 'builtin' } }));
+    const cards = await sdk((ops) => ops.raw.tools.apps_list_apps({ query: { include: 'builtin' } }));
     const words = (search ?? '').trim().toLowerCase();
     const rows = ids?.length ? cards.filter((c) => ids.includes(c.id)) : cards.filter((c) => !words || `${c.name} ${c.category ?? ''}`.toLowerCase().includes(words));
     return { data: rows.map((c) => ({ id: c.id, label: c.name, hint: c.category ?? null })), nextCursor: null };

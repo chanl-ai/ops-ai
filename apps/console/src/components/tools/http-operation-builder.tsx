@@ -108,6 +108,41 @@ export function DerivedInputs({ value }: { value: Pick<HttpOperationInput, 'url'
   );
 }
 
+/** A call that is not edited here (a plugin's tool): where it goes, the inputs its address takes, its headers and body. */
+export function RequestView({ value, address }: { value: HttpOperationInput; address: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-4" data-testid="request-view">
+      <div className="rounded-md border bg-muted/40 px-3 py-2">{address}</div>
+      <DerivedInputs value={value} />
+      {value.headers.length > 0 && (
+        <div className="overflow-hidden rounded-md border" data-testid="http-headers">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Header</TableHead>
+                <TableHead>Value</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {value.headers.map((h) => (
+                <TableRow key={h.key}>
+                  <TableCell>
+                    <code className="font-mono text-xs">{h.key}</code>
+                  </TableCell>
+                  <TableCell>
+                    <code className="font-mono text-xs break-all">{h.value}</code>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+      {hasBody(value.method) && value.body ? <pre className="overflow-x-auto rounded-md border bg-muted/40 p-3 font-mono text-xs">{value.body}</pre> : null}
+    </div>
+  );
+}
+
 /** Plain headers; a key belongs on the module's connection, which signs every call in. */
 export function HeadersEditor({ value, onChange, note }: { value: HttpOperationInput; onChange: (v: HttpOperationInput) => void; note?: React.ReactNode }) {
   const set = (headers: HttpOperationInput['headers']) => onChange({ ...value, headers });

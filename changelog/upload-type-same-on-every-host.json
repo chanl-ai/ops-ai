@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-04",
+  "title": "Uploads are typed the same on every server",
+  "description": "An executable renamed to a PDF is now recognised as an executable on Linux servers as well as on Macs.",
+  "tag": "fix"
+}

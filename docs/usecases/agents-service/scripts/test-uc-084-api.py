@@ -87,7 +87,7 @@ def grant(api: httpx.Client, *, on: bool) -> int:
 def main() -> None:
     with demo() as d, worker():
         api = d.api
-        listed = {t["id"]: t for t in data(api.get("/v1/tools", headers=OPS))}
+        listed = {t["id"]: t for t in data(api.get("/v1/tools", params={"pageSize": 200}, headers=OPS))["data"]}
         check(
             "the seeded v2 workflow is in the tool directory with its input schema",
             f"workflow:{WORKFLOW}" in listed

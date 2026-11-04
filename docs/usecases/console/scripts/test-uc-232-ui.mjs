@@ -10,7 +10,7 @@ await withUiStack(
   async (consoleUrl) => {
     const J = { Authorization: `Bearer ${await tokenFor(JAMES)}`, 'X-Team-Id': 'team_ops' };
     const me = (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/me`, { headers: J })).json()).data;
-    const wfTools = (await (await fetch(`${agents}/v1/tools?access=workflow`, { headers: J })).json()).data;
+    const wfTools = (await (await fetch(`${agents}/v1/tools?kind=workflow&pageSize=200`, { headers: J })).json()).data.data;
     const browser = await chromium.launch();
     const errors = [];
     try {
@@ -28,7 +28,7 @@ await withUiStack(
       const said = (await header.innerText()).trim();
       check('1 the header names the workspace as platform-service does, with no sample environment', !!me?.tenantName && said === me.tenantName, { said, tenantName: me?.tenantName });
 
-      await page.goto(`${consoleUrl}/tools`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.goto(`${consoleUrl}/tools/custom`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const tab = page.getByRole('tab', { name: /^Workflows/ }).or(page.getByRole('button', { name: /^Workflows ·/ })).first();
       await tab.waitFor({ timeout: 60_000 });
       const label = (await tab.innerText()).trim();

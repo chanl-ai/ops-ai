@@ -1,6 +1,8 @@
-"""The environments tools-service knows, as one list. A module's versions are promoted through all of them; a
-connection holds keys for those marked `keys`. Each route's environment type below is checked against this list
-(tests/test_environments.py), so adding a row and forgetting a route, or the reverse, fails a test rather than a call.
+"""The environments tools-service knows, as one list: a module's versions are promoted through all of them, and
+a call is made in a test run or a live (production) one. An account is not set per environment: a test run uses the
+app's sandbox account when it has one (connections.records.account_for). Each route's environment type below is checked
+against this list (tests/test_environments.py), so adding a row and forgetting a route, or the reverse, fails a test
+rather than a call.
 
 Team-defined environments are planned as rows of this list; until then the rows are fixed here."""
 
@@ -16,32 +18,22 @@ class EnvironmentRow:
     label: str
     # The one environment live runs call.
     production: bool = False
-    # Whether a connection holds keys for it. Only a module's versions are promoted through an environment without.
-    keys: bool = False
+    # Whether a call is made in it: a test run or a live one. Only a module's versions are promoted through the rest.
+    runs: bool = False
 
     def view(self) -> dict[str, Any]:
-        return {"id": self.id, "label": self.label, "production": self.production, "keys": self.keys}
+        return {"id": self.id, "label": self.label, "production": self.production}
 
 
 ROWS: tuple[EnvironmentRow, ...] = (
     EnvironmentRow("dev", "Dev"),
-    EnvironmentRow("test", "Test", keys=True),
-    EnvironmentRow("production", "Production", production=True, keys=True),
+    EnvironmentRow("test", "Test", runs=True),
+    EnvironmentRow("production", "Production", production=True, runs=True),
 )
 
 # The types routes accept, kept equal to ROWS by tests/test_environments.py.
 ModuleEnvironment = Literal["dev", "test", "production"]
-ConnectionEnvironment = Literal["test", "production"]
+# The kind of run a call is made in: a test run (the Test panel, a draft, a tool's Real run) or a live one.
+RunKind = Literal["test", "production"]
 
-CONNECTION_ENVIRONMENTS: tuple[str, ...] = tuple(r.id for r in ROWS if r.keys)
-TEST, PRODUCTION = CONNECTION_ENVIRONMENTS
-
-
-def views() -> list[dict[str, Any]]:
-    """Every environment, in order, as `GET /v1/connection-kinds` serves it."""
-    return [r.view() for r in ROWS]
-
-
-def connection_views() -> list[dict[str, Any]]:
-    """The environments a connection holds keys for, in order."""
-    return [r.view() for r in ROWS if r.keys]
+TEST, PRODUCTION = (r.id for r in ROWS if r.runs)
