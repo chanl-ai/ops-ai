@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -156,5 +156,34 @@ async def test_tools_0062_makes_one_account_per_slot_and_folds_them_back() -> No
             assert back["K_TEST"] == "con_both" and back["CRED_UAT_SECRET"] == "con_both", back
             plugins = {r["id"]: r["plugin_id"] for r in await _rows(engine, "select id, plugin_id from connections")}
             assert plugins == {"con_both": "desk", "con_live": None, "con_trial": "desk"}, plugins
+        finally:
+            await engine.dispose()
+
+
+def _json(value: Any) -> dict[str, Any]:
+    return cast(dict[str, Any], json.loads(value) if isinstance(value, str) else value)
+
+
+async def test_tools_0063_drops_the_slot_name_from_an_accounts_health() -> None:
+    # Health carried its slot's name onto the account, and the app page's model refuses the key: the page answered 500.
+    async with scratch_database("tools_health") as target:
+        _alembic(target, "upgrade", BEFORE)
+        engine = create_async_engine(target)
+        try:
+            await _connection(engine, "con_hub", {"production": {"settings": {"baseUrl": "https://hub.test"}}}, "hub")
+            health = {"status": "ok", "account": "team", "environment": "production", "at": "2026-11-01T10:00:00Z"}
+            await _sql(
+                engine,
+                "update connection_environments set health = cast(:h as json) where connection_id = 'con_hub'",
+                h=json.dumps(health),
+            )
+            _alembic(target, "upgrade", "tools_0063_health_slot")
+            [row] = await _rows(engine, "select health from connections where id = 'con_hub'")
+            kept = _json(row["health"])
+            assert kept == {"status": "ok", "account": "team", "at": "2026-11-01T10:00:00Z"}, kept
+            _alembic(target, "downgrade", AFTER)
+            [row] = await _rows(engine, "select health from connections where id = 'con_hub'")
+            back = _json(row["health"])
+            assert back == health, back
         finally:
             await engine.dispose()
