@@ -341,22 +341,33 @@ class GatewayCalls:
         # Approvals are off by default: a write waits only when its tool's switch is on, the team
         # has every write wait, or the team listed its app.
         module = resolved.module if resolved else None
-        needs = access in WRITES and (
-            # Over MCP every write waits for a person, whatever the operation declares.
-            channel == MCP
-            or await self.registry.requires_approval(req.tool, caller.tenant_id, caller.team_id)
-            or await self.all_writes_wait(caller.tenant_id, caller.team_id)
-            or (
-                self.app_writes_wait is not None
-                and await self.app_writes_wait(caller.tenant_id, caller.team_id, module)
+        # A test run on an app with no sandbox account signs in with its live one (connections.records account_for);
+        # its write then waits for a person's approval, so testing never changes live data unseen. The person running
+        # the test is not that approval, whatever their role: trying a tool is not deciding to change live data.
+        live_test_write = (
+            access in WRITES
+            and run == TEST
+            and bool((module or {}).get("connection_id"))
+            and not (module or {}).get("sandbox")
+        )
+        needs = live_test_write or (
+            access in WRITES
+            and (
+                # Over MCP every write waits for a person, whatever the operation declares.
+                channel == MCP
+                or await self.registry.requires_approval(req.tool, caller.tenant_id, caller.team_id)
+                or await self.all_writes_wait(caller.tenant_id, caller.team_id)
+                or (
+                    self.app_writes_wait is not None
+                    and await self.app_writes_wait(caller.tenant_id, caller.team_id, module)
+                )
             )
-            # A test run on an app with no sandbox account signs in with its live one (connections.records
-            # account_for); its writes then wait for a person, so testing never changes live data unseen.
-            or (run == TEST and bool((module or {}).get("connection_id")) and not (module or {}).get("sandbox"))
         )
         # When approval is on, roles decide: a person holding the approver role in the team is not
         # asked, and the log names them as the write's approver; anyone else needs an approval token.
-        self_approved = bool(needs and req.approval_token is None and self.approver and self.approver(caller))
+        self_approved = bool(
+            needs and not live_test_write and req.approval_token is None and self.approver and self.approver(caller)
+        )
         if self_approved:
             row["approvers"] = [caller.email]
         approval_required = access not in WRITES or (needs and not self_approved)
