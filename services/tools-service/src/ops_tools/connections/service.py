@@ -944,6 +944,9 @@ class ConnectionService:
         access not given, a wrong client secret at the token exchange, or the system's own words."""
         app = (await self._app_display(who, str(conn["app_id"]), {**conn, "connection_id": conn["id"]}))[0]
         credential = await self._credential_name(who, conn)
+        if token_exchange and error in WRONG_SECRET and not await self._holds_secret(who, conn):
+            # Known here, so said before any guess from the system's code: the team's app was never given a secret.
+            return f"{credential} has no client secret yet. Add it on its Credentials page.", "admin"
         said = (
             await self.sign_in_errors(who.tenant_id, str(conn["id"]), error, description)
             if self.sign_in_errors is not None
@@ -957,6 +960,13 @@ class ConnectionService:
             return f"The client secret for {credential} is wrong. Replace it on its Credentials page.", "admin"
         return f"{app} refused the sign-in: {description or error}", "person"
 
+    async def _holds_secret(self, who: Caller, conn: dict[str, Any]) -> bool:
+        """Whether the account's OAuth app has a client secret to send: Ops AI's app always does (the install's)."""
+        if conn.get("platform_app") or not conn.get("credential_id"):
+            return True
+        found = await self.store.credential(who.tenant_id, str(conn["credential_id"]))
+        return found is None or bool(found.get("secret_name"))
+
     async def _credential_name(self, who: Caller, conn: dict[str, Any]) -> str:
         """The OAuth app the account signs in with, as the Credentials page names it."""
         if conn.get("credential_id"):
@@ -964,6 +974,19 @@ class ConnectionService:
             if found is not None:
                 return str(found["name"])
         return "Ops AI's app" if conn.get("platform_app") else "the app credential"
+
+    async def sign_in_again(self, who: Caller, connection_id: str, why: str) -> None:
+        """Marks an account to sign in again (the app registration it signs in with changed): the team's sign-in is
+        dropped and the account reads as needing a reconnect, with `why`; each person's own sign-in is marked refused,
+        so their next call asks them to connect again."""
+        self._can(who, "manage")
+        conn = await self._get(who, connection_id)
+        now = self.clock()
+        await self.tokens.drop(who.tenant_id, await self.store.forget_token(who.tenant_id, connection_id))
+        for p in await self.store.people(who.tenant_id, connection_id):
+            await self.store.mark_refused(who.tenant_id, connection_id, str(p["person_id"]), reason=why, at=now)
+        await self.store.set_status(who.tenant_id, connection_id, "needs_reconnect", why)
+        await self.store.note(who.tenant_id, str(conn["id"]), self._event(who, "credential_changed"))
 
     async def _test_after_sign_in(self, who: Caller, connection_id: str, account: str) -> None:
         try:

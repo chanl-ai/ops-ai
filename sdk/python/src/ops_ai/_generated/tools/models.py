@@ -94,6 +94,14 @@ class AppCredentialIn(TypedDict, closed=True):
     clientSecret: NotRequired[str | None]
     name: NotRequired[str | None]
     scopes: NotRequired[list[Scope] | None]
+    settings: NotRequired[dict[str, str | None] | None]
+
+
+class AppCredentialPatchIn(TypedDict, closed=True):
+    clientId: NotRequired[str | None]
+    name: NotRequired[str | None]
+    scopes: NotRequired[list[Scope] | None]
+    settings: NotRequired[dict[str, str | None] | None]
 
 
 class AppMe(TypedDict, closed=True):
@@ -316,6 +324,13 @@ class CredentialCheck(TypedDict, closed=True):
 class CredentialCheckIn(TypedDict, closed=True):
     code: NotRequired[str | None]
     state: NotRequired[str | None]
+
+
+class CredentialField(TypedDict, closed=True):
+    help: NotRequired[str | None]
+    label: str
+    name: str
+    pem: NotRequired[bool]
 
 
 class CredentialSecretIn(TypedDict, closed=True):
@@ -1187,6 +1202,26 @@ class AppAccount(TypedDict, closed=True):
     test: NotRequired[AccountTest | None]
 
 
+class AppCredentialChange(TypedDict, closed=True):
+    accounts: int
+    accountsList: list[CredentialAccount]
+    app: str
+    appName: str
+    clientId: NotRequired[str | None]
+    created: NotRequired[str | None]
+    createdBy: NotRequired[str | None]
+    fields: NotRequired[list[CredentialField]]
+    id: str
+    name: str
+    permissions: list[str]
+    redirectUri: NotRequired[str | None]
+    settings: NotRequired[dict[str, Any]]
+    signInAgain: int
+    status: Literal["working", "not_tested", "failing"]
+    type: Literal["ops_ai", "own"]
+    updated: NotRequired[str | None]
+
+
 class AppCredentialDetail(TypedDict, closed=True):
     accounts: int
     accountsList: list[CredentialAccount]
@@ -1195,10 +1230,12 @@ class AppCredentialDetail(TypedDict, closed=True):
     clientId: NotRequired[str | None]
     created: NotRequired[str | None]
     createdBy: NotRequired[str | None]
+    fields: NotRequired[list[CredentialField]]
     id: str
     name: str
     permissions: list[str]
     redirectUri: NotRequired[str | None]
+    settings: NotRequired[dict[str, Any]]
     status: Literal["working", "not_tested", "failing"]
     type: Literal["ops_ai", "own"]
     updated: NotRequired[str | None]
@@ -1289,6 +1326,11 @@ class EnvelopeAccountDetail(TypedDict, closed=True):
 
 class EnvelopeAllowList(TypedDict, closed=True):
     data: AllowList
+    success: Literal[True]
+
+
+class EnvelopeAppCredentialChange(TypedDict, closed=True):
+    data: AppCredentialChange
     success: Literal[True]
 
 

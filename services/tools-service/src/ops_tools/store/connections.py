@@ -122,6 +122,9 @@ app_credentials = sa.Table(
     # The tool_secrets name in the team holding the client secret (its row's credential_id is this credential's id);
     # null for a public client.
     sa.Column("secret_name", sa.String(200)),
+    # The registration's own settings (a plugin's credential_settings, or a custom app's sign-in and token addresses),
+    # which every account signing in with it reads; null for none.
+    sa.Column("settings", sa.JSON),
     sa.Column("created_by", sa.String(200), nullable=False),
     sa.Column("created_at", _TS, nullable=False),
     sa.Column("updated_by", sa.String(200), nullable=False),
@@ -344,14 +347,32 @@ class ConnectionStore:
         async with self._tx() as c:
             await c.execute(app_credentials.insert().values(**row))
 
-    async def touch_credential(self, tenant_id: str, credential_id: str, *, actor: str, at: datetime) -> None:
-        """Records who changed the credential last (its secret, replaced in the secret store)."""
+    async def change_credential(
+        self, tenant_id: str, credential_id: str, values: Row, *, actor: str, at: datetime
+    ) -> None:
+        """Writes the credential's name, client id, permissions or settings, with who changed it and when."""
         t = app_credentials.c
         async with self._tx() as c:
             await c.execute(
                 app_credentials.update()
                 .where(t.tenant_id == tenant_id, t.id == credential_id, team_visible(app_credentials))
-                .values(updated_by=actor, updated_at=at)
+                .values(**values, updated_by=actor, updated_at=at)
+            )
+
+    async def touch_credential(
+        self, tenant_id: str, credential_id: str, *, actor: str, at: datetime, secret_name: str | None = None
+    ) -> None:
+        """Records who changed the credential last, and with `secret_name` the team secret now holding its client
+        secret: an account reads its secret through that name alone, so a secret stored under no name is never sent."""
+        t = app_credentials.c
+        values: Row = {"updated_by": actor, "updated_at": at}
+        if secret_name is not None:
+            values["secret_name"] = secret_name
+        async with self._tx() as c:
+            await c.execute(
+                app_credentials.update()
+                .where(t.tenant_id == tenant_id, t.id == credential_id, team_visible(app_credentials))
+                .values(**values)
             )
 
     async def credential_accounts(self, tenant_id: str, credential_ids: list[str]) -> list[Row]:
@@ -379,6 +400,13 @@ class ConnectionStore:
         cred = creds.get(str(row.get("credential_id") or ""))
         installed = self.install_clients.get(str(row.get("platform_app") or ""))
         if cred is not None:
+            held = dict(cred.get("settings") or {})
+            if str(row.get("app_id") or "").startswith(PLUGIN_APP):
+                # A plugin's: merged by the plugin host over the account's own (PluginHost.settings).
+                row = {**row, "credential_settings": held}
+            else:
+                # A custom app's: the registration's addresses and certificate, over any the account was given.
+                settings |= held
             settings["clientId"] = cred["client_id"]
             if cred.get("scopes"):
                 # The permissions the team's client asks for are the credential's, for every account on it.

@@ -45,7 +45,7 @@ from .modules.schemas import In, ToolCallRow
 from .modules.seed import BUILT_IN, TOOL_ORIGIN, template_of, tool_title
 from .modules.service import Caller, ModuleService
 from .modules.tool_users import ToolUsers
-from .plugins.host import PluginHost, fixed_fields, module_id_of, per_account, plugin_id_of
+from .plugins.host import PluginHost, fixed_fields, module_id_of, offered, per_account, plugin_id_of
 from .plugins.routes import PluginAccounts, TeamPluginIn
 from .plugins.templates import view_of
 from .store.connections import plugin_app, plugin_of
@@ -205,11 +205,40 @@ class CredentialAccount(Out):
     connected_at: str | None = None
 
 
+class CredentialField(Out):
+    """A setting an app credential may hold: one of a plugin's credential_settings, or a custom app's client field."""
+
+    name: str
+    label: str
+    help: str | None = None
+    # PEM text: a multi-line box and a file to read it from.
+    pem: bool = False
+
+
 class AppCredentialDetail(AppCredential):
     accounts_list: list[CredentialAccount]
     # The address to register with the app's sign-in.
     redirect_uri: str | None = None
     updated: str | None = None
+    # The registration's settings the credential holds, and every one it may hold, with its label.
+    settings: dict[str, Any] = Field(default_factory=dict[str, Any])
+    fields: list[CredentialField] = Field(default_factory=list[CredentialField])
+
+
+class AppCredentialChange(AppCredentialDetail):
+    # How many accounts were marked to sign in again, since the client id, permissions or settings changed.
+    sign_in_again: int
+
+
+class AppCredentialPatchIn(In):
+    """An edit of the team's own app credential: any of its name, client id, permissions and settings. Its secret is
+    replaced on its own route."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    client_id: str | None = Field(default=None, min_length=1, max_length=500)
+    scopes: list[Annotated[str, Field(min_length=1, max_length=200)]] | None = Field(default=None, max_length=100)
+    # One of `fields` each; an empty or null value removes it.
+    settings: dict[str, Annotated[str, Field(max_length=16_000)] | None] | None = Field(default=None, max_length=20)
 
 
 class AppCredentialIn(In):
@@ -224,6 +253,8 @@ class AppCredentialIn(In):
     client_secret: str | None = Field(default=None, min_length=1, max_length=2000)
     # The permissions to ask for, among the app's own; left out, all of them. A plugin's required ones are always asked.
     scopes: list[Annotated[str, Field(min_length=1, max_length=200)]] | None = Field(default=None, max_length=100)
+    # The settings its app registration holds (`fields` on its page): a Microsoft tenant, a custom app's addresses.
+    settings: dict[str, Annotated[str, Field(max_length=16_000)] | None] | None = Field(default=None, max_length=20)
 
 
 class CredentialSecretIn(In):
@@ -677,6 +708,8 @@ def card_credential(conn: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 OPS_AI = "ops-ai:"
+# A custom app credential's own fields beside its settings: the client id and permissions are edited as such.
+CREDENTIAL_OWN = ("clientId", "scopes")
 
 
 def credential_secret(credential_id: str) -> str:
@@ -738,20 +771,21 @@ async def add_app_credential(apps: Apps, who: Caller, i: AppCredentialIn) -> dic
         raise ValidationFailed(f"{card['name']} signs in with no OAuth app.", code="no_app_credential")
     plugin = _plugin(apps, card)
     scopes = i.scopes
+    app: dict[str, Any] | None = None
     if plugin is not None:
         kinds = [kind_of(k) for k in plugin.manifest.connection.kinds]
         if not any(k.field("clientId") is not None for k in kinds):
             raise ValidationFailed(f"{card['name']} signs in with no OAuth app.", code="no_app_credential")
-        offered = plugin.manifest.connection.scopes
-        unknown = sorted(set(scopes or []) - {sc.id for sc in offered})
-        if unknown:
-            raise ValidationFailed(f"{card['name']} asks for no {', '.join(unknown)}.", details={"field": "scopes"})
-        wanted = set(scopes) if scopes is not None else {sc.id for sc in offered}
-        scopes = [sc.id for sc in offered if sc.required or sc.id in wanted]
+        # Left out, every permission the plugin offers.
+        scopes = _offered_scopes(
+            card, plugin, scopes if scopes is not None else [sc.id for sc in plugin.manifest.connection.scopes]
+        )
     else:
         app = await apps.connections.account_of(who, str(card["id"]), str(card["connectionId"]))
         if not _signs_in_with_client(app):
             raise ValidationFailed(f"{card['name']} signs in with no OAuth app.", code="no_app_credential")
+    given = _checked_registration(apps, card, credential_fields(apps, card, app), dict(i.settings or {}))
+    registration = {k: v for k, v in given.items() if v not in (None, "")}
     now = apps.connections.clock()
     made = f"cred_{uuid.uuid4().hex[:12]}"
     secret = credential_secret(made) if i.client_secret else None
@@ -769,6 +803,7 @@ async def add_app_credential(apps: Apps, who: Caller, i: AppCredentialIn) -> dic
             "client_id": i.client_id.strip(),
             "scopes": " ".join(scopes) if scopes is not None else None,
             "secret_name": secret,
+            "settings": registration or None,
             "created_by": who.name,
             "created_at": now,
             "updated_by": who.name,
@@ -776,6 +811,106 @@ async def add_app_credential(apps: Apps, who: Caller, i: AppCredentialIn) -> dic
         }
     )
     return await app_credential(apps, who, made)
+
+
+def credential_fields(apps: Apps, card: dict[str, Any], app: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """The settings an app's credential may hold: a plugin's credential_settings, with their titles, or, for a custom
+    app, its sign-in kind's own client fields (`app` is its first account), never a secret, the client id or the
+    permissions, which have their own places."""
+    plugin = _plugin(apps, card)
+    if plugin is not None:
+        m = plugin.manifest
+        return [{"name": k, "label": m.settings[k].title or k} for k in m.connection.credential_settings]
+    if app is None:
+        return []
+    kind = kind_of(str(app["auth_kind"]))
+    return [
+        {k: v for k, v in f.view().items() if k in ("name", "label", "help", "pem")}
+        for f in kind.fields
+        if not f.secret and f.name not in CREDENTIAL_OWN
+    ]
+
+
+async def _custom_app(apps: Apps, who: Caller, card: dict[str, Any]) -> dict[str, Any] | None:
+    if card["kind"] != "connection" or not card.get("connectionId"):
+        return None
+    return await apps.connections.account_of(who, str(card["id"]), str(card["connectionId"]))
+
+
+def _checked_registration(
+    apps: Apps, card: dict[str, Any], fields: list[dict[str, Any]], given: dict[str, str | None]
+) -> dict[str, str | None]:
+    """A credential's settings as given, each one it may hold; a plugin's setting with choices takes only those."""
+    names = {f["name"] for f in fields}
+    plugin = _plugin(apps, card)
+    for k, v in given.items():
+        if k not in names:
+            allowed = ", ".join(sorted(names)) or "none"
+            raise ValidationFailed(
+                f"{k} is not a setting {card['name']}'s app credential holds ({allowed}).",
+                code="credential_setting_unknown",
+                details={"field": f"settings.{k}"},
+            )
+        setting = plugin.manifest.settings.get(k) if plugin is not None else None
+        if setting is not None and v not in (None, "") and not offered(setting, v):
+            raise ValidationFailed(
+                f"{card['name']} cannot use {v} there.", code="setting_not_offered", details={"field": f"settings.{k}"}
+            )
+    return given
+
+
+def _offered_scopes(card: dict[str, Any], plugin: Plugin | None, scopes: list[str]) -> list[str]:
+    """The permissions to ask for, among a plugin's own with its required ones always in; a custom app's as given."""
+    if plugin is None:
+        return list(dict.fromkeys(scopes))
+    offered = plugin.manifest.connection.scopes
+    unknown = sorted(set(scopes) - {sc.id for sc in offered})
+    if unknown:
+        raise ValidationFailed(f"{card['name']} asks for no {', '.join(unknown)}.", details={"field": "scopes"})
+    return [sc.id for sc in offered if sc.required or sc.id in scopes]
+
+
+async def change_app_credential(apps: Apps, who: Caller, credential_id: str, i: AppCredentialPatchIn) -> dict[str, Any]:
+    """Edits the team's own app credential. A new client id, other permissions or other settings make every account
+    signing in with it sign in again (their sign-ins were issued to the registration as it was): each is marked so,
+    and the answer says how many. A plugin account's sign-in addresses are written again from the new settings."""
+    apps.connections.check(who, "manage", what="app credentials")
+    if credential_id.startswith(OPS_AI):
+        raise ValidationFailed("Ops AI's app is the install's; nothing on it is changed here.", code="ops_ai_app")
+    store = apps.connections.store
+    cred = await store.credential(who.tenant_id, credential_id)
+    if cred is None or cred["team_id"] != who.team.id:
+        raise NotFound(f"App credential {credential_id}")
+    card = await apps.card(who, str(cred["app_id"]))
+    plugin = _plugin(apps, card)
+    values: dict[str, Any] = {}
+    if i.name is not None:
+        if not i.name.strip():
+            raise ValidationFailed("Name the app credential.", details={"field": "name"})
+        values["name"] = i.name.strip()
+    if i.client_id is not None and i.client_id.strip() != cred["client_id"]:
+        values["client_id"] = i.client_id.strip()
+    if i.scopes is not None:
+        scopes = " ".join(_offered_scopes(card, plugin, i.scopes))
+        if scopes != str(cred.get("scopes") or ""):
+            values["scopes"] = scopes
+    if i.settings is not None:
+        fields = credential_fields(apps, card, await _custom_app(apps, who, card))
+        given = _checked_registration(apps, card, fields, i.settings)
+        held = dict(cred.get("settings") or {})
+        after = {k: v for k, v in {**held, **given}.items() if v not in (None, "")}
+        if after != held:
+            values["settings"] = after or None
+    if values:
+        await store.change_credential(who.tenant_id, credential_id, values, actor=who.name, at=apps.connections.clock())
+    changed = bool({"client_id", "scopes", "settings"} & values.keys())
+    accounts = await store.credential_accounts(who.tenant_id, [credential_id]) if changed else []
+    why = f"{values.get('name') or cred['name']} changed, so this account signs in again."
+    for account in accounts:
+        if plugin is not None and "settings" in values and apps.plugin_accounts is not None:
+            await apps.plugin_accounts.rewrite_addresses(who, plugin, str(account["id"]))
+        await apps.connections.sign_in_again(who, str(account["id"]), why)
+    return {**await app_credential(apps, who, credential_id), "signInAgain": len(accounts)}
 
 
 async def replace_credential_secret(apps: Apps, who: Caller, credential_id: str, secret: str) -> dict[str, Any]:
@@ -794,7 +929,7 @@ async def replace_credential_secret(apps: Apps, who: Caller, credential_id: str,
         await resolver.create(
             who.tenant_id, who.team.id, name, secret, actor=who.name, at=now, credential_id=credential_id
         )
-    await store.touch_credential(who.tenant_id, credential_id, actor=who.name, at=now)
+    await store.touch_credential(who.tenant_id, credential_id, actor=who.name, at=now, secret_name=name)
     return await app_credential(apps, who, credential_id)
 
 
@@ -861,11 +996,14 @@ async def app_credential(apps: Apps, who: Caller, credential_id: str) -> dict[st
             }
         )
     kinds = apps.connections.kinds()
+    fields = credential_fields(apps, card, await _custom_app(apps, who, card)) if cred else []
     return {
         **await _row(apps, who, cred, card, accounts),
         "accountsList": listed,
         "redirectUri": kinds.get("redirectUri"),
         "updated": cred["updated_at"].isoformat() if cred else None,
+        "settings": dict((cred or {}).get("settings") or {}),
+        "fields": fields,
     }
 
 
@@ -1059,6 +1197,17 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
         """One app credential's page: its app, client id, permissions, who made it and the accounts signing in with it,
         each with its state. `ops-ai:<app>` is Ops AI's app of one app. Team admins only; no secret."""
         return ok(AppCredentialDetail(**await app_credential(apps, who, credential_id)).model_dump(by_alias=True))
+
+    @r.patch("/v1/app-credentials/{credential_id}", response_model=Envelope[AppCredentialChange])
+    async def change_app_credential_route(  # pyright: ignore[reportUnusedFunction]
+        credential_id: str, body: AppCredentialPatchIn, who: Annotated[Caller, Depends(caller)]
+    ) -> JSONResponse:
+        """Edits the team's own app credential: its name, client id, permissions and the settings its app
+        registration holds (`fields` on its page). A new client id, other permissions or settings mark every account
+        signing in with it to sign in again; `signInAgain` says how many. Team admins only; the secret has its own
+        route."""
+        row = await change_app_credential(apps, who, credential_id, body)
+        return ok(AppCredentialChange(**row).model_dump(by_alias=True))
 
     @r.put("/v1/app-credentials/{credential_id}/secret", response_model=Envelope[AppCredentialDetail])
     async def set_app_credential_secret(  # pyright: ignore[reportUnusedFunction]

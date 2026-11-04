@@ -43,6 +43,17 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "apps_change_app_credential_route": {
+    "body": "json",
+    "headers": [],
+    "method": "PATCH",
+    "path": "/v1/app-credentials/{credential_id}",
+    "pathParams": [
+      "credential_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "apps_check_credential": {
     "body": "json",
     "headers": [],

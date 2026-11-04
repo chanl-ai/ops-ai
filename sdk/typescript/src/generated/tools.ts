@@ -86,7 +86,14 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Change App Credential Route
+         * @description Edits the team's own app credential: its name, client id, permissions and the settings its app
+         *     registration holds (`fields` on its page). A new client id, other permissions or settings mark every account
+         *     signing in with it to sign in again; `signInAgain` says how many. Team admins only; the secret has its own
+         *     route.
+         */
+        patch: operations["apps_change_app_credential_route"];
         trace?: never;
     };
     "/v1/app-credentials/{credential_id}/secret": {
@@ -1461,6 +1468,51 @@ export interface components {
              */
             type: "ops_ai" | "own";
         };
+        /** AppCredentialChange */
+        AppCredentialChange: {
+            /** Accounts */
+            accounts: number;
+            /** Accountslist */
+            accountsList: components["schemas"]["CredentialAccount"][];
+            /** App */
+            app: string;
+            /** Appname */
+            appName: string;
+            /** Clientid */
+            clientId?: string | null;
+            /** Created */
+            created?: string | null;
+            /** Createdby */
+            createdBy?: string | null;
+            /** Fields */
+            fields?: components["schemas"]["CredentialField"][];
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Permissions */
+            permissions: string[];
+            /** Redirecturi */
+            redirectUri?: string | null;
+            /** Settings */
+            settings?: {
+                [key: string]: unknown;
+            };
+            /** Signinagain */
+            signInAgain: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "working" | "not_tested" | "failing";
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "ops_ai" | "own";
+            /** Updated */
+            updated?: string | null;
+        };
         /** AppCredentialDetail */
         AppCredentialDetail: {
             /** Accounts */
@@ -1477,6 +1529,8 @@ export interface components {
             created?: string | null;
             /** Createdby */
             createdBy?: string | null;
+            /** Fields */
+            fields?: components["schemas"]["CredentialField"][];
             /** Id */
             id: string;
             /** Name */
@@ -1485,6 +1539,10 @@ export interface components {
             permissions: string[];
             /** Redirecturi */
             redirectUri?: string | null;
+            /** Settings */
+            settings?: {
+                [key: string]: unknown;
+            };
             /**
              * Status
              * @enum {string}
@@ -1513,6 +1571,27 @@ export interface components {
             name?: string | null;
             /** Scopes */
             scopes?: string[] | null;
+            /** Settings */
+            settings?: {
+                [key: string]: string | null;
+            } | null;
+        };
+        /**
+         * AppCredentialPatchIn
+         * @description An edit of the team's own app credential: any of its name, client id, permissions and settings. Its secret is
+         *     replaced on its own route.
+         */
+        AppCredentialPatchIn: {
+            /** Clientid */
+            clientId?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Scopes */
+            scopes?: string[] | null;
+            /** Settings */
+            settings?: {
+                [key: string]: string | null;
+            } | null;
         };
         /**
          * AppMe
@@ -2052,6 +2131,23 @@ export interface components {
             /** State */
             state?: string | null;
         };
+        /**
+         * CredentialField
+         * @description A setting an app credential may hold: one of a plugin's credential_settings, or a custom app's client field.
+         */
+        CredentialField: {
+            /** Help */
+            help?: string | null;
+            /** Label */
+            label: string;
+            /** Name */
+            name: string;
+            /**
+             * Pem
+             * @default false
+             */
+            pem: boolean;
+        };
         /** CredentialSecretIn */
         CredentialSecretIn: {
             /** Clientsecret */
@@ -2167,6 +2263,15 @@ export interface components {
         /** Envelope[AllowList] */
         Envelope_AllowList_: {
             data: components["schemas"]["AllowList"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[AppCredentialChange] */
+        Envelope_AppCredentialChange_: {
+            data: components["schemas"]["AppCredentialChange"];
             /**
              * Success
              * @constant
@@ -5048,6 +5153,131 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_AppCredentialDetail_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    apps_change_app_credential_route: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credential_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppCredentialPatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AppCredentialChange_"];
                 };
             };
             /** @description Invalid request */

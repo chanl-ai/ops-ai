@@ -392,9 +392,15 @@ class PluginAccounts:
                 details={"field": "kind"},
             )
         plain, secret = self._credentials(plugin, kind, body.credentials)
-        # The account's own settings, those given over those it holds.
+        held = (conn or {}).get("credential_id") if not (conn or {}).get("platform_app") else None
+        chosen = body.credential_id if "credential_id" in body.model_fields_set else held
+        cred = await self.connections.store.credential(who.tenant_id, chosen) if chosen and kind.holds_token else None
+        # The account's own settings, those given over those it holds. On a team's app credential, the settings that
+        # belong to the app's registration are the credential's, read from it, and never copied onto the account.
         mine = {**dict((conn or {}).get("plugin_settings") or {}), **own}
-        merged = self.host.settings(plugin, settings, mine)
+        if cred is not None:
+            mine = {k: v for k, v in mine.items() if k not in c.credential_settings}
+        merged = self.host.settings(plugin, settings, {**mine, **dict(cred.get("settings") or {})} if cred else mine)
         before = cast(dict[str, Any], (conn or {}).get("settings") or {})
         keys: dict[str, Any] = dict(before)
         endpoint = render(m.endpoint, merged)
@@ -403,10 +409,7 @@ class PluginAccounts:
         # The OAuth client is the account's credential (credential_id) or Ops AI's app (platform_app), never a setting.
         keys.pop("clientId", None)
         if kind.holds_token:
-            # A later turn-on that names no credential keeps the one the account has; else Ops AI's app.
-            held = (conn or {}).get("credential_id") if not (conn or {}).get("platform_app") else None
-            chosen = body.credential_id if "credential_id" in body.model_fields_set else held
-            cred = await self.connections.store.credential(who.tenant_id, chosen) if chosen else None
+            # A later turn-on that names no credential keeps the one the account has (`held`); else Ops AI's app.
             if chosen and (cred is None or cred["team_id"] != who.team.id or cred["app_id"] != f"{PLUGIN_APP}{m.id}"):
                 raise ValidationFailed(
                     f"Pick one of the team's app credentials for {m.title}.",
@@ -465,6 +468,13 @@ class PluginAccounts:
             {"revision": int(conn["revision"]) if conn else 1, "settings": keys, "secret_values": secret, **client},
             plugin_settings=mine,
         )
+
+    async def rewrite_addresses(self, who: Caller, plugin: Plugin, connection_id: str) -> None:
+        """Writes a plugin account's sign-in addresses again from its settings as they now are (its app credential's
+        changed), keeping its kind, its credential and every setting it holds."""
+        b = await self.host.bindings.get(who.tenant_id, who.team.id, plugin.manifest.id) or {}
+        settings = self._team_settings(plugin, dict(b.get("settings") or {}), {})
+        await self.keys(who, plugin, connection_id, settings, TeamPluginIn(enabled=True), own={})
 
     def team_values(self, plugin: Plugin, b: dict[str, Any], own: dict[str, Any]) -> dict[str, Any]:
         """The team's settings of the plugin as a person may read them: a secret field never, even as its reference."""

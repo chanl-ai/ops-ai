@@ -927,6 +927,147 @@
         "title": "AppCredential",
         "type": "object"
       },
+      "AppCredentialChange": {
+        "additionalProperties": false,
+        "properties": {
+          "accounts": {
+            "title": "Accounts",
+            "type": "integer"
+          },
+          "accountsList": {
+            "items": {
+              "$ref": "#/components/schemas/CredentialAccount"
+            },
+            "title": "Accountslist",
+            "type": "array"
+          },
+          "app": {
+            "title": "App",
+            "type": "string"
+          },
+          "appName": {
+            "title": "Appname",
+            "type": "string"
+          },
+          "clientId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clientid"
+          },
+          "created": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created"
+          },
+          "createdBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Createdby"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/CredentialField"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "redirectUri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirecturi"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          },
+          "signInAgain": {
+            "title": "Signinagain",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "working",
+              "not_tested",
+              "failing"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "ops_ai",
+              "own"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "updated": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "app",
+          "appName",
+          "type",
+          "permissions",
+          "accounts",
+          "status",
+          "accountsList",
+          "signInAgain"
+        ],
+        "title": "AppCredentialChange",
+        "type": "object"
+      },
       "AppCredentialDetail": {
         "additionalProperties": false,
         "properties": {
@@ -982,6 +1123,13 @@
             ],
             "title": "Createdby"
           },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/CredentialField"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -1007,6 +1155,11 @@
               }
             ],
             "title": "Redirecturi"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
           },
           "status": {
             "enum": [
@@ -1109,6 +1262,29 @@
               }
             ],
             "title": "Scopes"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "maxLength": 16000,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "maxProperties": 20,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settings"
           }
         },
         "required": [
@@ -1116,6 +1292,80 @@
           "clientId"
         ],
         "title": "AppCredentialIn",
+        "type": "object"
+      },
+      "AppCredentialPatchIn": {
+        "additionalProperties": false,
+        "description": "An edit of the team's own app credential: any of its name, client id, permissions and settings. Its secret is\nreplaced on its own route.",
+        "properties": {
+          "clientId": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clientid"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "scopes": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scopes"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "maxLength": 16000,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "maxProperties": 20,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settings"
+          }
+        },
+        "title": "AppCredentialPatchIn",
         "type": "object"
       },
       "AppMe": {
@@ -2717,6 +2967,42 @@
         "title": "CredentialCheckIn",
         "type": "object"
       },
+      "CredentialField": {
+        "additionalProperties": false,
+        "description": "A setting an app credential may hold: one of a plugin's credential_settings, or a custom app's client field.",
+        "properties": {
+          "help": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Help"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pem": {
+            "default": false,
+            "title": "Pem",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "label"
+        ],
+        "title": "CredentialField",
+        "type": "object"
+      },
       "CredentialSecretIn": {
         "additionalProperties": false,
         "properties": {
@@ -3065,6 +3351,25 @@
           "data"
         ],
         "title": "Envelope[AllowList]",
+        "type": "object"
+      },
+      "Envelope_AppCredentialChange_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AppCredentialChange"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[AppCredentialChange]",
         "type": "object"
       },
       "Envelope_AppCredentialDetail_": {
@@ -11562,6 +11867,222 @@
           }
         },
         "summary": "Get App Credential",
+        "tags": [
+          "apps"
+        ],
+        "x-ops-public": "sdk"
+      },
+      "patch": {
+        "description": "Edits the team's own app credential: its name, client id, permissions and the settings its app\nregistration holds (`fields` on its page). A new client id, other permissions or settings mark every account\nsigning in with it to sign in again; `signInAgain` says how many. Team admins only; the secret has its own\nroute.",
+        "operationId": "apps_change_app_credential_route",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "credential_id",
+            "required": true,
+            "schema": {
+              "title": "Credential Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppCredentialPatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AppCredentialChange_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not available on this service yet"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The source could not be reached"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Change App Credential Route",
         "tags": [
           "apps"
         ],

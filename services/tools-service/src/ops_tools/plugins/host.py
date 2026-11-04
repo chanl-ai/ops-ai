@@ -101,6 +101,12 @@ def offered(setting: Setting, value: object) -> bool:
     return bool(same) or (setting.other is not None and typed_host(setting.other, value) is not None)
 
 
+def own_and_registration(conn: Mapping[str, Any] | None) -> dict[str, Any]:
+    """An account's own plugin settings with its app credential's over them (store.connections joins those in as
+    `credential_settings`): what PluginHost.settings takes as the account's layer."""
+    return {**dict((conn or {}).get("plugin_settings") or {}), **dict((conn or {}).get("credential_settings") or {})}
+
+
 def readable(manifest: Manifest, settings: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, bool]]:
     """Settings as a person may read them: each plain value, and for a secret one only whether it is set, never even
     its reference."""
@@ -480,11 +486,12 @@ class PluginHost:
         return tools.get(name) if tools is not None else plugin.manifest.tool(name)
 
     async def own_settings(self, tenant_id: str, connection_id: str | None) -> dict[str, Any]:
-        """The account's own plugin settings: its sign-in address, the instance its token named."""
+        """The account's own plugin settings (its sign-in address, the instance its token named) and the settings of
+        the app credential it signs in with (its registration's), the credential's winning."""
         if self.connections is None or not connection_id:
             return {}
         conn = await self.connections.get(tenant_id, connection_id)
-        return dict((conn or {}).get("plugin_settings") or {})
+        return own_and_registration(conn)
 
     def settings(
         self, plugin: Plugin, team_settings: Mapping[str, Any], own_values: Mapping[str, Any] | None = None
@@ -497,7 +504,9 @@ class PluginHost:
         own = per_account(m)
         merged: dict[str, Any] = {k: s.default for k, s in m.settings.items() if s.default is not None}
         merged |= {k: v for k, v in team_settings.items() if k in m.settings and k not in own}
-        merged |= {k: v for k, v in (own_values or {}).items() if k in own}
+        # The account's own, and the registration's its app credential holds (own_and_registration).
+        mine = own | set(m.connection.credential_settings)
+        merged |= {k: v for k, v in (own_values or {}).items() if k in mine}
         merged |= self.locked_settings(m.id)
         return merged
 
@@ -656,7 +665,7 @@ class PluginHost:
             else None
         )
         module = {**module, "sandbox": bool((conn or {}).get("sandbox"))}
-        own = dict((conn or {}).get("plugin_settings") or {})
+        own = own_and_registration(conn)
         settings = self.settings(plugin, dict(b.get("settings") or {}), own)
         endpoint = render(plugin.manifest.endpoint, settings)
         hosts = hosts_of(plugin.manifest, settings)

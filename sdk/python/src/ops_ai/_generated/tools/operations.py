@@ -46,6 +46,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "apps_change_app_credential_route": {
+        "body": "json",
+        "headers": [],
+        "method": "PATCH",
+        "path": "/v1/app-credentials/{credential_id}",
+        "pathParams": ["credential_id"],
+        "query": [],
+        "stream": False,
+    },
     "apps_check_credential": {
         "body": "json",
         "headers": [],
@@ -700,6 +709,12 @@ class Operations:
             SERVICE, OPERATIONS["apps_get_app_credential"], {"credential_id": credential_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
+    def apps_change_app_credential_route(self, credential_id: str, body: AppCredentialPatchIn) -> AppCredentialChange:
+        "Change App Credential Route"
+        return self._t.call(
+            SERVICE, OPERATIONS["apps_change_app_credential_route"], {"credential_id": credential_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
     def apps_set_app_credential_secret(self, credential_id: str, body: CredentialSecretIn) -> AppCredentialDetail:
         "Set App Credential Secret"
         return self._t.call(
@@ -1165,6 +1180,14 @@ class AsyncOperations:
         "Get App Credential"
         return await self._t.call(
             SERVICE, OPERATIONS["apps_get_app_credential"], {"credential_id": credential_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def apps_change_app_credential_route(
+        self, credential_id: str, body: AppCredentialPatchIn
+    ) -> AppCredentialChange:
+        "Change App Credential Route"
+        return await self._t.call(
+            SERVICE, OPERATIONS["apps_change_app_credential_route"], {"credential_id": credential_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
     async def apps_set_app_credential_secret(self, credential_id: str, body: CredentialSecretIn) -> AppCredentialDetail:
