@@ -111,6 +111,7 @@ make usecase-test UC=uc-094         # another team's file is 404 everywhere
 | The digest is computed by streaming the stored object | A client-declared digest is a claim; dedupe on a claim would let a caller who knows another file's hash obtain it |
 | Dedupe returns the existing file and discards the new upload | Matches the console's `CompletedUpload.deduplicated`. The second upload's name, purpose and retention class are not kept; the caller adds its reference to the returned file |
 | A file a document type is tested against has the purpose `document_type_sample`, shown as "Document type sample" | The documents seed uploaded its samples as case attachments, so Files showed 66 sample PDFs as email attachments. Dedupe keeps the first upload's purpose, so re-running the seed cannot relabel them; `files_0010` gives the purpose to case and chat attachments kept only by `test_set` references (documents-service's sample references). When a sample's bytes are uploaded again with another purpose (a mailed attachment), dedupe gives the file that purpose; an attachment uploaded again as a sample stays the attachment |
+| A chat attachment (`chat_attachment`) takes pdf, docx, xlsx, csv, html, txt and md, up to 10 MB (`PURPOSE_LIMITS`) | The console's chat composer uploads through the same ticket flow as Files, and agents-service reads each attachment's text through documents-service on every turn (`ops_agents.api.chat_attachments`), so a type documents-service cannot parse would reach the agent as an unreadable file. The conversation is recorded on the file as a `chat` reference, so Files shows it and the file is kept while the conversation uses it. Proof: `tests/test_chat_attachment_limits.py`, uc-620 steps 6-8 |
 | `delete` on S3 removes every version of the key | In a versioned bucket (Object Lock requires versioning) a plain delete adds a delete marker and the bytes remain |
 | Retention is never shortened, including S3 governance mode | S3 lets a caller with `s3:BypassGovernanceRetention` shorten governance retention; the service never uses that permission, which keeps the three backends identical |
 
@@ -123,7 +124,7 @@ make usecase-test UC=uc-094         # another team's file is 404 everywhere
 | `retention_classes`, `default_retention_class` | The console's `RetentionClass` list. A WORM class must have a period |
 | `upload_url_seconds` | Upload URL lifetime (default 900) |
 | `max_download_url_seconds` | Longest download link (default 300); must not exceed the store's cap |
-| `max_upload_bytes`, `limits` | Default size cap and per-purpose `PurposeLimit` (size, checked at the ticket, and allowed extensions, checked at completion against the proven type) |
+| `max_upload_bytes`, `limits` | Default size cap and per-purpose `PurposeLimit` (size, checked at the ticket, and allowed extensions, checked at completion against the proven type). The service starts with `PURPOSE_LIMITS` (`ops_files.__main__`) until a tenant saves its own limits in Storage settings |
 | `environment`, `region`, `encryption` | Reported on the admin `StorageLocation` |
 | `S3Config.bucket`, `kms_key_id`, `max_url_seconds` | Bucket (Object Lock enabled), KMS key id or alias, signing cap (at most seven days) |
 | `AzureBlobConfig.container`, `encryption_scope`, `max_url_seconds`, `allow_account_key_sas` | Container (version-level immutability enabled), encryption scope, signing cap, tests-only account-key switch |
@@ -132,7 +133,7 @@ make usecase-test UC=uc-094         # another team's file is 404 everywhere
 
 | Gap | Note |
 |---|---|
-| Callers moved onto the service | Chat attachments (agents-service `activities/attachments.ChatFileStore`, its own `fl_` ids and 90-day retention on the object) and knowledge intake (kb-service `ops_kb.files`) still run their own stores; each moves to `FilesClient` and maps or migrates its existing ids |
+| Callers moved onto the service | Knowledge intake (kb-service `ops_kb.files`) still runs its own store; it moves to `FilesClient` and maps or migrates its existing ids. Chat attachments have moved (see Decisions) |
 | S3 and Azure from settings | `__main__` builds the local backend only; the adapters take S3 and Azure when a caller builds them |
 | Multipart and resumable uploads, Uppy in the console upload component | Not started (design step 6) |
 | Retention run, upload expiry, abort sweep, scan reconciliation loops | Not started; the service has no `loops()` yet |

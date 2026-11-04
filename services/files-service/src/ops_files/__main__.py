@@ -14,7 +14,7 @@ import httpx
 import uvicorn
 
 from ops_files.app import create_files_app
-from ops_files.models import RetentionClass
+from ops_files.models import PurposeLimit, RetentionClass
 from ops_files.scanning import EicarScanner
 from ops_files.secrets import CredentialCipher
 from ops_files.service import FilesConfig
@@ -35,18 +35,33 @@ RETENTION_CLASSES = (
     RetentionClass(id="knowledge", name="Knowledge source", days=None, purposes=["knowledge_source"]),
 )
 
+# What each purpose accepts until a tenant saves its own limits in Storage settings. A chat attachment is read for the
+# agent through documents-service, so it takes only the formats documents-service parses (ops_ingest.parsers.parse).
+PURPOSE_LIMITS = (
+    PurposeLimit(
+        purpose="chat_attachment", allowed_types=["pdf", "docx", "xlsx", "csv", "html", "txt", "md"], max_size_mb=10
+    ),
+)
+
 # This service's own migration chain: it starts only on a database that records the chain's head.
 MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 
 
-def build(settings: Settings) -> TenantFiles:
+def files_config(settings: Settings) -> FilesConfig:
     environment = "dev" if settings.environment == "dev" else "test" if settings.environment == "test" else "prod"
+    return FilesConfig(
+        retention_classes=RETENTION_CLASSES,
+        default_retention_class="standard",
+        limits=PURPOSE_LIMITS,
+        environment=environment,
+    )
+
+
+def build(settings: Settings) -> TenantFiles:
     # Signed local:// URLs never leave this process (browsers use the proxy routes), so a per-process key is enough.
     signing_key = os.urandom(32)
     store = LocalObjectStore(settings.files_dir / "objects", signing_key=signing_key)
-    config = FilesConfig(
-        retention_classes=RETENTION_CLASSES, default_retention_class="standard", environment=environment
-    )
+    config = files_config(settings)
     # Refused here, not in Settings: every service builds Settings, and only files-service scans.
     if settings.files_scanning == "off" and settings.environment != "dev":
         raise ValueError("OPS_FILES_SCANNING=off is for dev only; outside dev name a scanner or the scan hook")
