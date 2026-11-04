@@ -1,4 +1,5 @@
-# The full `make verify`: nightly on main, on release tags, by hand, and from ci.yml when the lockfile or Makefiles change.
+# The full `make verify` in one job: nightly on main, on release tags and by hand. Pull requests run the same checks
+# spread over parallel jobs (ci.yml).
 name: verify-full
 
 on:
@@ -7,7 +8,6 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
-  workflow_call:
 
 permissions:
   contents: read

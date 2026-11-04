@@ -32,6 +32,8 @@ jobs:
       console: ${{ steps.plan.outputs.console }}
       docs: ${{ steps.plan.outputs.docs }}
       scripts: ${{ steps.plan.outputs.scripts }}
+      service_jobs: ${{ steps.plan.outputs.service_jobs }}
+      repo_pool: ${{ steps.plan.outputs.repo_pool }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -79,13 +81,14 @@ jobs:
         run: uv run pytest -q scripts/tests
 
   service:
+    # One job per service; the long suites as test shards beside one job for their lint, types and gates.
     needs: plan
-    if: needs.plan.outputs.full != 'true' && needs.plan.outputs.services != '[]'
+    if: needs.plan.outputs.service_jobs != '[]'
     strategy:
       fail-fast: false
       matrix:
-        service: ${{ fromJSON(needs.plan.outputs.services) }}
-    name: verify ${{ matrix.service }}
+        include: ${{ fromJSON(needs.plan.outputs.service_jobs) }}
+    name: ${{ matrix.service }} ${{ matrix.part }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
@@ -106,7 +109,15 @@ jobs:
           node: ${{ matrix.service == 'agents-service' }}
           browser: ${{ matrix.service == 'agents-service' }}
           infra: "true"
-      - run: make -C services/${{ matrix.service }} verify
+      - env:
+          SERVICE: ${{ matrix.service }}
+          PART: ${{ matrix.part }}
+        run: |
+          case "$PART" in
+            verify|checks) make -C "services/$SERVICE" "$PART" ;;
+            test\ *) make -C "services/$SERVICE" test T="$(python3 scripts/test_shard.py "services/$SERVICE/tests" "${PART#test }")" ;;
+            *) echo "unknown part $PART"; exit 1 ;;
+          esac
 
   package:
     needs: plan
@@ -135,7 +146,7 @@ jobs:
 
   console:
     needs: plan
-    if: needs.plan.outputs.full != 'true' && needs.plan.outputs.console == 'true'
+    if: needs.plan.outputs.console == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -148,28 +159,47 @@ jobs:
 
   docs:
     needs: plan
-    if: needs.plan.outputs.full != 'true' && needs.plan.outputs.docs == 'true'
+    if: needs.plan.outputs.docs == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      # The workspace's Python: the examples check reads YAML through it (make/docs.mk).
+      - uses: ./.github/actions/setup
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
       - run: make -s docs-verify
 
-  full:
+  repo:
+    # A full plan's checks outside the services: the rest of python-verify (its other suites and repo-wide checks),
+    # sdk-verify and changelog-verify; with the service, console and docs jobs, everything `make verify` runs.
     needs: plan
     if: needs.plan.outputs.full == 'true'
-    uses: ./.github/workflows/verify-full.yml
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env: { POSTGRES_USER: ops, POSTGRES_PASSWORD: ops, POSTGRES_DB: ops_runtime }
+        ports: ["5477:5432"]
+        options: --health-cmd "pg_isready -U ops -d ops_runtime" --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The trailer checks read the history of the baseline files.
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          node: "true"
+          infra: "true"
+      - run: make python-verify VERIFY_POOL="${{ needs.plan.outputs.repo_pool }}"
+      - run: make sdk-verify changelog-verify
 
   result:
     # One status for branch protection; a job the plan skipped counts as passed.
     if: always()
-    needs: [plan, checks, service, package, console, docs, full]
+    needs: [plan, checks, service, package, console, docs, repo]
     runs-on: ubuntu-24.04
     steps:
       - env:

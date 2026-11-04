@@ -4,7 +4,7 @@
 # while ops_tools reads the agents catalogue (docs/architecture/service-map.md).
 STACK_SVC := tools
 include ../../make/service-common.mk
-.PHONY: install run test test-gateway lint typecheck verify migrate clean openapi openapi-check
+.PHONY: install run test test-gateway lint typecheck verify checks migrate clean openapi openapi-check
 
 PY_DIRS := src tests migrations scripts
 
@@ -23,15 +23,17 @@ lint: ## ruff format check and lint
 typecheck: ## Strict pyright
 	uv run pyright $(PY_DIRS)
 
-test: ## Registry and API tests on the test database (starts compose)
+test: ## Registry and API tests on the test database (starts compose); T= runs only those files
 	$(MAKE) -C ../agents-service db-up
-	$(TEST_DB) uv run pytest
+	$(TEST_DB) uv run pytest $(T)
 
 test-gateway: ## Gateway tests, still in agents-service/tests/gateway, which agents-service verify also runs
 	$(MAKE) -C ../agents-service db-up
 	cd ../agents-service && $(TEST_DB) uv run pytest tests/gateway
 
-verify: lint typecheck test openapi-check ## lint, typecheck, test and the OpenAPI gate
+verify: checks test ## lint, typecheck, test and the OpenAPI gate
+
+checks: lint typecheck openapi-check ## Everything verify runs but the tests; CI runs it beside the test shards
 
 openapi-check: ## openapi.json matches the app, every route named, tagged and typed (or on the shrinking allowlist)
 	uv run python scripts/check_openapi.py
