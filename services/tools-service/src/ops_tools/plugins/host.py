@@ -28,7 +28,7 @@ from ops_plugin_sdk.versions import headers_of as declared_headers
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
 
-from ..connections.records import account_for
+from ..connections.records import account_for, default_sign_in
 from ..egress import EgressDenied, EgressPolicy, for_tenant
 from ..modules.seed import blank
 from ..store.connections import ConnectionStore, plugin_app, plugin_of
@@ -560,8 +560,7 @@ class PluginHost:
             return None
         found = await self.connections.accounts(tenant_id, team_id, plugin_app(plugin.manifest.id))
         ids = [str(a["id"]) for a in found if not a.get("sandbox")]
-        mine = [t for t in await self.connections.own_sign_ins(tenant_id, person, ids) if t["refused_at"] is None]
-        pick = next((t for t in mine if t["pinned"]), None) or (mine[0] if mine else None)
+        pick = default_sign_in(await self.connections.own_sign_ins(tenant_id, person, ids))
         return str(pick["connection_id"]) if pick is not None else None
 
     async def for_call(

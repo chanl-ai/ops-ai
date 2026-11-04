@@ -690,8 +690,10 @@ try {
           await connect.waitFor({ timeout: 60_000 });
           const [popup] = await Promise.all([james.waitForEvent('popup', { timeout: 60_000 }), connect.click()]);
           await allow(popup, 'james.eu');
+          // A person's own sign-ins, and which one their calls use, are on the People tab.
+          await james.getByTestId('app-tab-people').click();
           await james.getByTestId('account-pin-Person desk').waitFor({ timeout: 60_000 });
-          await shoot(james, 'app-accounts-mine');
+          await shoot(james, 'app-people-mine');
           const ask = async () => {
             await james.goto(`${consoleUrl}/chat?agent=${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
             const box = james.getByLabel('Message');
@@ -704,6 +706,7 @@ try {
           };
           const newest = await ask();
           await james.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await james.getByTestId('app-tab-people').click();
           await james.getByTestId('account-pin-Person desk').click();
           await james.getByTestId('account-pin-EU desk').waitFor({ timeout: 60_000 });
           const pinned = await ask();

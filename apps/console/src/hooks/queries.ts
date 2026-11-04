@@ -87,6 +87,15 @@ function useWrite<A, R>(fn: (a: A) => Promise<R>, roots: string[]) {
 export const useCreateAgent = () => useWrite((i: AgentInput) => api.agents.create(i), ['agents', 'overview']);
 export const useUpdateAgent = (id: string) =>
   useWrite((p: AgentPatch) => api.agents.update(id, p), ['agents', 'agent', 'tools', 'kbs']);
+/**
+ * Grants one tool to an agent from the tool's side: the same save as the agent page's Grant tools, with the tool added
+ * to the agent's grants, so it lands as a new draft version. The app page's and Tools page's Used by refresh too.
+ */
+export const useGrantToolToAgent = () =>
+  useWrite(async ({ agentId, toolId }: { agentId: string; toolId: string }) => {
+    const agent = await api.agents.get(agentId);
+    return agent.toolIds.includes(toolId) ? agent : api.agents.update(agentId, { toolIds: [...agent.toolIds, toolId] });
+  }, ['agents', 'agent', 'tools', 'apps']);
 export const useDeleteAgent = () => useWrite((id: string) => api.agents.remove(id), ['agents', 'overview']);
 export const useAgentVersions = (id: string) => useTeamQuery({ queryKey: qk.agentVersions(id), queryFn: () => api.agents.versions(id) });
 export const useAgentRuns = (id: string) => useTeamQuery({ queryKey: qk.agentRuns(id), queryFn: () => api.agents.runs(id) });

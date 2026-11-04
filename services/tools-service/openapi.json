@@ -756,11 +756,6 @@
             "title": "Name",
             "type": "string"
           },
-          "pinned": {
-            "default": false,
-            "title": "Pinned",
-            "type": "boolean"
-          },
           "sandbox": {
             "title": "Sandbox",
             "type": "boolean"
@@ -1087,6 +1082,17 @@
           "accountName": {
             "title": "Accountname",
             "type": "string"
+          },
+          "default": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default"
           },
           "mine": {
             "title": "Mine",

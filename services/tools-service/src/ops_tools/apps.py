@@ -25,7 +25,15 @@ from ops_service_kit.http import Envelope, Out, ok
 
 from .auth.kinds import BY_ID, kind_of
 from .callers import caller_in
-from .connections.records import CONNECTED, account_state, person_state, shown_status, state_reason, team_test
+from .connections.records import (
+    CONNECTED,
+    account_state,
+    default_sign_in,
+    person_state,
+    shown_status,
+    state_reason,
+    team_test,
+)
 from .connections.schemas import AccountDetail, AccountIn, AccountTest, ConnectionHealth, NewAppIn
 from .connections.service import ConnectionService, own_key
 from .defaults import ensure_defaults
@@ -217,8 +225,6 @@ class AppAccount(Out):
     # Whether the caller has signed in to this account themselves, and as whom.
     mine: bool = False
     account: str | None = None
-    # The caller's own default among their sign-ins to the app (c-608).
-    pinned: bool = False
     # The last test, run right after each sign-in: the caller's own on an account each person signs in to, else the
     # team account's. A failed one warns on the row; the account stays connected.
     test: AccountTest | None = None
@@ -241,6 +247,9 @@ class AppPerson(Out):
     state: Literal["connected", "expired", "refused"]
     # The test run right after the sign-in failed: the system's words. The sign-in stays connected.
     test_failed: str | None = None
+    # Whether calls naming no account use this sign-in for the person: their pinned one, else their newest the system
+    # has not refused. None while they hold only one they could use, or on a sandbox account, since nothing is chosen.
+    default: bool | None = None
 
 
 class AppPage(Out):
@@ -764,15 +773,31 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
 
 
 async def _people(apps: Apps, who: Caller, accounts: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Each person's own sign-in on the app's accounts, joined to the account it is on, with its state."""
+    """Each person's own sign-in on the app's accounts, joined to the account it is on, with its state and whether it
+    is the person's default among several."""
     names = {str(a["id"]): str(a["name"]) for a in accounts}
     mine = own_key(who)
     everyone = apps.connections.may_manage(who)
     now = apps.connections.clock()
     out: list[dict[str, Any]] = []
-    for t in await apps.connections.store.sign_ins(who.tenant_id, list(names)):
-        if not everyone and t["person_id"] != mine:
-            continue
+    sandboxes = {str(a["id"]) for a in accounts if a.get("sandbox")}
+    rows = [
+        t
+        for t in await apps.connections.store.sign_ins(who.tenant_id, list(names))
+        if everyone or t["person_id"] == mine
+    ]
+    defaults: dict[str, str | None] = {}
+    for person in {str(t["person_id"]) for t in rows}:
+        # Newest first and then by account, the order the call-time pick reads them in (`own_sign_ins`).
+        own = sorted(
+            (t for t in rows if t["person_id"] == person and str(t["connection_id"]) not in sandboxes),
+            key=lambda t: str(t["connection_id"]),
+        )
+        own.sort(key=lambda t: t["refreshed_at"], reverse=True)
+        live = [t for t in own if t.get("refused_at") is None]
+        pick = default_sign_in(own) if len(live) > 1 else None
+        defaults[person] = str(pick["connection_id"]) if pick is not None else None
+    for t in rows:
         test = cast(dict[str, Any], t.get("test") or {})
         at = t.get("refreshed_at")
         out.append(
@@ -785,6 +810,9 @@ async def _people(apps: Apps, who: Caller, accounts: list[dict[str, Any]]) -> li
                 "since": at.isoformat() if at else None,
                 "state": person_state(t, now),
                 "testFailed": str(test.get("message") or "no reason given") if test.get("status") == "failed" else None,
+                "default": None
+                if defaults[str(t["person_id"])] is None or str(t["connection_id"]) in sandboxes
+                else defaults[str(t["person_id"])] == str(t["connection_id"]),
             }
         )
     return out
@@ -820,7 +848,6 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
                 "stateReason": state[2],
                 "mine": str(a["id"]) in signed,
                 "account": (signed.get(str(a["id"])) or {}).get("account"),
-                "pinned": bool((signed.get(str(a["id"])) or {}).get("pinned")),
                 # On an account each person signs in to, the caller's own sign-in's test; else the team account's.
                 "test": own.get("test") if own is not None else team_test(a, team_tokens.get(str(a["id"]))),
                 "health": a.get("health"),

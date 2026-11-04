@@ -105,6 +105,13 @@ def person_state(token: dict[str, Any], now: datetime) -> str:
     return CONNECTED
 
 
+def default_sign_in(mine: Sequence[Row]) -> Row | None:
+    """A person's default among their own sign-ins to one app's accounts, given newest first with sandbox accounts
+    left out: the one they pinned, else the newest the system has not refused. Calls naming no account use it."""
+    live = [t for t in mine if t.get("refused_at") is None]
+    return next((t for t in live if t.get("pinned")), None) or (live[0] if live else None)
+
+
 def team_test(conn: dict[str, Any], team_token: dict[str, Any] | None) -> dict[str, Any] | None:
     """The team account's last test: kept on its token row after a sign-in, else (a key or password, which has no
     token) the account's last test made as the team."""

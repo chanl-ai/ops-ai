@@ -56,6 +56,8 @@ async def test_people_carry_their_state_and_account_and_a_builder_reads_only_the
     assert (rows["usr_priya"]["state"], rows["usr_james"]["state"]) == ("refused", "expired"), rows
     assert rows["usr_james"]["account"] == "usr_james@desk.example" and rows["usr_james"]["accountId"] == default
     assert rows["usr_priya"]["mine"] and not rows["usr_james"]["mine"]
+    # One sign-in each: nothing to choose, so neither row is marked as a default.
+    assert (rows["usr_priya"]["default"], rows["usr_james"]["default"]) == (None, None), rows
 
     mine = await _people(world, person(tenant, *BUILDER))
     assert [p["personId"] for p in mine] == ["usr_james"], mine

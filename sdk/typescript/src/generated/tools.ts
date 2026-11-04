@@ -1385,11 +1385,6 @@ export interface components {
             mine: boolean;
             /** Name */
             name: string;
-            /**
-             * Pinned
-             * @default false
-             */
-            pinned: boolean;
             /** Sandbox */
             sandbox: boolean;
             /**
@@ -1503,6 +1498,8 @@ export interface components {
             accountId: string;
             /** Accountname */
             accountName: string;
+            /** Default */
+            default?: boolean | null;
             /** Mine */
             mine: boolean;
             /** Personid */

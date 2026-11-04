@@ -105,6 +105,7 @@ class AppPerson(TypedDict, closed=True):
     account: NotRequired[str | None]
     accountId: str
     accountName: str
+    default: NotRequired[bool | None]
     mine: bool
     personId: str
     since: NotRequired[str | None]
@@ -1176,7 +1177,6 @@ class AppAccount(TypedDict, closed=True):
     id: str
     mine: NotRequired[bool]
     name: str
-    pinned: NotRequired[bool]
     sandbox: bool
     state: Literal["connected", "not_signed_in", "expired", "refused", "revoked"]
     stateReason: NotRequired[str | None]

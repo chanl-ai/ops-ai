@@ -8,7 +8,6 @@ import { toast } from 'sonner';
 
 import type { ColumnDef } from '@tanstack/react-table';
 
-import { AppsTabs } from '@/components/connections/apps-tabs';
 import { ConnectWindow, connectsInWindow } from '@/components/connections/connect-window';
 import { HealthLine } from '@/components/connections/health-line';
 import { AppStateBadge } from '@/components/connections/systems-grid';
@@ -17,6 +16,7 @@ import { ConnectSystemDialog, type ConnectMode } from '@/components/connections/
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { ToolCallsView } from '@/components/tools/tool-calls-view';
+import { GrantToAgentDialog } from '@/components/tools/grant-to-agent-dialog';
 import { UsedByCell } from '@/components/tools/used-by';
 import { ListEmpty } from '@/components/shared/query-states';
 import { useSignInWindow } from '@/components/connections/sign-in';
@@ -53,6 +53,7 @@ import {
 } from '@/hooks/systems-queries';
 import { useCopyResource, usePluginDocumentTypes, usePluginTemplates } from '@/hooks/plugin-update-queries';
 import { useFlag } from '@/hooks/flag-queries';
+import { useCanBuild } from '@/hooks/me-queries';
 import type { Kinds } from '@/lib/connect-plan';
 import { plural, shortDate } from '@/lib/format';
 
@@ -180,9 +181,7 @@ export function AppPageView({ appId }: { appId: string }) {
       title={card.name}
       description={`${plural(card.toolsCount, 'tool')}${card.kindLabel ? ` · ${card.kindLabel}` : ''}`}
       breadcrumbs={[{ label: 'Apps', href: '/integrations' }, { label: card.name }]}
-      // The Apps menu's tabs and a way back to the catalog, as the app page's frame draws them (Apps (final) group 4).
       backHref="/integrations"
-      tabs={<AppsTabs />}
       badge={<AppStateBadge card={card} testId="app-status" />}
       actions={
         builtIn || card.appState === 'removed' ? undefined : (
@@ -417,7 +416,6 @@ function AccountsTab({
 }) {
   const { card, connection: conn } = app;
   const accounts = app.accounts ?? [];
-  const pin = usePinDefault();
   const failure = card.appState === 'test_failed' ? (card.appStateReason ?? 'no reason given') : null;
   // A row's failed test: the account's own when the answer carries it, else the app's for its default account.
   const testFailed = (a: Account) => (a.test?.status === 'failed' ? a.test.message || 'no reason given' : a.default ? failure : null);
@@ -444,7 +442,6 @@ function AccountsTab({
                     </Badge>
                   )}
                   <AccountState status={accountStatus(a)} />
-                  {a.pinned && accounts.length > 1 && <Badge variant="outline">Your default</Badge>}
                 </span>
               }
               description={
@@ -474,16 +471,6 @@ function AccountsTab({
                     <ExternalLink />
                     Sign in
                   </Button>
-                ) : a.mine && !a.pinned && accounts.length > 1 ? (
-                  <LoadingButton
-                    size="sm"
-                    variant="outline"
-                    isLoading={pin.isPending && pin.variables?.accountId === a.id}
-                    onClick={() => pin.mutate({ appId: card.id, accountId: a.id }, { onError: (e) => toast.error('Couldn’t make it your default', { description: e.message }) })}
-                    data-testid={`account-pin-${a.name}`}
-                  >
-                    Make my default
-                  </LoadingButton>
                 ) : !a.mine && signsIn ? (
                   <Button size="sm" variant="outline" onClick={() => onSignIn('self', a.id)} data-testid={`account-connect-${a.name}`}>
                     <ExternalLink />
@@ -507,11 +494,13 @@ const PERSON_STATE = {
 
 /**
  * People: each person who signed in with their own login, on which account, when, and its state, as the API joins
- * them (a team admin reads everyone's, anyone else their own). The caller connects or disconnects their own here.
+ * them (a team admin reads everyone's, anyone else their own). The caller connects or disconnects their own here and,
+ * holding several, picks which one their calls use when a step names no account.
  */
 function PeopleTab({ app, signsIn, onConnectMine, starting }: { app: AppData; signsIn: boolean; onConnectMine: () => void; starting: boolean }) {
   const { card, connection: conn, me } = app;
   const signOut = useSignOutMine();
+  const pin = usePinDefault();
   const people = app.people ?? [];
   // On an app only each person signs in to, the header carries Connect my account; here it is the second way in.
   const connectsHere = signsIn && !me.connected && conn?.signIn !== 'person';
@@ -548,6 +537,7 @@ function PeopleTab({ app, signsIn, onConnectMine, starting }: { app: AppData; si
                   <Badge variant="outline" className={PERSON_STATE[p.state].className}>
                     {PERSON_STATE[p.state].label}
                   </Badge>
+                  {p.default && <Badge variant="outline">{p.mine ? 'Your default' : 'Default'}</Badge>}
                 </span>
               }
               description={
@@ -559,15 +549,29 @@ function PeopleTab({ app, signsIn, onConnectMine, starting }: { app: AppData; si
               }
               trailing={
                 p.mine && conn ? (
-                  <LoadingButton
-                    size="sm"
-                    variant="ghost"
-                    isLoading={signOut.isPending}
-                    onClick={() => signOut.mutate(p.accountId, { onError: (e) => toast.error('Couldn’t disconnect', { description: e.message }) })}
-                    data-testid={p.accountId === conn.id ? 'app-disconnect' : `person-disconnect-${p.accountName}`}
-                  >
-                    Disconnect
-                  </LoadingButton>
+                  <span className="flex flex-wrap gap-2">
+                    {/* One of several of the caller's own sign-ins that their calls do not use yet. */}
+                    {p.default === false && p.state === 'connected' && (
+                      <LoadingButton
+                        size="sm"
+                        variant="outline"
+                        isLoading={pin.isPending && pin.variables?.accountId === p.accountId}
+                        onClick={() => pin.mutate({ appId: card.id, accountId: p.accountId }, { onError: (e) => toast.error('Couldn’t make it your default', { description: e.message }) })}
+                        data-testid={`account-pin-${p.accountName}`}
+                      >
+                        Make my default
+                      </LoadingButton>
+                    )}
+                    <LoadingButton
+                      size="sm"
+                      variant="ghost"
+                      isLoading={signOut.isPending && signOut.variables === p.accountId}
+                      onClick={() => signOut.mutate(p.accountId, { onError: (e) => toast.error('Couldn’t disconnect', { description: e.message }) })}
+                      data-testid={p.accountId === conn.id ? 'app-disconnect' : `person-disconnect-${p.accountName}`}
+                    >
+                      Disconnect
+                    </LoadingButton>
+                  </span>
                 ) : undefined
               }
             />
@@ -582,7 +586,7 @@ function PeopleTab({ app, signsIn, onConnectMine, starting }: { app: AppData; si
   );
 }
 
-type AppTool = AppData['tools'][number];
+type AppTool = AppData['tools'][number] & { onGrant?: (t: AppTool) => void };
 
 const TOOL_COLUMNS: ColumnDef<AppTool>[] = [
   {
@@ -598,7 +602,8 @@ const TOOL_COLUMNS: ColumnDef<AppTool>[] = [
     accessorKey: 'access',
     header: ({ column }) => <DataTableColumnHeader column={column} title="Access" />,
     cell: ({ row }) => <Badge variant={row.original.access === 'write' ? 'default' : 'secondary'}>{row.original.access === 'write' ? 'Write' : 'Read'}</Badge>,
-  },  {
+  },
+  {
     id: 'usedBy',
     header: 'Used by',
     cell: ({ row }) =>
@@ -610,9 +615,24 @@ const TOOL_COLUMNS: ColumnDef<AppTool>[] = [
         </span>
       ),
   },
+  {
+    id: 'grant',
+    cell: ({ row }) =>
+      row.original.onGrant ? (
+        <Button size="sm" variant="outline" onClick={() => row.original.onGrant?.(row.original)} data-testid={`app-tool-grant-${row.original.name}`}>
+          <Bot />
+          Grant to agent
+        </Button>
+      ) : null,
+    enableHiding: false,
+  },
 ];
 
+/** The app's tools by title, who uses each, and Grant to agent for someone who builds agents. */
 function ToolsTab({ app }: { app: AppData }) {
+  const canBuild = useCanBuild();
+  const [granting, setGranting] = React.useState<AppTool | null>(null);
+  const rows = React.useMemo(() => app.tools.map((t): AppTool => ({ ...t, onGrant: canBuild ? setGranting : undefined })), [app.tools, canBuild]);
   return (
     <div className="flex flex-col gap-2" data-testid="app-tools">
       <div>
@@ -623,12 +643,13 @@ function ToolsTab({ app }: { app: AppData }) {
       </div>
       <DataTableWithViews
         columns={TOOL_COLUMNS}
-        data={app.tools}
+        data={rows}
         getRowId={(t) => t.name}
         searchColumn="title"
         searchPlaceholder="Filter tools"
         emptyState={<ListEmpty icon={KeyRound} noun="tools" filtered={false} description={`${app.card.name} has no tools.`} />}
       />
+      <GrantToAgentDialog tool={granting && { id: granting.name, title: granting.title }} onOpenChange={(o) => !o && setGranting(null)} />
     </div>
   );
 }

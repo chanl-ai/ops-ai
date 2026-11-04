@@ -856,7 +856,8 @@ class ConnectionStore:
 
     async def sign_ins(self, tenant_id: str, connection_ids: list[str]) -> list[Row]:
         """Every person's own sign-in on these connections (an app's accounts), newest first, with what its state is
-        read from: whether the system refused it, and whether it can renew once it ends. The team's row is not one."""
+        read from: whether the system refused it, and whether it can renew once it ends, and whether the person pinned
+        it. The team's row is not one."""
         if not connection_ids:
             return []
         t = connection_tokens.c
@@ -865,6 +866,7 @@ class ConnectionStore:
                 t.connection_id,
                 t.person_id,
                 t.account,
+                t.pinned,
                 t.refreshed_at,
                 t.expires_at,
                 t.refused_at,

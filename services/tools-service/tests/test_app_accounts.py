@@ -165,15 +165,17 @@ async def test_a_persons_call_uses_the_account_they_pinned_else_their_newest_sig
         assert r is not None and r.module is not None
         return str(r.module["connection_id"])
 
+    async def shown() -> dict[str, bool | None]:
+        """Her rows on the People tab: which one the page names as her default."""
+        page = (await world.client.get(f"/v1/apps/plugin:{ID}", headers=admin(tenant))).json()["data"]
+        return {p["accountName"]: p["default"] for p in page["people"] if p["mine"]}
+
     assert await used() == second  # the newest of her sign-ins
+    assert await shown() == {"Desk": False, "EU org": True}
     pinned = await world.client.put(f"/v1/apps/{APP}/accounts/{first}/default", headers=admin(tenant))
     assert pinned.status_code == 200, pinned.text
     assert await used() == first
-    page = (await world.client.get(f"/v1/apps/plugin:{ID}", headers=admin(tenant))).json()["data"]
-    assert [(a["name"], a["mine"], a["pinned"]) for a in page["accounts"]] == [
-        ("Desk", True, True),
-        ("EU org", True, False),
-    ]
+    assert await shown() == {"Desk": True, "EU org": False}
 
 
 async def test_with_several_accounts_off_a_second_account_cannot_be_made_or_named(world: World, tenant: str) -> None:
