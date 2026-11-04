@@ -49,9 +49,14 @@ def test_an_isolated_stack_reaches_its_own_models_service_whatever_the_env_file_
             check=True,
         ).stdout
 
-    agents, models, tools = cmd("agents"), cmd("models"), cmd("tools")
+    agents, models = cmd("agents"), cmd("models")
     assert "OPS_MODELS_URL=http://127.0.0.1:9730" in agents, agents
     assert "OPS_MODELS_FAKE_OPENAI_URL=http://127.0.0.1:9746/v1" in models, models
+    # Before its fake bank has written a certificate, tools-service gets no CA file, so it still starts.
+    assert "OPS_EGRESS_CA_FILE" not in cmd("tools")
+    (tmp_path / ".run/fake-bank").mkdir(parents=True)
+    (tmp_path / ".run/fake-bank/bank.crt").write_text("certificate\n")
+    tools = cmd("tools")
     assert f"OPS_EGRESS_CA_FILE={tmp_path}/.run/fake-bank/bank.crt" in tools, tools
 
 
