@@ -43,7 +43,7 @@ use case or test; Partial names what runs and what does not; Planned means desig
 | Team mailboxes over IMAP, Gmail or Microsoft 365, with replies over SMTP, Microsoft Graph or a mail API, each message read once | Built |
 | A REST API for other systems, with API keys scoped to a team | Built |
 | A task API: another system opens a typed human task and reads the decision | Built |
-| AI assistants calling the team's tools over MCP | Partial: read tools in the test environment |
+| AI assistants calling the team's tools over MCP | Partial: read tools, as test runs that use an app's sandbox account when it has one |
 | Webhooks to tell another system a run finished or is waiting | Planned: callers poll today |
 
 ## Files and documents
@@ -65,7 +65,7 @@ use case or test; Partial names what runs and what does not; Planned means desig
 | Capability | Status |
 |---|---|
 | Tool modules from OpenAPI 3.0 and 3.1, from an MCP server, or written in the console; versions and a Security review for major changes | Built |
-| Connections per test and production: API key, basic, bearer, OAuth client credentials, OAuth authorization code, an app's signed client assertion in place of a secret, a signed service-account grant, client certificate | Built |
+| App accounts, with a sandbox account for test runs: API key, basic, bearer, OAuth client credentials, OAuth authorization code, an app's signed client assertion in place of a secret, a signed service-account grant, client certificate | Built |
 | Each person connecting their own Account of an App, used by the Tools they run and the agents acting for them | Built |
 | The Apps menu: the catalog, Connect in a small window, each App's page with its Accounts, Tools, Resources, Secrets, Usage and Settings, Credentials, My accounts, and Turn off ([Apps](apps.md)) | Built |
 | A run waiting for a person's own Account is a Human Task: Connect my account, or Run as the team account | Built |
