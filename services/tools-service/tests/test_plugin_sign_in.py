@@ -65,6 +65,8 @@ class System:
     expired: set[str] = field(default_factory=set[str])
     # The certificate listener refuses the handshake, as one does when no client certificate is presented.
     refuse_handshake: bool = False
+    # The system itself is down: every read but the login host's answers 503.
+    down: bool = False
 
     def expire(self) -> None:
         self.expired |= set(self.issued)
@@ -81,6 +83,8 @@ class System:
         if request.url.host == "login.multi.test" and request.url.path.endswith("/token"):
             return self._token(request)
         self.seen.append(request)
+        if self.down:
+            return httpx.Response(503, json={"error": "unavailable"})
         method = request.url.path.strip("/").split("/", 1)[0]
         if method == "cert" and self.refuse_handshake:
             raise httpx.ConnectError("handshake refused") from ssl.SSLError(1, "tlsv13 alert certificate required")

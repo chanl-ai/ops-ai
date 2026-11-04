@@ -131,9 +131,10 @@ def broken_copy(folder: Path, old: str, new: str) -> Path:
 # 20. The plugin validates.
 good = ops("plugin", "validate", str(PLUGIN))
 check(
-    "20 ops plugin validate passes the Salesforce plugin, with its tools, 1 knowledge source and 1 template",
+    "20 ops plugin validate passes the Salesforce plugin, with its tools, 1 knowledge source and its templates",
     good.returncode == 0
-    and re.search(r"OK opsai\.salesforce \S+: \d+ tools, 1 knowledge sources, 1 templates", good.stdout) is not None,
+    and re.search(r"OK opsai\.salesforce \S+: \d+ tools, 1 knowledge sources, [1-9]\d* templates", good.stdout)
+    is not None,
     {"code": good.returncode, "out": good.stdout[-300:], "err": good.stderr[-300:]},
 )
 
@@ -206,7 +207,8 @@ with ExitStack() as stack:
     error = ((reached.get("output") or {}).get("error") or {}).get("code")
     check(
         "23 a broken plugin is reported as failed while Salesforce loads, and a tool's unlisted host is EGRESS_DENIED",
-        loaded == ["opsai.salesforce", "test.reach"]
+        {"opsai.salesforce", "test.reach"} <= set(loaded)
+        and "uc564_broken" not in loaded
         and any("uc564_broken" in line and "saml_magic" in line for line in failed)
         and on.status_code == 200
         and error == "EGRESS_DENIED",

@@ -307,6 +307,19 @@ try {
         // action; a category narrows it, and the whole card opens the app's page.
         await step('42 Apps lists Connected then Available, each card with its state and one action; a category narrows it; the card opens the app’s page', async () => {
           // A second installed app, not turned on for the team: Person key desk, in the Service desk category.
+          // Step 40's passing re-test went to the API, not through the console, so the reads the console saved before it
+          // (for 30 seconds) are dropped first, as signing out does.
+          await page.evaluate(() => new Promise((done) => {
+            const open = indexedDB.open('ops-console');
+            open.onsuccess = () => {
+              const db = open.result;
+              if (!db.objectStoreNames.contains('queries')) return done(null);
+              const tx = db.transaction('queries', 'readwrite');
+              tx.objectStore('queries').clear();
+              tx.oncomplete = tx.onerror = () => done(null);
+            };
+            open.onerror = () => done(null);
+          }));
           await page.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await page.getByTestId('apps-connected').waitFor({ timeout: 60_000 });
           await page.getByTestId('apps-available').waitFor({ timeout: 60_000 });
@@ -386,14 +399,19 @@ try {
         // Tools lists single tools, joined by the API: each with its app, kind, status and who uses it.
         await step('46 Tools lists Read a record as one row with its app, kind, status and Used by Ticket desk; its page says the same', async () => {
           await james.goto(`${consoleUrl}/tools`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          // The installed plugins' tools fill more than a page, so the row is found as a person finds it: by search.
+          await james.getByPlaceholder('Search tools or apps…').fill('Read a record');
           const row = james.getByTestId('tool-row-person_get_record');
-          await row.waitFor({ timeout: 60_000 });
+          await row.waitFor({ timeout: 60_000 }).catch(async (e) => {
+            const shown = ((await james.locator('main table').innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ').slice(0, 800);
+            throw new Error(`${e.message} The table read: ${shown}`);
+          });
           const line = ((await james.locator('tr', { has: row }).innerText()) ?? '').replace(/\s+/g, ' ');
           const tabs = (await james.getByTestId(/^tools-tab-/).allInnerTexts()).map((t) => t.trim());
           await shoot(james, 'tools-single');
           await row.click();
           await james.waitForURL((u) => u.pathname.endsWith('/operations/person_get_record'), { timeout: 60_000 });
-          const usedBy = await james.locator('#tool-used-by').waitFor({ timeout: 60_000 }).then(async () => ((await james.locator('#tool-used-by').innerText()) ?? '').replace(/\s+/g, ' '), () => '');
+          const usedBy = await james.locator('#tool-used-by').getByText('Ticket desk').first().waitFor({ timeout: 60_000 }).catch(() => {}).then(async () => ((await james.locator('#tool-used-by').innerText()) ?? '').replace(/\s+/g, ' '), () => '');
           check(
             '46 Tools lists Read a record as one row with its app, kind, status and Used by Ticket desk; its page says the same',
             tabs.join() === 'All tools,Custom tools,Logs' && /Read a record/.test(line) && /Person desk/.test(line) && /App tool/.test(line) && /Ready/.test(line) && /Ticket desk/.test(line) && /Ticket desk/.test(usedBy),
@@ -494,7 +512,7 @@ try {
             const want = c.appState;
             if (shown !== want) out.disagree.push({ id: c.id, state: c.state, shown, want });
           }
-          // Connect off for a non-admin says why.
+          // A non-admin gets no dead Connect button: each card they may not connect says why instead.
           out.connectOff = await james.locator('main button[data-testid^="connect-"]:disabled').count();
           out.connectWhy = await james.locator('main [data-testid^="connect-"][data-testid$="-why"]').count();
           // A list that fails offers Try again at once, not a skeleton.
@@ -535,24 +553,26 @@ try {
           await dark.close();
           check(
             '7c the grid and app page agree on Connected; errors offer Try again; no old words, no 404s, dark follows the system, tabs scroll',
-            out.disagree.length === 0 && out.connectWhy === out.connectOff && out.appsRetry && out.credsRetry && out.oldWords.length === 0 && out.updateNotFound === 0 && out.tabsScroll && out.settingsReached === 'active' && out.dark,
+            out.disagree.length === 0 && out.connectOff === 0 && out.connectWhy >= 1 && out.appsRetry && out.credsRetry && out.oldWords.length === 0 && out.updateNotFound === 0 && out.tabsScroll && out.settingsReached === 'active' && out.dark,
             out,
           );
         }, james);
 
         await step('8 each Built in app opens the page that manages it', async () => {
-          await page.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          await page.getByTestId(`system-${APP}`).waitFor({ timeout: 90_000 });
-          // The Apps grid leaves the built-in apps out (they have their own menu); include=builtin lists them.
+          // The Apps grid leaves the built-in apps out (they have their own menu); include=builtin lists them with the
+          // page each one opens, and that page loads.
           const cards = ((await call(tools, 'GET', '/v1/apps?include=builtin', priya)).data ?? []).filter((c) => c.kind === 'builtin');
           const opened = {};
-          for (const c of cards) opened[c.id] = await page.getByTestId(`card-link-${c.id}`).getAttribute('href');
-          await page.getByRole('button', { name: 'Built in', exact: true }).click().catch(() => {});
-          await page.waitForTimeout(300);
-          await shoot(page, 'catalog-built-in');
+          for (const c of cards) {
+            if (!String(c.href ?? '').startsWith('/')) { opened[c.id] = false; continue; }
+            const res = await page.goto(`${consoleUrl}${c.href}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+            const missing = await page.getByText(/page could not be found|^404$/i).count();
+            opened[c.id] = (res?.status() ?? 0) < 400 && missing === 0;
+          }
+          await shoot(page, 'built-in-page');
           check(
             '8 each Built in app opens the page that manages it',
-            cards.length >= 1 && cards.every((c) => opened[c.id] === c.href && c.href.startsWith('/')),
+            cards.length >= 1 && cards.every((c) => opened[c.id] === true),
             { cards: cards.map((c) => [c.id, c.href, c.toolsCount]), opened },
           );
         }, page);
@@ -940,10 +960,14 @@ try {
           const said = ((await line.count()) ? await line.innerText() : '').replace(/\s+/g, ' ');
           await shoot(page, 'app-settings-certificate');
           const html = await page.content();
+          // The same test again from the API, after the window saved the account: which of the two fails tells the
+          // window's request apart from the stack's reach to the sign-in host.
+          const again = entra?.connectionId ? await call(tools, 'POST', `/v1/apps/plugin:test.entra/accounts/${entra.connectionId}/test`, priya, { account: 'team' }) : null;
+          const apiHealth = again?.data?.health ?? null;
           check(
             "17 a certificate app connects in the window, and its Settings show the certificate's thumbprint and expiry, never its key",
             tested.status === 'ok' && /Signing certificate [0-9A-Za-z:_-]{16,} expires /.test(said) && !html.includes('PRIVATE KEY'),
-            { tested, said },
+            { tested, said, apiHealth },
           );
         }, page);
         check('18 no page errors with the certificate app', page.errors.length === 0, page.errors.slice(0, 3));
