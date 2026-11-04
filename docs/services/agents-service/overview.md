@@ -197,8 +197,10 @@ not name cannot be wired, and a name used twice fails the definition's checks. `
 fields from named sources: each field takes the first source (in `fields[].from` order, else the sources' order) with a
 non-empty value, `sources` says which, and every field the sources disagree on is listed in `conflicts` with each
 value; text compares without case or spacing and numbers as numbers (1,200.00 is 1200). The Email received trigger also
-stores the email's text as `email-body.txt` (purpose `email_body`) and passes it as `bodyFile`, so a body-only email is
-read through Extract from file like an attachment. uc-226 runs all of it on one workflow. When no case holds,
+stores the email's text as a file named from its subject, else "Email from <sender>" (`body_file_name`, purpose
+`email_body`), and passes it as `bodyFile`, so a body-only email is read through Extract from file like an attachment.
+Files lists email texts only when its purpose filter asks for them (`LISTED_WHEN_ASKED` in files-service); a run or case
+that used one opens it by id. uc-226 runs all of it on one workflow. When no case holds,
 `otherwise` carries `tried`: each case's rule with the value it read, so a run page shows why none matched.
 
 ## Branches and the Join

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-04",
+  "title": "Email texts in Files are named and filtered",
+  "description": "The text of a received email is stored under its subject, or the sender when there is none, instead of the same name for every email. Files lists email texts only when you filter for them, and a run or case that used one still opens it.",
+  "tag": "fix"
+}

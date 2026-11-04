@@ -17,6 +17,7 @@ import contextlib
 import dataclasses
 import hashlib
 import json
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -51,8 +52,20 @@ SourceFor = Callable[[MailboxRow, str], MailSource]
 POLL_LEASE_PREFIX = "poll_"
 
 EMAIL_TRIGGER = "ops.trigger.email"
-# The name an email's text is stored under in Files.
-BODY_FILE = "email-body.txt"
+# Characters an email's text keeps in its Files name; anything else (a colon, a slash, a control character) is a space.
+_UNSAFE_NAME = re.compile(r"[^\w .,()&'@+-]+")
+BODY_NAME_CHARS = 100
+
+
+def body_file_name(subject: str | None, sender: str | None) -> str:
+    """The name Files shows for an email's text: its subject, else who sent it, so one email's text is told from
+    another's in a list."""
+
+    def safe(text: str | None) -> str:
+        return " ".join(_UNSAFE_NAME.sub(" ", text or "").split())[:BODY_NAME_CHARS].strip(" .")
+
+    named = safe(subject) or (f"Email from {who}" if (who := safe(sender)) else "Email")
+    return f"{named}.txt"
 
 
 @dataclass(frozen=True)
@@ -303,13 +316,14 @@ class EmailStarts:
         # The text as a file too, so a workflow reads a body-only email through Extract from file like an attachment,
         # with places and corrections; the plain body stays on the input for workflows that use it.
         body_file: dict[str, Any] | None = None
+        body_name = body_file_name(msg.subject, msg.sender)
         if msg.body and msg.body.strip():
             try:
                 stored = await self.files.write(
                     b.tenant,
                     team,
                     msg.body.encode("utf-8"),
-                    name=BODY_FILE,
+                    name=body_name,
                     mime="text/plain",
                     purpose="email_body",
                     uploaded_by=sender,
@@ -318,11 +332,11 @@ class EmailStarts:
             except FilesRefused as e:
                 if (reason := refusal(e.status)) is None:
                     raise
-                skipped.append({"name": BODY_FILE, "reason": reason, "message": e.message})
+                skipped.append({"name": body_name, "reason": reason, "message": e.message})
             else:
                 body_file = {
                     "fileId": stored.file.id,
-                    "name": BODY_FILE,
+                    "name": body_name,
                     "mime": stored.file.mime,
                     "size": stored.file.size,
                 }
