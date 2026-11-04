@@ -56,6 +56,11 @@ TEXT_BY_EXTENSION = {
 _CONTROL = frozenset(range(32)) - {9, 10, 12, 13} | {127}
 
 
+# Python's own type list, not the host's: Linux's /etc/mime.types names `.flt`, whose signature is an executable's
+# first bytes, so read from the host an executable proved to be a filter file on Linux and an executable on a Mac.
+_TYPES = mimetypes.MimeTypes(filenames=())
+
+
 @dataclass(frozen=True)
 class Proven:
     """The type the bytes prove, and the extensions (lowercase, no dot) a purpose's allowed types are matched with."""
@@ -77,7 +82,7 @@ def candidates(head: bytes) -> list[tuple[str, str]]:
     found: list[tuple[float, str, str]] = []
     for m in matches:
         ext = str(m.extension).lstrip(".").lower()
-        mime = str(m.mime_type) or (mimetypes.guess_type(f"x.{ext}")[0] or "" if ext else "")
+        mime = str(m.mime_type) or (_TYPES.guess_type(f"x.{ext}")[0] or "" if ext else "")
         if mime:
             found.append((-float(m.confidence), mime, ext))
     return list(dict.fromkeys((mime, ext) for _, mime, ext in sorted(found)))
@@ -92,7 +97,7 @@ def prove(declared: str, name: str, head: bytes) -> Proven:
         allowed = list(dict.fromkeys(mime for mime, _ in found))
         named = next((mime for mime, ext in found if ext and ext == by_name), None)
         if named is None and by_name:
-            named = next((m for m in allowed if f".{by_name}" in mimetypes.guess_all_extensions(m)), None)
+            named = next((m for m in allowed if f".{by_name}" in _TYPES.guess_all_extensions(m)), None)
         mime = declared if declared in allowed else named or allowed[0]
         return Proven(mime, _extensions(mime, found), signed=True)
     if not _is_text(head):
@@ -107,6 +112,6 @@ def _is_text(head: bytes) -> bool:
 
 def _extensions(mime: str, found: list[tuple[str, str]]) -> frozenset[str]:
     exts = {ext for m, ext in found if m == mime and ext}
-    exts |= {e.lstrip(".") for e in mimetypes.guess_all_extensions(mime)}
+    exts |= {e.lstrip(".") for e in _TYPES.guess_all_extensions(mime)}
     exts |= {ext for ext, m in TEXT_BY_EXTENSION.items() if m == mime}
     return frozenset(exts)
