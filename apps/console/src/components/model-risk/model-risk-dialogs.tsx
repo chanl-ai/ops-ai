@@ -125,7 +125,7 @@ export function ConditionDialog({ open, onOpenChange, owners, onSubmit, isPendin
         <FormField id="cnd-text" label="Condition" error={error.text}>
           <Textarea id="cnd-text" aria-invalid={!!error.text} value={v.text} onChange={(e) => (setV({ ...v, text: e.target.value }), setError({ ...error, text: undefined }))} placeholder="e.g. Human approval on all writes until 2026-12-31" className="min-h-16" />
         </FormField>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4">
           <FormField id="cnd-owner" label="Owner" error={error.owner}>
             <Select value={v.owner} onValueChange={(owner) => (setV({ ...v, owner }), setError({ ...error, owner: undefined }))}>
               <SelectTrigger id="cnd-owner" className="w-full" aria-invalid={!!error.owner}>

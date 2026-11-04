@@ -138,7 +138,7 @@ export function GatePolicyDialog({
             aria-invalid={!!errors.condition}
           />
         </FormField>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4">
           <FormField id="gate-reviewers" label="Reviewer group" error={errors.reviewers}>
             <Select value={values.reviewers} onValueChange={(v) => set('reviewers', v)}>
               <SelectTrigger id="gate-reviewers" className="w-full" aria-invalid={!!errors.reviewers}>

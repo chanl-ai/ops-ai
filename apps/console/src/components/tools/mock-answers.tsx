@@ -205,7 +205,7 @@ function MockAnswerDialog({ moduleId, opId, mock, onClose }: { moduleId: string;
             placeholder={'{"accountId": "acc-404"}'}
           />
         </FormField>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4">
           <FormField id="mock-status" label="Status" error={statusError}>
             <Input id="mock-status" type="number" min={100} max={599} value={d.status} onChange={(e) => set({ status: e.target.value })} disabled={d.timeout} />
           </FormField>

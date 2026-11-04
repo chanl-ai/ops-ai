@@ -89,7 +89,7 @@ export function RequestApprovalDialog({
     >
       <div className="flex flex-col gap-4">
         {error && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p>}
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4">
           <FormField id="ra-wf" label="Workflow" error={touched ? errs.workflow : undefined}>
             <Select value={workflowId} onValueChange={setWorkflowId}>
               <SelectTrigger id="ra-wf" className="w-full" aria-invalid={touched && !!errs.workflow}>

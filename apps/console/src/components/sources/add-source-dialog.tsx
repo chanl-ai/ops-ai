@@ -461,7 +461,7 @@ export function AddSourceDialog({
           {(['Content you provide', 'Connected apps'] as const).map((group) => (
             <div key={group} className="flex flex-col gap-2">
               <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{group}</h3>
-              <RadioGroup value={d.type ?? ''} onValueChange={(t) => pickType(t as SourceType)} className="grid gap-2 sm:grid-cols-2">
+              <RadioGroup value={d.type ?? ''} onValueChange={(t) => pickType(t as SourceType)} className="grid gap-2">
                 {SOURCE_TYPES.filter((t) => t.group === group).map((t) => {
                   const cs = connections.filter((x) => x.kind === KIND_OF[t.type]);
                   const ok = cs.some(usableConn);
@@ -566,7 +566,7 @@ export function AddSourceDialog({
               <FormField id="src-start" label="Start URL or sitemap">
                 <Input id="src-start" value={d.startUrl} onChange={(e) => set('startUrl', e.target.value)} placeholder="e.g. https://www.example.com/sitemap.xml" className="font-mono text-xs" />
               </FormField>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3">
                 <FormField id="src-depth" label="Depth (1 to 5)">
                   <Input id="src-depth" type="number" min={1} max={5} value={d.depth} onChange={(e) => set('depth', Number(e.target.value))} />
                 </FormField>
@@ -574,7 +574,7 @@ export function AddSourceDialog({
                   <Input id="src-max" type="number" min={10} max={5000} value={d.maxPages} onChange={(e) => set('maxPages', Number(e.target.value))} />
                 </FormField>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3">
                 <FormField id="src-inc" label="Include paths" optional>
                   <Input id="src-inc" value={d.includePaths} onChange={(e) => set('includePaths', e.target.value)} placeholder="e.g. /pricing/**, /fees/**" className="font-mono text-xs" />
                 </FormField>
@@ -626,7 +626,7 @@ export function AddSourceDialog({
             <p className="text-xs text-muted-foreground">Each key comes from a field at the source, a fixed value such as locale = en, or a model reading the document at ingest.</p>
             <MetadataMappingEditor value={d.mapping} onChange={(v) => set('mapping', v)} model={d.ingest.model} />
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4">
             <FormField id="src-tags" label="Tags on every item" optional>
               <TagInput id="src-tags" value={d.tags} onChange={(v) => set('tags', v)} suggestions={['policy', 'cards', 'lending', 'pricing', 'faq', 'procedure']} placeholder="e.g. policy" />
             </FormField>
@@ -756,7 +756,7 @@ export function AddSourceDialog({
               </div>
             )}
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3">
             <FormField id="src-deleted" label="When an item is deleted at the source">
               <Select value={d.deletedAtSource} onValueChange={(v) => set('deletedAtSource', v as Draft['deletedAtSource'])}>
                 <SelectTrigger id="src-deleted" className="w-full">
