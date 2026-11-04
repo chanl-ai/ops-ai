@@ -45,7 +45,7 @@ The failure modes the tests guard, and which backend runs each, are in `docs/ser
 | `POST /v1/files/uploads` | Ticket: a signed PUT (S3, Azure) or, on the local backend and in proxy mode, this service's content route. `Idempotency-Key`: a retry gets the same file id; the key with another request is 409 |
 | `PUT /v1/files/uploads/{id}/content` | Proxy upload: the body streamed into storage, refused past the declared size or with another type (409) |
 | `POST /v1/files/uploads/{id}/complete` | Size, the type proven from the first 8 KB (puremagic) and checked against the purpose's allowed types, sha256 from the stored bytes, dedupe through `file_blobs`; 409 on a size or digest mismatch and 415 on a refused type, the object deleted either way. The file is recorded as the proven type. Repeated or concurrent completes of one ticket return the same file |
-| `GET /v1/files`, `GET /v1/files/{id}` | The team's available files (`uploadedBy=me`, `purpose`, `refType`, `refId`), and one file's detail; the storage location only for admins of the file's team (files 8.1) |
+| `GET /v1/files`, `GET /v1/files/{id}` | The team's available files (`uploadedBy=me`, `purpose`, `refType`, `refId`), and one file's detail; the storage location only for admins of the file's team (files 8.1). A list naming no purpose and no record leaves out email texts (`LISTED_WHEN_ASKED`); the purpose facet still counts them |
 | `POST /v1/files/{id}/download-url`, `GET /v1/files/{id}/content` | A short-lived link (signed GET, or the proxy route); 423 until scanned clean |
 | `DELETE /v1/files/{id}` | 409 while referenced, held, retained, or locked in storage |
 | `POST /v1/files/legal-hold` | `{ids, hold, reason}`; an admin of the team only (403), sets the storage-level hold too |

@@ -27,6 +27,10 @@ from ops_store.schema import TENANT_SCOPED, team_owned
 from ops_store.search import contains
 from ops_store.team_scope import team_visible
 
+# Listed in Files only when a filter asks for them: every email's text is stored so a workflow can read it, and
+# listed beside the documents they would bury them. A run or case that used one still opens it by id.
+LISTED_WHEN_ASKED: tuple[str, ...] = ("email_body",)
+
 __all__ = [
     "ROLE",
     "SYSTEM_ROLE",
@@ -383,9 +387,14 @@ class FilesStore:
             "readPath": files.c.read_path,
         }
         chosen = {k: list(v) for k, v in (filters or {}).items() if k in facet_cols and v}
+        # A list that names no purpose and no record leaves out the purposes listed only when asked for; the purpose
+        # facet still counts them, so the filter offers them.
+        asked = "purpose" in chosen or purpose is not None or ref_type is not None or ref_id is not None
+        hidden = [] if asked else [files.c.purpose.not_in(LISTED_WHEN_ASKED)]
 
         def facet_where(skip: str | None = None) -> list[sa.ColumnElement[bool]]:
-            return [facet_cols[k].in_(v) for k, v in chosen.items() if k != skip]
+            shown = [] if skip == "purpose" else hidden
+            return [*(facet_cols[k].in_(v) for k, v in chosen.items() if k != skip), *shown]
 
         where = [*base, *facet_where(), self._in_view(view, tenant, at)]
         async with isolation.isolated_tx(self.engine, role=ROLE) as c:
