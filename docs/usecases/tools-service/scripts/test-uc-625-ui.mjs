@@ -249,7 +249,9 @@ try {
             if (!(await win.getByTestId('connect-window-name').isVisible())) await win.getByTestId('connect-window-more').click();
             await win.getByTestId('connect-window-name').fill(`${app.name} · elsewhere`);
             const popup = await authorize(page);
-            await app.ready(popup);
+            await app.ready(popup).catch(async (e) => {
+              throw new Error(`${String(e).split('\n')[0]}; the sign-in window is at ${popup.url()}: ${((await popup.locator('body').innerText().catch(() => '')) ?? '').slice(0, 200)}`);
+            });
             const signInAt = popup.url();
             // Another browser: no window ties it to this one, and no storage is shared, so only the API knows the sign-in.
             const other = await signedIn(browser, consoleUrl, PRIYA).catch(() => null);

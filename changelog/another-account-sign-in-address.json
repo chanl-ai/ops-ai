@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "A second account signs in where the first does",
+  "description": "Add account on an app now signs in at the address the app's first account uses, such as your company's Salesforce or GitHub Enterprise address, instead of the public one.",
+  "tag": "fix"
+}

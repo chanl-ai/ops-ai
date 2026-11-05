@@ -277,6 +277,15 @@ class PluginAccounts:
                 code="setting_not_per_account",
             )
         settings = self._team_settings(plugin, dict(b.get("settings") or {}), {})
+        if not body.sandbox:
+            # Another live account signs in where the first does unless it names its own address; a sandbox, which
+            # signs in elsewhere, names its own.
+            first = await self.connections.store.get(who.tenant_id, str(b["connection_id"])) or {}
+            c = m.connection
+            # What the sign-in itself fills (an org's instance) is the first account's own, so it is never copied.
+            filled = set(c.from_token) | ({c.after_sign_in.setting} if c.after_sign_in else set[str]())
+            held = dict(first.get("plugin_settings") or {})
+            own = {**{k: v for k, v in held.items() if k in per_account(m) and k not in filled}, **own}
         given = TeamPluginIn(
             enabled=True,
             credential_id=body.credential_id,
