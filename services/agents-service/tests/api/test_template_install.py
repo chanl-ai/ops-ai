@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -100,7 +100,7 @@ async def client() -> AsyncGenerator[AsyncClient]:
 
 
 def wire(client: AsyncClient, listed: list[dict[str, Any]], tools: list[str] = TOOLS) -> Templates:
-    rt = client._transport.app.state.runtime  # type: ignore[attr-defined]
+    rt: Any = client._transport.app.state.runtime  # type: ignore[attr-defined]
     templates = Templates(listed)
     rt.tool_reviews = SimpleNamespace(tools=templates)
     rt.tool_directory = Directory(tools)
@@ -246,13 +246,15 @@ async def test_an_update_takes_an_unedited_copy_at_once_and_asks_first_for_one_w
     wire(client, [AGENT])
     made = ok(await install(client, {"knowledgeBases": ["kb_support"]}), 201)["copy"]
     path = f"/v1/resources/{SOURCE}:case-helper/copies/{made['recordId']}/update"
-    changed = AGENT | {"version": 3, "digest": "b" * 64, "body": {**AGENT["body"], "instructions": "Read it twice."}}
+    body = cast(dict[str, Any], AGENT["body"])
+    edited = {**body, "instructions": "Read it twice."}
+    changed: dict[str, Any] = AGENT | {"version": 3, "digest": "b" * 64, "body": edited}
     wire(client, [changed])
     review = ok(await client.get(path, headers=OPS))
     assert (review["fromVersion"], review["toVersion"], review["edits"]) == (2, 3, [])
     assert "instructions" in review["changes"]
     assert ok(await client.post(path, json={}, headers=OPS))["taken"] is True
-    rt = client._transport.app.state.runtime  # type: ignore[attr-defined]
+    rt: Any = client._transport.app.state.runtime  # type: ignore[attr-defined]
     async with rt.db.begin() as c:
         await c.execute(sa.update(template_copies).values(record_digest=None))
     wire(client, [changed | {"version": 4, "digest": "c" * 64}])
