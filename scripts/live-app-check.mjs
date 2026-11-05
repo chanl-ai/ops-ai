@@ -1,37 +1,27 @@
 #!/usr/bin/env node
-// Checks a real GitHub app against a running stack, end to end, from an env file:
-//   1. the client id and secret are accepted by GitHub (a token request with a made-up code must fail only on the code)
+// Checks a real app (GitHub or Salesforce) against a running stack, end to end, from an env file:
+//   1. the provider accepts the client (GitHub: id and secret; Salesforce: the id, which is all it confirms unsigned)
 //   2. the team's app credential holds them (made, or its secret replaced, through the Apps API)
-//   3. the team account signs in through that credential (a browser window; GitHub remembers the person afterwards)
-//   4. the account's test call answers, and the read tool lists a repository's issues
-//   5. a test run of the write tool never reaches GitHub
+//   3. the team account signs in through that credential (a browser that remembers the person, or a hand-off)
+//   4. the account's test call answers, and a read tool returns real records
+//   5. a test run of a write tool never reaches the provider
 //
-// Usage: node scripts/live-app-check.mjs [--env ~/.config/ops-ai/github.env] [--repo owner/name] [--team team_ops]
-// The env file holds GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET (a GitHub App's client id and one of its client
-// secrets). The secret is sent only to GitHub and to the stack's credential API, and never printed.
-// Ports follow OPS_PORT_OFFSET as the stack's do (ISOLATED=1 stacks pass theirs), and the admin signs in with the
-// stack's own .run/<stack>/dev-admin.env.
-import { existsSync, readFileSync } from 'node:fs';
+// Usage: node scripts/live-app-check.mjs [--app github|salesforce] [--env <file>] [--team team_ops]
+//          [--repo owner/name] [--handoff <dir>] [--wait minutes]
+// GitHub reads GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET from ~/.config/ops-ai/github.env; Salesforce reads SF_LOGIN
+// (the org's sign-in address, ending /services/oauth2), SF_CLIENT_ID and SF_CLIENT_SECRET from
+// ~/.config/ops-ai/salesforce.env. Secrets go only to the provider and the stack's credential API, never to output.
+// Ports follow OPS_PORT_OFFSET as the stack's do, and the admin signs in with the stack's own dev-admin.env.
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 const ROOT = new URL('..', import.meta.url).pathname;
-const { chromium } = createRequire(join(ROOT, 'packages/usecase-runner/package.json'))('playwright');
-
 const arg = (name, fallback) => {
   const i = process.argv.indexOf(`--${name}`);
   return i > 0 ? process.argv[i + 1] : fallback;
 };
-const envFile = arg('env', join(homedir(), '.config/ops-ai/github.env')).replace(/^~/, homedir());
-const [owner, repo] = arg('repo', 'chanl-ai/ops-ai').split('/');
-const team = arg('team', 'team_ops');
-const offset = Number(process.env.OPS_PORT_OFFSET ?? 0);
-const PLATFORM = `http://127.0.0.1:${8710 + offset}`;
-const TOOLS = `http://127.0.0.1:${8720 + offset}`;
-const APP = 'plugin:opsai.github';
-const CREDENTIAL_NAME = 'GitHub · live check';
-
 const readEnv = (path) =>
   Object.fromEntries(
     readFileSync(path, 'utf8')
@@ -42,6 +32,62 @@ const readEnv = (path) =>
         return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^["']|["']$/g, '')];
       }),
   );
+
+const form = (fields) => ({
+  method: 'POST',
+  headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+  body: new URLSearchParams(fields),
+});
+
+// What differs between apps: where the client lives, how the provider confirms it, the team's settings, and which
+// read and write tools prove calls.
+const PROFILES = {
+  github: {
+    title: 'GitHub',
+    env: '~/.config/ops-ai/github.env',
+    keys: ['GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET'],
+    client: (e) => ({ id: e.GITHUB_CLIENT_ID, secret: e.GITHUB_CLIENT_SECRET }),
+    // A made-up code fails on the code (bad_verification_code) only when the id and secret are right.
+    probe: async ({ id, secret }) => {
+      const said = await fetch('https://github.com/login/oauth/access_token', form({ client_id: id, client_secret: secret, code: 'live-check' })).then((r) => r.json());
+      return { ok: said.error === 'bad_verification_code', said: `GitHub said ${said.error}`, what: 'GitHub accepts the client id and secret' };
+    },
+    settings: () => ({ api_url: 'https://api.github.com', web_url: 'https://github.com' }),
+    module: 'mod_plugin_github',
+    read: (repo) => ({ tool: 'github_list_issues', input: { owner: repo[0], repo: repo[1], state: 'all' }, rows: (o) => o?.issues, what: `lists ${repo.join('/')}'s issues` }),
+    write: (repo, rows) => ({ tool: 'github_add_comment', input: { owner: repo[0], repo: repo[1], number: rows?.[0]?.number ?? 1, body: 'Live check: this comment must never be posted.' } }),
+  },
+  salesforce: {
+    title: 'Salesforce',
+    env: '~/.config/ops-ai/salesforce.env',
+    keys: ['SF_LOGIN', 'SF_CLIENT_ID', 'SF_CLIENT_SECRET'],
+    client: (e) => ({ id: e.SF_CLIENT_ID, secret: e.SF_CLIENT_SECRET, login: e.SF_LOGIN.replace(/\/$/, '') }),
+    // Salesforce answers an unknown client id with invalid_client_id and gives the same vague answer for a right or a
+    // wrong secret before a sign-in, so only the id is confirmed here; the sign-in confirms the secret.
+    probe: async ({ id, login }) => {
+      const said = await fetch(`${new URL(login).origin}/services/oauth2/token`, form({ grant_type: 'authorization_code', code: 'live-check', client_id: id, client_secret: 'live-check' })).then((r) => r.json());
+      return { ok: said.error !== 'invalid_client_id', said: `Salesforce said ${said.error}`, what: 'Salesforce knows the client id' };
+    },
+    settings: ({ login }) => ({ login_url: login.endsWith('/services/oauth2') ? login : `${login}/services/oauth2` }),
+    module: 'mod_plugin_salesforce',
+    read: () => ({ tool: 'salesforce_query', input: { q: 'SELECT Id, Name FROM Account ORDER BY CreatedDate DESC LIMIT 5' }, rows: (o) => o?.records ?? (Array.isArray(o) ? o : undefined), what: 'reads accounts' }),
+    write: () => ({ tool: 'salesforce_create_record', input: { object: 'Account', fields: { Name: 'Live check: this account must never be created' } } }),
+  },
+};
+
+const appName = arg('app', 'github');
+const P = PROFILES[appName];
+if (!P) {
+  console.error(`live-app-check: --app is one of ${Object.keys(PROFILES).join(', ')}`);
+  process.exit(2);
+}
+const APP = `plugin:opsai.${appName}`;
+const envFile = arg('env', P.env).replace(/^~/, homedir());
+const repo = arg('repo', 'chanl-ai/ops-ai').split('/');
+const team = arg('team', 'team_ops');
+const offset = Number(process.env.OPS_PORT_OFFSET ?? 0);
+const PLATFORM = `http://127.0.0.1:${8710 + offset}`;
+const TOOLS = `http://127.0.0.1:${8720 + offset}`;
 
 const results = [];
 const step = (name, ok, said) => {
@@ -56,23 +102,20 @@ const stop = () => {
 };
 
 if (!existsSync(envFile)) {
-  console.error(`live-app-check: ${envFile} is missing; put GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET in it`);
+  console.error(`live-app-check: ${envFile} is missing; it needs ${P.keys.join(', ')}`);
   process.exit(2);
 }
-const { GITHUB_CLIENT_ID: clientId, GITHUB_CLIENT_SECRET: clientSecret } = readEnv(envFile);
-if (!clientId || !clientSecret) {
-  console.error(`live-app-check: ${envFile} needs both GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET`);
+const env = readEnv(envFile);
+const missing = P.keys.filter((k) => !env[k]);
+if (missing.length) {
+  console.error(`live-app-check: ${envFile} needs ${missing.join(', ')}`);
   process.exit(2);
 }
+const client = P.client(env);
 
-// 1. GitHub answers a made-up code with bad_verification_code when the client is right, and with
-//    incorrect_client_credentials when the id or secret is wrong.
-const probe = await fetch('https://github.com/login/oauth/access_token', {
-  method: 'POST',
-  headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-  body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, code: 'live-check-not-a-code' }),
-}).then((r) => r.json());
-if (!step('GitHub accepts the client id and secret', probe.error === 'bad_verification_code', `GitHub said ${probe.error}`)) stop();
+// 1. The provider confirms the client before anything else runs.
+const probe = await P.probe(client);
+if (!step(probe.what, probe.ok, probe.said)) stop();
 
 // The stack's admin.
 const stackDir = existsSync(join(ROOT, '.run/isolated/dev-admin.env')) && offset ? '.run/isolated' : '.run';
@@ -93,51 +136,46 @@ const api = async (method, path, body) => {
 
 // 2. The team's credential for this client: made once, its secret replaced on every run.
 const listed = await api('GET', `/v1/app-credentials?app=${encodeURIComponent(APP)}`);
-let credential = (listed.data ?? []).find((c) => c.type === 'own' && c.clientId === clientId);
+let credential = (listed.data ?? []).find((c) => c.type === 'own' && c.clientId === client.id);
 if (!credential) {
-  const made = await api('POST', '/v1/app-credentials', { app: APP, name: CREDENTIAL_NAME, clientId, clientSecret });
+  const made = await api('POST', '/v1/app-credentials', { app: APP, name: `${P.title} · live check`, clientId: client.id, clientSecret: client.secret });
   credential = made.data;
   step('The team credential is made with the client id and secret', made.status === 201, made.error?.message);
 } else {
-  const set = await api('PUT', `/v1/app-credentials/${credential.id}/secret`, { clientSecret });
+  const set = await api('PUT', `/v1/app-credentials/${credential.id}/secret`, { clientSecret: client.secret });
   step(`The team credential "${credential.name}" takes the secret`, set.status === 200, set.error?.message);
 }
 if (!credential) stop();
 
-// The team turns GitHub on with that credential, at GitHub's real addresses, signed in as the team.
-const turnedOn = await api('PUT', `/v1/apps/${encodeURIComponent(APP)}/team`, {
-  enabled: true,
-  sandbox: false,
-  credentialId: credential.id,
-  settings: { api_url: 'https://api.github.com', web_url: 'https://github.com' },
-});
-if (!step('GitHub is on for the team with this credential', turnedOn.status === 200, turnedOn.error?.message)) stop();
+// The team turns the app on with that credential and its real addresses, signed in as the team.
+const turnedOn = await api('PUT', `/v1/apps/${encodeURIComponent(APP)}/team`, { enabled: true, sandbox: false, credentialId: credential.id, settings: P.settings(client) });
+if (!step(`${P.title} is on for the team with this credential`, turnedOn.status === 200, turnedOn.error?.message)) stop();
 const page = await api('GET', `/v1/apps/${encodeURIComponent(APP)}`);
 const account = (page.data?.accounts ?? []).find((a) => a.default) ?? page.data?.accounts?.[0];
-if (!step('The team has a GitHub account', Boolean(account), page.error?.message) || !account) stop();
+if (!step(`The team has a ${P.title} account`, Boolean(account), page.error?.message) || !account) stop();
 const accountPath = `/v1/apps/${encodeURIComponent(APP)}/accounts/${account.id}`;
 const detail = await api('GET', accountPath);
 if (detail.data?.signIn !== 'team') await api('PATCH', accountPath, { revision: detail.data.revision, signIn: 'team', teamBackup: false });
 
-// 3. The sign-in: GitHub's page in a browser that keeps its session in ~/.config/ops-ai/browser, so a person signs
-//    in to GitHub there once. The return to Ops AI is caught here and finished through the API.
+// 3. The sign-in. --handoff <dir>: a person's own browser (already signed in to the provider) opens the address in
+//    <dir>/authorize.txt and writes the address it is sent back to into <dir>/return.txt. Otherwise a browser that
+//    keeps its session in ~/.config/ops-ai/browser opens, so a person signs in to the provider there once.
 const started = await api('POST', `${accountPath}/sign-in`, {});
 if (!step('A sign-in starts', Boolean(started.data?.authorizeUrl), started.error?.message)) stop();
-// --handoff <dir>: another browser (a person's own, already signed in to GitHub) opens the address written to
-// <dir>/authorize.txt and writes the address GitHub sent it back to into <dir>/return.txt.
 const handoff = arg('handoff', '');
+const waitMinutes = Number(arg('wait', 10));
 let back = null;
 if (handoff) {
-  const { mkdirSync, writeFileSync, rmSync } = await import('node:fs');
   mkdirSync(handoff, { recursive: true });
   rmSync(join(handoff, 'return.txt'), { force: true });
   writeFileSync(join(handoff, 'authorize.txt'), started.data.authorizeUrl);
-  console.log(`      Open the address in ${handoff}/authorize.txt in a browser signed in to GitHub, then write the address it lands on to ${handoff}/return.txt. Waiting up to 10 minutes…`);
-  for (let i = 0; i < 600 && !back; i++) {
+  console.log(`      Open ${handoff}/authorize.txt's address in a browser signed in to ${P.title}; write the address it lands on to ${handoff}/return.txt. Waiting up to ${waitMinutes} minutes…`);
+  for (let i = 0; i < waitMinutes * 60 && !back; i++) {
     await new Promise((r) => setTimeout(r, 1000));
     if (existsSync(join(handoff, 'return.txt'))) back = new URL(readFileSync(join(handoff, 'return.txt'), 'utf8').trim());
   }
 } else {
+  const { chromium } = createRequire(join(ROOT, 'packages/usecase-runner/package.json'))('playwright');
   const context = await chromium.launchPersistentContext(join(homedir(), '.config/ops-ai/browser'), { headless: false });
   const tab = context.pages()[0] ?? (await context.newPage());
   const returned = new Promise((resolve) => {
@@ -147,31 +185,25 @@ if (handoff) {
     });
   });
   await tab.goto(started.data.authorizeUrl);
-  console.log('      A browser window opened on GitHub. The first time, sign in to GitHub there and approve the app; it stays signed in for the next runs. Waiting up to 10 minutes…');
+  console.log(`      A browser window opened on ${P.title}. The first time, sign in there and allow access; it stays signed in for the next runs. Waiting up to ${waitMinutes} minutes…`);
   await tab.bringToFront();
-  back = await Promise.race([returned, new Promise((r) => setTimeout(() => r(null), 600_000))]);
+  back = await Promise.race([returned, new Promise((r) => setTimeout(() => r(null), waitMinutes * 60_000))]);
   await context.close();
 }
-if (!step('GitHub sends the sign-in back', Boolean(back?.searchParams.get('code')), back ? back.searchParams.get('error') ?? '' : 'no answer in 10 minutes')) stop();
+if (!step(`${P.title} sends the sign-in back`, Boolean(back?.searchParams.get('code')), back ? [back.searchParams.get('error'), back.searchParams.get('error_description')].filter(Boolean).join(': ') : `no answer in ${waitMinutes} minutes`)) stop();
 const done = await api('POST', `${accountPath}/sign-in/complete`, { state: back.searchParams.get('state'), code: back.searchParams.get('code') });
 if (!step('Ops AI finishes the sign-in', done.status === 200, done.error?.message)) stop();
 
 // 4. The account's test call and a real read.
 const tested = await api('POST', `${accountPath}/test`, { account: 'team' });
-step('The account test reaches GitHub', tested.data?.health?.status === 'ok', tested.data?.health?.message ?? tested.error?.message);
-const read = await api('POST', '/v1/tool-modules/mod_plugin_github/operations/github_list_issues/run', {
-  mode: 'real',
-  environment: 'production',
-  input: { owner, repo, state: 'all' },
-});
-const issues = read.data?.output?.issues;
-step(`The read tool lists ${owner}/${repo}'s issues`, Array.isArray(issues), Array.isArray(issues) ? `${issues.length} issues` : JSON.stringify(read.data?.output ?? read.error).slice(0, 200));
+step(`The account test reaches ${P.title}`, tested.data?.health?.status === 'ok', tested.data?.health?.message ?? tested.error?.message);
+const r = P.read(repo);
+const read = await api('POST', `/v1/tool-modules/${P.module}/operations/${r.tool}/run`, { mode: 'real', environment: 'production', input: r.input });
+const rows = r.rows(read.data?.output);
+step(`The read tool ${r.what}`, Array.isArray(rows), Array.isArray(rows) ? `${rows.length} rows` : JSON.stringify(read.data?.output ?? read.error).slice(0, 240));
 
-// 5. A test run of the write tool answers from its mock and never posts.
-const write = await api('POST', '/v1/tool-modules/mod_plugin_github/operations/github_add_comment/run', {
-  mode: 'real',
-  environment: 'test',
-  input: { owner, repo, number: issues?.[0]?.number ?? 1, body: 'Live check: this comment must never be posted.' },
-});
-step('A test run of the write tool never reaches GitHub', write.data?.mocked === true || write.data?.wouldPause === true, JSON.stringify(write.data ?? write.error).slice(0, 200));
+// 5. A test run of a write tool answers from its mock or waits for a person, and never reaches the provider.
+const w = P.write(repo, rows);
+const write = await api('POST', `/v1/tool-modules/${P.module}/operations/${w.tool}/run`, { mode: 'real', environment: 'test', input: w.input });
+step(`A test run of the write tool never reaches ${P.title}`, write.data?.mocked === true || write.data?.wouldPause === true, JSON.stringify(write.data ?? write.error).slice(0, 200));
 stop();
