@@ -306,6 +306,9 @@ class KnowledgeSource(Strict):
 class Requires(Strict):
     tools: list[str] = Field(default_factory=list[str])
     bind: list[dict[str, str]] = Field(default_factory=list[dict[str, str]])
+    # Other templates of this plugin, by id, that a copy cannot run without: the agent a workflow step runs, the
+    # document type it reads. Declared here so validate checks them and no service reads a template body to find them.
+    resources: list[str] = Field(default_factory=list[str])
 
 
 class Template(Strict):

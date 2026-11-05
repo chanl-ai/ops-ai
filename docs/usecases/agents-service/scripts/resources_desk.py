@@ -79,6 +79,7 @@ templates:
     path: templates/ticket-triage.yaml
     requires:
       tools: [get_ticket]
+      resources: [ticket-helper]
   - kind: document_type
     id: ticket-form
     version: 1

@@ -943,6 +943,7 @@ class TeamPluginIn(TypedDict, closed=True):
 
 class TemplateRequires(TypedDict):
     bind: list[dict[str, str]]
+    resources: NotRequired[list[str]]
     tools: list[str]
 
 
@@ -1630,7 +1631,7 @@ class PluginTemplate(TypedDict):
     body: NotRequired[dict[str, Any]]
     digest: str
     id: str
-    kind: Literal["agent", "skill", "workflow", "document_type"]
+    kind: Literal["agent", "skill", "workflow", "document_type", "knowledge_source"]
     plugin: PluginRef
     requires: TemplateRequires
     source: str

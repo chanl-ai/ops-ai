@@ -7660,7 +7660,8 @@
               "agent",
               "skill",
               "workflow",
-              "document_type"
+              "document_type",
+              "knowledge_source"
             ],
             "title": "Kind",
             "type": "string"
@@ -9442,6 +9443,13 @@
               "type": "object"
             },
             "title": "Bind",
+            "type": "array"
+          },
+          "resources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Resources",
             "type": "array"
           },
           "tools": {
@@ -19954,7 +19962,7 @@
     },
     "/v1/plugin-templates": {
       "get": {
-        "description": "Every template of every plugin on for the caller's team, with its body. A person in the team, or a service\nholding `tools:view` that names the team, may read it; a call naming no team is refused, since templates are\nlisted per team.",
+        "description": "Every template and knowledge source of every plugin on for the caller's team, with its body. A person in the\nteam, or a service holding `tools:view` that names the team, may read it; a call naming no team is refused,\nsince templates are listed per team.",
         "operationId": "plugins_list_plugin_templates",
         "parameters": [
           {
@@ -19968,7 +19976,8 @@
                     "agent",
                     "skill",
                     "workflow",
-                    "document_type"
+                    "document_type",
+                    "knowledge_source"
                   ],
                   "type": "string"
                 },

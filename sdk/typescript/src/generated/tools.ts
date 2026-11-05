@@ -679,9 +679,9 @@ export interface paths {
         };
         /**
          * List Plugin Templates
-         * @description Every template of every plugin on for the caller's team, with its body. A person in the team, or a service
-         *     holding `tools:view` that names the team, may read it; a call naming no team is refused, since templates are
-         *     listed per team.
+         * @description Every template and knowledge source of every plugin on for the caller's team, with its body. A person in the
+         *     team, or a service holding `tools:view` that names the team, may read it; a call naming no team is refused,
+         *     since templates are listed per team.
          */
         get: operations["plugins_list_plugin_templates"];
         put?: never;
@@ -3741,7 +3741,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "agent" | "skill" | "workflow" | "document_type";
+            kind: "agent" | "skill" | "workflow" | "document_type" | "knowledge_source";
             plugin: components["schemas"]["PluginRef"];
             requires: components["schemas"]["TemplateRequires"];
             /** Source */
@@ -4300,6 +4300,8 @@ export interface components {
             bind: {
                 [key: string]: string;
             }[];
+            /** Resources */
+            resources?: string[];
             /** Tools */
             tools: string[];
         };
@@ -9063,7 +9065,7 @@ export interface operations {
     plugins_list_plugin_templates: {
         parameters: {
             query?: {
-                kind?: ("agent" | "skill" | "workflow" | "document_type") | null;
+                kind?: ("agent" | "skill" | "workflow" | "document_type" | "knowledge_source") | null;
             };
             header?: never;
             path?: never;

@@ -456,6 +456,10 @@ def check(manifest: Manifest, root: Path) -> list[Problem]:
         for name in tpl.requires.tools:
             if manifest.tool(name) is None:
                 out.append(Problem(where, f"requires the tool {name}, which this plugin does not have"))
+        ids = {t.id for t in manifest.templates}
+        for name in tpl.requires.resources:
+            if name not in ids or name == tpl.id:
+                out.append(Problem(where, f"requires the resource {name}, which is no other template of this plugin"))
     return out
 
 

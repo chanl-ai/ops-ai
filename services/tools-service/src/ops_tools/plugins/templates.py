@@ -1,5 +1,5 @@
 """`/v1/plugin-templates`: the agents, skills, workflows and document types a plugin brings, as one team sees
-them, with each body a copy is made from.
+them, with each body a copy is made from, and its knowledge sources, which a team adds to a knowledge base.
 
 tools-service is the one service that loads plugins, so agents-service and documents-service read a template's body
 here (their service tokens hold `tools:view` and name the team) and make the team's copy through their own create
@@ -21,7 +21,7 @@ from pydantic.alias_generators import to_camel
 
 from ops_identity import Principal
 from ops_plugin_sdk import Plugin
-from ops_plugin_sdk.manifest import Template
+from ops_plugin_sdk.manifest import KnowledgeSource, Template
 from ops_service_kit.errors import ValidationFailed
 from ops_service_kit.http import Envelope, ok
 
@@ -29,7 +29,7 @@ from ..callers import tools_reader
 from ..modules.routes import ERRORS
 from .host import PluginHost
 
-Kind = Literal["agent", "skill", "workflow", "document_type"]
+Kind = Literal["agent", "skill", "workflow", "document_type", "knowledge_source"]
 
 
 class TemplateOutside(ValueError):
@@ -51,6 +51,8 @@ class TemplateRequires(_Wire):
     tools: list[str]
     # What the person names at install: `{"knowledge_base": "<what it is>"}` or `{"model_alias": "<capability>"}`.
     bind: list[dict[str, str]]
+    # The plugin's other resources a copy cannot run without, each `<source>:<template id>` as the copy route names it.
+    resources: list[str] = Field(default_factory=list[str])
 
 
 class PluginTemplate(_Wire):
@@ -93,7 +95,29 @@ def view_of(plugin: Plugin, template: Template) -> dict[str, Any]:
         version=template.version,
         title=str(body.get("name") or template.id),
         requires=TemplateRequires(
-            tools=[m.operation(t) for t in template.requires.tools], bind=list(template.requires.bind)
+            tools=[m.operation(t) for t in template.requires.tools],
+            bind=list(template.requires.bind),
+            resources=[f"plugin:{m.id}:{r}" for r in template.requires.resources],
+        ),
+        body=body,
+        digest=digest_of(body),
+    ).model_dump(by_alias=True)
+
+
+def source_view(plugin: Plugin, source: KnowledgeSource) -> dict[str, Any]:
+    """A knowledge source as a resource: kb-service makes it, in a knowledge base the team picks, syncing through the
+    two tools named here. Its body is the source's definition, so its digest moves when the plugin changes it."""
+    m = plugin.manifest
+    body = source.model_dump(mode="json")
+    return PluginTemplate(
+        source=f"plugin:{m.id}",
+        plugin=PluginRef(id=m.id, title=m.title, version=m.version),
+        kind="knowledge_source",
+        id=source.name,
+        version=1,
+        title=source.title,
+        requires=TemplateRequires(
+            tools=[m.operation(t) for t in (source.list, source.get)], bind=[{"knowledge_base": source.title}]
         ),
         body=body,
         digest=digest_of(body),
@@ -107,18 +131,31 @@ def plugin_templates_router(host: PluginHost) -> APIRouter:
     async def list_plugin_templates(  # pyright: ignore[reportUnusedFunction]
         who: Annotated[Principal, Depends(tools_reader)], kind: Annotated[Kind | None, Query()] = None
     ) -> JSONResponse:
-        """Every template of every plugin on for the caller's team, with its body. A person in the team, or a service
-        holding `tools:view` that names the team, may read it; a call naming no team is refused, since templates are
-        listed per team."""
+        """Every template and knowledge source of every plugin on for the caller's team, with its body. A person in the
+        team, or a service holding `tools:view` that names the team, may read it; a call naming no team is refused,
+        since templates are listed per team."""
         if not who.team_id:
             raise ValidationFailed("Templates are listed for one team; this call names none.", code="team_required")
         out: list[dict[str, Any]] = []
         for plugin in host.plugins.values():
-            if plugin.manifest.templates and await host.off_reason(who.tenant_id, who.team_id, plugin) is None:
-                out += [view_of(plugin, t) for t in plugin.manifest.templates if kind in (None, t.kind)]
+            m = plugin.manifest
+            if not (m.templates or m.knowledge_sources):
+                continue
+            if await host.off_reason(who.tenant_id, who.team_id, plugin) is not None:
+                continue
+            out += [view_of(plugin, t) for t in m.templates if kind in (None, t.kind)]
+            out += [source_view(plugin, s) for s in m.knowledge_sources if kind in (None, "knowledge_source")]
         return ok(out)
 
     return r
 
 
-__all__ = ["PluginTemplate", "TemplateOutside", "body_of", "digest_of", "plugin_templates_router", "view_of"]
+__all__ = [
+    "PluginTemplate",
+    "TemplateOutside",
+    "body_of",
+    "digest_of",
+    "plugin_templates_router",
+    "source_view",
+    "view_of",
+]

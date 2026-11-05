@@ -162,3 +162,9 @@ def test_a_plugin_in_its_own_repository_runs_its_tests_without_being_installed(t
     )
     assert pkg.parent.name == "src"
     assert main(["plugin", "test", str(project)]) == 0
+
+
+def test_a_template_that_needs_a_resource_the_plugin_lacks_is_refused(tmp_path: Path) -> None:
+    needs = "requires: { tools: [get_case], resources: [triage] }"
+    bad = MANIFEST.replace("requires: { tools: [get_case] }", needs)
+    assert any("requires the resource triage" in p for p in problems(plugin(tmp_path, bad)))

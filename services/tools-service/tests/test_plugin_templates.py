@@ -35,14 +35,58 @@ PLUGIN = "test.templates"
 FOLDER = Path(__file__).parent / "plugin_templates" / "templates_desk"
 
 
+# A second plugin whose workflow runs its own agent and which brings a knowledge source, written per test.
+LINKED = "test.linked"
+LINKED_MANIFEST = """\
+schema: ops-ai/plugin@2
+id: test.linked
+title: Linked desk
+version: 0.1.0
+sdk: "1"
+connection: { kinds: [none], sign_in: [team] }
+egress: ["https://api.linked.test"]
+endpoint: "https://api.linked.test"
+tools:
+  - { name: get_case, access: read, input: { id: { type: string } }, request: { method: GET, path: "/cases/{id}" } }
+  - name: list_articles
+    access: read
+    knowledge: list_items
+    input: { since: { type: string, required: false }, cursor: { type: string, required: false } }
+    request: { method: GET, path: "/articles" }
+  - name: get_article
+    access: read
+    knowledge: get_item
+    input: { id: { type: string } }
+    request: { method: GET, path: "/articles/{id}" }
+knowledge_sources:
+  - { name: articles, title: Help articles, list: list_articles, get: get_article }
+templates:
+  - { kind: agent, id: helper, version: 1, path: helper.yaml, requires: { tools: [get_case] } }
+  - { kind: workflow, id: triage, version: 1, path: triage.yaml, requires: { tools: [get_case], resources: [helper] } }
+"""
+
+
+def linked_desk(parent: Path) -> Path:
+    root = parent / "linked_desk"
+    root.mkdir()
+    (root / "__init__.py").write_text("from ops_plugin_sdk import Plugin\n\nplugin = Plugin.beside(__file__)\n")
+    (root / "plugin.yaml").write_text(LINKED_MANIFEST)
+    (root / "helper.yaml").write_text("name: Helper\ninstructions: Help.\n")
+    (root / "triage.yaml").write_text("schemaVersion: 2\nid: triage\nname: Triage\nnodes: []\nconnections: []\n")
+    return root
+
+
 @pytest.fixture
-async def client(engine: AsyncEngine, seed: dict[str, Any], tenant: str) -> AsyncIterator[httpx.AsyncClient]:
-    loaded = discover(found=[], folders=[str(FOLDER)])
+async def client(
+    engine: AsyncEngine, seed: dict[str, Any], tenant: str, tmp_path: Path
+) -> AsyncIterator[httpx.AsyncClient]:
+    loaded = discover(found=[], folders=[str(FOLDER), str(linked_desk(tmp_path))])
     assert all(item.ok for item in loaded), [item.error for item in loaded if not item.ok]
     host = PluginHost(ModuleStore(engine), PluginBindings(engine), {}, loaded)
     bindings = PluginBindings(engine)
     await bindings.put(tenant, ON, PLUGIN, enabled=True, connection_id=None, settings={}, by="test")
     await bindings.put(tenant, OFF, PLUGIN, enabled=False, connection_id=None, settings={}, by="test")
+    await bindings.put(tenant, ON, LINKED, enabled=True, connection_id=None, settings={}, by="test")
     # People sign in with the platform's tokens; services with the dev service key, as the tools tests sign them.
     dev = Auth.for_dev(Settings(), audience="tools", name="dev", email="dev", tenant_id=tenant)
     auth = Auth(
@@ -78,7 +122,7 @@ async def listed(c: httpx.AsyncClient, headers: dict[str, str], **params: str) -
 async def test_a_team_sees_the_templates_only_while_the_plugin_is_on_for_it(
     client: httpx.AsyncClient, tenant: str
 ) -> None:
-    on = await listed(client, person(tenant, "Priya Shah", {ON: "builder"}))
+    on = [t for t in await listed(client, person(tenant, "Priya Shah", {ON: "builder"})) if t["plugin"]["id"] == PLUGIN]
     off = await listed(client, person(tenant, "Maya Okafor", {OFF: "builder"}))
     assert sorted((t["kind"], t["id"]) for t in on) == [
         ("agent", "case-helper"),
@@ -92,7 +136,7 @@ async def test_a_team_sees_the_templates_only_while_the_plugin_is_on_for_it(
 async def test_each_template_carries_its_body_source_version_and_the_teams_operations(
     client: httpx.AsyncClient, tenant: str
 ) -> None:
-    [agent] = await listed(client, service(tenant, ON), kind="agent")
+    [agent] = [t for t in await listed(client, service(tenant, ON), kind="agent") if t["plugin"]["id"] == PLUGIN]
     assert agent["source"] == f"plugin:{PLUGIN}"
     assert agent["plugin"] == {"id": PLUGIN, "title": "Case desk", "version": "0.2.0"}
     assert agent["version"] == 2 and agent["title"] == "Case helper"
@@ -103,7 +147,7 @@ async def test_each_template_carries_its_body_source_version_and_the_teams_opera
     # The digest is the body's fingerprint: a copy keeps it, so a changed template shows as changed since install.
     body = json.dumps(agent["body"], sort_keys=True, separators=(",", ":")).encode()
     assert agent["digest"] == hashlib.sha256(body).hexdigest()
-    [workflow] = await listed(client, service(tenant, ON), kind="workflow")
+    [workflow] = [t for t in await listed(client, service(tenant, ON), kind="workflow") if t["plugin"]["id"] == PLUGIN]
     assert workflow["body"]["schemaVersion"] == 2 and workflow["body"]["id"] == "case_review"
 
 
@@ -114,6 +158,21 @@ async def test_a_call_naming_no_team_or_without_tools_view_is_refused(client: ht
     assert no_team.status_code == 403 and no_team.json()["error"]["code"] == "team_required", no_team.text
     unscoped = await client.get("/v1/plugin-templates", headers=service(tenant, ON, "documents", scopes=[]))
     assert unscoped.status_code == 403, unscoped.text
+
+
+async def test_a_workflow_names_the_resources_it_needs_and_a_knowledge_source_is_a_resource(
+    client: httpx.AsyncClient, tenant: str
+) -> None:
+    mine = {t["id"]: t for t in await listed(client, service(tenant, ON)) if t["plugin"]["id"] == LINKED}
+    # Named as the copy route names a resource, so a preview and an add find the team's copy of it.
+    assert mine["triage"]["requires"]["resources"] == [f"plugin:{LINKED}:helper"]
+    assert mine["helper"]["requires"]["resources"] == []
+    articles = mine["articles"]
+    assert articles["kind"] == "knowledge_source" and articles["title"] == "Help articles"
+    assert articles["requires"]["tools"] == ["linked_list_articles", "linked_get_article"]
+    assert articles["requires"]["bind"] == [{"knowledge_base": "Help articles"}]
+    only = await listed(client, service(tenant, ON), kind="knowledge_source")
+    assert [t["id"] for t in only] == ["articles"]
 
 
 def test_a_body_outside_the_plugin_folder_is_never_read(tmp_path: Path) -> None:
