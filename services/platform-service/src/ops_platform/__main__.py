@@ -13,7 +13,7 @@ import uvicorn
 from ops_email import EmailProviders
 from ops_identity import ServiceAuth, ServiceClient, service_verifiers
 from ops_service_kit.logging import configure_logging
-from ops_service_kit.settings import Settings
+from ops_service_kit.settings import Settings, require_keys
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import run as run_background
 from ops_store.schema_version import require_current_schema
@@ -50,7 +50,6 @@ async def serve(settings: Settings) -> None:
         dev_people=settings.platform_seed_file if settings.environment == "dev" else None,
         cors_origins=settings.cors_origins,
         token_ttl_s=settings.platform_token_ttl_seconds,
-        security_team=settings.security_team_id,
         signin=SignInOptions.from_settings(settings, mail=mail),
     )
     services = ServiceAuth(audience="platform", verifiers=service_verifiers(settings, "platform"), tenant_scoped=False)
@@ -62,9 +61,7 @@ async def serve(settings: Settings) -> None:
         ),
     ]
     # Workspaces closed longer than the restore window are purged here, one copy for the account.
-    purge = WorkspacePurge(
-        LifecycleStore(store.db, security_team=settings.security_team_id), restore_days=settings.workspace_restore_days
-    )
+    purge = WorkspacePurge(LifecycleStore(store.db), restore_days=settings.workspace_restore_days)
     stop = asyncio.Event()
     purging = asyncio.create_task(run_background("workspace_lifecycle", purge.once, stop=stop, store=LOCAL_BEATS))
     # Events other services act on (event_relay.py) go to each one this install runs; with no address for a service,
@@ -90,6 +87,8 @@ async def serve(settings: Settings) -> None:
 def main() -> None:
     configure_logging()
     settings = Settings()
+    # The workspaces' sign-in secrets are sealed under it (store/signin_secrets.py).
+    require_keys(settings, "secrets_key")
     require_current_schema(settings.database_url, MIGRATIONS)
     asyncio.run(serve(settings))
 

@@ -83,6 +83,7 @@ def _signed_in(engine: AsyncEngine, tenant: str, email: str, team: str, roles: d
         "email": email,
         "name": email,
         "kind": "person",
+        "security_team": "team_security",
         "aud": ["kb"],
         "tenant_id": tenant,
         "team_ids": list(roles),

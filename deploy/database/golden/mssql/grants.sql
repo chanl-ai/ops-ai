@@ -153,6 +153,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.platform_outbox TO ops_platform_runt
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.teams TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.users TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.roles TO ops_platform_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_secrets TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.policies TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.members TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.api_keys TO ops_platform_runtime;

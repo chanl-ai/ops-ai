@@ -31,6 +31,7 @@ def token(tenant: str, teams: list[str], *, aud: str = "agents") -> dict[str, st
         "email": f"p@{tenant}.example",
         "name": "Pat",
         "kind": "person",
+        "security_team": "team_security",
         "aud": [aud],
         "tenant_id": tenant,
         "team_ids": teams,

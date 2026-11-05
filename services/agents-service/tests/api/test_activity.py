@@ -37,6 +37,7 @@ def two_teams() -> dict[str, str]:
         "email": "lee@harborpine.example",
         "name": "lee",
         "kind": "person",
+        "security_team": "team_security",
         "aud": ["agents"],
         "tenant_id": TENANT,
         "team_ids": ["team_ops", "team_fraud"],

@@ -107,9 +107,9 @@ def _iso(at: datetime | None) -> str | None:
     return at.astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z") if at else None
 
 
-def connection_rights(p: Principal, action: str, *, security_team: str, what: str = "connections") -> None:
+def connection_rights(p: Principal, action: str, *, what: str = "connections") -> None:
     """`can(connections, action)`: the one check every connection route runs, or Forbidden."""
-    Access(security_team=security_team).can(p, "connections", action, what=what)
+    Access().can(p, "connections", action, what=what)
 
 
 def _person(who: Caller) -> str:
@@ -160,7 +160,6 @@ class ConnectionService:
         *,
         egress: EgressPolicy | None,
         console_url: str | None,
-        security_team: str = "team_security",
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         discovery: Discovery | None = None,
         auth: Authenticator | None = None,
@@ -181,8 +180,7 @@ class ConnectionService:
         self.dir = directory
         self.egress = egress
         self.console_url = console_url
-        self.access = Access(security_team=security_team)
-        self.security_team = security_team
+        self.access = Access()
         self.clock = clock
         self.discovery = discovery
         self.auth = auth
@@ -212,7 +210,7 @@ class ConnectionService:
             if self.access.may(who.principal, "chat", "run"):
                 return
             action = "view"
-        connection_rights(who.principal, action, security_team=self.security_team, what=what)
+        connection_rights(who.principal, action, what=what)
 
     def check(self, who: Caller, action: str, what: str = "connections") -> None:
         """Refuses a caller who may not take `action` on the team's connections, by the same rights every route here

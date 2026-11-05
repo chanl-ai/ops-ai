@@ -78,23 +78,20 @@ class LocalToolRunner:
         catalog: Catalog,
         mail: MailSender | None = None,
         *,
-        mail_for: Callable[[ToolCaller], MailSender] | None = None,
         mailbox_sender: Callable[[str, str, str], Awaitable[MailSender]] | None = None,
         cases: ServiceClient | None = None,
         decisions: AccessDecisions | None = None,
         file_tools: FileTools | None = None,
         knowledge: KnowledgeSearch | None = None,
     ) -> None:
-        """`mail_for` builds the sender for a caller, from the provider settings picked (ops_email.EmailProviders),
-        reading that caller's tenant's secrets; `mail` is one fixed sender (tests). With neither, or none configured,
-        every send_reply fails with that reason. `mailbox_sender(tenant, team, address)` is the sender of a named
-        mailbox of the caller's team (mailboxes.MailboxSenders), used when send_reply names `mailbox`. `cases` is
-        agents-service, where open_case opens a case in the caller's team. `file_tools` reads the caller's
-        team's files and documents through documents-service; `knowledge` searches its knowledge bases through
-        kb-service."""
+        """`mail` is the install's own sender (ops_email.EmailProviders), for a send_reply that names no mailbox;
+        without one, or with none configured, such a send fails with that reason. `mailbox_sender(tenant, team,
+        address)` is the sender of a named mailbox of the caller's team (mailboxes.MailboxSenders), used when
+        send_reply names `mailbox`. `cases` is agents-service, where open_case opens a case in the caller's team.
+        `file_tools` reads the caller's team's files and documents through documents-service; `knowledge` searches
+        its knowledge bases through kb-service."""
         self.tools = LocalToolExecutor(catalog)
         self.mail = mail
-        self.mail_for = mail_for
         self.mailbox_sender = mailbox_sender
         self.cases = cases
         self.decisions = decisions
@@ -170,7 +167,7 @@ class LocalToolRunner:
         return ToolOutcome(True, {"caseId": case["id"], "status": case["status"]})
 
     def _process_sender(self, caller: ToolCaller) -> MailSender:
-        sender = self.mail_for(caller) if self.mail_for is not None else self.mail
+        sender = self.mail
         if sender is None:
             raise MailNotConfiguredError("No mail provider is configured for send_reply.")
         return sender

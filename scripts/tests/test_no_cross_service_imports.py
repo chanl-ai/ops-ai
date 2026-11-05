@@ -31,7 +31,6 @@ KNOWN = {
     "services/tools-service/tests/test_cors.py: ops_agents",
     "services/tools-service/tests/test_send_reply.py: ops_agents",
     "services/tools-service/tests/test_mailbox_senders.py: ops_agents",
-    "services/tools-service/tests/test_tenants_kept_apart.py: ops_agents",
     "services/agents-service/tests/gateway/conftest.py: ops_tools",
     "services/agents-service/tests/gateway/test_gateway_policy.py: ops_tools",
     "services/agents-service/experiments/e3_gateway_approval_token.py: ops_tools",

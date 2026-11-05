@@ -26,7 +26,7 @@ class Limits:
 @dataclass(frozen=True)
 class SignInOptions:
     """What sign-in needs from settings beyond the database: the work factor, where people come back to, the mail
-    sender for reset links, the secrets providers name and the resolver that proves a domain. `transport` reaches
+    sender for reset links and the resolver that proves a domain. `transport` reaches
     identity providers in tests."""
 
     password_iterations: int
@@ -35,7 +35,6 @@ class SignInOptions:
     reset_ttl_s: int
     public_url: str | None = None
     console_url: str | None = None
-    secrets: dict[str, SecretStr] = field(default_factory=dict[str, SecretStr])
     mail: MailSender | None = None
     transport: httpx.AsyncBaseTransport | None = None
     dns: TxtResolver = field(default_factory=TxtResolver)
@@ -53,7 +52,6 @@ class SignInOptions:
             reset_ttl_s=settings.password_reset_seconds,
             public_url=settings.platform_public_url,
             console_url=settings.console_url,
-            secrets=settings.signin_secrets,
             mail=mail,
             dns=TxtResolver(settings.signin_dns_servers, timeout_s=settings.signin_dns_timeout_seconds),
             saml_sp_key=settings.saml_sp_key,

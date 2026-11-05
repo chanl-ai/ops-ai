@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from ops_access import encode_grid
 from ops_policy import mint
 
 from .test_provisioned_records import tools  # noqa: F401  # pyright: ignore[reportUnusedImport] - a fixture
@@ -21,6 +22,7 @@ def builder(tenant: str, team: str, policies: dict[str, Any] | None = None) -> d
         "email": "jordan@bank.example",
         "name": "Jordan Hale",
         "kind": "person",
+        "security_team": "team_security",
         "aud": ["tools"],
         "tenant_id": tenant,
         "team_ids": [team],
@@ -94,3 +96,29 @@ async def test_the_security_team_adds_secrets_when_the_policy_says_so(
     assert refused.status_code == 403, refused.text
     added = await c.post("/v1/secrets", json=_secret("PLATFORM_KEY", "team_platform"), headers=people["sam"])
     assert added.status_code == 201 and added.json()["data"]["teamId"] == "team_platform", added.text
+
+
+async def test_the_policy_moves_secret_writes_to_the_workspaces_own_security_team(
+    tools: tuple[httpx.AsyncClient, dict[str, dict[str, str]]],  # noqa: F811
+    tenant: str,
+) -> None:
+    """With securityTeamAddsSecrets on, a secret write is held in the Security team the workspace names (the token's
+    claim), not in a team the install names."""
+    c, _ = tools
+    claims = {
+        "sub": "usr_noor",
+        "email": "noor@bank.example",
+        "name": "Noor Haddad",
+        "kind": "person",
+        "security_team": "team_sec2",
+        "aud": ["tools"],
+        "tenant_id": tenant,
+        "team_ids": ["team_sec2"],
+        "access": {"team_sec2": ["secret_maker"]},
+        "grids": {"secret_maker": encode_grid([("secrets_egress", "create", "all")])},
+        "policies": {"securityTeamAddsSecrets": True},
+        "auth_method": "session",
+    }
+    noor = {"Authorization": f"Bearer {mint(claims, PLATFORM, ttl_s=3600)}", "X-Team-Id": "team_sec2"}
+    made = await c.post("/v1/secrets", json=_secret("SEC2_KEY"), headers=noor)
+    assert made.status_code == 201 and made.json()["data"]["teamId"] == "team_sec2", made.text

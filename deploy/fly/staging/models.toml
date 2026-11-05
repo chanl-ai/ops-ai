@@ -37,7 +37,6 @@ kill_timeout = 20
   OPS_FILES_DIR = "/tmp/ops/files"
   OPS_KB_FILES_DIR = "/tmp/ops/kb-files"
   OPS_FILES_SCANNING = "eicar"
-  OPS_MAILBOX_SOURCE = "none"
   OPS_MAIL_PROVIDER = "none"
   OPS_BOOTSTRAP_TENANT_ID = "local"
 

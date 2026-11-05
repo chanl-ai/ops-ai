@@ -270,7 +270,7 @@ def kernel_agents(
     executor = GatewayToolExecutor(gateway, directory) if gateway is not None else LocalToolExecutor(catalog)
     knowledge: Knowledge = KbService(kb) if kb is not None else NoKnowledgeService()
     ports = KernelPorts(
-        model=LedgerModel(model, usage, settings.model_alias),
+        model=LedgerModel(model, usage, settings.model_alias, call_headers=through is not None),
         tools=executor,
         knowledge=knowledge,
         models=LedgerSource(through, usage) if through is not None else None,

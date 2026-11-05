@@ -56,8 +56,6 @@ def main() -> None:
         engine,
         auth=Auth.from_settings(settings, audience="models"),
         provider_secrets=dev_provider_keys(settings),
-        keys_tenant=settings.model_keys_tenant,
-        security_team=settings.security_team_id,
         overlap_seconds=settings.model_key_overlap_seconds,
     )
     uvicorn.run(app, host=settings.bind_host, port=settings.models_port, log_level="info")

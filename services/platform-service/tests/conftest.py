@@ -105,7 +105,14 @@ class Platform:
         async with self.engine.begin() as c:
             if tenant_id is None:
                 await c.execute(
-                    tenants.insert().values(id=tenant, name=tenant, status="active", allowed_domains=[], created_at=now)
+                    tenants.insert().values(
+                        id=tenant,
+                        name=tenant,
+                        status="active",
+                        allowed_domains=[],
+                        created_at=now,
+                        security_team_id="team_security",
+                    )
                 )
                 await ensure_builtin_roles(c, tenant, at=now)
             await c.execute(
@@ -387,7 +394,6 @@ async def signin(engine: AsyncEngine, database_url: str) -> AsyncIterator[SignIn
         reset_ttl_s=3600,
         public_url=PUBLIC_URL,
         console_url=CONSOLE,
-        secrets={OIDC_SECRET: SecretStr("s3cret")},
         mail=mail,
         transport=httpx.ASGITransport(app=create_idp(IDP, fake_dns)),
         dns=TxtResolver([f"127.0.0.1:{dns_port}"], timeout_s=2),
@@ -399,14 +405,15 @@ async def signin(engine: AsyncEngine, database_url: str) -> AsyncIterator[SignIn
         dev_signer(),
         demo_password=DEMO_PASSWORD,
         audiences=["platform", "agents"],
-        security_team=security,
         signin=options,
     )
     now = now_iso()
     admin_email = f"{new_id('sec')}@bank.test"
     async with engine.begin() as c:
         await c.execute(
-            tenants.insert().values(id=tenant, name=tenant, status="active", allowed_domains=[], created_at=now)
+            tenants.insert().values(
+                id=tenant, name=tenant, status="active", allowed_domains=[], created_at=now, security_team_id=security
+            )
         )
         await ensure_builtin_roles(c, tenant, at=now)
         admin = new_id("usr")
@@ -449,6 +456,9 @@ async def signin(engine: AsyncEngine, database_url: str) -> AsyncIterator[SignIn
         r = await pub.post("/v1/auth/sign-in", json={"email": admin_email, "password": DEMO_PASSWORD})
         token = r.json()["data"]["token"]
         headers = {"Authorization": f"Bearer {token}", "X-Team-Id": security}
+        # The client secret the OIDC providers name, saved by the workspace's Security admin.
+        saved = await pub.put(f"/v1/settings/sign-in/secrets/{OIDC_SECRET}", json={"value": "s3cret"}, headers=headers)
+        assert saved.status_code == 200, saved.text
         yield SignInRig(pub, idp, mail, engine, tenant, security, ops, headers, public)
     stop_dns.set()
     await store.close()

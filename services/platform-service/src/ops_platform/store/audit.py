@@ -47,6 +47,8 @@ KIND = {
     "access.check": "checked",
     "role.edit": "edited",
     "role.reset": "edited",
+    "signin_secret.save": "edited",
+    "signin_secret.delete": "deleted",
 }
 
 # Every route that changes a workspace or a team, and the audit action it writes in the same transaction. The
@@ -70,6 +72,8 @@ ROUTE_ACTIONS: dict[tuple[str, str], str] = {
     ("DELETE", "/v1/settings/teams/{team_id}"): "team.delete",
     ("PUT", "/v1/roles/{role_id}/permissions"): "role.edit",
     ("POST", "/v1/roles/{role_id}/reset"): "role.reset",
+    ("PUT", "/v1/settings/sign-in/secrets/{name}"): "signin_secret.save",
+    ("DELETE", "/v1/settings/sign-in/secrets/{name}"): "signin_secret.delete",
 }
 
 # The audit page's views, as the platform actions each holds; platform-service records no publishes.

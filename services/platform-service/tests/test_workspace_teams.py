@@ -11,7 +11,7 @@ import httpx
 import sqlalchemy as sa
 
 from ops_platform.keys import dev_signer
-from ops_platform.store.tables import audit_entries, members, teams
+from ops_platform.store.tables import audit_entries, members, teams, tenants
 from ops_policy import Ed25519Verifier, verify
 from ops_service_kit.ids import new_id, now_iso
 
@@ -62,6 +62,20 @@ async def test_moving_the_security_team_moves_security_admin_and_the_token_names
     assert claims["security_team"] == risk
     # The new security team cannot be archived; the old one now can.
     assert (await signin.public.post(f"/v1/settings/teams/{risk}/archive", headers=signin.admin)).status_code == 409
+
+
+async def test_a_workspace_that_names_no_security_team_has_none_whatever_the_install_says(signin: SignInRig) -> None:
+    """The Security team is the workspace's record: with none recorded, the workspace reads none and its tokens name
+    none, so no install setting stands in for it."""
+    async with signin.engine.begin() as c:
+        await c.execute(tenants.update().where(tenants.c.id == signin.tenant).values(security_team_id=None))
+    read = await signin.public.get("/v1/settings/workspace-teams", headers=signin.admin)
+    assert read.status_code == 200 and read.json()["data"]["securityTeam"] is None, read.text
+    me = await signin.public.get("/v1/me", headers={"Authorization": signin.admin["Authorization"]})
+    email = me.json()["data"]["user"]["email"]
+    r = await signin.public.post("/v1/auth/sign-in", json={"email": email, "password": DEMO_PASSWORD})
+    claims = verify(r.json()["data"]["token"], Ed25519Verifier.from_jwk(dev_signer().public_jwk(), "platform"))
+    assert "security_team" not in claims
 
 
 async def test_only_a_workspace_admin_sets_the_workspace_teams(signin: SignInRig) -> None:

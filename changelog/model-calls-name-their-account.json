@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Model calls use their own account's provider keys",
+  "description": "An agent's chat turn now names its account when it reaches the model gateway, so it signs in with that account's saved provider key rather than one account the install named.",
+  "tag": "fix"
+}

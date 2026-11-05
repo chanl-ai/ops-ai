@@ -10,17 +10,15 @@ provider is tested on a mock transport only; it has not run against a tenant (**
 | Message key | `inbound.py`, `graph.py` | Normalised Message-ID (brackets stripped, domain lower-cased), or a SHA-256 of sender, time and subject when there is none; the dedupe key for every consumer |
 | `EmailFilter` | `inbound.py` | From contains, subject contains, has an attachment; case-insensitive |
 | `MailSender` | `outbound.py` | `send(OutboundMessage) -> reference`; the message carries the caller's idempotency key |
-| `EmailProviders` | `providers.py` | Builds the source and sender from settings once per process; a missing secret raises at start-up |
+| `EmailProviders` | `providers.py` | Builds the install's own sender from settings once per process; a missing secret raises at start-up. Mail in is each team's mailbox records, never a setting |
 
 ## Providers and settings
 
 | Direction | Setting | Value | Needs |
 |---|---|---|---|
-| In | `OPS_MAILBOX_SOURCE` | `graph` | `OPS_GRAPH_TENANT_ID`, `OPS_GRAPH_CLIENT_ID`, `OPS_GRAPH_CLIENT_SECRET`; `OPS_GRAPH_URL` and `OPS_GRAPH_LOGIN_URL` default to Microsoft's public cloud |
-| In | `OPS_MAILBOX_SOURCE` | `none` | Nothing is read; a consumer that asks for a source gets `MailboxNotConfiguredError` |
 | Out | `OPS_MAIL_PROVIDER` | `smtp` | `OPS_MAIL_FROM`, `OPS_SMTP_HOST`, `OPS_SMTP_PORT`, optional `OPS_SMTP_USERNAME`, `OPS_SMTP_PASSWORD`, `OPS_SMTP_STARTTLS` |
 | Out | `OPS_MAIL_PROVIDER` | `resend` | `OPS_MAIL_FROM`, `OPS_RESEND_API_KEY`; the idempotency key goes as `Idempotency-Key` |
-| Out | `OPS_MAIL_PROVIDER` | `graph` | `OPS_MAIL_FROM` (the sending mailbox) and the Graph credentials above |
+| Out | `OPS_MAIL_PROVIDER` | `graph` | `OPS_MAIL_FROM` (the sending mailbox), `OPS_GRAPH_TENANT_ID`, `OPS_GRAPH_CLIENT_ID`, `OPS_GRAPH_CLIENT_SECRET`; `OPS_GRAPH_URL` and `OPS_GRAPH_LOGIN_URL` default to Microsoft's public cloud |
 | Out | `OPS_MAIL_PROVIDER` | `fake` (dev only) | Each message is written to `OPS_MAIL_FAKE_OUT_DIR/<key hash>.json` |
 | Out | `OPS_MAIL_PROVIDER` | `none` | Every send fails with "No mail provider is configured" |
 

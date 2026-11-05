@@ -10,6 +10,7 @@ the first run and the re-run while the conversation is the same.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import time
@@ -29,6 +30,7 @@ from ops_agent_kernel.ports import ModelSource
 from ops_agents.graphs.common import emit
 from ops_agents.graphs.metering import CallSite, call_site
 from ops_metering import Usage
+from ops_store import isolation
 
 _VOLATILE = frozenset({"timestamp", "run_id", "provider_response_id", "provider_details"})
 
@@ -109,18 +111,25 @@ class LedgerModel(WrapperModel):
         super().__init__(wrapped)
         self.recorder = recorder
         self.alias = alias
-        # Through models-service, each request names its thread, run, step and request hash, so its call log row
-        # joins this record. Never sent to a provider directly.
+        # Through models-service, each request names its tenant, whose provider keys and budget it uses, and in a
+        # graph run its thread, run, step and request hash, so its call log row joins this record. Never sent to a
+        # provider directly.
         self.call_headers = call_headers
 
     def _with_call_headers(
         self, settings: ModelSettings | None, site: _Site | None, digest: str
     ) -> ModelSettings | None:
-        if not self.call_headers or site is None:
+        if not self.call_headers:
             return settings
-        headers = {"X-Thread-Id": site.call.thread_id, "X-Step-Id": site.call.node, "X-Request-Hash": digest}
-        if site.call.run_id:
-            headers["X-Run-Id"] = site.call.run_id
+        headers: dict[str, str] = {}
+        with contextlib.suppress(isolation.NoTenantError):
+            headers["X-Tenant-Id"] = isolation.tenant()
+        if site is not None:
+            headers |= {"X-Thread-Id": site.call.thread_id, "X-Step-Id": site.call.node, "X-Request-Hash": digest}
+            if site.call.run_id:
+                headers["X-Run-Id"] = site.call.run_id
+        if not headers:
+            return settings
         merged: ModelSettings = {**(settings or {})}
         merged["extra_headers"] = {**(merged.get("extra_headers") or {}), **headers}
         return merged

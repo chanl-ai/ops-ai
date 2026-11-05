@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Each workspace's own Security team decides",
+  "description": "Security reviews, held hosts, workspace secrets and storage settings now follow the Security team named on Settings > Workspace, even when it is not the default team. A workspace that names none has no Security team until an admin names one.",
+  "tag": "fix"
+}

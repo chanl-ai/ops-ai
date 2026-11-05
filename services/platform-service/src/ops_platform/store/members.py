@@ -66,10 +66,8 @@ class Invite:
 class TeamStore:
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.RLS, Guarantee.LOCK})
 
-    def __init__(self, db: TenantDb, *, security_team: str = "team_security") -> None:
+    def __init__(self, db: TenantDb) -> None:
         self.db = db
-        # The deployment's security team (settings `security_team_id`), for a workspace that names none.
-        self.security_team = security_team
 
     async def people_names(self, tenant_id: str) -> list[dict[str, str]]:
         """Every person of the workspace as `{email, name}`, suspended ones too: a record keeps naming who acted."""
@@ -90,14 +88,14 @@ class TeamStore:
             team_id=actor.team_id,
             user_id=user_id,
             member_role=role,
-            security_team=await security_team_in(c, actor.tenant_id, self.security_team),
+            security_team=await security_team_in(c, actor.tenant_id),
             granted_by=actor.user_id,
             at=at,
         )
 
-    async def security_team_of(self, tenant_id: str) -> str:
+    async def security_team_of(self, tenant_id: str) -> str | None:
         async with self.db.tenant_tx(tenant_id) as c:
-            return await security_team_in(c, tenant_id, self.security_team)
+            return await security_team_in(c, tenant_id)
 
     async def teams_of(self, tenant_id: str, user_id: str, *, everywhere: bool = False) -> list[dict[str, Any]]:
         """The person's active teams with their role; `everywhere` (a workspace admin) adds every other active

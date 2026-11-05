@@ -352,7 +352,7 @@ async def mirror_membership(
     team_id: str,
     user_id: str,
     member_role: str | None,
-    security_team: str,
+    security_team: str | None,
     granted_by: str,
     at: str,
 ) -> None:

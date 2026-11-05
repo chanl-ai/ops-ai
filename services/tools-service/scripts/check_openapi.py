@@ -92,7 +92,7 @@ def document() -> dict[str, Any]:
             expressions_router(),
             secrets_router(secrets),
             send_policy_router(SendPolicies(engine), directory),
-            mocks_router(MockStore(engine), ModuleStore(engine), directory, security_team="team_security"),
+            mocks_router(MockStore(engine), ModuleStore(engine), directory),
             accounts_router(connection_service, directory),
             plugins_router(PluginAccounts(host, connection_service), directory),
             plugin_templates_router(host),

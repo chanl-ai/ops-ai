@@ -98,6 +98,8 @@ def sign_in(app: FastAPI, tenant: str, role: str, email: str = "james@harborpine
             roles={team: role},
             scopes=[],
             auth_method="session",
+            # The workspace's Security team, which platform-service names in every person's token.
+            security_team="team_security",
         )
         # The stand-in replaces ops_identity's dependency, so it enters the request's context as that one does.
         isolation.enter_caller(p, dev=False)

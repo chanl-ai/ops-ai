@@ -11,7 +11,7 @@ case and Activity lists the call behind it.
 | Needs | How |
 |---|---|
 | PostgreSQL and Docker (for OPA) | `make db-up`; the harness starts its own OPA container |
-| platform-service, tools-service with the https core-banking fake bank (`OPS_FAKE_BANK_APP=core`), agents-service on the scripted model with tools-service as its gateway and the fake Graph source | started by the script on the run's own ports (`withUiStack` with `platform`, `tools.bank`, `tools.gateway`; `OPS_MAILBOX_SOURCE=fake`, the seeded `dep_levy_mailbox` deployment) |
+| platform-service, tools-service with the https core-banking fake bank (`OPS_FAKE_BANK_APP=core`), agents-service on the scripted model with tools-service as its gateway and the fake Graph source | started by the script on the run's own ports (`withUiStack` with `platform`, `tools.bank`, `tools.gateway`; the seeded `dep_levy_mailbox` deployment) |
 | The bank as a published module | imported by the script over the API: reads from GET, `place_hold` approved by one person of `team_ops` with a step-up, published by Security |
 
 ## Steps and expected results
