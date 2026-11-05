@@ -33,7 +33,7 @@ with ExitStack() as stack:
         test.get("ok") and test["output"] == {"environment": "test"},
         test,
     )
-    live = call(gw, "uc392_bearer", environment="production")
+    live = call(gw, "uc392_bearer", environment="live")
     check(
         "1 a live call carries the live account's token",
         live.get("ok") and live["output"] == {"environment": "production"},

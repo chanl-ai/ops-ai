@@ -101,7 +101,7 @@ with ExitStack() as stack:
 
     def call(tool: str, args: dict[str, Any]) -> httpx.Response:
         headers = service_headers("tools", tenant=tenant, service="agents", team="team_ops")
-        body = {"tool": tool, "input": args, "key": uuid4().hex, "runContext": {"environment": "production"}}
+        body = {"tool": tool, "input": args, "key": uuid4().hex, "runContext": {"environment": "live"}}
         return kept(gw.post("/v1/calls", json=body, headers=headers | {"X-Team-Id": "team_ops"}))
 
     def output(r: httpx.Response) -> dict[str, Any]:

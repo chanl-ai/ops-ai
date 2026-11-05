@@ -149,7 +149,7 @@ class Walk:
                 headers=service_headers("platform", tenant=self.tenant, service="agents", team=team),
             )
             headers["X-Acting-For"] = str((data(minted) or {}).get("token") or "")
-        body = {"tool": tool, "input": args or {}, "key": uuid4().hex, "runContext": {"environment": "production"}}
+        body = {"tool": tool, "input": args or {}, "key": uuid4().hex, "runContext": {"environment": "live"}}
         return self.kept(self.gw.post("/v1/calls", json=body, headers=headers))
 
 

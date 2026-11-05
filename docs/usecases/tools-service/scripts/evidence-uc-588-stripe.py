@@ -85,7 +85,7 @@ with ExitStack() as stack:
     seen.append(tested.text)
     health = (data(tested) or {}).get("health") or {}
     headers = service_headers("tools", tenant=tenant, service="agents", team="team_ops")
-    body = {"tool": "stripe_balance", "input": {}, "key": uuid4().hex, "runContext": {"environment": "production"}}
+    body = {"tool": "stripe_balance", "input": {}, "key": uuid4().hex, "runContext": {"environment": "live"}}
     called = gw.post("/v1/calls", json=body, headers=headers | {"X-Team-Id": "team_ops"})
     seen.append(called.text)
     out = (data(called) or {}).get("output") or {}

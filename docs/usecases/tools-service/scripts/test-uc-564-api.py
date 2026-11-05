@@ -66,7 +66,7 @@ def call(
             headers=service_headers("platform", tenant=TENANT["id"], service="agents", team=team),
         )
         headers["X-Acting-For"] = str((data(minted) or {}).get("token") or "")
-    body = {"tool": tool, "input": args, "key": uuid4().hex, "runContext": {"environment": "production"}}
+    body = {"tool": tool, "input": args, "key": uuid4().hex, "runContext": {"environment": "live"}}
     return gw.post("/v1/calls", json=body, headers=headers | {"X-Team-Id": team})
 
 
@@ -143,13 +143,15 @@ with ExitStack() as stack:
         {"view": str(view)[:300]},
     )
 
-    # 2. The team admin turns it on for the team with the team's OAuth app; a builder cannot, nor change a locked field.
+    # 2. The team admin turns it on for the team with the team's OAuth app; a viewer cannot, nor change a locked field.
     # The org's company address, one of the places the Salesforce plugin signs in.
     login = sf["login_url"]
     own = {"app": f"plugin:{PLUGIN}", "clientId": "ops-ai-acme", "clientSecret": CLIENT_SECRET}
     credential = (data(gw.post("/v1/app-credentials", json=own, headers=priya)) or {}).get("id")
     team_on = {"enabled": True, "settings": {"login_url": login}, "credentialId": credential}
-    refused = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json=team_on, headers=james)
+    # A viewer: builders manage apps since D59.
+    viewer = bearer(signed_in(api, "r.menon@harborpine.example"), "team_ops")
+    refused = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json=team_on, headers=viewer)
     turned = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json=team_on, headers=priya)
     view = data(turned) or {}
     locked = gw.put(
@@ -163,7 +165,7 @@ with ExitStack() as stack:
         and locked.status_code == 400
         and code_of(locked) == "setting_locked"
         and ((view.get("plugin") or {}).get("values") or {}).get("api_version") == "61.0",
-        {"turned": turned.text[:300], "builder": refused.status_code, "locked": locked.text[:200]},
+        {"turned": turned.text[:300], "viewer": refused.status_code, "locked": locked.text[:200]},
     )
     connection_id = str(view.get("connectionId") or "con_missing")
 

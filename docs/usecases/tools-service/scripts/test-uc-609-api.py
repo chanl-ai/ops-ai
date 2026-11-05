@@ -46,7 +46,7 @@ TENANT: dict[str, str] = {}
 def call(gw: httpx.Client, tool: str, args: dict[str, Any], team: str = "team_ops") -> httpx.Response:
     """A call as agents-service makes it for a run in `team` with nobody behind it."""
     headers = service_headers("tools", tenant=TENANT["id"], service="agents", team=team)
-    body = {"tool": f"fields_{tool}", "input": args, "key": uuid4().hex, "runContext": {"environment": "production"}}
+    body = {"tool": f"fields_{tool}", "input": args, "key": uuid4().hex, "runContext": {"environment": "live"}}
     return gw.post("/v1/calls", json=body, headers=headers | {"X-Team-Id": team})
 
 
