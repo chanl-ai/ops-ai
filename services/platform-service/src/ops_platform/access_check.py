@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from ops_access import Access, Grids, active, effective
+from ops_access import BUILTIN_ROLES, Access, Grids, active, effective
 from ops_identity import Principal
 from ops_service_kit.errors import Forbidden, NotFound
 from ops_service_kit.ids import now_iso
@@ -108,7 +108,8 @@ class AccessCheck:
             security_team=await self.teams.security_team_of(tenant),
             grids=Grids(fetch=lambda t, _v, ids: self.roles.grids(t, ids)),
         )
-        await access.grids.load(tenant, version, [a.role_id for a in live])
+        # The built-in roles too, so a refusal names who holds the cell in this workspace.
+        await access.grids.load(tenant, version, [*{a.role_id for a in live}, *(r.id for r in BUILTIN_ROLES)])
         answer: dict[str, Any] = {"personId": person_id, "teamId": team, "area": area, "action": action}
         try:
             # An admin checking someone reads a refusal about that person, not one addressed to themselves.

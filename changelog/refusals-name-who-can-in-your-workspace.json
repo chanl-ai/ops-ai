@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "A refusal names who can act in your workspace",
+  "description": "When a role's permissions have been edited, a refused action now names the roles that hold it in your workspace, not the roles that hold it by default.",
+  "tag": "fix"
+}

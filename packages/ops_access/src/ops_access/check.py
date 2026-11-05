@@ -188,7 +188,7 @@ class Access:
             _same_team(p, held_in, action, what)
         scope = self.scope(p, area, action, held_in)
         if scope is None:
-            granting = granted_by(area, action)
+            granting = granted_by(area, action, self._workspace_grids(p))
             raise Forbidden(
                 f"{your} role cannot {action} {what}; {_who_can(granting)} can.",
                 code=code,
@@ -208,6 +208,12 @@ class Access:
             )
         return scope
 
+    def _workspace_grids(self, p: Principal) -> dict[str, tuple[Grant, ...]]:
+        """The built-in roles' cells as this workspace holds them: the token's grids (platform-service puts every
+        built-in role's there), else what the cache fetched, else the seed."""
+        known = self.grids.known(p.tenant_id, p.permission_version, [r.id for r in BUILTIN_ROLES])
+        return known | {r: decode_grid(g) for r, g in p.grids.items()}
+
     def may(self, p: Principal, area: str, action: str, **record: Any) -> bool:
         """`can` as a yes or no, for a response that tells the caller what they may do with a record."""
         try:
@@ -217,11 +223,14 @@ class Access:
         return True
 
 
-def granted_by(area: str, action: str) -> list[BuiltinRole]:
+def granted_by(area: str, action: str, grids: Mapping[str, Iterable[Grant]] | None = None) -> list[BuiltinRole]:
     """The built-in roles that grant a cell, the narrowest first: a role holding fewer cells names the cell's purpose
-    better than one holding every cell."""
+    better than one holding every cell. `grids` are the workspace's own cells for the roles it names (an admin may have
+    edited them); any other role answers from its seed grid."""
+    held = {r.id: tuple((grids or {}).get(r.id, r.grants)) for r in BUILTIN_ROLES}
     return sorted(
-        (r for r in BUILTIN_ROLES if any((a, x) == (area, action) for a, x, _ in r.grants)), key=lambda r: len(r.grants)
+        (r for r in BUILTIN_ROLES if any((a, x) == (area, action) for a, x, _ in held[r.id])),
+        key=lambda r: len(held[r.id]),
     )
 
 

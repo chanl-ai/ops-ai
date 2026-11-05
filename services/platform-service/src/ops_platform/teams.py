@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from ops_access import Access, Grids, active
+from ops_access import BUILTIN_ROLES, Access, Grids, active
 from ops_identity import Principal
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, Unauthorized
 from ops_service_kit.ids import now_iso
@@ -67,7 +67,8 @@ class Members:
             security_team=await self.store.security_team_of(actor.tenant_id),
             grids=Grids(fetch=lambda t, _v, ids: roles.grids(t, ids)),
         )
-        await access.grids.load(actor.tenant_id, version, [a.role_id for a in live])
+        # The built-in roles too, so a refusal names who holds the cell in this workspace.
+        await access.grids.load(actor.tenant_id, version, [*{a.role_id for a in live}, *(r.id for r in BUILTIN_ROLES)])
         access.can(p, area, action, team=actor.team_id, what="this team", code="admin_required")
 
     async def invite(self, actor: Actor, emails: list[str], role: str) -> dict[str, Any]:
