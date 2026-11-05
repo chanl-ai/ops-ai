@@ -214,7 +214,7 @@ export function ResourcesTab({ appName, pluginId, onConnect }: { appName: string
                         </Link>
                       </Button>
                     )}
-                    {r.copy && (
+                    {r.copy && r.canRemove && (
                       <Button size="sm" variant="ghost" onClick={() => setRemoving(r)} data-testid={`resource-remove-${r.id}`}>
                         Remove
                       </Button>
@@ -390,7 +390,7 @@ function AddPreviewDialog({
 
 function UpdateDialog({ resource, app, onOpenChange }: { resource: AppResource | null; app: string; onOpenChange: (open: boolean) => void }) {
   const id = resource ? resourceOf(resource) : '';
-  const review = useUpdateReview(id, resource?.copy?.recordId);
+  const review = useUpdateReview(id, resource?.copy?.recordId, resource?.kind ?? 'agent');
   const take = useTakeUpdate(app);
   const [confirmed, setConfirmed] = React.useState(false);
   React.useEffect(() => {
@@ -405,7 +405,7 @@ function UpdateDialog({ resource, app, onOpenChange }: { resource: AppResource |
       onOpenChange={onOpenChange}
       size="md"
       title={`Update ${resource.title}`}
-      description="Taking the update makes a new draft. The version your team runs now keeps running until the draft is published."
+      description="Taking the update makes a new version of your team’s copy. What runs now keeps running until that version is published."
       footer={
         <div className="flex w-full justify-end gap-2">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -416,10 +416,10 @@ function UpdateDialog({ resource, app, onOpenChange }: { resource: AppResource |
             disabled={!r || (edited && !confirmed)}
             onClick={() =>
               take.mutate(
-                { resource: id, copy: resource.copy!.recordId, confirm: edited },
+                { resource: id, copy: resource.copy!.recordId, confirm: edited, kind: resource.kind },
                 {
                   onSuccess: () => {
-                    toast.success(`A new draft of ${resource.title} is ready`);
+                    toast.success(`A new version of ${resource.title} is ready`);
                     onOpenChange(false);
                   },
                   onError: (e) => toast.error(`Couldn’t update ${resource.title}`, { description: e.message }),
@@ -443,7 +443,7 @@ function UpdateDialog({ resource, app, onOpenChange }: { resource: AppResource |
             <p>{r.changes.length ? `The update changes: ${r.changes.join(', ')}.` : 'The update changes nothing your copy shows.'}</p>
             {edited && (
               <>
-                <p className="text-destructive">{`Your team changed ${r.edits.join(', ')} since adding it. The new draft does not carry those changes.`}</p>
+                <p className="text-destructive">{`Your team changed ${r.edits.join(', ')} since adding it. The new version does not carry those changes.`}</p>
                 <label className="flex items-center gap-2">
                   <Checkbox checked={confirmed} onCheckedChange={(on) => setConfirmed(on === true)} data-testid="resource-update-confirm" />
                   Take the update without my team’s changes

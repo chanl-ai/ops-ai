@@ -20,7 +20,10 @@ type Raw = OpsAI['raw'];
 export type AppResource = Awaited<ReturnType<Raw['tools']['plugins_list_app_resources']>>[number];
 export type ResourcePlan = Awaited<ReturnType<Raw['agents']['resources_plan_resources']>>;
 export type PlanItem = ResourcePlan['items'][number];
-export type UpdateReview = Awaited<ReturnType<Raw['agents']['resources_review_update']>>;
+/** The same review either service answers; a document type's copy kind is the one the agents type leaves out. */
+export type UpdateReview = Omit<Awaited<ReturnType<Raw['agents']['resources_review_update']>>, 'copy'> & {
+  copy: { id: string; kind: string; recordId: string; source: string; templateId: string; version: number };
+};
 export type ResourceKind = AppResource['kind'];
 /** A record that uses a copy, as a refused delete names it. */
 export type CopyUser = { kind: string; id: string; name: string };
@@ -102,11 +105,21 @@ export function useAddResources(app: string) {
   });
 }
 
-/** Review update: what the app's template would change in the copy, and the team's edits the new draft leaves out. */
-export const useUpdateReview = (resource: string, copy: string | undefined) =>
+/** A copy's update in the service that keeps it: documents-service for a document type, agents-service otherwise. */
+const reviewIn = (kind: ResourceKind, path: { resource: string; copy: string }): Promise<UpdateReview> =>
+  kind === 'document_type'
+    ? sdk((ops) => ops.raw.documents.resources_review_update({ path }))
+    : sdk((ops) => ops.raw.agents.resources_review_update({ path }));
+const takeIn = (kind: ResourceKind, path: { resource: string; copy: string }, confirm: boolean): Promise<UpdateReview> =>
+  kind === 'document_type'
+    ? sdk((ops) => ops.raw.documents.resources_take_update({ path, body: { confirm } }))
+    : sdk((ops) => ops.raw.agents.resources_take_update({ path, body: { confirm } }));
+
+/** Review update: what the app's template would change in the copy, and the team's edits the new version leaves out. */
+export const useUpdateReview = (resource: string, copy: string | undefined, kind: ResourceKind) =>
   useTeamQuery({
     queryKey: ['app-resources', 'update', resource, copy],
-    queryFn: () => sdk((ops) => ops.raw.agents.resources_review_update({ path: { resource, copy: copy! } })),
+    queryFn: () => reviewIn(kind, { resource, copy: copy! }),
     enabled: !!copy,
   });
 
@@ -114,8 +127,8 @@ export const useUpdateReview = (resource: string, copy: string | undefined) =>
 export function useTakeUpdate(app: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ resource, copy, confirm }: { resource: string; copy: string; confirm: boolean }) =>
-      sdk((ops) => ops.raw.agents.resources_take_update({ path: { resource, copy }, body: { confirm } })),
+    mutationFn: ({ resource, copy, confirm, kind }: { resource: string; copy: string; confirm: boolean; kind: ResourceKind }) =>
+      takeIn(kind, { resource, copy }, confirm),
     onSuccess: () => qc.invalidateQueries({ queryKey: key(app) }),
   });
 }
@@ -128,6 +141,7 @@ export function useRemoveCopy(app: string) {
       if (kind === 'agent') return sdk((ops) => ops.raw.agents.agents_delete_agent({ path: { agent_id: recordId } }));
       if (kind === 'skill') return sdk((ops) => ops.raw.agents.agents_delete_skill({ path: { skill_id: recordId } }));
       if (kind === 'workflow') return sdk((ops) => ops.raw.agents.workflows_delete_definition({ path: { workflow_id: recordId } }));
+      if (kind === 'knowledge_source') return sdk((ops) => ops.raw.kb.sources_remove_source({ path: { source_id: recordId } }));
       return sdk((ops) => ops.raw.documents.document_types_delete_type({ path: { type_id: recordId } }));
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: key(app) }),
