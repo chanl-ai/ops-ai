@@ -252,7 +252,7 @@ export function TestConsole({
                 Real
               </ToggleGroupItem>
             </ToggleGroup>
-            <p className="text-xs text-muted-foreground">{target === 'stub' ? 'Answers from the operation’s mock response. Nothing leaves the gateway.' : 'Test run (uses the app’s sandbox account if it has one): calls the app for real through the gateway, writes included.'}</p>
+            <p className="text-xs text-muted-foreground">{target === 'stub' ? 'Answers from the operation’s mock response. Nothing leaves the gateway.' : 'Test run (uses the app’s test account if it has one): calls the app for real through the gateway, writes included.'}</p>
           </div>
           {op && (
             <div className="flex flex-col gap-3 border-t pt-4">

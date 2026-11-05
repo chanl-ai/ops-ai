@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { AppCredentialPicker } from '@/components/connections/app-credential-picker';
 import { appHref } from '@/components/connections/systems-grid';
 import { useSignInWindow } from '@/components/connections/sign-in';
-import { isSignInPlace, SignInPlace } from '@/components/connections/sign-in-place';
+import { isSignInPlace, isTestPlace, SignInPlace } from '@/components/connections/sign-in-place';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormTextField } from '@/components/shared/form-text-field';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -120,8 +120,10 @@ export function ConnectWindow({
 
   // Whose account it is and its name sit under More options; another account or a sandbox opens with them showing.
   const [more, setMore] = React.useState(another || sandbox);
+  // A test account is the one test runs use and live runs never do; a test sign-in place turns it on.
+  const [testAccount, setTestAccount] = React.useState(sandbox);
   const [team, setTeam] = React.useState(true);
-  const suggested = freeName(sandbox ? `${card.name} sandbox` : another ? `${card.name} · second account` : `${card.name} · ${current?.name ?? 'Team'}`, taken);
+  const suggested = freeName(testAccount ? `${card.name} test account` : another ? `${card.name} · second account` : `${card.name} · ${current?.name ?? 'Team'}`, taken);
 
   const [waiting, setWaiting] = React.useState(false);
   // The account a sign-in window was closed on before access was allowed: Try again signs it in again, as it is.
@@ -210,12 +212,12 @@ export function ConnectWindow({
       const offered = team ? (plugin.signIn.includes('person_or_team') ? 'person_or_team' : undefined) : plugin.signIn.includes('person') ? 'person' : undefined;
       let id: string;
       if (adding) {
-        const body = newAccountBody(kind, plugin, client, draft, accountName, sandbox, offered) as AccountBody;
+        const body = newAccountBody(kind, plugin, client, draft, accountName, testAccount, offered) as AccountBody;
         const account = await addAccount.mutateAsync({ appId: card.id, body });
         id = account.id;
         made.current = { id, turnedOn: false };
       } else {
-        const body = { ...turnOnBody(kind, plugin, client, draft, teamSettings, !card.connectionId, offered), accountName } as TeamAppBody;
+        const body = { ...turnOnBody(kind, plugin, client, draft, teamSettings, !card.connectionId, offered), accountName, sandbox: testAccount } as TeamAppBody;
         const view = await setTeamApp.mutateAsync({ appId: card.id, body });
         id = String(view.connectionId ?? card.connectionId ?? '');
         made.current = { id: card.connectionId ? null : id, turnedOn: true };
@@ -259,7 +261,7 @@ export function ConnectWindow({
       open={open}
       onOpenChange={(o) => (o ? onOpenChange(o) : void cancel())}
       size="md"
-      title={sandbox ? `Add a ${card.name} sandbox account` : another ? `Connect another ${card.name} account` : `Connect ${card.name}`}
+      title={sandbox ? `Add a ${card.name} test account` : another ? `Connect another ${card.name} account` : `Connect ${card.name}`}
       description={`Choose how Ops AI signs in to ${card.name}, then allow access.`}
       data-testid="connect-window"
       footer={
@@ -279,8 +281,22 @@ export function ConnectWindow({
         <AppCredentialPicker app={card.id} value={client} onChange={setClient} platform={managed && Boolean(plugin.platformApp)} id="connect-window-app" testId="connect-window-app" />
 
         {asked.filter(isSignInPlace).map((x) => (
-          <SignInPlace key={x.name} setting={x} value={form.watch(x.name) ?? ''} onChange={(v) => form.setValue(x.name, v)} testId={`connect-window-place-${x.name}`} />
+          <SignInPlace
+            key={x.name}
+            setting={x}
+            value={form.watch(x.name) ?? ''}
+            onChange={(v) => (form.setValue(x.name, v), setTestAccount(sandbox || isTestPlace(x, v)))}
+            testId={`connect-window-place-${x.name}`}
+          />
         ))}
+
+        <label className="flex items-start gap-2">
+          <Checkbox checked={testAccount} onCheckedChange={(v) => setTestAccount(v === true)} className="mt-0.5" data-testid="connect-window-test-account" />
+          <span className="grid gap-1">
+            <span className="text-sm">Test account</span>
+            <span className="text-xs text-muted-foreground">Test runs use this account; live runs never do.</span>
+          </span>
+        </label>
 
         {needed.map(setting)}
 

@@ -85,10 +85,10 @@ export function ConnectSystemDialog({
       ? `Connect ${target.name}`
       : target.kind === 'plugin'
         ? target.sandbox
-          ? `Add a ${target.card.name} sandbox account`
+          ? `Add a ${target.card.name} test account`
           : `Connect ${target.card.name}`
         : target.kind === 'sandbox'
-          ? `Add a ${target.name} sandbox account`
+          ? `Add a ${target.name} test account`
           : 'Add custom app';
   const description =
     mode === 'edit' ? 'A saved key stays unless you type a new one. It is tested before it is called working.' : 'It is tested before it is called working.';
@@ -147,7 +147,7 @@ function ConnectForm({
   onConnected?: (c: AccountDetail) => void;
 }) {
   const sandbox = target.kind === 'sandbox';
-  const [name, setName] = React.useState(target.kind === 'module' ? target.name : sandbox ? `${target.name} sandbox` : '');
+  const [name, setName] = React.useState(target.kind === 'module' ? target.name : sandbox ? `${target.name} test account` : '');
   const [kindId, setKindId] = React.useState(
     detail?.authKind ?? (sandbox ? target.authKind : undefined) ?? kinds.kinds.find((k) => k.id === 'api_key')?.id ?? kinds.kinds[0]?.id ?? 'none',
   );
@@ -311,7 +311,7 @@ function ConnectForm({
           });
         await remove.mutateAsync(ref());
       } catch (e) {
-        toast.error(sandbox ? 'Couldn’t remove the new sandbox account' : 'Couldn’t remove the new app', {
+        toast.error(sandbox ? 'Couldn’t remove the new test account' : 'Couldn’t remove the new app', {
           description: message(e),
         });
       }
