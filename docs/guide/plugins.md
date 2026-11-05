@@ -488,6 +488,12 @@ model is needed.
 | Add it to the environment tools-service runs in (`uv add`) | A packaged plugin on a developer's stack |
 | List its folder in `OPS_PLUGIN_PATHS` (a JSON list) | A plugin under development, without copying it |
 
+A plugin found in two places, such as a copy in the plugins folder and a checkout in `OPS_PLUGIN_PATHS`, loads from
+neither: `GET /v1/plugins` reports each with both places, so a stale copy can never run in place of the checkout. A
+stack that has the plugins repository cloned by `make demo-salesforce` (`.run/plugins/ops-ai-plugins`, or
+`.run/isolated/...` with `ISOLATED=1`, at its pinned ref) loads plugins from that clone only, and does not read the
+repo's `plugins/` folder.
+
 `ops plugin install <folder>` validates the plugin, then copies its package folder into the plugins folder (`--into`
 names it when it is not `./plugins`), replacing an earlier copy whole; a plugin that fails validation is not copied.
 `ops plugin remove <id>` deletes it. Restart tools-service and kb-service after either.

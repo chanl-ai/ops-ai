@@ -64,6 +64,9 @@ if [ -f ".devcontainer/.env.local" ]; then set -a; . ".devcontainer/.env.local" 
 # A demo's settings on top (make demo-salesforce writes the plugin switch, its folder and a fake system's CA and host map),
 # so every restart keeps them; removing the file drops them at the next restart.
 if [ -f "$RUN_DIR/demo-addons.env" ]; then set -a; . "$RUN_DIR/demo-addons.env" >/dev/null 2>&1 || true; set +a; fi
+# A stack with the plugins repo cloned (make demo-salesforce, at the pinned ref) loads every plugin from that clone and
+# nothing else: a copy left in the repo's plugins/ folder is never read beside it.
+if [ -d "$RUN_DIR/plugins/ops-ai-plugins/plugins" ]; then export OPS_PLUGINS_DIR="$(cd "$RUN_DIR/plugins/ops-ai-plugins/plugins" && pwd)"; unset OPS_PLUGIN_PATHS; fi
 # An isolated stack's services reach its own models-service, fake model and fake bank: a laptop .env that names the
 # shared stack's sent an isolated run's model calls to the shared stack's aliases, real models included, and had its
 # tools-service trust the shared fake bank's certificate.

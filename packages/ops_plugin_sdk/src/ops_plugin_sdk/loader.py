@@ -56,7 +56,8 @@ def discover(found: Iterable[EntryPoint] | None = None, folders: Iterable[str] =
     """Every entry point in the `ops_ai.plugins` group, then each folder in `folders` (the install's plugins folder,
     then a developer's plugin paths), loaded or failed; `found` replaces the installed set (tests)."""
     out: list[Loaded] = []
-    seen: set[str] = set()
+    # Each loaded plugin's id and where it came from, so a plugin found in two places can be refused in both.
+    places: dict[str, list[tuple[int, str]]] = {}
     loaders: list[tuple[str, Callable[[], Any], str]] = [
         (ep.name, ep.load, ep.value)
         for ep in sorted(found if found is not None else entry_points(group=GROUP), key=lambda e: e.name)
@@ -80,9 +81,13 @@ def discover(found: Iterable[EntryPoint] | None = None, folders: Iterable[str] =
         if problems:
             out.append(Loaded(name, None, "; ".join(str(p) for p in problems)))
             continue
-        if obj.manifest.id in seen:
-            out.append(Loaded(name, None, f"{obj.manifest.id} is installed twice"))
-            continue
-        seen.add(obj.manifest.id)
+        places.setdefault(obj.manifest.id, []).append((len(out), where))
         out.append(Loaded(name, obj, None))
+    # Two copies of one plugin (a stale one in the plugins folder beside a checkout) would run whichever was found
+    # first, with nothing saying the other was skipped; neither runs, and each failure names both places.
+    for pid, found_at in places.items():
+        if len(found_at) > 1:
+            said = f"{pid} is in two places ({', '.join(w for _, w in found_at)}); remove all but one"
+            for i, _ in found_at:
+                out[i] = Loaded(out[i].name, None, said)
     return out
