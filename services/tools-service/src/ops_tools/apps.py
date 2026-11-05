@@ -46,7 +46,7 @@ from .modules.seed import BUILT_IN, TOOL_ORIGIN, template_of, tool_title
 from .modules.service import Caller, ModuleService
 from .modules.tool_users import ToolUsers
 from .plugins.host import PluginHost, fixed_fields, module_id_of, offered, per_account, plugin_id_of
-from .plugins.routes import PluginAccounts, TeamPluginIn
+from .plugins.routes import PluginAccounts, TeamPluginIn, not_offered
 from .plugins.templates import view_of
 from .store.connections import plugin_app, plugin_of
 from .store.modules import ModuleStore
@@ -91,6 +91,9 @@ class PluginSetting(Out):
     other: SettingOther | None = None
     # Held by the app credential the account signs in with (the app registration's), not by the account.
     credential: bool = False
+    # Where a person sets it: config (the auth config's windows), connect (Connect and Add account), settings (the
+    # app's Settings tab); null for the default place.
+    asked: Literal["config", "connect", "settings"] | None = None
 
 
 class Permission(Out):
@@ -221,13 +224,20 @@ class CredentialAccount(Out):
 
 
 class CredentialField(Out):
-    """A setting an app credential may hold: one of a plugin's credential_settings, or a custom app's client field."""
+    """A setting an auth config holds, as its New and Edit windows draw and check it: a plugin's setting `asked:
+    config` (or one of its credential_settings), or a custom app's client field. The console builds its form schema
+    from these, and the API checks a saved value against the same."""
 
     name: str
     label: str
     help: str | None = None
     # PEM text: a multi-line box and a file to read it from.
     pem: bool = False
+    required: bool = False
+    default: str | None = None
+    # The values it takes, and a host typed in place of one: the same check the API runs on save.
+    choices: list[SettingChoice] | None = None
+    other: SettingOther | None = None
 
 
 class AppCredentialDetail(AppCredential):
@@ -501,7 +511,8 @@ class Apps:
                         "perAccount": k in own,
                         "locked": k in locked,
                         **setting_offer(s),
-                        "credential": k in m.connection.credential_settings,
+                        "credential": k in m.config_settings,
+                        "asked": s.asked,
                     }
                     for k, s in m.settings.items()
                     if not s.at_sign_in
@@ -895,6 +906,12 @@ async def add_app_credential(apps: Apps, who: Caller, i: AppCredentialIn) -> dic
     return await app_credential(apps, who, made)
 
 
+def config_field(s: Setting, name: str) -> dict[str, Any]:
+    """One auth config setting of a plugin's as its windows draw and check it."""
+    default = None if s.default is None else str(s.default)
+    return {"name": name, "label": s.title or name, "required": default is None, "default": default, **setting_offer(s)}
+
+
 def credential_fields(apps: Apps, card: dict[str, Any], app: dict[str, Any] | None) -> list[dict[str, Any]]:
     """The settings an app's credential may hold: a plugin's credential_settings, with their titles, or, for a custom
     app, its sign-in kind's own client fields (`app` is its first account), never a secret, the client id or the
@@ -902,7 +919,7 @@ def credential_fields(apps: Apps, card: dict[str, Any], app: dict[str, Any] | No
     plugin = _plugin(apps, card)
     if plugin is not None:
         m = plugin.manifest
-        return [{"name": k, "label": m.settings[k].title or k} for k in m.connection.credential_settings]
+        return [config_field(m.settings[k], k) for k in m.config_settings]
     if app is None:
         return []
     kind = kind_of(str(app["auth_kind"]))
@@ -936,7 +953,9 @@ def _checked_registration(
         setting = plugin.manifest.settings.get(k) if plugin is not None else None
         if setting is not None and v not in (None, "") and not offered(setting, v):
             raise ValidationFailed(
-                f"{card['name']} cannot use {v} there.", code="setting_not_offered", details={"field": f"settings.{k}"}
+                not_offered(str(card["name"]), setting, v),
+                code="setting_not_offered",
+                details={"field": f"settings.{k}"},
             )
     return given
 

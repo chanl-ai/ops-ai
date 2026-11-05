@@ -122,7 +122,7 @@ export const useAppCredentials = (app?: string) =>
 /** One app credential's page (GET /v1/app-credentials/{id}): its row and the accounts signing in with it, joined. */
 export type AppCredentialDetail = Data<'apps_get_app_credential'>;
 export const useAppCredential = (id: string) =>
-  useTeamQuery({ queryKey: [...SYSTEMS, 'app-credentials', 'one', id], queryFn: () => sdk((ops) => ops.raw.tools.apps_get_app_credential({ path: { credential_id: id } })) });
+  useTeamQuery({ queryKey: [...SYSTEMS, 'app-credentials', 'one', id], enabled: Boolean(id), queryFn: () => sdk((ops) => ops.raw.tools.apps_get_app_credential({ path: { credential_id: id } })) });
 /** The team's own client for an app (POST /v1/app-credentials), made with no account; answers its page. */
 export const useCreateAppCredential = () =>
   useSystemsMutation((body: Args<'apps_create_app_credential'>['body']) => sdk((ops) => ops.raw.tools.apps_create_app_credential({ body })));
