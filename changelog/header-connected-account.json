@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "The app's header names its account",
+  "description": "Once an app's default account is signed in, its page header reads Connected with the account's name, and whom it signed in as when the system says.",
+  "tag": "improved"
+}

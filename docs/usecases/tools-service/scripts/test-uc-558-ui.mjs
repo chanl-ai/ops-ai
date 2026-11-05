@@ -276,11 +276,11 @@ try {
           const [popup] = await Promise.all([admin.waitForEvent('popup', { timeout: 60_000 }), button.click()]);
           await throughPopup(popup, 'lead@kestrel.example');
           const me = admin.getByTestId('app-connected-as');
-          await me.getByText(/Connected as/).waitFor({ timeout: 60_000 }).catch(() => {});
+          await me.getByText(/Connected\b.* as /).waitFor({ timeout: 60_000 }).catch(() => {});
           const text = ((await me.innerText()) ?? '').replace(/\s+/g, ' ');
           await admin.screenshot({ path: join(SHOTS, 'app-own-account-1280.png') });
           const mine = (await call(tools, 'GET', '/v1/me/accounts', priya)).data ?? [];
-          check('18 she connects her own account on the app’s page, which the old connection address opens', /Connected as lead@kestrel\.example/.test(text) && mine.some((c) => c.account === 'lead@kestrel.example'), { text, mine });
+          check('18 she connects her own account on the app’s page, which the old connection address opens', /Connected\b.* as lead@kestrel\.example/.test(text) && mine.some((c) => c.account === 'lead@kestrel.example'), { text, mine });
         }, admin);
 
         check('no page errors', errors.length === 0, errors.slice(0, 3));
