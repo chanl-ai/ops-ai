@@ -166,7 +166,7 @@ export function SignInProviderDialog({
       }
     >
       <div className="flex flex-col gap-4" data-testid="provider-form">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4">
           <FormField id="provider-kind" label="Type" hint={provider ? 'Fixed once saved.' : undefined}>
             <Select value={f.kind} onValueChange={(v) => set('kind', v as SignInProviderKind)} disabled={!!provider}>
               <SelectTrigger id="provider-kind" className="w-full">
@@ -194,8 +194,8 @@ export function SignInProviderDialog({
         </div>
 
         {f.kind === 'oidc' && (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField id="provider-issuer" label="Issuer URL" error={errors.issuer} className="sm:col-span-2">
+          <div className="grid gap-4">
+            <FormField id="provider-issuer" label="Issuer URL" error={errors.issuer}>
               <Input id="provider-issuer" value={f.issuer} aria-invalid={!!errors.issuer} onChange={(e) => set('issuer', e.target.value)} placeholder="https://login.bank.com" />
             </FormField>
             <FormField id="provider-client" label="Client ID" error={errors.clientId}>
@@ -220,20 +220,20 @@ export function SignInProviderDialog({
         )}
 
         {f.kind === 'saml' && (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4">
             <FormField id="provider-entity" label="Identity provider entity ID" error={errors.entity}>
               <Input id="provider-entity" value={f.entity} aria-invalid={!!errors.entity} onChange={(e) => set('entity', e.target.value)} />
             </FormField>
             <FormField id="provider-sso-url" label="Sign-in URL" error={errors.ssoUrl}>
               <Input id="provider-sso-url" value={f.ssoUrl} aria-invalid={!!errors.ssoUrl} onChange={(e) => set('ssoUrl', e.target.value)} placeholder="https://login.bank.com/saml/sso" />
             </FormField>
-            <FormField id="provider-certificate" label="Signing certificate" error={errors.certificate} hint="PEM, from the identity provider’s metadata." className="sm:col-span-2">
+            <FormField id="provider-certificate" label="Signing certificate" error={errors.certificate} hint="PEM, from the identity provider’s metadata.">
               <Textarea id="provider-certificate" value={f.certificate} rows={5} className="font-mono text-xs" aria-invalid={!!errors.certificate} onChange={(e) => set('certificate', e.target.value)} placeholder="-----BEGIN CERTIFICATE-----" />
             </FormField>
             <FormField id="provider-email-attr" label="Email attribute" optional hint="When the email is not the NameID.">
               <Input id="provider-email-attr" value={f.emailAttribute} onChange={(e) => set('emailAttribute', e.target.value)} />
             </FormField>
-            <div className="flex flex-col gap-3 sm:col-span-2">
+            <div className="flex flex-col gap-3">
               <div className="flex items-start gap-3">
                 <Switch id="provider-sign-requests" checked={f.signRequests} onCheckedChange={(v) => set('signRequests', v)} className="mt-0.5" />
                 <Label htmlFor="provider-sign-requests" className="flex flex-col items-start gap-0.5 font-normal">
@@ -250,7 +250,7 @@ export function SignInProviderDialog({
               </div>
             </div>
             {metadataUrl && (
-              <FormField id="provider-metadata" label="Metadata for your identity provider" hint="Give this URL to the bank's identity team; it holds the certificate for signed requests and encryption." className="sm:col-span-2">
+              <FormField id="provider-metadata" label="Metadata for your identity provider" hint="Give this URL to the bank's identity team; it holds the certificate for signed requests and encryption.">
                 <CopyField id="provider-metadata" value={metadataUrl} label="SAML metadata URL" />
               </FormField>
             )}
@@ -262,7 +262,7 @@ export function SignInProviderDialog({
             <FormField id="provider-domains" label="Email domains" error={errors.domains} hint="Each is verified by a DNS TXT record before it sends anyone here. Press Enter after each.">
               <TagInput id="provider-domains" value={f.domains} invalid={!!errors.domains} onChange={(v) => set('domains', v.map((d) => d.toLowerCase()))} placeholder="e.g. harborpine.ca" />
             </FormField>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4">
               <FormField id="provider-role" label="New people join as" error={errors.jit} hint="Someone new to the workspace gets an account on their first sign-in.">
                 <Select value={f.role} onValueChange={(v) => set('role', v as Form['role'])}>
                   <SelectTrigger id="provider-role" className="w-full">

@@ -37,7 +37,9 @@ class NotFound(ApiError):
     code = "not_found"
 
     def __init__(self, what: str) -> None:
-        super().__init__(f"{what} was not found.")
+        # `what` names the missing thing ("Run", "Agent ag_1"); a caller that words the whole sentence ends it with a
+        # full stop, and it is kept as written rather than read as "No item with that id. was not found."
+        super().__init__(what if what.rstrip().endswith((".", "!", "?")) else f"{what} was not found.")
 
 
 class Conflict(ApiError):

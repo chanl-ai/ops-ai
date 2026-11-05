@@ -6,11 +6,12 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
 
-from .types import AgentSettings, Passage, ToolGrant, TranscriptMessage
+from .types import AgentSettings, AttachedFile, Passage, ToolGrant, TranscriptMessage
 
 PLATFORM_RULES = (
     "When a <knowledge> block is present, answer from it and cite each fact with its number in square brackets, "
@@ -54,6 +55,20 @@ def knowledge_block(passages: list[Passage]) -> str:
     return "<knowledge>\n" + "\n".join(rows) + "\n</knowledge>"
 
 
+def attachments_block(files: Sequence[AttachedFile]) -> str:
+    rows = [
+        f"- {_escape(f.name, 'attachments')} ({f.file_id})"
+        + (f": could not be read: {_escape(f.unread, 'attachments')}" if f.unread else "")
+        for f in files
+    ]
+    # The rule rides with the block, so a turn without attachments keeps the same system prompt.
+    head = (
+        "Files the person attached to this conversation, by name and file id. The text of each one that could be read "
+        "is in the <knowledge> block; for one that could not, tell the person why instead of answering from it."
+    )
+    return "<attachments>\n" + head + "\n" + "\n".join(rows) + "\n</attachments>"
+
+
 def _sha(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
@@ -66,6 +81,7 @@ def assemble(
     user_turn: str,
     passages: list[Passage],
     variables: dict[str, str],
+    attachments: Sequence[AttachedFile] = (),
 ) -> AssembledContext:
     stable = [f.text for f in settings.instructions if f.stable]
     volatile = [_fill(f.text, variables) for f in settings.instructions if not f.stable]
@@ -77,12 +93,14 @@ def assemble(
         for m in transcript
         if m.content
     ]
+    files = attachments_block(attachments) + "\n\n" if attachments else ""
     data = knowledge_block(passages) + "\n\n" if passages else ""
-    user_prompt = f"{data}{user_turn}"
+    user_prompt = f"{files}{data}{user_turn}"
     digest = {
         "instructions": _sha(system_prompt),
         "tools": _sha(",".join(sorted(t.name for t in tools))),
         "transcript": _sha("\n".join(f"{m.role}:{m.content}" for m in transcript)),
+        "attachments": _sha(files),
         "knowledge": _sha(data),
         "user_turn": _sha(user_turn),
     }

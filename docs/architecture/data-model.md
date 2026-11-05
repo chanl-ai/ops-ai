@@ -171,13 +171,6 @@ erDiagram
     string origin "planned"
     string owner_team "planned"
   }
-  chat_attachments {
-    string id PK
-    string team_id
-    string owner_email
-    string name
-    json pages "parsed text, capped"
-  }
   chat_search {
     string thread_id PK
     string team_id
@@ -225,7 +218,6 @@ erDiagram
 | `registry_skills, registry_skill_versions` | Versioned procedures an agent loads when a request matches. A skill records who created it, once, so the right to delete it does not pass to whoever saved a draft last | built |
 | `registry_guardrails, registry_guardrail_versions` | Versioned checks on the question and the answer | built |
 | `graph_threads` | A conversation or job thread, with the overrides set for the thread. Its origin and owning team are planned `ix_graph_threads_team_updated` (tenant_id, team_id, updated_at) serves a team's thread list (0071). | partial |
-| `chat_attachments` | A file attached to a chat message: who owns it, its type and size, and the text read from it, capped | built |
 | `chat_search` | A thread's title, agent, last reply and questions as plain columns, so search works on every supported database | built |
 | `registry_widgets, registry_widget_versions` | Widget templates an agent may show in chat, saved as versions and published through a review. The newest name is kept on the widget so a list searches and pages in the database | built |
 | `widget_deployments` | A chat widget served to pages on other origins: the agent and published version it is pinned to, the exact origins allowed, a paused flag and the team its conversations belong to. Sessions are signed tokens that expire after 15 minutes and are not stored | built |

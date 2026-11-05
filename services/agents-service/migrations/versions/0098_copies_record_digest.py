@@ -1,7 +1,7 @@
 """Template copies keep the digest of the record they made
 
-Revision ID: 0097_copies_record_digest
-Revises: 0096_system_reads_team_defaults
+Revision ID: 0098_copies_record_digest
+Revises: 0097_chat_attachments_in_files
 
 A copy records the digest of its own record as the copy made it, so taking a template's update can tell a copy the
 team edited since and ask before replacing those edits. Nullable: copies made before carry none, and read as edited.
@@ -13,8 +13,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0097_copies_record_digest"
-down_revision = "0096_system_reads_team_defaults"
+revision = "0098_copies_record_digest"
+down_revision = "0097_chat_attachments_in_files"
 branch_labels = None
 depends_on = None
 

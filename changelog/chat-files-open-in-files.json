@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-04",
+  "title": "A file cited in chat opens in Files",
+  "description": "Clicking a file you attached in chat, from the message, its source chip or a citation, opens the file in Files with its preview. A missing record now says so in one plain sentence.",
+  "tag": "fix"
+}

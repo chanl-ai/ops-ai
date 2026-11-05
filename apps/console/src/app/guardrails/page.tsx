@@ -163,7 +163,7 @@ function GuardrailDialog({ open, onOpenChange, onCreated }: { open: boolean; onO
       }
     >
       <div className="flex flex-col gap-4">
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4">
           <FormField id="guardrail-name" label="Name" error={errors.name}>
             <Input id="guardrail-name" value={name} aria-invalid={!!errors.name} onChange={(e) => (setName(e.target.value), setErrors({}))} placeholder="e.g. No investment advice" />
           </FormField>

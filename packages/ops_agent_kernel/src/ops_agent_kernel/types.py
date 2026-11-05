@@ -173,6 +173,16 @@ class Resume:
 
 
 @dataclass(frozen=True)
+class AttachedFile:
+    """A file the person attached to the conversation, as the turn names it to the model: its name, its file id, and
+    why it could not be read when it could not. The text that was read arrives as knowledge passages."""
+
+    file_id: str
+    name: str
+    unread: str | None = None
+
+
+@dataclass(frozen=True)
 class TurnRequest:
     turn_id: str
     run_id: str
@@ -184,6 +194,8 @@ class TurnRequest:
     # not the mapped input JSON whose names and ids drown the handbook terms).
     search_text: str | None = None
     kb_ids: list[str] = field(default_factory=list[str])
+    # Files attached to the conversation, named in their own data block whether or not their text could be read.
+    attachments: list[AttachedFile] = field(default_factory=list[AttachedFile])
     # The conversation named knowledge bases and the agent no longer holds any of them: the turn says so and does not
     # call the model, which would otherwise answer from its own knowledge, uncited.
     knowledge_withdrawn: bool = False

@@ -1,7 +1,7 @@
 // uc-091 a banker narrows the agent for a thread within its limits and attaches a file, ui layer:
 // docs/usecases/console/chat-overrides-within-limits.md. Headless Chromium against a console whose chat calls the agents
 // service on the scripted model. The settings panel offers only what the agent's limits allow; a switched-off tool is
-// not offered to the model; every turn records the settings it ran on; an attached PDF is cited by its page.
+// not offered to the model; every turn records the settings it ran on; a PDF attached through Files is cited by its page.
 import { fileURLToPath } from 'node:url';
 
 import { AGENTS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
@@ -84,9 +84,9 @@ await withUiStack(async (consoleUrl) => {
     const refusal = await refused.json();
     check('a value outside the limits is refused with the field it breaks', refused.status === 422 && refusal.error?.details?.field === 'overrides.thread.temperature', { status: refused.status, error: refusal.error });
 
-    // An attached PDF: parsed at upload, cited by its page.
+    // An attached PDF: uploaded to Files as a chat attachment, read for the turn, cited by its page.
     const uploads = [];
-    page.on('response', (r) => r.url().includes('/chat/attachments') && uploads.push(`${r.request().method()} ${r.status()}`));
+    page.on('response', (r) => r.url().includes('/v1/files/uploads') && uploads.push(`${r.request().method()} ${r.status()}`));
     await page.locator('#chat-attach').setInputFiles(PDF);
     const ready = await page.getByTestId('chat-attach-items').locator('[data-phase="ready"]').waitFor({ timeout: 30_000 }).then(() => true, () => false);
     const chip = ready ? 'ready' : await page.getByTestId('chat-attach-items').innerHTML().catch(() => 'no chip');
@@ -96,7 +96,7 @@ await withUiStack(async (consoleUrl) => {
     if (cited) await marker.click();
     const location = cited ? await page.getByRole('dialog').getByTestId('citation-location').innerText().catch(() => '') : '';
     const last = (await thread()).messages.slice(-2).map((m) => ({ role: m.role, content: m.content.slice(0, 120), attachments: m.attachments, citations: m.citations?.map((c) => `${c.title} p${c.page}`) }));
-    check('an attached PDF is read and the answer cites it by its page', cited && /Card fees · p\.3/.test(location), { cited, location, last, uploads, chip: String(chip).slice(0, 400) });
+    check('an attached PDF is read and the answer cites it by its page', cited && /fee-schedule-v2\.pdf · p\.3/.test(location), { cited, location, last, uploads, chip: String(chip).slice(0, 400) });
 
     check('no page errors', errors.length === 0, errors);
   } finally {

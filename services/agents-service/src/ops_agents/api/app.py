@@ -33,6 +33,7 @@ from ops_agents.graphs.definition import CompiledCache, WorkflowDefinition
 from ops_agents.graphs.metering import MeteredModels
 from ops_agents.graphs.models import GraphModels, PydanticAiModels
 from ops_agents.graphs.registry import build_graphs
+from ops_documents_client import DocumentsClient
 from ops_files_client import FilesClient
 from ops_identity import Auth, ServiceClient, install_auth
 from ops_metering import PriceTable
@@ -54,6 +55,7 @@ from . import agent_registry, engine_seed, guardrails, skills, workflow_registry
 from .acting_for import CallPeople, acting_for_tokens
 from .agent_calls import AgentCalls
 from .approval_renewal import ApprovalRenewal
+from .chat_attachments import ChatAttachmentReader
 from .child_runs import ChildRuns
 from .deps import Runtime
 from .envelope import install_error_handlers
@@ -345,6 +347,14 @@ def create_app(
             rt.start_files = FilesClient.from_settings(
                 settings, service="agents", scopes=["files:view", "files:create"]
             )
+            if settings.documents_url:
+                # A chat turn reads its attached files as the person's team.
+                rt.chat_attachments = ChatAttachmentReader(
+                    FilesClient.from_settings(settings, service="agents", scopes=["files:view"]),
+                    DocumentsClient.from_settings(
+                        settings, service="agents", scopes=["documents:view", "documents:run"]
+                    ),
+                )
         rt.knowledge_bases = knowledge
         if gateway_client is not None:
             gateway_client.renewer = ApprovalRenewal(rt)

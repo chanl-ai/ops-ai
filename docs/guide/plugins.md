@@ -20,7 +20,7 @@ The manifest file is `plugin.yaml`. The Salesforce example lives at `plugins/sal
 | Manifest | `src/ops_plugin_salesforce/plugin.yaml` | Id, version, connection, settings, tools, knowledge sources and templates, schema `ops-ai/plugin@2` |
 | Entry point | `pyproject.toml`, group `ops_ai.plugins` | How tools-service finds the installed plugin: `salesforce = "ops_plugin_salesforce:plugin"` |
 | Plugin object | `src/ops_plugin_salesforce/__init__.py` | `plugin = Plugin.beside(__file__)`, which reads the manifest next to it |
-| Python tools | a module beside the manifest | Functions marked `@tool(access=...)`, named from the manifest by `function: module:name`. Salesforce has none; `services/tools-service/tests/plugin_desk/kb.py` in ops-ai is a small one |
+| Python tools | a module beside the manifest | Functions marked `@tool(access=...)`, named from the manifest by their full import path, `function: <package>.<module>:<function>`. Salesforce has none; `services/tools-service/tests/plugin_desk/kb.py` in ops-ai is a small one |
 | Templates | `src/ops_plugin_salesforce/templates/` | Agents, skills, workflows and document types the manifest lists under `templates`; a team adds its own copy from the App's Resources tab |
 | Tests | `tests/test_tools.py` | Each tool against a fake of the system, through the SDK's runner |
 
@@ -323,6 +323,56 @@ and `cursor` with `required: false`, because its first page has neither.
 Raise `BadInput` for an input the tool refuses, `NeedsReconnect` when the system rejects the sign-in, and
 `RateLimited` when it asks to slow down. A list tool's `next_cursor` is sealed by tools-service before it leaves, so a
 model or a caller cannot change it between pages.
+
+A worked example, added to the Ticket desk plugin from Start a new plugin: one tool that reads a queue's tickets and
+counts the open ones, which a request template cannot do. The module sits beside the manifest:
+
+```python
+# src/ops_plugin_ticketdesk/tickets.py
+from typing import Any
+
+from ops_plugin_sdk import Context, tool
+
+
+@tool(access="read")
+def open_tickets_summary(ctx: Context, queue: str) -> dict[str, Any]:
+    tickets = ctx.http.get(f"{ctx.settings.api_url}/queues/{queue}/tickets").json()["tickets"]
+    open_ = [t for t in tickets if t["status"] == "open"]
+    oldest = min((t["opened_at"] for t in open_), default=None)
+    return {"queue": queue, "open": len(open_), "total": len(tickets), "oldest_open": oldest}
+```
+
+The manifest names it by its full import path. A short name such as `tickets:open_tickets_summary` is refused with
+`cannot import tickets`:
+
+```yaml
+  - name: open_tickets_summary
+    title: Summarize a queue
+    description: How many tickets in a queue are open, and the oldest one
+    access: read
+    input:
+      queue: { type: string, pattern: "^[a-z0-9-]{1,40}$", description: "The queue, such as billing" }
+    function: ops_plugin_ticketdesk.tickets:open_tickets_summary
+```
+
+Its test answers the request the way the system would, through the same `call` as a request-template tool:
+
+```python
+def test_the_summary_counts_the_open_tickets_of_a_queue() -> None:
+    def desk(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/queues/billing/tickets"
+        return httpx.Response(200, json={"tickets": [
+            {"status": "open", "opened_at": "2026-11-01"},
+            {"status": "closed", "opened_at": "2026-10-01"},
+            {"status": "open", "opened_at": "2026-10-20"},
+        ]})
+
+    client = Fake(httpx.Client(transport=httpx.MockTransport(desk)), "k-1")
+    out = call(plugin, "open_tickets_summary", {"queue": "billing"}, SETTINGS, client)
+    assert out == {"queue": "billing", "open": 2, "total": 3, "oldest_open": "2026-10-20"}
+```
+
+`validate` then counts 2 tools, and `test` reports 2 passed.
 
 ## Knowledge sources
 

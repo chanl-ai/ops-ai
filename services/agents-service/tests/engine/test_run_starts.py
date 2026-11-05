@@ -186,7 +186,7 @@ async def test_a_test_email_runs_with_the_input_and_steps_a_mailbox_email_gets(
     assert shape(a["input"]) == shape(b["input"]), (shape(a["input"]), shape(b["input"]))
     [attachment] = b["input"]["attachments"]
     assert attachment["size"] == len(PDF) and attachment["mime"] == "application/pdf"
-    assert b["input"]["bodyFile"]["name"] == "email-body.txt" and b["input"]["mailbox"] == address
+    assert b["input"]["bodyFile"]["name"].startswith("Notice of garnishment") and b["input"]["mailbox"] == address
     # Who started each, and how: the mailbox, or the person through the test email form.
     assert a["created_by"] == f"trigger:email:{address}" and a["started_via"] is None
     assert (b["created_by"], b["started_via"]) == (CLERK.email, "start:email")

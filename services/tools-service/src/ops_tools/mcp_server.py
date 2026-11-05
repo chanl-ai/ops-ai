@@ -76,7 +76,7 @@ class McpAdapter:
         found = _PATH.match(scope["path"])
         try:
             if found is None:
-                raise NotFound("MCP URL; use /mcp/{team}")
+                raise NotFound("No MCP server answers at this URL; use /mcp/{team}.")
             team_id = found["team"]
             headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope["headers"]}
             # 401 without a credential, 403 team_forbidden when the key or token belongs to another team.

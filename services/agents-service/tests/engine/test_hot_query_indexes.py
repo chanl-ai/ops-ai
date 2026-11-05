@@ -68,7 +68,8 @@ async def test_a_claim_seeks_both_due_work_and_lapsed_leases(
     engine: AsyncEngine,  # noqa: F811
     recorded: list[tuple[str, Any]],
 ) -> None:
-    """300 finished rows and a few queued and claimed ones: the claim's two branches each seek their own index."""
+    """3,000 finished rows and a few queued and claimed ones: the claim's two branches each seek their own index. The
+    crowd is large enough that rows other tests left in the table do not change the plan."""
     tx = EngineTransactions(engine)
     with tenant_scope(f"t_{uuid4().hex[:8]}"):
         rows: list[dict[str, Any]] = [
@@ -84,7 +85,7 @@ async def test_a_claim_seeks_both_due_work_and_lapsed_leases(
                 "attempts": 1,
                 "created_at": AT,
             }
-            for i in range(300)
+            for i in range(3000)
         ]
         async with tx.tenant_tx() as c:
             await c.execute(engine_work.insert(), rows)

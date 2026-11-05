@@ -594,6 +594,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                 user_turn=req.user_turn or "",
                 passages=passages,
                 variables=req.variables,
+                attachments=req.attachments,
             )
             digest = ctx.digest
             history, results, system_prompt, user_prompt = ctx.history, None, ctx.system_prompt, ctx.user_prompt

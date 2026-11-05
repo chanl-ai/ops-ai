@@ -11,7 +11,6 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { useAttachChatFile } from '@/hooks/chat-settings-queries';
 import type { ChatAttachment } from '@/lib/types/chat';
 
 const MAX = 8000;
@@ -75,9 +74,6 @@ export function KbChips({ kbs, value, onChange, disabled, agentName }: { kbs: Kb
     </div>
   );
 }
-
-// What chat reads (agents-service activities/attachments.py); the server refuses anything else with 422.
-const CHAT_FILE_TYPES = ['pdf', 'txt', 'md', 'csv', 'docx'];
 
 /** An agent the person can hand the chat to by typing @. */
 export interface MentionOption {
@@ -155,7 +151,6 @@ export function Composer({
     setTextState(next);
     writeDraft(draftKey, next);
   };
-  const attach = useAttachChatFile();
   const [files, setFiles] = React.useState<UploadItem[]>([]);
   // Remounting the upload control clears it after a send.
   const [uploadKey, setUploadKey] = React.useState(0);
@@ -213,7 +208,7 @@ export function Composer({
       autoFocus={autoFocus}
       tools={
         <>
-          {canAttach && <FileUpload key={uploadKey} variant="compact" purpose="chat_attachment" multiple onChange={setFiles} id="chat-attach" testId="chat-attach" types={CHAT_FILE_TYPES} upload={attach} />}
+          {canAttach && <FileUpload key={uploadKey} variant="compact" purpose="chat_attachment" multiple onChange={setFiles} id="chat-attach" testId="chat-attach" />}
           {footer}
         </>
       }

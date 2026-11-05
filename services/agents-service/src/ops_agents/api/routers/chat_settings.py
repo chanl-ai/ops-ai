@@ -1,33 +1,28 @@
-"""A chat thread's settings and a chat message's attachments.
+"""A chat thread's settings.
 
 Settings: what the thread's agent lets the banker change, the thread's overrides, and the settings every turn starts
 from. PATCH merges into the stored overrides: a field sent replaces that field, a field sent as null clears it, a field
 left out is kept, so the panel's four controls never wipe knowledge, budget or widget overrides set elsewhere. The
 merged result is checked by the resolver against the agent's limits, so a value outside them, or an unknown field, is
-a 422 naming the field and nothing is stored. Owner only, like every chat route.
-
-Attachments: a file's bytes are stored through an ops_storage object store and its text parsed once, here at upload;
-type and size are checked first and refused with 422 saying what chat reads. A message names its attachments by id.
+a 422 naming the field and nothing is stored. Owner only, like every chat route. A message's attachments are files
+uploaded to files-service; the turn reads them (api/chat_attachments.py).
 """
 
 from __future__ import annotations
 
 from typing import Annotated, Any, TypeAlias
 
-from fastapi import APIRouter, Body, Depends, Request
+from fastapi import APIRouter, Body, Depends
 from fastapi.responses import JSONResponse
 
-from ops_access import can
-from ops_agents.activities import attachments
 from ops_agents.activities.agent_limits import AgentLimits
 from ops_agents.activities.catalog import AgentDefinition
 from ops_agents.activities.overrides import limits_for, parse, resolve
-from ops_contracts.chat import BudgetAnswer, ChatAttachment, ChatOverrides, NamedRef, ThreadLimits, ThreadSettings
+from ops_contracts.chat import BudgetAnswer, ChatOverrides, NamedRef, ThreadLimits, ThreadSettings
 from ops_service_kit.errors import ApiError, NotFound, Unprocessable
 from ops_service_kit.ids import now_iso
 
-from ...store.chat_attachments import ChatAttachments
-from ..auth import Principal, caller_of, principal
+from ..auth import Principal, principal
 from ..chat_budget import answer as answer_budget
 from ..chat_threads import chat_row, messages_of, thread_view
 from ..deps import Runtime, runtime
@@ -112,43 +107,3 @@ async def budget(rt: Rt, me: Me, thread_id: str, body: BudgetAnswer) -> JSONResp
     row = await chat_row(rt, thread_id, None)
     assert row is not None
     return ok(thread_view(rt, row, (await messages_of(rt, [thread_id], reader=person_of(me)))[thread_id]).wire())
-
-
-_files: dict[str, attachments.ChatFileStore] = {}
-
-
-def chat_files(rt: Runtime) -> attachments.ChatFileStore:
-    """One store per process, beside kb-service's files under the repo's data folder."""
-    root = rt.settings.kb_files_dir.parent / "chat-files"
-    return _files.setdefault(str(root), attachments.ChatFileStore.local(root))
-
-
-@router.post("/attachments", status_code=201)
-async def upload_attachment(rt: Rt, me: Me, request: Request, name: str) -> JSONResponse:
-    """The file's bytes as the request body, its type as Content-Type. Attaching is part of chatting (chat.run)."""
-    can(caller_of(me), "chat", "run", what="this conversation")
-    mime = attachments.mime_of(name, request.headers.get("content-type"))
-    body = bytearray()
-    async for chunk in request.stream():
-        body += chunk
-        # Refused while reading, so an oversized upload is never held whole in memory.
-        if len(body) > attachments.MAX_BYTES:
-            raise attachments.refuse(f"{name} is larger than {attachments.MAX_BYTES // (1024 * 1024)} MB.")
-    if not body:
-        raise attachments.refuse(f"{name} is empty.")
-    parsed = attachments.read(bytes(body), name=name, mime=mime)
-    file_id = chat_files(rt).put(bytes(body), mime=mime, team=me.team_id or "none")
-    await ChatAttachments(graph_store(rt).engine).add(
-        {
-            "id": file_id,
-            "team_id": me.team_id,
-            "owner_email": me.email,
-            "name": name,
-            "mime": mime,
-            "size": len(body),
-            "pages": [{"page": p.page, "section": p.section, "text": p.text} for p in parsed.pages],
-            "truncated": parsed.truncated,
-            "created_at": now_iso(),
-        }
-    )
-    return ok(ChatAttachment(file_id=file_id, name=name, size=len(body)).wire(), status=201)

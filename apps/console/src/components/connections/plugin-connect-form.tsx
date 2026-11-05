@@ -253,7 +253,7 @@ export function PluginConnectForm({
     <DialogShell
       open={open}
       onOpenChange={(o) => !o && void cancel()}
-      size="sm"
+      size="md"
       title={sandbox ? `Add a ${card.name} sandbox account` : `Connect ${card.name}`}
       description={card.description ?? undefined}
       data-testid="connect-dialog"
@@ -269,13 +269,13 @@ export function PluginConnectForm({
             disabled={!ready || state.busy}
             data-testid="connect-submit"
           >
-            {kind.signsIn ? (sandbox ? 'Save and connect the sandbox account' : 'Save and connect the team account') : 'Save'}
+            {kind.signsIn ? (sandbox ? 'Save and connect the sandbox account' : 'Save and connect the team account') : 'Connect'}
           </LoadingButton>
         </>
       }
     >
       <div className="flex min-w-0 flex-col gap-5">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4">
           {sandbox && (
             <FormField id="plugin-account-name" label="Account name" hint="Steps and tools pick an account by this name.">
               <Input id="plugin-account-name" value={accountName} onChange={(e) => setAccountName(e.target.value)} disabled={Boolean(state.connectionId)} data-testid="plugin-account-name" />

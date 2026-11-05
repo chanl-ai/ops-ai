@@ -197,8 +197,10 @@ not name cannot be wired, and a name used twice fails the definition's checks. `
 fields from named sources: each field takes the first source (in `fields[].from` order, else the sources' order) with a
 non-empty value, `sources` says which, and every field the sources disagree on is listed in `conflicts` with each
 value; text compares without case or spacing and numbers as numbers (1,200.00 is 1200). The Email received trigger also
-stores the email's text as `email-body.txt` (purpose `email_body`) and passes it as `bodyFile`, so a body-only email is
-read through Extract from file like an attachment. uc-226 runs all of it on one workflow. When no case holds,
+stores the email's text as a file named from its subject, else "Email from <sender>" (`body_file_name`, purpose
+`email_body`), and passes it as `bodyFile`, so a body-only email is read through Extract from file like an attachment.
+Files lists email texts only when its purpose filter asks for them (`LISTED_WHEN_ASKED` in files-service); a run or case
+that used one opens it by id. uc-226 runs all of it on one workflow. When no case holds,
 `otherwise` carries `tried`: each case's rule with the value it read, so a run page shows why none matched.
 
 ## Branches and the Join
@@ -303,6 +305,26 @@ A person's memories belong to one team and reach every agent in it, unless a mem
 | Recall | Up to 5 standing preferences and procedures, then the best full-text matches for the question across all of the person's memories, ranked in SQL (PostgreSQL `ts_rank`; SQL Server `CONTAINSTABLE` where it has Full-Text Search, else a word count) and again by confidence, recency and kind, until 8 memories or 600 tokens counted as characters / 4 per line. Each answer's memory ids and why each was picked are recorded in `message_memory_use`; a thread keeps ids only, so a reload reads the text from the memory, and shows it only to the memory's person: anyone else allowed to read the thread sees that something was remembered, never what |
 | Taking it back | `/v1/me/memories`: forget (erased after 30 days unless taken back with `POST /{id}/undo`), undo of what a reply just saved (a replaced memory comes back), and `POST /{id}/erase`, which removes a memory and its earlier versions at once. The hourly `memory_cleanup` erases forgotten memories past their grace and suggestions unanswered after 14 days |
 | Not yet | Matching is by words, not meaning, until models-service serves embeddings; the SQL Server memory tests have not run yet on the test machine; team memory, the admin's memory policy and the console screens are later cards. gpt-5-mini makes 7 of 8 decisions right with the code rules above, the miss asking instead of replacing (`experiments/memory-decisions.md`) |
+
+## Files attached in chat
+
+A file attached to a chat message is a Files file: the console uploads it through the upload ticket flow as a chat
+attachment, and the message carries its `fil_` id. agents-service keeps no copy of it.
+
+| Rule | Where |
+|---|---|
+| Each turn reads every file attached in the thread, this message's first, through files-service as the person's team, and its text through documents-service's full-text read, the read the read_file tool makes | `api/chat_attachments.py` |
+| The agent is told each file's name and id in an `<attachments>` data block, and the text it could read arrives as passages it cites by page, within 24,000 characters a turn (`activities/attachments.TURN_TEXT_CHARS`) | `ops_agent_kernel.context.attachments_block`, `graphs/agent_wrapper.py` |
+| A file named on the message that the team does not hold is 404. A file no longer in Files, not cleared by the scan, with no text, or still being read after 20 seconds is told to the agent with the reason; for a file on this message the reply also ends with that reason in words, and with "Only part of ... was read" when the text was cut | `api/chat_attachments.py` |
+| A citation of an attached file carries `fileId`, so the console opens it in Files; a knowledge passage's citation opens its knowledge item | `graphs/common.py`, `components/chat/citation-popover.tsx` |
+| The conversation records no reference on the file, so the person can delete it in Files; the message keeps its name, and a later turn tells the agent it is no longer in Files | `api/chat_attachments.py` |
+| Without files-service and documents-service configured, a message with attachments is 503 rather than answered without them | `routers/chat.py` |
+| Files are the team's, as in Files: any member of the team may attach one by id | files-service |
+
+Migration 0097 dropped `chat_attachments`, the table of the earlier store inside agents-service (`fl_` ids, bytes on
+the agents host's disk). Those rows were not moved to files-service: their bytes were never in a store files-service
+reads. A thread that named one keeps its name, and a later turn tells the agent it is no longer in Files. Proof:
+`tests/api/test_chat_attachments.py`, uc-620 steps 6-11 (step 7 deletes an attached file).
 
 ## Testing an agent and its replies
 

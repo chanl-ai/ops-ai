@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { ExternalLink, FileText, ListTree } from 'lucide-react';
 
 import { CitationFlags } from '@/components/knowledge/citation-flags';
@@ -7,6 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { Citation } from '@/lib/types/chat';
 import { cn } from '@/lib/utils';
+
+/** A passage from a file attached in the conversation opens that file in Files; a knowledge passage opens its item. */
+const fileHref = (c: Citation) => (c.fileId ? `/files/${encodeURIComponent(c.fileId)}` : undefined);
 
 const flagWords = (c: Citation) => [c.stale && 'stale', c.connectionRevoked && 'connection revoked'].filter(Boolean).join(', ');
 
@@ -39,9 +43,15 @@ export function CitationPopover({ citation, onOpenDocument, onOpenTrace }: { cit
         <blockquote className="border-l-2 pl-3 text-xs text-muted-foreground">{citation.snippet}</blockquote>
         {citation.precedenceNote && <p className="text-xs text-muted-foreground">{citation.precedenceNote}</p>}
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onOpenDocument(citation.documentId, citation.page)}>
-            {citation.page ? `Open at p.${citation.page}` : 'Open document'}
-          </Button>
+          {fileHref(citation) ? (
+            <Button asChild size="sm" variant="outline" className="h-7 text-xs">
+              <Link href={fileHref(citation)!}>Open in Files</Link>
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onOpenDocument(citation.documentId, citation.page)}>
+              {citation.page ? `Open at p.${citation.page}` : 'Open document'}
+            </Button>
+          )}
           {onOpenTrace && (
             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onOpenTrace}>
               <ListTree className="size-3" /> How it was found
@@ -67,13 +77,28 @@ export function SourcesList({ citations, onOpenDocument }: { citations: Citation
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="text-xs text-muted-foreground">Sources</span>
-      {docs.map((c) => (
-        <Button key={c.documentId} variant="outline" size="sm" className="h-6 max-w-80 gap-1 rounded-full px-2 text-xs font-normal" aria-label={`Open ${c.title}${flagWords(c) ? ` (${flagWords(c)})` : ''}`} onClick={() => onOpenDocument(c.documentId, c.page)}>
-          <span className="tabular-nums text-primary">{c.n}</span>
-          <span className="truncate">{c.title}</span>
-          <CitationFlags citation={c} />
-        </Button>
-      ))}
+      {docs.map((c) => {
+        const label = `Open ${c.title}${flagWords(c) ? ` (${flagWords(c)})` : ''}`;
+        const chip = (
+          <>
+            <span className="tabular-nums text-primary">{c.n}</span>
+            <span className="truncate">{c.title}</span>
+            <CitationFlags citation={c} />
+          </>
+        );
+        const href = fileHref(c);
+        return href ? (
+          <Button key={c.documentId} asChild variant="outline" size="sm" className="h-6 max-w-80 gap-1 rounded-full px-2 text-xs font-normal">
+            <Link href={href} aria-label={label}>
+              {chip}
+            </Link>
+          </Button>
+        ) : (
+          <Button key={c.documentId} variant="outline" size="sm" className="h-6 max-w-80 gap-1 rounded-full px-2 text-xs font-normal" aria-label={label} onClick={() => onOpenDocument(c.documentId, c.page)}>
+            {chip}
+          </Button>
+        );
+      })}
     </div>
   );
 }

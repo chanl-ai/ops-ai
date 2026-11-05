@@ -188,7 +188,7 @@ function OwnClientForm({
     <Form {...form}>
       <div className="flex flex-col gap-4" data-testid="new-credential-form">
         <FormTextField control={form.control} name="name" label="Name" optional placeholder={`e.g. ${card.name} credentials`} testId="new-credential-name" />
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3">
           <FormTextField control={form.control} name="clientId" label="Client ID" testId="new-credential-client-id" />
           <FormTextField control={form.control} name="clientSecret" label="Client secret" type="password" optional testId="new-credential-client-secret" />
         </div>

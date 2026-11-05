@@ -220,6 +220,11 @@ const REUSE = {
     owns: (rel) => rel.startsWith('src/components/chat/'),
     hit: (text) => text.search(/\b(?:function|const)\s+[A-Z]\w*(?:Composer|MessageView|MessageList|Bubble|ToolCall|Chat(?:Response|Prompt|Conversation|Thinking))\b/),
   },
+  dialogColumns: {
+    what: 'a form laid out in columns inside a dialog (dialog forms are one column)',
+    owns: (rel) => rel.startsWith('src/components/ui/'),
+    hit: (text) => (text.includes('<DialogShell') ? text.search(/(?:sm:|md:|lg:|xl:)?grid-cols-[2-9]/) : -1),
+  },
 };
 const reusePath = join(root, 'scripts/reuse-baseline.json');
 const reuseBaseline = existsSync(reusePath) ? JSON.parse(readFileSync(reusePath, 'utf8')) : {};

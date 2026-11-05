@@ -1,5 +1,7 @@
 {
  "rules": [
+  {"when": "<attachments>[\\s\\S]*?- (?P<gone>[^\\n]+could not be read: it is no longer in Files)[\\s\\S]*uc620 what did i attach", "text": "uc620: {gone}."},
+  {"when": "(?=[\\s\\S]*\\[(?P<n>\\d+)\\] (?P<file>[^\\n]+?) — [^\\n]*\\(version attached\\): [\\s\\S]*?Debtor 1: (?P<debtor>[^\\n]+)[\\s\\S]*?Amount: (?P<amount>[\\d,.]+))[\\s\\S]*uc620 who is the first debtor", "text": "uc620: the first debtor in {file} is {debtor}, held for {amount} [{n}]."},
   {"when": "(?i)uc613 read (?P<name>[\\w.-]+\\.pdf)", "tool": "read_file", "arguments": {"file": "{name}"}},
   {"when": "(?i)uc613 read (?P<name>[\\w.-]+\\.pdf)", "after": "read_file", "tool": "read_document", "arguments": {"file": "{name}", "documentType": "restraining_notice"}},
   {"when": "(?i)uc613 read", "after": "read_document", "result": "SYN-2026-0006", "text": "uc613: the notice's case number is SYN-2026-0006."},

@@ -22,7 +22,6 @@ from sse_starlette import EventSourceResponse
 
 from ops_access import can
 from ops_access.check import DEFAULT as ACCESS
-from ops_agents.activities import attachments
 from ops_agents.activities.catalog import AgentDefinition
 from ops_agents.activities.overrides import limits_for, parse
 from ops_agents.activities.overrides import resolve as resolve_settings
@@ -60,17 +59,19 @@ from ops_service_kit.errors import (
     Unprocessable,
     ValidationFailed,
 )
+from ops_service_kit.errors import ServiceUnavailable as Unavailable
 from ops_service_kit.http import Envelope
 from ops_service_kit.ids import new_id, now_iso
 
-from ...store.chat_attachments import ChatAttachments
 from ...store.events import EventLog
 from ...store.leases import LeaseHeldError
 from ...store.team_defaults import TeamDefaults
+from ...store.tenancy import current_tenant
 from .. import hitl_facade
 from ..agent_calls import agent_team
 from ..agent_registry import definition_of, pinned_definition, refuse_new_turns, registry
 from ..auth import Principal, caller_of, principal, require_chat_use
+from ..chat_attachments import ChatAttachmentReader
 from ..chat_budget import ensure_budget
 from ..chat_threads import (
     CHAT_GRAPH,
@@ -651,32 +652,22 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         graph_input["thread_attachments"] = meta["attachments"]
     if turn_overrides is not None:
         graph_input["overrides"] = turn_overrides.model_dump(mode="json", by_alias=True, exclude_none=True)
-    # Files attached to this message or earlier in the thread, read from their parsed text and cited like knowledge.
-    # A file id the person does not hold in this team is not found, never silently skipped.
-    asked_ids = [a.file_id for a in body.attachments or []]
-    earlier_ids = [a.file_id for m in transcript if m.role == "user" for a in m.attachments or []]
-    held = await ChatAttachments(graph_store(rt).engine).owned(
-        list(dict.fromkeys([*asked_ids, *earlier_ids])), owner_email=me.email, team_id=me.team_id
-    )
-    if missing := [i for i in asked_ids if i not in held]:
-        raise NotFound(f"Attachment {missing[0]}")
-    cut: list[str] = []
-    budget = attachments.TURN_TEXT_CHARS
-    attached: list[dict[str, Any]] = []
-    for file_id in dict.fromkeys([*asked_ids, *earlier_ids]):
-        if (a := held.get(file_id)) is None:
-            continue
-        pages = [attachments.Page(p.get("page"), str(p.get("section") or ""), str(p["text"])) for p in a["pages"]]
-        found, was_cut = attachments.passages(str(a["name"]), file_id, pages, budget)
-        budget -= sum(len(p.text) for p in found)
-        attached += [
-            {"documentId": p.document_id, "title": p.title, "section": p.section, "page": p.page, "text": p.text}
-            for p in found
+    # Files attached to this message or earlier in the thread: named to the agent with their ids, their text read
+    # through documents-service and cited like knowledge.
+    asked = list(body.attachments or [])
+    earlier = [a for m in transcript if m.role == "user" for a in m.attachments or []]
+    notes: list[str] = []
+    if asked or earlier:
+        reader = cast(ChatAttachmentReader | None, rt.chat_attachments)
+        if reader is None:
+            raise Unavailable("Attached files are read through Files, which this installation does not run.")
+        read = await reader.read(current_tenant(), str(row["team_id"]), asked=asked, earlier=earlier)
+        notes = read.notes
+        graph_input["attached_files"] = [
+            {"fileId": f.file_id, "name": f.name, **({"unread": f.unread} if f.unread else {})} for f in read.files
         ]
-        if was_cut or a["truncated"]:
-            cut.append(str(a["name"]))
-    if attached:
-        graph_input["attached_passages"] = attached
+        if read.passages:
+            graph_input["attached_passages"] = read.passages
     run_id, thread_row, graph = await _start_run(rt, thread_id, graph_input)
     if replaced:
         # The supersede rule: the replaced turns stay in the log and drop out of the conversation.
@@ -748,9 +739,9 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
             # the four-eyes rule are the same; a write that needs a step-up still asks them. The thread read after
             # the reply shows the decided card and the resumed answer.
             await _decide_own_write(rt, me, thread_id, assistant)
-        if cut:
-            # Told in the reply, and kept in the log so a reload says the same.
-            note = f"\n\n_Only part of {', '.join(cut)} was read; ask about a specific page or section for the rest._"
+        if notes:
+            # What could not be read, told in the reply, and kept in the log so a reload says the same.
+            note = "".join(f"\n\n_{n}_" for n in notes)
             await EventLog(graph_store(rt).engine).append(
                 thread_id=thread_id, team_id=row["team_id"], run_id=run_id, type_="text", data=note
             )

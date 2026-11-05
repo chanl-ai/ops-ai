@@ -25,6 +25,13 @@ runs:
       with:
         enable-cache: true
         cache-dependency-glob: uv.lock
+    # The environment itself, keyed on the lockfile: uv sync then only checks it. The runner's checkout path is the same
+    # every run, so the workspace's editable installs still point at this checkout.
+    - if: inputs.python == 'true'
+      uses: actions/cache@v4
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-py3.12-${{ hashFiles('uv.lock') }}
     - if: inputs.python == 'true'
       shell: bash
       run: uv sync --frozen --all-packages --all-groups --quiet
@@ -45,13 +52,18 @@ runs:
         key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
     - if: inputs.browser == 'true'
       shell: bash
-      run: pnpm --filter @ops-ai/usecase-runner exec playwright install --with-deps chromium
+      # The runner image already has the libraries Chrome needs; installing them again with --with-deps took 8 minutes.
+      run: pnpm --filter @ops-ai/usecase-runner exec playwright install chromium
     - if: inputs.infra == 'true'
       shell: bash
       run: |
         # The full run needs more than the default 100 connections, and a service container takes no command line.
+        # A test database is thrown away with the runner, so it skips flushing to disk: the suites spend most of their
+        # time in commits, and no test reads what a crash would lose.
         pg=$(docker ps -q --filter "publish=5477")
-        docker exec "$pg" psql -U ops -d ops_runtime -qc "ALTER SYSTEM SET max_connections = 300"
+        for setting in "max_connections = 300" "fsync = off" "synchronous_commit = off" "full_page_writes = off"; do
+          docker exec "$pg" psql -U ops -d ops_runtime -qc "ALTER SYSTEM SET $setting"
+        done
         docker restart "$pg" >/dev/null
         until docker exec "$pg" pg_isready -U ops -d ops_runtime -q; do sleep 1; done
         docker compose -p ops-ci -f deploy/compose/compose.yaml up -d --wait opa greenmail mailpit

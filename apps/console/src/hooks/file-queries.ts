@@ -120,7 +120,7 @@ export function useFileUpload({ purpose, team, retentionClass, multiple, upload 
     async (key: string, file: File) => {
       try {
         if (upload) {
-          // A service that stores and checks the file itself (chat attachments): one request with the bytes.
+          // A caller that stores the file somewhere other than Files: one request with the bytes.
           patch(key, { phase: 'uploading', progress: 0, error: undefined });
           const r = await upload(file);
           patch(key, { phase: 'ready', progress: 1, fileId: r.fileId });
@@ -156,7 +156,8 @@ export function useFileUpload({ purpose, team, retentionClass, multiple, upload 
         const key = `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2, 6)}`;
         const typeOk = !limit || limit.allowedTypes.includes(ext(file.name));
         const sizeOk = !limit || file.size <= limit.maxSizeMb * 1024 * 1024;
-        const error = !typeOk ? `${ext(file.name).toUpperCase() || 'This type'} is not accepted here` : !sizeOk ? `Over the ${limit!.maxSizeMb} MB limit` : file.size === 0 ? 'The file is empty' : undefined;
+        const accepted = limit?.allowedTypes.map((t) => t.toUpperCase()).join(', ');
+        const error = !typeOk ? `${ext(file.name).toUpperCase() || 'This type'} is not accepted here. Accepted: ${accepted}.` : !sizeOk ? `Over the ${limit!.maxSizeMb} MB limit` : file.size === 0 ? 'The file is empty' : undefined;
         next.push({ key, name: file.name, size: file.size, phase: error ? 'error' : 'hashing', progress: 0, error, retryable: !error });
         if (!error) sources.current.set(key, file);
       }
