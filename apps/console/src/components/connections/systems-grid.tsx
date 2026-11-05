@@ -11,12 +11,14 @@ import { DataTableWithViews } from '@/components/data-table-with-views';
 import { PageLayout } from '@/components/page-layout';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { AskAnAdmin } from '@/components/connections/ask-an-admin';
+import { EmptyState } from '@/components/shared/empty-state';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useCan } from '@/hooks/me-queries';
 import { type AppState, type SystemCard, useSystems } from '@/hooks/systems-queries';
 import { facetFilterFn } from '@/hooks/use-list-params';
 import { plural } from '@/lib/format';
@@ -204,6 +206,8 @@ const columns = (onConnect: (s: SystemCard, mode: ConnectMode) => void): ColumnD
  * so the table filters the rows it holds.
  */
 export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, mode: ConnectMode) => void; onNew: () => void }) {
+  // Adding an app is managing the team's apps; a person who may not is offered no button, and each card says whom to ask.
+  const mayAdd = useCan('connections', 'manage') === true;
   const router = useRouter();
   const systems = useSystems();
   const [view, setView] = React.useState<View>('all');
@@ -231,10 +235,12 @@ export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, m
             Connected apps
             <ArrowRight />
           </Button>
-          <Button size="sm" onClick={onNew} data-testid="connect-system">
-            <Plus />
-            Add custom app
-          </Button>
+          {mayAdd && (
+            <Button size="sm" onClick={onNew} data-testid="connect-system">
+              <Plus />
+              Add custom app
+            </Button>
+          )}
         </div>
       }
     >
@@ -277,15 +283,26 @@ export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, m
               ]}
               filterResetKey={filterResetKey}
               emptyState={
-                <ListEmpty
-                  icon={Plug}
-                  noun="apps"
-                  filtered={view !== 'all' || rows.length > 0}
-                  onClear={() => (setView('all'), setFilterResetKey((k) => k + 1))}
-                  createLabel="Add custom app"
-                  onCreate={onNew}
-                  description="Your platform admin installs apps; you can add your own app now."
-                />
+                view === 'connected' && !(systems.data ?? []).some((s) => s.appState === 'connected') ? (
+                  // The view itself empties the list when nothing is connected yet: that is said, not "No apps match".
+                  <EmptyState
+                    icon={Plug}
+                    title="No app is connected yet"
+                    description="Connect one from All apps; it shows here once it signs in."
+                    action={{ label: 'All apps', onClick: () => setView('all') }}
+                    testId="apps-none-connected"
+                  />
+                ) : (
+                  <ListEmpty
+                    icon={Plug}
+                    noun="apps"
+                    filtered={view !== 'all' || rows.length > 0}
+                    onClear={() => (setView('all'), setFilterResetKey((k) => k + 1))}
+                    createLabel={mayAdd ? 'Add custom app' : undefined}
+                    onCreate={mayAdd ? onNew : undefined}
+                    description={mayAdd ? 'Your platform admin installs apps; you can add your own app now.' : 'Your platform admin installs apps.'}
+                  />
+                )
               }
             />
           </div>

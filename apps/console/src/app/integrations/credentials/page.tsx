@@ -4,6 +4,8 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { KeyRound } from 'lucide-react';
 
 import { AppCredentialsPanel } from '@/components/connections/app-credentials-panel';
+import { AskAnAdmin } from '@/components/connections/ask-an-admin';
+import { useCan } from '@/hooks/me-queries';
 import { PageLayout } from '@/components/page-layout';
 import { SecretsPanel } from '@/components/secrets/secrets-panel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -17,6 +19,8 @@ export default function CredentialsPage() {
   const router = useRouter();
   const pathname = usePathname();
   const tab = params.get('tab') === 'secrets' ? 'secrets' : 'apps';
+  // Auth configs are read by those who manage the team's apps; anyone else is told so, and whom to ask, not shown a refusal.
+  const mayRead = useCan('connections', 'manage');
   return (
     <PageLayout icon={KeyRound} title="Auth configs" description="How your apps sign in, and the secret values tools use.">
       <Tabs value={tab} onValueChange={(v) => router.replace(v === 'secrets' ? `${pathname}?tab=secrets` : pathname, { scroll: false })}>
@@ -29,7 +33,13 @@ export default function CredentialsPage() {
           </TabsTrigger>
         </TabsList>
         <TabsContent value="apps" className="pt-2">
-          <AppCredentialsPanel />
+          {mayRead === false ? (
+            <p className="py-6 text-sm">
+              <AskAnAdmin testId="auth-configs-why" lead="Only people who manage your team's apps see its auth configs." />
+            </p>
+          ) : mayRead ? (
+            <AppCredentialsPanel />
+          ) : null}
         </TabsContent>
         <TabsContent value="secrets" className="pt-2">
           <SecretsPanel />

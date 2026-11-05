@@ -1,6 +1,9 @@
 'use client';
 
 import * as React from 'react';
+
+import { AskAnAdmin } from '@/components/connections/ask-an-admin';
+import { useCan } from '@/hooks/me-queries';
 import { Bot, FileText, Library, Sparkles, Workflow } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -77,6 +80,8 @@ export function ResourcesTab({ appName, pluginId, onConnect }: { appName: string
   const list = useAppResources(source);
   const plan = useResourcePlan();
   const add = useAddResources(source);
+  // Adding an app's resources makes the team's own agents; a person who may not is told who adds them instead.
+  const mayAdd = useCan('agents', 'create') !== false;
   const [ticked, setTicked] = React.useState<string[]>([]);
   const [preview, setPreview] = React.useState<ResourcePlan | null>(null);
   const [updating, setUpdating] = React.useState<AppResource | null>(null);
@@ -134,6 +139,7 @@ export function ResourcesTab({ appName, pluginId, onConnect }: { appName: string
       description="Agents, skills, workflows, document types and knowledge sources the app brings. Added ones are your team’s own copies."
       flush
       actions={
+        mayAdd ? (
         <LoadingButton
           size="sm"
           variant="outline"
@@ -144,6 +150,9 @@ export function ResourcesTab({ appName, pluginId, onConnect }: { appName: string
         >
           {selected.length ? `Add selected (${selected.length})` : 'Add selected'}
         </LoadingButton>
+        ) : (
+          <AskAnAdmin testId="resources-why" area="agents" action="create" lead="Builders and admins add these to the team." />
+        )
       }
     >
       {list.isPending ? (
