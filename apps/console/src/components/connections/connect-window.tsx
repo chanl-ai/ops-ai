@@ -114,6 +114,9 @@ export function ConnectWindow({
   const suggested = freeName(sandbox ? `${card.name} sandbox` : another ? `${card.name} · second account` : `${card.name} · ${current?.name ?? 'Team'}`, taken);
 
   const [waiting, setWaiting] = React.useState(false);
+  // The account a sign-in window was closed on before access was allowed: Try again signs it in again, as it is.
+  const [closedOn, setClosedOn] = React.useState<string | null>(null);
+  const signingIn = React.useRef<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   // What this window made, until the sign-in answers: Cancel removes it (and turns a plugin it turned on off again).
   const made = React.useRef<{ id: string | null; turnedOn: boolean } | null>(null);
@@ -127,6 +130,11 @@ export function ConnectWindow({
       // Connected once access is allowed; the first test runs after, and a failure shows on the account's row.
       test.mutate({ appId: card.id, accountId: m.connectionId });
       router.push(appHref(card));
+    },
+    onClosed: () => {
+      setWaiting(false);
+      setClosedOn(signingIn.current);
+      setError(`The window was closed before access was allowed. Try again to open it once more.`);
     },
     onFailed: (why) => {
       setError(why);
@@ -199,12 +207,31 @@ export function ConnectWindow({
         id = String(view.connectionId ?? card.connectionId ?? '');
         made.current = { id: card.connectionId ? null : id, turnedOn: true };
       }
+      signingIn.current = id;
       const s = await start.mutateAsync({ appId: card.id, accountId: id, account: team ? 'team' : 'self' });
       w.go(s, { appId: card.id, accountId: id });
     } catch (e) {
       w.fail(message(e));
       setError(message(e));
       void undo().finally(() => setWaiting(false));
+    }
+  };
+
+  /** Try again after the window was closed: a new window, signing in the account already made. */
+  const again = async (id: string) => {
+    const w = signIn.open(card.name, card.logo);
+    if (!w) return;
+    setError(null);
+    setClosedOn(null);
+    setWaiting(true);
+    try {
+      signingIn.current = id;
+      const s = await start.mutateAsync({ appId: card.id, accountId: id, account: team ? 'team' : 'self' });
+      w.go(s, { appId: card.id, accountId: id });
+    } catch (e) {
+      w.fail(message(e));
+      setError(message(e));
+      setWaiting(false);
     }
   };
 
@@ -227,9 +254,9 @@ export function ConnectWindow({
           <Button variant="outline" onClick={() => void cancel()} data-testid="connect-window-cancel">
             Cancel
           </Button>
-          <LoadingButton isLoading={waiting} onClick={() => void authorize()} data-testid="connect-window-authorize">
+          <LoadingButton isLoading={waiting} onClick={() => void (closedOn ? again(closedOn) : authorize())} data-testid="connect-window-authorize">
             <ExternalLink />
-            {waiting ? 'Connecting…' : 'Connect'}
+            {waiting ? 'Connecting…' : closedOn ? 'Try again' : 'Connect'}
           </LoadingButton>
         </>
       }

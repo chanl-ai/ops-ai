@@ -206,6 +206,11 @@ function ConnectForm({
       opened.current = false;
       dispatch({ type: 'failed', message: why });
     },
+    onClosed: () => {
+      if (!opened.current) return;
+      opened.current = false;
+      dispatch({ type: 'failed', message: 'The window was closed before access was allowed. Save again to try once more.' });
+    },
   });
 
   /**

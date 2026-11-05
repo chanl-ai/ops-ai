@@ -135,6 +135,11 @@ export function PluginConnectForm({
       opened.current = null;
       if (waiting) dispatch({ type: 'failed', message: why });
     },
+    onClosed: () => {
+      const waiting = opened.current;
+      opened.current = null;
+      if (waiting) dispatch({ type: 'failed', message: 'The window was closed before access was allowed. Save again to try once more.' });
+    },
     onConnected: (m) => {
       const waiting = opened.current;
       if (!waiting) return;
