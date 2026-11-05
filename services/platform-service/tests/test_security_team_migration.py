@@ -44,11 +44,25 @@ def test_each_workspace_keeps_the_security_team_it_had(database_url: str) -> Non
         asyncio.run(_run(database_url, writes))
     finally:
         command.upgrade(alembic_config(), "head")
-    rows = asyncio.run(
-        _rows(
-            database_url,
-            "SELECT id, security_team_id FROM tenants WHERE id IN (:a, :b, :c)",
-            {"a": relied, "b": without, "c": own},
+    try:
+        rows = asyncio.run(
+            _rows(
+                database_url,
+                "SELECT id, security_team_id FROM tenants WHERE id IN (:a, :b, :c)",
+                {"a": relied, "b": without, "c": own},
+            )
         )
-    )
-    assert dict(rows) == {relied: "team_security", without: None, own: risk}
+        assert dict(rows) == {relied: "team_security", without: None, own: risk}
+    finally:
+        if not found:
+            # The id is unique in the database and the dev seed's own tenant holds it; a run of the seed's tests
+            # after this one finds it free again.
+            asyncio.run(
+                _run(
+                    database_url,
+                    [
+                        ("DELETE FROM teams WHERE id = 'team_security' AND tenant_id = :t", {"t": relied}),
+                        ("DELETE FROM tenants WHERE id = :t", {"t": relied}),
+                    ],
+                )
+            )
