@@ -42,7 +42,7 @@ async def test_the_answer_names_the_granting_role_or_the_refusal_the_services_wo
     assert any(r["name"] == "Builder" for r in yes["grantedBy"]), yes
     no = await _check(signin, h, personId=builder, area="access", action="manage")
     assert (no["allowed"], no["refusedBy"]["code"]) == (False, "role_required"), no
-    assert "access.manage" in no["refusedBy"]["reason"], no
+    assert "an Admin can" in no["refusedBy"]["reason"], no
 
 
 async def test_a_policy_refusal_is_reported_as_the_policy_not_the_grid(signin: SignInRig) -> None:

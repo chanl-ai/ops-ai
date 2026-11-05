@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from httpx import AsyncClient
 
@@ -71,10 +71,13 @@ async def test_a_workflow_whose_step_reads_a_document_type_is_named_and_another_
     client: AsyncClient,
 ) -> None:
     """documents-service asks this before deleting a type, so a workflow that reads it is never left without it."""
-    seeded = json.loads((Path(__file__).parents[2] / "seed" / "engine_workflows.json").read_text())
-    rows = seeded if isinstance(seeded, list) else seeded.get("workflows") or list(seeded.values())
-    intake = next(w.get("definition", w) for w in rows if w.get("definition", w).get("id") == "levy_intake")
-    intake = {k: v for k, v in intake.items() if k != "teamId"}
+    seeded: Any = json.loads((Path(__file__).parents[2] / "seed" / "engine_workflows.json").read_text())
+    rows = cast(
+        list[dict[str, Any]], seeded if isinstance(seeded, list) else seeded.get("workflows") or list(seeded.values())
+    )
+    defs = [cast(dict[str, Any], w.get("definition", w)) for w in rows]
+    found = next(d for d in defs if d.get("id") == "levy_intake")
+    intake = {k: v for k, v in found.items() if k != "teamId"}
     made = await client.post("/v1/workflows/definitions", json={"definition": intake}, headers={"X-Team-Id": SEED_TEAM})
     assert made.status_code in (200, 201), made.text
     r = await client.get(
