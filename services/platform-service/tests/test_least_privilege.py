@@ -9,7 +9,6 @@ from collections.abc import AsyncIterator
 import httpx
 import pytest
 import sqlalchemy as sa
-from pydantic import SecretStr
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -20,7 +19,7 @@ from ops_platform.store.identity import IdentityStore
 from ops_platform.store.tables import users
 from ops_platform.store.tenancy import ROLE, TenantDb
 
-from .conftest import CONSOLE, DEMO_PASSWORD, OIDC_SECRET, PUBLIC_URL, SERVICE, SERVICES, Platform, SignInRig
+from .conftest import CONSOLE, DEMO_PASSWORD, PUBLIC_URL, SERVICE, SERVICES, Platform, SignInRig
 
 APP_ROLE = "ops_platform_app_test"
 
@@ -119,7 +118,6 @@ async def test_sign_in_lookups_work_as_the_app_role(app_url: str, signin: SignIn
             reset_ttl_s=3600,
             public_url=PUBLIC_URL,
             console_url=CONSOLE,
-            secrets={OIDC_SECRET: SecretStr("s3cret")},
             mail=signin.mail,
             transport=signin.idp._transport,  # pyright: ignore[reportPrivateUsage]
         ),

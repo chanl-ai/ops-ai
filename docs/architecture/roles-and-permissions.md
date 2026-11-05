@@ -421,6 +421,9 @@ when a question comes up again.
 | D61 | Where is an auth config's client secret changed? | On its auth config only. The Secrets page lists it read only with a link to the config, and the secrets API refuses a rotate or delete of it (409 `credential_secret`) naming the config | 2026-11-05 |
 | D62 | When does a change to roles, cells, assignments or policies reach the services? | On the person's next request: each service compares the token's `perm_version` with platform-service's current one and refuses an older token (401 `permissions_changed`), so the client renews it. The database stays the one source; the token is a copy checked by version | 2026-11-05 |
 | D63 | Where does each workspace's Security team come from? | Its own record, edited by a workspace admin through `can()` on Settings > Workspace and read by every service from the token, or from platform-service for a review a service opened. The install setting names only a new workspace's team; migration 0029 wrote its old default into each workspace that relied on it | 2026-11-05 |
+| D64 | Where do the install's own mail settings stop? | The install sends its own mail (password resets, a send_reply that names no mailbox) with its own provider and password from the environment; a team reads and sends mail only through its mailbox records, each with its own secret. No setting names a mailbox or a team's secret | 2026-11-05 |
+| D65 | Whose provider key does a model call use? | The account the call names (`X-Tenant-Id`, which every calling service sends); a call that uses an account's key without naming one is refused, 400 `tenant_required` | 2026-11-05 |
+| D66 | Where are a workspace's sign-in secrets kept? | In the workspace, sealed under the install's secrets key: a Security team admin saves or deletes one through `can()` (`settings.manage`), each change audited, and a provider names it as `clientSecretRef`; no value is read back, and one a provider names is not deleted (409 `secret_in_use`) | 2026-11-05 |
 
 ## Open questions
 
@@ -441,7 +444,7 @@ Still open. A recommendation is not an answer; nothing here may be quoted as dec
 | O11 | May an agent open a case without approval, and do test runs open real cases? | Unanswered; built that way | E23 |
 | O12 | Should a person with a cell read every team's API key summaries? | E21 | `app.py:699` |
 | O13 | Should tools-service's bulk delete skip system modules for admins? | E05 | `modules/service.py:1109` |
-| O14 | Five install settings still hold a value one team or workspace owns, which the rule "env is system-wide; team configs live in the database" would move to records: `security_team_id` (a team id, the fallback for each workspace's Security team), `mailbox_source=graph` with `graph_tenant_id`, `graph_client_id`, `graph_client_secret` (one mailbox read for the process, not a team's Email record), `smtp_password_secret` (names a team's secret on the Secrets page), `model_keys_tenant` (the tenant a model call naming none bills) and `signin_secrets` (each workspace's sign-in provider secrets) | 2026-11-05 env audit | `packages/ops_service_kit/src/ops_service_kit/settings.py` |
+| O14 | Resolved 2026-11-05: the five install settings that held one team's or workspace's value moved to records or went away, D63 (Security team), D64 (mailbox, SMTP secret), D65 (model keys tenant), D66 (sign-in secrets) | 2026-11-05 env audit | `packages/ops_service_kit/src/ops_service_kit/settings.py` |
 
 ## Errors
 

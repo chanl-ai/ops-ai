@@ -415,6 +415,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "sign_in_providers_delete_signin_secret": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/settings/sign-in/secrets/{name}",
+        "pathParams": ["name"],
+        "query": [],
+        "stream": False,
+    },
     "sign_in_providers_list_signin_providers": {
         "body": None,
         "headers": [],
@@ -433,12 +442,30 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "sign_in_providers_list_signin_secrets": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/settings/sign-in/secrets",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "sign_in_providers_save_signin_provider": {
         "body": "json",
         "headers": [],
         "method": "PUT",
         "path": "/v1/settings/sign-in/providers/{provider_id}",
         "pathParams": ["provider_id"],
+        "query": [],
+        "stream": False,
+    },
+    "sign_in_providers_save_signin_secret": {
+        "body": "json",
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/settings/sign-in/secrets/{name}",
+        "pathParams": ["name"],
         "query": [],
         "stream": False,
     },
@@ -864,6 +891,18 @@ class Operations:
         "List Signin Secret Names"
         return self._t.call(SERVICE, OPERATIONS["sign_in_providers_list_signin_secret_names"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def sign_in_providers_list_signin_secrets(self) -> list[SignInSecretOut]:
+        "List Signin Secrets"
+        return self._t.call(SERVICE, OPERATIONS["sign_in_providers_list_signin_secrets"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def sign_in_providers_save_signin_secret(self, name: str, body: SignInSecretIn) -> SignInSecretOut:
+        "Save Signin Secret"
+        return self._t.call(SERVICE, OPERATIONS["sign_in_providers_save_signin_secret"], {"name": name}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def sign_in_providers_delete_signin_secret(self, name: str) -> Any:
+        "Delete Signin Secret"
+        return self._t.call(SERVICE, OPERATIONS["sign_in_providers_delete_signin_secret"], {"name": name}, {}, {}, None)  # type: ignore[no-any-return]
+
     def teams_list_workspace_teams(
         self,
         *,
@@ -1209,6 +1248,22 @@ class AsyncOperations:
     async def sign_in_providers_list_signin_secret_names(self) -> list[str]:
         "List Signin Secret Names"
         return await self._t.call(SERVICE, OPERATIONS["sign_in_providers_list_signin_secret_names"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def sign_in_providers_list_signin_secrets(self) -> list[SignInSecretOut]:
+        "List Signin Secrets"
+        return await self._t.call(SERVICE, OPERATIONS["sign_in_providers_list_signin_secrets"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def sign_in_providers_save_signin_secret(self, name: str, body: SignInSecretIn) -> SignInSecretOut:
+        "Save Signin Secret"
+        return await self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_save_signin_secret"], {"name": name}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    async def sign_in_providers_delete_signin_secret(self, name: str) -> Any:
+        "Delete Signin Secret"
+        return await self._t.call(
+            SERVICE, OPERATIONS["sign_in_providers_delete_signin_secret"], {"name": name}, {}, {}, None
+        )  # type: ignore[no-any-return]
 
     async def teams_list_workspace_teams(
         self,

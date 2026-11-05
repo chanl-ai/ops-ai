@@ -453,6 +453,17 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "sign_in_providers_delete_signin_secret": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/settings/sign-in/secrets/{name}",
+    "pathParams": [
+      "name"
+    ],
+    "query": [],
+    "stream": false
+  },
   "sign_in_providers_list_signin_providers": {
     "body": null,
     "headers": [],
@@ -471,6 +482,15 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "sign_in_providers_list_signin_secrets": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/settings/sign-in/secrets",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "sign_in_providers_save_signin_provider": {
     "body": "json",
     "headers": [],
@@ -478,6 +498,17 @@ export const platformOperations = {
     "path": "/v1/settings/sign-in/providers/{provider_id}",
     "pathParams": [
       "provider_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "sign_in_providers_save_signin_secret": {
+    "body": "json",
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/settings/sign-in/secrets/{name}",
+    "pathParams": [
+      "name"
     ],
     "query": [],
     "stream": false

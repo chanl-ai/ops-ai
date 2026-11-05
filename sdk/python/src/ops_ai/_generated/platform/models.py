@@ -398,6 +398,18 @@ class SignIn(TypedDict, closed=True):
     password: str
 
 
+class SignInSecretIn(TypedDict, closed=True):
+    value: str
+
+
+class SignInSecretOut(TypedDict, closed=True):
+    createdAt: str
+    createdBy: str
+    name: str
+    rotatedAt: str | None
+    version: int
+
+
 class Skip(TypedDict, closed=True):
     id: str
     reason: str
@@ -652,6 +664,11 @@ class EnvelopeRoleDetail(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeSignInSecretOut(TypedDict, closed=True):
+    data: SignInSecretOut
+    success: Literal[True]
+
+
 class EnvelopeSsoStarted(TypedDict, closed=True):
     data: SsoStarted
     success: Literal[True]
@@ -714,6 +731,11 @@ class EnvelopeListPolicyOut(TypedDict, closed=True):
 
 class EnvelopeListRoleOut(TypedDict, closed=True):
     data: list[RoleOut]
+    success: Literal[True]
+
+
+class EnvelopeListSignInSecretOut(TypedDict, closed=True):
+    data: list[SignInSecretOut]
     success: Literal[True]
 
 

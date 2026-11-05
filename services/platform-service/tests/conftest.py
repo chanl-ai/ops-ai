@@ -394,7 +394,6 @@ async def signin(engine: AsyncEngine, database_url: str) -> AsyncIterator[SignIn
         reset_ttl_s=3600,
         public_url=PUBLIC_URL,
         console_url=CONSOLE,
-        secrets={OIDC_SECRET: SecretStr("s3cret")},
         mail=mail,
         transport=httpx.ASGITransport(app=create_idp(IDP, fake_dns)),
         dns=TxtResolver([f"127.0.0.1:{dns_port}"], timeout_s=2),
@@ -457,6 +456,9 @@ async def signin(engine: AsyncEngine, database_url: str) -> AsyncIterator[SignIn
         r = await pub.post("/v1/auth/sign-in", json={"email": admin_email, "password": DEMO_PASSWORD})
         token = r.json()["data"]["token"]
         headers = {"Authorization": f"Bearer {token}", "X-Team-Id": security}
+        # The client secret the OIDC providers name, saved by the workspace's Security admin.
+        saved = await pub.put(f"/v1/settings/sign-in/secrets/{OIDC_SECRET}", json={"value": "s3cret"}, headers=headers)
+        assert saved.status_code == 200, saved.text
         yield SignInRig(pub, idp, mail, engine, tenant, security, ops, headers, public)
     stop_dns.set()
     await store.close()

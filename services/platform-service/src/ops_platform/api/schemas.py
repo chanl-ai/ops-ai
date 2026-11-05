@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints
 from pydantic.alias_generators import to_camel
 
 from ops_service_kit.flags import FlagName
@@ -249,6 +249,18 @@ class WorkspaceTeamsIn(In):
     security_team: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
     # Null: no default team; new people join only the team something else names.
     default_team: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,64}$")
+
+
+class SignInSecretIn(In):
+    value: SecretStr = Field(min_length=1, max_length=4000)
+
+
+class SignInSecretOut(Out):
+    name: str
+    version: int
+    created_by: str
+    created_at: str
+    rotated_at: str | None
 
 
 class WorkspaceTeamsOut(Out):

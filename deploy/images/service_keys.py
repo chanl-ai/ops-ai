@@ -5,7 +5,7 @@ not use. The worker uses agents-service's."""
 from __future__ import annotations
 
 USES: dict[str, tuple[str, ...]] = {
-    "platform": ("OPS_PLATFORM_SIGNING_KEY",),
+    "platform": ("OPS_PLATFORM_SIGNING_KEY", "OPS_SECRETS_KEY"),
     "agents": ("OPS_REVIEW_KEY",),
     "tools": ("OPS_REVIEW_KEY", "OPS_SECRETS_KEY"),
     "files": ("OPS_SECRETS_KEY",),

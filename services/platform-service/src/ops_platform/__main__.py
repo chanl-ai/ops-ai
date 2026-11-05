@@ -13,7 +13,7 @@ import uvicorn
 from ops_email import EmailProviders
 from ops_identity import ServiceAuth, ServiceClient, service_verifiers
 from ops_service_kit.logging import configure_logging
-from ops_service_kit.settings import Settings
+from ops_service_kit.settings import Settings, require_keys
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import run as run_background
 from ops_store.schema_version import require_current_schema
@@ -87,6 +87,8 @@ async def serve(settings: Settings) -> None:
 def main() -> None:
     configure_logging()
     settings = Settings()
+    # The workspaces' sign-in secrets are sealed under it (store/signin_secrets.py).
+    require_keys(settings, "secrets_key")
     require_current_schema(settings.database_url, MIGRATIONS)
     asyncio.run(serve(settings))
 

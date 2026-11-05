@@ -19,8 +19,9 @@ from ops_access import ACTIONS, ANY_TEAM, AREAS, SECURITY_TEAM_ACTIONS
 from ops_access.catalogue import ADMIN, Grant
 from ops_identity import Principal as Caller
 from ops_identity import ServiceAuth, ServiceClient, service_verifiers
-from ops_policy import STEP_UP_TTL_S, Ed25519Signer
+from ops_policy import STEP_UP_TTL_S, CredentialStore, Ed25519Signer
 from ops_service_kit.background import BackgroundHealthOut
+from ops_service_kit.credentials import credential_store
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, Unauthorized, ValidationFailed
 from ops_service_kit.http import (
     Envelope,
@@ -60,6 +61,7 @@ from ..store.members import Actor, TeamStore
 from ..store.policies import PolicyStore
 from ..store.roles import RoleStore
 from ..store.signin import SignInStore
+from ..store.signin_secrets import SignInSecretStore
 from ..store.teams import TeamAdminStore
 from ..store.workspace import WorkspaceStore
 from ..team_admin import TeamAdmin
@@ -111,6 +113,8 @@ from .schemas import (
     RoleOut,
     SessionOut,
     SignIn,
+    SignInSecretIn,
+    SignInSecretOut,
     SsoCompleteIn,
     SsoStarted,
     SsoStartIn,
@@ -195,12 +199,15 @@ def create_public_app(
     signin: SignInOptions | None = None,
     services: ServiceAuth | None = None,
     usage: UsageReader | None = None,
+    credentials: CredentialStore | None = None,
 ) -> FastAPI:
     """`signin` unset takes its values from settings, with no mail sender and no public or console URL. `services`
     verifies the service tokens the few routes open to services accept (a policy read); unset, settings' keys.
-    `usage` reads what still runs in a team; unset, agents-service at settings' agents URL."""
+    `usage` reads what still runs in a team; unset, agents-service at settings' agents URL. `credentials` seals the
+    workspaces' sign-in secrets; unset, the store the settings choose."""
     sign = signin or SignInOptions.from_settings(Settings())
     signin_store = SignInStore(store.db)
+    signin_secrets = SignInSecretStore(store.db, credentials or credential_store(Settings()))
     passwords = Passwords(
         identity=store,
         store=signin_store,
@@ -229,7 +236,7 @@ def create_public_app(
         http=httpx.AsyncClient(timeout=15, transport=sign.transport),
         public_url=sign.public_url,
         console_url=sign.console_url,
-        secrets=sign.secrets,
+        secrets=signin_secrets,
         flow_ttl_s=sign.flow_ttl_s,
         sp_key=sign.saml_sp_key,
         sp_certificate=sign.saml_sp_certificate,
@@ -610,7 +617,7 @@ def create_public_app(
         return ok(view | ({"name": who.name, "email": who.email} if who else {}))
 
     signin_settings = SignInSettings(
-        signin_store, people, sign.secrets, sign.dns, sp_key_set=sign.saml_sp_key is not None
+        signin_store, people, signin_secrets, sign.dns, sp_key_set=sign.saml_sp_key is not None
     )
 
     @app.get(
@@ -644,8 +651,47 @@ def create_public_app(
         responses=ERRORS,
     )
     async def list_signin_secret_names(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
-        """The names an OIDC provider may give as `clientSecretRef` (`OPS_SIGNIN_SECRETS`), never the values."""
+        """The names an OIDC provider may give as `clientSecretRef`: the workspace's saved secrets, never the values."""
         return ok(await signin_settings.secret_names(actor))
+
+    @app.get(
+        "/v1/settings/sign-in/secrets",
+        tags=["sign-in-providers"],
+        response_model=Envelope[list[SignInSecretOut]],
+        responses=ERRORS,
+    )
+    async def list_signin_secrets(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """The workspace's sign-in secrets with who saved each and when, never a value; Security team admins read."""
+        return ok(await signin_settings.secrets_listed(actor))
+
+    @app.put(
+        "/v1/settings/sign-in/secrets/{name}",
+        tags=["sign-in-providers"],
+        response_model=Envelope[SignInSecretOut],
+        responses=ERRORS,
+    )
+    async def save_signin_secret(  # pyright: ignore[reportUnusedFunction]
+        name: Annotated[str, Path(max_length=100, pattern=r"^[A-Za-z0-9_.-]+$")],
+        body: SignInSecretIn,
+        actor: Annotated[Actor, Depends(acting)],
+    ) -> Any:
+        """Creates or replaces a secret a sign-in provider names as `clientSecretRef`, sealed and never returned;
+        Security team admins only, audited."""
+        return ok(await signin_settings.save_secret(actor, name, body.value.get_secret_value()))
+
+    @app.delete(
+        "/v1/settings/sign-in/secrets/{name}",
+        tags=["sign-in-providers"],
+        status_code=204,
+        responses=ERRORS,
+    )
+    async def delete_signin_secret(  # pyright: ignore[reportUnusedFunction]
+        name: Annotated[str, Path(max_length=100, pattern=r"^[A-Za-z0-9_.-]+$")],
+        actor: Annotated[Actor, Depends(acting)],
+    ) -> Response:
+        """409 `secret_in_use` while a provider names it; Security team admins only, audited."""
+        await signin_settings.delete_secret(actor, name)
+        return Response(status_code=204)
 
     @app.post(
         "/v1/settings/sign-in/domains/{domain}/verify",

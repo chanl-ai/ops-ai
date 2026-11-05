@@ -83,6 +83,7 @@ services:
       OPS_PLATFORM_SIGNING_KEY: ${OPS_PLATFORM_SIGNING_KEY:?}
       OPS_SERVICE_SIGNING_KEY: ${OPS_SVC_KEY_PLATFORM:?}
       OPS_SERVICE_SIGNING_KID: svc-platform-1
+      OPS_SECRETS_KEY: ${OPS_SECRETS_KEY:?}
 
   # agents-service's /health answers 503 until a model is connected (docs/deploy/compose.md, "Connect a model"), so
   # nothing waits on it being healthy.

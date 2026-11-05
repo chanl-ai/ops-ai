@@ -39,6 +39,7 @@ from ops_signin.saml import sp_metadata
 from .auth import SSO_METHODS, Auth, Issued, StepUpIssued
 from .store.identity import IdentityStore
 from .store.signin import Flow, Provider, SignInStore
+from .store.signin_secrets import SignInSecretStore
 
 log = get_logger(__name__)
 
@@ -85,7 +86,7 @@ class Sso:
     http: httpx.AsyncClient
     public_url: str | None
     console_url: str | None
-    secrets: dict[str, SecretStr]
+    secrets: SignInSecretStore
     flow_ttl_s: int
     # The SAML service provider's key and certificate; None when the installation has none.
     sp_key: SecretStr | None = None
@@ -110,16 +111,16 @@ class Sso:
             raise ServiceUnavailable("Single sign-on is not set up on this installation.", code="sso_not_configured")
         return self.public_url.rstrip("/"), self.console_url.rstrip("/")
 
-    def _oidc(self, p: Provider) -> OidcClient:
+    async def _oidc(self, p: Provider) -> OidcClient:
         c = p.config
         ref = c.get("clientSecretRef")
-        secret = self.secrets.get(str(ref)) if ref else None
+        secret = await self.secrets.value(p.tenant_id, str(ref)) if ref else None
         if ref and secret is None:
             raise ServiceUnavailable("The sign-in provider's secret is not set.", code="sso_not_configured")
         config = OidcConfig(
             issuer=str(c["issuer"]),
             client_id=str(c["clientId"]),
-            client_secret=secret.get_secret_value() if secret else None,
+            client_secret=secret,
             scopes=tuple(c.get("scopes") or ("openid", "email", "profile")),
             groups_claim=_groups_source(c),
         )
@@ -193,7 +194,7 @@ class Sso:
 
         try:
             if p.kind == "oidc":
-                start = await self._oidc(p).begin(
+                start = await (await self._oidc(p)).begin(
                     redirect_uri=f"{public}{OIDC_CALLBACK}", login_hint=login_hint, force=force
                 )
                 await keep(start.state, verifier=start.verifier, nonce=start.nonce)
@@ -223,7 +224,7 @@ class Sso:
             if flow is None or not flow.verifier or not flow.nonce:
                 raise SignInRefused("flow has no PKCE verifier or nonce")
             public, _ = self._urls()
-            who = await self._oidc(p).complete(
+            who = await (await self._oidc(p)).complete(
                 code=code,
                 verifier=flow.verifier,
                 nonce=flow.nonce,

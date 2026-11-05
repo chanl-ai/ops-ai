@@ -295,9 +295,6 @@ class Settings(BaseSettings):
     # and a reset link land. Unset, SSO and reset refuse with `sso_not_configured`.
     platform_public_url: str | None = None
     console_url: str | None = None
-    # Secrets a workspace's sign-in provider names (an OIDC client secret's `clientSecretRef`), as JSON name -> value.
-    # The provider row stores the name only, so the value never reaches the database.
-    signin_secrets: dict[str, SecretStr] = Field(default_factory=dict[str, SecretStr])
     # The DNS servers that prove a workspace's email domain by its TXT record, as `host:port`; empty asks the
     # system's resolvers. A bank that resolves through its own servers names them here.
     signin_dns_servers: list[str] = Field(default_factory=list[str])
@@ -528,7 +525,7 @@ _PUBLIC_DEFAULTS = {"review_key": _DEV_REVIEW_KEY, "secrets_key": _DEV_SECRETS_K
 def require_keys(settings: Settings, *names: str) -> None:
     """Refuses to start a service outside dev while a key it uses still holds its public default. Called by each
     service that uses the key, so a service that does not use one is never handed it (`review_key`: agents-service and
-    its worker, tools-service; `secrets_key`: tools-service, files-service, models-service)."""
+    its worker, tools-service; `secrets_key`: tools-service, files-service, models-service, platform-service)."""
     if settings.environment == "dev":
         return
     for name in names:
