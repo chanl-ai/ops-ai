@@ -20,6 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # uv never downloads a Python here (python-downloads = "manual" in pyproject.toml), so the runner provides it.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - uses: astral-sh/setup-uv@v5
       - name: Build
         run: uv build --out-dir dist sdk/python
@@ -40,9 +44,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # The pnpm version comes from packageManager in package.json; naming one here as well fails the step.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 22
