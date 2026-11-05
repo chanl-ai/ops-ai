@@ -165,9 +165,9 @@ async def test_a_persons_call_uses_the_account_they_pinned_else_their_newest_sig
         return str(r.module["connection_id"])
 
     async def shown() -> dict[str, bool | None]:
-        """Her rows on the People tab: which one the page names as her default."""
+        """Her accounts on the app page: which one it names as her default."""
         page = (await world.client.get(f"/v1/apps/plugin:{ID}", headers=admin(tenant))).json()["data"]
-        return {p["accountName"]: p["default"] for p in page["people"] if p["mine"]}
+        return {a["name"]: a["myDefault"] for a in page["accounts"] if a["mine"]}
 
     assert await used() == second  # the newest of her sign-ins
     assert await shown() == {"Desk": False, "EU org": True}

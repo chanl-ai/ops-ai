@@ -313,6 +313,19 @@ class AppMe(Out):
     account: str | None = None
 
 
+class AccountOwner(Out):
+    """Whose sign-in an account is: the team's, or one person's own, by name."""
+
+    kind: Literal["team", "person"]
+    name: str
+
+
+# What the caller may do to an account on the app page, decided here so the console offers only these.
+AccountAction = Literal[
+    "rename", "sign_in", "reconnect", "make_default", "disconnect", "delete", "move", "connect_mine"
+]
+
+
 class AppAccount(Out):
     """One of the team's accounts of the app: the default is the one live calls use unless they name another,
     and a sandbox one is what test runs use."""
@@ -323,52 +336,57 @@ class AppAccount(Out):
     sandbox: bool
     status: str
     status_detail: str | None = None
-    # Connected only after a sign-in or a passing test, as the card's.
+    # The account's one state: its team sign-in's, or on an account only its owner signs in to, the caller's own.
     state: AccountState
     # Why it is refused or expired: the system's words, or the day the sign-in ended.
     state_reason: str | None = None
+    owner: AccountOwner
+    # The auth config it signs in with (`AuthConfig.id`); null for a kind with no OAuth client.
+    config_id: str | None = None
+    actions: list[AccountAction] = Field(default_factory=list[AccountAction])
     # Whether the caller has signed in to this account themselves, and as whom.
     mine: bool = False
     account: str | None = None
+    # Among the caller's own sign-ins to the app's accounts, whether calls naming none use this one; null while they
+    # hold one or none they could use, or on a sandbox account, since nothing is chosen.
+    my_default: bool | None = None
     # The last test, run right after each sign-in: the caller's own on an account each person signs in to, else the
     # team account's. A failed one warns on the row; the account stays connected.
     test: AccountTest | None = None
     health: ConnectionHealth | None = None
 
 
-class AppPerson(Out):
-    """One person's own sign-in on one of the app's accounts, for the app page's People tab: a team admin reads
-    everyone's, anyone else their own."""
+class AuthConfig(Out):
+    """How the app's accounts sign in: Ops AI's own OAuth app, one the team made (an app credential), or, for a kind
+    with no OAuth client, each account's own key; with the accounts signing in through it. Only the team's own is
+    edited or deleted."""
 
-    person_id: str
-    # Whether it is the caller's own.
-    mine: bool
-    # Who the system says signed in, when it says.
-    account: str | None = None
-    # The team account it is on, by its id and name.
-    account_id: str
-    account_name: str
-    since: str | None = None
-    state: Literal["connected", "expired", "refused"]
-    # The test run right after the sign-in failed: the system's words. The sign-in stays connected.
-    test_failed: str | None = None
-    # Whether calls naming no account use this sign-in for the person: their pinned one, else their newest the system
-    # has not refused. None while they hold only one they could use, or on a sandbox account, since nothing is chosen.
-    default: bool | None = None
+    id: str
+    name: str
+    # ops_ai: Ops AI's own OAuth app; own: the team's app credential; account: each account holds its own key or token.
+    type: Literal["ops_ai", "own", "account"]
+    client_id: str | None = None
+    # A team admin reads the client secret's last four characters, never the secret.
+    secret_ends: str | None = None
+    # The config of the app's default account, which Connect opens on.
+    default: bool
+    can_edit: bool
+    can_delete: bool
+    accounts: list[AppAccount] = Field(default_factory=list[AppAccount])
 
 
 class AppPage(Out):
     """One app's page, joined here: its card, its default account, the caller's own sign-in, how many people
-    signed in, its accounts, its tools, the plugin's skills and the latest runs of its tools."""
+    signed in, its accounts, its auth configs with their accounts, its tools, the plugin's skills and the latest runs
+    of its tools."""
 
     card: SystemCard
     connection: AccountDetail | None = None
     me: AppMe
     people_count: int
-    # The team's accounts of the app, the default first.
+    # The team's accounts of the app, the default first; `auth_configs` nests the same rows under their config.
     accounts: list[AppAccount] = Field(default_factory=list[AppAccount])
-    # Each person's own sign-in on the app's accounts, newest first.
-    people: list[AppPerson] = Field(default_factory=list[AppPerson])
+    auth_configs: list[AuthConfig] = Field(default_factory=list[AuthConfig])
     tools: list[AppTool]
     skills: list[AppSkill]
     usage: list[ToolCallRow]
@@ -1160,61 +1178,16 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
         "me": {"connected": bool(signed), "account": signed[0].get("account") if signed else None},
         "peopleCount": len(people),
         "accounts": accounts,
-        "people": await _people(apps, who, accounts),
+        "authConfigs": await _auth_configs(apps, who, card, accounts),
         "tools": tools,
         "skills": skills,
         "usage": usage,
     }
 
 
-async def _people(apps: Apps, who: Caller, accounts: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Each person's own sign-in on the app's accounts, joined to the account it is on, with its state and whether it
-    is the person's default among several."""
-    names = {str(a["id"]): str(a["name"]) for a in accounts}
-    mine = own_key(who)
-    everyone = apps.connections.may_manage(who)
-    now = apps.connections.clock()
-    out: list[dict[str, Any]] = []
-    sandboxes = {str(a["id"]) for a in accounts if a.get("sandbox")}
-    rows = [
-        t
-        for t in await apps.connections.store.sign_ins(who.tenant_id, list(names))
-        if everyone or t["person_id"] == mine
-    ]
-    defaults: dict[str, str | None] = {}
-    for person in {str(t["person_id"]) for t in rows}:
-        # Newest first and then by account, the order the call-time pick reads them in (`own_sign_ins`).
-        own = sorted(
-            (t for t in rows if t["person_id"] == person and str(t["connection_id"]) not in sandboxes),
-            key=lambda t: str(t["connection_id"]),
-        )
-        own.sort(key=lambda t: t["refreshed_at"], reverse=True)
-        live = [t for t in own if t.get("refused_at") is None]
-        pick = default_sign_in(own) if len(live) > 1 else None
-        defaults[person] = str(pick["connection_id"]) if pick is not None else None
-    for t in rows:
-        test = cast(dict[str, Any], t.get("test") or {})
-        at = t.get("refreshed_at")
-        out.append(
-            {
-                "personId": str(t["person_id"]),
-                "mine": t["person_id"] == mine,
-                "account": t.get("account"),
-                "accountId": str(t["connection_id"]),
-                "accountName": names[str(t["connection_id"])],
-                "since": at.isoformat() if at else None,
-                "state": person_state(t, now),
-                "testFailed": str(test.get("message") or "no reason given") if test.get("status") == "failed" else None,
-                "default": None
-                if defaults[str(t["person_id"])] is None or str(t["connection_id"]) in sandboxes
-                else defaults[str(t["person_id"])] == str(t["connection_id"]),
-            }
-        )
-    return out
-
-
 async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[str, Any]]:
-    """The app's accounts for the page, the default (the binding's, or a custom app's first) first."""
+    """The app's accounts for the page, the default (the binding's, or a custom app's first) first, each with its one
+    state, whose sign-in it is, its auth config and what the caller may do to it."""
     if card["kind"] not in ("plugin", "connection") or not card.get("connectionId"):
         return []
     default = str(card["connectionId"])
@@ -1226,29 +1199,121 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
     mine = own_key(who)
     ids = [str(a["id"]) for a in stored]
     signed = {str(t["connection_id"]): t for t in await store.own_sign_ins(who.tenant_id, mine, ids)}
+    may = apps.connections.may_manage(who)
+    now = apps.connections.clock()
+    sandboxes = {str(a["id"]) for a in stored if a.get("sandbox")}
+    # The caller's default among their own sign-ins, as the call-time pick reads them: newest first, then by account.
+    own_rows = sorted(
+        (t for t in signed.values() if str(t["connection_id"]) not in sandboxes), key=lambda t: str(t["connection_id"])
+    )
+    own_rows.sort(key=lambda t: t["refreshed_at"], reverse=True)
+    pick = default_sign_in(own_rows) if len([t for t in own_rows if t.get("refused_at") is None]) > 1 else None
+    platform = bool(cast(dict[str, Any], card.get("plugin") or {}).get("platformApp"))
+    configs = len(await store.team_credentials(who.tenant_id, who.team.id, str(card["id"]))) + int(platform)
     out: list[dict[str, Any]] = []
     for a in stored:
-        state = states[str(a["id"])]
-        per_person = (a.get("sign_in") or "team") != "team"
-        own = signed.get(str(a["id"])) if per_person else None
+        aid = str(a["id"])
+        state, status, why = states[aid]
+        sign_in = a.get("sign_in") or "team"
+        own = signed.get(aid)
+        alone = sign_in == "person"
+        if alone and own is not None:
+            # Only its owner signs in to it, so its state is that sign-in's, never a team token it has none of.
+            state, why = person_state(own, now), own.get("refused_reason")
+        is_default = aid == default
+        connected = state == "connected"
+        mine_alone = alone and own is not None
+        actions: list[str] = []
+        if may or mine_alone:
+            actions += ["rename"] if may else []
+            actions.append("reconnect" if state != "not_signed_in" else "sign_in")
+            if may and not is_default and not a.get("sandbox"):
+                actions.append("make_default")
+            if connected:
+                actions.append("disconnect")
+            if may:
+                actions += ["delete"] + (["move"] if configs > 1 else [])
+        # A person signs in with their own account only where the account lets each person do so beside the team's.
+        if sign_in == "person_or_team" and own is None:
+            actions.append("connect_mine")
+        config = (
+            str(a["credential_id"])
+            if a.get("credential_id")
+            else (f"{OPS_AI}{card['id']}" if a.get("platform_app") else None)
+        )
         out.append(
             {
-                "id": str(a["id"]),
+                "id": aid,
                 "name": a.get("account_name") or a["name"],
-                "default": str(a["id"]) == default,
+                "default": is_default,
                 "sandbox": bool(a.get("sandbox")),
-                "state": state[0],
-                "status": state[1],
+                "state": state,
+                "status": status,
                 "statusDetail": a.get("status_detail"),
-                "stateReason": state[2],
-                "mine": str(a["id"]) in signed,
-                "account": (signed.get(str(a["id"])) or {}).get("account"),
+                "stateReason": why,
+                "owner": {"kind": "person", "name": str(a["created_by"])}
+                if alone
+                else {"kind": "team", "name": who.team.name},
+                "configId": config,
+                "actions": actions,
+                "mine": own is not None,
+                "account": (own or {}).get("account"),
+                "myDefault": None if pick is None or aid in sandboxes else str(pick["connection_id"]) == aid,
                 # On an account each person signs in to, the caller's own sign-in's test; else the team account's.
-                "test": own.get("test") if own is not None else team_test(a, team_tokens.get(str(a["id"]))),
+                "test": own.get("test")
+                if own is not None and sign_in != "team"
+                else team_test(a, team_tokens.get(aid)),
                 "health": a.get("health"),
             }
         )
     return out
+
+
+async def _auth_configs(
+    apps: Apps, who: Caller, card: dict[str, Any], accounts: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """The app's auth configs, each with the accounts signing in through it: Ops AI's own app where the install has
+    one, then the team's own, oldest first. Only a team admin edits or deletes the team's own; a kind that signs in
+    with no OAuth client has none."""
+    plugin = cast(dict[str, Any], card.get("plugin") or {})
+    store = apps.connections.store
+    may = apps.connections.may_manage(who)
+    configs: list[dict[str, Any]] = []
+    if plugin.get("platformApp"):
+        configs.append(
+            {"id": f"{OPS_AI}{card['id']}", "name": "Ops AI", "type": "ops_ai", "canEdit": False, "canDelete": False}
+        )
+    for cred in await store.team_credentials(who.tenant_id, who.team.id, str(card["id"])):
+        secret = await _secret_row(apps, who, cred) if may else None
+        configs.append(
+            {
+                "id": str(cred["id"]),
+                "name": str(cred["name"]),
+                "type": "own",
+                "clientId": cred["client_id"] if may else None,
+                "secretEnds": (secret or {}).get("ends"),
+                "canEdit": may,
+                "canDelete": may,
+            }
+        )
+    if any(not a.get("configId") for a in accounts):
+        # Each account holds its own key or token, so the accounts sit under the kind they sign in with.
+        configs.append(
+            {
+                "id": "",
+                "name": str(card.get("kindLabel") or "Keys"),
+                "type": "account",
+                "canEdit": False,
+                "canDelete": False,
+            }
+        )
+    default = next((a.get("configId") or "" for a in accounts if a["default"]), None)
+    if default is None:
+        default = configs[0]["id"] if configs else None
+    return [
+        {**c, "default": c["id"] == default, "accounts": [a for a in accounts if (a.get("configId") or "") == c["id"]]}
+        for c in configs
+    ]
 
 
 def apps_router(apps: Apps, directory: Directory) -> APIRouter:

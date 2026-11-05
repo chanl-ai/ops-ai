@@ -40,6 +40,11 @@ class AccountIn(TypedDict, closed=True):
     signIn: NotRequired[str | None]
 
 
+class AccountOwner(TypedDict, closed=True):
+    kind: Literal["team", "person"]
+    name: str
+
+
 class AccountPatchIn(TypedDict, closed=True):
     category: NotRequired[str | None]
     credentialId: NotRequired[str | None]
@@ -93,18 +98,6 @@ class AppCredentialPatchIn(TypedDict, closed=True):
 class AppMe(TypedDict, closed=True):
     account: NotRequired[str | None]
     connected: bool
-
-
-class AppPerson(TypedDict, closed=True):
-    account: NotRequired[str | None]
-    accountId: str
-    accountName: str
-    default: NotRequired[bool | None]
-    mine: bool
-    personId: str
-    since: NotRequired[str | None]
-    state: Literal["connected", "expired", "refused"]
-    testFailed: NotRequired[str | None]
 
 
 class AppSkill(TypedDict, closed=True):
@@ -1193,11 +1186,28 @@ class AllowList(TypedDict, closed=True):
 
 class AppAccount(TypedDict, closed=True):
     account: NotRequired[str | None]
+    actions: NotRequired[
+        list[
+            Literal[
+                "rename",
+                "sign_in",
+                "reconnect",
+                "make_default",
+                "disconnect",
+                "delete",
+                "move",
+                "connect_mine",
+            ]
+        ]
+    ]
+    configId: NotRequired[str | None]
     default: bool
     health: NotRequired[ConnectionHealth | None]
     id: str
     mine: NotRequired[bool]
+    myDefault: NotRequired[bool | None]
     name: str
+    owner: AccountOwner
     sandbox: bool
     state: Literal["connected", "not_signed_in", "expired", "refused", "revoked"]
     stateReason: NotRequired[str | None]
@@ -1270,6 +1280,7 @@ class AppCredentialDetail(TypedDict, closed=True):
 
 class AppResource(TypedDict):
     canAdd: bool
+    canRemove: NotRequired[bool]
     copy: NotRequired[ResourceCopy | None]
     id: str
     installed: NotRequired[ResourceInstalled | None]
@@ -1282,6 +1293,18 @@ class AppResource(TypedDict):
     state: Literal["available", "added", "update_available", "removed_upstream", "needs_sign_in"]
     title: str
     version: int
+
+
+class AuthConfig(TypedDict, closed=True):
+    accounts: NotRequired[list[AppAccount]]
+    canDelete: bool
+    canEdit: bool
+    clientId: NotRequired[str | None]
+    default: bool
+    id: str
+    name: str
+    secretEnds: NotRequired[str | None]
+    type: Literal["ops_ai", "own", "account"]
 
 
 class AuthKind(TypedDict, closed=True):
@@ -1890,10 +1913,10 @@ class SystemCard(TypedDict, closed=True):
 
 class AppPage(TypedDict, closed=True):
     accounts: NotRequired[list[AppAccount]]
+    authConfigs: NotRequired[list[AuthConfig]]
     card: SystemCard
     connection: NotRequired[AccountDetail | None]
     me: AppMe
-    people: NotRequired[list[AppPerson]]
     peopleCount: int
     skills: list[AppSkill]
     tools: list[AppTool]

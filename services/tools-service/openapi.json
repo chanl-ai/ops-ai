@@ -488,6 +488,30 @@
         "title": "AccountIn",
         "type": "object"
       },
+      "AccountOwner": {
+        "additionalProperties": false,
+        "description": "Whose sign-in an account is: the team's, or one person's own, by name.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "team",
+              "person"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "name"
+        ],
+        "title": "AccountOwner",
+        "type": "object"
+      },
       "AccountPatchIn": {
         "additionalProperties": false,
         "properties": {
@@ -742,6 +766,34 @@
             ],
             "title": "Account"
           },
+          "actions": {
+            "items": {
+              "enum": [
+                "rename",
+                "sign_in",
+                "reconnect",
+                "make_default",
+                "disconnect",
+                "delete",
+                "move",
+                "connect_mine"
+              ],
+              "type": "string"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "configId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Configid"
+          },
           "default": {
             "title": "Default",
             "type": "boolean"
@@ -765,9 +817,23 @@
             "title": "Mine",
             "type": "boolean"
           },
+          "myDefault": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mydefault"
+          },
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/AccountOwner"
           },
           "sandbox": {
             "title": "Sandbox",
@@ -827,7 +893,8 @@
           "default",
           "sandbox",
           "status",
-          "state"
+          "state",
+          "owner"
         ],
         "title": "AppAccount",
         "type": "object"
@@ -1459,13 +1526,20 @@
       },
       "AppPage": {
         "additionalProperties": false,
-        "description": "One app's page, joined here: its card, its default account, the caller's own sign-in, how many people\nsigned in, its accounts, its tools, the plugin's skills and the latest runs of its tools.",
+        "description": "One app's page, joined here: its card, its default account, the caller's own sign-in, how many people\nsigned in, its accounts, its auth configs with their accounts, its tools, the plugin's skills and the latest runs\nof its tools.",
         "properties": {
           "accounts": {
             "items": {
               "$ref": "#/components/schemas/AppAccount"
             },
             "title": "Accounts",
+            "type": "array"
+          },
+          "authConfigs": {
+            "items": {
+              "$ref": "#/components/schemas/AuthConfig"
+            },
+            "title": "Authconfigs",
             "type": "array"
           },
           "card": {
@@ -1483,13 +1557,6 @@
           },
           "me": {
             "$ref": "#/components/schemas/AppMe"
-          },
-          "people": {
-            "items": {
-              "$ref": "#/components/schemas/AppPerson"
-            },
-            "title": "People",
-            "type": "array"
           },
           "peopleCount": {
             "title": "Peoplecount",
@@ -1528,94 +1595,15 @@
         "title": "AppPage",
         "type": "object"
       },
-      "AppPerson": {
-        "additionalProperties": false,
-        "description": "One person's own sign-in on one of the app's accounts, for the app page's People tab: a team admin reads\neveryone's, anyone else their own.",
-        "properties": {
-          "account": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Account"
-          },
-          "accountId": {
-            "title": "Accountid",
-            "type": "string"
-          },
-          "accountName": {
-            "title": "Accountname",
-            "type": "string"
-          },
-          "default": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Default"
-          },
-          "mine": {
-            "title": "Mine",
-            "type": "boolean"
-          },
-          "personId": {
-            "title": "Personid",
-            "type": "string"
-          },
-          "since": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Since"
-          },
-          "state": {
-            "enum": [
-              "connected",
-              "expired",
-              "refused"
-            ],
-            "title": "State",
-            "type": "string"
-          },
-          "testFailed": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Testfailed"
-          }
-        },
-        "required": [
-          "personId",
-          "mine",
-          "accountId",
-          "accountName",
-          "state"
-        ],
-        "title": "AppPerson",
-        "type": "object"
-      },
       "AppResource": {
         "properties": {
           "canAdd": {
             "title": "Canadd",
+            "type": "boolean"
+          },
+          "canRemove": {
+            "default": false,
+            "title": "Canremove",
             "type": "boolean"
           },
           "copy": {
@@ -1864,6 +1852,80 @@
           "justification"
         ],
         "title": "ApprovalRequestIn",
+        "type": "object"
+      },
+      "AuthConfig": {
+        "additionalProperties": false,
+        "description": "How the app's accounts sign in: Ops AI's own OAuth app, one the team made (an app credential), or, for a kind\nwith no OAuth client, each account's own key; with the accounts signing in through it. Only the team's own is\nedited or deleted.",
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/AppAccount"
+            },
+            "title": "Accounts",
+            "type": "array"
+          },
+          "canDelete": {
+            "title": "Candelete",
+            "type": "boolean"
+          },
+          "canEdit": {
+            "title": "Canedit",
+            "type": "boolean"
+          },
+          "clientId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clientid"
+          },
+          "default": {
+            "title": "Default",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "secretEnds": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secretends"
+          },
+          "type": {
+            "enum": [
+              "ops_ai",
+              "own",
+              "account"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "default",
+          "canEdit",
+          "canDelete"
+        ],
+        "title": "AuthConfig",
         "type": "object"
       },
       "AuthKind": {

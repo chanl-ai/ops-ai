@@ -1356,6 +1356,19 @@ export interface components {
             /** Signin */
             signIn?: string | null;
         };
+        /**
+         * AccountOwner
+         * @description Whose sign-in an account is: the team's, or one person's own, by name.
+         */
+        AccountOwner: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "team" | "person";
+            /** Name */
+            name: string;
+        };
         /** AccountPatchIn */
         AccountPatchIn: {
             /** Category */
@@ -1435,6 +1448,10 @@ export interface components {
         AppAccount: {
             /** Account */
             account?: string | null;
+            /** Actions */
+            actions?: ("rename" | "sign_in" | "reconnect" | "make_default" | "disconnect" | "delete" | "move" | "connect_mine")[];
+            /** Configid */
+            configId?: string | null;
             /** Default */
             default: boolean;
             health?: components["schemas"]["ConnectionHealth"] | null;
@@ -1445,8 +1462,11 @@ export interface components {
              * @default false
              */
             mine: boolean;
+            /** Mydefault */
+            myDefault?: boolean | null;
             /** Name */
             name: string;
+            owner: components["schemas"]["AccountOwner"];
             /** Sandbox */
             sandbox: boolean;
             /**
@@ -1662,16 +1682,17 @@ export interface components {
         /**
          * AppPage
          * @description One app's page, joined here: its card, its default account, the caller's own sign-in, how many people
-         *     signed in, its accounts, its tools, the plugin's skills and the latest runs of its tools.
+         *     signed in, its accounts, its auth configs with their accounts, its tools, the plugin's skills and the latest runs
+         *     of its tools.
          */
         AppPage: {
             /** Accounts */
             accounts?: components["schemas"]["AppAccount"][];
+            /** Authconfigs */
+            authConfigs?: components["schemas"]["AuthConfig"][];
             card: components["schemas"]["SystemCard"];
             connection?: components["schemas"]["AccountDetail"] | null;
             me: components["schemas"]["AppMe"];
-            /** People */
-            people?: components["schemas"]["AppPerson"][];
             /** Peoplecount */
             peopleCount: number;
             /** Skills */
@@ -1681,38 +1702,15 @@ export interface components {
             /** Usage */
             usage: components["schemas"]["ToolCallRow"][];
         };
-        /**
-         * AppPerson
-         * @description One person's own sign-in on one of the app's accounts, for the app page's People tab: a team admin reads
-         *     everyone's, anyone else their own.
-         */
-        AppPerson: {
-            /** Account */
-            account?: string | null;
-            /** Accountid */
-            accountId: string;
-            /** Accountname */
-            accountName: string;
-            /** Default */
-            default?: boolean | null;
-            /** Mine */
-            mine: boolean;
-            /** Personid */
-            personId: string;
-            /** Since */
-            since?: string | null;
-            /**
-             * State
-             * @enum {string}
-             */
-            state: "connected" | "expired" | "refused";
-            /** Testfailed */
-            testFailed?: string | null;
-        };
         /** AppResource */
         AppResource: {
             /** Canadd */
             canAdd: boolean;
+            /**
+             * Canremove
+             * @default false
+             */
+            canRemove: boolean;
             copy?: components["schemas"]["ResourceCopy"] | null;
             /** Id */
             id: string;
@@ -1793,6 +1791,35 @@ export interface components {
             operations: string[];
             /** Workflowid */
             workflowId: string;
+        };
+        /**
+         * AuthConfig
+         * @description How the app's accounts sign in: Ops AI's own OAuth app, one the team made (an app credential), or, for a kind
+         *     with no OAuth client, each account's own key; with the accounts signing in through it. Only the team's own is
+         *     edited or deleted.
+         */
+        AuthConfig: {
+            /** Accounts */
+            accounts?: components["schemas"]["AppAccount"][];
+            /** Candelete */
+            canDelete: boolean;
+            /** Canedit */
+            canEdit: boolean;
+            /** Clientid */
+            clientId?: string | null;
+            /** Default */
+            default: boolean;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Secretends */
+            secretEnds?: string | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "ops_ai" | "own" | "account";
         };
         /** AuthKind */
         AuthKind: {
