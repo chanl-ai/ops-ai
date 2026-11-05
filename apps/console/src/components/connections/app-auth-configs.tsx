@@ -35,7 +35,7 @@ export type ConfigAccount = NonNullable<AuthConfig['accounts']>[number];
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 // The Apps design's three account states; a refused or revoked sign-in reads Expired, its reason beside it.
-const STATE: Record<ConfigAccount['state'], { label: string; className: string }> = {
+export const STATE: Record<ConfigAccount['state'], { label: string; className: string }> = {
   connected: { label: 'Connected', className: 'border-success/40 bg-success/10 text-success-text' },
   not_signed_in: { label: 'Not signed in', className: '' },
   expired: { label: 'Expired', className: 'border-warning/40 bg-warning/10 text-warning-text' },
