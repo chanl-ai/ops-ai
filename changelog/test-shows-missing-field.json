@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "A missing field is shown",
+  "description": "When a custom app's Run test needs a field under More settings, such as its test address, that section opens and the field shows why.",
+  "tag": "fix"
+}

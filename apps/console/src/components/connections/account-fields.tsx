@@ -24,6 +24,7 @@ export function AccountFields({
   onSecret,
   onTest,
   testLabel = 'Run test',
+  missing,
 }: {
   label?: string;
   draft: Draft;
@@ -34,7 +35,13 @@ export function AccountFields({
   onSecret: (name: string, value: string) => void;
   onTest: () => void;
   testLabel?: string;
+  /** A field a failed test or save named: shown with the reason, its More settings opened when it sits there. */
+  missing?: { name: string; message: string } | null;
 }) {
+  const [moreOpen, setMoreOpen] = React.useState(false);
+  React.useEffect(() => {
+    if (missing && groups.more.some((f) => f.name === missing.name)) setMoreOpen(true);
+  }, [missing, groups.more]);
   const input = (f: KindField) => {
     const id = `account-${f.name}`;
     if (f.pem) {
@@ -80,7 +87,14 @@ export function AccountFields({
     return <Input id={id} value={draft.settings[f.name] ?? ''} onChange={(e) => onSetting(f.name, e.target.value)} />;
   };
   const field = (f: KindField) => (
-    <FormField key={f.name} id={`account-${f.name}`} label={f.label} optional={!isRequired(f, draft.settings)} hint={f.help ?? undefined}>
+    <FormField
+      key={f.name}
+      id={`account-${f.name}`}
+      label={f.label}
+      optional={!isRequired(f, draft.settings)}
+      hint={f.help ?? undefined}
+      error={missing?.name === f.name ? missing.message : undefined}
+    >
       {input(f)}
     </FormField>
   );
@@ -102,7 +116,7 @@ export function AccountFields({
       </div>
       <div className="grid gap-3">{groups.main.map(field)}</div>
       {groups.more.length > 0 && (
-        <Collapsible>
+        <Collapsible open={moreOpen} onOpenChange={setMoreOpen}>
           <CollapsibleTrigger asChild>
             <Button type="button" variant="ghost" size="sm" className="-ml-2 text-muted-foreground">
               <ChevronDown />
