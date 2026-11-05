@@ -20,6 +20,9 @@ Ticket desk signs in with an API key, so it has no return page and is not walked
 | S2 | A refused sign-in says, in one sentence in both windows, who acts next | ui | 12, 22, 32 | 12 |
 | S3 | A sign-in window closed early says "The window was closed", and Try again connects; the app's page reads Connected | ui | 13-14, 23-24, 33-34 | 13 |
 | S4 | A sign-in finished in a fresh browser with no storage still reads Connected in the window that started it | ui | 15, 25, 35 | 15 |
+| S5 | Connect and Add account ask where a Salesforce account signs in, with the plugin's choices, starting from the first account's address | ui | 26, 28 | 26 |
+| S6 | Once connected, the app's header says Connected with the default account's name | ui | 17, 27, 37 | 17 |
+| S7 | A team's own auth config shows the callback URL to register in the system's app, with a copy button, on its row and in Edit | ui | 41 | 41 |
 
 ## Preconditions
 
@@ -41,6 +44,10 @@ Steps run once per app, numbered by app and step: 11-15 GitHub, 21-25 Salesforce
 | n3 | Connect, then close the sign-in window on the system's page | The Connect window says "The window was closed" and its button reads Try again |
 | n4 | Try again, allow | A new window opens, closes once allowed, and the app's page and `GET /v1/apps` read Connected |
 | n5 | Add account, then open the system's page in a fresh browser signed in as the same person and allow there | The fresh browser shows the account connected; the first window closes its sign-in window and its Connect window, and the account reads connected |
+| n6 | (Salesforce) Open Connect | Where do you sign in is asked outside More options, with login.salesforce.com, test.salesforce.com and your company's address |
+| n7 | After n4 | The header reads "Connected · " and the default account's name |
+| n8 | (Salesforce) Add account | Where it signs in starts at the first account's company address |
+| 41 | Make a team auth config for GitHub, open the app page and Edit | The row and Edit show `<console>/connections/sign-in/return`, with a copy button |
 | 9 | Every page | No page errors |
 
 ## Acceptance layers

@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 
+import { CallbackUrl } from '@/components/connections/callback-url';
 import { secretShown } from '@/components/connections/credential-display';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormTextField } from '@/components/shared/form-text-field';
@@ -119,6 +120,7 @@ function EditForm({ id, onClose }: { id: string; onClose: () => void }) {
               hint={`${secretShown(c)}. Leave blank to keep it.`}
               testId="credential-edit-client-secret"
             />
+            <CallbackUrl app={c.appName} id="credential-edit-return" testId="credential-edit-callback" />
             {plugin ? (
               <fieldset className="flex flex-col gap-2" data-testid="credential-edit-scopes">
                 <legend className="mb-1 text-sm font-medium">Permissions it asks for</legend>

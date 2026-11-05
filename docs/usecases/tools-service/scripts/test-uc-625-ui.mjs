@@ -84,6 +84,8 @@ try {
       id: 'plugin:opsai.salesforce',
       name: 'Salesforce',
       settings: { login_url: sf.info.login_url },
+      place: 'login_url',
+      places: ['login.salesforce.com', 'test.salesforce.com', 'Your company'],
       allow: (popup) => mockAllow(popup, 'priya.sf'),
       ready: (popup) => popup.locator('input[name=username]').waitFor({ timeout: 60_000 }),
       refuse: (popup, consoleUrl) => deny(popup, consoleUrl),
@@ -158,11 +160,32 @@ try {
     await page.getByTestId(`connect-${app.id}`).click({ timeout: 90_000 });
     const win = page.getByTestId('connect-window');
     await win.waitFor({ timeout: 30_000 });
-    if (Object.keys(app.settings).length) {
-      if (!(await win.getByTestId(`connect-window-setting-${Object.keys(app.settings)[0]}`).isVisible())) await win.getByTestId('connect-window-more').click();
-      for (const [name, value] of Object.entries(app.settings)) await win.getByTestId(`connect-window-setting-${name}`).fill(value);
+    for (const [name, value] of Object.entries(app.settings)) {
+      if (await win.getByTestId(`connect-window-place-${name}`).count()) {
+        await setPlace(page, win, name, value);
+        continue;
+      }
+      if (!(await win.getByTestId(`connect-window-setting-${name}`).isVisible())) await win.getByTestId('connect-window-more').click();
+      await win.getByTestId(`connect-window-setting-${name}`).fill(value);
     }
     return win;
+  }
+
+  /** Where the account signs in, as a person picks it: the company's own address, typed as its host. */
+  async function setPlace(page, win, name, value) {
+    await win.getByTestId(`connect-window-place-${name}`).click();
+    await page.getByTestId(`connect-window-place-${name}-other`).click();
+    await win.getByTestId(`connect-window-place-${name}-host`).fill(new URL(value).host);
+  }
+
+  /** The sign-in place control's choices as shown, or null when the window has none for `name`. */
+  async function placeChoices(page, win, name) {
+    const control = win.getByTestId(`connect-window-place-${name}`);
+    if (!(await control.isVisible().catch(() => false))) return null;
+    await control.click();
+    const shown = (await page.getByRole('option').allInnerTexts()).map((t) => t.trim());
+    await page.keyboard.press('Escape');
+    return shown;
   }
 
   /** Presses the window's main button and resolves with the sign-in window it opened. */
@@ -203,7 +226,12 @@ try {
             const [stale] = await Promise.all([page.waitForEvent('popup', { timeout: 30_000 }), page.evaluate(() => void window.open('/connections/connect?app=Stale', 'ops-sign-in', 'popup,width=400,height=400'))]);
             await stale.waitForLoadState('domcontentloaded');
             const before = stale.url();
-            await connectWindow(page, consoleUrl, app);
+            const win = await connectWindow(page, consoleUrl, app);
+            if (app.place) {
+              // Asked in the window's main part, not under More options, with the plugin's own choices.
+              const shown = await placeChoices(page, win, app.place);
+              check(`${at(6)} ${app.name}: the Connect window asks where you sign in, with the plugin's choices and your company's address`, Boolean(shown) && app.places.every((p) => shown.some((t) => t.includes(p))), { shown });
+            }
             const popup = await authorize(page);
             await app.ready(popup);
             const own = popup !== stale && !stale.isClosed() && stale.url() === before;
@@ -239,6 +267,9 @@ try {
             const seen = await connectedOnPage(page, consoleUrl, app, priya);
             await page.screenshot({ path: join(SHOTS, `${app.name.toLowerCase().replace(/\s+/g, '-')}-connected.png`) });
             check(`${at(4)} ${app.name}: Try again opens a new window, the fake system allows it, the window closes, and the app's page reads Connected`, seen.badge === 'Connected' && seen.state === 'connected' && again.isClosed(), seen);
+            const name = ((await call('GET', `/v1/apps/${encodeURIComponent(app.id)}`, priya)).data?.authConfigs ?? []).flatMap((c) => c.accounts).find((a) => a.default)?.name;
+            const header = ((await page.getByTestId('app-connected-as').innerText().catch(() => '')) ?? '').trim();
+            check(`${at(7)} ${app.name}: the app's header says Connected with the default account's name`, Boolean(name) && header.startsWith(`Connected · ${name}`), { header, name });
           }, page);
 
           await step(`${at(5)} ${app.name}: a sign-in finished in a fresh browser with no storage still reads Connected in the window that started it`, async () => {
@@ -246,6 +277,10 @@ try {
             await page.locator('[data-testid^="auth-config-add-"]').first().click({ timeout: 60_000 });
             const win = page.getByTestId('connect-window');
             await win.waitFor({ timeout: 30_000 });
+            if (app.place) {
+              const host = await win.getByTestId(`connect-window-place-${app.place}-host`).inputValue().catch(() => null);
+              check(`${at(8)} ${app.name}: Add account asks where it signs in, starting from the first account's address`, host === new URL(app.settings[app.place]).host, { host });
+            }
             if (!(await win.getByTestId('connect-window-name').isVisible())) await win.getByTestId('connect-window-more').click();
             await win.getByTestId('connect-window-name').fill(`${app.name} · elsewhere`);
             const popup = await authorize(page);
@@ -273,6 +308,18 @@ try {
             if (!popup.isClosed()) await popup.close();
           }, page);
         }
+        await step('41 a team’s own auth config shows the callback URL to register, on its row and in Edit', async () => {
+          const made = (await call('POST', '/v1/app-credentials', priya, { app: 'plugin:opsai.github', name: 'Harbor GitHub app', clientId: 'Iv1.harborown', clientSecret: 'harbor-own-secret-1234' })).data;
+          const want = `${consoleUrl}/connections/sign-in/return`;
+          await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent('plugin:opsai.github')}`, { waitUntil: 'domcontentloaded' });
+          const row = await page.getByTestId('auth-config-callback-Harbor GitHub app').locator('input').inputValue({ timeout: 30_000 }).catch(() => '');
+          await page.getByTestId('auth-config-edit-Harbor GitHub app').click({ timeout: 30_000 }).catch(() => undefined);
+          const edit = await page.getByTestId('credential-edit-callback').locator('input').inputValue({ timeout: 30_000 }).catch(() => '');
+          const copy = await page.getByTestId('credential-edit-callback').getByRole('button').count();
+          await page.screenshot({ path: join(SHOTS, 'auth-config-callback.png') });
+          await page.keyboard.press('Escape');
+          check('41 a team’s own auth config shows the callback URL to register, on its row and in Edit', Boolean(made?.id) && row.includes(want) && edit.includes(want) && copy > 0, { row, edit, copy, want });
+        }, page);
         check('9 no page errors', page.errors.length === 0, page.errors.slice(0, 3));
       } finally {
         await browser.close();

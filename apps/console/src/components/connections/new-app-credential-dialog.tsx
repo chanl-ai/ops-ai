@@ -1,13 +1,14 @@
 'use client';
 
 import * as React from 'react';
+
+import { CallbackUrl } from '@/components/connections/callback-url';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { Search } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { credentialHref } from '@/components/connections/credential-display';
-import { CopyButton } from '@/components/shared/copy-button';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
 import { FormTextField } from '@/components/shared/form-text-field';
@@ -192,14 +193,7 @@ function OwnClientForm({
           <FormTextField control={form.control} name="clientId" label="Client ID" testId="new-credential-client-id" />
           <FormTextField control={form.control} name="clientSecret" label="Client secret" type="password" optional testId="new-credential-client-secret" />
         </div>
-        {kinds.redirectUri && (
-          <FormField id="new-credential-return" label="Return address" hint={`Register it on your ${card.name} app.`}>
-            <div className="flex min-w-0 items-center gap-1">
-              <Input id="new-credential-return" readOnly value={kinds.redirectUri} className="font-mono text-xs" />
-              <CopyButton text={kinds.redirectUri} />
-            </div>
-          </FormField>
-        )}
+        <CallbackUrl app={card.name} id="new-credential-return" testId="new-credential-callback" />
         {plugin.scopes.length > 0 && (
           <fieldset className="flex flex-col gap-2" data-testid="new-credential-scopes">
             <legend className="mb-1 text-sm font-medium">Permissions it asks for</legend>

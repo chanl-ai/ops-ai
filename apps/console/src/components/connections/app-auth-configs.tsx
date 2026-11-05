@@ -4,6 +4,7 @@ import * as React from 'react';
 import { ExternalLink, KeyRound, MoreVertical, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { CallbackUrl } from '@/components/connections/callback-url';
 import { CredentialDeleteDialog } from '@/components/connections/credential-delete-dialog';
 import { CredentialEditDialog } from '@/components/connections/credential-edit-dialog';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
@@ -118,6 +119,11 @@ export function AuthConfigsTab({
             </span>
           }
         >
+          {c.type === 'own' && c.canEdit && (
+            <div className="border-b px-4 py-3">
+              <CallbackUrl app={app.card.name} id={`auth-config-callback-${c.id}`} testId={`auth-config-callback-${c.name}`} />
+            </div>
+          )}
           {c.accounts?.length ? (
             <Rows testId={`auth-config-accounts-${c.name}`}>
               {c.accounts.map((a) => (
