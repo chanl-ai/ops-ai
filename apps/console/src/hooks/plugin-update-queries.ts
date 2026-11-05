@@ -44,32 +44,6 @@ export const useToolUses = (tools: string[]) =>
 export type TemplateCopy = Awaited<ReturnType<Agents['templates_list_templates']>>[number];
 
 /** The plugin's templates with the version of the team's copy of each (copy provenance), for the review. */
-type Documents = OpsAI['raw']['documents'];
-export type DocumentTypeTemplate = Awaited<ReturnType<Documents['templates_list_templates']>>[number];
-/**
- * The plugin's document types with the team's copies of each, from documents-service (U5). Its list takes no source, so
- * the installed plugins' few document types are narrowed to this plugin's here.
- */
-export const usePluginDocumentTypes = (source: string) =>
-  useTeamQuery({
-    queryKey: ['templates', 'documents', source],
-    queryFn: async () => (await sdk((ops) => ops.raw.documents.templates_list_templates({ query: {} }))).filter((t) => t.source === source),
-    enabled: !!source,
-  });
-/**
- * Add to team (U5): the team's own copy of one resource an app brings, made by the service that keeps that kind
- * (POST /v1/resources/{source}:{id}/copies). Asking again answers the copy already made, so Open uses it too.
- */
-export function useCopyResource(source: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, service }: { id: string; service: 'agents' | 'documents' }): Promise<{ copy: { kind: 'agent' | 'skill' | 'workflow' | 'document_type'; recordId: string } }> =>
-      service === 'documents'
-        ? sdk((ops) => ops.raw.documents.resources_copy_resource({ path: { resource: `${source}:${id}` }, body: {} }))
-        : sdk((ops) => ops.raw.agents.resources_copy_resource({ path: { resource: `${source}:${id}` }, body: {} })),
-    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: ['templates', source] }), qc.invalidateQueries({ queryKey: ['templates', 'documents', source] })]),
-  });
-}
 export const usePluginTemplates = (source: string) =>
   useTeamQuery({
     queryKey: ['templates', source],

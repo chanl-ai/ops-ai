@@ -28,8 +28,8 @@ test("only the current team's screen reads are saved", () => {
   assert.equal(shouldSave({ queryKey: ['workflows', T], state: { status: 'error', data: undefined } }, 'team_ops'), false);
 });
 
-test('session reads, Human Tasks, file preview links and unfinished runs are never saved', () => {
-  for (const key of [['me', T], ['me', 'permissions', T], ['teams', T], ['sign-in-policy', T], ['reviews', 'one', 'r1', T], ['files', 'preview-link', 'f1', T]]) {
+test('session reads, Human Tasks, an app\'s resources, file preview links and unfinished runs are never saved', () => {
+  for (const key of [['me', T], ['me', 'permissions', T], ['teams', T], ['sign-in-policy', T], ['reviews', 'one', 'r1', T], ['app-resources', 'plugin:desk', T], ['files', 'preview-link', 'f1', T]]) {
     assert.equal(shouldSave(done(key), 'team_ops'), false, JSON.stringify(key));
   }
   assert.equal(shouldSave(done(['engine', 'run', 'r1', T], { status: 'running' }), 'team_ops'), false);

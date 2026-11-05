@@ -2,9 +2,9 @@
 
 import * as React from 'react';
 import { AppCredentialPicker } from '@/components/connections/app-credential-picker';
+import { ResourcesTab } from '@/components/connections/app-resources';
 import { AppCredentialsPanel } from '@/components/connections/app-credentials-panel';
-import { Bot, ChevronDown, CircleCheck, ExternalLink, FileText, FlaskConical, KeyRound, Plug, Plus, RefreshCw, Sparkles, Users, Workflow } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { Bot, ChevronDown, CircleCheck, ExternalLink, FlaskConical, KeyRound, Plug, Plus, RefreshCw, Users, Workflow } from 'lucide-react';
 import { toast } from 'sonner';
 
 import type { ColumnDef } from '@tanstack/react-table';
@@ -52,7 +52,6 @@ import {
   useStartSignIn,
   useTestAccount,
 } from '@/hooks/systems-queries';
-import { useCopyResource, usePluginDocumentTypes, usePluginTemplates } from '@/hooks/plugin-update-queries';
 import { useCanBuild } from '@/hooks/me-queries';
 import type { Kinds } from '@/lib/connect-plan';
 import { plural, shortDate } from '@/lib/format';
@@ -240,7 +239,7 @@ export function AppPageView({ appId }: { appId: string }) {
           <ToolsTab app={data} />
         </TabsContent>
         <TabsContent value="resources">
-          <ResourcesTab app={data} />
+          <ResourcesTab appName={data.card.name} pluginId={data.card.pluginId} />
         </TabsContent>
         <TabsContent value="credentials">
           <CredentialsTab app={data} onReconnect={() => setDialog({ mode: 'edit' })} />
@@ -648,88 +647,6 @@ function ToolsTab({ app }: { app: AppData }) {
       />
       <GrantToAgentDialog tool={granting && { id: granting.name, title: granting.title }} onOpenChange={(o) => !o && setGranting(null)} />
     </div>
-  );
-}
-
-const COPY_HREF = { agent: '/agents', skill: '/skills', workflow: '/workflows', document_type: '/document-types' } as const;
-const RESOURCE_ICON = { agent: Bot, skill: Sparkles, workflow: Workflow, document_type: FileText } as const;
-
-/**
- * Resources (U5): the agents, skills, workflows and document types the app brings, each from the service that keeps
- * that kind with whether the team has its own copy. Add to team makes the copy and opens it; Added opens it again.
- */
-function ResourcesTab({ app }: { app: AppData }) {
-  const router = useRouter();
-  const source = app.card.pluginId ? `plugin:${app.card.pluginId}` : '';
-  const agents = usePluginTemplates(source);
-  const documents = usePluginDocumentTypes(source);
-  const copy = useCopyResource(source);
-  if (!app.card.pluginId || (!app.skills.length && !agents.isPending && !documents.isPending && !agents.data?.length && !documents.data?.length))
-    return (
-      <Section>
-        <p className="text-sm text-muted-foreground" data-testid="app-skills-none">
-          No resources: {app.card.name} brings tools only.
-        </p>
-      </Section>
-    );
-  const rows = [
-    ...(agents.data ?? []).map((t) => ({ id: t.id, kind: t.kind, title: t.title, copies: t.installed.copies, service: 'agents' as const })),
-    ...(documents.data ?? []).map((t) => ({ id: t.id, kind: t.kind, title: t.title, copies: t.installed.copies, service: 'documents' as const })),
-  ];
-  const open = (r: (typeof rows)[number], added: boolean) =>
-    copy.mutate(
-      { id: r.id, service: r.service },
-      {
-        onSuccess: (made) => {
-          if (!added) toast.success(`Added ${r.title} to your team`);
-          router.push(`${COPY_HREF[made.copy.kind]}/${made.copy.recordId}`);
-        },
-        onError: (e) => toast.error(`Couldn’t add ${r.title}`, { description: e.message }),
-      },
-    );
-  return (
-    <Section title="Resources" description="Agents, skills, workflows and document types the app brings. Added ones are your team’s own copies." flush>
-      {agents.isPending || documents.isPending ? (
-        <div className="flex flex-col gap-2 p-4" aria-busy="true">
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-        </div>
-      ) : agents.isError || documents.isError ? (
-        <div className="p-4">
-          <QueryError what="the app’s resources" error={agents.error ?? documents.error} onRetry={() => (void agents.refetch(), void documents.refetch())} retrying={agents.isFetching || documents.isFetching} />
-        </div>
-      ) : (
-        <Rows testId="app-skills">
-          {rows.map((r) => {
-            const Icon = RESOURCE_ICON[r.kind];
-            const added = r.copies > 0;
-            return (
-              <Row
-                key={`${r.service}-${r.id}`}
-                leading={<Icon className="size-4 text-muted-foreground" />}
-                title={
-                  <span className="flex flex-wrap items-center gap-2" data-testid={`resource-${r.id}`}>
-                    {r.title}
-                    <Badge variant="secondary">{r.kind.replace('_', ' ')}</Badge>
-                  </span>
-                }
-                trailing={
-                  <LoadingButton
-                    size="sm"
-                    variant={added ? 'ghost' : 'outline'}
-                    isLoading={copy.isPending && copy.variables?.id === r.id}
-                    onClick={() => open(r, added)}
-                    data-testid={`resource-${added ? 'open' : 'add'}-${r.id}`}
-                  >
-                    {added ? 'Added · Open' : 'Add to team'}
-                  </LoadingButton>
-                }
-              />
-            );
-          })}
-        </Rows>
-      )}
-    </Section>
   );
 }
 
