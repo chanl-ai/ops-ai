@@ -360,6 +360,8 @@ export function ConnectWindow({
 function ConfigPlace({ config, settings }: { config: string | null; settings: { name: string; label: string; default?: string | null }[] }) {
   const own = useAppCredential(config ?? '');
   const held = (config ? own.data?.settings : undefined) ?? {};
+  // Until the picked auth config answers, its address is unknown; the plugin's default would be wrong.
+  if (config && !own.data) return null;
   return (
     <div className="flex flex-col gap-1 text-sm" data-testid="connect-window-config-place">
       {settings.map((s) => (

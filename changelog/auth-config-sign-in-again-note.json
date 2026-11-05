@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Sign in again is asked only after a change",
+  "description": "The note that accounts must sign in again now shows only once you change where the auth config signs in, its client ID or its permissions. The Connect window waits for the auth config before showing where it signs in.",
+  "tag": "fix"
+}
