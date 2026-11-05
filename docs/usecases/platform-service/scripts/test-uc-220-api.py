@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import secrets
 
-from usecase_harness import bearer, check, finish, invited, people_stack, signed_in
+from usecase_harness import INVITED_PASSWORD, bearer, check, finish, invited, people_stack, signed_in
 
 SAM, PRIYA, WANJIRU = "s.adeyemi@harborpine.example", "p.shah@harborpine.example", "w.kamau@harborpine.example"
 PASSWORD_PROVIDER = {"kind": "password", "label": "Password"}
@@ -19,10 +19,13 @@ with people_stack() as (api, _):
     r = api.put("/v1/policies/requesterMayDecide", json={"value": False}, headers=sec)
     check("the Security team admin changes a policy (200)", r.status_code == 200, r.text[:200])
 
+    # An admin of team_ops only. Priya is a workspace admin with Security admin in every team, so she holds the right.
     priya = bearer(signed_in(api, PRIYA), "team_ops")
-    r = api.put("/v1/settings/sign-in/providers/password", json=PASSWORD_PROVIDER, headers=priya)
+    ops_email = f"ops.admin.{secrets.token_hex(3)}@harborpine.example"
+    ops = bearer(invited(api, priya, ops_email, "admin"), "team_ops")
+    r = api.put("/v1/settings/sign-in/providers/password", json=PASSWORD_PROVIDER, headers=ops)
     check("an admin of another team cannot set sign-in providers (403)", r.status_code == 403, r.text[:200])
-    r = api.put("/v1/policies/requesterMayDecide", json={"value": True}, headers=priya)
+    r = api.put("/v1/policies/requesterMayDecide", json={"value": True}, headers=ops)
     check("an admin of another team cannot change a workspace policy (403)", r.status_code == 403, r.text[:200])
 
     wanjiru = bearer(signed_in(api, WANJIRU))
@@ -30,8 +33,8 @@ with people_stack() as (api, _):
     check("Wanjiru makes team_ops the security team", r.status_code == 200, r.text[:200])
     r = api.put("/v1/settings/sign-in/providers/password", json=PASSWORD_PROVIDER, headers=sec)
     check("the old Security team's admin loses the right (403)", r.status_code == 403, r.text[:200])
-    priya = bearer(signed_in(api, PRIYA), "team_ops")
-    r = api.put("/v1/settings/sign-in/providers/password", json=PASSWORD_PROVIDER, headers=priya)
+    ops = bearer(signed_in(api, ops_email, INVITED_PASSWORD), "team_ops")
+    r = api.put("/v1/settings/sign-in/providers/password", json=PASSWORD_PROVIDER, headers=ops)
     check("team_ops's admin now holds it (200)", r.status_code == 200, r.text[:200])
 
 finish()

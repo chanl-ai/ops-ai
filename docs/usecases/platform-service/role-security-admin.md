@@ -19,8 +19,8 @@ password. No model is called.
 |---|---|---|
 | 1 | Sam, admin of team_security, invites a new address as admin there | They join team_security as admin |
 | 2 | They set a sign-in provider and a policy | 200 each |
-| 3 | Priya, admin of team_ops, does the same | 403 each |
-| 4 | Wanjiru makes team_ops the security team | The invited admin is refused (403); Priya now succeeds |
+| 3 | An admin of team_ops only (Priya invites one; she herself holds Security admin in every team) does the same | 403 each |
+| 4 | Wanjiru makes team_ops the security team | The invited Security admin is refused (403); the team_ops admin now succeeds |
 | 5 | ui: both open Settings > Sign-in | The Security team admin sees the providers and Add provider; Priya's team's admin is told the Security team sets sign-in |
 
 ## Acceptance layers

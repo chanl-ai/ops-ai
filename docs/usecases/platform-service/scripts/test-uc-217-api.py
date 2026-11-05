@@ -1,5 +1,6 @@
-"""uc-217 a person invited as a builder builds the team's agents and asks to publish, and decides nothing, api layer:
-docs/usecases/platform-service/role-builder.md."""
+"""uc-217 a person invited as a builder builds the team's agents and asks to publish, and runs no people or
+policies, api layer: docs/usecases/platform-service/role-builder.md. Builders decide their team's reviews since D59, so
+the review refusal is a viewer's."""
 
 from __future__ import annotations
 
@@ -24,10 +25,11 @@ with people_stack(agents_env={"OPS_REGISTRY_AUTO_APPROVE": "false"}) as (api, ag
     r = agents.post(f"/v1/agents/{agent.get('id', 'ag_x')}/publish-requests", json={"version": version}, headers=h)
     request = data(r) if r.status_code in (200, 201) else {}
     check("the builder asks to publish, and the request waits", request.get("status") == "pending", r.text[:200])
+    viewer = bearer(invited(api, priya, f"viewer.{secrets.token_hex(3)}@harborpine.example", "viewer"), "team_ops")
     r = agents.post(
-        f"/v1/publish-requests/{request.get('id', 'pr_x')}/decision", json={"decision": "approved"}, headers=h
+        f"/v1/publish-requests/{request.get('id', 'pr_x')}/decision", json={"decision": "approved"}, headers=viewer
     )
-    check("the builder cannot decide the review (403)", r.status_code == 403, r.text[:200])
+    check("a viewer cannot decide the review (403)", r.status_code == 403, r.text[:200])
     r = api.post("/v1/settings/members/invite", json={"emails": ["x@harborpine.example"], "role": "viewer"}, headers=h)
     check("the builder cannot invite anyone (403)", r.status_code == 403, r.text[:200])
     r = api.put("/v1/policies/requesterMayDecide", json={"value": False}, headers=h)
