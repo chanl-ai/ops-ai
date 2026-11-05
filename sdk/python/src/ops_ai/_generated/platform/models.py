@@ -530,7 +530,7 @@ class WorkspaceTeamsIn(TypedDict, closed=True):
 
 class WorkspaceTeamsOut(TypedDict, closed=True):
     defaultTeam: str | None
-    securityTeam: str
+    securityTeam: str | None
 
 
 class AccessCheckOut(TypedDict, closed=True):
@@ -759,7 +759,7 @@ class ListResultWorkspaceTeamOut(TypedDict, closed=True):
 class Me(TypedDict, closed=True):
     flags: list[FlagOut]
     policies: dict[str, Any]
-    securityTeamId: str
+    securityTeamId: str | None
     teams: list[MeTeam]
     tenantId: str
     tenantName: str

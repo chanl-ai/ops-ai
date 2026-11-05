@@ -2430,8 +2430,15 @@
             "type": "object"
           },
           "securityTeamId": {
-            "title": "Securityteamid",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Securityteamid"
           },
           "teams": {
             "items": {
@@ -4497,8 +4504,15 @@
             "title": "Defaultteam"
           },
           "securityTeam": {
-            "title": "Securityteam",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Securityteam"
           }
         },
         "required": [

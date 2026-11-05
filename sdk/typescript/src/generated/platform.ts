@@ -2113,7 +2113,7 @@ export interface components {
                 [key: string]: unknown;
             };
             /** Securityteamid */
-            securityTeamId: string;
+            securityTeamId: string | null;
             /** Teams */
             teams: components["schemas"]["MeTeam"][];
             /** Tenantid */
@@ -2763,7 +2763,7 @@ export interface components {
             /** Defaultteam */
             defaultTeam: string | null;
             /** Securityteam */
-            securityTeam: string;
+            securityTeam: string | null;
         };
     };
     responses: never;

@@ -202,8 +202,8 @@ class Settings(BaseSettings):
     credential_store: Literal["sealed", "memory"] = "sealed"
     # A CA bundle tools-service trusts for its outbound https, for systems whose certificates an internal CA issued.
     egress_ca_file: Path | None = None
-    # tools-service: the team whose approvers and admins decide a module's security review. Matches the id in
-    # platform-service's directory (its dev seed, seed/people.json).
+    # The id a new workspace's Security team is given: the first workspace's (`python -m ops_platform.bootstrap`) and
+    # the dev seed's (seed/people.json). A running service reads each workspace's own record, never this.
     security_team_id: str = "team_security"
     # Dev only: host names tools-service resolves to these addresses instead of asking DNS, so a use case can reach a
     # local fake as if it were a bank system. Refused outside dev.

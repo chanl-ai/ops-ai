@@ -140,6 +140,7 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict source_paused 0 state
 * conflict sync_running 0 state
 * conflict needs_reconnect 0 state
+* conflict no_security_team 0 state
 * conflict tools_unavailable 0 state
 * conflict stale_base 0 state
 * conflict stale_pause 0 state

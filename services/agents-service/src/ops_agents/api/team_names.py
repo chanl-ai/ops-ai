@@ -1,6 +1,6 @@
-"""Team display names for detail responses: a record of another team says whose it is by name, which only
-platform-service knows. Read through ServiceClient once a minute per tenant; a name that cannot be read is None and
-the console shows the id."""
+"""Team display names for detail responses, and the workspace's Security team, which only platform-service knows.
+Read through ServiceClient once a minute per tenant; a name that cannot be read is None and the console shows the id.
+The Security team decides security reviews, so one that cannot be read refuses the request rather than guess."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_service_kit.errors import ServiceUnavailable
 from ops_service_kit.logging import get_logger
 
 from ..store.tenancy import current_tenant
@@ -23,6 +24,7 @@ class PlatformTeamNames:
     def __init__(self, platform: ServiceClient | None, clock: Callable[[], float] = time.monotonic) -> None:
         self.platform, self.clock = platform, clock
         self.cached: dict[str, tuple[dict[str, str], float]] = {}
+        self.security: dict[str, tuple[str | None, float]] = {}
 
     async def name(self, team_id: str) -> str | None:
         if self.platform is None:
@@ -38,6 +40,31 @@ class PlatformTeamNames:
             hit = ({str(r["id"]): str(r["name"]) for r in rows}, self.clock())
             self.cached[tenant] = hit
         return hit[0].get(team_id)
+
+    async def security_team(self) -> str | None:
+        """The workspace's Security team from its record (Settings > Workspace); None when it names none."""
+        if self.platform is None:
+            return None
+        tenant = current_tenant()
+        hit = self.security.get(tenant)
+        if hit is None or self.clock() - hit[1] >= CACHE_SECONDS:
+            try:
+                found = cast(dict[str, Any], await self.platform.get("/v1/settings/workspace-teams") or {})
+            except (ServiceCallError, ServiceUnreachable) as e:
+                if hit is not None:
+                    return hit[0]
+                raise ServiceUnavailable(
+                    "The workspace's Security team cannot be read now; try again.", code="security_team_unavailable"
+                ) from e
+            hit = (str(found.get("securityTeam") or "") or None, self.clock())
+            self.security[tenant] = hit
+        return hit[0]
+
+
+async def security_team(rt: Runtime) -> str | None:
+    """The workspace's Security team, which decides security reviews; None without platform-service (dev)."""
+    names = cast(PlatformTeamNames | None, getattr(rt, "team_names", None))
+    return await names.security_team() if names is not None else None
 
 
 async def team_name(rt: Runtime, team_id: str | None) -> dict[str, str | None]:

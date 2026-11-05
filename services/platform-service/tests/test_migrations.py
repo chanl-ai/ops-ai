@@ -32,4 +32,4 @@ def test_down_to_base_and_up_to_head(database_url: str) -> None:
     assert not ours & names and version is None
     command.upgrade(alembic_config(), "head")
     names, version = asyncio.run(tables_and_version(database_url))
-    assert ours <= names and version == "0028_builder_every_team_cell"
+    assert ours <= names and version == "0029_tenant_security_team"

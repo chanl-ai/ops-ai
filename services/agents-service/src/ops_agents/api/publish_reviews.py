@@ -136,11 +136,11 @@ async def subject_team(rt: Runtime, req: dict[str, Any]) -> str | None:
     if kind == deployment_reviews.KIND:
         return await deployment_reviews.team(rt, req)
     if kind == tool_module_reviews.KIND:
-        return tool_module_reviews.team(rt, req)
+        return await tool_module_reviews.team(rt, req)
     if kind == tool_access_reviews.KIND:
         return tool_access_reviews.team(req)
     if kind == egress_host_reviews.KIND:
-        return egress_host_reviews.team(rt)
+        return await egress_host_reviews.team(rt)
     if kind == engine_lifecycle.KIND:
         row = await engine_lifecycle.definitions(rt).current(subject) or {}
         return str(row.get("team_id") or "") or None

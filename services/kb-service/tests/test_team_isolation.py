@@ -22,6 +22,7 @@ def outsider(tenant: str) -> dict[str, str]:
         "email": "omar@harborpine.example",
         "name": "omar",
         "kind": "person",
+        "security_team": "team_security",
         "aud": ["kb"],
         "tenant_id": tenant,
         "team_ids": ["team_lending"],

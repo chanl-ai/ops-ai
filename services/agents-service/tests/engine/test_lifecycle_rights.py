@@ -45,6 +45,7 @@ def person(
         "email": f"{sub}@harborpine.example",
         "name": sub,
         "kind": "person",
+        "security_team": "team_security",
         "aud": ["agents"],
         "tenant_id": TENANT,
         "team_ids": [team],

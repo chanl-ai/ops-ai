@@ -245,7 +245,7 @@ async def test_the_purge_keeps_audit_entries_and_team_rows_and_refuses_a_late_re
         )
     audit_before = await _audit(signin, "workspace.close")
     # The loop's own path: the pre-tenant lookup runs as the tenant role, so row-level security applies.
-    store = LifecycleStore(TenantDb(signin.engine), security_team=signin.security_team)
+    store = LifecycleStore(TenantDb(signin.engine))
     assert signin.tenant in await store.purge_due(restore_days=30)
     assert await WorkspacePurge(store, restore_days=30).once() >= 1
     async with signin.engine.connect() as c:

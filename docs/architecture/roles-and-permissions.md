@@ -277,7 +277,7 @@ fails the commit until it is classified.
 | A record no team owns | None remain among a team's work: account records and the background processes, each named in `scripts/tests/test_team_boundary.py` | `scripts/tests/test_team_boundary.py` |
 | A workspace admin | Admin in team `*`, acts in any team without joining it | — |
 | Workspace settings | Policies are per tenant unless marked per team; a per-team value is changed in that team only | `policies.py` `per_team` |
-| The Security team | A setting per workspace, carried in the token as `security_team`; `SECURITY_TEAM_ACTIONS` are held there whatever team the request acts in | `catalogue.py:55`, `check.py:95` |
+| The Security team | The workspace's record (`tenants.security_team_id`, set on Settings > Workspace), carried in the token as `security_team`; `SECURITY_TEAM_ACTIONS` are held there whatever team the request acts in. A workspace that names none has no Security team: those actions are refused with 403 `no_security_team`. The install setting `security_team_id` only names a new workspace's team at bootstrap and in the dev seed | `catalogue.py:55`, `check.py:97`, migration `0029_tenant_security_team` |
 | The default team for new people | A setting, read at first sign-in | — |
 | Last admin | A team cannot lose its last admin | `services/platform-service/src/ops_platform/store/members.py:241` |
 
@@ -420,6 +420,7 @@ when a question comes up again.
 | D60 | Where do role permissions live, and who changes them? | In the database, managed centrally and defined from the UI: a workspace admin edits any role's cells on Access › Roles, built-in or custom, each change audited; the code grid is seed data only, with Reset to default per built-in role | 2026-11-05 |
 | D61 | Where is an auth config's client secret changed? | On its auth config only. The Secrets page lists it read only with a link to the config, and the secrets API refuses a rotate or delete of it (409 `credential_secret`) naming the config | 2026-11-05 |
 | D62 | When does a change to roles, cells, assignments or policies reach the services? | On the person's next request: each service compares the token's `perm_version` with platform-service's current one and refuses an older token (401 `permissions_changed`), so the client renews it. The database stays the one source; the token is a copy checked by version | 2026-11-05 |
+| D63 | Where does each workspace's Security team come from? | Its own record, edited by a workspace admin through `can()` on Settings > Workspace and read by every service from the token, or from platform-service for a review a service opened. The install setting names only a new workspace's team; migration 0029 wrote its old default into each workspace that relied on it | 2026-11-05 |
 
 ## Open questions
 

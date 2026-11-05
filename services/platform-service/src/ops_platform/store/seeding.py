@@ -56,6 +56,13 @@ async def write_seed(
             )
             .on_conflict_do_nothing(index_elements=[tenants.c.id])
         )
+        if security_team in {str(t["id"]) for t in data.get("teams") or []}:
+            # The workspace's record names its Security team; a workspace that already names one keeps it.
+            await c.execute(
+                tenants.update()
+                .where(tenants.c.id == tenant_id, tenants.c.security_team_id.is_(None))
+                .values(security_team_id=security_team)
+            )
         # Before any upsert: an id another tenant holds conflicts invisibly, and the error would not say which.
         held = [
             (table.name, i)

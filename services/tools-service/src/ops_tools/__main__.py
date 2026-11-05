@@ -170,7 +170,6 @@ def main() -> None:
         egress=policy,
         http=egress_client(policy, ca_file=ca),
         secrets=secrets,
-        security_team=settings.security_team_id,
         workflows=AgentsWorkflows(client("agents", agents_url, ["workflows:view"])),
         reviews=Reviews(client("agents", agents_url)),
         # The team's publish-review mode, read from platform-service on each publish so a change applies at once.
@@ -211,7 +210,6 @@ def main() -> None:
         egress=policy,
         # A sign-in returns to the console's page, which hands the code to this service.
         console_url=settings.console_url,
-        security_team=settings.security_team_id,
         # An MCP server's sign-in is found from the server, through the egress client.
         discovery=Discovery(egress_client(policy, ca_file=ca), policy),
         # Test connection signs its read in as a call is, through the same egress client.
@@ -318,7 +316,7 @@ def main() -> None:
             expressions_router(),
             secrets_router(secrets, modules=store, credentials=connection_store),
             send_policy_router(SendPolicies(engine), directory),
-            mocks_router(MockStore(engine), store, directory, security_team=settings.security_team_id),
+            mocks_router(MockStore(engine), store, directory),
             *(
                 [
                     plugins_router(

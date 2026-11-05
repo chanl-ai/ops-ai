@@ -22,6 +22,7 @@ def account_admin() -> dict[str, str]:
         "email": "priya@harborpine.example",
         "name": "priya",
         "kind": "person",
+        "security_team": "team_security",
         "aud": ["agents"],
         "tenant_id": TENANT,
         "team_ids": ["team_ops"],

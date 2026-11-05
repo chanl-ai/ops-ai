@@ -52,6 +52,7 @@ async def test_each_starter_is_named(stack: Stack) -> None:  # noqa: F811
         )
     assert await started_by(stack, parent) == {
         "kind": "person",
+        "security_team": "team_security",
         "id": "james@harborpine.example",
         "name": "james@harborpine.example",
     }

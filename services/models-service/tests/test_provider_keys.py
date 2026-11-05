@@ -65,6 +65,8 @@ def _people(tenant: str) -> Any:
             roles={team: x_role or "admin"},
             scopes=[],
             auth_method="session",
+            # The workspace's Security team, which platform-service names in every person's token.
+            security_team="team_security",
         )
         # As the real dependency does: the request acts in the person's tenant and team, which the database holds
         # provider keys to.

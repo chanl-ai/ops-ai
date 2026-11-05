@@ -239,13 +239,12 @@ def create_models_app(
     upstream: httpx.AsyncClient | None = None,
     credentials: CredentialStore | None = None,
     keys_tenant: str | None = None,
-    security_team: str | None = None,
 ) -> FastAPI:
     """Tests inject `upstream`, the client provider calls go out on; otherwise one is opened and closed with the app.
     `auth` resolves callers (ops_identity's shared dependency); by default it is built from Settings for "models".
     Provider keys are the accounts' own (`provider_keys`), kept in `credentials` (the store the settings choose by
     default); `provider_secrets` are the dev stack's keys from settings, behind them. `keys_tenant` is the deployment's
-    tenant, whose key a call naming no tenant uses; `security_team` is where an account admin holds settings.manage."""
+    tenant, whose key a call naming no tenant uses."""
     http = upstream or httpx.AsyncClient(timeout=60)
 
     @asynccontextmanager
@@ -274,7 +273,7 @@ def create_models_app(
     install_auth(app, auth or Auth.from_settings(settings, audience="models"))
     key_vault = ProviderKeyStore(db, credentials or credential_store(settings))
     keys = ProviderKeys(key_vault, provider_secrets, tenant=keys_tenant or settings.model_keys_tenant)
-    access = Access(security_team=security_team or settings.security_team_id)
+    access = Access()
     providers, aliases, key_store, call_log = Providers(db), Aliases(db), ModelKeys(db), CallLog(db)
 
     # TODO(auth): every /v1/models/* route below takes a calling service's Ed25519 token (CurrentService), the same

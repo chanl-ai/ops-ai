@@ -122,9 +122,8 @@ async def _status_locked(c: AsyncConnection, tenant_id: str) -> str:
 class LifecycleStore:
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.RLS})
 
-    def __init__(self, db: TenantDb, *, security_team: str) -> None:
+    def __init__(self, db: TenantDb) -> None:
         self.db = db
-        self.security_team = security_team
 
     async def state(self, tenant_id: str) -> WorkspaceState:
         async with self.db.tenant_tx(tenant_id) as c:
@@ -291,7 +290,7 @@ class LifecycleStore:
             )
             await mirror_membership(
                 c, tenant_id=tenant_id, team_id=team_id, user_id=user_id, member_role=None,
-                security_team=await security_team_in(c, tenant_id, self.security_team), granted_by=user_id, at=at,
+                security_team=await security_team_in(c, tenant_id), granted_by=user_id, at=at,
             )  # fmt: skip
             await _audit(
                 c, tenant_id=tenant_id, team_id=team_id, actor=user_id, action="team.leave", target_kind="member",

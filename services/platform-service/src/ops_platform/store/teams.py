@@ -35,9 +35,8 @@ class TeamNameTakenError(Exception):
 class TeamAdminStore:
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.RLS})
 
-    def __init__(self, db: TenantDb, *, security_team: str) -> None:
+    def __init__(self, db: TenantDb) -> None:
         self.db = db
-        self.security_team = security_team
 
     async def every(
         self,
@@ -86,7 +85,7 @@ class TeamAdminStore:
             escaped = search.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             where.append(teams.c.name_key.like(f"%{escaped}%", escape="\\"))
         async with self.db.tenant_tx(tenant_id) as c:
-            security = await security_team_in(c, tenant_id, self.security_team)
+            security = await security_team_in(c, tenant_id)
             total = int((await c.execute(sa.select(sa.func.count()).select_from(teams).where(*where))).scalar_one())
             page, offset = page_window(total, page, page_size)
             rows = (await c.execute(q.where(*where).limit(page_size).offset(offset))).all()
@@ -159,7 +158,7 @@ class TeamAdminStore:
                     team_id=team_id,
                     user_id=admin_id,
                     member_role="admin",
-                    security_team=await security_team_in(c, tenant_id, self.security_team),
+                    security_team=await security_team_in(c, tenant_id),
                     granted_by=by,
                     at=at,
                 )
@@ -216,9 +215,9 @@ class TeamAdminStore:
             raise
         return True
 
-    async def security_team_of(self, tenant_id: str) -> str:
+    async def security_team_of(self, tenant_id: str) -> str | None:
         async with self.db.tenant_tx(tenant_id) as c:
-            return await security_team_in(c, tenant_id, self.security_team)
+            return await security_team_in(c, tenant_id)
 
     async def set_status(self, tenant_id: str, team_id: str, status: str, *, by: str, at: str, request_id: str) -> bool:
         """Archives or restores the team; False when the workspace has no such team."""

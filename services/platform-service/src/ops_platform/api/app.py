@@ -21,7 +21,7 @@ from ops_identity import Principal as Caller
 from ops_identity import ServiceAuth, ServiceClient, service_verifiers
 from ops_policy import STEP_UP_TTL_S, Ed25519Signer
 from ops_service_kit.background import BackgroundHealthOut
-from ops_service_kit.errors import Forbidden, NotFound, Unauthorized, ValidationFailed
+from ops_service_kit.errors import Conflict, Forbidden, NotFound, Unauthorized, ValidationFailed
 from ops_service_kit.http import (
     Envelope,
     ListResult,
@@ -192,7 +192,6 @@ def create_public_app(
     cors_origins: list[str] | None = None,
     token_ttl_s: int = 900,
     step_up_ttl_s: int = STEP_UP_TTL_S,
-    security_team: str = "team_security",
     signin: SignInOptions | None = None,
     services: ServiceAuth | None = None,
     usage: UsageReader | None = None,
@@ -201,7 +200,7 @@ def create_public_app(
     verifies the service tokens the few routes open to services accept (a policy read); unset, settings' keys.
     `usage` reads what still runs in a team; unset, agents-service at settings' agents URL."""
     sign = signin or SignInOptions.from_settings(Settings())
-    signin_store = SignInStore(store.db, security_team=security_team)
+    signin_store = SignInStore(store.db)
     passwords = Passwords(
         identity=store,
         store=signin_store,
@@ -221,7 +220,7 @@ def create_public_app(
         audiences,
         token_ttl_s=token_ttl_s,
         step_up_ttl_s=step_up_ttl_s,
-        workspace=WorkspaceStore(store.db, fallback_security_team=security_team),
+        workspace=WorkspaceStore(store.db),
     )
     sso = Sso(
         auth=auth,
@@ -369,12 +368,12 @@ def create_public_app(
         await passwords.reset(body.token, body.password, request_id=new_id("req"))
         return Response(status_code=204)
 
-    team_store = TeamStore(store.db, security_team=security_team)
+    team_store = TeamStore(store.db)
     people = Members(team_store)
     settings = Settings()
     lifecycle = WorkspaceLifecycle(
-        LifecycleStore(store.db, security_team=security_team),
-        TeamAdminStore(store.db, security_team=security_team),
+        LifecycleStore(store.db),
+        TeamAdminStore(store.db),
         people,
         restore_days=settings.workspace_restore_days,
         team_delete_after_days=settings.team_delete_after_days,
@@ -554,6 +553,10 @@ def create_public_app(
             raise Forbidden("You are not a member of that team.", code="team_forbidden")
         security = await team_store.security_team_of(actor.tenant_id)
         team = security if (area, action) in SECURITY_TEAM_ACTIONS else team or actor.team_id
+        if team is None:
+            raise Conflict(
+                "This workspace names no Security team; a workspace admin names it.", code="no_security_team"
+            )
         return ok({"teamId": team, **await holder_store.holders(actor.tenant_id, team, area, action)})
 
     @app.get("/v1/me/permissions", tags=["me"], response_model=Envelope[PermissionsOut], responses=ERRORS)
@@ -743,9 +746,9 @@ def create_public_app(
         return Response(status_code=204)
 
     team_admin = TeamAdmin(
-        TeamAdminStore(store.db, security_team=security_team),
+        TeamAdminStore(store.db),
         people,
-        WorkspaceStore(store.db, fallback_security_team=security_team),
+        WorkspaceStore(store.db),
     )
 
     async def on_workspace(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Actor:

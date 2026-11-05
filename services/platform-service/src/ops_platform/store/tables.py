@@ -43,8 +43,8 @@ tenants = sa.Table(
     sa.Column("allowed_domains", sa.JSON, nullable=False),
     sa.Column("created_at", sa.String(40), nullable=False),
     sa.Column("permission_version", sa.Integer, nullable=False, server_default="1"),
-    # Migration 0014: the workspace's security team (null: Settings.security_team_id) and the team new people
-    # join when nothing else names one (null: none).
+    # Migration 0014: the workspace's security team (null: none, so nobody holds its actions; 0029 wrote the
+    # install default into each workspace that had it) and the team new people join when nothing else names one.
     sa.Column("security_team_id", sa.String(64)),
     sa.Column("default_team_id", sa.String(64)),
     # Migration 0026: when and by whom the workspace was closed; a restore clears both.

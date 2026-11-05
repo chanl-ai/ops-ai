@@ -105,7 +105,14 @@ class Platform:
         async with self.engine.begin() as c:
             if tenant_id is None:
                 await c.execute(
-                    tenants.insert().values(id=tenant, name=tenant, status="active", allowed_domains=[], created_at=now)
+                    tenants.insert().values(
+                        id=tenant,
+                        name=tenant,
+                        status="active",
+                        allowed_domains=[],
+                        created_at=now,
+                        security_team_id="team_security",
+                    )
                 )
                 await ensure_builtin_roles(c, tenant, at=now)
             await c.execute(
@@ -399,14 +406,15 @@ async def signin(engine: AsyncEngine, database_url: str) -> AsyncIterator[SignIn
         dev_signer(),
         demo_password=DEMO_PASSWORD,
         audiences=["platform", "agents"],
-        security_team=security,
         signin=options,
     )
     now = now_iso()
     admin_email = f"{new_id('sec')}@bank.test"
     async with engine.begin() as c:
         await c.execute(
-            tenants.insert().values(id=tenant, name=tenant, status="active", allowed_domains=[], created_at=now)
+            tenants.insert().values(
+                id=tenant, name=tenant, status="active", allowed_domains=[], created_at=now, security_team_id=security
+            )
         )
         await ensure_builtin_roles(c, tenant, at=now)
         admin = new_id("usr")

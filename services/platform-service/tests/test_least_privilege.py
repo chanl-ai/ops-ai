@@ -112,7 +112,6 @@ async def test_sign_in_lookups_work_as_the_app_role(app_url: str, signin: SignIn
         dev_signer(),
         demo_password=DEMO_PASSWORD,
         audiences=["platform"],
-        security_team=signin.security_team,
         signin=SignInOptions(
             password_iterations=1_000,
             password_min_length=12,
