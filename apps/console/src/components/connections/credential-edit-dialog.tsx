@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 
 import { CallbackUrl } from '@/components/connections/callback-url';
 import { secretShown } from '@/components/connections/credential-display';
+import { SignInPlace } from '@/components/connections/sign-in-place';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormTextField } from '@/components/shared/form-text-field';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -16,6 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Form } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { type AppCredentialChange, useAppCredential, useChangeAppCredential, useSetCredentialSecret, useSystems } from '@/hooks/systems-queries';
+import { configSchema } from '@/lib/field-schema';
 import { plural } from '@/lib/format';
 
 type Change = NonNullable<AppCredentialChange>;
@@ -43,7 +45,7 @@ function EditForm({ id, onClose }: { id: string; onClose: () => void }) {
   const [error, setError] = React.useState<string | null>(null);
   React.useEffect(() => {
     if (!c) return;
-    form.reset({ name: c.name, clientId: c.clientId ?? '', scopesText: c.permissions.map((p) => p.id).join(' '), clientSecret: '', ...Object.fromEntries((c.fields ?? []).map((f) => [`setting__${f.name}`, String((c.settings ?? {})[f.name] ?? '')])) });
+    form.reset({ name: c.name, clientId: c.clientId ?? '', scopesText: c.permissions.map((p) => p.id).join(' '), clientSecret: '', ...Object.fromEntries((c.fields ?? []).map((f) => [`setting__${f.name}`, String((c.settings ?? {})[f.name] ?? f.default ?? '')])) });
     setScopes(c.permissions.map((p) => p.id));
   }, [c, form]);
 
@@ -70,6 +72,11 @@ function EditForm({ id, onClose }: { id: string; onClose: () => void }) {
     const v = form.getValues();
     if (plugin && !(scopes ?? []).length) {
       setError(`Pick at least one permission for ${c.appName} to ask for.`);
+      return;
+    }
+    const checked = configSchema(c.fields ?? []).safeParse(Object.fromEntries((c.fields ?? []).map((f) => [f.name, v[`setting__${f.name}`] ?? ''])));
+    if (!checked.success) {
+      setError(checked.error.issues[0]?.message ?? 'Check the settings.');
       return;
     }
     try {
@@ -140,9 +147,19 @@ function EditForm({ id, onClose }: { id: string; onClose: () => void }) {
             ) : (
               <FormTextField control={form.control} name="scopesText" label="Permissions it asks for" optional hint="Separated by spaces, as the app names them." testId="credential-edit-scopes-text" />
             )}
-            {(c.fields ?? []).map((f) => (
+            {(c.fields ?? []).map((f) =>
+              f.choices?.length || f.other ? (
+                <SignInPlace
+                  key={f.name}
+                  setting={f}
+                  value={values[`setting__${f.name}`] ?? ''}
+                  onChange={(v) => form.setValue(`setting__${f.name}`, v)}
+                  testId={`credential-edit-setting-${f.name}`}
+                />
+              ) : (
               <FormTextField key={f.name} control={form.control} name={`setting__${f.name}`} label={f.label} optional hint={f.help ?? undefined} multiline={f.pem} testId={`credential-edit-setting-${f.name}`} />
-            ))}
+              ),
+            )}
             {resigns > 0 && (
               <Alert data-testid="credential-edit-resign">
                 <AlertDescription>{`${plural(resigns, 'account')} signing in with it must sign in again after this change.`}</AlertDescription>

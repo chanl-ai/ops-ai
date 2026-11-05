@@ -1,12 +1,14 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { AppCredentialPicker } from '@/components/connections/app-credential-picker';
+import { credentialHref } from '@/components/connections/credential-display';
 import { appHref } from '@/components/connections/systems-grid';
 import { useSignInWindow } from '@/components/connections/sign-in';
 import { isSignInPlace, isTestPlace, SignInPlace } from '@/components/connections/sign-in-place';
@@ -24,6 +26,7 @@ import {
   type SystemCard,
   type TeamAppBody,
   useAccountDetail,
+  useAppCredential,
   useAddAccount,
   useDeleteAccount,
   useSetTeamApp,
@@ -102,7 +105,11 @@ export function ConnectWindow({
   // asks the ones each account keeps its own, as the team's settings stay the app's.
   // Another account is asked where it signs in, as every Salesforce org has its own address; a turn-on again asks nothing.
   const places = (plugin?.settings ?? []).filter(isSignInPlace);
-  const asked = reusing ? (another ? places : []) : (plugin?.settings ?? []).filter((x) => !x.locked && (!sandbox || x.perAccount));
+  // A setting asked on the auth config (Salesforce's org) or on the Settings tab only is never asked here.
+  const askedHere = (x: { asked?: string | null }) => x.asked !== 'config' && x.asked !== 'settings';
+  const asked = reusing ? (another ? places : []) : (plugin?.settings ?? []).filter((x) => !x.locked && askedHere(x) && (!sandbox || x.perAccount));
+  // Where the chosen auth config signs in, for each setting it holds: shown read-only, edited on the config.
+  const onConfig = (plugin?.settings ?? []).filter((x) => x.asked === 'config');
   const fields: KindField[] = asked.filter((x) => !isSignInPlace(x)).map((x) => ({ name: x.name, label: x.label, secret: x.secret, required: !x.default, advanced: Boolean(x.default), default: x.default }));
   const schema = schemaForFields(fields);
   const form = useForm<Record<string, string>>({
@@ -279,6 +286,7 @@ export function ConnectWindow({
       <Form {...form}>
       <div className="flex min-w-0 flex-col gap-4">
         <AppCredentialPicker app={card.id} value={client} onChange={setClient} platform={managed && Boolean(plugin.platformApp)} id="connect-window-app" testId="connect-window-app" />
+        {onConfig.length > 0 && <ConfigPlace config={client} settings={onConfig} />}
 
         {asked.filter(isSignInPlace).map((x) => (
           <SignInPlace
@@ -342,5 +350,29 @@ export function ConnectWindow({
       </div>
       </Form>
     </DialogShell>
+  );
+}
+
+/**
+ * Where the chosen auth config signs in, read-only: each setting the plugin asks on the config (Salesforce's org), with
+ * an Edit link to the team's own config. Ops AI's own config signs in at the plugin's default.
+ */
+function ConfigPlace({ config, settings }: { config: string | null; settings: { name: string; label: string; default?: string | null }[] }) {
+  const own = useAppCredential(config ?? '');
+  const held = (config ? own.data?.settings : undefined) ?? {};
+  return (
+    <div className="flex flex-col gap-1 text-sm" data-testid="connect-window-config-place">
+      {settings.map((s) => (
+        <p key={s.name} className="flex flex-wrap items-center gap-2">
+          <span className="text-muted-foreground">Signs in at</span>
+          <code className="break-all text-xs">{String(held[s.name] ?? s.default ?? '')}</code>
+          {config && own.data && (
+            <Link href={credentialHref(own.data)} className="text-xs underline-offset-4 hover:underline" data-testid="connect-window-config-edit">
+              Edit
+            </Link>
+          )}
+        </p>
+      ))}
+    </div>
   );
 }

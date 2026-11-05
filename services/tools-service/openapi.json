@@ -3161,8 +3161,33 @@
       },
       "CredentialField": {
         "additionalProperties": false,
-        "description": "A setting an app credential may hold: one of a plugin's credential_settings, or a custom app's client field.",
+        "description": "A setting an auth config holds, as its New and Edit windows draw and check it: a plugin's setting `asked:\nconfig` (or one of its credential_settings), or a custom app's client field. The console builds its form schema\nfrom these, and the API checks a saved value against the same.",
         "properties": {
+          "choices": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SettingChoice"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choices"
+          },
+          "default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default"
+          },
           "help": {
             "anyOf": [
               {
@@ -3182,9 +3207,24 @@
             "title": "Name",
             "type": "string"
           },
+          "other": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SettingOther"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "pem": {
             "default": false,
             "title": "Pem",
+            "type": "boolean"
+          },
+          "required": {
+            "default": false,
+            "title": "Required",
             "type": "boolean"
           }
         },
@@ -7820,6 +7860,22 @@
       "PluginSetting": {
         "additionalProperties": false,
         "properties": {
+          "asked": {
+            "anyOf": [
+              {
+                "enum": [
+                  "config",
+                  "connect",
+                  "settings"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asked"
+          },
           "choices": {
             "anyOf": [
               {
