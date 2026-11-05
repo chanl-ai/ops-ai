@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-04",
+  "title": "Sign-in addresses are checked before you connect",
+  "description": "An app that lists where its system signs in, such as Salesforce, now takes only those places or your company's own address on that system, and says which before any sign-in starts.",
+  "tag": "improved"
+}

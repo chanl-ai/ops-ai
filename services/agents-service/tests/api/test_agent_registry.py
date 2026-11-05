@@ -167,13 +167,19 @@ async def test_pause_stops_new_threads_and_resume_serves_again(client: AsyncClie
     assert (await client.post("/v1/threads", json={"graph": f"agent:{FRAUD}"})).status_code == 201
 
 
-async def test_restore_copies_into_a_new_draft_and_delete_takes_the_agent_down(client: AsyncClient) -> None:
+async def test_restore_copies_into_a_new_draft_and_delete_waits_for_its_workflows(client: AsyncClient) -> None:
     await client.patch(f"/v1/agents/{FRAUD}", json={"instructions": "Changed."})
     r = await client.post(f"/v1/agents/{FRAUD}/versions/7/restore")
     a = r.json()["data"]
     # The edit and the restore both land in the one draft after the published v7.
     assert (a["version"], a["publishedVersion"]) == (8, 7) and a["instructions"].startswith("You are Wire Fraud")
 
+    # A workflow runs it: the delete is refused naming that workflow, and the agent stays until it is removed.
+    refused = await client.delete(f"/v1/agents/{FRAUD}")
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "in_use", refused.text
+    assert [u["name"] for u in refused.json()["error"]["details"]["usedBy"]] == ["Wire hold review"]
+    assert (await client.get(f"/v1/agents/{FRAUD}")).status_code == 200
+    assert (await client.delete("/v1/workflows/wire_hold_review")).status_code == 204
     assert (await client.delete(f"/v1/agents/{FRAUD}")).status_code == 204
     assert (await client.get(f"/v1/agents/{FRAUD}")).status_code == 404
     assert "agent:ag_fraud" not in {g["name"] for g in (await client.get("/v1/graphs")).json()["data"]}

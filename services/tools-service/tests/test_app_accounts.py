@@ -1,7 +1,6 @@
 """A team keeps several named accounts of one app, by failure mode: a second account replaces the first; a
 sign-in on the second account settles the first's instance; a call naming an account runs with another, or with
-another team's; a person's call ignores the account they pinned; and with several_accounts off, a second account
-can still be made or named."""
+another team's; and a person's call ignores the account they pinned."""
 
 from __future__ import annotations
 
@@ -69,7 +68,6 @@ async def world(
         {},
         [Loaded("desk", desk, None)],
         store,
-        accounts=True,
     )
     users = StaticToolUsers()
     app = build_app(engine, seed, tenant, auth=auth, install_clients=INSTALL, plugins=host, users=users)
@@ -119,10 +117,8 @@ async def test_a_second_named_account_is_made_beside_the_first_which_stays_the_d
     second = made.json()["data"]
     assert second["id"].startswith("ca_") and second["accountName"] == "EU org" and second["appId"] == APP
     page = (await world.client.get(f"/v1/apps/plugin:{ID}", headers=admin(tenant))).json()["data"]
-    assert [(a["id"], a["name"], a["default"]) for a in page["accounts"]] == [
-        (first, "Desk", True),
-        (second["id"], "EU org", False),
-    ]
+    listed = sorted((a["id"], a["name"], a["default"]) for c in page["authConfigs"] for a in c["accounts"])
+    assert listed == sorted([(first, "Desk", True), (second["id"], "EU org", False)]), listed
     again = await another(world, tenant, "eu ORG")
     assert again.status_code == 409, again.text
 
@@ -167,9 +163,9 @@ async def test_a_persons_call_uses_the_account_they_pinned_else_their_newest_sig
         return str(r.module["connection_id"])
 
     async def shown() -> dict[str, bool | None]:
-        """Her rows on the People tab: which one the page names as her default."""
+        """Her accounts on the app page: which one it names as her default."""
         page = (await world.client.get(f"/v1/apps/plugin:{ID}", headers=admin(tenant))).json()["data"]
-        return {p["accountName"]: p["default"] for p in page["people"] if p["mine"]}
+        return {a["name"]: a["myDefault"] for c in page["authConfigs"] for a in c["accounts"] if a["mine"]}
 
     assert await used() == second  # the newest of her sign-ins
     assert await shown() == {"Desk": False, "EU org": True}
@@ -177,16 +173,6 @@ async def test_a_persons_call_uses_the_account_they_pinned_else_their_newest_sig
     assert pinned.status_code == 200, pinned.text
     assert await used() == first
     assert await shown() == {"Desk": True, "EU org": False}
-
-
-async def test_with_several_accounts_off_a_second_account_cannot_be_made_or_named(world: World, tenant: str) -> None:
-    world.host.accounts = False
-    await connected(world, tenant)
-    made = await another(world, tenant, "EU org")
-    assert (made.status_code, made.json()["error"]["code"]) == (400, "one_account"), made.text
-    r = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, run="production", account="Desk")
-    assert r is not None and r.module is not None
-    assert r.module.get("account_missing"), r.module
 
 
 async def test_a_plugin_tools_page_names_the_teams_account_not_no_connection(

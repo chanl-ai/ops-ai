@@ -26,6 +26,15 @@ class SecretMissing(LookupError):
         self.names = names
 
 
+# A value this short or shorter keeps no ending: four of its characters would give too much of it away.
+SHORTEST_WITH_ENDING = 8
+
+
+def ending(value: str) -> str | None:
+    """The last four characters of a secret value, shown so a person can tell which value is held."""
+    return value[-4:] if len(value) >= SHORTEST_WITH_ENDING else None
+
+
 class SecretResolver:
     """Turns `{{NAME}}` references into values, for one call, and sets, rotates and deletes them. Values are read on
     every call, so a rotation applies to the next one, and each use is audited with the tool that sent it."""
@@ -57,6 +66,7 @@ class SecretResolver:
             ref,
             actor=actor,
             at=at,
+            ends=ending(value),
             template=template,
             connection_id=connection_id,
             credential_id=credential_id,
@@ -65,13 +75,24 @@ class SecretResolver:
             await self.credentials.delete(ref, context=context)
         return made
 
+    async def ends_of(self, tenant_id: str, team_id: str, name: str) -> str | None:
+        """A secret's last four characters. One kept before they were stored is read once and they are kept, so a
+        person can still tell which value it holds."""
+        ref = await self.store.missing_ends(tenant_id, team_id, name)
+        if ref is None:
+            return None
+        ends = ending(await self.credentials.get(ref, context=context_of(tenant_id, name)))
+        if ends is not None:
+            await self.store.keep_ends(tenant_id, team_id, name, ref, ends)
+        return ends
+
     async def rotate(
         self, tenant_id: str, team_id: str, name: str, value: str, *, actor: str, at: datetime
     ) -> int | None:
         """The new version, or None when the team has no such secret; the value it replaced is dropped."""
         context = context_of(tenant_id, name)
         ref = await self.credentials.put(value, context=context)
-        rotated = await self.store.rotate(tenant_id, team_id, name, ref, actor=actor, at=at)
+        rotated = await self.store.rotate(tenant_id, team_id, name, ref, actor=actor, at=at, ends=ending(value))
         if rotated is None:
             await self.credentials.delete(ref, context=context)
             return None

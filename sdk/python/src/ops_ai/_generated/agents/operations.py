@@ -964,6 +964,33 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "resources_plan_resources": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/resources/plan",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "resources_review_update": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/resources/{resource}/copies/{copy}/update",
+        "pathParams": ["resource", "copy"],
+        "query": [],
+        "stream": False,
+    },
+    "resources_take_update": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/resources/{resource}/copies/{copy}/update",
+        "pathParams": ["resource", "copy"],
+        "query": [],
+        "stream": False,
+    },
     "reviews_assign": {
         "body": "json",
         "headers": [],
@@ -1394,6 +1421,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/workflows/definitions",
         "pathParams": [],
         "query": ["page", "pageSize", "search", "sortBy", "sortOrder"],
+        "stream": False,
+    },
+    "workflows_list_document_type_uses": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/document-type-uses",
+        "pathParams": [],
+        "query": ["types"],
         "stream": False,
     },
     "workflows_list_engine_runs": {
@@ -2108,6 +2144,10 @@ class Operations:
             SERVICE, OPERATIONS["deployments_pause_deployment"], {"deployment_id": deployment_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
+    def workflows_list_document_type_uses(self, *, types: str | None = None) -> Any:
+        "List Document Type Uses"
+        return self._t.call(SERVICE, OPERATIONS["workflows_list_document_type_uses"], {}, {"types": types}, {}, None)  # type: ignore[no-any-return]
+
     def threads_team_stream(self, *, after: int | None = None, follow: bool | None = None) -> Any:
         "Team Stream"
         return self._t.call(
@@ -2310,9 +2350,25 @@ class Operations:
             SERVICE, OPERATIONS["reviews_decide_publish_request"], {"request_id": request_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
+    def resources_plan_resources(self, body: PlanInput) -> Plan:
+        "Plan Resources"
+        return self._t.call(SERVICE, OPERATIONS["resources_plan_resources"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     def resources_copy_resource(self, resource: str, body: InstallInput) -> Installation:
         "Copy Resource"
         return self._t.call(SERVICE, OPERATIONS["resources_copy_resource"], {"resource": resource}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def resources_review_update(self, resource: str, copy: str) -> UpdateReview:
+        "Review Update"
+        return self._t.call(
+            SERVICE, OPERATIONS["resources_review_update"], {"resource": resource, "copy": copy}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def resources_take_update(self, resource: str, copy: str, body: UpdateInput) -> UpdateReview:
+        "Take Update"
+        return self._t.call(
+            SERVICE, OPERATIONS["resources_take_update"], {"resource": resource, "copy": copy}, {}, {}, body
+        )  # type: ignore[no-any-return]
 
     def workflows_list_engine_runs(
         self,
@@ -3319,6 +3375,12 @@ class AsyncOperations:
             SERVICE, OPERATIONS["deployments_pause_deployment"], {"deployment_id": deployment_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
+    async def workflows_list_document_type_uses(self, *, types: str | None = None) -> Any:
+        "List Document Type Uses"
+        return await self._t.call(
+            SERVICE, OPERATIONS["workflows_list_document_type_uses"], {}, {"types": types}, {}, None
+        )  # type: ignore[no-any-return]
+
     async def threads_team_stream(self, *, after: int | None = None, follow: bool | None = None) -> Any:
         "Team Stream"
         return await self._t.call(
@@ -3525,9 +3587,25 @@ class AsyncOperations:
             SERVICE, OPERATIONS["reviews_decide_publish_request"], {"request_id": request_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
+    async def resources_plan_resources(self, body: PlanInput) -> Plan:
+        "Plan Resources"
+        return await self._t.call(SERVICE, OPERATIONS["resources_plan_resources"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     async def resources_copy_resource(self, resource: str, body: InstallInput) -> Installation:
         "Copy Resource"
         return await self._t.call(SERVICE, OPERATIONS["resources_copy_resource"], {"resource": resource}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def resources_review_update(self, resource: str, copy: str) -> UpdateReview:
+        "Review Update"
+        return await self._t.call(
+            SERVICE, OPERATIONS["resources_review_update"], {"resource": resource, "copy": copy}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def resources_take_update(self, resource: str, copy: str, body: UpdateInput) -> UpdateReview:
+        "Take Update"
+        return await self._t.call(
+            SERVICE, OPERATIONS["resources_take_update"], {"resource": resource, "copy": copy}, {}, {}, body
+        )  # type: ignore[no-any-return]
 
     async def workflows_list_engine_runs(
         self,

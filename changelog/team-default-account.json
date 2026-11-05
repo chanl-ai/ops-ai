@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Choose the team's default account",
+  "description": "An admin makes any live account of an app the team's default from its menu on the app's page, and every auth config shows its client secret's last four characters, older ones included.",
+  "tag": "improved"
+}

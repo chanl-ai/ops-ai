@@ -82,6 +82,7 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict connect_wait 0 state
 * conflict connection_in_use 0 state
 * conflict connection_secret 0 state
+* conflict copy_edited 0 state
 * conflict credential_secret 0 state
 * conflict credential_in_use 0 state
 * conflict daily_cap 0 state
@@ -95,6 +96,7 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict file_not_ready 0 state
 * conflict form_needs_inputs 0 state
 * conflict guardrail_pinned 0 state
+* conflict in_use 0 state
 * conflict invite_expired 0 state
 * conflict invite_used 0 state
 * conflict key_in_use 0 state
@@ -134,7 +136,6 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict security_team 0 state
 * conflict skill_deprecated 0 state
 * conflict skill_pinned 0 state
-* conflict slug_taken 0 state
 * conflict source_paused 0 state
 * conflict sync_running 0 state
 * conflict needs_reconnect 0 state

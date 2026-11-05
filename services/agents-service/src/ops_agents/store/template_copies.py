@@ -38,6 +38,9 @@ template_copies = sa.Table(
     # sha256 of the template body the copy was made from (tools-service's digest): the baseline that tells a copy made
     # from a body the plugin has since changed, even at the same version.
     sa.Column("digest", sa.String(64)),
+    # The digest of the copy's own record as the copy (or its last update) made it: a record whose digest differs now
+    # was edited by the team, which an update must not overwrite unseen.
+    sa.Column("record_digest", sa.String(64)),
     sa.Column("installed_by", sa.String(320), nullable=False),
     sa.Column("installed_at", sa.String(32), nullable=False),
     sa.Column("removed_at", sa.String(32)),
@@ -92,6 +95,7 @@ class TemplateCopies:
         version: int,
         by: str,
         digest: str | None = None,
+        record_digest: str | None = None,
     ) -> tuple[dict[str, Any], bool]:
         """Records a new copy and answers it with True; when another install of the same version won the race, answers
         that one's row with False, and the caller drops the record it made."""
@@ -104,6 +108,7 @@ class TemplateCopies:
             "template_id": template_id,
             "version": version,
             "digest": digest,
+            "record_digest": record_digest,
             "installed_by": by,
             "installed_at": now_iso(),
         }
@@ -116,6 +121,21 @@ class TemplateCopies:
                 raise
             return first, False
         return {**row, "tenant_id": current_tenant(), "removed_at": None}, True
+
+    async def of_record(self, kind: Kind, record_id: str) -> dict[str, Any] | None:
+        """The acting team's live copy row of this record, if the record is a copy."""
+        t = template_copies
+        q = sa.select(t).where(t.c.kind == kind, t.c.record_id == record_id, LIVE, team_visible(t))
+        async with tenant_tx(self.engine) as c:
+            found = (await c.execute(q)).mappings().first()
+        return dict(found) if found is not None else None
+
+    async def updated(self, copy_id: str, *, version: int, digest: str | None, record_digest: str | None) -> None:
+        """The copy took its template's update: it now stands for that version and body."""
+        t = template_copies
+        values = {"version": version, "digest": digest, "record_digest": record_digest}
+        async with tenant_tx(self.engine) as c:
+            await c.execute(t.update().where(t.c.id == copy_id, team_visible(t)).values(**values))
 
     async def removed(self, copy_id: str) -> None:
         """The copy's record is gone: its row stops counting, so the next install makes a new copy."""

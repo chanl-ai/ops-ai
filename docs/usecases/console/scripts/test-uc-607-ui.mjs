@@ -22,8 +22,6 @@ const LOGIN_HOST = 'login.multi.test';
 const KINDS = join(ROOT, 'services/tools-service/tests/plugin_kinds');
 const FOLDERS = readdirSync(KINDS).filter((n) => n.startsWith('kinds_')).map((n) => join(KINDS, n));
 process.env.OPS_PLUGINS = 'true';
-// Several named accounts of one app are behind their install flag; this walk turns it on.
-process.env.OPS_FLAGS = 'several_accounts,sandbox_accounts';
 process.env.OPS_PLUGIN_PATHS = JSON.stringify(FOLDERS);
 
 // The fake model: the request asks for Person desk's read tool, and the answer names the account the record was read as.
@@ -592,7 +590,7 @@ try {
           );
         }, page);
 
-        await step('9 the app page has the frame’s Accounts and tabs; Tools by title, Secrets with no secret, Settings with the switch and the default account’s keys', async () => {
+        await step('9 the app page has the frame’s Accounts and tabs; Tools by title, Credentials with no secret, Settings with the switch and the default account’s keys', async () => {
           await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await page.getByTestId('app-accounts').waitFor({ timeout: 60_000 });
           const head = ((await page.locator('main').innerText()) ?? '').replace(/\s+/g, ' ');
@@ -605,10 +603,10 @@ try {
           await page.getByTestId('app-tab-resources').click();
           await page.getByTestId('app-skills-none').waitFor({ timeout: 30_000 });
           await shoot(page, 'app-resources');
-          await page.getByTestId('app-tab-secrets').click();
-          const secrets = (await page.getByTestId('app-secrets').innerText()).replace(/\s+/g, ' ');
-          const credentialLink = await page.getByTestId('app-credential-link').getAttribute('href').catch(() => null);
-          await shoot(page, 'app-secrets');
+          await page.getByTestId('app-tab-credentials').click();
+          await page.getByTestId('app-credentials-panel').waitFor({ timeout: 30_000 });
+          const credentials = (await page.getByTestId('app-credentials-tab').innerText()).replace(/\s+/g, ' ');
+          await shoot(page, 'app-credentials');
           await page.getByTestId('app-tab-settings').click();
           await page.getByTestId('app-keys').waitFor({ timeout: 30_000 });
           const everyone = await page.getByTestId('app-everyone').getAttribute('aria-checked');
@@ -618,10 +616,10 @@ try {
           await shoot(page, 'app-settings');
           const html = await page.content();
           check(
-            '9 the app page has the frame’s Accounts and tabs; Tools by title, Secrets with no secret, Settings with the switch and the default account’s keys',
-            tabs.join() === 'Accounts,People,Tools,Resources,Secrets,Logs,Settings' && /Calls use the default account unless a step names another/.test(head) && !/\bPlugin\b/.test(head) &&
-              /Ticket desk/.test(usedBy) && /harbor\.ops/.test(secrets) && /App credential · Ops AI’s app/.test(secrets) && credentialLink === '/integrations/credentials' && everyone === 'true' && /Person desk/.test(keys) && /Working/.test(keys) && !/Production/.test(keys) && !html.includes(fake.info.clients['multi-app']),
-            { tabs, usedBy, secrets, credentialLink, everyone, keys },
+            '9 the app page has the frame’s Accounts and tabs; Tools by title, Credentials with no secret, Settings with the switch and the default account’s keys',
+            tabs.join() === 'Accounts,People,Tools,Resources,Credentials,Logs,Settings' && /Calls use the default account unless a step names another/.test(head) && !/\bPlugin\b/.test(head) &&
+              /Ticket desk/.test(usedBy) && /Ops AI’s app/.test(credentials) && /Kept by Ops AI/.test(credentials) && everyone === 'true' && /Person desk/.test(keys) && /Working/.test(keys) && !/Production/.test(keys) && !html.includes(fake.info.clients['multi-app']),
+            { tabs, usedBy, credentials, everyone, keys },
           );
         }, page);
 
@@ -663,7 +661,7 @@ try {
           const rows = (await page.getByTestId('app-accounts').innerText()).replace(/\s+/g, ' ');
           await shoot(page, 'app-accounts');
           const page_ = (await call(tools, 'GET', `/v1/apps/${encodeURIComponent(APP)}`, priya)).data ?? {};
-          const accounts = (page_.accounts ?? []).map((a) => [a.name, a.default, a.status]);
+          const accounts = (page_.authConfigs ?? []).flatMap((c) => c.accounts).map((a) => [a.name, a.default, a.status]);
           check(
             '11 Priya connects another account named EU desk and allows it as the EU team account; both are listed, the first the default',
             accounts.length === 2 && accounts[0][1] === true && accounts[1][0] === 'EU desk' && accounts[1][1] === false && /EU desk/.test(rows),
@@ -1057,7 +1055,7 @@ try {
         for (let i = 0; i < 20 && !((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).some((c) => c.pluginId === 'opsai.salesforce'); i++) await page.waitForTimeout(1000);
         const SF = 'plugin:opsai.salesforce';
         /** The app's accounts, its default first, each with its last test, as its page reads them. */
-        const sfAccounts = async () => (await call(tools, 'GET', `/v1/apps/${encodeURIComponent(SF)}`, priya)).data?.accounts ?? [];
+        const sfAccounts = async () => ((await call(tools, 'GET', `/v1/apps/${encodeURIComponent(SF)}`, priya)).data?.authConfigs ?? []).flatMap((c) => c.accounts);
         /** The team's own client, made under Credentials with no account, as the Connect window then offers it. */
         const credentialFor = async (clientId, clientSecret) =>
           (await call(tools, 'POST', '/v1/app-credentials', priya, { app: SF, name: `Salesforce ${clientId}`, clientId, clientSecret })).data?.id;

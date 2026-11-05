@@ -668,6 +668,8 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
         // The read_file and read_document tools read the team's files through documents-service.
         OPS_FILES_URL: `http://127.0.0.1:${FILES_PORT}`,
         OPS_DOCUMENTS_URL: `http://127.0.0.1:${DOCUMENTS_PORT}`,
+        // An app's resources list the knowledge sources the team made from a plugin, from this run's kb-service.
+        OPS_KB_URL: `http://127.0.0.1:${KB_PORT}`,
         // send_reply sends through the provider settings pick and fails with none: the dev fake writes each
         // mail to this run's folder.
         OPS_MAIL_PROVIDER: 'fake',
@@ -753,6 +755,8 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       OPS_FILES_URL: `http://127.0.0.1:${FILES_PORT}`,
       // A team's document type templates come from its plugins in tools-service.
       OPS_TOOLS_URL: `http://127.0.0.1:${TOOLS_PORT}`,
+      // A type's delete asks this run's agents-service which workflows read the type.
+      OPS_AGENTS_URL: `http://127.0.0.1:${AGENTS_PORT}`,
       OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),
       ...auth,
       // Extractions run on the run's models-service with documents-service's own dev key.

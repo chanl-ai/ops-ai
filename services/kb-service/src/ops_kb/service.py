@@ -500,6 +500,27 @@ class KnowledgeService:
         facets = {"type": _facet(rows, "type"), "status": _facet(rows, "status")}
         return page_of(rows, page=page, page_size=page_size, facets=facets)
 
+    async def plugin_sources(self, who: Who, plugin: str) -> list[dict[str, Any]]:
+        """The sources the caller's team made from one plugin's knowledge sources, each with the bases it feeds. Read
+        by the team the call names, a service's included, so an app's resource list shows only that team's."""
+        if not who.team_id:
+            raise ValidationFailed(
+                "Plugin sources are listed for one team; this call names none.", code="team_required"
+            )
+        _, by_source = await self._joined(who.tenant_id)
+        return [
+            {
+                "id": s["id"],
+                "name": s["name"],
+                "source": str(cfg.get("source") or ""),
+                "kbIds": by_source.get(s["id"], []),
+            }
+            for s in await self.store.sources(who.tenant_id)
+            if s["type"] == "tool"
+            and s.get("team_id") == who.team_id
+            and (cfg := dict(s.get("config") or {})).get("plugin") == plugin
+        ]
+
     async def get_source(self, who: Who, source_id: str) -> dict[str, Any]:
         found = await self.store.sources(who.tenant_id, [source_id])
         if not found:

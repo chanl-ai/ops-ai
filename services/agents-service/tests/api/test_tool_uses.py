@@ -4,7 +4,9 @@ a tool nothing uses is said to be used, and another team's agents are named."""
 
 from __future__ import annotations
 
-from typing import Any
+import json
+from pathlib import Path
+from typing import Any, cast
 
 from httpx import AsyncClient
 
@@ -63,3 +65,25 @@ async def test_a_workflow_whose_tool_node_calls_it_is_named_draft_or_live(client
     assert made.status_code in (200, 201), made.text
     found = await uses(client, ["get_customer"])
     assert {"kind": "workflow", "id": "refund_check", "name": basic()["name"]} in found["get_customer"], found
+
+
+async def test_a_workflow_whose_step_reads_a_document_type_is_named_and_another_type_is_not(
+    client: AsyncClient,
+) -> None:
+    """documents-service asks this before deleting a type, so a workflow that reads it is never left without it."""
+    seeded: Any = json.loads((Path(__file__).parents[2] / "seed" / "engine_workflows.json").read_text())
+    rows = cast(
+        list[dict[str, Any]], seeded if isinstance(seeded, list) else seeded.get("workflows") or list(seeded.values())
+    )
+    defs = [cast(dict[str, Any], w.get("definition", w)) for w in rows]
+    found = next(d for d in defs if d.get("id") == "levy_intake")
+    intake = {k: v for k, v in found.items() if k != "teamId"}
+    made = await client.post("/v1/workflows/definitions", json={"definition": intake}, headers={"X-Team-Id": SEED_TEAM})
+    assert made.status_code in (200, 201), made.text
+    r = await client.get(
+        "/v1/document-type-uses", params={"types": "legal_notice,nothing_reads_this"}, headers={"X-Team-Id": SEED_TEAM}
+    )
+    assert r.status_code == 200, r.text
+    found = r.json()["data"]
+    assert {"kind": "workflow", "id": "levy_intake", "name": intake["name"]} in found["legal_notice"], found
+    assert found["nothing_reads_this"] == []

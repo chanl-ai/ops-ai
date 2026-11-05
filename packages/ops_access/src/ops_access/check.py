@@ -39,6 +39,7 @@ from .catalogue import (
     AREAS,
     BUILTIN_ROLES,
     SECURITY_TEAM_ACTIONS,
+    BuiltinRole,
     Grant,
     Scope,
     builtin_roles_for,
@@ -181,20 +182,21 @@ class Access:
             _same_team(p, held_in, action, what)
         scope = self.scope(p, area, action, held_in)
         if scope is None:
+            granting = granted_by(area, action)
             raise Forbidden(
-                f"{your} roles in {held_in} do not allow {area}.{action} on {what}.",
+                f"{your} role cannot {action} {what}; {_who_can(granting)} can.",
                 code=code,
                 details={
                     "teamId": held_in,
                     "area": area,
                     "action": action,
                     "roles": self.roles_in(p, held_in),
-                    "grantedBy": [r.id for r in BUILTIN_ROLES if any((a, x) == (area, action) for a, x, _ in r.grants)],
+                    "grantedBy": [r.id for r in granting],
                 },
             )
         if scope == "own" and owner is not None and owner.strip().lower() != p.email.strip().lower():
             raise Forbidden(
-                f"{your} roles in {held_in} allow {area}.{action} on {own} own records only.",
+                f"{your} role lets you {action} only {own} own; {what} is someone else's.",
                 code="role_required",
                 details={"teamId": held_in, "area": area, "action": action, "scope": "own"},
             )
@@ -207,6 +209,28 @@ class Access:
         except Forbidden:
             return False
         return True
+
+
+def granted_by(area: str, action: str) -> list[BuiltinRole]:
+    """The built-in roles that grant a cell, the narrowest first: a role holding fewer cells names the cell's purpose
+    better than one holding every cell."""
+    return sorted(
+        (r for r in BUILTIN_ROLES if any((a, x) == (area, action) for a, x, _ in r.grants)), key=lambda r: len(r.grants)
+    )
+
+
+def who_can(area: str, action: str) -> str:
+    """Who holds a cell, in the words a sentence reads: "a Builder or Admin"."""
+    return _who_can(granted_by(area, action))
+
+
+def _who_can(roles: list[BuiltinRole]) -> str:
+    """The roles that grant a cell, in the words a refusal reads: "a Builder or Admin"."""
+    names = [r.name for r in roles]
+    if not names:
+        return "no role"
+    listed = names[0] if len(names) == 1 else f"{', '.join(names[:-1])} or {names[-1]}"
+    return f"{'an' if listed[0] in 'AEIOU' else 'a'} {listed}"
 
 
 def _same_team(p: Principal, team: str, action: str, what: str) -> None:

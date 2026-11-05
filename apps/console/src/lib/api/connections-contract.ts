@@ -1,4 +1,4 @@
-import type { AccountRef, AuthKind, CredentialCheck, MyConnection, SignedInAccount, SignInAccount, SignInStart } from '@/lib/types/connections';
+import type { AccountRef, AuthKind, MyConnection, SignInAccount, SignInFinished, SignInReturn, SignInStart } from '@/lib/types/connections';
 
 /**
  * An app's account sign-ins (tools-service): starting and finishing one, each person's own sign-in, and the team's
@@ -9,8 +9,11 @@ export interface ConnectionsApi {
   kinds(): Promise<AuthKind[]>;
   /** Where to send the person to sign in with `account` (their own unless they manage the account and ask for the team's). */
   startSignIn(ref: AccountRef, input: { account?: SignInAccount }): Promise<SignInStart>;
-  /** Finishes a sign-in with the code and state the system returned; only the person who started it may. */
-  completeSignIn(ref: AccountRef, input: { code: string; state: string }): Promise<SignedInAccount>;
+  /**
+   * Finishes the sign-in or Test with my account the state was sent out for, from what the system sent back alone;
+   * only the person who started it may, once. A refusal rejects with 422 sign_in_refused and its plain sentence.
+   */
+  finishSignIn(input: SignInReturn): Promise<SignInFinished>;
   /** Starts the sign-in a `CONNECTION_NOT_LINKED` link names; 404 once used or expired, 403 for anyone else. */
   openConnectLink(link: string): Promise<SignInStart>;
   /** The caller's own sign-ins on this team's accounts (My accounts); `every` adds those they can connect. */
@@ -22,6 +25,4 @@ export interface ConnectionsApi {
   /** Adds the team's own OAuth app to one of its apps; team admins only. 409 when the app takes no client or has one. */
   /** Test with my account: where the admin signs in through the app credential; nothing is kept but the result. */
   startCredentialCheck(ref: AccountRef): Promise<SignInStart>;
-  /** Finishes Test with my account with the code and state the sign-in returned. */
-  finishCredentialCheck(ref: AccountRef, input: { state: string; code: string }): Promise<CredentialCheck>;
 }

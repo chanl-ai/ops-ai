@@ -127,6 +127,18 @@ export const useAppCredential = (id: string) =>
 export const useCreateAppCredential = () =>
   useSystemsMutation((body: Args<'apps_create_app_credential'>['body']) => sdk((ops) => ops.raw.tools.apps_create_app_credential({ body })));
 /** Replaces the client secret of the team's own app credential (PUT /v1/app-credentials/{id}/secret); sealed on save. */
+export type AppCredentialChange = Args<'apps_change_app_credential'>['body'];
+export const useChangeAppCredential = () =>
+  useSystemsMutation((a: { id: string; body: AppCredentialChange }) => sdk((ops) => ops.raw.tools.apps_change_app_credential({ path: { credential_id: a.id }, body: a.body })));
+
+/** Deletes the team's own app credential; `move` moves its accounts first, to `moveTo` or, with none, Ops AI's app. */
+export const useDeleteAppCredential = () =>
+  useSystemsMutation((a: { id: string; move?: boolean; moveTo?: string | null }) =>
+    sdk((ops) =>
+      ops.raw.tools.apps_delete_app_credential({ path: { credential_id: a.id }, query: { move: Boolean(a.move), ...(a.moveTo ? { moveTo: a.moveTo } : {}) } }),
+    ),
+  );
+
 export const useSetCredentialSecret = () =>
   useSystemsMutation((a: Args<'apps_set_app_credential_secret'>) => sdk((ops) => ops.raw.tools.apps_set_app_credential_secret(a)));
 /** Turns a plugin's app on or off for the team (PUT /v1/apps/plugin:{id}/team); answers the app's card. */
@@ -134,6 +146,9 @@ export const useSetTeamApp = () =>
   useSystemsMutation((a: { appId: string; body: TeamAppBody }) => sdk((ops) => ops.raw.tools.apps_set_team_app({ path: { app_id: a.appId }, body: a.body })));
 /** Makes one of the app's accounts the caller's default: their calls that name no account use it. */
 export const usePinDefault = () => useSystemsMutation((a: AccountRef) => sdk((ops) => ops.raw.tools.apps_pin_default({ path: path(a) })));
+/** Makes an account the one the team's calls use when they name none (PUT …/team-default); team admins only. */
+export const useMakeTeamDefault = () =>
+  useSystemsMutation((a: AccountRef) => sdk((ops) => ops.raw.tools.apps_make_team_default({ path: path(a) })));
 
 export const useSendPolicy = () =>
   useTeamQuery({ queryKey: ['send-policy'], queryFn: () => sdk((ops) => ops.raw.tools.send_policy_get_send_policy()) });

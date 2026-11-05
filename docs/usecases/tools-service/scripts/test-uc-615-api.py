@@ -48,13 +48,14 @@ with apps_stack(ops_ai_apps={"test.person": "multi-zoom"}) as w:
         (target("P1: the account route takes the team's own client"), saved.status_code, saved.text[:200], read),
     )
 
-    # 3. Test with my account: a sign-in through the team's app, answered back on the same route.
+    # 3. Test with my account: a sign-in through the team's app, finished as every sign-in is.
     test = f"{path}/test-credential"
     started = w.kept(w.gw.post(test, json={}, headers=admin))
     url = str((data(started) or {}).get("authorizeUrl") or "") if started.status_code == 200 else ""
     client = parse_qs(urlsplit(url).query).get("client_id", [""])[0]
     back = w.m["sign_in"](url, "harbor.ops") if url else {}
-    done = w.kept(w.gw.post(test, json={"state": back.get("state"), "code": back.get("code")}, headers=admin))
+    finish = {"state": back.get("state"), "code": back.get("code")}
+    done = w.kept(w.gw.post("/v1/sign-ins/complete", json=finish, headers=admin))
     health = (data(done) or {}).get("health") or {}
     check(
         "3 Test with my account signs in through client multi-app and answers ok as harbor.ops",

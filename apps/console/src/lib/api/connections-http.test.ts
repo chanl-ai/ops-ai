@@ -20,16 +20,15 @@ test('every connections call is a route tools-service serves', async () => {
   await Promise.all([
     c.kinds(),
     c.startSignIn(account, { account: 'self' }),
-    c.completeSignIn(account, { code: 'c', state: 's' }),
+    c.finishSignIn({ state: 's', code: 'c' }),
     c.openConnectLink('l'),
     c.mine(),
     c.mine(true),
     c.giveOwn('conn_1', { credentials: { key: 'k' } }),
     c.disconnect('conn_1'),
     c.startCredentialCheck(account),
-    c.finishCredentialCheck(account, { state: 's', code: 'c' }),
   ]);
   const missing = calls.filter((call) => !served.some((s) => s.method === call.method && s.path.test(call.path)));
-  assert.equal(calls.length, 10);
+  assert.equal(calls.length, 9);
   assert.deepEqual(missing, []);
 });

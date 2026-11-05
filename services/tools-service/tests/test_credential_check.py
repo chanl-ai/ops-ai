@@ -66,9 +66,11 @@ async def test_a_credential_check_signs_in_through_the_app_and_keeps_no_token(
     assert started.status_code == 200, started.text
     query = parse_qs(urlsplit(str(started.json()["data"]["authorizeUrl"])).query)
     assert query["client_id"] == ["ops-console"]
-    done = await client.post(url, json={"state": query["state"][0], "code": "priya"}, headers=admin(tenant))
+    done = await client.post(
+        "/v1/sign-ins/complete", json={"state": query["state"][0], "code": "priya"}, headers=admin(tenant)
+    )
     assert done.status_code == 200, done.text
-    assert done.json()["data"]["health"]["status"] == "ok", done.text
+    assert done.json()["data"]["check"] is True and done.json()["data"]["health"]["status"] == "ok", done.text
     assert system.asked[-1]["code"] == "priya"
     assert await ConnectionStore(engine).token(tenant, conn, SHARED) is None
 

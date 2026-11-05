@@ -24,6 +24,8 @@ from ..workflow_registry import registry as workflow_registry
 from .agents import used_in_all
 
 router = APIRouter(prefix="/v1/tool-uses")
+# Which of a team's workflows read each document type, for documents-service's delete of one.
+document_type_router = APIRouter(prefix="/v1/document-type-uses")
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 MAX_TOOLS = 200
 
@@ -97,3 +99,31 @@ async def list_tool_uses(
     can(caller, "agents", "view", team=team, what="which agents and workflows use a tool")
     names = [n for n in dict.fromkeys(t.strip() for t in tools.split(",")) if n][:MAX_TOOLS]
     return ok(await tool_uses(rt, caller.team_id, names))
+
+
+async def document_type_uses(rt: Runtime, types: list[str]) -> dict[str, list[dict[str, str]]]:
+    """For each document type id, the acting team's workflows whose newest version, draft or live, has a step that
+    reads it (`parameters.documentType.id`), each `{kind, id, name}` once."""
+    out: dict[str, list[dict[str, str]]] = {t: [] for t in types}
+    for d in await team_workflows(rt):
+        if d.get("archived_at"):
+            continue
+        for node in cast(list[dict[str, Any]], dict(d.get("definition") or {}).get("nodes") or []):
+            ref = dict(node.get("parameters") or {}).get("documentType")
+            type_id = str(cast(dict[str, Any], ref).get("id") or "") if isinstance(ref, dict) else ""
+            use = {"kind": "workflow", "id": str(d["workflow_id"]), "name": str(d["name"])}
+            if type_id in out and use not in out[type_id]:
+                out[type_id].append(use)
+    return out
+
+
+@document_type_router.get("", response_model=Envelope[dict[str, list[ToolUser]]])
+async def list_document_type_uses(
+    rt: Rt, caller: CurrentTenantCaller, types: Annotated[str, Query(min_length=1, max_length=8000)]
+) -> JSONResponse:
+    """`types` is a comma-separated list of document type ids; each comes back with the workflows that read it. A
+    person with workflows.view in their team, or a service holding `workflows:view` for the team its token names."""
+    team = None if caller.kind == "service" else caller.team_id
+    can(caller, "workflows", "view", team=team, what="which workflows read a document type")
+    names = [n for n in dict.fromkeys(t.strip() for t in types.split(",")) if n][:MAX_TOOLS]
+    return ok(await document_type_uses(rt, names))

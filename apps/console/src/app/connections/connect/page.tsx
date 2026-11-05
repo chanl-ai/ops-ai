@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
 import { SignInCard } from '@/components/connections/sign-in-card';
-import { goSignIn, READY_MESSAGE, START_MESSAGE, STOP_MESSAGE, type WindowMessage, rememberSignInApp } from '@/components/connections/sign-in';
+import { goSignIn, READY_MESSAGE, START_MESSAGE, STOP_MESSAGE, type WindowMessage } from '@/components/connections/sign-in';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useOpenConnectLink } from '@/hooks/connections-queries';
@@ -29,8 +29,7 @@ function LinkConnect({ link }: { link: string }) {
     if (started.current || !link) return;
     started.current = true;
     open.mutate(link, {
-      // Finishing needs the account's app, which the link's answer names; without it the return page says to start again.
-      onSuccess: (s) => goSignIn(s, { appId: s.appId ?? '', accountId: s.connectionId ?? '' }),
+      onSuccess: (start) => goSignIn(start),
     });
   }, [link, open]);
 
@@ -58,11 +57,10 @@ function LinkConnect({ link }: { link: string }) {
 function OpenedConnect({ app, logo }: { app: string; logo: string | null }) {
   const [failed, setFailed] = React.useState<string | null>(null);
   React.useEffect(() => {
-    rememberSignInApp(app, logo);
     const opener = window.opener as Window | null;
     const onMessage = (e: MessageEvent<WindowMessage>) => {
       if (e.origin !== window.location.origin || e.source !== opener) return;
-      if (e.data?.type === START_MESSAGE) goSignIn(e.data.start, e.data.account, { check: e.data.check });
+      if (e.data?.type === START_MESSAGE) goSignIn(e.data.start);
       else if (e.data?.type === STOP_MESSAGE) setFailed(e.data.message);
     };
     window.addEventListener('message', onMessage);

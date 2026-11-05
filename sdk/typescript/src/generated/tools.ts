@@ -83,10 +83,23 @@ export interface paths {
         get: operations["apps_get_app_credential"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete App Credential
+         * @description Deletes the team's own app credential and its client secret. While accounts sign in with it the answer is
+         *     409 credential_in_use naming them; `move=true` moves them first, to `moveTo` (another of the team's credentials
+         *     of the app) or, with none, to Ops AI's app, and each signs in again. Team admins only.
+         */
+        delete: operations["apps_delete_app_credential"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Change App Credential
+         * @description Edits the team's own app credential: its name, client id, permissions and the settings its app
+         *     registration holds (`fields` on its page). A new client id, other permissions or settings mark every account
+         *     signing in with it to sign in again; `signInAgain` says how many. Team admins only; the secret has its own
+         *     route.
+         */
+        patch: operations["apps_change_app_credential"];
         trace?: never;
     };
     "/v1/app-credentials/{credential_id}/secret": {
@@ -168,7 +181,7 @@ export interface paths {
         /**
          * Add Account
          * @description Another account of one of the team's apps: a sandbox, which test runs use, or another named account
-         *     (with several_accounts on). The first stays the default.
+         *     (a second org of the same system). The first stays the default.
          */
         post: operations["apps_add_account"];
         delete?: never;
@@ -243,26 +256,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/apps/{app_id}/accounts/{account_id}/sign-in/complete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Complete Sign In
-         * @description The console hands back the code and state; only the person who started may finish, once.
-         */
-        post: operations["apps_complete_sign_in"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/apps/{app_id}/accounts/{account_id}/sign-out": {
         parameters: {
             query?: never;
@@ -277,6 +270,27 @@ export interface paths {
          * @description Ends the team's sign-in on the account; each person's own stays.
          */
         post: operations["apps_sign_out"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/apps/{app_id}/accounts/{account_id}/team-default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Make Team Default
+         * @description Makes the account the one the team's calls use when they name none. Team admins only; a sandbox is
+         *     refused, as only test runs use it.
+         */
+        put: operations["apps_make_team_default"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -315,11 +329,33 @@ export interface paths {
         put?: never;
         /**
          * Check Credential
-         * @description An admin's Test with my account of the app credential: signs in through the account's app (the team's own
-         *     or Ops AI's) and answers whether it worked and as whom, keeping no token. Only an admin, as only an admin
-         *     sets app credentials.
+         * @description An admin's Test with my account of the app credential: starts a sign-in through the account's app (the
+         *     team's own or Ops AI's) that keeps no token; the return page finishes it on /v1/sign-ins/complete. Only an
+         *     admin, as only an admin sets app credentials.
          */
         post: operations["apps_check_credential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/apps/{app_id}/resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List App Resources
+         * @description The app's Resources tab: every agent, skill, workflow, document type and knowledge source the app brings,
+         *     and every copy the team holds of one it no longer ships or of an app turned off, each with its state, the
+         *     team's copy, and whether the caller may add it (with who can, when they cannot).
+         */
+        get: operations["plugins_list_app_resources"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -670,9 +706,9 @@ export interface paths {
         };
         /**
          * List Plugin Templates
-         * @description Every template of every plugin on for the caller's team, with its body. A person in the team, or a service
-         *     holding `tools:view` that names the team, may read it; a call naming no team is refused, since templates are
-         *     listed per team.
+         * @description Every template and knowledge source of every plugin on for the caller's team, with its body. A person in the
+         *     team, or a service holding `tools:view` that names the team, may read it; a call naming no team is refused,
+         *     since templates are listed per team.
          */
         get: operations["plugins_list_plugin_templates"];
         put?: never;
@@ -757,6 +793,29 @@ export interface paths {
          */
         put: operations["send_policy_save_send_policy"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sign-ins/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish Sign In
+         * @description The return page hands back what the system sent: the state with the code, or with the error it refused
+         *     the sign-in with. The state alone names the account, so any window of the person who started finishes it,
+         *     once. A refusal, there or at the token exchange, answers 422 sign_in_refused with details {message, who,
+         *     providerCode, appId, app} and marks the account refused.
+         */
+        post: operations["apps_finish_sign_in"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1318,6 +1377,19 @@ export interface components {
             /** Signin */
             signIn?: string | null;
         };
+        /**
+         * AccountOwner
+         * @description Whose sign-in an account is: the team's, or one person's own, by name.
+         */
+        AccountOwner: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "team" | "person";
+            /** Name */
+            name: string;
+        };
         /** AccountPatchIn */
         AccountPatchIn: {
             /** Category */
@@ -1397,6 +1469,10 @@ export interface components {
         AppAccount: {
             /** Account */
             account?: string | null;
+            /** Actions */
+            actions?: ("rename" | "sign_in" | "reconnect" | "make_default" | "make_team_default" | "disconnect" | "delete" | "move" | "connect_mine")[];
+            /** Configid */
+            configId?: string | null;
             /** Default */
             default: boolean;
             health?: components["schemas"]["ConnectionHealth"] | null;
@@ -1407,8 +1483,13 @@ export interface components {
              * @default false
              */
             mine: boolean;
+            /** Mydefault */
+            myDefault?: boolean | null;
             /** Name */
             name: string;
+            owner: components["schemas"]["AccountOwner"];
+            /** Revision */
+            revision: number;
             /** Sandbox */
             sandbox: boolean;
             /**
@@ -1442,22 +1523,85 @@ export interface components {
             created?: string | null;
             /** Createdby */
             createdBy?: string | null;
+            /**
+             * Holdssecret
+             * @default false
+             */
+            holdsSecret: boolean;
             /** Id */
             id: string;
             /** Name */
             name: string;
             /** Permissions */
-            permissions: string[];
+            permissions: components["schemas"]["Permission"][];
+            /** Secretends */
+            secretEnds?: string | null;
             /**
              * Status
              * @enum {string}
              */
             status: "working" | "not_tested" | "failing";
+            /** Teamid */
+            teamId: string;
             /**
              * Type
              * @enum {string}
              */
             type: "ops_ai" | "own";
+        };
+        /** AppCredentialChange */
+        AppCredentialChange: {
+            /** Accounts */
+            accounts: number;
+            /** Accountslist */
+            accountsList: components["schemas"]["CredentialAccount"][];
+            /** App */
+            app: string;
+            /** Appname */
+            appName: string;
+            /** Clientid */
+            clientId?: string | null;
+            /** Created */
+            created?: string | null;
+            /** Createdby */
+            createdBy?: string | null;
+            /** Fields */
+            fields?: components["schemas"]["CredentialField"][];
+            /**
+             * Holdssecret
+             * @default false
+             */
+            holdsSecret: boolean;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Permissions */
+            permissions: components["schemas"]["Permission"][];
+            /** Redirecturi */
+            redirectUri?: string | null;
+            /** Secretends */
+            secretEnds?: string | null;
+            /** Settings */
+            settings?: {
+                [key: string]: unknown;
+            };
+            /** Signinagain */
+            signInAgain: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "working" | "not_tested" | "failing";
+            /** Teamid */
+            teamId: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "ops_ai" | "own";
+            /** Updated */
+            updated?: string | null;
         };
         /** AppCredentialDetail */
         AppCredentialDetail: {
@@ -1475,19 +1619,34 @@ export interface components {
             created?: string | null;
             /** Createdby */
             createdBy?: string | null;
+            /** Fields */
+            fields?: components["schemas"]["CredentialField"][];
+            /**
+             * Holdssecret
+             * @default false
+             */
+            holdsSecret: boolean;
             /** Id */
             id: string;
             /** Name */
             name: string;
             /** Permissions */
-            permissions: string[];
+            permissions: components["schemas"]["Permission"][];
             /** Redirecturi */
             redirectUri?: string | null;
+            /** Secretends */
+            secretEnds?: string | null;
+            /** Settings */
+            settings?: {
+                [key: string]: unknown;
+            };
             /**
              * Status
              * @enum {string}
              */
             status: "working" | "not_tested" | "failing";
+            /** Teamid */
+            teamId: string;
             /**
              * Type
              * @enum {string}
@@ -1511,6 +1670,27 @@ export interface components {
             name?: string | null;
             /** Scopes */
             scopes?: string[] | null;
+            /** Settings */
+            settings?: {
+                [key: string]: string | null;
+            } | null;
+        };
+        /**
+         * AppCredentialPatchIn
+         * @description An edit of the team's own app credential: any of its name, client id, permissions and settings. Its secret is
+         *     replaced on its own route.
+         */
+        AppCredentialPatchIn: {
+            /** Clientid */
+            clientId?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Scopes */
+            scopes?: string[] | null;
+            /** Settings */
+            settings?: {
+                [key: string]: string | null;
+            } | null;
         };
         /**
          * AppMe
@@ -1525,16 +1705,15 @@ export interface components {
         /**
          * AppPage
          * @description One app's page, joined here: its card, its default account, the caller's own sign-in, how many people
-         *     signed in, its accounts, its tools, the plugin's skills and the latest runs of its tools.
+         *     signed in, its auth configs with their accounts, its tools, the plugin's skills and the latest runs
+         *     of its tools.
          */
         AppPage: {
-            /** Accounts */
-            accounts?: components["schemas"]["AppAccount"][];
+            /** Authconfigs */
+            authConfigs?: components["schemas"]["AuthConfig"][];
             card: components["schemas"]["SystemCard"];
             connection?: components["schemas"]["AccountDetail"] | null;
             me: components["schemas"]["AppMe"];
-            /** People */
-            people?: components["schemas"]["AppPerson"][];
             /** Peoplecount */
             peopleCount: number;
             /** Skills */
@@ -1544,33 +1723,41 @@ export interface components {
             /** Usage */
             usage: components["schemas"]["ToolCallRow"][];
         };
-        /**
-         * AppPerson
-         * @description One person's own sign-in on one of the app's accounts, for the app page's People tab: a team admin reads
-         *     everyone's, anyone else their own.
-         */
-        AppPerson: {
-            /** Account */
-            account?: string | null;
-            /** Accountid */
-            accountId: string;
-            /** Accountname */
-            accountName: string;
-            /** Default */
-            default?: boolean | null;
-            /** Mine */
-            mine: boolean;
-            /** Personid */
-            personId: string;
-            /** Since */
-            since?: string | null;
+        /** AppResource */
+        AppResource: {
+            /** Canadd */
+            canAdd: boolean;
+            /**
+             * Canremove
+             * @default false
+             */
+            canRemove: boolean;
+            copy?: components["schemas"]["ResourceCopy"] | null;
+            /** Id */
+            id: string;
+            installed?: components["schemas"]["ResourceInstalled"] | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "agent" | "skill" | "workflow" | "document_type" | "knowledge_source";
+            plugin: components["schemas"]["PluginRef"];
+            /** Reason */
+            reason?: string | null;
+            requires: components["schemas"]["TemplateRequires"];
+            /** Service */
+            service: string;
+            /** Source */
+            source: string;
             /**
              * State
              * @enum {string}
              */
-            state: "connected" | "expired" | "refused";
-            /** Testfailed */
-            testFailed?: string | null;
+            state: "available" | "added" | "update_available" | "removed_upstream" | "needs_sign_in";
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
         };
         /** AppSkill */
         AppSkill: {
@@ -1625,6 +1812,35 @@ export interface components {
             operations: string[];
             /** Workflowid */
             workflowId: string;
+        };
+        /**
+         * AuthConfig
+         * @description How the app's accounts sign in: Ops AI's own OAuth app, one the team made (an app credential), or, for a kind
+         *     with no OAuth client, each account's own key; with the accounts signing in through it. Only the team's own is
+         *     edited or deleted.
+         */
+        AuthConfig: {
+            /** Accounts */
+            accounts?: components["schemas"]["AppAccount"][];
+            /** Candelete */
+            canDelete: boolean;
+            /** Canedit */
+            canEdit: boolean;
+            /** Clientid */
+            clientId?: string | null;
+            /** Default */
+            default: boolean;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Secretends */
+            secretEnds?: string | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "ops_ai" | "own" | "account";
         };
         /** AuthKind */
         AuthKind: {
@@ -2035,20 +2251,27 @@ export interface components {
             /** Status */
             status: string;
         };
-        /** CredentialCheck */
-        CredentialCheck: {
-            health: components["schemas"]["CheckedCredential"];
+        /** CredentialDeleted */
+        CredentialDeleted: {
+            /** Moved */
+            moved: number;
         };
         /**
-         * CredentialCheckIn
-         * @description Test with my account: an empty body starts it; the `state` and `code` the sign-in page was handed back
-         *     finish it, on the same route.
+         * CredentialField
+         * @description A setting an app credential may hold: one of a plugin's credential_settings, or a custom app's client field.
          */
-        CredentialCheckIn: {
-            /** Code */
-            code?: string | null;
-            /** State */
-            state?: string | null;
+        CredentialField: {
+            /** Help */
+            help?: string | null;
+            /** Label */
+            label: string;
+            /** Name */
+            name: string;
+            /**
+             * Pem
+             * @default false
+             */
+            pem: boolean;
         };
         /** CredentialSecretIn */
         CredentialSecretIn: {
@@ -2171,6 +2394,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[AppCredentialChange] */
+        Envelope_AppCredentialChange_: {
+            data: components["schemas"]["AppCredentialChange"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[AppCredentialDetail] */
         Envelope_AppCredentialDetail_: {
             data: components["schemas"]["AppCredentialDetail"];
@@ -2228,6 +2460,15 @@ export interface components {
         /** Envelope[ConnectionKinds] */
         Envelope_ConnectionKinds_: {
             data: components["schemas"]["ConnectionKinds"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[CredentialDeleted] */
+        Envelope_CredentialDeleted_: {
+            data: components["schemas"]["CredentialDeleted"];
             /**
              * Success
              * @constant
@@ -2387,6 +2628,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[SignInFinished] */
+        Envelope_SignInFinished_: {
+            data: components["schemas"]["SignInFinished"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[SignInStart] */
         Envelope_SignInStart_: {
             data: components["schemas"]["SignInStart"];
@@ -2459,16 +2709,6 @@ export interface components {
              */
             success: true;
         };
-        /** Envelope[Union[SignInStart, CredentialCheck]] */
-        Envelope_Union_SignInStart__CredentialCheck__: {
-            /** Data */
-            data: components["schemas"]["SignInStart"] | components["schemas"]["CredentialCheck"];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
         /** Envelope[Union[list[SecretMeta], SecretList]] */
         Envelope_Union_list_SecretMeta___SecretList__: {
             /** Data */
@@ -2492,6 +2732,16 @@ export interface components {
         Envelope_list_AppCredential__: {
             /** Data */
             data: components["schemas"]["AppCredential"][];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[list[AppResource]] */
+        Envelope_list_AppResource__: {
+            /** Data */
+            data: components["schemas"]["AppResource"][];
             /**
              * Success
              * @constant
@@ -3528,6 +3778,22 @@ export interface components {
             version: string;
         };
         /**
+         * Permission
+         * @description One permission an app asks for: its id, as the system names it and a credential holds it, and what it lets Ops AI
+         *     do, in plain words. A required one is always asked for.
+         */
+        Permission: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Required
+             * @default false
+             */
+            required: boolean;
+        };
+        /**
          * PersonCredentialsIn
          * @description A person's own key, password or token on an account each person signs in to: the kind's person
          *     fields, each a value of at most 2,000 characters.
@@ -3590,6 +3856,13 @@ export interface components {
         };
         /** PluginSetting */
         PluginSetting: {
+            /** Choices */
+            choices?: components["schemas"]["SettingChoice"][] | null;
+            /**
+             * Credential
+             * @default false
+             */
+            credential: boolean;
             /** Default */
             default?: string | null;
             /** Label */
@@ -3601,6 +3874,7 @@ export interface components {
             locked: boolean;
             /** Name */
             name: string;
+            other?: components["schemas"]["SettingOther"] | null;
             /**
              * Peraccount
              * @default false
@@ -3626,7 +3900,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "agent" | "skill" | "workflow" | "document_type";
+            kind: "agent" | "skill" | "workflow" | "document_type" | "knowledge_source";
             plugin: components["schemas"]["PluginRef"];
             requires: components["schemas"]["TemplateRequires"];
             /** Source */
@@ -3685,6 +3959,35 @@ export interface components {
         RemoveIn: {
             /** Value */
             value: string;
+        };
+        /** ResourceCopy */
+        ResourceCopy: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Recordid */
+            recordId: string;
+            /** Source */
+            source: string;
+            /** Templateid */
+            templateId: string;
+            /** Version */
+            version: number;
+        };
+        /** ResourceInstalled */
+        ResourceInstalled: {
+            /**
+             * Changed
+             * @default false
+             */
+            changed: boolean;
+            /** Copies */
+            copies: number;
+            /** Neweravailable */
+            newerAvailable: boolean;
+            /** Version */
+            version: number | null;
         };
         /**
          * ReviewDecisionIn
@@ -3837,6 +4140,8 @@ export interface components {
             createdBy: string;
             /** Credentialid */
             credentialId?: string | null;
+            /** Ends */
+            ends?: string | null;
             /** Lastusedat */
             lastUsedAt?: string | null;
             /** Name */
@@ -3910,12 +4215,80 @@ export interface components {
             /** Version */
             version: number;
         };
-        /** SignInCompleteIn */
+        /**
+         * SettingChoice
+         * @description One value the setting takes, in the system's words; `test_account` starts the Test account switch on.
+         */
+        SettingChoice: {
+            /**
+             * Hint
+             * @default
+             */
+            hint: string;
+            /** Label */
+            label: string;
+            /**
+             * Testaccount
+             * @default false
+             */
+            testAccount: boolean;
+            /** Value */
+            value: boolean | number | string;
+        };
+        /**
+         * SettingOther
+         * @description A host typed in place of a choice: the value is `value` with `{host}` replaced, and the host must end in one of
+         *     `hosts`; a host ending in one of `test_account_hosts` starts the Test account switch on.
+         */
+        SettingOther: {
+            /**
+             * Hint
+             * @default
+             */
+            hint: string;
+            /** Hosts */
+            hosts: string[];
+            /** Label */
+            label: string;
+            /**
+             * Placeholder
+             * @default
+             */
+            placeholder: string;
+            /** Testaccounthosts */
+            testAccountHosts?: string[];
+            /** Value */
+            value: string;
+        };
+        /**
+         * SignInCompleteIn
+         * @description What the sign-in page was handed back: the `code` of a sign-in the system allowed, or the `error` and
+         *     `errorDescription` of one it refused, with the `state` either way.
+         */
         SignInCompleteIn: {
             /** Code */
-            code: string;
+            code?: string | null;
+            /** Error */
+            error?: string | null;
+            /** Errordescription */
+            errorDescription?: string | null;
             /** State */
             state: string;
+        };
+        /**
+         * SignInFinished
+         * @description A finished sign-in, as the return page tells the window that started it: the account and its app, and either
+         *     the account signed in or, for Test with my account (`check`), the check's outcome.
+         */
+        SignInFinished: {
+            account?: components["schemas"]["AccountDetail"] | null;
+            /** Accountid */
+            accountId: string;
+            /** Appid */
+            appId: string;
+            /** Check */
+            check: boolean;
+            health?: components["schemas"]["CheckedCredential"] | null;
         };
         /** SignInIn */
         SignInIn: {
@@ -4074,7 +4447,7 @@ export interface components {
             /** Platformapp */
             platformApp: boolean;
             /** Scopes */
-            scopes: string[];
+            scopes: components["schemas"]["Permission"][];
             /** Settings */
             settings: components["schemas"]["PluginSetting"][];
             /** Signin */
@@ -4132,6 +4505,8 @@ export interface components {
             bind: {
                 [key: string]: string;
             }[];
+            /** Resources */
+            resources?: string[];
             /** Tools */
             tools: string[];
         };
@@ -4985,6 +5360,255 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_AppCredentialDetail_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    apps_delete_app_credential: {
+        parameters: {
+            query?: {
+                moveTo?: string | null;
+                move?: boolean;
+            };
+            header?: never;
+            path: {
+                credential_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CredentialDeleted_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    apps_change_app_credential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credential_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppCredentialPatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AppCredentialChange_"];
                 };
             };
             /** @description Invalid request */
@@ -6231,7 +6855,7 @@ export interface operations {
             };
         };
     };
-    apps_complete_sign_in: {
+    apps_sign_out: {
         parameters: {
             query?: never;
             header?: never;
@@ -6241,11 +6865,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SignInCompleteIn"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -6339,7 +6959,7 @@ export interface operations {
             };
         };
     };
-    apps_sign_out: {
+    apps_make_team_default: {
         parameters: {
             query?: never;
             header?: never;
@@ -6425,6 +7045,24 @@ export interface operations {
             };
             /** @description Server error */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6561,11 +7199,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CredentialCheckIn"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -6573,7 +7207,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_Union_SignInStart__CredentialCheck__"];
+                    "application/json": components["schemas"]["Envelope_SignInStart_"];
                 };
             };
             /** @description Invalid request */
@@ -6641,6 +7275,127 @@ export interface operations {
             };
             /** @description Server error */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    plugins_list_app_resources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_AppResource__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8770,7 +9525,7 @@ export interface operations {
     plugins_list_plugin_templates: {
         parameters: {
             query?: {
-                kind?: ("agent" | "skill" | "workflow" | "document_type") | null;
+                kind?: ("agent" | "skill" | "workflow" | "document_type" | "knowledge_source") | null;
             };
             header?: never;
             path?: never;
@@ -9536,6 +10291,111 @@ export interface operations {
             };
             /** @description The source could not be reached */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    apps_finish_sign_in: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignInCompleteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SignInFinished_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

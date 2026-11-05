@@ -128,7 +128,7 @@ class Walk:
         back = self.m["sign_in"](url, user) if url else {}
         done = self.kept(
             self.gw.post(
-                f"{account_path(app, account)}/sign-in/complete",
+                "/v1/sign-ins/complete",
                 headers=self.who[role],
                 json={"state": back.get("state", ""), "code": back.get("code", "")},
             )

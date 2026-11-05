@@ -149,7 +149,9 @@ paging, knowledge sources and templates.
 | `connection.after_sign_in` | One lookup after sign-in that fills a setting (Salesforce's instance from UserInfo); see Headers, forms and sign-in steps |
 | `connection.client_auth`, `authorize_params` | How the OAuth client is sent on the token call, and extra parameters on the sign-in address |
 | `connection.health_check` | The path Test connection calls |
-| `settings` | Values a team sets. `default`, `lockable` (the install can fix it for every team, `OPS_PLUGIN_LOCKED`), and `from_token` or `after_sign_in` (only the sign-in sets it) |
+| `connection.sign_in_errors` | What a refused sign-in says, by the system's error code: `{error, description_contains?, say, who}`; see Where a team signs in |
+| `connection.credential_settings` | Settings that belong to the OAuth app's registration (a Microsoft tenant, an Okta domain): the team's app credential holds them, and every account signing in with it reads them from there |
+| `settings` | Values a team sets. `default`, `lockable` (the install can fix it for every team, `OPS_PLUGIN_LOCKED`), `from_token` or `after_sign_in` (only the sign-in sets it), and `choices` and `other` (the only values it takes; see Where a team signs in) |
 | `headers` | Headers on every request the plugin makes, a Python tool's too; a tool's own `headers` add to them |
 | `egress` | The hosts a tool may reach, usually a setting such as `{instance_url}` |
 | `endpoint` | The base address every request template is relative to |
@@ -252,6 +254,59 @@ value, names an address outside `token_hosts`, or names a plain value with anyth
 and `:`. The team admin's own sign-in sets or replaces the value; a person's own sign-in sets it only when none is held,
 and one that reaches a different site is refused as "signed in to another site", so one person cannot point the team's
 calls at another tenant. That rule is `settle_at_sign_in` in tools-service's `plugins/host.py`, the one place it lives.
+
+## Where a team signs in, and what a refused sign-in says
+
+A setting with `choices` takes only one of them, or, with `other`, a host the person types: `other.value` is the
+setting's value with `{host}` where the host goes, and the host must end in one of `other.hosts`. tools-service refuses
+any other value with a 400 when the app is turned on or an account is added, before any sign-in starts, so a typed
+address never sends a person or a token outside the system. `GET /v1/apps/{id}` answers each setting's choices and
+`other`, so the Connect window draws the question from the plugin. A choice with `test_account: true`, or a host ending
+in one of `other.test_account_hosts`, starts the window's Test account switch on; the person can change it.
+
+When the system refuses a sign-in, on the redirect back (`error`, `error_description`) or at the token exchange (the
+token answer's `error`), `POST .../sign-in/complete` answers 422 `sign_in_refused` with `details: {message, who,
+providerCode}` and records the refusal on the account, which then reads refused. `message` is the first
+`sign_in_errors` entry whose `error` is the code and whose `description_contains`, when given, is in the description
+(any case); `{app}` and `{credential}` in `say` are the app's title and the name of the app credential the account
+signs in with. With no entry the platform says:
+
+| Code | Says | Who |
+|---|---|---|
+| `access_denied` | `<App> access was not given. Connect again to retry.` | person |
+| `invalid_client` or `incorrect_client_credentials`, at the token exchange | `The client secret for <credential> is wrong. Replace it on its Credentials page.` | admin |
+| anything else | `<App> refused the sign-in: <description>` | person |
+
+Salesforce, in the plugins repository:
+
+```yaml
+connection:
+  sign_in_errors:
+    - error: invalid_client
+      description_contains: must be installed
+      say: Your Salesforce admin needs to install Ops AI's app in your org first.
+      who: admin
+    - { error: OAUTH_APP_BLOCKED, say: Your Salesforce admin has blocked Ops AI's app. Ask them to allow it., who: admin }
+settings:
+  login_url:
+    type: string
+    title: Where do you sign in to Salesforce?
+    default: "https://login.salesforce.com/services/oauth2"
+    choices:
+      - { value: "https://login.salesforce.com/services/oauth2", label: login.salesforce.com, hint: Production and developer orgs }
+      - { value: "https://test.salesforce.com/services/oauth2", label: test.salesforce.com, hint: Orgs used for testing, test_account: true }
+    other:
+      label: Your company's address
+      hint: Your Salesforce My Domain
+      placeholder: acme.my.salesforce.com
+      value: "https://{host}/services/oauth2"
+      hosts: [.my.salesforce.com, .my.salesforce.test]
+      test_account_hosts: [.sandbox.my.salesforce.com]
+```
+
+`ops plugin validate` refuses a choice whose value is not of the setting's type, an `other` with no `hosts`, a value
+without `{host}` or a suffix without its leading dot, a `sign_in_errors` entry with no `say` or no `who`, and a
+`credential_settings` name that is not a setting.
 
 ## Writing a Python tool
 

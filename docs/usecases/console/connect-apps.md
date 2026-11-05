@@ -5,12 +5,12 @@ Status: draft. Id: `uc-607`. Service: `console`. Layers: api, sdk, cli, ui.
 Connections was a grid of systems and one large dialog, so connecting an app took many fields and a person could not
 see whether they were signed in. Connections is now a catalog of apps: a plugin connects in one
 Connect window, and each app has its own page with its accounts, the person's own sign-in, and tabs for
-Tools, Skills, Sign-in and secrets, Usage and Settings. The catalog reads `GET /v1/apps` and the page reads
+Tools, Resources, Credentials, Logs and Settings. The catalog reads `GET /v1/apps` and the page reads
 `GET /v1/apps/{id}`, each already joined, so the console never joins lists itself.
 
 The walk runs on its own stack with the test plugins of `services/tools-service/tests/plugin_kinds` and the fake
-system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account name it is given. The install turns on
-`several_accounts` for steps 11-13; `docs/usecases/lib/agents_call.py` makes step 12's calls as agents-service does.
+system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account name it is given;
+`docs/usecases/lib/agents_call.py` makes step 12's calls as agents-service does.
 
 ## Stories
 
@@ -28,8 +28,8 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | S14 | One Connect window: Ops AI's app or the team's own, the access asked for, then Authorize; the sign-in window opens at once; a refused sign-in shows in both windows and Authorize works again; an app turned on again continues with its app credential | ui | 3 | 3 |
 | S3 | A person presses Connect my account, allows access, and the page reads Connected as their account; a tool the agent then calls runs with it, shown on Usage | ui | 5-7 | 7 |
 | S4 | Ops AI's own tools show as Built in apps that open the page managing them | ui | 8 | 8 |
-| S5 | The app's tabs show its tools by title, its sign-ins with no secret, and its Settings with the one sign-in switch and the default account's keys | ui | 9 | 9 |
-| S6 | With several_accounts on, an admin connects another account of the app under its own name; both are listed and the first stays the default | ui | 11 | 11 |
+| S5 | The app's tabs show its tools by title, its credentials with no secret, and its Settings with the one sign-in switch and the default account's keys | ui | 9 | 9 |
+| S6 | An admin connects another account of the app under its own name; both are listed and the first stays the default | ui | 11 | 11 |
 | S7 | A call naming an account runs with it, a call naming none with the default, and an unknown name is refused | ui | 12 | 12 |
 | S8 | A person signed in to two accounts reads with their newest, and Make my default picks the other | ui | 13 | 13 |
 | S9 | Add custom app: a refused key says Failed with the app's 401, the right one Working with 200, and the key is sealed (from uc-580) | ui | 14 | 14 |
@@ -42,6 +42,9 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | S14 | On an app where each person signs in with their own account, a person's own sign-in runs a tool before any team account exists | api | 29 | 29 |
 | S16 | An app's account shows its saved settings per environment, the secret ones only as set or not | api | 32 | 32 |
 | S15 | Signing in connects an account at once; its test runs right after, as that person, and a failed test warns on the row without disconnecting it | api | 30-31 | 31 |
+| S22 | A new client id on an app credential marks every account signing in with it to sign in again and says how many | api | 33 | 33 |
+| S23 | A refused sign-in answers one plain sentence naming who acts, and the account reads refused with it | api | 34 | 34 |
+| S24 | A sign-in place outside the app's choices is refused in plain words before any sign-in | api | 35 | 35 |
 | S11 | A developer lists the connected apps and reads one through the Python SDK and gets what the API gives | sdk | 24 | 24 |
 | S12 | A team admin lists and shows apps with `ops apps`; a viewer's `ops apps connect` is refused | cli | 25-26 | 25 |
 
@@ -58,7 +61,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | 6 | He presses it and allows access as james.person | the page reads Connected as james.person |
 | 7 | He asks the agent in chat for a record, then opens the app's Logs tab | the chat answers with the record read as james.person; Logs lists Read a record as James, Succeeded |
 | 8 | Priya opens Connections | each Built in card present opens its managing page (Knowledge bases at /knowledge, Mailboxes at /channels/email) |
-| 9 | Priya opens Tools, Sign-in and secrets and Settings | Read a record with its name; the team account's sign-in with no secret on the page; the switch and the Keys row, Working |
+| 9 | Priya opens Tools, Credentials and Settings | Read a record with its name; Ops AI's app listed with no secret on the page; the switch and the Keys row, Working |
 | 11 | Priya presses Connect another account, which opens the Connect window with its name showing, names it EU desk, presses Authorize and allows access as harbor.eu | Accounts lists Person desk (Default) and EU desk |
 | 12 | A run with nobody behind it calls Read a record naming EU desk, then naming nothing, then naming Nowhere desk | The system reads as harbor.eu, then harbor.ops; the third is refused 404 ACCOUNT_NOT_FOUND |
 | 13 | James connects his own EU desk account (james.eu) and asks the agent for a record; then presses Make my default on Person desk and asks again | The first read is as james.eu, his newest sign-in; the second as james.person |
@@ -79,6 +82,9 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | 30 | James reads the person desk's page after his sign-in in step 29, without pressing Test | His row's `test` reads ok with when it ran |
 | 31 | Security removes the desk's API host; Maya signs in with her own account | The sign-in answers 200; her row's `test` reads failed with the reason |
 | 32 | Priya reads the person desk's account (`GET /v1/connections/{id}`) | Production's `pluginSettings` hold the saved address; `pluginSecrets` names none |
+| 33 | Priya changes the client id of the person desk's app credential (`PATCH /v1/app-credentials/{id}`) | `signInAgain` 1; James's own sign-in reads refused |
+| 34 | Priya starts the team's sign-in and hands back the system's refusal (`error=access_denied`) | 422 `sign_in_refused`, "Person desk access was not given. Connect again to retry.", who person; the account reads refused with that sentence |
+| 35 | Priya turns the person desk on with a sign-in place outside its choices | 400 `setting_not_offered` naming login.multi.test |
 | 40 | Security takes Person desk's hosts off the allow list and the team account is tested; then the hosts go back and it is tested again | the account row and the catalog card read "Signed in, but a test call failed" with Reconnect; after, the account is Connected and the test passes |
 | 41 | On Salesforce's Settings, Priya presses Edit on the Keys row and Save without typing | the sign-in address field is blank with "Blank keeps the saved value."; the saved settings are unchanged |
 | 43 | In Salesforce's Connect window, Priya picks Your own app and presses Authorize with the client fields empty | "Enter the client ID." and "Enter the client secret." under the fields; no sign-in window opens |

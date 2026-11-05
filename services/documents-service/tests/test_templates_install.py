@@ -59,7 +59,8 @@ class Tools:
     async def get(
         self, path: str, *, params: dict[str, Any] | None = None, tenant: str | None = None, team: str | None = None
     ) -> Any:
-        assert path == "/v1/plugin-templates" and params == {"kind": "document_type"}
+        # Every kind: a copy whose app ships other resources but not its own reads as removed by the app.
+        assert path == "/v1/plugin-templates" and params is None
         self.asked.append((tenant, team))
         return list(self.listed) if team in self.on else []
 
@@ -197,3 +198,62 @@ async def test_a_role_that_cannot_edit_types_or_no_tools_address_makes_nothing(m
     unwired = make()
     assert code(await unwired.client.get("/v1/templates", headers=OPS), 503) == "unavailable"
     assert code(await install(unwired), 503) == "unavailable"
+
+
+async def test_a_deleted_copy_reads_available_again_and_one_the_app_dropped_reads_removed(make: Make) -> None:
+    svc = make()
+    other = LETTER | {"id": "case-note", "title": "Case note", "body": {**LETTER["body"], "name": "Case note"}}
+    wire(svc, [LETTER, other])
+    made = data(await install(svc), 201)["copy"]["recordId"]
+    [held] = [t for t in await listed(svc) if t["id"] == "case-letter"]
+    assert (held["state"], held["copy"]["recordId"]) == ("added", made)
+    assert (await svc.client.delete(f"/v1/document-types/{made}", headers=OPS)).status_code == 204
+    [again] = [t for t in await listed(svc) if t["id"] == "case-letter"]
+    assert again["state"] == "available" and again["installed"]["copies"] == 0 and again["copy"] is None
+    # The app, still on, stops shipping the letter: the team's copy stays, listed as removed by the app.
+    kept = data(await install(svc), 201)["copy"]["recordId"]
+    wire(svc, [other])
+    [dropped] = [t for t in await listed(svc) if t["id"] == "case-letter"]
+    assert (dropped["state"], dropped["canAdd"], dropped["copy"]["recordId"]) == ("removed_upstream", False, kept)
+
+
+class Uses:
+    """agents-service's answer of which workflows read a type, as the documents client reaches it."""
+
+    def __init__(self, users: list[dict[str, str]]) -> None:
+        self.users = users
+
+    async def of(self, who: Any, type_id: str) -> list[dict[str, str]]:
+        return list(self.users)
+
+
+async def test_a_type_a_workflow_reads_is_not_deleted_and_the_refusal_names_the_workflow(make: Make) -> None:
+    svc = make(type_uses=Uses([{"kind": "workflow", "id": "levy_intake", "name": "Levy intake"}]))
+    wire(svc, [LETTER])
+    made = data(await install(svc), 201)["copy"]["recordId"]
+    refused = await svc.client.delete(f"/v1/document-types/{made}", headers=OPS)
+    assert code(refused, 409) == "in_use" and "Levy intake" in refused.json()["error"]["message"]
+    assert refused.json()["error"]["details"]["usedBy"][0]["id"] == "levy_intake"
+    assert (await svc.client.get(f"/v1/document-types/{made}", headers=OPS)).status_code == 200
+
+
+async def test_an_update_makes_a_new_version_and_asks_first_when_the_team_saved_its_own(make: Make) -> None:
+    svc = make()
+    wire(svc, [LETTER])
+    made = data(await install(svc), 201)["copy"]["recordId"]
+    fields = [*LETTER["body"]["fields"], {"key": "sender", "label": "Sender", "type": "text"}]
+    wire(svc, [LETTER | {"version": 2, "digest": "c" * 64, "body": {**LETTER["body"], "fields": fields}}])
+    path = f"/v1/resources/{SOURCE}:case-letter/copies/{made}/update"
+    review = data(await svc.client.get(path, headers=OPS))
+    assert (review["fromVersion"], review["toVersion"], review["edits"]) == (1, 2, [])
+    taken = data(await svc.client.post(path, json={}, headers=OPS))
+    assert taken["taken"] is True and taken["copy"]["version"] == 2
+    versions = data(await svc.client.get(f"/v1/document-types/{made}", headers=OPS))["versions"]
+    keys = [f["key"] for f in max(versions, key=lambda v: v["version"])["fields"]]
+    assert keys == ["case_number", "letter_date", "sender"]
+    # The team saves a version of its own; the next update asks before leaving it out.
+    own = await svc.client.post(f"/v1/document-types/{made}/versions", json={"fields": fields[:1]}, headers=OPS)
+    assert own.status_code == 201, own.text
+    wire(svc, [LETTER | {"version": 3, "digest": "d" * 64, "body": {**LETTER["body"], "fields": fields}}])
+    assert code(await svc.client.post(path, json={}, headers=OPS), 409) == "copy_edited"
+    assert data(await svc.client.post(path, json={"confirm": True}, headers=OPS))["copy"]["version"] == 3

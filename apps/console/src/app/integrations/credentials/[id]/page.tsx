@@ -1,12 +1,15 @@
 'use client';
 
 import * as React from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Activity, ExternalLink, KeyRound, UserRoundPlus } from 'lucide-react';
+import { Activity, ExternalLink, KeyRound, Pencil, Trash2, UserRoundPlus } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { CREDENTIAL_STATUS, EditSecretDialog } from '@/components/connections/app-credentials-panel';
+import { CREDENTIAL_STATUS } from '@/components/connections/app-credentials-panel';
+import { secretShown } from '@/components/connections/credential-display';
+import { CredentialDeleteDialog } from '@/components/connections/credential-delete-dialog';
+import { CredentialEditDialog } from '@/components/connections/credential-edit-dialog';
 import { ConnectWindow, connectsInWindow } from '@/components/connections/connect-window';
 import { useSignInWindow } from '@/components/connections/sign-in';
 import { appHref } from '@/components/connections/systems-grid';
@@ -99,12 +102,19 @@ export default function AppCredentialPage() {
   const c = q.data;
   const systems = useSystems();
   const kinds = useConnectionKinds();
-  const { team } = useTeam();
+  const { team, teamId, teams, switchTeam } = useTeam();
+  const router = useRouter();
+  // A link to a credential names its team; the page opens in it when the person is in that team.
+  const wanted = useSearchParams().get('team');
+  React.useEffect(() => {
+    if (wanted && wanted !== teamId && teams.some((t) => t.id === wanted)) switchTeam(wanted);
+  }, [wanted, teamId, teams, switchTeam]);
   const card = (systems.data ?? []).find((s) => s.id === c?.app);
   const all = kinds.data as Kinds | undefined;
   const connects = Boolean(card && all && connectsInWindow(card, all));
   const [connecting, setConnecting] = React.useState(false);
-  const [replacing, setReplacing] = React.useState(false);
+  const [editing, setEditing] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
   const [busy, setBusy] = React.useState<string | null>(null);
   const start = useStartSignIn();
   const signOut = useSignOutTeam();
@@ -112,7 +122,7 @@ export default function AppCredentialPage() {
   const signIn = useSignInWindow({
     onConnected: (m) => {
       setBusy(null);
-      toast.success(`Signed in through ${c?.name ?? 'the app credential'}`, { description: m.account ? `As ${m.account}.` : undefined });
+      toast.success(`Signed in through ${c?.name ?? 'the auth config'}`, { description: m.account ? `As ${m.account}.` : undefined });
       void q.refetch();
     },
     onFailed: (why) => {
@@ -145,14 +155,14 @@ export default function AppCredentialPage() {
     if (!w || !c || !first) return;
     setBusy('check');
     const ref = { appId: c.app, accountId: first.id };
-    startCheck.mutate(ref, { onSuccess: (s) => w.go(s, ref, { check: true }), onError: (e) => (w.fail(e.message), setBusy(null)) });
+    startCheck.mutate(ref, { onSuccess: (s) => w.go(s, ref), onError: (e) => (w.fail(e.message), setBusy(null)) });
   };
 
   const rows: Account[] = (c?.accountsList ?? []).map((a) => ({ ...a, onReconnect: reconnect, onDisconnect: disconnect, busy, team: team?.name ?? 'The team' }));
   return (
     <PageLayout
       icon={KeyRound}
-      title={c?.name ?? 'App credential'}
+      title={c?.name ?? 'Auth config'}
       description={c ? `${c.appName} · ${own ? 'Your own app' : 'Ops AI’s app'}` : undefined}
       backHref="/integrations/credentials"
       actions={
@@ -173,25 +183,36 @@ export default function AppCredentialPage() {
       }
     >
       {q.isError || !c ? (
-        <QueryError what="this app credential" error={q.error} onRetry={() => q.refetch()} retrying={q.isFetching} />
+        <QueryError what="this auth config" error={q.error} onRetry={() => q.refetch()} retrying={q.isFetching} />
       ) : (
         <RecordLayout
           rail={
             <AttributeCard
-              title="App credential"
+              title="Auth config"
               icon={KeyRound}
               testId="credential-details"
               action={
                 own ? (
-                  <Button size="sm" variant="ghost" onClick={() => setReplacing(true)} data-testid="credential-replace-secret">
-                    Replace secret
-                  </Button>
+                  <span className="flex gap-1">
+                    <Button size="sm" variant="ghost" onClick={() => setEditing(true)} data-testid="credential-edit">
+                      <Pencil />
+                      Edit
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setDeleting(true)} data-testid="credential-delete">
+                      <Trash2 />
+                      Delete
+                    </Button>
+                  </span>
                 ) : undefined
               }
             >
               <FieldRow label="App" value={c.appName} href={card ? appHref(card) : undefined} />
               <FieldRow label="Type" value={own ? 'Your own app' : 'Ops AI’s app'} />
               <FieldRow label="Client ID" value={c.clientId ?? (own ? undefined : 'Kept by the install')} mono={Boolean(c.clientId)} testId="credential-client-id" />
+              {own && <FieldRow label="Client secret" value={secretShown(c)} mono={Boolean(c.secretEnds)} testId="credential-secret" />}
+              {(c.fields ?? []).map((f) => (
+                <FieldRow key={f.name} label={f.label} value={(c.settings ?? {})[f.name] ? String((c.settings ?? {})[f.name]) : 'Not set'} mono={Boolean((c.settings ?? {})[f.name])} wrap testId={`credential-setting-${f.name}`} />
+              ))}
               <FieldRow label="Status" value={CREDENTIAL_STATUS[c.status]} />
               <FieldRow label="Made by" value={c.createdBy ?? undefined} />
               <FieldRow label="Created" value={c.created ? shortDate(c.created) : undefined} />
@@ -201,8 +222,8 @@ export default function AppCredentialPage() {
                 {c.permissions.length ? (
                   <span className="flex flex-wrap gap-1.5">
                     {c.permissions.map((p) => (
-                      <Badge key={p} variant="outline" className="font-mono">
-                        {p}
+                      <Badge key={p.id} variant="outline" title={p.id}>
+                        {p.label}
                       </Badge>
                     ))}
                   </span>
@@ -213,7 +234,7 @@ export default function AppCredentialPage() {
             </AttributeCard>
           }
         >
-          <Section title="Connected accounts" description="The accounts signing in with this app credential." flush>
+          <Section title="Connected accounts" description="The accounts signing in with this auth config." flush>
             <div className="p-2" data-testid="credential-accounts">
               <DataTableWithViews
                 columns={COLUMNS}
@@ -245,7 +266,13 @@ export default function AppCredentialPage() {
           onOpenChange={(o) => !o && (setConnecting(false), void q.refetch())}
         />
       )}
-      <EditSecretDialog credential={replacing && c ? c : null} onClose={() => setReplacing(false)} />
+      <CredentialEditDialog credentialId={editing && c ? c.id : null} onClose={() => (setEditing(false), void q.refetch())} />
+      <CredentialDeleteDialog
+        credential={deleting && c ? c : null}
+        platform={Boolean(card?.managedClient)}
+        onOpenChange={(o) => !o && setDeleting(false)}
+        onDeleted={() => router.push('/integrations/credentials')}
+      />
     </PageLayout>
   );
 }

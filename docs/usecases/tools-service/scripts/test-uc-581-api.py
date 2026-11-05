@@ -87,7 +87,8 @@ with ExitStack() as stack:
     for h in sf["hosts"]:
         gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-581"}, headers=sam)
     gw.post("/v1/egress/ranges", json={"value": sf["range"], "note": "uc-581"}, headers=sam)
-    login = sf["authorize_url"].rsplit("/", 1)[0]
+    # The org's company address, one of the places the Salesforce plugin signs in.
+    login = sf["login_url"]
     own = {"app": f"plugin:{PLUGIN}", "clientId": "ops-ai-acme", "clientSecret": "s3"}
     credential = (data(gw.post("/v1/app-credentials", json=own, headers=priya)) or {}).get("id")
     team_on = {"enabled": True, "settings": {"login_url": login}, "credentialId": credential}
@@ -96,7 +97,7 @@ with ExitStack() as stack:
     started = gw.post(f"/v1/apps/plugin:{PLUGIN}/accounts/{connection_id}/sign-in", json={}, headers=priya)
     back = sf["sign_in"]((data(started) or {}).get("authorizeUrl", ""), "acme.integration")
     done = gw.post(
-        f"/v1/apps/plugin:{PLUGIN}/accounts/{connection_id}/sign-in/complete",
+        "/v1/sign-ins/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=priya,
     )

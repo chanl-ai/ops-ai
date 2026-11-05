@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from ops_access import can
+from ops_documents.agents_client import TypeUses
 from ops_documents.document_types import DocumentTypes
 from ops_documents.errors import (
     CreateNotAllowedError,
@@ -167,12 +168,14 @@ def create_documents_app(
     auth: Auth | None = None,
     layouts: Layouts | None = None,
     plugin_templates: PluginTemplates | None = None,
+    type_uses: TypeUses | None = None,
     background: Sequence[Callable[[], Coroutine[Any, Any, None]]] = (),
 ) -> FastAPI:
     """`extractor` and `document_types` read bytes through files-service as the caller's team; `auth` resolves
     callers through ops_identity, by default from Settings for audience "documents". `layouts` serves the layout
     routes, by default the extractor's own, else a cache on `engine`. `plugin_templates` reads the team's plugin
-    templates from tools-service for /v1/templates; without it those routes answer 503."""
+    templates from tools-service for /v1/templates; without it those routes answer 503. `type_uses` asks
+    agents-service which workflows read a type before it is deleted; without it (a test app) the delete does not ask."""
     config = Settings()
     layouts = layouts or extractor.layouts or Layouts(extractor.files, LayoutsStore(engine))
 
@@ -321,6 +324,7 @@ def create_documents_app(
         return ok({"extractions": removed, "samples": samples})
 
     types = APIRouter(prefix="/v1/document-types", tags=["document-types"], responses=errors)
+    copies = TemplateCopies(engine)
 
     @types.post("", status_code=201, response_model=Envelope[DocumentType], dependencies=[service_scope("edit")])
     async def create_type(body: DocumentTypeIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -343,6 +347,26 @@ def create_documents_app(
     @types.get("/{type_id}", response_model=Envelope[DocumentType], dependencies=[service_scope("view")])
     async def get_type(type_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(found(await document_types.get(who, type_id), "Document type"))
+
+    @types.delete("/{type_id}", status_code=204, response_class=Response, dependencies=[service_scope("edit")])
+    async def delete_type(type_id: str, who: Caller) -> Response:  # pyright: ignore[reportUnusedFunction]
+        """Deletes the team's type with its versions and samples; reads already made keep their fields. 409 `in_use`
+        while a workflow of the team reads it, naming each in `details.usedBy`. An app's resource row reads not added
+        again once its copy is deleted."""
+        if await document_types.get(who, type_id) is None:
+            raise NotFound(f"Document type {type_id}")
+        if type_uses is not None and (users := await type_uses.of(who, type_id)):
+            names = ", ".join(u["name"] for u in users)
+            raise Conflict(
+                f"{names} {'reads' if len(users) == 1 else 'read'} this document type. Change or remove "
+                f"{'it' if len(users) == 1 else 'them'} first.",
+                code="in_use",
+                details={"usedBy": users},
+            )
+        if not await document_types.delete(who, type_id):
+            raise NotFound(f"Document type {type_id}")
+        await copies.removed_record(type_id)
+        return Response(status_code=204)
 
     @types.post(
         "/{type_id}/versions",
@@ -447,7 +471,7 @@ def create_documents_app(
     app.state.plugin_templates = plugin_templates
     app.include_router(
         templates_router(
-            copies=TemplateCopies(engine),
+            copies=copies,
             document_types=document_types,
             caller=who,
             scope=service_scope,

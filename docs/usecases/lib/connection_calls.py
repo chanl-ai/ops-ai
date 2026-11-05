@@ -29,7 +29,7 @@ def clean(gw: httpx.Client, prefix: str) -> None:
         if card.get("kind") != "connection" or prefix.lower() not in str(card.get("name", "")).lower():
             continue
         app = str(card["id"])
-        accounts = (data(gw.get(f"/v1/apps/{app}")) or {}).get("accounts") or []
+        accounts = [a for c in (data(gw.get(f"/v1/apps/{app}")) or {}).get("authConfigs") or [] for a in c["accounts"]]
         for a in sorted(accounts, key=lambda a: a["id"] == app):
             gw.delete(f"/v1/apps/{app}/accounts/{a['id']}")
 

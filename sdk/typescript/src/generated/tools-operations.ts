@@ -43,23 +43,22 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
-  "apps_check_credential": {
+  "apps_change_app_credential": {
     "body": "json",
     "headers": [],
-    "method": "POST",
-    "path": "/v1/apps/{app_id}/accounts/{account_id}/test-credential",
+    "method": "PATCH",
+    "path": "/v1/app-credentials/{credential_id}",
     "pathParams": [
-      "app_id",
-      "account_id"
+      "credential_id"
     ],
     "query": [],
     "stream": false
   },
-  "apps_complete_sign_in": {
-    "body": "json",
+  "apps_check_credential": {
+    "body": null,
     "headers": [],
     "method": "POST",
-    "path": "/v1/apps/{app_id}/accounts/{account_id}/sign-in/complete",
+    "path": "/v1/apps/{app_id}/accounts/{account_id}/test-credential",
     "pathParams": [
       "app_id",
       "account_id"
@@ -97,6 +96,20 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "apps_delete_app_credential": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/app-credentials/{credential_id}",
+    "pathParams": [
+      "credential_id"
+    ],
+    "query": [
+      "moveTo",
+      "move"
+    ],
+    "stream": false
+  },
   "apps_disconnect": {
     "body": null,
     "headers": [],
@@ -105,6 +118,15 @@ export const toolsOperations = {
     "pathParams": [
       "account_id"
     ],
+    "query": [],
+    "stream": false
+  },
+  "apps_finish_sign_in": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/sign-ins/complete",
+    "pathParams": [],
     "query": [],
     "stream": false
   },
@@ -184,6 +206,18 @@ export const toolsOperations = {
     "query": [
       "include"
     ],
+    "stream": false
+  },
+  "apps_make_team_default": {
+    "body": null,
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/apps/{app_id}/accounts/{account_id}/team-default",
+    "pathParams": [
+      "app_id",
+      "account_id"
+    ],
+    "query": [],
     "stream": false
   },
   "apps_my_accounts": {
@@ -409,6 +443,17 @@ export const toolsOperations = {
     "method": "GET",
     "path": "/health/background",
     "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "plugins_list_app_resources": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/apps/{app_id}/resources",
+    "pathParams": [
+      "app_id"
+    ],
     "query": [],
     "stream": false
   },

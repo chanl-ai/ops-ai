@@ -46,20 +46,20 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
-    "apps_check_credential": {
+    "apps_change_app_credential": {
         "body": "json",
         "headers": [],
-        "method": "POST",
-        "path": "/v1/apps/{app_id}/accounts/{account_id}/test-credential",
-        "pathParams": ["app_id", "account_id"],
+        "method": "PATCH",
+        "path": "/v1/app-credentials/{credential_id}",
+        "pathParams": ["credential_id"],
         "query": [],
         "stream": False,
     },
-    "apps_complete_sign_in": {
-        "body": "json",
+    "apps_check_credential": {
+        "body": None,
         "headers": [],
         "method": "POST",
-        "path": "/v1/apps/{app_id}/accounts/{account_id}/sign-in/complete",
+        "path": "/v1/apps/{app_id}/accounts/{account_id}/test-credential",
         "pathParams": ["app_id", "account_id"],
         "query": [],
         "stream": False,
@@ -91,12 +91,30 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "apps_delete_app_credential": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/app-credentials/{credential_id}",
+        "pathParams": ["credential_id"],
+        "query": ["moveTo", "move"],
+        "stream": False,
+    },
     "apps_disconnect": {
         "body": None,
         "headers": [],
         "method": "DELETE",
         "path": "/v1/me/accounts/{account_id}",
         "pathParams": ["account_id"],
+        "query": [],
+        "stream": False,
+    },
+    "apps_finish_sign_in": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/sign-ins/complete",
+        "pathParams": [],
         "query": [],
         "stream": False,
     },
@@ -161,6 +179,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/apps",
         "pathParams": [],
         "query": ["include"],
+        "stream": False,
+    },
+    "apps_make_team_default": {
+        "body": None,
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/apps/{app_id}/accounts/{account_id}/team-default",
+        "pathParams": ["app_id", "account_id"],
+        "query": [],
         "stream": False,
     },
     "apps_my_accounts": {
@@ -349,6 +376,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/health/background",
         "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "plugins_list_app_resources": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/apps/{app_id}/resources",
+        "pathParams": ["app_id"],
         "query": [],
         "stream": False,
     },
@@ -700,6 +736,25 @@ class Operations:
             SERVICE, OPERATIONS["apps_get_app_credential"], {"credential_id": credential_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
+    def apps_change_app_credential(self, credential_id: str, body: AppCredentialPatchIn) -> AppCredentialChange:
+        "Change App Credential"
+        return self._t.call(
+            SERVICE, OPERATIONS["apps_change_app_credential"], {"credential_id": credential_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    def apps_delete_app_credential(
+        self, credential_id: str, *, move_to: str | None = None, move: bool | None = None
+    ) -> CredentialDeleted:
+        "Delete App Credential"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["apps_delete_app_credential"],
+            {"credential_id": credential_id},
+            {"moveTo": move_to, "move": move},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     def apps_set_app_credential_secret(self, credential_id: str, body: CredentialSecretIn) -> AppCredentialDetail:
         "Set App Credential Secret"
         return self._t.call(
@@ -754,16 +809,16 @@ class Operations:
             SERVICE, OPERATIONS["apps_start_sign_in"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    def apps_complete_sign_in(self, app_id: str, account_id: str, body: SignInCompleteIn) -> AccountDetail:
-        "Complete Sign In"
-        return self._t.call(
-            SERVICE, OPERATIONS["apps_complete_sign_in"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
-        )  # type: ignore[no-any-return]
-
     def apps_sign_out(self, app_id: str, account_id: str) -> AccountDetail:
         "Sign Out"
         return self._t.call(
             SERVICE, OPERATIONS["apps_sign_out"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def apps_make_team_default(self, app_id: str, account_id: str) -> AccountDetail:
+        "Make Team Default"
+        return self._t.call(
+            SERVICE, OPERATIONS["apps_make_team_default"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     def apps_test_account(self, app_id: str, account_id: str, body: AccountTestIn) -> AccountDetail:
@@ -772,11 +827,15 @@ class Operations:
             SERVICE, OPERATIONS["apps_test_account"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    def apps_check_credential(self, app_id: str, account_id: str, body: CredentialCheckIn) -> Any:
+    def apps_check_credential(self, app_id: str, account_id: str) -> SignInStart:
         "Check Credential"
         return self._t.call(
-            SERVICE, OPERATIONS["apps_check_credential"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
+            SERVICE, OPERATIONS["apps_check_credential"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
         )  # type: ignore[no-any-return]
+
+    def plugins_list_app_resources(self, app_id: str) -> list[AppResource]:
+        "List App Resources"
+        return self._t.call(SERVICE, OPERATIONS["plugins_list_app_resources"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def apps_set_team_app(self, app_id: str, body: TeamPluginIn) -> SystemCard:
         "Set Team App"
@@ -935,6 +994,10 @@ class Operations:
     def send_policy_save_send_policy(self, body: SendPolicyIn) -> SendPolicyView:
         "Save Send Policy"
         return self._t.call(SERVICE, OPERATIONS["send_policy_save_send_policy"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def apps_finish_sign_in(self, body: SignInCompleteIn) -> SignInFinished:
+        "Finish Sign In"
+        return self._t.call(SERVICE, OPERATIONS["apps_finish_sign_in"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     def tool_modules_list_modules(
         self,
@@ -1167,6 +1230,25 @@ class AsyncOperations:
             SERVICE, OPERATIONS["apps_get_app_credential"], {"credential_id": credential_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
+    async def apps_change_app_credential(self, credential_id: str, body: AppCredentialPatchIn) -> AppCredentialChange:
+        "Change App Credential"
+        return await self._t.call(
+            SERVICE, OPERATIONS["apps_change_app_credential"], {"credential_id": credential_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    async def apps_delete_app_credential(
+        self, credential_id: str, *, move_to: str | None = None, move: bool | None = None
+    ) -> CredentialDeleted:
+        "Delete App Credential"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["apps_delete_app_credential"],
+            {"credential_id": credential_id},
+            {"moveTo": move_to, "move": move},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     async def apps_set_app_credential_secret(self, credential_id: str, body: CredentialSecretIn) -> AppCredentialDetail:
         "Set App Credential Secret"
         return await self._t.call(
@@ -1221,16 +1303,16 @@ class AsyncOperations:
             SERVICE, OPERATIONS["apps_start_sign_in"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def apps_complete_sign_in(self, app_id: str, account_id: str, body: SignInCompleteIn) -> AccountDetail:
-        "Complete Sign In"
-        return await self._t.call(
-            SERVICE, OPERATIONS["apps_complete_sign_in"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
-        )  # type: ignore[no-any-return]
-
     async def apps_sign_out(self, app_id: str, account_id: str) -> AccountDetail:
         "Sign Out"
         return await self._t.call(
             SERVICE, OPERATIONS["apps_sign_out"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def apps_make_team_default(self, app_id: str, account_id: str) -> AccountDetail:
+        "Make Team Default"
+        return await self._t.call(
+            SERVICE, OPERATIONS["apps_make_team_default"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     async def apps_test_account(self, app_id: str, account_id: str, body: AccountTestIn) -> AccountDetail:
@@ -1239,11 +1321,15 @@ class AsyncOperations:
             SERVICE, OPERATIONS["apps_test_account"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def apps_check_credential(self, app_id: str, account_id: str, body: CredentialCheckIn) -> Any:
+    async def apps_check_credential(self, app_id: str, account_id: str) -> SignInStart:
         "Check Credential"
         return await self._t.call(
-            SERVICE, OPERATIONS["apps_check_credential"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
+            SERVICE, OPERATIONS["apps_check_credential"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
         )  # type: ignore[no-any-return]
+
+    async def plugins_list_app_resources(self, app_id: str) -> list[AppResource]:
+        "List App Resources"
+        return await self._t.call(SERVICE, OPERATIONS["plugins_list_app_resources"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def apps_set_team_app(self, app_id: str, body: TeamPluginIn) -> SystemCard:
         "Set Team App"
@@ -1408,6 +1494,10 @@ class AsyncOperations:
     async def send_policy_save_send_policy(self, body: SendPolicyIn) -> SendPolicyView:
         "Save Send Policy"
         return await self._t.call(SERVICE, OPERATIONS["send_policy_save_send_policy"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def apps_finish_sign_in(self, body: SignInCompleteIn) -> SignInFinished:
+        "Finish Sign In"
+        return await self._t.call(SERVICE, OPERATIONS["apps_finish_sign_in"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def tool_modules_list_modules(
         self,

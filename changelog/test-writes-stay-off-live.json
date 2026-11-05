@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-04",
+  "title": "Test runs never change a live account unasked",
+  "description": "A write tried in a test run on an app's live account now waits for someone's approval, even when the person testing could approve writes themselves. Add a test account to the app to try writes freely.",
+  "tag": "fix"
+}

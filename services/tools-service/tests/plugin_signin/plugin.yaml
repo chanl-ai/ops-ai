@@ -1,0 +1,45 @@
+# A plugin that asks where its system signs in (choices and a company's own address), says what a refused sign-in
+# means, and keeps its tenant on the app credential; tests/test_sign_in_place.py, test_sign_in_refused.py and
+# test_app_credential_edit.py drive it through the routes.
+schema: ops-ai/plugin@2
+id: test.signin
+title: Signin desk
+version: 0.1.0
+sdk: "1"
+connection:
+  kinds: [oauth2_auth_code]
+  authorize_url: "{login_url}/{tenant}/authorize"
+  token_url: "{login_url}/{tenant}/token"
+  scopes:
+    - { id: api, label: Read records, required: true }
+    - { id: write, label: Change records }
+  sign_in: [team, person]
+  credential_settings: [tenant]
+  sign_in_errors:
+    - { error: invalid_client, description_contains: must be installed, say: "Install {app}'s app in your org first.", who: admin }
+    - { error: invalid_client, say: "{app} does not know this app.", who: admin }
+    - { error: OAUTH_APP_BLOCKED, say: "Your admin has blocked {app}'s app. Ask them to allow it.", who: admin }
+  health_check: { path: /api/me }
+settings:
+  login_url:
+    type: string
+    title: Where do you sign in?
+    default: "https://login.signin.test/oauth2"
+    choices:
+      - { value: "https://login.signin.test/oauth2", label: login.signin.test, hint: Live orgs }
+      - { value: "https://test.signin.test/oauth2", label: test.signin.test, hint: Orgs used for testing, test_account: true }
+    other:
+      label: Your company's address
+      hint: Your own sign-in host
+      placeholder: acme.my.signin.test
+      value: "https://{host}/oauth2"
+      hosts: [.my.signin.test]
+      test_account_hosts: [.sandbox.my.signin.test]
+  tenant: { type: string, title: Directory tenant, default: common }
+egress: ["{login_url}"]
+endpoint: "{login_url}"
+tools:
+  - name: me
+    title: Who am I
+    access: read
+    request: { method: GET, path: /api/me }

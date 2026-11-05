@@ -255,7 +255,7 @@ export function PluginConnectForm({
       onOpenChange={(o) => !o && void cancel()}
       size="md"
       title={sandbox ? `Add a ${card.name} sandbox account` : `Connect ${card.name}`}
-      description={card.description ?? 'It is tested before it is called working.'}
+      description={card.description ?? undefined}
       data-testid="connect-dialog"
       footer={
         <>
@@ -324,8 +324,8 @@ export function PluginConnectForm({
               <div className="flex flex-wrap items-center gap-1.5 text-sm">
                 <span className="text-muted-foreground">It asks for:</span>
                 {plugin.scopes.map((s) => (
-                  <Badge key={s} variant="outline">
-                    {s}
+                  <Badge key={s.id} variant="outline" title={s.id}>
+                    {s.label}
                   </Badge>
                 ))}
               </div>

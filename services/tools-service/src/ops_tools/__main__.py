@@ -33,6 +33,7 @@ from .auth import Authenticator, Tokens
 from .auth.discovery import Discovery
 from .code_runs import CodeExecutor, code_signer
 from .connections.connect_links import ConnectLinks
+from .connections.keepalive import SignInKeepalive, keep_signed_in
 from .connections.routes import accounts_router
 from .connections.service import ConnectionService
 from .defaults import catch_up_at_start
@@ -58,7 +59,7 @@ from .opa import OpaClient
 from .platform_events import member_removed_handlers, team_created_handlers
 from .plugins.host import PluginHost
 from .plugins.routes import plugins_router
-from .plugins.templates import plugin_templates_router
+from .plugins.templates import ServiceCopies, plugin_templates_router
 from .registry import ToolRegistry
 from .secrets import SecretResolver
 from .secrets.routes import secrets_router
@@ -219,9 +220,18 @@ def main() -> None:
         # A plugin's connection takes its instance from the token answer.
         on_token=plugins.on_token if plugins else None,
         plugin_settings=plugins.account_settings if plugins else None,
+        # A refused sign-in says what the plugin's sign_in_errors say of its code.
+        sign_in_errors=plugins.sign_in_error if plugins else None,
     )
     connection_service.app_display = plugins.display_of if plugins else None
     tool_users = AgentsToolUsers(client("agents", agents_url, ["agents:view"]))
+    # An app's Resources tab joins the copies agents-service and documents-service keep, read as the caller's team.
+    documents_url = settings.documents_url or f"http://127.0.0.1:{settings.documents_port}"
+    resource_copies = ServiceCopies(
+        client("agents", agents_url, ["agents:view"]),
+        client("documents", documents_url, ["documents:view"]),
+        client("kb", settings.kb_url, ["knowledge:view"]) if settings.kb_url else None,
+    )
     apps = Apps(connection_service, store, plugins, modules, tool_users)
     app = create_gateway_app(
         opa=OpaClient(httpx.AsyncClient(base_url=settings.opa_url, timeout=5)),
@@ -279,6 +289,8 @@ def main() -> None:
             lambda: catch_up_at_start(store, TeamDefaults(engine)),
             # Once at start: a tool's sign-in header saved before they were refused moves to its connection.
             lambda: move_at_start(store, connection_store),
+            # Once a day: every sign-in left unused for 20 days is refreshed, so no system ends it for being idle.
+            lambda: keep_signed_in(SignInKeepalive(TeamDefaults(engine), connection_store, authenticator)),
         ),
         secret_resolver=secrets,
         authenticator=authenticator,
@@ -316,7 +328,7 @@ def main() -> None:
                 if apps.plugin_accounts
                 else []
             ),
-            *([plugin_templates_router(plugins)] if plugins else []),
+            *([plugin_templates_router(plugins, resource_copies)] if plugins else []),
             accounts_router(connection_service, directory),
             apps_router(apps, directory),
             platform_events_router(

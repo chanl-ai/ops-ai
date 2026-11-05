@@ -136,11 +136,13 @@ async def test_a_save_lists_every_problem_at_once_and_sends_the_key_to_the_conne
 async def test_request_sent_shows_the_content_type_its_encoding_set(encoded: Bank) -> None:
     """The tool page's Request sent is what the system got: httpx adds a form's Content-Type on the wire, so the record
     of the request names it too."""
+    # A live run: a test run's write on this live account waits for a person, and this one has to reach the system.
     run = {
         "operation": f"form_{encoded.api.tenant}",
         "contextId": "owner",
         "target": "sandbox",
         "input": {"email": "a@b.c"},
+        "environment": "production",
     }
     out = (await encoded.api.call("POST", f"/{MODULE}/test", json=run)).json()["data"]
     headers = {h["key"].lower(): h["value"] for h in out["request"]["headers"]}

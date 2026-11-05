@@ -56,6 +56,7 @@ from .schemas import (
     OwnerIn,
     PageIn,
     PlaygroundAnswer,
+    PluginSource,
     QueryIn,
     SearchIn,
     SearchOut,
@@ -294,6 +295,14 @@ def create_kb_app(
         who: Caller, page: Page = 1, page_size: PageSize = 25, search: str | None = None
     ) -> JSONResponse:
         return ok(await service.list_sources(who, page=page, page_size=page_size, search=search))
+
+    @sources.get("/from-plugin", response_model=Envelope[list[PluginSource]])
+    async def list_plugin_sources(  # pyright: ignore[reportUnusedFunction]
+        who: Caller, plugin: Annotated[str, Query(min_length=1, max_length=200)]
+    ) -> JSONResponse:
+        """The sources the team made from a plugin's knowledge sources, for the app's resource list in tools-service:
+        each with the plugin's source name and the bases it feeds."""
+        return ok(await service.plugin_sources(who, plugin))
 
     @sources.get("/{source_id}", response_model=Envelope[SourceDetail])
     async def get_source(source_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

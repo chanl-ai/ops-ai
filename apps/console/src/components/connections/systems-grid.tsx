@@ -29,7 +29,7 @@ const STATE: Record<AppState, { label: string; className: string; icon?: typeof 
   connected: { label: 'Connected', className: 'border-success/40 bg-success/10 text-success-text', icon: CircleCheck },
   test_failed: { label: 'Signed in, test failed', className: 'border-warning/40 bg-warning/10 text-warning-text', icon: TriangleAlert },
   needs_sign_in: { label: 'Needs sign-in', className: 'border-warning/40 bg-warning/10 text-warning-text', icon: CircleAlert },
-  not_installed: { label: 'Not installed', className: 'text-muted-foreground' },
+  not_installed: { label: 'Available', className: 'text-muted-foreground' },
   removed: { label: 'No longer installed', className: 'border-destructive/40 bg-destructive/10 text-destructive', icon: CircleAlert },
 };
 

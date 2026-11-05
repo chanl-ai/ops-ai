@@ -122,6 +122,9 @@ app_credentials = sa.Table(
     # The tool_secrets name in the team holding the client secret (its row's credential_id is this credential's id);
     # null for a public client.
     sa.Column("secret_name", sa.String(200)),
+    # The registration's own settings (a plugin's credential_settings, or a custom app's sign-in and token addresses),
+    # which every account signing in with it reads; null for none.
+    sa.Column("settings", sa.JSON),
     sa.Column("created_by", sa.String(200), nullable=False),
     sa.Column("created_at", _TS, nullable=False),
     sa.Column("updated_by", sa.String(200), nullable=False),
@@ -344,14 +347,43 @@ class ConnectionStore:
         async with self._tx() as c:
             await c.execute(app_credentials.insert().values(**row))
 
-    async def touch_credential(self, tenant_id: str, credential_id: str, *, actor: str, at: datetime) -> None:
-        """Records who changed the credential last (its secret, replaced in the secret store)."""
+    async def change_credential(
+        self, tenant_id: str, credential_id: str, values: Row, *, actor: str, at: datetime
+    ) -> None:
+        """Writes the credential's name, client id, permissions or settings, with who changed it and when."""
         t = app_credentials.c
         async with self._tx() as c:
             await c.execute(
                 app_credentials.update()
                 .where(t.tenant_id == tenant_id, t.id == credential_id, team_visible(app_credentials))
-                .values(updated_by=actor, updated_at=at)
+                .values(**values, updated_by=actor, updated_at=at)
+            )
+
+    async def delete_credential(self, tenant_id: str, credential_id: str) -> bool:
+        """Deletes the team's app credential; False when there is none. Accounts are moved off it first."""
+        t = app_credentials.c
+        async with self._tx() as c:
+            gone = await c.execute(
+                app_credentials.delete().where(
+                    t.tenant_id == tenant_id, t.id == credential_id, team_visible(app_credentials)
+                )
+            )
+            return bool(gone.rowcount)
+
+    async def touch_credential(
+        self, tenant_id: str, credential_id: str, *, actor: str, at: datetime, secret_name: str | None = None
+    ) -> None:
+        """Records who changed the credential last, and with `secret_name` the team secret now holding its client
+        secret: an account reads its secret through that name alone, so a secret stored under no name is never sent."""
+        t = app_credentials.c
+        values: Row = {"updated_by": actor, "updated_at": at}
+        if secret_name is not None:
+            values["secret_name"] = secret_name
+        async with self._tx() as c:
+            await c.execute(
+                app_credentials.update()
+                .where(t.tenant_id == tenant_id, t.id == credential_id, team_visible(app_credentials))
+                .values(**values)
             )
 
     async def credential_accounts(self, tenant_id: str, credential_ids: list[str]) -> list[Row]:
@@ -379,6 +411,13 @@ class ConnectionStore:
         cred = creds.get(str(row.get("credential_id") or ""))
         installed = self.install_clients.get(str(row.get("platform_app") or ""))
         if cred is not None:
+            held = dict(cred.get("settings") or {})
+            if str(row.get("app_id") or "").startswith(PLUGIN_APP):
+                # A plugin's: merged by the plugin host over the account's own (PluginHost.settings).
+                row = {**row, "credential_settings": held}
+            else:
+                # A custom app's: the registration's addresses and certificate, over any the account was given.
+                settings |= held
             settings["clientId"] = cred["client_id"]
             if cred.get("scopes"):
                 # The permissions the team's client asks for are the credential's, for every account on it.
@@ -842,6 +881,30 @@ class ConnectionStore:
         async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q.returning(*_HELD_TOKEN))).mappings()]
 
+    async def idle_sign_ins(self, tenant_id: str, refreshed_before: datetime, *, limit: int = 500) -> list[Row]:
+        """The acting team's sign-ins, the team's and each person's, that hold a refresh token, were last refreshed
+        before `refreshed_before` and are not refused, oldest first: what the keep-alive refreshes. A revoked account's
+        are left out."""
+        t, k = connection_tokens.c, connections.c
+        on = sa.and_(k.tenant_id == t.tenant_id, k.id == t.connection_id)
+        q = (
+            sa.select(t.connection_id, t.person_id, t.rotations)
+            .select_from(connection_tokens.join(connections, on))
+            .where(
+                t.tenant_id == tenant_id,
+                t.refresh_ct.is_not(None),
+                t.refreshed_at < refreshed_before,
+                t.refused_at.is_(None),
+                k.status != "revoked",
+                team_visible(connection_tokens),
+                team_visible(connections),
+            )
+            .order_by(t.refreshed_at, t.connection_id, t.person_id)
+            .limit(limit)
+        )
+        async with self._tx() as c:
+            return [dict(r) for r in (await c.execute(q)).mappings()]
+
     async def own_sign_ins(self, tenant_id: str, person: str, connection_ids: list[str]) -> list[Row]:
         """One person's own sign-ins on these connections (an app's accounts), newest first: which they pinned
         and which the system refused."""
@@ -1067,6 +1130,17 @@ class ConnectionStore:
             team = self._team(str(row["tenant_id"]), str(row["connection_id"]))
             await c.execute(oauth_states.insert().values(**row, team_id=team))
         return pruned
+
+    async def state_account(self, tenant_id: str, state_hash: str) -> Row | None:
+        """The account and whose token a sign-in's state was sent out for, read without spending it: what the return
+        page finishes, which `take_state` then checks and spends. None for an unknown state."""
+        s = oauth_states.c
+        q = sa.select(s.connection_id, s.token_for).where(
+            s.tenant_id == tenant_id, s.state_hash == state_hash, team_visible(oauth_states)
+        )
+        async with self._tx() as c:
+            row = (await c.execute(q)).mappings().first()
+            return dict(row) if row else None
 
     async def take_state(
         self, tenant_id: str, state_hash: str, *, connection_id: str, person: str, now: datetime

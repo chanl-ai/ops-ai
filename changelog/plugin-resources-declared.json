@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-04",
+  "title": "Plugins say what each resource needs",
+  "description": "A plugin's agent, skill, workflow or document type can name the other resources of the plugin it cannot run without, and checking a plugin refuses a name the plugin does not have. An app's knowledge source is now listed among its resources.",
+  "tag": "new"
+}

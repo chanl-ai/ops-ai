@@ -37,6 +37,9 @@ tool_secrets = sa.Table(
     sa.Column("ciphertext", sa.Text, nullable=False),
     # Rises on every rotation, so a reader can tell which value a call used.
     sa.Column("version", sa.Integer, nullable=False),
+    # The value's last four characters, shown so a person can tell which value is held (secrets.ending); null for a
+    # short value, whose ending would give too much away.
+    sa.Column("ends", sa.String(4)),
     sa.Column("created_by", sa.String(200), nullable=False),
     sa.Column("created_at", _TS, nullable=False),
     sa.Column("rotated_at", _TS),
@@ -150,6 +153,7 @@ class SecretStore:
         *,
         actor: str,
         at: datetime,
+        ends: str | None = None,
         template: dict[str, str] | None = None,
         connection_id: str | None = None,
         credential_id: str | None = None,
@@ -157,7 +161,7 @@ class SecretStore:
         """False when the team already has the name (nothing written). `template` carries the provisioner's
         `template_id` and `protection`; `connection_id` marks a connection's secret part, and
         `credential_id` an app credential's client secret."""
-        row = {"tenant_id": tenant_id, "team_id": team_id, "name": name, "ciphertext": ref, "version": 1}
+        row = {"tenant_id": tenant_id, "team_id": team_id, "name": name, "ciphertext": ref, "version": 1, "ends": ends}
         if connection_id is not None:
             row["connection_id"] = connection_id
         if credential_id is not None:
@@ -173,8 +177,31 @@ class SecretStore:
             await self._audit(c, tenant_id, team_id, change)
         return True
 
+    async def missing_ends(self, tenant_id: str, team_id: str, name: str) -> str | None:
+        """The reference of a secret kept before its last four characters were, so they can be read once and kept;
+        None once it has them or when the team has no such secret."""
+        q = sa.select(tool_secrets.c.ciphertext).where(
+            _of(tenant_id, team_id),
+            tool_secrets.c.name == name,
+            tool_secrets.c.ends.is_(None),
+            team_visible(tool_secrets),
+        )
+        async with self._tx() as c:
+            found = (await c.execute(q)).first()
+        return str(found.ciphertext) if found else None
+
+    async def keep_ends(self, tenant_id: str, team_id: str, name: str, ref: str, ends: str) -> None:
+        """Keeps the last four characters read from `ref`, unless the secret was replaced since."""
+        q = (
+            tool_secrets.update()
+            .where(_of(tenant_id, team_id), tool_secrets.c.name == name, tool_secrets.c.ciphertext == ref)
+            .values(ends=ends)
+        )
+        async with self._tx() as c:
+            await c.execute(q)
+
     async def rotate(
-        self, tenant_id: str, team_id: str, name: str, ref: str, *, actor: str, at: datetime
+        self, tenant_id: str, team_id: str, name: str, ref: str, *, actor: str, at: datetime, ends: str | None = None
     ) -> tuple[int, str] | None:
         """The new version and the reference it replaced, or None when the team has no such secret. The row is locked
         while it is read, so two rotations each hand back the reference they replaced and none is lost."""
@@ -187,7 +214,7 @@ class SecretStore:
             q = (
                 tool_secrets.update()
                 .where(mine)
-                .values(ciphertext=ref, version=tool_secrets.c.version + 1, rotated_at=at)
+                .values(ciphertext=ref, version=tool_secrets.c.version + 1, rotated_at=at, ends=ends)
                 .returning(tool_secrets.c.version)
             )
             version = int((await c.execute(q)).scalar_one())

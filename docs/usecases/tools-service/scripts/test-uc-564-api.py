@@ -103,7 +103,7 @@ def sign_in_team(gw: httpx.Client, sf: dict[str, Any], who: dict[str, str], conn
     if not back.get("code"):
         print(f"sign-in gave no code: start {started.status_code} {started.text[:300]}; back {back}", flush=True)
     return gw.post(
-        f"{account(connection_id)}/sign-in/complete",
+        "/v1/sign-ins/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=who,
     )
@@ -144,7 +144,8 @@ with ExitStack() as stack:
     )
 
     # 2. The team admin turns it on for the team with the team's OAuth app; a builder cannot, nor change a locked field.
-    login = sf["authorize_url"].rsplit("/", 1)[0]
+    # The org's company address, one of the places the Salesforce plugin signs in.
+    login = sf["login_url"]
     own = {"app": f"plugin:{PLUGIN}", "clientId": "ops-ai-acme", "clientSecret": CLIENT_SECRET}
     credential = (data(gw.post("/v1/app-credentials", json=own, headers=priya)) or {}).get("id")
     team_on = {"enabled": True, "settings": {"login_url": login}, "credentialId": credential}
@@ -194,7 +195,9 @@ with ExitStack() as stack:
     # 51. The team account reads connected at once, and its test runs on its own right after the sign-in.
     def team_row() -> dict[str, Any]:
         page = data(gw.get(f"/v1/apps/plugin:{PLUGIN}", headers=priya)) or {}
-        return next((a for a in page.get("accounts") or [] if a.get("id") == connection_id), {})
+        return next(
+            (a for c in page.get("authConfigs") or [] for a in c["accounts"] if a.get("id") == connection_id), {}
+        )
 
     first_row = team_row()
     team_test = until(lambda: (team_row().get("test") or {}).get("status"), timeout=20)
@@ -469,12 +472,12 @@ with ExitStack() as stack:
     own = gw.post(f"{account(mine_id)}/sign-in", json={}, headers=security)
     back = sf["sign_in"]((data(own) or {}).get("authorizeUrl", ""), "sam.own") if own.status_code == 200 else {}
     own_done = gw.post(
-        f"{account(mine_id)}/sign-in/complete",
+        "/v1/sign-ins/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=security,
     )
     page_mine = data(gw.get(f"/v1/apps/plugin:{PLUGIN}", headers=security)) or {}
-    accounts_mine = page_mine.get("accounts") or []
+    accounts_mine = [a for c in page_mine.get("authConfigs") or [] for a in c["accounts"]]
     check(
         "48 a person signs in with their own account before any team account exists",
         own_done.status_code == 200 and any(a.get("id") == mine_id and a.get("mine") for a in accounts_mine),

@@ -8,6 +8,7 @@ a check whose behaviour is not built names the task it waits on. No model call."
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 from apps_walk import account_path, app_path, apps_stack, target
 from usecase_harness import check, data, finish, until
@@ -57,7 +58,7 @@ with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
 
     # 23. The app's page reads Connected · team account.
     page = data(w.kept(w.gw.get(app_path(APP), headers=w.who["admin"]))) or {}
-    accounts = page.get("accounts") or []
+    accounts = [a for c in page.get("authConfigs") or [] for a in c["accounts"]]
     first = accounts[0] if accounts else {}
     check(
         "23 the app's page lists the team account first, as the default, in state connected",
@@ -101,7 +102,7 @@ with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
     # 30. Signing in is what connects an account; its test then runs on its own, and the outcome is kept on the row.
     def own_row(role: str) -> dict[str, Any]:
         page = data(w.kept(w.gw.get(app_path("plugin:test.person"), headers=w.who[role]))) or {}
-        return next((a for a in page.get("accounts") or [] if a.get("mine")), {})
+        return next((a for c in page.get("authConfigs") or [] for a in c["accounts"] if a.get("mine")), {})
 
     james_test = until(lambda: (own_row("builder").get("test") or {}).get("status"), timeout=20)
     check(
@@ -130,6 +131,53 @@ with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
         (shown.get("pluginSettings") or {}).get("base_url") == "https://api.multi.test"
         and shown.get("pluginSecrets") == {},
         {k: shown.get(k) for k in ("pluginSettings", "pluginSecrets")},
+    )
+
+    # 33. A new client id on the credential the person desk signs in with marks its accounts to sign in again and says
+    # how many; James's own sign-in on it then reads refused.
+    edited = w.kept(
+        w.gw.patch(f"/v1/app-credentials/{person_client}", json={"clientId": "multi-app-2"}, headers=w.who["admin"])
+    )
+    again = (data(edited) or {}).get("signInAgain") if edited.status_code == 200 else None
+
+    def james() -> dict[str, Any]:
+        page = data(w.kept(w.gw.get(app_path("plugin:test.person"), headers=w.who["builder"]))) or {}
+        return next((p for p in page.get("people") or [] if p.get("mine")), {})
+
+    check(
+        "33 editing a credential's client id marks the accounts signing in with it to sign in again, and says how many",
+        again == 1 and james().get("state") == "refused",
+        {"edit": edited.text[:300], "james": james()},
+    )
+
+    # 34. A refused sign-in: the system hands back access_denied. The answer is one sentence naming who acts, and the
+    # account reads refused with that sentence.
+    at = account_path("plugin:test.person", person_app)
+    started = w.kept(w.gw.post(f"{at}/sign-in", json={"account": "team"}, headers=w.who["admin"]))
+    state = parse_qs(urlsplit(str((data(started) or {}).get("authorizeUrl") or "")).query).get("state", [""])[0]
+    refusal = {"state": state, "error": "access_denied", "errorDescription": "end-user denied authorization"}
+    refused = w.kept(w.gw.post("/v1/sign-ins/complete", json=refusal, headers=w.who["admin"]))
+    said = (refused.json().get("error") or {}) if refused.status_code == 422 else {}
+    page = data(w.kept(w.gw.get(app_path("plugin:test.person"), headers=w.who["admin"]))) or {}
+    row = next((a for c in page.get("authConfigs") or [] for a in c["accounts"] if a.get("id") == person_app), {})
+    check(
+        "34 a refused sign-in answers one plain sentence naming who acts, and the account reads refused",
+        said.get("code") == "sign_in_refused"
+        and (said.get("details") or {}).get("who") == "person"
+        and said.get("message") == "Person desk access was not given. Connect again to retry."
+        and row.get("state") == "refused"
+        and row.get("stateReason") == said.get("message"),
+        {"answer": refused.text[:300], "row": row},
+    )
+
+    # 35. A sign-in place outside the plugin's choices is refused before any sign-in, in plain words.
+    outside = {"enabled": True, "signIn": "person", "settings": {"login_url": "https://login.evil.example/salesforce"}}
+    place = w.kept(w.gw.put("/v1/apps/plugin:test.person/team", json=outside, headers=w.who["admin"]))
+    error = (place.json().get("error") or {}) if place.status_code == 400 else {}
+    check(
+        "35 a sign-in place outside the plugin's choices is refused with a plain 400 before any sign-in",
+        error.get("code") == "setting_not_offered" and "login.multi.test" in str(error.get("message")),
+        place.text[:300],
     )
 
 finish()

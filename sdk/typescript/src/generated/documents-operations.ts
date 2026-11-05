@@ -31,6 +31,17 @@ export const documentsOperations = {
     "query": [],
     "stream": false
   },
+  "document_types_delete_type": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/document-types/{type_id}",
+    "pathParams": [
+      "type_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "document_types_get_test": {
     "body": null,
     "headers": [],
@@ -269,6 +280,30 @@ export const documentsOperations = {
     "path": "/v1/resources/{resource}/copies",
     "pathParams": [
       "resource"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "resources_review_update": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/resources/{resource}/copies/{copy}/update",
+    "pathParams": [
+      "resource",
+      "copy"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "resources_take_update": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/resources/{resource}/copies/{copy}/update",
+    "pathParams": [
+      "resource",
+      "copy"
     ],
     "query": [],
     "stream": false

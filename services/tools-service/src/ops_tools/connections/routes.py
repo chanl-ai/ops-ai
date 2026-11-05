@@ -21,11 +21,10 @@ from .schemas import (
     AccountTestIn,
     ConnectionKinds,
     ConnectLinkIn,
-    CredentialCheck,
-    CredentialCheckIn,
     MyAccount,
     PersonCredentialsIn,
     SignInCompleteIn,
+    SignInFinished,
     SignInIn,
     SignInStart,
 )
@@ -72,24 +71,23 @@ def accounts_router(service: ConnectionService, directory: Directory) -> APIRout
         """Where to send the person's browser; it returns to the console's sign-in page with a code and state."""
         return ok(await service.start_sign_in(who, await _of(who, app_id, account_id), body.account))
 
-    @r.post(f"{ACCOUNT}/sign-in/complete", response_model=Envelope[AccountDetail])
-    async def complete_sign_in(  # pyright: ignore[reportUnusedFunction]
-        app_id: str, account_id: str, body: SignInCompleteIn, who: Annotated[Caller, Depends(caller)]
-    ) -> JSONResponse:
-        """The console hands back the code and state; only the person who started may finish, once."""
-        account = await _of(who, app_id, account_id)
-        return ok(await service.complete_sign_in(who, account, body.state, body.code))
+    @r.post("/v1/sign-ins/complete", response_model=Envelope[SignInFinished])
+    async def finish_sign_in(body: SignInCompleteIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The return page hands back what the system sent: the state with the code, or with the error it refused
+        the sign-in with. The state alone names the account, so any window of the person who started finishes it,
+        once. A refusal, there or at the token exchange, answers 422 sign_in_refused with details {message, who,
+        providerCode, appId, app} and marks the account refused."""
+        finished = await service.finish(
+            who, body.state, code=body.code, error=body.error, description=body.error_description
+        )
+        return ok(SignInFinished(**finished).model_dump(by_alias=True))
 
-    @r.post(f"{ACCOUNT}/test-credential", response_model=Envelope[SignInStart | CredentialCheck])
-    async def check_credential(  # pyright: ignore[reportUnusedFunction]
-        app_id: str, account_id: str, body: CredentialCheckIn, who: Annotated[Caller, Depends(caller)]
-    ) -> JSONResponse:
-        """An admin's Test with my account of the app credential: signs in through the account's app (the team's own
-        or Ops AI's) and answers whether it worked and as whom, keeping no token. Only an admin, as only an admin
-        sets app credentials."""
+    @r.post(f"{ACCOUNT}/test-credential", response_model=Envelope[SignInStart])
+    async def check_credential(app_id: str, account_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """An admin's Test with my account of the app credential: starts a sign-in through the account's app (the
+        team's own or Ops AI's) that keeps no token; the return page finishes it on /v1/sign-ins/complete. Only an
+        admin, as only an admin sets app credentials."""
         account = await _of(who, app_id, account_id)
-        if body.state is not None and body.code is not None:
-            return ok(await service.check_credential(who, account, body.state, body.code))
         return ok(await service.start_sign_in(who, account, "team", check=True))
 
     @r.post(f"{ACCOUNT}/test", response_model=Envelope[AccountDetail])

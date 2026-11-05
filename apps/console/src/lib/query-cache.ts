@@ -9,8 +9,9 @@
  *
  * Only data a screen reads for the current team is saved (its key ends with that `{ team }`). Never saved: the
  * session's own reads (who the person is, their permissions and teams, the sign-in policy), since a stale permission
- * would enable Approve or Run; Human Tasks, which a person decides and must see as they are now; a run that has not
- * finished; and a file preview's signed link, which expires.
+ * would enable Approve or Run; Human Tasks, which a person decides and must see as they are now; an app's resources,
+ * whose Add and Remove follow what the team holds now, which another person or the API may have changed; a run that
+ * has not finished; and a file preview's signed link, which expires.
  *
  * Kept free of `@/` imports so `node --test` can load it.
  */
@@ -25,7 +26,7 @@ export const MAX_AGE_MS = 24 * 60 * 60_000;
 const SAVE_AFTER_MS = 1_000;
 
 const SESSION_ROOTS = new Set(['me', 'teams', 'sign-in-policy', 'sign-in-options', 'demo-people']);
-const NEVER_ROOTS = new Set(['reviews']);
+const NEVER_ROOTS = new Set(['reviews', 'app-resources']);
 /** Keys of one run: saved only once the run has finished. */
 const SINGLE_RUN: QueryKey[] = [['cases', 'run'], ['cases', 'run-state'], ['engine', 'run'], ['eval-run'], ['knowledge', 'run']];
 const FINISHED = new Set(['succeeded', 'failed', 'cancelled', 'completed']);

@@ -147,6 +147,14 @@ PROCESSES: tuple[Process, ...] = (
         "It delivers every team's tool events, each as its own team.",
     ),
     Process(
+        "sign_in_keepalive",
+        "tools",
+        "Sign-in keep-alive",
+        "Refreshes every account sign-in unused for 20 days, so a system that ends idle sign-ins keeps them.",
+        86400.0,
+        "Any team's sign-ins can go unused; each team's are refreshed in that team.",
+    ),
+    Process(
         "document_reading",
         "documents",
         "Document reading",

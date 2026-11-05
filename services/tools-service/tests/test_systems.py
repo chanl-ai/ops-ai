@@ -134,7 +134,7 @@ async def test_a_plugins_card_says_how_it_signs_in_and_which_settings_a_team_typ
     cards = await systems(client, tenant)
     plugin = next(c for c in cards if c["kind"] == "plugin")["plugin"]
     assert plugin["kinds"] == ["oauth2_auth_code"] and plugin["signIn"] == ["team"], plugin
-    assert plugin["scopes"] == ["Read and change records"]
+    assert plugin["scopes"] == [{"id": "api", "label": "Read and change records", "required": True}]
     typed = [(s["name"], s["perAccount"]) for s in plugin["settings"]]
     assert typed == [("api_version", False)], plugin["settings"]
     assert plugin["settings"][0]["default"] == "1"
@@ -223,7 +223,7 @@ async def _app(client: httpx.AsyncClient, tenant: str) -> tuple[dict[str, Any], 
     """The plugin's card in the grid and the default account on its page."""
     card = next(c for c in await systems(client, tenant) if c["id"] == f"plugin:{ID}")
     page = (await client.get(f"/v1/apps/plugin:{ID}", headers=admin(tenant))).json()["data"]
-    return card, page["accounts"][0]
+    return card, next(a for c in page["authConfigs"] for a in c["accounts"] if a["default"])
 
 
 def _token(**extra: Any) -> dict[str, Any]:

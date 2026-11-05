@@ -18,11 +18,11 @@ export default function CredentialsPage() {
   const pathname = usePathname();
   const tab = params.get('tab') === 'secrets' ? 'secrets' : 'apps';
   return (
-    <PageLayout icon={KeyRound} title="Credentials" description="The OAuth apps your apps sign in with, and the secret values tools use.">
+    <PageLayout icon={KeyRound} title="Auth configs" description="How your apps sign in, and the secret values tools use.">
       <Tabs value={tab} onValueChange={(v) => router.replace(v === 'secrets' ? `${pathname}?tab=secrets` : pathname, { scroll: false })}>
         <TabsList>
           <TabsTrigger value="apps" data-testid="credentials-tab-apps">
-            App credentials
+            Auth configs
           </TabsTrigger>
           <TabsTrigger value="secrets" data-testid="credentials-tab-secrets">
             Secrets

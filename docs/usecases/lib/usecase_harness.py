@@ -437,9 +437,9 @@ def documents(
         env["OPS_MODELS_KEY"] = "mk_dev_extract"
     if platform_url:
         env["OPS_PLATFORM_URL"] = platform_url
-    if agents_url:
-        # Its service events (extraction.corrected) are delivered there.
-        env["OPS_AGENTS_URL"] = agents_url
+    # Its service events (extraction.corrected) are delivered there, and a type's delete asks it which workflows read
+    # the type: this run's agents-service, never the shared stack's.
+    env["OPS_AGENTS_URL"] = agents_url or f"http://127.0.0.1:{AGENTS_PORT}"
     # `env` adds OPS_* values a use case needs, e.g. platform sign-in (OPS_AUTH_MODE) beside agents and tools.
     env.update(extra)
     svc = ROOT / "services" / "documents-service"
@@ -513,6 +513,11 @@ def tools(settings: dict[str, str] | None = None) -> Generator[httpx.Client]:
     env["OPS_GATEWAY_PORT"] = str(TOOLS_PORT)
     # A tool module review opens in agents-service's Reviews; a stack that publishes modules runs agents too.
     env.setdefault("OPS_AGENTS_URL", f"http://127.0.0.1:{AGENTS_PORT}")
+    # An app's resources join the copies documents-service keeps, on this run's port when the run names one.
+    if DOCUMENTS_PORT:
+        env.setdefault("OPS_DOCUMENTS_URL", f"http://127.0.0.1:{DOCUMENTS_PORT}")
+    # and the knowledge sources the team made from a plugin, from this run's kb-service.
+    env.setdefault("OPS_KB_URL", f"http://127.0.0.1:{KB_PORT}")
     # send_reply sends through the provider settings pick and fails with none: the dev fake writes each mail
     # to a folder of this run's.
     env.setdefault("OPS_MAIL_PROVIDER", "fake")

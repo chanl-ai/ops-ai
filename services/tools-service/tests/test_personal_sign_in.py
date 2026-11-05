@@ -344,9 +344,7 @@ async def sign_in(
     started = await client.post(f"/v1/apps/{conn}/accounts/{conn}/sign-in", json={}, headers=headers)
     assert started.status_code == 200, started.text
     state = parse_qs(urlsplit(str(started.json()["data"]["authorizeUrl"])).query)["state"][0]
-    done = await client.post(
-        f"/v1/apps/{conn}/accounts/{conn}/sign-in/complete", json={"state": state, "code": code}, headers=headers
-    )
+    done = await client.post("/v1/sign-ins/complete", json={"state": state, "code": code}, headers=headers)
     assert done.status_code == 200, done.text
 
 

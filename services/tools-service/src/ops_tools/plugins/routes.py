@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 from ops_plugin_sdk import Plugin
+from ops_plugin_sdk.manifest import Setting
 from ops_plugin_sdk.versions import declarations, diff, digest, tools_of
 from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import Envelope, ok
@@ -30,7 +31,7 @@ from ..modules.routes import ERRORS
 from ..modules.service import Caller
 from ..modules.tool_users import ToolUsers
 from ..store.connections import PLUGIN_APP
-from .host import PluginHost, fixed_fields, per_account, readable, render, sign_in_fixed
+from .host import PluginHost, fixed_fields, offered, per_account, readable, render, sign_in_fixed
 
 # The OAuth app's own fields: an app credential's, made under Credentials, never typed into an account.
 CLIENT_FIELDS = ("clientId", "clientSecret")
@@ -139,6 +140,16 @@ def _split(plugin: Plugin, given: dict[str, Any]) -> tuple[dict[str, Any], dict[
     return {k: v for k, v in given.items() if k not in own}, {k: v for k, v in given.items() if k in own}
 
 
+def _not_offered(title: str, setting: Setting, value: Any) -> str:
+    """The plain refusal of a value outside a setting's choices: what was given, and what may be."""
+    places = [c.label for c in setting.choices or []]
+    other = setting.other
+    if other is not None:
+        places.append(f"{other.label.lower()} ending in {' or '.join(other.hosts)}")
+    said = places[0] if len(places) == 1 else f"{', '.join(places[:-1])} or {places[-1]}"
+    return f"{title} cannot use {value} there. Choose {said}."
+
+
 class PluginAccounts:
     """A plugin's app for one team: turning it on, its accounts, and the sign-in settings each account takes from the
     plugin's connection definition."""
@@ -173,7 +184,7 @@ class PluginAccounts:
     def _checked_settings(self, plugin: Plugin, given: dict[str, Any]) -> None:
         m = plugin.manifest
         locked = self.host.locked_settings(m.id)
-        for k in given:
+        for k, value in given.items():
             setting = m.settings.get(k)
             if setting is None:
                 raise ValidationFailed(f"{k} is not a setting of {m.title}.", details={"field": k})
@@ -181,6 +192,11 @@ class PluginAccounts:
                 raise ValidationFailed(f"{k} is set by the platform admin for every team.", code="setting_locked")
             if setting.at_sign_in:
                 raise ValidationFailed(f"{k} is read from the sign-in, not typed.", code="setting_from_token")
+            # An empty value unsets it, so the plugin's default (one of its choices) applies.
+            if value not in (None, "") and not offered(setting, value):
+                raise ValidationFailed(
+                    _not_offered(m.title, setting, value), code="setting_not_offered", details={"field": k}
+                )
 
     async def switch(self, who: Caller, app_id: str, body: TeamPluginIn) -> None:
         """Turns the plugin on or off for the team and saves the team's settings: a team admin's alone. The first
@@ -216,16 +232,35 @@ class PluginAccounts:
             # A team turning a plugin on takes the installed version; a later upgrade waits for its review.
             await self.host.take_installed(who.tenant_id, who.team.id, plugin)
 
+    async def make_team_default(self, who: Caller, app_id: str, account_id: str) -> None:
+        """Makes one of the team's live accounts of a plugin's app the one calls naming no account use: a team admin's
+        alone. A sandbox only test runs use, so it is refused."""
+        self.manages(who)
+        m = self.plugin(app_id).manifest
+        before = await self.host.bindings.get(who.tenant_id, who.team.id, m.id)
+        account = await self.connections.store.get(who.tenant_id, account_id)
+        if before is None or account is None or account["app_id"] != app_id or account["team_id"] != who.team.id:
+            raise NotFound(f"Account {account_id}")
+        if account.get("sandbox"):
+            raise ValidationFailed(
+                "A sandbox account is used by test runs only, so it cannot be the default.", code="sandbox_default"
+            )
+        await self.host.bindings.put(
+            who.tenant_id,
+            who.team.id,
+            m.id,
+            enabled=bool(before.get("enabled")),
+            connection_id=account_id,
+            settings=dict(before.get("settings") or {}),
+            by=who.name,
+        )
+
     async def add_account(self, who: Caller, app_id: str, body: AccountIn) -> str:
-        """Another account of a plugin's app the team has connected: a sandbox (always), or a second org of the same
-        system with several_accounts on, made with the first's contract. The first stays the default."""
+        """Another account of a plugin's app the team has connected, a test account or another live one (a second org
+        of the same system), made with the first's contract. The first stays the default."""
         self.manages(who)
         plugin = self.plugin(app_id)
         m = plugin.manifest
-        if not body.sandbox and not self.host.accounts:
-            raise ValidationFailed(
-                "This install keeps one live account per app; add a sandbox account instead.", code="one_account"
-            )
         b = await self.host.bindings.get(who.tenant_id, who.team.id, m.id)
         if b is None or not b["enabled"] or not b.get("connection_id"):
             raise ValidationFailed(f"Connect {m.title} first; another account comes after it.", code="no_first_account")
@@ -380,9 +415,15 @@ class PluginAccounts:
                 details={"field": "kind"},
             )
         plain, secret = self._credentials(plugin, kind, body.credentials)
-        # The account's own settings, those given over those it holds.
+        held = (conn or {}).get("credential_id") if not (conn or {}).get("platform_app") else None
+        chosen = body.credential_id if "credential_id" in body.model_fields_set else held
+        cred = await self.connections.store.credential(who.tenant_id, chosen) if chosen and kind.holds_token else None
+        # The account's own settings, those given over those it holds. On a team's app credential, the settings that
+        # belong to the app's registration are the credential's, read from it, and never copied onto the account.
         mine = {**dict((conn or {}).get("plugin_settings") or {}), **own}
-        merged = self.host.settings(plugin, settings, mine)
+        if cred is not None:
+            mine = {k: v for k, v in mine.items() if k not in c.credential_settings}
+        merged = self.host.settings(plugin, settings, {**mine, **dict(cred.get("settings") or {})} if cred else mine)
         before = cast(dict[str, Any], (conn or {}).get("settings") or {})
         keys: dict[str, Any] = dict(before)
         endpoint = render(m.endpoint, merged)
@@ -391,10 +432,7 @@ class PluginAccounts:
         # The OAuth client is the account's credential (credential_id) or Ops AI's app (platform_app), never a setting.
         keys.pop("clientId", None)
         if kind.holds_token:
-            # A later turn-on that names no credential keeps the one the account has; else Ops AI's app.
-            held = (conn or {}).get("credential_id") if not (conn or {}).get("platform_app") else None
-            chosen = body.credential_id if "credential_id" in body.model_fields_set else held
-            cred = await self.connections.store.credential(who.tenant_id, chosen) if chosen else None
+            # A later turn-on that names no credential keeps the one the account has (`held`); else Ops AI's app.
             if chosen and (cred is None or cred["team_id"] != who.team.id or cred["app_id"] != f"{PLUGIN_APP}{m.id}"):
                 raise ValidationFailed(
                     f"Pick one of the team's app credentials for {m.title}.",
@@ -453,6 +491,23 @@ class PluginAccounts:
             {"revision": int(conn["revision"]) if conn else 1, "settings": keys, "secret_values": secret, **client},
             plugin_settings=mine,
         )
+
+    async def move_to_credential(
+        self, who: Caller, plugin: Plugin, connection_id: str, credential_id: str | None
+    ) -> None:
+        """Puts a plugin account on another of the team's app credentials, or with none on Ops AI's app, its sign-in
+        addresses written again from that credential's settings."""
+        b = await self.host.bindings.get(who.tenant_id, who.team.id, plugin.manifest.id) or {}
+        settings = self._team_settings(plugin, dict(b.get("settings") or {}), {})
+        body = TeamPluginIn(enabled=True, credential_id=credential_id)
+        await self.keys(who, plugin, connection_id, settings, body, own={})
+
+    async def rewrite_addresses(self, who: Caller, plugin: Plugin, connection_id: str) -> None:
+        """Writes a plugin account's sign-in addresses again from its settings as they now are (its app credential's
+        changed), keeping its kind, its credential and every setting it holds."""
+        b = await self.host.bindings.get(who.tenant_id, who.team.id, plugin.manifest.id) or {}
+        settings = self._team_settings(plugin, dict(b.get("settings") or {}), {})
+        await self.keys(who, plugin, connection_id, settings, TeamPluginIn(enabled=True), own={})
 
     def team_values(self, plugin: Plugin, b: dict[str, Any], own: dict[str, Any]) -> dict[str, Any]:
         """The team's settings of the plugin as a person may read them: a secret field never, even as its reference."""

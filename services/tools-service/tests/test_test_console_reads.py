@@ -90,8 +90,10 @@ async def test_a_sandbox_read_that_fails_reports_the_side_and_status(g: Gateway)
     assert (out["stubbed"], error["code"], error["side"], out["status"]) == (False, "RATE_LIMITED", "upstream", 429)
 
 
-async def _as_owner(g: Gateway, base: str, args: dict[str, Any], **headers: str) -> Any:
-    body = {"operation": g.tool(base), "contextId": "owner", "target": "sandbox", "input": args}
+async def _as_owner(g: Gateway, base: str, args: dict[str, Any], environment: str = "test", **headers: str) -> Any:
+    body = {
+        "operation": g.tool(base), "contextId": "owner", "target": "sandbox", "input": args, "environment": environment
+    }  # fmt: skip
     return await g.client.post(f"{BASE}/test", json=body, headers={**TEAM, **headers})
 
 
@@ -106,14 +108,15 @@ async def test_the_owner_reads_for_real_without_any_workflow_approval(g: Gateway
 
 async def test_a_real_write_runs_for_an_approver_and_is_logged_from_the_console(g: Gateway) -> None:
     """Real is a gateway call. The module holds place_hold for approval, and the dev caller, who passes every
-    role rule, holds the approver role (reviews.decide), so it is not asked: the write runs, and the log names it as
-    the write's approver under the console channel and the test environment."""
-    r = await _as_owner(g, "place_hold", {"accountId": "CHQ-2219", "hours": 24})
+    role rule, holds the approver role (reviews.decide), so a live run of it is not asked: the write runs, and the log
+    names it as the write's approver under the console channel and the live environment. A test run of the same write
+    on this live account waits for a person instead (test_test_run_writes)."""
+    r = await _as_owner(g, "place_hold", {"accountId": "CHQ-2219", "hours": 24}, "production")
     out = r.json()["data"]
     assert (out["decision"], out["stubbed"]) == ("allow", False), out
     assert [x["path"] for x in g.received] == ["/v1/holds"], "the system was called"
     rows = (await g.client.get("/v1/executions", params={"tool": g.tool("place_hold")})).json()["data"]["data"]
-    assert [(x["channel"], x["environment"], x["decision"]) for x in rows] == [("console", "test", "allow")], rows
+    assert [(x["channel"], x["environment"], x["decision"]) for x in rows] == [("console", "production", "allow")], rows
     assert rows[0]["approval"].get("by"), rows[0]["approval"]
 
 
@@ -140,6 +143,7 @@ async def test_the_panels_default_context_is_the_owner_even_with_a_workflow_wait
         "contextId": first["id"],
         "target": "sandbox",
         "input": {"accountId": "CHQ-2219", "hours": 24},
+        "environment": "production",
     }
     out = (await g.client.post(f"{BASE}/test", json=body, headers=TEAM)).json()["data"]
     # Decided as the owner's try, never refused as the waiting workflow's no_approval.

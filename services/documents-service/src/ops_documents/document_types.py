@@ -262,6 +262,12 @@ class DocumentTypes:
         assert found is not None
         return _version_view(found)
 
+    async def delete(self, who: Who, type_id: str) -> bool:
+        """Deletes the team's type. Whoever keeps the team's document types (documents.edit) removes one too, so a
+        member who may add a type may take it away again."""
+        self._may_write(who)
+        return await self.store.delete(who.team, type_id)
+
     async def get_version(self, who: Who, type_id: str, version: int) -> dict[str, Any] | None:
         if await self._own(who, type_id) is None:
             return None

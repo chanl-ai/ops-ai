@@ -103,6 +103,8 @@ ENTRIES: dict[str, set[str]] = {
         "services/tools-service/src/ops_tools/secrets/routes.py",
         # The start-up move of sign-in header keys acts on each module in the module's own team.
         "services/tools-service/src/ops_tools/header_keys.py",
+        # The sign-in keep-alive refreshes each team's sign-ins in that team's own scope.
+        "services/tools-service/src/ops_tools/connections/keepalive.py",
         # A model call reads its tenant's provider key, or the deployment's when it names none.
         "services/models-service/src/ops_models/provider_keys.py",
         # A per-tenant model key's call spends from the share of the tenant it names (X-Tenant-Id).

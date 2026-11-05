@@ -152,7 +152,7 @@ def connect(gw: httpx.Client, sf: dict[str, Any], who: dict[str, str], link: str
         return opened
     back = sf["sign_in"](data(opened)["authorizeUrl"], account)
     return gw.post(
-        f"/v1/apps/{data(opened)['connectionId']}/accounts/{data(opened)['connectionId']}/sign-in/complete",
+        "/v1/sign-ins/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=who,
     )
@@ -163,7 +163,7 @@ def own_sign_in(gw: httpx.Client, sf: dict[str, Any], who: dict[str, str], conne
     started = gw.post(f"/v1/apps/{connection_id}/accounts/{connection_id}/sign-in", json={}, headers=who)
     back = sf["sign_in"]((data(started) or {}).get("authorizeUrl", ""), account) if started.status_code == 200 else {}
     done = gw.post(
-        f"/v1/apps/{connection_id}/accounts/{connection_id}/sign-in/complete",
+        "/v1/sign-ins/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=who,
     )
@@ -421,7 +421,7 @@ with ExitStack() as stack:
         else {}
     )
     gw.post(
-        f"/v1/apps/{conn.get('id')}/accounts/{conn.get('id')}/sign-in/complete",
+        "/v1/sign-ins/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=priya,
     )

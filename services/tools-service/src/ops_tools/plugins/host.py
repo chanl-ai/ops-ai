@@ -20,7 +20,7 @@ import httpx
 
 from ops_plugin_sdk import Manifest, Plugin
 from ops_plugin_sdk.loader import Loaded, discover
-from ops_plugin_sdk.manifest import AfterSignIn, InputField, Tool
+from ops_plugin_sdk.manifest import AfterSignIn, InputField, Other, Setting, SignInError, Tool
 from ops_plugin_sdk.paging import at
 from ops_plugin_sdk.paging import headers as request_headers
 from ops_plugin_sdk.versions import declarations, digest, tools_of
@@ -46,6 +46,9 @@ UNSENDABLE = re.compile(r"\{\{|[\r\n]")
 # endpoint's path), so it may hold nothing that adds a path segment or a query.
 PLAIN_VALUE = re.compile(r"^[A-Za-z0-9._:-]+$")
 LOOKUP_TIMEOUT_S = 10.0
+# A host a person types in place of a choice: lower-case labels of letters, digits and inner hyphens, two or more, so
+# no port, path, user or second address rides in with it.
+HOSTNAME = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 
 
 class SignInRefused(ValueError):
@@ -71,6 +74,37 @@ def settle_at_sign_in(held: Mapping[str, Any], read: Mapping[str, Any], *, own: 
                 "another_site",
             )
     return dict(read)
+
+
+def typed_host(other: Other, value: object) -> str | None:
+    """The host a value was made from by `other.value` (`https://{host}/services/oauth2`), when it ends in one of
+    `other.hosts` with a label of its own before the suffix; None for any other value."""
+    if not isinstance(value, str):
+        return None
+    before, _, after = other.value.partition("{host}")
+    if len(value) <= len(before) + len(after) or not (value.startswith(before) and value.endswith(after)):
+        return None
+    host = value[len(before) : len(value) - len(after)].lower()
+    if not HOSTNAME.match(host):
+        return None
+    return host if any(host.endswith(s.lower()) and len(host) > len(s) for s in other.hosts) else None
+
+
+def offered(setting: Setting, value: object) -> bool:
+    """Whether a team's value is one the setting offers: one of its choices, or a host typed for its `other`. A setting
+    that declares neither takes any value."""
+    if not setting.choices and setting.other is None:
+        return True
+    same = [
+        c for c in setting.choices or [] if c.value == value and isinstance(c.value, bool) == isinstance(value, bool)
+    ]
+    return bool(same) or (setting.other is not None and typed_host(setting.other, value) is not None)
+
+
+def own_and_registration(conn: Mapping[str, Any] | None) -> dict[str, Any]:
+    """An account's own plugin settings with its app credential's over them (store.connections joins those in as
+    `credential_settings`): what PluginHost.settings takes as the account's layer."""
+    return {**dict((conn or {}).get("plugin_settings") or {}), **dict((conn or {}).get("credential_settings") or {})}
 
 
 def readable(manifest: Manifest, settings: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, bool]]:
@@ -297,8 +331,6 @@ class PluginHost:
     # The plugin_updates flag: each team runs the plugin version it took. Off, the row is written once and
     # every call reads the installed manifest, as before.
     versions: bool = False
-    # The several_accounts flag: a team keeps several named accounts of one app, and a call may name one.
-    accounts: bool = False
     _written: set[str] = field(default_factory=set[str])
 
     @classmethod
@@ -313,7 +345,6 @@ class PluginHost:
         http: httpx.AsyncClient | None = None,
         policy: EgressPolicy | None = None,
         versions: bool = False,
-        accounts: bool = False,
     ) -> PluginHost:
         """Reads every installed plugin once, at start, and the developer's plugin folders; a failed one is left out and
         logged with why, where the install's admin reads it."""
@@ -330,7 +361,6 @@ class PluginHost:
             http=http,
             policy=policy,
             versions=versions,
-            accounts=accounts,
         )
 
     @classmethod
@@ -358,7 +388,6 @@ class PluginHost:
             http=http,
             policy=policy,
             versions=flags.on("plugin_updates"),
-            accounts=flags.on("several_accounts"),
         )
 
     @property
@@ -457,11 +486,12 @@ class PluginHost:
         return tools.get(name) if tools is not None else plugin.manifest.tool(name)
 
     async def own_settings(self, tenant_id: str, connection_id: str | None) -> dict[str, Any]:
-        """The account's own plugin settings: its sign-in address, the instance its token named."""
+        """The account's own plugin settings (its sign-in address, the instance its token named) and the settings of
+        the app credential it signs in with (its registration's), the credential's winning."""
         if self.connections is None or not connection_id:
             return {}
         conn = await self.connections.get(tenant_id, connection_id)
-        return dict((conn or {}).get("plugin_settings") or {})
+        return own_and_registration(conn)
 
     def settings(
         self, plugin: Plugin, team_settings: Mapping[str, Any], own_values: Mapping[str, Any] | None = None
@@ -474,7 +504,9 @@ class PluginHost:
         own = per_account(m)
         merged: dict[str, Any] = {k: s.default for k, s in m.settings.items() if s.default is not None}
         merged |= {k: v for k, v in team_settings.items() if k in m.settings and k not in own}
-        merged |= {k: v for k, v in (own_values or {}).items() if k in own}
+        # The account's own, and the registration's its app credential holds (own_and_registration).
+        mine = own | set(m.connection.credential_settings)
+        merged |= {k: v for k, v in (own_values or {}).items() if k in mine}
         merged |= self.locked_settings(m.id)
         return merged
 
@@ -488,6 +520,15 @@ class PluginHost:
         own = await self.own_settings(tenant_id, connection_id)
         plain, secrets = readable(plugin.manifest, self.settings(plugin, dict(b.get("settings") or {}), own))
         return {"pluginSettings": plain, "pluginSecrets": secrets}
+
+    async def sign_in_error(
+        self, tenant_id: str, connection_id: str, error: str, description: str | None
+    ) -> SignInError | None:
+        """What the plugin serving an account says of a refused sign-in: its first sign_in_errors entry for the code
+        and description; None for an account no plugin serves, or a code the plugin does not name."""
+        b = await self.binding_of(tenant_id, connection_id)
+        plugin = self.plugins.get(str(b["plugin_id"])) if b else None
+        return plugin.manifest.connection.sign_in_error(error, description) if plugin else None
 
     async def connection_hosts(self, tenant_id: str, connection_id: str) -> list[str]:
         """The hosts the plugin serving an account declares, rendered with the account's settings: what its sign-in,
@@ -591,17 +632,13 @@ class PluginHost:
         if account:
             # A call naming an account uses that account of the team's, never another team's; an unknown name
             # is refused rather than falling back to the default, so a step never acts in the wrong org.
-            named = await self.account_named(tenant_id, team_id, plugin, account) if self.accounts else None
+            named = await self.account_named(tenant_id, team_id, plugin, account)
             if named is None:
-                why = (
-                    f"{plugin.manifest.title} has no account named {account} in this team."
-                    if self.accounts
-                    else "This install keeps one account per app; a call cannot name one."
-                )
+                why = f"{plugin.manifest.title} has no account named {account} in this team."
                 return {**module, "account_missing": why, "connection_id": None, "egress_hosts": []}
             b = {**b, "connection_id": named["id"]}
         else:
-            if person and self.accounts:
+            if person:
                 # A call naming no account, for a person signed in to several: the one they pinned, else their
                 # newest live sign-in; with none of their own, the team's default.
                 chosen = await self.person_default(tenant_id, team_id, plugin, person)
@@ -628,7 +665,7 @@ class PluginHost:
             else None
         )
         module = {**module, "sandbox": bool((conn or {}).get("sandbox"))}
-        own = dict((conn or {}).get("plugin_settings") or {})
+        own = own_and_registration(conn)
         settings = self.settings(plugin, dict(b.get("settings") or {}), own)
         endpoint = render(plugin.manifest.endpoint, settings)
         hosts = hosts_of(plugin.manifest, settings)

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-04",
+  "title": "A refused sign-in says why and who acts",
+  "description": "When an app refuses a sign-in, Connect says in one sentence what went wrong and whether you or an admin fixes it, with the app's own code under Details, and the account reads as refused.",
+  "tag": "improved"
+}

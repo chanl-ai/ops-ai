@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-04",
+  "title": "Unused sign-ins stay signed in",
+  "description": "Every app sign-in is refreshed once it has gone 20 days unused, so an app that ends idle sign-ins after 30 days, such as Salesforce, keeps yours. One the app has ended shows Reconnect.",
+  "tag": "improved"
+}

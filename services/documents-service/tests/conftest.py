@@ -141,7 +141,11 @@ Make = Callable[..., Service]
 @pytest.fixture
 def make(engine: AsyncEngine, tenant: str) -> Make:
     def build(
-        models: Models | None = None, floors: Floors | None = None, prices: Prices | None = None, role: str = "builder"
+        models: Models | None = None,
+        floors: Floors | None = None,
+        prices: Prices | None = None,
+        role: str = "builder",
+        type_uses: Any = None,
     ) -> Service:
         fake = FakeFilesService()
         files = Files(fake.client(service="documents", scopes=["files:view", "files:edit"]))
@@ -150,7 +154,9 @@ def make(engine: AsyncEngine, tenant: str) -> Make:
         types = DocumentTypes(DocumentTypesStore(engine), files, extractor, prices)
         extractor.types = types
         auth = Auth.for_dev(Settings(), audience="documents", name="james", email="j@x", tenant_id=tenant)
-        app = create_documents_app(engine=engine, extractor=extractor, document_types=types, auth=auth, layouts=layouts)
+        app = create_documents_app(
+            engine=engine, extractor=extractor, document_types=types, auth=auth, layouts=layouts, type_uses=type_uses
+        )
         sign_in(app, tenant, role)
         hooks: dict[str, Any] = {"response": [response_checker(app)]}
         client = httpx.AsyncClient(

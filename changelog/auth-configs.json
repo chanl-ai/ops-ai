@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Auth configs on an app's page",
+  "description": "An app's page lists how it signs in, Ops AI's own app or one your team made, with each account under it: whose sign-in it is, one state, and what you can do to it.",
+  "tag": "improved"
+}

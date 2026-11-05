@@ -141,6 +141,14 @@ class NamedRef(Out):
     name: str
 
 
+class PluginSource(Out):
+    # A source the team made from a plugin's knowledge source, for the app's resource list.
+    id: str
+    name: str
+    source: str
+    kb_ids: list[str]
+
+
 class SourceRow(Source):
     used_by: list[NamedRef]
     running: bool

@@ -98,7 +98,7 @@ def sign_in(
     started = gw.post(f"{path}/sign-in", json={"account": account}, headers=who)
     back = browser((data(started) or {}).get("authorizeUrl", ""), user) if started.status_code == 200 else {}
     done = gw.post(
-        f"{path}/sign-in/complete",
+        "/v1/sign-ins/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=who,
     )
@@ -291,7 +291,8 @@ with ExitStack() as stack:
     for h in sf["hosts"]:
         gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-584"}, headers=sam)
     gw.post("/v1/egress/ranges", json={"value": sf["range"], "note": "uc-584"}, headers=sam)
-    login = sf["authorize_url"].rsplit("/", 1)[0]
+    # The org's company address, one of the places the Salesforce plugin signs in.
+    login = sf["login_url"]
     team_on = {
         "settings": {"login_url": login},
         "credentialId": credential(gw, priya, "opsai.salesforce", "ops-ai-acme", "s3"),

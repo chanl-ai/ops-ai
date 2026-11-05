@@ -23,7 +23,7 @@ with (
     account = w.turn_on("admin", "test.client", credentialId=wrong)
     failed = w.call("client_get_record", args={"id": "rec-1042"})
     page = data(w.kept(w.gw.get(app_path(APP), headers=w.who["admin"]))) or {}
-    team = next((a for a in page.get("accounts") or [] if a.get("id") == account), {})
+    team = next((a for c in page.get("authConfigs") or [] for a in c["accounts"] if a.get("id") == account), {})
     check(
         "1 the client desk's team account reads refused, with the sign-in server's reason",
         team.get("state") == "refused" and "invalid_client" in str(team.get("stateReason")),
@@ -149,7 +149,7 @@ with (
         else {}
     )
     signed = w.gw.post(
-        f"{backed_path}/sign-in/complete",
+        "/v1/sign-ins/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=w.who["admin"],
     )

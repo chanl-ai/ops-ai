@@ -505,6 +505,7 @@ def create_app(
     mount(workflows.refs_router, "Workflows")
     mount(knowledge_usage_routes.router, "Agents")
     mount(tool_uses_routes.router, "Agents")
+    mount(tool_uses_routes.document_type_router, "Workflows")
     mount(team_usage_routes.router, "Workflows")
     mount(tool_catalog.router, "Agents")
     mount(guardrail_routes.router, "Agents")

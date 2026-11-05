@@ -79,18 +79,18 @@ with ExitStack() as stack:
 
     # 3. Only the person who started finishes it, once.
     finish_body = {"state": back.get("state", ""), "code": back.get("code", "")}
-    stolen = gw.post(f"{path}/sign-in/complete", json=finish_body, headers={"X-Dev-User": "Maya Okafor"})
+    stolen = gw.post("/v1/sign-ins/complete", json=finish_body, headers={"X-Dev-User": "Maya Okafor"})
     check(
         "3 another person cannot finish the sign-in (sign_in_expired)",
         stolen.status_code == 400 and stolen.json()["error"]["code"] == "sign_in_expired",
         stolen.text[:300],
     )
-    done = gw.post(f"{path}/sign-in/complete", json=finish_body)
+    done = gw.post("/v1/sign-ins/complete", json=finish_body)
     signed = (data(done) or {}).get("signedIn") or {}
     check("3 the person who started finishes it (200)", done.status_code == 200, done.text[:300])
     check("3 the account says who signed in", signed.get("account") == "svc-lending@bank.test", signed)
     check("3 no token is shown", "at_" not in done.text and "rt_" not in done.text, "token in the detail")
-    replay = gw.post(f"{path}/sign-in/complete", json=finish_body)
+    replay = gw.post("/v1/sign-ins/complete", json=finish_body)
     check(
         "3 the same state again is refused (sign_in_expired)",
         replay.status_code == 400 and replay.json()["error"]["code"] == "sign_in_expired",

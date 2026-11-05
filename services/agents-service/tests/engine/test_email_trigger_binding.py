@@ -132,7 +132,7 @@ async def test_publishing_without_deployments_create_is_refused(stack: tuple[Asy
     await save(c, email_workflow("levy_editor", "levy@bank.example"), editor())
     r = await publish(c, "levy_editor", editor())
     assert r.status_code == 403, r.text
-    assert "deployments.create" in r.json()["error"]["message"]
+    assert "a Builder or Admin can" in r.json()["error"]["message"]
     # The same role publishes a workflow that is not on a mailbox: the refusal is the binding's, not the publish's.
     plain: dict[str, Any] = email_workflow("plain_editor", "x") | {
         "nodes": [

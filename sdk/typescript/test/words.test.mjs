@@ -97,3 +97,22 @@ test('a sandbox account is added as a sandbox under its app', async () => {
   assert.equal(decodeURIComponent(made.url.pathname), '/api/tools/v1/apps/plugin:desk/accounts');
   assert.deepEqual(made.body, { name: 'Desk sandbox', sandbox: true, credentialId: 'cred_uat' });
 });
+
+test("a copy is removed by the delete of the service that keeps its kind", async () => {
+  const seen = [];
+  const ops = client({}, seen);
+  const made = { copy: { kind: 'document_type', recordId: 'dt_1', source: 'plugin:desk', templateId: 'case-letter' } };
+  await ops.resources.remove(made);
+  assert.deepEqual([seen.at(-1).method, seen.at(-1).url.pathname], ['DELETE', '/api/documents/v1/document-types/dt_1']);
+  await ops.resources.remove({ ...made.copy, kind: 'workflow', recordId: 'case_review_1' });
+  assert.deepEqual([seen.at(-1).method, seen.at(-1).url.pathname], ['DELETE', '/api/agents/v1/workflows/definitions/case_review_1']);
+});
+
+test("the resources list is the app's one list, and an update names the copy", async () => {
+  const seen = [];
+  const ops = client({}, seen);
+  await ops.resources.list('plugin:desk');
+  assert.equal(decodeURIComponent(seen.at(-1).url.pathname), '/api/tools/v1/apps/plugin:desk/resources');
+  await ops.resources.update({ copy: { kind: 'agent', recordId: 'ag_1', source: 'plugin:desk', templateId: 'case-helper' } }, { confirm: true });
+  assert.equal(decodeURIComponent(seen.at(-1).url.pathname), '/api/agents/v1/resources/plugin:desk:case-helper/copies/ag_1/update');
+});

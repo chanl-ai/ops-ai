@@ -116,7 +116,7 @@ def sign_in_own(gw: httpx.Client, m: dict[str, Any], who: dict[str, str], connec
     started = gw.post(f"{account(connection_id)}/sign-in", json={}, headers=who)
     back = m["sign_in"]((data(started) or {}).get("authorizeUrl", ""), user) if started.status_code == 200 else {}
     done = gw.post(
-        f"{account(connection_id)}/sign-in/complete",
+        "/v1/sign-ins/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=who,
     )
@@ -387,7 +387,7 @@ with ExitStack() as stack:
     link_back = m["sign_in"](link_url, "priya.person") if link_url else {}
     kept(
         gw.post(
-            f"{account(person_id)}/sign-in/complete",
+            "/v1/sign-ins/complete",
             json={"state": link_back.get("state", ""), "code": link_back.get("code", "")},
             headers=priya,
         )

@@ -8,6 +8,11 @@ from typing import Any, Literal, NotRequired
 from typing_extensions import TypedDict
 
 
+class AddCell(TypedDict, closed=True):
+    action: str
+    area: str
+
+
 class BackgroundProcessOut(TypedDict, closed=True):
     does: str
     doneHour: int
@@ -273,6 +278,7 @@ class TemplatePlugin(TypedDict, closed=True):
 
 class TemplateRequires(TypedDict, closed=True):
     bind: list[dict[str, str]]
+    resources: NotRequired[list[str]]
     tools: list[str]
 
 
@@ -286,12 +292,17 @@ class TemplateSuggestion(TypedDict, closed=True):
 
 
 class TemplateView(TypedDict, closed=True):
+    addCell: AddCell
+    canAdd: bool
+    copy: NotRequired[CopyRef | None]
     id: str
     installed: Installed
     kind: Literal["document_type"]
     plugin: TemplatePlugin
+    removeCell: NotRequired[AddCell | None]
     requires: TemplateRequires
     source: str
+    state: Literal["available", "added", "update_available", "removed_upstream"]
     title: str
     version: int
 
@@ -317,6 +328,19 @@ class TestRun(TypedDict, closed=True):
     status: Literal["queued", "running", "done", "failed"]
     typeId: str
     version: int
+
+
+class UpdateInput(TypedDict, closed=True):
+    confirm: NotRequired[bool]
+
+
+class UpdateReview(TypedDict, closed=True):
+    changes: list[str]
+    copy: CopyRef
+    edits: list[str]
+    fromVersion: int
+    taken: NotRequired[bool]
+    toVersion: int
 
 
 class BackgroundHealthOut(TypedDict, closed=True):
@@ -378,6 +402,11 @@ class EnvelopeTestEstimate(TypedDict, closed=True):
 
 class EnvelopeTestRun(TypedDict, closed=True):
     data: TestRun
+    success: Literal[True]
+
+
+class EnvelopeUpdateReview(TypedDict, closed=True):
+    data: UpdateReview
     success: Literal[True]
 
 
