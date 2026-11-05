@@ -169,7 +169,7 @@ export function ToolCallsView({ fixed, run, q, totals = true, emptyText }: { fix
             // Whom each call ran as and how it ended always show, as the log's frame draws them (Tool, App, As, Status, When).
             initialColumnVisibility={{ gateway: false, workflowId: false, runId: false, record: false, cost: false, run: false, as: true, status: true }}
             filters={[
-              { column: 'gateway', title: 'Gateway', options: withCounts('gateway', options(GATEWAY_LABEL)) },
+              { column: 'gateway', title: 'Kind', options: withCounts('gateway', options(GATEWAY_LABEL)) },
               { column: 'workflowId', title: 'Workflow', options: withCounts('workflowId', workflowOptions) },
               { column: 'operation', title: 'Operation', options: withCounts('operation', options(OPERATION_LABEL)) },
               { column: 'approval', title: 'Approval', options: withCounts('approval', options(APPROVAL_LABEL)) },

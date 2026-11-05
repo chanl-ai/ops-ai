@@ -12,7 +12,7 @@ export default function ToolCallsPage() {
   const q = search.get('q');
   const run = search.get('run');
   return (
-    <PageLayout switcher icon={ScrollText} title="Tool calls" description={run ? `Every gateway call behind run ${run}, with its approval and policy` : 'Every tool and model call through the data and AI gateways, with its approval and policy'}>
+    <PageLayout switcher icon={ScrollText} title="Tool calls" description={run ? `Every call behind run ${run}, with its approval and policy` : 'Every tool and model call, with its approval and policy'}>
       <div className="flex flex-col gap-4">
         <ToolsTabs />
         <ToolCallsView run={run} q={q} />
