@@ -71,6 +71,8 @@ OWN = "own"
 # tenant, account, the token answer, and whether it is a person's own sign-in, which may not change what the
 # team's sign-in set -> account settings to add, or None. A ValueError with a `code` names why for the event.
 OnToken = Callable[[str, str, dict[str, Any], bool], Awaitable[dict[str, Any] | None]]
+# tenant, account, who signed in -> after a finished sign-in: the account's app is turned on for its team.
+OnSignedIn = Callable[[str, str, str], Awaitable[None]]
 # tenant, account -> the plugin's settings on it as a person may read them.
 PluginSettings = Callable[[str, str], Awaitable[dict[str, Any]]]
 # tenant, account, the system's error code and description -> what the plugin behind the account says of that refusal,
@@ -166,6 +168,7 @@ class ConnectionService:
         on_token: OnToken | None = None,
         plugin_settings: PluginSettings | None = None,
         sign_in_errors: SignInErrors | None = None,
+        on_signed_in: OnSignedIn | None = None,
     ) -> None:
         """`console_url` is where a sign-in returns (`SIGN_IN_RETURN_PATH` on it); without it no sign-in starts.
         `discovery` finds an MCP server's sign-in; without it no MCP connection is made from an address.
@@ -186,6 +189,7 @@ class ConnectionService:
         self.http = http
         # A plugin's connection reads settings from the token answer (Salesforce's instance_url).
         self.on_token = on_token
+        self.on_signed_in = on_signed_in
         # A plugin's settings on an account as a person may read them (PluginHost.account_settings); without it an
         # account's page shows none.
         self.plugin_settings = plugin_settings
@@ -867,6 +871,8 @@ class ConnectionService:
         token = await self.tokens.store_answer(who.tenant_id, connection_id, answer, token_for, requested=requested)
         if token_for == SHARED:
             await self.store.set_status(who.tenant_id, connection_id, "healthy", None)
+        if self.on_signed_in is not None:
+            await self.on_signed_in(who.tenant_id, connection_id, who.name)
         if extra:
             # Where Test connection reads, from what the token said (the instance), never typed by a person.
             fresh = await self._get(who, connection_id)

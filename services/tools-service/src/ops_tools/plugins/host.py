@@ -574,6 +574,35 @@ class PluginHost:
         b = await self.bindings.get(tenant_id, team_id, plugin.manifest.id)
         return str(b["connection_id"]) if b and b.get("connection_id") else None
 
+    async def on_signed_in(self, tenant_id: str, connection_id: str, by: str) -> None:
+        """After a finished sign-in on a plugin's account: the app is on for the account's team, with this account its
+        default while it has no other, so a connected account is never left behind an app that is off."""
+        if self.connections is None:
+            return
+        conn = await self.connections.get(tenant_id, connection_id)
+        pid = plugin_of(conn) if conn else None
+        plugin = self.plugins.get(pid) if pid else None
+        if conn is None or plugin is None:
+            return
+        team = str(conn["team_id"])
+        b = await self.bindings.get(tenant_id, team, plugin.manifest.id)
+        held = b.get("connection_id") if b else None
+        if held is not None and await self.connections.get(tenant_id, str(held)) is None:
+            held = None
+        if b is not None and b.get("enabled") and held is not None:
+            return
+        await self.bindings.put(
+            tenant_id,
+            team,
+            plugin.manifest.id,
+            enabled=True,
+            connection_id=str(held or connection_id),
+            settings=dict((b or {}).get("settings") or {}),
+            by=by,
+        )
+        if self.versions and not (b or {}).get("version"):
+            await self.take_installed(tenant_id, team, plugin)
+
     async def binding_of(self, tenant_id: str, connection_id: str) -> dict[str, Any] | None:
         """The binding a connection serves: the one naming it (the default account), else, for another account of the
         app, the binding of the account's plugin in the account's team."""

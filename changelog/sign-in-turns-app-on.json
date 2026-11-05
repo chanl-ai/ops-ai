@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Connecting an account turns its app on",
+  "description": "Signing in an account of an app turns the app on for your team, so its tools work and the app reads Connected; there is no separate switch to find.",
+  "tag": "fix"
+}
