@@ -15,7 +15,12 @@ connection:
   health_check: { path: "/person/me" }
 settings:
   base_url: { type: string, title: System address, default: "https://api.multi.test" }
-  login_url: { type: string, title: Sign-in address, default: "https://login.multi.test/salesforce" }
+  login_url:
+    type: string
+    title: Where do you sign in?
+    default: "https://login.multi.test/salesforce"
+    choices: [{ value: "https://login.multi.test/salesforce", label: login.multi.test, hint: The fake's own sign-in }]
+    other: { label: Your company's address, value: "https://{host}/salesforce", hosts: [.multi.test] }
 egress: ["{base_url}"]
 endpoint: "{base_url}/person"
 tools:

@@ -291,7 +291,8 @@ with ExitStack() as stack:
     for h in sf["hosts"]:
         gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-584"}, headers=sam)
     gw.post("/v1/egress/ranges", json={"value": sf["range"], "note": "uc-584"}, headers=sam)
-    login = sf["authorize_url"].rsplit("/", 1)[0]
+    # The org's company address, one of the places the Salesforce plugin signs in.
+    login = sf["login_url"]
     team_on = {
         "settings": {"login_url": login},
         "credentialId": credential(gw, priya, "opsai.salesforce", "ops-ai-acme", "s3"),

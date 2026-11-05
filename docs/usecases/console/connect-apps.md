@@ -42,6 +42,9 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | S14 | On an app where each person signs in with their own account, a person's own sign-in runs a tool before any team account exists | api | 29 | 29 |
 | S16 | An app's account shows its saved settings per environment, the secret ones only as set or not | api | 32 | 32 |
 | S15 | Signing in connects an account at once; its test runs right after, as that person, and a failed test warns on the row without disconnecting it | api | 30-31 | 31 |
+| S22 | A new client id on an app credential marks every account signing in with it to sign in again and says how many | api | 33 | 33 |
+| S23 | A refused sign-in answers one plain sentence naming who acts, and the account reads refused with it | api | 34 | 34 |
+| S24 | A sign-in place outside the app's choices is refused in plain words before any sign-in | api | 35 | 35 |
 | S11 | A developer lists the connected apps and reads one through the Python SDK and gets what the API gives | sdk | 24 | 24 |
 | S12 | A team admin lists and shows apps with `ops apps`; a viewer's `ops apps connect` is refused | cli | 25-26 | 25 |
 
@@ -79,6 +82,9 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | 30 | James reads the person desk's page after his sign-in in step 29, without pressing Test | His row's `test` reads ok with when it ran |
 | 31 | Security removes the desk's API host; Maya signs in with her own account | The sign-in answers 200; her row's `test` reads failed with the reason |
 | 32 | Priya reads the person desk's account (`GET /v1/connections/{id}`) | Production's `pluginSettings` hold the saved address; `pluginSecrets` names none |
+| 33 | Priya changes the client id of the person desk's app credential (`PATCH /v1/app-credentials/{id}`) | `signInAgain` 1; James's own sign-in reads refused |
+| 34 | Priya starts the team's sign-in and hands back the system's refusal (`error=access_denied`) | 422 `sign_in_refused`, "Person desk access was not given. Connect again to retry.", who person; the account reads refused with that sentence |
+| 35 | Priya turns the person desk on with a sign-in place outside its choices | 400 `setting_not_offered` naming login.multi.test |
 | 40 | Security takes Person desk's hosts off the allow list and the team account is tested; then the hosts go back and it is tested again | the account row and the catalog card read "Signed in, but a test call failed" with Reconnect; after, the account is Connected and the test passes |
 | 41 | On Salesforce's Settings, Priya presses Edit on the Keys row and Save without typing | the sign-in address field is blank with "Blank keeps the saved value."; the saved settings are unchanged |
 | 43 | In Salesforce's Connect window, Priya picks Your own app and presses Authorize with the client fields empty | "Enter the client ID." and "Enter the client secret." under the fields; no sign-in window opens |

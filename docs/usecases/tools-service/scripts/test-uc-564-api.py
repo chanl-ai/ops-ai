@@ -144,7 +144,8 @@ with ExitStack() as stack:
     )
 
     # 2. The team admin turns it on for the team with the team's OAuth app; a builder cannot, nor change a locked field.
-    login = sf["authorize_url"].rsplit("/", 1)[0]
+    # The org's company address, one of the places the Salesforce plugin signs in.
+    login = sf["login_url"]
     own = {"app": f"plugin:{PLUGIN}", "clientId": "ops-ai-acme", "clientSecret": CLIENT_SECRET}
     credential = (data(gw.post("/v1/app-credentials", json=own, headers=priya)) or {}).get("id")
     team_on = {"enabled": True, "settings": {"login_url": login}, "credentialId": credential}

@@ -54,6 +54,10 @@ SANDBOX_ID = "sandbox"
 SANDBOX_ISSUER = f"https://{LOGIN_HOST}/{SANDBOX_ID}"
 SANDBOX_HOST = "kestrel--uat.sandbox.my.salesforce.test"
 INSTANCES = {ISSUER: API_HOST, SANDBOX_ISSUER: SANDBOX_HOST}
+# Each org also signs in at its own My Domain, `https://<my domain>/services/oauth2/...`, as Salesforce's do: the path
+# the server serves the org's sign-in under, by host.
+MY_DOMAIN_LOGIN = {API_HOST: ISSUER_ID, SANDBOX_HOST: SANDBOX_ID}
+OAUTH = "/services/oauth2/"
 AUDIENCE = "salesforce-api"
 IMAGE = "ghcr.io/navikt/mock-oauth2-server:2.1.10"
 API = "/services/data/v61.0"
@@ -245,13 +249,13 @@ class Salesforce:
         }
 
     def app(self) -> Any:
-        from starlette.applications import Starlette  # noqa: PLC0415 - the agents-service environment has it
-        from starlette.routing import Route  # noqa: PLC0415
+        from starlette.applications import Starlette
+        from starlette.routing import Route
 
         return Starlette(routes=[Route("/{path:path}", self._handle, methods=["GET", "POST", "PATCH"])])
 
     async def _handle(self, request: Any) -> Any:
-        from starlette.responses import JSONResponse, Response  # noqa: PLC0415
+        from starlette.responses import JSONResponse, Response
 
         host = (request.headers.get("host") or "").split(":")[0]
         body = await request.body()
@@ -261,6 +265,12 @@ class Salesforce:
             return JSONResponse(self.state())
         if host == LOGIN_HOST:
             return await self._login(request, body)
+        if (
+            host in MY_DOMAIN_LOGIN
+            and request.url.path.startswith(OAUTH)
+            and not request.url.path.endswith("/userinfo")
+        ):
+            return await self._login(request, body, f"/{MY_DOMAIN_LOGIN[host]}/{request.url.path.removeprefix(OAUTH)}")
         auth = request.headers.get("authorization", "")
         token = auth[7:] if auth.startswith("Bearer ") else ""
         try:
@@ -279,7 +289,8 @@ class Salesforce:
         scopes = set(self._scope_by_token.get(token, "").split())
         path = request.url.path
         if path == "/services/oauth2/userinfo":
-            return JSONResponse({"preferred_username": who, "organization_id": "00Dkestrel"})
+            # On a My Domain this is also the sign-in host's UserInfo, which names the org's address.
+            return self._userinfo(request)
         if self.fail_next is not None:
             status, self.fail_next = self.fail_next, None
             code = "REQUEST_LIMIT_EXCEEDED" if status == 429 else "INVALID_SESSION_ID"
@@ -341,7 +352,7 @@ class Salesforce:
 
     def _query_tools(self, request: Any, path: str) -> Any:
         """The Salesforce calls the plugin's query tools make, or None for any other path."""
-        from starlette.responses import JSONResponse  # noqa: PLC0415
+        from starlette.responses import JSONResponse
 
         params = request.query_params
         # The query tools filter cases by status; uc-564's case lookups by number keep their own answer below.
@@ -457,7 +468,7 @@ class Salesforce:
         return out
 
     def _other_case(self, request: Any, path: str, body: bytes, who: str) -> Any:
-        from starlette.responses import JSONResponse, Response  # noqa: PLC0415
+        from starlette.responses import JSONResponse, Response
 
         parts = path.removeprefix(f"{API}/sobjects/Case/").split("/")
         if len(parts) == 2:  # an upsert by an external key field
@@ -495,10 +506,11 @@ class Salesforce:
             for item in body.get("change", []):
                 self.articles[item["Id"]].update(item)
 
-    async def _login(self, request: Any, body: bytes) -> Any:
-        from starlette.responses import JSONResponse, Response  # noqa: PLC0415
+    async def _login(self, request: Any, body: bytes, path: str | None = None) -> Any:
+        """The OAuth server, at `path` on it (the request's own, or a My Domain sign-in's mapped to its org's)."""
+        from starlette.responses import JSONResponse, Response
 
-        path = request.url.path
+        path = path or request.url.path
         if path.endswith("/revoke"):
             self.revoked.append(parse_qs(body.decode()).get("token", [""])[0])
             return Response(status_code=200)
@@ -547,7 +559,7 @@ class Salesforce:
     def _userinfo(self, request: Any) -> Any:
         """Salesforce's UserInfo endpoint on the sign-in host, in its format: who signed in, their org, and the org's
         addresses, its My Domain under `urls.custom_domain` (help.salesforce.com, "Using the UserInfo Endpoint")."""
-        from starlette.responses import JSONResponse  # noqa: PLC0415
+        from starlette.responses import JSONResponse
 
         auth = request.headers.get("authorization", "")
         token = auth[7:] if auth.startswith("Bearer ") else ""
@@ -604,7 +616,7 @@ def _when(text: str) -> datetime | None:
 
 
 def _serve(app: Any, address: str, cert: Path, key: Path) -> tuple[Any, int]:
-    import uvicorn  # noqa: PLC0415
+    import uvicorn
 
     with socket.socket() as s:
         s.bind((address, 0))
@@ -637,7 +649,7 @@ def salesforce(token_expiry_s: int = 300) -> Generator[dict[str, Any]]:
                 target = f"https://{address}:{port}{url.path}?{url.query}"
                 # Reached by address with the sign-in host named in Host, so the name check cannot pass; tools-service,
                 # which does verify, reaches the same certificate by name through OPS_EGRESS_RESOLVE.
-                with httpx.Client(verify=False, headers={"Host": LOGIN_HOST}, timeout=30) as browser:
+                with httpx.Client(verify=False, headers={"Host": url.hostname or LOGIN_HOST}, timeout=30) as browser:
                     page = browser.get(target)
                     if page.status_code != 200:
                         return {"error": f"sign-in page {page.status_code}"}
@@ -654,6 +666,10 @@ def salesforce(token_expiry_s: int = 300) -> Generator[dict[str, Any]]:
                 },
                 "hosts": [LOGIN_HOST, API_HOST, SANDBOX_HOST],
                 "sandbox_login": SANDBOX_ISSUER,
+                # Where the Salesforce plugin signs in to each org: its company address (My Domain), one of the
+                # places the plugin takes.
+                "login_url": f"https://{API_HOST}/services/oauth2",
+                "sandbox_login_url": f"https://{SANDBOX_HOST}/services/oauth2",
                 "sandbox_base": f"https://{SANDBOX_HOST}",
                 "range": f"{address}/32",
                 "authorize_url": f"{ISSUER}/authorize",
