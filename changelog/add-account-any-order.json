@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Add accounts in any order",
+  "description": "Add account works on an app with no account yet: the first one you add becomes its default and turns the app on.",
+  "tag": "fix"
+}

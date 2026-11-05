@@ -256,19 +256,38 @@ class PluginAccounts:
         )
 
     async def add_account(self, who: Caller, app_id: str, body: AccountIn) -> str:
-        """Another account of a plugin's app the team has connected, a test account or another live one (a second org
-        of the same system), made with the first's contract. The first stays the default."""
+        """Another account of a plugin's app, a test account or another live one (a second org of the same system), made
+        with the first's contract; the first stays the default. With no account yet, it is the app's first and default,
+        and the app is turned on for the team."""
         self.manages(who)
         plugin = self.plugin(app_id)
         m = plugin.manifest
         b = await self.host.bindings.get(who.tenant_id, who.team.id, m.id)
-        if b is None or not b["enabled"] or not b.get("connection_id"):
-            raise ValidationFailed(f"Connect {m.title} first; another account comes after it.", code="no_first_account")
         name = body.name.strip()
         if not name:
             raise ValidationFailed("Name the account.", details={"field": "name"})
         if await self.host.account_named(who.tenant_id, who.team.id, plugin, name) is not None:
             raise Conflict(f"{m.title} already has an account named {name}.")
+        first = b.get("connection_id") if b else None
+        if first is None or await self.connections.store.get(who.tenant_id, str(first)) is None:
+            # The team has no account of the app yet: this one is its first, made as turning the app on makes it.
+            await self.switch(
+                who,
+                app_id,
+                TeamPluginIn(
+                    enabled=True,
+                    settings=dict(body.settings),
+                    credential_id=body.credential_id,
+                    sign_in=body.sign_in,
+                    kind=body.kind,
+                    credentials=dict(body.credentials),
+                    account_name=name,
+                    sandbox=body.sandbox,
+                ),
+            )
+            made = await self.host.bindings.get(who.tenant_id, who.team.id, m.id)
+            return str((made or {})["connection_id"])
+        assert b is not None
         self._checked_settings(plugin, body.settings)
         team, own = _split(plugin, body.settings)
         if team:
