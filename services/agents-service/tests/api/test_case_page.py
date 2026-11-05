@@ -24,7 +24,7 @@ from tests.api.test_activity import FRAUD_BUILDER
 from tests.api.test_case_routes import started_run
 from tests.api.test_started_by import Platform
 from tests.api.test_team_default_agent import Stack, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
-from tests.engine.test_lifecycle_rights import BUILDER, TENANT, VIEWER
+from tests.engine.test_lifecycle_rights import BUILDER, BUILDER_WITHOUT_MANAGE, TENANT, VIEWER
 
 
 def data(r: Any, status: int = 200) -> Any:
@@ -85,7 +85,10 @@ async def test_editing_a_case_type_changes_no_case_already_open_and_a_viewer_can
         {"key": "amount", "label": "Amount", "type": "money"},
         {"key": "complaint", "label": "What happened", "type": "text"},
     ]
-    changed = await c.put("/v1/case-types/complaint/draft", json={"name": "Complaint", "fields": new}, headers=BUILDER)
+    # Builders hold cases.manage since D59; a role without it copies a seeded type to change it.
+    changed = await c.put(
+        "/v1/case-types/complaint/draft", json={"name": "Complaint", "fields": new}, headers=BUILDER_WITHOUT_MANAGE
+    )
     assert changed.status_code == 403, "a seeded type is a system record, copied to change it"
     copy = data(
         await c.post(

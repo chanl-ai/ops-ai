@@ -15,7 +15,7 @@ from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, Text
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from tests.conftest import sse_events, structured
-from tests.engine.test_lifecycle_rights import ADMIN, BUILDER
+from tests.engine.test_lifecycle_rights import ADMIN, person
 
 from .role_app import ok, role_app
 
@@ -92,8 +92,10 @@ async def test_withdrawn_text_is_kept_for_the_audit_and_survives_a_reload(client
 
 async def test_a_reader_who_may_not_view_the_audit_never_gets_the_withdrawn_text(client: AsyncClient) -> None:
     await _guarded(client)
-    tid, events = await _ask(client, BUILDER)
-    reloaded = ok(await client.get(f"/chat/threads/{tid}", headers=BUILDER))
+    # Builders read the audit since D59; a builder whose role lost audit.view does not.
+    reader = person("jo", "team_ops", "builder", unticked=(("audit", "view"),))
+    tid, events = await _ask(client, reader)
+    reloaded = ok(await client.get(f"/chat/threads/{tid}", headers=reader))
     assert reloaded["messages"][-1]["content"] == RULE["message"]
     assert ANSWER not in json.dumps(reloaded) and "guardrailAudit" not in json.dumps(reloaded), reloaded
     # The stream never carries the record either: it is written to the journal only.

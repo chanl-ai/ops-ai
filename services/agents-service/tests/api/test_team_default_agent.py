@@ -26,9 +26,9 @@ from ops_agents.store.tenancy import tenant_scope
 from ops_engine.store import metadata as engine_metadata
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
 from ops_service_kit.settings import Settings
-from tests.api.test_action_roles import ADMIN, BUILDER, OUTSIDER, REVIEWER, VIEWER, introspect
+from tests.api.test_action_roles import ADMIN, OUTSIDER, REVIEWER, VIEWER, introspect
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, sse_events
-from tests.engine.test_lifecycle_rights import TENANT, jwks
+from tests.engine.test_lifecycle_rights import TENANT, jwks, person
 
 URL = "/v1/chat/default-agent"
 Stack = tuple[AsyncClient, Runtime]
@@ -94,7 +94,9 @@ async def say(c: AsyncClient, thread: str, text: str, headers: dict[str, str]) -
 async def test_only_a_team_admin_sets_the_default(stack: Stack) -> None:
     c, _ = stack
     assert "agentId" not in (await c.get(URL, headers=VIEWER)).json()["data"], "no default until one is set"
-    refused = [await c.put(URL, json={"agentId": "ag_branch"}, headers=h) for h in (BUILDER, REVIEWER, VIEWER)]
+    # Builders hold chat.manage since D59; a builder whose role lost it is refused like a reviewer and a viewer.
+    no_manage = person("jo", "team_ops", "builder", unticked=(("chat", "manage"),))
+    refused = [await c.put(URL, json={"agentId": "ag_branch"}, headers=h) for h in (no_manage, REVIEWER, VIEWER)]
     assert [r.status_code for r in refused] == [403, 403, 403], [r.text for r in refused]
     saved = await c.put(URL, json={"agentId": "ag_branch"}, headers=ADMIN)
     assert saved.status_code == 200, saved.text
