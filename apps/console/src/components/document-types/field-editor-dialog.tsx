@@ -313,7 +313,7 @@ export function VersionFieldsEditor({
           </p>
         )}
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4">
         <div className="flex items-start justify-between gap-3 rounded-lg border px-4 py-3">
           <div className="flex flex-col gap-0.5">
             <Label htmlFor="field-editor-many">Several records</Label>

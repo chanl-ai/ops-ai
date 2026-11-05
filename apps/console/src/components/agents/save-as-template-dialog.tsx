@@ -90,7 +90,7 @@ export function SaveAsTemplateDialog({
           </Alert>
         )}
         {dirty && <p className="rounded-md bg-warning/10 px-3 py-2 text-xs text-warning-text">Unsaved changes on this page are not included. Save first to include them.</p>}
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4">
           <FormField id="st-name" label="Template name" error={e('name')}>
             <Input id="st-name" value={v.name} onChange={(x) => setV({ ...v, name: x.target.value })} aria-invalid={!!e('name')} />
           </FormField>

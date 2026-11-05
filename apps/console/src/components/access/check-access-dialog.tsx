@@ -68,11 +68,11 @@ export function CheckAccessDialog({ open, onOpenChange, personId, personName, te
       }
     >
       <div className="flex flex-col gap-4">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4">
           {pick('check-area', 'Area', area, setArea, areas, areaLabel)}
           {pick('check-action', 'Action', action, setAction, actions, actionLabel)}
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4">
           <FormField id="check-owner" label="Record owner" optional hint="For an action allowed on their own records only.">
             <Input id="check-owner" value={owner} onChange={(e) => (setOwner(e.target.value), setAnswer(null))} placeholder="e.g. j.richardson@bank.example" className="bg-card" />
           </FormField>

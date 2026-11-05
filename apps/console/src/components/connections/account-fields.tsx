@@ -80,7 +80,7 @@ export function AccountFields({
     return <Input id={id} value={draft.settings[f.name] ?? ''} onChange={(e) => onSetting(f.name, e.target.value)} />;
   };
   const field = (f: KindField) => (
-    <FormField key={f.name} id={`account-${f.name}`} label={f.label} optional={!isRequired(f, draft.settings)} hint={f.help ?? undefined} className={f.pem ? 'sm:col-span-2' : undefined}>
+    <FormField key={f.name} id={`account-${f.name}`} label={f.label} optional={!isRequired(f, draft.settings)} hint={f.help ?? undefined}>
       {input(f)}
     </FormField>
   );
@@ -100,7 +100,7 @@ export function AccountFields({
           {testLabel}
         </LoadingButton>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">{groups.main.map(field)}</div>
+      <div className="grid gap-3">{groups.main.map(field)}</div>
       {groups.more.length > 0 && (
         <Collapsible>
           <CollapsibleTrigger asChild>
@@ -109,7 +109,7 @@ export function AccountFields({
               More settings
             </Button>
           </CollapsibleTrigger>
-          <CollapsibleContent className="grid gap-3 pt-2 sm:grid-cols-2">{groups.more.map(field)}</CollapsibleContent>
+          <CollapsibleContent className="grid gap-3 pt-2">{groups.more.map(field)}</CollapsibleContent>
         </Collapsible>
       )}
       {draft.health && <HealthLine health={draft.health} testId="account-health" who={false} />}

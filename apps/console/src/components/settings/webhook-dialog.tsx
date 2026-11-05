@@ -81,7 +81,7 @@ export function WebhookDialog({
         </FormField>
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-1.5 text-sm font-medium">Events</legend>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="grid gap-2">
             {events.map((e) => (
               <div key={e.value} className="flex items-center gap-2">
                 <Checkbox id={`wh-ev-${e.value}`} checked={picked.includes(e.value)} onCheckedChange={(v) => (setPicked((p) => (v ? [...p, e.value] : p.filter((x) => x !== e.value))), setError(null))} />

@@ -295,7 +295,7 @@ export function GenerateSkillDialog({
     if (step === 1)
       return (
         <div className="flex flex-col gap-4" data-testid="gen-step-start">
-          <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Start from">
+          <div className="grid gap-2" role="radiogroup" aria-label="Start from">
             {STARTS.map((s) => (
               <button
                 key={s.kind}
@@ -383,7 +383,7 @@ export function GenerateSkillDialog({
           )}
           {kind === 'template' && (
             <div className="flex flex-col gap-3">
-              <div className="grid gap-2 sm:grid-cols-2" data-testid="gen-templates">
+              <div className="grid gap-2" data-testid="gen-templates">
                 {opts.templates.map((t) => (
                   <button key={t.id} type="button" aria-pressed={templateId === t.id} onClick={() => setTemplateId(t.id)} className={cn('rounded-lg border p-3 text-left hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none', templateId === t.id && 'border-primary bg-primary/5')}>
                     <span className="block text-sm font-medium">{t.name}</span>
@@ -402,7 +402,7 @@ export function GenerateSkillDialog({
 
     if (step === 2)
       return (
-        <div className="grid gap-5 lg:grid-cols-2" data-testid="gen-step-scope">
+        <div className="grid gap-5" data-testid="gen-step-scope">
           <div className="flex flex-col gap-4">
             <FormField id="gen-team" label="Owner team" error={showErrors ? scopeError : undefined} hint="Owns the skill, its reviews and its versions.">
               <Select value={team} onValueChange={setTeam}>

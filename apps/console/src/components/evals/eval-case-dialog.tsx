@@ -62,7 +62,7 @@ export function CheckRow({ check, onChange, onRemove, options, index }: { check:
           {(check.type === 'calls_tool' || check.type === 'not_calls_tool') && sel(`chk-${index}-tool`, check.tool, tools, 'Choose a tool', (tool) => onChange({ ...check, tool }), true)}
           {check.type === 'cites' && sel(`chk-${index}-src`, check.source, options?.collections ?? [], 'Choose a knowledge base', (source) => onChange({ ...check, source }))}
           {check.type === 'extracts' && (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="grid gap-2">
               <Input aria-label="Field" value={check.field ?? ''} onChange={(e) => onChange({ ...check, field: e.target.value })} placeholder="e.g. amount" className="font-mono text-xs" />
               <Input aria-label="Value" value={check.value ?? ''} onChange={(e) => onChange({ ...check, value: e.target.value })} placeholder="e.g. 1240.18" />
             </div>
@@ -175,7 +175,7 @@ export function EvalCaseDialog({
         <FormField id="ec-input" label="Input" error={errors.input} hint="What a customer or upstream system sends.">
           <Textarea id="ec-input" aria-invalid={!!errors.input} value={v.input} onChange={(e) => (setV({ ...v, input: e.target.value }), setErrors({ ...errors, input: undefined }))} className="min-h-20" placeholder="e.g. I never received the order and the merchant stopped answering." />
         </FormField>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4">
           <FormField id="ec-kbs" label="Knowledge bases" optional hint="Attached for this case only.">
             <div id="ec-kbs" className="flex flex-wrap gap-1.5">
               {(options?.collections ?? []).map((kb) => {

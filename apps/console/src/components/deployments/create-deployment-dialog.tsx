@@ -265,7 +265,7 @@ export function CreateDeploymentDialog({
           <FormField id="dp-name" label="Name" error={err('name')}>
             <Input id="dp-name" autoFocus value={v.name} onChange={(e) => set('name', e.target.value)} placeholder={v.channel === 'email' ? 'e.g. Support inbox' : v.channel === 'api' ? 'e.g. Mobile app' : 'e.g. Website chat'} aria-invalid={!!err('name')} />
           </FormField>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4">
             <FormField id="dp-wf" label="Workflow or agent" error={err('workflowId')} hint={fixedWorkflowId ? undefined : 'Only published workflows and agents can be deployed.'}>
               <Select value={v.workflowId} onValueChange={(x) => set('workflowId', x)} disabled={!!fixedWorkflowId}>
                 <SelectTrigger id="dp-wf" className="w-full" aria-invalid={!!err('workflowId')}>
@@ -298,7 +298,7 @@ export function CreateDeploymentDialog({
               <FormField id="dp-domains" label="Allowed domains" error={err('domains')} hint="Comma separated. *.example.com covers subdomains.">
                 <Input id="dp-domains" value={v.domains} onChange={(e) => set('domains', e.target.value)} placeholder="e.g. www.example.com, example.com" aria-invalid={!!err('domains')} />
               </FormField>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4">
                 <FormField id="dp-title" label="Widget title">
                   <Input id="dp-title" value={v.title} onChange={(e) => set('title', e.target.value)} />
                 </FormField>

@@ -214,7 +214,7 @@ export function PromptGeneratorDialog({
               </SelectContent>
             </Select>
           </FormField>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4">
             <FormField id="pg-goals" label="Primary goals" error={err('goals')}>
               <ListField id="pg-goals" value={spec.purpose.goals} onChange={(v) => put('purpose', { goals: v })} placeholder="e.g. Answer the customer’s question in the first paragraph" addLabel="Add goal" invalid={!!err('goals')} />
             </FormField>
@@ -227,7 +227,7 @@ export function PromptGeneratorDialog({
 
       {step === 2 && (
         <div className="flex flex-col gap-4">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4">
             <FormField id="pg-tone" label="Tone" error={err('tone')}>
               <Select value={TONES.includes(spec.behaviour.tone) ? spec.behaviour.tone : 'custom'} onValueChange={(v) => put('behaviour', { tone: v === 'custom' ? '' : v })}>
                 <SelectTrigger id="pg-tone" className="w-full" aria-invalid={!!err('tone')}>
@@ -300,7 +300,7 @@ export function PromptGeneratorDialog({
           <FormField id="pg-steps" label="Procedure" error={err('steps')} hint="Press Enter for the next step.">
             <ListField id="pg-steps" value={spec.process.steps} onChange={(v) => put('process', { steps: v })} placeholder="e.g. Read the whole email before choosing an intent" addLabel="Add step" numbered invalid={!!err('steps')} />
           </FormField>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4">
             <FormField id="pg-rules" label="Decision rules" optional hint="Start with Always or Never so conflicts can be found.">
               <ListField id="pg-rules" value={spec.process.decisionRules} onChange={(v) => put('process', { decisionRules: v })} placeholder="e.g. Always offer the hardship line first" addLabel="Add rule" />
             </FormField>
@@ -350,7 +350,7 @@ export function PromptGeneratorDialog({
               </div>
             )}
           </FormField>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4">
             <FormField id="pg-kb" label="Knowledge bases to search" optional hint={context.collections.length ? 'The agent’s attached knowledge bases.' : 'No knowledge attached to this agent.'}>
               <div className="flex flex-col gap-1.5">
                 {context.collections.map((k) => (
@@ -376,7 +376,7 @@ export function PromptGeneratorDialog({
           <p className="text-xs text-muted-foreground" data-testid="generator-always-on-note">
             Shared wording such as the bank disclosure, the tone guide or the citation rule is not written here: attach it as an always-on skill under Skills on the agent, so its owner keeps the wording.
           </p>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4">
             <FormField id="pg-disc" label="Required disclosures or phrases" optional>
               <ListField id="pg-disc" value={spec.compliance.disclosures} onChange={(v) => put('compliance', { disclosures: v })} placeholder="e.g. You can ask us to contact you in writing only." addLabel="Add phrase" />
             </FormField>
@@ -395,7 +395,7 @@ export function PromptGeneratorDialog({
 
       {step === 6 && (
         <div className="flex flex-col gap-4">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4">
             <FormField id="pg-format" label="Format">
               <Select value={spec.output.format} onValueChange={(v) => put('output', { format: v as OutputFormat })}>
                 <SelectTrigger id="pg-format" className="w-full">

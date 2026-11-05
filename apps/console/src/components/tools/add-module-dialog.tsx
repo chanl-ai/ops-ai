@@ -258,7 +258,7 @@ export function AddModuleDialog({
 
       {step === 1 && (
         <div className="flex flex-col gap-5">
-          <RadioGroup value={kind} onValueChange={(k) => setKind(k as Kind)} className="grid gap-2 sm:grid-cols-2">
+          <RadioGroup value={kind} onValueChange={(k) => setKind(k as Kind)} className="grid gap-2">
             {kinds.map((k) => (
               <label key={k.kind} htmlFor={`mk-${k.kind}`} className={cn('flex items-start gap-3 rounded-md border p-3', k.disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer', kind === k.kind && 'border-primary bg-primary/5')}>
                 <RadioGroupItem value={k.kind} id={`mk-${k.kind}`} disabled={!!k.disabled} className="mt-0.5" />
