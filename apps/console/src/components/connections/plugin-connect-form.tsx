@@ -70,7 +70,7 @@ export function PluginConnectForm({
   const kind = offered.find((k) => k.id === kindId) ?? offered[0];
   // The default account keeps the app credential it has until another is picked; a new sandbox starts on Ops AI's app.
   const [client, setClient] = React.useState<string | null>(!sandbox && card.credential?.type === 'own' ? (card.credential.id ?? null) : null);
-  const [accountName, setAccountName] = React.useState(`${card.name} sandbox`);
+  const [accountName, setAccountName] = React.useState(`${card.name} test account`);
   // Whose account calls use, asked only before the team's default account exists and when the plugin offers a choice.
   const offeredWho = plugin.signIn ?? ['team'];
   const [who, setWho] = React.useState<SignIn>((offeredWho[0] as SignIn | undefined) ?? 'team');

@@ -150,7 +150,7 @@ export function RestTool(p: RestToolProps) {
   const help =
     mode === 'stub'
       ? 'Mock answers from the operation’s mock answers. Nothing leaves the gateway.'
-      : `Test run (uses the app’s sandbox account if it has one): Real sends to ${host}${op.access === 'write' ? ', so a write changes data there' : ''}.`;
+      : `Test run (uses the app’s test account if it has one): Real sends to ${host}${op.access === 'write' ? ', so a write changes data there' : ''}.`;
 
   return (
     <PageLayout

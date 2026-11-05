@@ -1147,7 +1147,7 @@ try {
           check(
             "19 Salesforce's own app on each account: the live one in the Connect window, a sandbox account from the app page, each on its own instance",
             // The sign-in address typed on the first Connect is the one the live account signs in at.
-            live === 'ok' && sandbox === 'ok' && suggested === 'Salesforce sandbox' && accounts.length === 2 && accounts[0].default && !accounts[0].sandbox && badge === 1 && /Sandbox/.test(rows) && addAgain === 0 &&
+            live === 'ok' && sandbox === 'ok' && suggested === 'Salesforce test account' && accounts.length === 2 && accounts[0].default && !accounts[0].sandbox && badge === 1 && /Test account/.test(rows) && addAgain === 0 &&
               bases.sandbox === sf.sandbox_base && bases.live === sf.api_base && String(liveOne.settings?.authorizeUrl ?? '').startsWith(loginUrl),
             { live, sandbox, suggested, rows: rows.slice(0, 300), badge, addAgain, bases, authorizeUrl: liveOne.settings?.authorizeUrl },
           );
@@ -1189,6 +1189,12 @@ try {
           });
           const accounts = ((await page.getByTestId('app-auth-configs').innerText()) ?? '').replace(/\s+/g, ' ');
           await shoot(page, 'app-account-expired');
+          // The catalog card says the same: an expired sign-in offers Reconnect, not Connect.
+          await page.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await page.getByPlaceholder('Search apps').fill('Salesforce');
+          const cardReconnect = await page.getByTestId(`reconnect-${SF}`).waitFor({ timeout: 30_000 }).then(() => true, () => false);
+          await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(SF)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await button.waitFor({ timeout: 60_000 });
           const [again] = await Promise.all([page.waitForEvent('popup', { timeout: 60_000 }), button.click()]);
           const name = again.locator('input[name=username]');
           await name.waitFor({ timeout: 60_000 });
@@ -1203,8 +1209,8 @@ try {
           const after = await accountOf(priya, SF, card?.connectionId);
           check(
             "21 when Salesforce refuses the team account's refresh, its account reads Expired with Reconnect, and signing in again makes it work",
-            /Expired/.test(accounts) && after.status === 'healthy' && after.health?.status === 'ok',
-            { accounts: accounts.slice(0, 200), status: after.status, health: after.health },
+            /Expired/.test(accounts) && cardReconnect && after.status === 'healthy' && after.health?.status === 'ok',
+            { accounts: accounts.slice(0, 200), cardReconnect, status: after.status, health: after.health },
           );
         }, page);
         check('20 no page errors with Salesforce', page.errors.length === 0, page.errors.slice(0, 3));

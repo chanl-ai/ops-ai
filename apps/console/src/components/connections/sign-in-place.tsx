@@ -15,6 +15,13 @@ const OTHER = '__other__';
 /** A setting that asks where an account signs in: one with the plugin's choices or a typed company host. */
 export const isSignInPlace = (s: Setting) => s.perAccount && !s.locked && Boolean(s.choices?.length || s.other);
 
+/** Whether `value` is a place test accounts sign in at: a choice marked so, or a typed host under a test host. */
+export function isTestPlace(setting: Setting, value: string): boolean {
+  if ((setting.choices ?? []).some((c) => c.testAccount && String(c.value) === value)) return true;
+  const host = hostOf(setting, value);
+  return Boolean(host && (setting.other?.testAccountHosts ?? []).some((h) => host.endsWith(h)));
+}
+
 /** The host a typed company address holds, when `value` is the setting's `other` address with a host in it. */
 function hostOf(setting: Setting, value: string): string | null {
   const template = setting.other?.value;

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Test account, not sandbox",
+  "description": "Connect and Add account have a Test account switch, which a test sign-in place such as test.salesforce.com turns on; test runs use that account and live runs never do.",
+  "tag": "improved"
+}

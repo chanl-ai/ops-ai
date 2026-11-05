@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { AppCredentialPicker } from '@/components/connections/app-credential-picker';
 import { ResourcesTab } from '@/components/connections/app-resources';
+import { AskAnAdmin } from '@/components/connections/ask-an-admin';
 import { AuthConfigsTab, type AuthConfig } from '@/components/connections/app-auth-configs';
 import { Bot, ChevronDown, CircleCheck, ExternalLink, FlaskConical, KeyRound, Plug, RefreshCw, Workflow } from 'lucide-react';
 import { toast } from 'sonner';
@@ -199,7 +200,7 @@ export function AppPageView({ appId }: { appId: string }) {
               <div className="flex justify-end">
                 <Button size="sm" variant="outline" onClick={() => setSandboxing(true)} data-testid="app-add-sandbox">
                   <FlaskConical />
-                  Add a sandbox account
+                  Add a test account
                 </Button>
               </div>
             )}
@@ -285,7 +286,7 @@ const BROKEN = new Set(['expired', 'refused', 'revoked']);
 /**
  * The header's one main action, from the team account's state: Connect while it is not signed in, Reconnect once its
  * sign-in expired, was refused or its test failed, and "Connected as …" once it works. Someone who does not manage the
- * team's apps reads that a team admin connects it. On an app each person signs in to, the caller's own sign-in is the
+ * team's apps is told to ask an admin, by name. On an app each person signs in to, the caller's own sign-in is the
  * action once the team account works.
  */
 function HeaderAction({
@@ -329,9 +330,7 @@ function HeaderAction({
   }
   if ((broken || unsigned) && !card.mayManage)
     return (
-      <span className="text-sm text-muted-foreground" data-testid="app-admin-connects">
-        A team admin connects this
-      </span>
+      <AskAnAdmin testId="app-admin-connects" />
     );
   if (broken)
     return (
@@ -434,6 +433,62 @@ function ToolsTab({ app }: { app: AppData }) {
   );
 }
 
+// Hosts that never answer on the internet (RFC 2606, RFC 6761): an address on one is a test or fake system.
+const RESERVED = ['.test', '.example', '.invalid', '.localhost'];
+
+/** Whether calls to `host` reach a test system: a reserved name, this machine, or a host the plugin marks as a test one. */
+function testHost(host: string, plugin: SystemCard['plugin'] | null | undefined): boolean {
+  if (host === 'localhost' || RESERVED.some((t) => host.endsWith(t))) return true;
+  return (plugin?.settings ?? []).some(
+    (s) =>
+      (s.other?.testAccountHosts ?? []).some((h) => host.endsWith(h)) ||
+      (s.choices ?? []).some((c) => c.testAccount && typeof c.value === 'string' && c.value.includes(`//${host}`)),
+  );
+}
+
+const hostOfUrl = (url: unknown) => {
+  try {
+    return typeof url === 'string' && url ? new URL(url).host : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Where the default account's calls and sign-in go, as the account holds them, so a team sees a leftover test or fake
+ * host before a call reaches it; one that is a test host is said to be.
+ */
+function AddressesSection({ conn, plugin }: { conn: Connection; plugin: SystemCard['plugin'] | null | undefined }) {
+  const settings = conn.settings as Record<string, unknown>;
+  const rows: [string, string, unknown][] = [
+    ['API address', 'api', settings.baseUrl],
+    ['Sign-in address', 'sign-in', settings.authorizeUrl],
+  ];
+  const shown = rows.map(([label, id, url]) => ({ label, id, url: typeof url === 'string' ? url : null, host: hostOfUrl(url) })).filter((r) => r.host);
+  if (!shown.length) return null;
+  return (
+    <Section title="Addresses" description="Where the default account's calls and sign-in go." flush>
+      <Rows testId="app-addresses">
+        {shown.map((r) => (
+          <Row
+            key={r.id}
+            wrap
+            title={r.label}
+            description={<code className="break-all text-xs">{r.url}</code>}
+            trailing={
+              testHost(r.host ?? '', plugin) ? (
+                <Badge variant="outline" className="border-warning/40 bg-warning/10 text-warning-text" data-testid="app-address-test-host">
+                  Test host
+                </Badge>
+              ) : undefined
+            }
+          />
+        ))}
+      </Rows>
+    </Section>
+  );
+}
+
 function SettingsTab({ app, kinds, onSetUp }: { app: AppData; kinds?: Kinds; onSetUp: () => void }) {
   const conn = app.connection;
   const change = useChangeAccount();
@@ -454,6 +509,7 @@ function SettingsTab({ app, kinds, onSetUp }: { app: AppData; kinds?: Kinds; onS
     );
   return (
     <div className="flex flex-col gap-4">
+      <AddressesSection conn={conn} plugin={app.card.plugin} />
       {kind?.perPerson && conn.mayManage && (
         <Section title="Who signs in" flush>
           <div className="flex items-center gap-3 p-4">

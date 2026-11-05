@@ -163,6 +163,18 @@ def oauth_server(token_expiry_s: int = 300) -> Generator[str]:
         subprocess.run(["docker", "stop", name], capture_output=True, check=False)
 
 
+def with_username_claim(body: bytes) -> bytes:
+    """The interactive sign-in form as a real OpenID provider would sign the person in: the name typed comes back as
+    `preferred_username` too, not only as the subject, unless the form gives its own claims."""
+    from urllib.parse import urlencode
+
+    form = {k: v[0] for k, v in parse_qs(body.decode(), keep_blank_values=True).items()}
+    if not form.get("username") or form.get("claims", "").strip():
+        return body
+    form["claims"] = json.dumps({"preferred_username": form["username"]})
+    return urlencode(form).encode()
+
+
 class Salesforce:
     """The front: the sign-in host proxied to the OAuth server, and the API, with what each call did kept for checks."""
 
@@ -511,6 +523,8 @@ class Salesforce:
         from starlette.responses import JSONResponse, Response
 
         path = path or request.url.path
+        if path.endswith("/authorize") and request.method == "POST":
+            body = with_username_claim(body)
         if path.endswith("/revoke"):
             self.revoked.append(parse_qs(body.decode()).get("token", [""])[0])
             return Response(status_code=200)

@@ -205,7 +205,7 @@ function AccountRow({
             {a.default && <Badge variant="secondary">Default</Badge>}
             {a.sandbox && (
               <Badge variant="outline" data-testid={`account-sandbox-${a.name}`}>
-                Sandbox
+                Test account
               </Badge>
             )}
             <Badge variant="outline" className={STATE[a.state].className} data-testid={`account-state-${a.name}`} data-state={a.state}>

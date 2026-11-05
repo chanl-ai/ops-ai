@@ -218,6 +218,17 @@ try {
       const browser = await chromium.launch();
       try {
         const page = await signedIn(browser, consoleUrl, PRIYA);
+        await step('51 a member who may not connect is told to ask an admin, by name, on the card and on the app page', async () => {
+          const viewer = await signedIn(browser, consoleUrl, 'r.menon@harborpine.example');
+          await viewer.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded' });
+          const why = viewer.getByTestId(`connect-${APPS[0].id}-why`);
+          const card = ((await why.innerText({ timeout: 60_000 }).catch(() => '')) ?? '').replace(/\s+/g, ' ');
+          await viewer.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APPS[0].id)}`, { waitUntil: 'domcontentloaded' });
+          const header = ((await viewer.getByTestId('app-admin-connects').innerText({ timeout: 60_000 }).catch(() => '')) ?? '').replace(/\s+/g, ' ');
+          await viewer.screenshot({ path: join(SHOTS, 'ask-an-admin.png') });
+          await viewer.context().close();
+          check('51 a member who may not connect is told to ask an admin, by name, on the card and on the app page', [card, header].every((t) => /Ask an admin/.test(t) && /Priya Shah/.test(t)), { card, header });
+        }, page);
         for (const [n, app] of APPS.entries()) {
           const at = (k) => `${(n + 1) * 10 + k}`;
 
@@ -319,6 +330,31 @@ try {
           await page.screenshot({ path: join(SHOTS, 'auth-config-callback.png') });
           await page.keyboard.press('Escape');
           check('41 a team’s own auth config shows the callback URL to register, on its row and in Edit', Boolean(made?.id) && row.includes(want) && edit.includes(want) && copy > 0, { row, edit, copy, want });
+        }, page);
+        await step('52 Add account on Salesforce has a Test account switch that a test sign-in place turns on, and no screen says sandbox', async () => {
+          const sfApp = APPS.find((a) => a.place);
+          await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(sfApp.id)}`, { waitUntil: 'domcontentloaded' });
+          const pageText = ((await page.locator('main').innerText({ timeout: 60_000 })) ?? '').replace(/\s+/g, ' ');
+          await page.locator('[data-testid^="auth-config-add-"]').first().click({ timeout: 60_000 });
+          const win = page.getByTestId('connect-window');
+          await win.waitFor({ timeout: 30_000 });
+          const box = win.getByTestId('connect-window-test-account');
+          const before = await box.getAttribute('data-state').catch(() => null);
+          await win.getByTestId(`connect-window-place-${sfApp.place}`).click();
+          await page.getByTestId(`connect-window-place-${sfApp.place}-test.salesforce.com`).click();
+          const after = await box.getAttribute('data-state').catch(() => null);
+          const winText = ((await win.innerText()) ?? '').replace(/\s+/g, ' ');
+          await page.screenshot({ path: join(SHOTS, 'test-account-switch.png') });
+          await win.getByTestId('connect-window-cancel').click();
+          check('52 Add account on Salesforce has a Test account switch that a test sign-in place turns on, and no screen says sandbox', before === 'unchecked' && after === 'checked' && !/sandbox/i.test(pageText + winText), { before, after, sandbox: /sandbox/i.test(pageText + winText) });
+        }, page);
+        await step('53 an app’s Settings show its addresses and call out a test host', async () => {
+          await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APPS[0].id)}`, { waitUntil: 'domcontentloaded' });
+          await page.getByTestId('app-tab-settings').click({ timeout: 60_000 });
+          const shown = ((await page.getByTestId('app-addresses').innerText({ timeout: 30_000 }).catch(() => '')) ?? '').replace(/\s+/g, ' ');
+          const flagged = await page.getByTestId('app-address-test-host').count();
+          await page.screenshot({ path: join(SHOTS, 'app-addresses.png') });
+          check('53 an app’s Settings show its addresses and call out a test host', shown.includes('api.github.test') && shown.includes('github.test') && flagged > 0, { shown, flagged });
         }, page);
         check('9 no page errors', page.errors.length === 0, page.errors.slice(0, 3));
       } finally {

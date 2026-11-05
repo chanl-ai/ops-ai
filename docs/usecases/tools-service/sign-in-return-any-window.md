@@ -23,6 +23,9 @@ Ticket desk signs in with an API key, so it has no return page and is not walked
 | S5 | Connect and Add account ask where a Salesforce account signs in, with the plugin's choices, starting from the first account's address | ui | 26, 28 | 26 |
 | S6 | Once connected, the app's header says Connected with the default account's name | ui | 17, 27, 37 | 17 |
 | S7 | A team's own auth config shows the callback URL to register in the system's app, with a copy button, on its row and in Edit | ui | 41 | 41 |
+| S8 | A member who may not connect is told to ask an admin, by name, on the card and the app page | ui | 51 | 51 |
+| S9 | Add account has a Test account switch a test sign-in place turns on, and no screen says sandbox | ui | 52 | 52 |
+| S10 | An app's Settings show its API and sign-in addresses and call out a test host | ui | 53 | 53 |
 
 ## Preconditions
 
@@ -48,6 +51,9 @@ Steps run once per app, numbered by app and step: 11-15 GitHub, 21-25 Salesforce
 | n7 | After n4 | The header reads "Connected · " and the default account's name |
 | n8 | (Salesforce) Add account | Where it signs in starts at the first account's company address |
 | 41 | Make a team auth config for GitHub, open the app page and Edit | The row and Edit show `<console>/connections/sign-in/return`, with a copy button |
+| 51 | The viewer opens Apps and GitHub's page before anyone connects it | Both say "Ask an admin" and name Priya Shah |
+| 52 | Add account on Salesforce, pick test.salesforce.com | The Test account switch turns on; the page and window never say sandbox |
+| 53 | GitHub's Settings tab | Its API and sign-in addresses, each on a `.test` host marked Test host |
 | 9 | Every page | No page errors |
 
 ## Acceptance layers
