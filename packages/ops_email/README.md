@@ -6,7 +6,7 @@ the provider from settings, so a deployment changes provider by changing setting
 
 | Direction | Setting | Providers |
 |---|---|---|
-| In | `OPS_MAILBOX_SOURCE` | `graph` (delta query; `OPS_GRAPH_TENANT_ID`, `OPS_GRAPH_CLIENT_ID`, `OPS_GRAPH_CLIENT_SECRET`). A team's own mailboxes are records read by their provider (IMAP on a dev stack's GreenMail); tests read JSON files through `ops_email.testing` |
+| In | none | A team's own mailboxes are records read by their provider (Graph, IMAP; a dev stack's GreenMail); tests read JSON files through `ops_email.testing` |
 | Out | `OPS_MAIL_PROVIDER`, `OPS_MAIL_FROM` | `smtp` (`OPS_SMTP_*`), `resend` (`OPS_RESEND_API_KEY`), `graph` (`sendMail`), `fake` (dev: JSON files under `OPS_MAIL_FAKE_OUT_DIR`) |
 
 ```python

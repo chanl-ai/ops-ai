@@ -7,7 +7,7 @@ Status: retired 2026-10-18: the v1 court order flow and its mailbox deployment a
 | Needs | How |
 |---|---|
 | PostgreSQL and OPA | `make db-up` |
-| agents-service on the scripted model, with tools-service as its gateway and the fake Graph source | started by the script on the run's own ports (`OPS_MAILBOX_SOURCE=fake`, the seeded `dep_levy_mailbox` deployment) |
+| agents-service on the scripted model, with tools-service as its gateway and the fake Graph source | started by the script on the run's own ports (the seeded `dep_levy_mailbox` deployment) |
 | The bank system on https | the scripts' fake bank (`services/tools-service/scripts/fake_bank`), served by the script, listed on egress with its private range, imported as a published module with `place_hold` approved by one person of `team_ops` |
 
 ## Steps and expected results

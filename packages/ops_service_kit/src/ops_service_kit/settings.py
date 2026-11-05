@@ -98,16 +98,15 @@ class Settings(BaseSettings):
     # Dev only: channel deployments to seed at start (a graph on a channel), e.g. services/agents-service/seed/
     # deployments.json. Rows that exist are updated to the file.
     deployments_seed_file: Path | None = None
-    # Mail in (packages/ops_email): the source a process-wide mailbox is read from. "none": nothing is read. "graph":
-    # Microsoft Graph's delta query with the app credentials below. A team's own mailboxes are records (Channels >
-    # Email) read by their provider; a dev stack's are on GreenMail.
-    mailbox_source: Literal["none", "graph"] = "none"
+    # Mail in is a team's own mailbox records (Channels > Email), each read by its provider; a dev stack's are on
+    # GreenMail. No setting names a mailbox.
     # The IMAP server a mailbox of provider gmail signs in to.
     gmail_imap_host: str = "imap.gmail.com"
     # The SMTP server a Gmail mailbox's replies go through when its sender names none.
     gmail_smtp_host: str = "smtp.gmail.com"
     graph_url: str = "https://graph.microsoft.com"
     graph_login_url: str = "https://login.microsoftonline.com"
+    # The install's own Microsoft 365 app, for mail_provider "graph" only: the platform's sender, not a team's mailbox.
     graph_tenant_id: str | None = None
     graph_client_id: str | None = None
     graph_client_secret: SecretStr | None = None

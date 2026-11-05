@@ -42,7 +42,6 @@ x-settings: &settings
   OPS_FILES_SCANNING: ${OPS_FILES_SCANNING:-eicar}
   # The features this install turns on (docs/deploy/install.md, Feature flags); empty turns none on.
   OPS_FLAGS: ${OPS_FLAGS:-}
-  OPS_MAILBOX_SOURCE: none
   OPS_MAIL_PROVIDER: ${OPS_MAIL_PROVIDER:-none}
   OPS_MAIL_FROM: ${OPS_MAIL_FROM:-}
   OPS_SMTP_HOST: ${OPS_SMTP_HOST:-}
