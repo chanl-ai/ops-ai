@@ -20,7 +20,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic_ai.models.test import TestModel
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from ops_agents.activities.tool_directory import OperationRef
@@ -254,8 +254,8 @@ async def test_an_update_takes_an_unedited_copy_at_once_and_asks_first_for_one_w
     assert (review["fromVersion"], review["toVersion"], review["edits"]) == (2, 3, [])
     assert "instructions" in review["changes"]
     assert ok(await client.post(path, json={}, headers=OPS))["taken"] is True
-    rt: Any = client._transport.app.state.runtime  # type: ignore[attr-defined]
-    async with rt.db.begin() as c:
+    db = cast(AsyncEngine, client._transport.app.state.runtime.db)  # type: ignore[attr-defined]
+    async with db.begin() as c:
         await c.execute(sa.update(template_copies).values(record_digest=None))
     wire(client, [changed | {"version": 4, "digest": "c" * 64}])
     assert ok(await client.get(path, headers=OPS))["edits"]
