@@ -4132,6 +4132,10 @@ export interface components {
         };
         /** SecretMeta */
         SecretMeta: {
+            /** Authconfig */
+            authConfig?: {
+                [key: string]: string;
+            } | null;
             /** Connectionid */
             connectionId?: string | null;
             /** Createdat */
@@ -4148,6 +4152,11 @@ export interface components {
             name: string;
             /** Protection */
             protection?: ("system" | "managed") | null;
+            /**
+             * Readonly
+             * @default false
+             */
+            readOnly: boolean;
             /** Rotatedat */
             rotatedAt?: string | null;
             /** Teamid */

@@ -18,4 +18,8 @@ export interface SecretMeta {
   usedBy: SecretUser[];
   /** The team whose tool modules and connections read it; another team that needs it holds its own. */
   teamId: string;
+  /** The auth config this is the client secret of: changed on that config, never here. */
+  authConfig?: { id: string; name: string } | null;
+  /** True when this list may not change it (an auth config's client secret). */
+  readOnly?: boolean;
 }

@@ -314,7 +314,7 @@ def main() -> None:
             mailboxes_router(settings, secrets, policy, graph),
             egress_router(EgressStore(engine)),
             expressions_router(),
-            secrets_router(secrets, modules=store),
+            secrets_router(secrets, modules=store, credentials=connection_store),
             send_policy_router(SendPolicies(engine), directory),
             mocks_router(MockStore(engine), store, directory, security_team=settings.security_team_id),
             *(

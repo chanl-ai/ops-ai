@@ -134,12 +134,11 @@ class SecretStore:
 
     @staticmethod
     def _matching(tenant_id: str, team_id: str, search: str, template_id: str | None = None) -> sa.ColumnElement[bool]:
-        # An account's secret parts (an OAuth client secret, an API key) are its sign-in, kept and changed on the
-        # account; the Secrets list holds only values tools reference.
+        # An account's secret parts (an API key, a password) are its sign-in, kept and changed on the account, so the
+        # Secrets list leaves them out. An auth config's client secret is listed, read only, with its config.
         named = sa.and_(
             _of(tenant_id, team_id),
             tool_secrets.c.connection_id.is_(None),
-            tool_secrets.c.credential_id.is_(None),
             contains(tool_secrets.c.name, search),
         )
         return named if template_id is None else sa.and_(named, tool_secrets.c.template_id == template_id)

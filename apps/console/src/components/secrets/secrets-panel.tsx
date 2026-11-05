@@ -40,7 +40,19 @@ function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onDelete: 
       cell: ({ row }) => (
         <div className="min-w-48">
           <code className="font-mono text-sm">{row.original.name}</code>
-          <div className="font-mono text-[11px] text-muted-foreground">{`{{${row.original.name}}}`} in a header</div>
+          {row.original.authConfig ? (
+            <StopRowClick align="start">
+              <div className="text-[11px] text-muted-foreground" data-testid={`secret-auth-config-${row.original.name}`}>
+                Client secret of{' '}
+                <Link href={`/integrations/credentials/${encodeURIComponent(row.original.authConfig.id)}`} className="underline underline-offset-2">
+                  {row.original.authConfig.name}
+                </Link>
+                ; change it there
+              </div>
+            </StopRowClick>
+          ) : (
+            <div className="font-mono text-[11px] text-muted-foreground">{`{{${row.original.name}}}`} in a header</div>
+          )}
         </div>
       ),
       enableHiding: false,
@@ -93,7 +105,8 @@ function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onDelete: 
     {
       id: 'actions',
       meta: { className: 'sticky right-0 z-[1] w-10 bg-card shadow-[-8px_0_8px_-8px_rgb(0_0_0/0.12)]' },
-      cell: ({ row }) => (
+      cell: ({ row }) =>
+        row.original.readOnly ? null : (
         <StopRowClick>
           <DataTableRowActions
             row={row}

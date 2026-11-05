@@ -1721,6 +1721,7 @@ class PluginUpdateView(TypedDict, closed=True):
 
 
 class SecretMeta(TypedDict, closed=True):
+    authConfig: NotRequired[dict[str, str] | None]
     connectionId: NotRequired[str | None]
     createdAt: str
     createdBy: str
@@ -1729,6 +1730,7 @@ class SecretMeta(TypedDict, closed=True):
     lastUsedAt: NotRequired[str | None]
     name: str
     protection: NotRequired[Literal["system", "managed"] | None]
+    readOnly: NotRequired[bool]
     rotatedAt: NotRequired[str | None]
     teamId: str
     teams: NotRequired[list[str] | None]
