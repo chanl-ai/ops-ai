@@ -38,6 +38,11 @@ class Introspect(In):
     api_key: str = Field(min_length=1, max_length=200)
 
 
+class PermissionVersionOut(Out):
+    # Rises with every role, grid, assignment, membership or policy change; a person's token older than it is refused.
+    permission_version: int
+
+
 class ActingForIn(In):
     """The person a tool call acts for, by the email a run or chat turn records; the team is the service token's."""
 

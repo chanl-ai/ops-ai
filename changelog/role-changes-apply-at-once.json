@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Role changes apply at once",
+  "description": "A change to a role's permissions, someone's roles or an access policy now applies on the person's next action, instead of up to 15 minutes later when their sign-in renewed.",
+  "tag": "improved"
+}

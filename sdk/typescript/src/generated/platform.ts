@@ -1595,6 +1595,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[PermissionVersionOut] */
+        Envelope_PermissionVersionOut_: {
+            data: components["schemas"]["PermissionVersionOut"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[PermissionsOut] */
         Envelope_PermissionsOut_: {
             data: components["schemas"]["PermissionsOut"];
@@ -2243,6 +2252,11 @@ export interface components {
              * @enum {string}
              */
             scope: "all" | "own";
+        };
+        /** PermissionVersionOut */
+        PermissionVersionOut: {
+            /** Permissionversion */
+            permissionVersion: number;
         };
         /** PermissionsOut */
         PermissionsOut: {

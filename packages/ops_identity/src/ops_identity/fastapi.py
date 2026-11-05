@@ -38,7 +38,7 @@ from ops_service_kit.settings import Settings
 from ops_store import isolation
 
 from .acting_for import ActingForPerson
-from .http import http_introspect, http_jwks
+from .http import http_current_version, http_introspect, http_jwks
 from .principal import Principal
 from .resolve import Identity, ServiceAuth, mint_service_token
 from .service_keys import service_signer, service_verifiers
@@ -87,6 +87,11 @@ class Auth:
             introspect=http_introspect(
                 http,
                 f"{internal.rstrip('/')}/v1/auth/introspect",
+                lambda: mint_service_token(signer, service=audience, audience="platform", tenant_id=None),
+            ),
+            current_version=http_current_version(
+                http,
+                internal,
                 lambda: mint_service_token(signer, service=audience, audience="platform", tenant_id=None),
             ),
             services=services,

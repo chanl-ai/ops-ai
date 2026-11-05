@@ -38,7 +38,7 @@ These hold whatever the grid and policies say. A 403 with one of these codes nee
 
 | Control | Codes | Where |
 |---|---|---|
-| Token identity: every caller is a verified token, key or service token; dev headers only in dev | 401, `api_key_refused`, `not_the_invitee`, `key_not_registered` | `packages/ops_identity/src/ops_identity/resolve.py`, `fastapi.py:13` |
+| Token identity: every caller is a verified token, key or service token; dev headers only in dev | 401, `permissions_changed`, `api_key_refused`, `not_the_invitee`, `key_not_registered` | `packages/ops_identity/src/ops_identity/resolve.py`, `fastapi.py:13` |
 | Tenant isolation: another tenant's record is not found | 404, `tenant_required` | store tenant filter and PostgreSQL row-level security (data model) |
 | Team isolation: another team's record is refused naming the owning team | `team_forbidden` (`details.teamId`), `team_required`, `team_mismatch` | `resolve.py:49`, `check.py:203` |
 | Scoped service tokens and API keys: a token does only what its scopes or key target say | `scope_required`, `event_not_owned`, `key_target`, `widget_key_other_deployment` | `check.py:212-247`, `services/agents-service/src/ops_agents/api/auth.py:272` |
@@ -52,7 +52,11 @@ assignment in the same transaction) or a grant, in one team or in every team (`*
 (`services/platform-service/src/ops_platform/store/tables.py`, migration `0006_roles`). What they may do in a team is
 the union of their unexpired assignments there, `all` over `own`. The token carries team → role ids as the `access`
 claim, each of those roles' stored cells as the `grids` claim (`ops_access.encode_grid`), and the tenant's
-`perm_version`; every service reads them locally, so a change applies at the next token refresh.
+`perm_version`; every service reads them locally. A service also asks platform-service for the tenant's current
+version (internal `GET /v1/tenants/{id}/permission-version`, cached for one second) and refuses an older token with
+401 `permissions_changed`; the console renews the token and retries, so a role, grid, assignment or policy change
+decides on the person's next request (`packages/ops_identity/src/ops_identity/resolve.py`, D62). When platform-service
+does not answer, the last version seen, else the token, decides.
 
 | Built-in role | Stored membership value | Meaning | Who holds it |
 |---|---|---|---|
@@ -392,7 +396,7 @@ when a question comes up again.
 | D36 | Are chats private? | Yes by default (`chatThreadsOwnerOnly`); off lets the team's admins read them | 2026-10-17 |
 | D37 | Who edits what agents remember about a person? | That person only | 2026-10-17 |
 | D38 | Where is a Security-team rule held? | In the Security team, a per-workspace setting; Admin elsewhere holds none of `SECURITY_TEAM_ACTIONS` | 2026-10-17 |
-| D39 | What does an assignment look like, and when does a change apply? | Person or team subject, a role, a team or `*`, an optional expiry; the permission version rises on every change and applies at the next token refresh | 2026-10-17 |
+| D39 | What does an assignment look like, and when does a change apply? | Person or team subject, a role, a team or `*`, an optional expiry; the permission version rises on every change, which applies on the next request (D62) | 2026-10-17 |
 | D40 | Custom roles: when, how narrow, which cells? | Later; may be narrower than any built-in; may not hold secrets, egress or Security-team cells. The first answer is narrowed by D22 | 2026-10-17 |
 | D41 | How does a service pass `can()`? | Its token lists `area:action` scopes; 403 `scope_required` otherwise | 2026-10-17 |
 | D42 | Do people call service routes? | Yes: each with the cell it needs, answering their team's records only | 2026-10-18 |
@@ -415,6 +419,7 @@ when a question comes up again.
 | D59 | What does Builder hold by default? | Every cell in the team except people and access (members, roles, assignments) and the workspace's settings: connections, secrets, auth configs and testing a connection included. Admin keeps every cell | 2026-11-05 |
 | D60 | Where do role permissions live, and who changes them? | In the database, managed centrally and defined from the UI: a workspace admin edits any role's cells on Access › Roles, built-in or custom, each change audited; the code grid is seed data only, with Reset to default per built-in role | 2026-11-05 |
 | D61 | Where is an auth config's client secret changed? | On its auth config only. The Secrets page lists it read only with a link to the config, and the secrets API refuses a rotate or delete of it (409 `credential_secret`) naming the config | 2026-11-05 |
+| D62 | When does a change to roles, cells, assignments or policies reach the services? | On the person's next request: each service compares the token's `perm_version` with platform-service's current one and refuses an older token (401 `permissions_changed`), so the client renews it. The database stays the one source; the token is a copy checked by version | 2026-11-05 |
 
 ## Open questions
 
