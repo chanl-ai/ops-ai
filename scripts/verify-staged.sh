@@ -69,31 +69,16 @@ gate() {
   PYTHONPATH="$export_path" "$@" >"$tmp/.gate-$name.log" 2>&1 \
     || { tail -20 "$tmp/.gate-$name.log"; echo "verify-staged: $name: $fix"; exit 1; }
 }
-# The reviewed SQL Server DDL is what the store models and migrations compile to, every revision renders
-# offline for SQL Server installs, and the SQL Server system principal reads what PostgreSQL's system role reads;
-# the last two reddened HEAD three times on 10-30 because only the full QA run checked them.
-gate golden-ddl '(^|/)migrations/|/store/|^packages/ops_store/|^deploy/database/' \
-  "the SQL Server golden DDL is not what the models compile to; review it, run make db-ddl-golden and stage it" \
-  "$root/.venv/bin/python" -m pytest -q -p no:cacheprovider deploy/database/tests/test_mssql_ddl.py \
-    deploy/database/tests/test_offline.py deploy/database/tests/test_model_parity.py
 # Every table is marked TENANT_SCOPED or system(reason); a migration that adds one unmarked turned HEAD red overnight.
 # A migration's downgrade must undo its upgrade: the runtime-logins test migrates each chain down and back up, and
 # three empty downgrades (tools 0048, 0049, 0050) each held QA red for about an hour on 10-31.
 gate downgrades '/migrations/versions/.*\.py$' \
   "a staged migration's downgrade() does nothing; make it undo exactly what upgrade() did" \
   python3 "$root/scripts/check_downgrades.py" --root "$PWD" "${staged[@]}"
-gate isolation '(^|/)migrations/|/store/|^packages/ops_store/' \
-  "a table is not marked TENANT_SCOPED or system(reason) (above); mark it in its store models" \
-  "$root/.venv/bin/python" -m pytest -q -p no:cacheprovider deploy/database/tests/test_isolation_markings.py \
-  scripts/tests/test_team_boundary.py
 # Test person tokens live an hour: a short one flakes under load (c81399fd). The scan is about 2 s.
 gate token-lifetime '(^|/)tests/.*\.py$' \
   "a test mints a short-lived person token (above); mint it for an hour, or allowlist an expiry test with its reason" \
   "$root/.venv/bin/python" -m pytest -q -p no:cacheprovider scripts/tests/test_test_token_lifetime.py
-# ops_store is under every service; its own tests (about 11 s) run when it changes.
-gate ops-store '^packages/ops_store/|^services/[^/]+/src/[^/]+/store/' \
-  "an ops_store test fails (above); every service reads this package" \
-  "$root/.venv/bin/python" -m pytest -q -p no:cacheprovider packages/ops_store/tests
 # The dependencies page is generated from the lock (make sbom).
 gate sbom '(^|/)pyproject\.toml$|^uv\.lock$|^docs/architecture/dependencies\.md$' \
   "docs/architecture/dependencies.md does not match uv.lock; run make sbom and stage it" \
@@ -103,11 +88,6 @@ gate sbom '(^|/)pyproject\.toml$|^uv\.lock$|^docs/architecture/dependencies\.md$
 gate k8s '^deploy/compose/app\.yaml$|^deploy/k8s/|^(services|packages)/[^/]+/src/[^/]+/settings\.py$' \
   "deploy/k8s/base is not what deploy/k8s/generate.py writes; run uv run python deploy/k8s/generate.py and stage it" \
   "$root/.venv/bin/python" deploy/k8s/generate.py --check
-# The SDKs' generated layer is what the committed OpenAPI documents say (sdk/generate.py); a route body change
-# committed without `make sdk` turned HEAD red on 10-30, and only QA's full run checked it.
-gate sdk '^services/[^/]+/openapi\.json$|^sdk/' \
-  "the generated SDK does not match the services' OpenAPI documents; run make sdk and stage sdk/" \
-  "$root/.venv/bin/python" sdk/generate.py --check
 # No service imports another, outside a test conftest the allowlist names (c4957ea5 reddened QA this way).
 gate cross-service '^services/[^/]+/(src|tests)/' \
   "a service imports another service; import it only in a tests/conftest.py the allowlist names" \
@@ -117,81 +97,12 @@ gate cross-service '^services/[^/]+/(src|tests)/' \
 gate standards '^(services|packages)/.*\.py$' \
   "a code rule in services/agents-service/scripts/check_standards.py fails (above); fix the code" \
   bash -c 'cd services/agents-service && "$0" scripts/check_standards.py' "$root/.venv/bin/python"
-# Python files in the commit get the same lint, format, type and inventory checks verify-head runs. They slipped past the
-# console-only gate above and turned HEAD red for every builder until someone fixed them forward.
+# Python files in the commit are linted and format-checked; a second each.
 mapfile -t py < <(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --name-only --diff-filter=ACMR -- '*.py' || true)
-# Lint and format first: they take a second and fail most often, so a commit that will be refused says so before the
-# minutes of import, openapi and type checks below (the same checks, only earlier).
 if [ "${#py[@]}" -gt 0 ]; then
   "$root/.venv/bin/ruff" check "${py[@]}"
   "$root/.venv/bin/ruff" format --check "${py[@]}"
 fi
-# Database code only in store packages, and the layers' import directions (.importlinter), on this export: the
-# shared venv's editable installs point at the working tree, so the export's source goes first on PYTHONPATH.
-if [ "${#py[@]}" -gt 0 ] || [ -n "$(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --name-only -- .importlinter)" ]; then
-  PYTHONPATH="$(ls -d "$PWD"/packages/*/src "$PWD"/services/*/src 2>/dev/null | tr '\n' ':')" "$root/.venv/bin/lint-imports" --no-logo --no-cache
-fi
-mapfile -t docs < <(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --name-only --diff-filter=ACMRD -- 'services/*/openapi.json' || true)
-if [ "${#py[@]}" -gt 0 ] || [ "${#docs[@]}" -gt 0 ]; then
-  pp=$(ls -d "$PWD"/packages/*/src "$PWD"/services/*/src 2>/dev/null | tr '\n' ':')
-  # Each service whose code or openapi.json is in the commit must still match its committed document, checked on this
-  # export with its own source first (the shared venv's editables point at the tree): a route change committed without
-  # openapi.json, or an openapi.json grafted onto an older HEAD, turned HEAD red three times on 10-18. A shared package
-  # changes the documents of the services that depend on it, directly or through another package (scripts/dependants.py).
-  # No service file in the commit (a script only) is no services, not a failure: grep finds nothing and exits 1.
-  svcs=$(printf '%s\n' "${py[@]}" "${docs[@]}" | grep -oE '^services/[^/]+' | sort -u || true)
-  mapfile -t changed_pkgs < <(printf '%s\n' "${py[@]}" | grep -oE '^packages/[^/]+' | grep -v '^packages/usecase-runner$' | sort -u || true)
-  if [ "${#changed_pkgs[@]}" -gt 0 ]; then
-    svcs=$(printf '%s\n' $svcs; "$root/.venv/bin/python" scripts/dependants.py "${changed_pkgs[@]}" | awk '$1 == "service" { print $2 } $1 == "unknown" { print "ALL" }')
-    if grep -qx ALL <<<"$svcs"; then svcs=$(ls -d services/*/ | sed 's#/$##'); fi
-    svcs=$(printf '%s\n' $svcs | sort -u)
-  fi
-  for svc in $svcs; do
-    [ -f "$svc/scripts/check_openapi.py" ] || continue
-    (cd "$svc" && "$root/.venv/bin/python" -I -c "import runpy, sys; sys.path[:0] = '$pp'.split(':'); sys.argv = ['check_openapi.py']; runpy.run_path('scripts/check_openapi.py', run_name='__main__')") \
-      || { echo "verify-staged: $svc/openapi.json does not match the committed app; run make -C $svc openapi and stage it"; exit 1; }
-  done
-fi
-# Database-specific code outside ops_store, on this export with its own checker and baseline (an export whose
-# checker predates the strict rule skips it); --commits reads the repository for a raised row without its trailer.
-base_staged=$(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --name-only -- portable-baseline.txt)
-if grep -q -- '--commits' scripts/check_portable_store.py && { [ "${#py[@]}" -gt 0 ] || [ -n "$base_staged" ]; }; then
-  PYTHONPATH="$(ls -d "$PWD"/packages/*/src "$PWD"/services/*/src 2>/dev/null | tr '\n' ':')" \
-    "$root/.venv/bin/python" scripts/check_portable_store.py --strict
-  "$root/.venv/bin/python" "$root/scripts/check_portable_store.py" --commits
-fi
-if [ "${#py[@]}" -gt 0 ]; then
-  # Strict pyright on the commit's own Python files, the ones a service or package type-checks, on this export. The
-  # shared virtualenv's editable installs point at the working tree, where another builder's uncommitted edit made it
-  # fail or pass a commit by accident, so a pyrightconfig.json written into the export puts the export's sources first
-  # in every execution environment. Paths are physical: under macOS's /var -> /private/var link, sources named by the
-  # logical path did not match the files pyright opened, and it reported one module as two types. Type errors in staged
-  # tests reached HEAD three times in one hour on 10-30.
-  mapfile -t typed < <(printf '%s\n' "${py[@]}" | grep -E '^(packages/[^/]+/|services/[^/]+/(src|tests|migrations|scripts|experiments)/)' || true)
-  if [ "${#typed[@]}" -gt 0 ]; then
-    here=$(pwd -P)
-    "$root/.venv/bin/python" - "$here" <<'PY'
-import json, sys, tomllib
-from pathlib import Path
-
-here = Path(sys.argv[1])
-config = tomllib.loads((here / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["pyright"]
-sources = sorted(str(p) for p in [*here.glob("packages/*/src"), *here.glob("services/*/src")])
-for env in config.get("executionEnvironments", []):
-    env["extraPaths"] = sources + env.get("extraPaths", [])
-(here / "pyrightconfig.json").write_text(json.dumps(config), encoding="utf-8")
-PY
-    "$root/.venv/bin/pyright" --project "$here/pyrightconfig.json" "${typed[@]/#/$here/}"
-  fi
-  "$root/.venv/bin/python" scripts/store_inventory.py --check
-  # Each changed service's app must import from the committed files alone: a swept hunk that imports a module someone
-  # has not committed yet broke every import of ops_agents on HEAD. Source paths point at this export, not the tree.
-  pp=$(ls -d "$PWD"/packages/*/src "$PWD"/services/*/src 2>/dev/null | tr '\n' ':')
-  for svc in $(printf '%s\n' "${py[@]}" | grep -oE '^services/[^/]+' | sort -u); do
-    for app in $(find "$svc/src" -name app.py 2>/dev/null | awk '{ print length, $0 }' | sort -n | head -1 | cut -d' ' -f2); do
-      mod=$(echo "${app#$svc/src/}" | sed 's#/#.#g; s#\.py$##')
-      PYTHONPATH="$pp" PYTHONSAFEPATH=1 "$root/.venv/bin/python" -I -c "import sys; sys.path[:0]='$pp'.split(':'); import $mod" \
-        || { echo "verify-staged: $mod does not import from the committed files"; exit 1; }
-    done
-  done
-fi
+# Slower checks that build each service (OpenAPI documents, the generated SDKs, import directions, strict types, the
+# SQL Server DDL and store tests) run in CI on every pull request and in `make verify`, not on each commit. After a route
+# or DTO change, `make openapi` regenerates every service's document and the SDKs in one step.

@@ -52,5 +52,16 @@
   "chatRenderer": [
     "src/app/dev/chat-default-agent/page.tsx",
     "src/components/shared/chat-blocks.tsx"
+  ],
+  "dialogColumns": [
+    "src/app/settings/account/security/page.tsx",
+    "src/app/settings/workspace/storage/page.tsx",
+    "src/app/workflows/runs/[runId]/page.tsx",
+    "src/components/chat/widgets.tsx",
+    "src/components/deployments/deployment-sheet.tsx",
+    "src/components/deployments/mcp/endpoint-panel.tsx",
+    "src/components/document-types/tests-panel.tsx",
+    "src/components/knowledge/document-sheet.tsx",
+    "src/components/skills/generate-skill-dialog.tsx"
   ]
 }
