@@ -10,6 +10,7 @@ import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { PageLayout } from '@/components/page-layout';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
+import { AskAnAdmin } from '@/components/connections/ask-an-admin';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -24,6 +25,9 @@ import type { ConnectMode } from './connect-system-dialog';
 
 export type { ConnectMode };
 type View = 'all' | 'connected' | 'available';
+
+// An account whose sign-in ended (expired, refused or revoked) is signed in again with Reconnect, not Connect.
+const ENDED = new Set(['expired', 'refused', 'revoked']);
 
 const STATE: Record<AppState, { label: string; className: string; icon?: typeof CircleCheck }> = {
   connected: { label: 'Connected', className: 'border-success/40 bg-success/10 text-success-text', icon: CircleCheck },
@@ -122,10 +126,10 @@ function AppCard({ system, onConnect }: { system: SystemCard; onConnect: (s: Sys
           )}
           {state === 'connected' || state === 'removed' ? null : !system.mayManage ? (
             // Only a team admin connects an app; anyone else is told why rather than shown a dead button.
-            <span className="text-xs text-muted-foreground" data-testid={`connect-${system.id}-why`}>
-              A team admin connects it
+            <span className="relative z-10">
+              <AskAnAdmin testId={`connect-${system.id}-why`} />
             </span>
-          ) : state === 'test_failed' ? (
+          ) : state === 'test_failed' || (state === 'needs_sign_in' && ENDED.has(String(system.state))) ? (
             <Button size="sm" variant="outline" className="relative z-10" onClick={() => onConnect(system, 'reconnect')} data-testid={`reconnect-${system.id}`}>
               Reconnect
             </Button>
