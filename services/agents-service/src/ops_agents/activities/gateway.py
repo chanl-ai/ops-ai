@@ -31,8 +31,8 @@ class RunContext:
     act: str | None = None
     # The lease generation of the run making the call; the gateway refuses a write from a superseded owner (E2b).
     generation: int | None = None
-    # Which of a connection's environments the call uses: live runs and chats production, test runs and test
-    # chats test. None says nothing, and the gateway then uses test.
+    # The kind of run the call is made in: live runs and chats live, test runs and test chats test. None says
+    # nothing, and the gateway then treats the call as a test run's.
     environment: str | None = None
     # The engine run making the call, whose starter the call acts for; None outside a run.
     run_id: str | None = None
@@ -40,12 +40,12 @@ class RunContext:
     team_account: bool = False
 
 
-TEST, PRODUCTION = "test", "production"
+TEST, LIVE = "test", "live"
 
 
 def environment_of(mode: str | None) -> str | None:
-    """An engine run's mode as the environment its calls use: a test run test, a live one production."""
-    return None if mode is None else TEST if mode == "test" else PRODUCTION
+    """An engine run's mode as the kind of run its calls are made in: a test run test, a live one live."""
+    return None if mode is None else TEST if mode == "test" else LIVE
 
 
 RUN_CONTEXT: ContextVar[RunContext | None] = ContextVar("ops_run_context", default=None)

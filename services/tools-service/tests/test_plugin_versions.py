@@ -107,9 +107,9 @@ class Upgrade:
         http = HttpExecutor(client, AllowAll(), auth=TeamSignIn())  # type: ignore[arg-type]
         if found.executor == "plugin":
             return await PluginExecutor(self.host, http, b"k" * 32).run(
-                found.module, found.operation, given, actor="t", environment="production", acting_for=None
+                found.module, found.operation, given, actor="t", environment="live", acting_for=None
             )
-        return await http.run(found.module, found.operation, given, actor="t", environment="production")
+        return await http.run(found.module, found.operation, given, actor="t", environment="live")
 
     async def listed(self, team: str) -> set[str]:
         with acting_as(team):

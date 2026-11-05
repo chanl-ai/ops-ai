@@ -57,7 +57,7 @@ def kept(r: httpx.Response) -> httpx.Response:
 def call(gw: httpx.Client, tool: str, args: dict[str, Any] | None = None) -> httpx.Response:
     """A call as agents-service makes it for a run in team_ops with nobody behind it."""
     headers = service_headers("tools", tenant=TENANT["id"], service="agents", team="team_ops")
-    body = {"tool": tool, "input": args or {}, "key": uuid4().hex, "runContext": {"environment": "production"}}
+    body = {"tool": tool, "input": args or {}, "key": uuid4().hex, "runContext": {"environment": "live"}}
     return kept(gw.post("/v1/calls", json=body, headers=headers | {"X-Team-Id": "team_ops"}))
 
 

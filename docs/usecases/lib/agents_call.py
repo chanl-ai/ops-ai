@@ -16,7 +16,7 @@ from usecase_harness import service_headers
 def main() -> None:
     base, tenant, team, tool, given = sys.argv[1:6]
     account = sys.argv[6] if len(sys.argv) > 6 else None
-    context: dict[str, str] = {"environment": "production", **({"account": account} if account else {})}
+    context: dict[str, str] = {"environment": "live", **({"account": account} if account else {})}
     body = {"tool": tool, "input": json.loads(given), "key": uuid4().hex, "runContext": context}
     headers = service_headers("tools", tenant=tenant, service="agents", team=team) | {"X-Team-Id": team}
     r = httpx.post(f"{base}/v1/calls", json=body, headers=headers, timeout=60)

@@ -1,5 +1,5 @@
 """Mock answers through the real routes: a test call gets the first mock that matches its input or the default
-and nothing reaches the system; a production call, or one that names no environment, never gets a mock; a delay and a
+and nothing reaches the system; a live call, or one that names no environment, never gets a mock; a delay and a
 timeout wait no longer than the operation's limit; and changing mocks is tools.edit."""
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ async def test_a_test_call_is_answered_from_its_mock_and_a_live_one_never(gatewa
     # A mock's answer is masked as the operation masks a real one.
     assert default["ok"] and default["output"]["holder"]["sin"] == "[redacted]"
     assert len(g.received) == before, "a mocked call reached the system"
-    live = await _call(g, {"accountId": "ERR-1"}, "m3", "production")
+    live = await _call(g, {"accountId": "ERR-1"}, "m3", "live")
     unsaid = await _call(g, {"accountId": "ERR-1"}, "m4", None)
     assert live["ok"] and unsaid["ok"], (live, unsaid)
     assert len(g.received) == before + 2

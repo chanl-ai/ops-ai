@@ -133,7 +133,7 @@ with ExitStack() as stack:
     rows = data(gw.get("/v1/executions", params={"tool": OP, "pageSize": 20}))["data"]
     check(
         "3 the call log names each call's environment",
-        sorted({r.get("environment") for r in rows}) == ["production", "test"],
+        sorted({r.get("environment") for r in rows}) == ["live", "test"],
         [(r.get("environment"), r.get("status")) for r in rows],
     )
 finish()

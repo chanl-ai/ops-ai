@@ -16,6 +16,7 @@ from ops_store.team_scope import acting_team
 
 from .connections.records import account_for
 from .defaults import ensure_defaults
+from .environments import LIVE
 from .modules.seed import PLATFORM_TOOLS, READ_TOOLS, SENDS, ensure_platform_tools, tool_title
 from .modules.seed import WORKFLOW_TOOLS as PLATFORM_MODULE_TOOLS
 from .store.connections import ConnectionStore
@@ -183,7 +184,7 @@ class ToolRegistry:
                 and self.plugins.versions
                 and str(module.get("template_id") or "").startswith("plugin:")
             ):
-                view = await self.plugins.for_call(tenant_id, acting_team(), module, "production")
+                view = await self.plugins.for_call(tenant_id, acting_team(), module, LIVE)
             for served in served_operations(module):
                 op = self.plugins.operation(view, served) if view is not module and self.plugins is not None else served
                 if not op["enabled"] or (module["team_id"] is None and op["name"] in own):
@@ -299,11 +300,11 @@ class ToolRegistry:
         *,
         tenant_id: str,
         team_id: str | None = None,
-        run: str = "production",
+        run: str = LIVE,
         account: str | None = None,
         person: str | None = None,
     ) -> Resolved | None:
-        """`run` is the kind of run the call is made in (test or production). The module comes back with the account
+        """`run` is the kind of run the call is made in (test or live). The module comes back with the account
         its call signs in with (`connection_id`, from connections.records.account_for, and whether it is a `sandbox`),
         which picks its address, instance and hosts; a listing or an access check, which shows the same tools either
         way, takes production's.

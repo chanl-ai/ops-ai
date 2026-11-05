@@ -279,7 +279,7 @@ with ExitStack() as stack:
             "tool": "uc558_update_case",
             "input": {"status": "Awaiting documents"},
             "key": key,
-            "runContext": {"act": "chat:uc558", "environment": "production"},
+            "runContext": {"act": "chat:uc558", "environment": "live"},
         }
         return httpx.post(f"{GW}/v1/calls", json=body, headers=headers, timeout=30)
 
@@ -361,7 +361,7 @@ with ExitStack() as stack:
             "key": "uc558-forged",
             "runContext": {
                 "act": "workflow:uc558",
-                "environment": "production",
+                "environment": "live",
                 "actingFor": "j.richardson@harborpine.example",
             },
         },
@@ -397,7 +397,7 @@ with ExitStack() as stack:
             "tool": "uc558_update_case",
             "input": {"status": "Closed"},
             "key": "uc558-nobody",
-            "runContext": {"act": "schedule:uc558", "environment": "production"},
+            "runContext": {"act": "schedule:uc558", "environment": "live"},
         },
         headers=service_headers("tools", team="team_ops"),
         timeout=30,
@@ -431,7 +431,7 @@ with ExitStack() as stack:
             "tool": "uc558_update_case",
             "input": {"status": "Closed"},
             "key": "uc558-nobody-2",
-            "runContext": {"act": "schedule:uc558", "environment": "production"},
+            "runContext": {"act": "schedule:uc558", "environment": "live"},
         },
         headers=service_headers("tools", team="team_ops"),
         timeout=30,
@@ -457,7 +457,7 @@ with ExitStack() as stack:
             "tool": "uc558_update_case",
             "input": {"status": "Closed"},
             "key": "uc558-nobody-3",
-            "runContext": {"act": "schedule:uc558", "environment": "production"},
+            "runContext": {"act": "schedule:uc558", "environment": "live"},
         },
         headers=service_headers("tools", team="team_ops"),
         timeout=30,

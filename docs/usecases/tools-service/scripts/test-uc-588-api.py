@@ -61,7 +61,7 @@ def kept(r: httpx.Response) -> httpx.Response:
 def call(gw: httpx.Client, tool: str, team: str = "team_ops", args: dict[str, Any] | None = None) -> httpx.Response:
     """A gateway call as agents-service makes it for a run in `team` with nobody behind it: a read, runs at once."""
     headers = service_headers("tools", tenant=TENANT["id"], service="agents", team=team)
-    body = {"tool": tool, "input": args or {}, "key": uuid4().hex, "runContext": {"environment": "production"}}
+    body = {"tool": tool, "input": args or {}, "key": uuid4().hex, "runContext": {"environment": "live"}}
     return kept(gw.post("/v1/calls", json=body, headers=headers | {"X-Team-Id": team}))
 
 
@@ -364,7 +364,7 @@ with ExitStack() as stack:
             "tool": tool,
             "input": {"id": "rec-1042"},
             "key": uuid4().hex,
-            "runContext": {"environment": "production"},
+            "runContext": {"environment": "live"},
         }
         return kept(gw.post("/v1/calls", json=body, headers=headers))
 

@@ -47,7 +47,7 @@ def call(gw: httpx.Client, tool: str, args: dict[str, Any]) -> httpx.Response:
         "tool": f"salesforce_{tool}",
         "input": args,
         "key": uuid4().hex,
-        "runContext": {"environment": "production"},
+        "runContext": {"environment": "live"},
     }
     return gw.post("/v1/calls", json=body, headers=headers | {"X-Team-Id": "team_ops"})
 

@@ -6470,7 +6470,7 @@
             "default": "test",
             "enum": [
               "test",
-              "production"
+              "live"
             ],
             "title": "Environment",
             "type": "string"
@@ -8278,7 +8278,7 @@
               {
                 "enum": [
                   "test",
-                  "production"
+                  "live"
                 ],
                 "type": "string"
               },
@@ -10205,7 +10205,7 @@
               {
                 "enum": [
                   "test",
-                  "production"
+                  "live"
                 ],
                 "type": "string"
               },
@@ -11247,7 +11247,7 @@
               {
                 "enum": [
                   "test",
-                  "production"
+                  "live"
                 ],
                 "type": "string"
               },

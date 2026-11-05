@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Live runs read live",
+  "description": "A call's kind of run reads test or live in the API, the SDKs and the call log, where a live run used to read production.",
+  "tag": "improved"
+}

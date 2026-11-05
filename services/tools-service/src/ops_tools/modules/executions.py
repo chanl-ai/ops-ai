@@ -87,7 +87,7 @@ def call_row(
         row["denyReason"] = "; ".join(r["reasons"])
     if r.get("replay_of"):
         row["replayOf"] = r["replay_of"]
-    # Which environment the call used and the connection that signed it in: every row shows Test or Production.
+    # The kind of run the call was made in and the connection that signed it in: every row shows Test or Live.
     if r.get("environment"):
         row["environment"] = r["environment"]
     if r.get("connection_id"):

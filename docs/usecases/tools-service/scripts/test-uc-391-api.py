@@ -42,7 +42,7 @@ with ExitStack() as stack:
         test.get("ok") and test["output"] == {"user": "ops-test", "environment": "test"},
         test,
     )
-    live = call(gw, "uc391_basic", environment="production")
+    live = call(gw, "uc391_basic", environment="live")
     check(
         "2 a live call signs in as the live account's user",
         live.get("ok") and live["output"] == {"user": "ops-prod", "environment": "production"},
@@ -66,7 +66,7 @@ with ExitStack() as stack:
     check(
         "4 each call row names its run and the account it signed in with, and no password",
         sorted((r.get("environment"), r.get("connectionId")) for r in rows["data"])
-        == [("production", conn["id"]), ("test", sandbox["id"])]
+        == [("live", conn["id"]), ("test", sandbox["id"])]
         and "test-pass" not in str(rows)
         and "prod-pass" not in str(rows),
         rows["data"],

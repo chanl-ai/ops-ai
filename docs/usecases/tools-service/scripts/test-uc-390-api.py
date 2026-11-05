@@ -51,7 +51,7 @@ with ExitStack() as stack:
         test.get("ok") and test["output"] == {"via": "header", "environment": "test"},
         test,
     )
-    live = call(gw, "uc390_header", environment="production")
+    live = call(gw, "uc390_header", environment="live")
     check(
         "2 a live call carries the live account's key",
         live.get("ok") and live["output"] == {"via": "header", "environment": "production"},
@@ -80,7 +80,7 @@ with ExitStack() as stack:
         q.get("ok") and q["output"] == {"via": "query", "environment": "test"},
         q,
     )
-    unset = call(gw, "uc390_query", environment="production")
+    unset = call(gw, "uc390_query", environment="live")
     check(
         "3 a live call on an app with only a sandbox account is refused as not set",
         unset.get("ok") is False and unset["output"]["error"]["code"] == "CONNECTION_NOT_SET",

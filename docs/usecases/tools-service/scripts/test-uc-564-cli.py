@@ -202,7 +202,7 @@ with ExitStack() as stack:
         failed = [line for line in fh.read().decode(errors="replace").splitlines() if "plugin_failed" in line]
     on = gw.put("/v1/apps/plugin:test.reach/team", json={"enabled": True}, headers=priya)
     headers = service_headers("tools", tenant=tenant, service="agents", team="team_ops")
-    body = {"tool": "reach_reach_out", "input": {}, "key": uuid4().hex, "runContext": {"environment": "production"}}
+    body = {"tool": "reach_reach_out", "input": {}, "key": uuid4().hex, "runContext": {"environment": "live"}}
     reached = data(gw.post("/v1/calls", json=body, headers=headers)) or {}
     error = ((reached.get("output") or {}).get("error") or {}).get("code")
     check(

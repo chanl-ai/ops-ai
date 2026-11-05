@@ -26,7 +26,7 @@ from ops_identity import ActingForPerson
 
 from ..connections.account_events import CONNECTED, connected_key, needs_reconnect_event
 from ..connections.records import EXPIRED, REFUSED
-from ..environments import PRODUCTION
+from ..environments import LIVE
 from ..secrets import SecretMissing, SecretResolver
 from ..store.connections import SHARED, ConnectionStore
 from .assertion import SigningError, read_certificate
@@ -245,11 +245,11 @@ class Authenticator:
             raise AuthFailed("CONNECTION_OUT_OF_SCOPE", f"{name} is not available to this module's team.")
         if conn["status"] == "revoked":
             raise AuthFailed("CONNECTION_REVOKED", f"{name} is revoked; reconnect it before tools use it.")
-        if run == PRODUCTION and conn.get("sandbox"):
+        if run == LIVE and conn.get("sandbox"):
             raise AuthFailed(
                 "CONNECTION_NOT_SET",
-                f"{name} is a sandbox account, which only test runs use. A team admin connects a live account under "
-                "the app's Accounts.",
+                f"{name} is a test account, which only test runs use. A team admin connects a live account on the "
+                "app's page.",
             )
         # A credential goes to its own system only: the module's address must be the account's, scheme, host and
         # port, before any secret is read; another allow-listed host gets nothing.

@@ -36,7 +36,6 @@ from .modules.directory import Directory, Team
 from .registry import ToolRegistry
 from .store.modules import Aggregate
 
-PRODUCTION = "production"
 _PATH = re.compile(r"^(?:/mcp)?/(?P<team>[^/]+)/?$")
 _CLIENT_INFO = "io.modelcontextprotocol/clientInfo"
 

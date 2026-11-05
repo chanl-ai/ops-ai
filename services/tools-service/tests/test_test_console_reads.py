@@ -109,14 +109,14 @@ async def test_the_owner_reads_for_real_without_any_workflow_approval(g: Gateway
 async def test_a_real_write_runs_for_an_approver_and_is_logged_from_the_console(g: Gateway) -> None:
     """Real is a gateway call. The module holds place_hold for approval, and the dev caller, who passes every
     role rule, holds the approver role (reviews.decide), so a live run of it is not asked: the write runs, and the log
-    names it as the write's approver under the console channel and the live environment. A test run of the same write
+    names it as the write's approver under the console channel and a live run. A test run of the same write
     on this live account waits for a person instead (test_test_run_writes)."""
-    r = await _as_owner(g, "place_hold", {"accountId": "CHQ-2219", "hours": 24}, "production")
+    r = await _as_owner(g, "place_hold", {"accountId": "CHQ-2219", "hours": 24}, "live")
     out = r.json()["data"]
     assert (out["decision"], out["stubbed"]) == ("allow", False), out
     assert [x["path"] for x in g.received] == ["/v1/holds"], "the system was called"
     rows = (await g.client.get("/v1/executions", params={"tool": g.tool("place_hold")})).json()["data"]["data"]
-    assert [(x["channel"], x["environment"], x["decision"]) for x in rows] == [("console", "production", "allow")], rows
+    assert [(x["channel"], x["environment"], x["decision"]) for x in rows] == [("console", "live", "allow")], rows
     assert rows[0]["approval"].get("by"), rows[0]["approval"]
 
 
@@ -143,7 +143,7 @@ async def test_the_panels_default_context_is_the_owner_even_with_a_workflow_wait
         "contextId": first["id"],
         "target": "sandbox",
         "input": {"accountId": "CHQ-2219", "hours": 24},
-        "environment": "production",
+        "environment": "live",
     }
     out = (await g.client.post(f"{BASE}/test", json=body, headers=TEAM)).json()["data"]
     # Decided as the owner's try, never refused as the waiting workflow's no_approval.
@@ -175,7 +175,7 @@ async def test_a_real_run_signs_in_with_the_sandbox_account_in_a_test_and_the_li
         assert put.status_code == 200, put.text
     await store.put({**m, "connection_id": live["id"]}, expected_revision=m["revision"])
     body = {"operation": g.tool("get_account"), "contextId": "owner", "target": "sandbox", "input": {"accountId": "A"}}
-    for env, key in (("production", "k-prod"), ("test", "k-test")):
+    for env, key in (("live", "k-prod"), ("test", "k-test")):
         r = await g.client.post(f"{BASE}/test", json={**body, "environment": env}, headers=TEAM)
         assert r.json()["data"]["decision"] == "allow", r.text
         sent = g.received[-1]

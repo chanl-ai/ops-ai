@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import Any, cast
 
-from ..environments import PRODUCTION
+from ..environments import LIVE
 
 Row = dict[str, Any]
 
@@ -58,7 +58,7 @@ def account_for(chosen: Row | None, accounts: Sequence[Row], run: str) -> Row | 
     run uses `chosen`. Every choice of a call's account between sandbox and live is made here. A live run on a sandbox
     account is refused where it signs in (Authenticator.prepare), and the gateway holds a test run's write on a live
     account for a person (gateway_calls)."""
-    if run != PRODUCTION:
+    if run != LIVE:
         sandbox = next((a for a in accounts if a.get("sandbox")), None)
         if sandbox is not None:
             return sandbox
