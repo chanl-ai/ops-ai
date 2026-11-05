@@ -43,7 +43,7 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
-  "apps_change_app_credential_route": {
+  "apps_change_app_credential": {
     "body": "json",
     "headers": [],
     "method": "PATCH",
@@ -106,6 +106,20 @@ export const toolsOperations = {
       "account_id"
     ],
     "query": [],
+    "stream": false
+  },
+  "apps_delete_app_credential": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/app-credentials/{credential_id}",
+    "pathParams": [
+      "credential_id"
+    ],
+    "query": [
+      "moveTo",
+      "move"
+    ],
     "stream": false
   },
   "apps_disconnect": {

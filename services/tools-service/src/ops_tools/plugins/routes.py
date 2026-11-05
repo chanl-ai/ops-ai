@@ -469,6 +469,16 @@ class PluginAccounts:
             plugin_settings=mine,
         )
 
+    async def move_to_credential(
+        self, who: Caller, plugin: Plugin, connection_id: str, credential_id: str | None
+    ) -> None:
+        """Puts a plugin account on another of the team's app credentials, or with none on Ops AI's app, its sign-in
+        addresses written again from that credential's settings."""
+        b = await self.host.bindings.get(who.tenant_id, who.team.id, plugin.manifest.id) or {}
+        settings = self._team_settings(plugin, dict(b.get("settings") or {}), {})
+        body = TeamPluginIn(enabled=True, credential_id=credential_id)
+        await self.keys(who, plugin, connection_id, settings, body, own={})
+
     async def rewrite_addresses(self, who: Caller, plugin: Plugin, connection_id: str) -> None:
         """Writes a plugin account's sign-in addresses again from its settings as they now are (its app credential's
         changed), keeping its kind, its credential and every setting it holds."""

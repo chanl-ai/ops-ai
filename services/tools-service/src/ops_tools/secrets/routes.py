@@ -69,6 +69,8 @@ class SecretUser(Out):
 class SecretMeta(Out):
     name: str
     version: int
+    # The value's last four characters, so a person can tell which value is held; none for a short value.
+    ends: str | None = None
     created_by: str
     created_at: str
     rotated_at: str | None = None
@@ -122,6 +124,7 @@ def _meta(row: dict[str, Any], users: dict[str, list[dict[str, Any]]] | None = N
     out = {
         "name": row["name"],
         "version": row["version"],
+        "ends": row.get("ends"),
         "createdBy": row["created_by"],
         "createdAt": row["created_at"].isoformat(),
         "usedBy": (users or {}).get(row["name"], []),

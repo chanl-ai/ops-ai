@@ -359,6 +359,17 @@ class ConnectionStore:
                 .values(**values, updated_by=actor, updated_at=at)
             )
 
+    async def delete_credential(self, tenant_id: str, credential_id: str) -> bool:
+        """Deletes the team's app credential; False when there is none. Accounts are moved off it first."""
+        t = app_credentials.c
+        async with self._tx() as c:
+            gone = await c.execute(
+                app_credentials.delete().where(
+                    t.tenant_id == tenant_id, t.id == credential_id, team_visible(app_credentials)
+                )
+            )
+            return bool(gone.rowcount)
+
     async def touch_credential(
         self, tenant_id: str, credential_id: str, *, actor: str, at: datetime, secret_name: str | None = None
     ) -> None:

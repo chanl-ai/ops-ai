@@ -48,7 +48,7 @@ async def test_a_credential_needs_no_account_and_its_secret_is_not_a_value_tools
 ) -> None:
     row = await made(world, tenant)
     assert (row["app"], row["type"], row["clientId"], row["permissions"], row["accounts"]) == (
-        APP, "own", "bank-own-client", ["api"], 0,
+        APP, "own", "bank-own-client", [{"id": "api", "label": "Read and change records", "required": True}], 0,
     ), row  # fmt: skip
     listed = await world.client.get("/v1/app-credentials", params={"app": APP}, headers=admin(tenant))
     assert [c["id"] for c in listed.json()["data"] if c["type"] == "own"] == [row["id"]], listed.text
@@ -90,7 +90,7 @@ async def test_scopes_are_the_apps_own_and_its_required_ones_stay(world: World, 
     unknown = await world.client.post("/v1/app-credentials", json=body(scopes=["admin"]), headers=admin(tenant))
     assert unknown.status_code == 400, unknown.text
     row = await made(world, tenant, scopes=[])
-    assert row["permissions"] == ["api"], row
+    assert row["permissions"] == [{"id": "api", "label": "Read and change records", "required": True}], row
 
 
 async def test_a_builder_cannot_add_one_and_an_unknown_app_has_none(world: World, tenant: str) -> None:  # noqa: F811

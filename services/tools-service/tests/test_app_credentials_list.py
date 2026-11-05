@@ -38,7 +38,7 @@ async def test_the_teams_own_client_lists_its_app_permissions_accounts_and_statu
         "app": f"plugin:{ID}",
         "appName": "Desk",
         "type": "own",
-        "permissions": ["api"],
+        "permissions": [{"id": "api", "label": "Read and change records", "required": True}],
         "accounts": 1,
         "status": "not_tested",
     }, row

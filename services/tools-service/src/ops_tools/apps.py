@@ -93,6 +93,15 @@ class PluginSetting(Out):
     credential: bool = False
 
 
+class Permission(Out):
+    """One permission an app asks for: its id, as the system names it and a credential holds it, and what it lets Ops AI
+    do, in plain words. A required one is always asked for."""
+
+    id: str
+    label: str
+    required: bool = False
+
+
 class SystemPlugin(Out):
     team_on: bool
     # Whether the install has Ops AI's own app for the plugin, so a team may sign in with no app of its own.
@@ -100,7 +109,7 @@ class SystemPlugin(Out):
     # The sign-in kinds the plugin offers, the first the default; a team's account keeps the one it chose first.
     kinds: list[str]
     sign_in: list[str]
-    scopes: list[str]
+    scopes: list[Permission]
     # The settings a team types, in the manifest's order; those read from the token at sign-in are left out.
     settings: list[PluginSetting]
     # The team's settings as a person may read them: a secret one never, even as its reference.
@@ -182,12 +191,18 @@ class AppCredential(Out):
     type: Literal["ops_ai", "own"]
     # The client id; none for Ops AI's app, which the install keeps.
     client_id: str | None = None
-    permissions: list[str]
+    permissions: list[Permission]
     # The team's accounts signing in with it.
     accounts: int
     status: CredentialStatus
     created: str | None = None
     created_by: str | None = None
+    # The team it belongs to: a link to it opens in that team.
+    team_id: str
+    # The client secret's last four characters, so a person can tell which one it holds; none while it holds none
+    # (or a short one).
+    secret_ends: str | None = None
+    holds_secret: bool = False
 
 
 class CredentialAccount(Out):
@@ -228,6 +243,11 @@ class AppCredentialDetail(AppCredential):
 class AppCredentialChange(AppCredentialDetail):
     # How many accounts were marked to sign in again, since the client id, permissions or settings changed.
     sign_in_again: int
+
+
+class CredentialDeleted(Out):
+    # How many accounts were moved off it, each to sign in again.
+    moved: int
 
 
 class AppCredentialPatchIn(In):
@@ -485,7 +505,10 @@ class Apps:
                             "platformApp": platform,
                             "kinds": list(m.connection.kinds),
                             "signIn": list(m.connection.sign_in),
-                            "scopes": [sc.label or sc.id for sc in m.connection.scopes],
+                            "scopes": [
+                                {"id": sc.id, "label": sc.label or sc.id, "required": sc.required}
+                                for sc in m.connection.scopes
+                            ],
                             "settings": settings,
                             "values": self.plugin_accounts.team_values(
                                 plugin, b, dict((conn or {}).get("plugin_settings") or {})
@@ -739,19 +762,40 @@ async def _row(
         reverse=True,
     )
     own = cred is not None
+    offered = {sc.id: sc for sc in plugin.manifest.connection.scopes} if plugin is not None else {}
+    secret = await _secret_row(apps, who, cred)
     return {
+        "teamId": str(cred["team_id"]) if own else who.team.id,
+        "secretEnds": (secret or {}).get("ends"),
+        "holdsSecret": secret is not None,
         "id": str(cred["id"]) if own else f"{OPS_AI}{card['id']}",
         "name": str(cred["name"]) if own else "Ops AI's app",
         "app": str(card["id"]),
         "appName": str(card["name"]),
         "type": "own" if own else "ops_ai",
         "clientId": cred["client_id"] if own else None,
-        "permissions": scopes,
+        "permissions": [
+            {
+                "id": sc,
+                "label": offered[sc].label if sc in offered else sc,
+                "required": sc in offered and offered[sc].required,
+            }
+            for sc in scopes
+        ],
         "accounts": len(accounts),
         "status": _status(audits),
         "created": cred["created_at"].isoformat() if own else None,
         "createdBy": cred["created_by"] if own else None,
     }
+
+
+async def _secret_row(apps: Apps, who: Caller, cred: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The team secret holding a credential's client secret, as listed (never its value); None while it holds none."""
+    if cred is None or not cred.get("secret_name"):
+        return None
+    name = str(cred["secret_name"])
+    rows = await apps.connections.secrets.store.listed(who.tenant_id, str(cred["team_id"]))
+    return next((r for r in rows if r["name"] == name), None)
 
 
 def _plugin(apps: Apps, card: dict[str, Any]) -> Plugin | None:
@@ -870,7 +914,7 @@ def _offered_scopes(card: dict[str, Any], plugin: Plugin | None, scopes: list[st
     return [sc.id for sc in offered if sc.required or sc.id in scopes]
 
 
-async def change_app_credential(apps: Apps, who: Caller, credential_id: str, i: AppCredentialPatchIn) -> dict[str, Any]:
+async def edit_app_credential(apps: Apps, who: Caller, credential_id: str, i: AppCredentialPatchIn) -> dict[str, Any]:
     """Edits the team's own app credential. A new client id, other permissions or other settings make every account
     signing in with it sign in again (their sign-ins were issued to the registration as it was): each is marked so,
     and the answer says how many. A plugin account's sign-in addresses are written again from the new settings."""
@@ -911,6 +955,61 @@ async def change_app_credential(apps: Apps, who: Caller, credential_id: str, i: 
             await apps.plugin_accounts.rewrite_addresses(who, plugin, str(account["id"]))
         await apps.connections.sign_in_again(who, str(account["id"]), why)
     return {**await app_credential(apps, who, credential_id), "signInAgain": len(accounts)}
+
+
+async def remove_app_credential(
+    apps: Apps, who: Caller, credential_id: str, move_to: str | None, *, move: bool
+) -> dict[str, Any]:
+    """Deletes the team's own app credential with its client secret. While accounts sign in with it, the delete is
+    refused naming them, unless `move` says where they go: another of the team's credentials of the same app
+    (`move_to`), or Ops AI's app (`move_to` none, where the install has one). Moved accounts sign in again."""
+    apps.connections.check(who, "manage", what="app credentials")
+    if credential_id.startswith(OPS_AI):
+        raise ValidationFailed("Ops AI's app is the install's; it is not deleted here.", code="ops_ai_app")
+    store = apps.connections.store
+    cred = await store.credential(who.tenant_id, credential_id)
+    if cred is None or cred["team_id"] != who.team.id:
+        raise NotFound(f"App credential {credential_id}")
+    accounts = await store.credential_accounts(who.tenant_id, [credential_id])
+    names = [str(a.get("account_name") or a["name"]) for a in accounts]
+    if accounts and not move:
+        raise Conflict(
+            f"{plural_accounts(len(accounts))} sign in with {cred['name']}: {', '.join(names)}. Move them to another "
+            "app credential first, then delete it.",
+            code="credential_in_use",
+            details={"accounts": [{"id": str(a["id"]), "name": n} for a, n in zip(accounts, names, strict=True)]},
+        )
+    if move_to == credential_id:
+        raise ValidationFailed("Move the accounts to another app credential.", details={"field": "moveTo"})
+    card = await apps.card(who, str(cred["app_id"]))
+    plugin = _plugin(apps, card)
+    why = f"{cred['name']} was deleted, so this account signs in again."
+    for account in accounts:
+        if plugin is not None and apps.plugin_accounts is not None:
+            await apps.plugin_accounts.move_to_credential(who, plugin, str(account["id"]), move_to)
+        else:
+            if move_to is None:
+                raise ValidationFailed(
+                    f"{card['name']} has no app of Ops AI's; move its accounts to another app credential.",
+                    code="client_missing",
+                    details={"field": "moveTo"},
+                )
+            fresh = await apps.connections.detail(who, str(account["id"]))
+            await apps.connections.change(
+                who, str(account["id"]), {"revision": fresh["revision"], "credential_id": move_to}
+            )
+        await apps.connections.sign_in_again(who, str(account["id"]), why)
+    if cred.get("secret_name"):
+        now = apps.connections.clock()
+        await apps.connections.secrets.delete(
+            who.tenant_id, who.team.id, str(cred["secret_name"]), actor=who.name, at=now
+        )
+    await store.delete_credential(who.tenant_id, credential_id)
+    return {"moved": len(accounts)}
+
+
+def plural_accounts(n: int) -> str:
+    return "1 account" if n == 1 else f"{n} accounts"
 
 
 async def replace_credential_secret(apps: Apps, who: Caller, credential_id: str, secret: str) -> dict[str, Any]:
@@ -1199,15 +1298,31 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
         return ok(AppCredentialDetail(**await app_credential(apps, who, credential_id)).model_dump(by_alias=True))
 
     @r.patch("/v1/app-credentials/{credential_id}", response_model=Envelope[AppCredentialChange])
-    async def change_app_credential_route(  # pyright: ignore[reportUnusedFunction]
+    async def change_app_credential(  # pyright: ignore[reportUnusedFunction]
         credential_id: str, body: AppCredentialPatchIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
         """Edits the team's own app credential: its name, client id, permissions and the settings its app
         registration holds (`fields` on its page). A new client id, other permissions or settings mark every account
         signing in with it to sign in again; `signInAgain` says how many. Team admins only; the secret has its own
         route."""
-        row = await change_app_credential(apps, who, credential_id, body)
+        row = await edit_app_credential(apps, who, credential_id, body)
         return ok(AppCredentialChange(**row).model_dump(by_alias=True))
+
+    @r.delete("/v1/app-credentials/{credential_id}", response_model=Envelope[CredentialDeleted])
+    async def delete_app_credential(  # pyright: ignore[reportUnusedFunction]
+        credential_id: str,
+        who: Annotated[Caller, Depends(caller)],
+        move_to: Annotated[str | None, Query(alias="moveTo", max_length=64)] = None,
+        move: bool = False,
+    ) -> JSONResponse:
+        """Deletes the team's own app credential and its client secret. While accounts sign in with it the answer is
+        409 credential_in_use naming them; `move=true` moves them first, to `moveTo` (another of the team's credentials
+        of the app) or, with none, to Ops AI's app, and each signs in again. Team admins only."""
+        return ok(
+            CredentialDeleted(**await remove_app_credential(apps, who, credential_id, move_to, move=move)).model_dump(
+                by_alias=True
+            )
+        )
 
     @r.put("/v1/app-credentials/{credential_id}/secret", response_model=Envelope[AppCredentialDetail])
     async def set_app_credential_secret(  # pyright: ignore[reportUnusedFunction]

@@ -881,6 +881,11 @@
             ],
             "title": "Createdby"
           },
+          "holdsSecret": {
+            "default": false,
+            "title": "Holdssecret",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -891,10 +896,21 @@
           },
           "permissions": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/Permission"
             },
             "title": "Permissions",
             "type": "array"
+          },
+          "secretEnds": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secretends"
           },
           "status": {
             "enum": [
@@ -903,6 +919,10 @@
               "failing"
             ],
             "title": "Status",
+            "type": "string"
+          },
+          "teamId": {
+            "title": "Teamid",
             "type": "string"
           },
           "type": {
@@ -922,7 +942,8 @@
           "type",
           "permissions",
           "accounts",
-          "status"
+          "status",
+          "teamId"
         ],
         "title": "AppCredential",
         "type": "object"
@@ -989,6 +1010,11 @@
             "title": "Fields",
             "type": "array"
           },
+          "holdsSecret": {
+            "default": false,
+            "title": "Holdssecret",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -999,7 +1025,7 @@
           },
           "permissions": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/Permission"
             },
             "title": "Permissions",
             "type": "array"
@@ -1014,6 +1040,17 @@
               }
             ],
             "title": "Redirecturi"
+          },
+          "secretEnds": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secretends"
           },
           "settings": {
             "additionalProperties": true,
@@ -1031,6 +1068,10 @@
               "failing"
             ],
             "title": "Status",
+            "type": "string"
+          },
+          "teamId": {
+            "title": "Teamid",
             "type": "string"
           },
           "type": {
@@ -1062,6 +1103,7 @@
           "permissions",
           "accounts",
           "status",
+          "teamId",
           "accountsList",
           "signInAgain"
         ],
@@ -1130,6 +1172,11 @@
             "title": "Fields",
             "type": "array"
           },
+          "holdsSecret": {
+            "default": false,
+            "title": "Holdssecret",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -1140,7 +1187,7 @@
           },
           "permissions": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/Permission"
             },
             "title": "Permissions",
             "type": "array"
@@ -1156,6 +1203,17 @@
             ],
             "title": "Redirecturi"
           },
+          "secretEnds": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secretends"
+          },
           "settings": {
             "additionalProperties": true,
             "title": "Settings",
@@ -1168,6 +1226,10 @@
               "failing"
             ],
             "title": "Status",
+            "type": "string"
+          },
+          "teamId": {
+            "title": "Teamid",
             "type": "string"
           },
           "type": {
@@ -1199,6 +1261,7 @@
           "permissions",
           "accounts",
           "status",
+          "teamId",
           "accountsList"
         ],
         "title": "AppCredentialDetail",
@@ -2967,6 +3030,20 @@
         "title": "CredentialCheckIn",
         "type": "object"
       },
+      "CredentialDeleted": {
+        "additionalProperties": false,
+        "properties": {
+          "moved": {
+            "title": "Moved",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "moved"
+        ],
+        "title": "CredentialDeleted",
+        "type": "object"
+      },
       "CredentialField": {
         "additionalProperties": false,
         "description": "A setting an app credential may hold: one of a plugin's credential_settings, or a custom app's client field.",
@@ -3503,6 +3580,25 @@
           "data"
         ],
         "title": "Envelope[ConnectionKinds]",
+        "type": "object"
+      },
+      "Envelope_CredentialDeleted_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CredentialDeleted"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[CredentialDeleted]",
         "type": "object"
       },
       "Envelope_DiscoveryResult_": {
@@ -7402,6 +7498,31 @@
         "title": "PendingReview",
         "type": "object"
       },
+      "Permission": {
+        "additionalProperties": false,
+        "description": "One permission an app asks for: its id, as the system names it and a credential holds it, and what it lets Ops AI\ndo, in plain words. A required one is always asked for.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "required": {
+            "default": false,
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "Permission",
+        "type": "object"
+      },
       "PersonCredentialsIn": {
         "additionalProperties": false,
         "description": "A person's own key, password or token on an account each person signs in to: the kind's person\nfields, each a value of at most 2,000 characters.",
@@ -8375,6 +8496,17 @@
             ],
             "title": "Credentialid"
           },
+          "ends": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends"
+          },
           "lastUsedAt": {
             "anyOf": [
               {
@@ -9271,7 +9403,7 @@
           },
           "scopes": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/Permission"
             },
             "title": "Scopes",
             "type": "array"
@@ -11674,6 +11806,239 @@
       }
     },
     "/v1/app-credentials/{credential_id}": {
+      "delete": {
+        "description": "Deletes the team's own app credential and its client secret. While accounts sign in with it the answer is\n409 credential_in_use naming them; `move=true` moves them first, to `moveTo` (another of the team's credentials\nof the app) or, with none, to Ops AI's app, and each signs in again. Team admins only.",
+        "operationId": "apps_delete_app_credential",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "credential_id",
+            "required": true,
+            "schema": {
+              "title": "Credential Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "moveTo",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Moveto"
+            }
+          },
+          {
+            "in": "query",
+            "name": "move",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Move",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CredentialDeleted_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not available on this service yet"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The source could not be reached"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Delete App Credential",
+        "tags": [
+          "apps"
+        ],
+        "x-ops-public": "sdk"
+      },
       "get": {
         "description": "One app credential's page: its app, client id, permissions, who made it and the accounts signing in with it,\neach with its state. `ops-ai:<app>` is Ops AI's app of one app. Team admins only; no secret.",
         "operationId": "apps_get_app_credential",
@@ -11882,7 +12247,7 @@
       },
       "patch": {
         "description": "Edits the team's own app credential: its name, client id, permissions and the settings its app\nregistration holds (`fields` on its page). A new client id, other permissions or settings mark every account\nsigning in with it to sign in again; `signInAgain` says how many. Team admins only; the secret has its own\nroute.",
-        "operationId": "apps_change_app_credential_route",
+        "operationId": "apps_change_app_credential",
         "parameters": [
           {
             "in": "path",
@@ -12090,7 +12455,7 @@
             "description": "Service unavailable"
           }
         },
-        "summary": "Change App Credential Route",
+        "summary": "Change App Credential",
         "tags": [
           "apps"
         ],

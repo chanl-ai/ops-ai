@@ -71,20 +71,6 @@ class ActivityDay(TypedDict, closed=True):
     p95Ms: int
 
 
-class AppCredential(TypedDict, closed=True):
-    accounts: int
-    app: str
-    appName: str
-    clientId: NotRequired[str | None]
-    created: NotRequired[str | None]
-    createdBy: NotRequired[str | None]
-    id: str
-    name: str
-    permissions: list[str]
-    status: Literal["working", "not_tested", "failing"]
-    type: Literal["ops_ai", "own"]
-
-
 Scope: TypeAlias = str
 
 
@@ -326,6 +312,10 @@ class CredentialCheckIn(TypedDict, closed=True):
     state: NotRequired[str | None]
 
 
+class CredentialDeleted(TypedDict, closed=True):
+    moved: int
+
+
 class CredentialField(TypedDict, closed=True):
     help: NotRequired[str | None]
     label: str
@@ -364,8 +354,8 @@ class EnvelopeChange(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListAppCredential(TypedDict, closed=True):
-    data: list[AppCredential]
+class EnvelopeCredentialDeleted(TypedDict, closed=True):
+    data: CredentialDeleted
     success: Literal[True]
 
 
@@ -701,6 +691,12 @@ class PendingReview(TypedDict, closed=True):
     requestedAt: str
     requestedBy: str
     version: str
+
+
+class Permission(TypedDict, closed=True):
+    id: str
+    label: str
+    required: NotRequired[bool]
 
 
 class PersonCredentialsIn(TypedDict, closed=True):
@@ -1203,6 +1199,23 @@ class AppAccount(TypedDict, closed=True):
     test: NotRequired[AccountTest | None]
 
 
+class AppCredential(TypedDict, closed=True):
+    accounts: int
+    app: str
+    appName: str
+    clientId: NotRequired[str | None]
+    created: NotRequired[str | None]
+    createdBy: NotRequired[str | None]
+    holdsSecret: NotRequired[bool]
+    id: str
+    name: str
+    permissions: list[Permission]
+    secretEnds: NotRequired[str | None]
+    status: Literal["working", "not_tested", "failing"]
+    teamId: str
+    type: Literal["ops_ai", "own"]
+
+
 class AppCredentialChange(TypedDict, closed=True):
     accounts: int
     accountsList: list[CredentialAccount]
@@ -1212,13 +1225,16 @@ class AppCredentialChange(TypedDict, closed=True):
     created: NotRequired[str | None]
     createdBy: NotRequired[str | None]
     fields: NotRequired[list[CredentialField]]
+    holdsSecret: NotRequired[bool]
     id: str
     name: str
-    permissions: list[str]
+    permissions: list[Permission]
     redirectUri: NotRequired[str | None]
+    secretEnds: NotRequired[str | None]
     settings: NotRequired[dict[str, Any]]
     signInAgain: int
     status: Literal["working", "not_tested", "failing"]
+    teamId: str
     type: Literal["ops_ai", "own"]
     updated: NotRequired[str | None]
 
@@ -1232,12 +1248,15 @@ class AppCredentialDetail(TypedDict, closed=True):
     created: NotRequired[str | None]
     createdBy: NotRequired[str | None]
     fields: NotRequired[list[CredentialField]]
+    holdsSecret: NotRequired[bool]
     id: str
     name: str
-    permissions: list[str]
+    permissions: list[Permission]
     redirectUri: NotRequired[str | None]
+    secretEnds: NotRequired[str | None]
     settings: NotRequired[dict[str, Any]]
     status: Literal["working", "not_tested", "failing"]
+    teamId: str
     type: Literal["ops_ai", "own"]
     updated: NotRequired[str | None]
 
@@ -1432,6 +1451,11 @@ class EnvelopeUnionSignInStartCredentialCheck(TypedDict, closed=True):
 
 class EnvelopeWaitOut(TypedDict, closed=True):
     data: WaitOut
+    success: Literal[True]
+
+
+class EnvelopeListAppCredential(TypedDict, closed=True):
+    data: list[AppCredential]
     success: Literal[True]
 
 
@@ -1653,6 +1677,7 @@ class SecretMeta(TypedDict, closed=True):
     createdAt: str
     createdBy: str
     credentialId: NotRequired[str | None]
+    ends: NotRequired[str | None]
     lastUsedAt: NotRequired[str | None]
     name: str
     protection: NotRequired[Literal["system", "managed"] | None]
@@ -1668,7 +1693,7 @@ class SystemPlugin(TypedDict, closed=True):
     fixed: list[str]
     kinds: list[str]
     platformApp: bool
-    scopes: list[str]
+    scopes: list[Permission]
     settings: list[PluginSetting]
     signIn: list[str]
     teamOn: bool
