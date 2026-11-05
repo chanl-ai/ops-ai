@@ -16,12 +16,24 @@ export interface Operation {
   readonly stream: boolean;
 }
 
+/**
+ * A signed-in person's tokens, shared by every client made from one sign-in (`withTeam`): a refresh token works once,
+ * so the first call that renews it changes it for all of them.
+ */
+export interface Session {
+  accessToken: string;
+  refreshToken: string;
+  renewing?: Promise<boolean>;
+}
+
 export interface Config {
   /** The origin every service is reached through, under /api/<service>. */
   baseUrl: string;
   apiKey?: string;
   /** A person's session token from `OpsAI.signIn`, sent as a Bearer token. */
   accessToken?: string;
+  /** A session from `OpsAI.signIn`: its token is sent, and a 401 renews it once and retries the call. */
+  session?: Session;
   team?: string;
   /** A service reached at its own address instead, e.g. `{ agents: 'http://localhost:8700' }`. */
   services?: Partial<Record<Service, string>>;
@@ -58,10 +70,46 @@ export class Transport {
   headers(extra: Record<string, unknown> = {}): Record<string, string> {
     const h: Record<string, string> = { Accept: 'application/json', 'User-Agent': 'ops-ai-typescript' };
     if (this.config.apiKey) h['X-Api-Key'] = this.config.apiKey;
-    else if (this.config.accessToken) h.Authorization = `Bearer ${this.config.accessToken}`;
+    else if (this.bearer()) h.Authorization = this.bearer()!;
     if (this.config.team) h['X-Team-Id'] = this.config.team;
     for (const [k, v] of Object.entries(extra)) if (v !== undefined && v !== null) h[k] = String(v);
     return h;
+  }
+
+  private bearer(): string | undefined {
+    const token = this.config.session?.accessToken ?? this.config.accessToken;
+    return token ? `Bearer ${token}` : undefined;
+  }
+
+  /**
+   * After a 401 under a session: a new token from its refresh token, once. A call that went out before another renewed
+   * it retries with the newer token instead of spending the refresh token again.
+   */
+  private async renew(sent: Record<string, string>): Promise<boolean> {
+    const s = this.config.session;
+    if (!s) return false;
+    if (sent.Authorization !== this.bearer()) {
+      sent.Authorization = this.bearer()!;
+      return true;
+    }
+    s.renewing ??= (async () => {
+      const base = this.config.services?.platform ?? `${this.config.baseUrl.replace(/\/$/, '')}/api/platform`;
+      const r = await this.fetch(`${base.replace(/\/$/, '')}/v1/auth/refresh`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: s.refreshToken }),
+      });
+      if (r.status !== 200) return false;
+      const data = ((await r.json()) as { data: { token: string; refreshToken: string } }).data;
+      s.accessToken = data.token;
+      s.refreshToken = data.refreshToken;
+      return true;
+    })().finally(() => {
+      s.renewing = undefined;
+    });
+    const ok = await s.renewing;
+    if (ok) sent.Authorization = this.bearer()!;
+    return ok;
   }
 
   url(service: Service, op: Operation, path: Record<string, unknown> = {}, query: Record<string, unknown> = {}): string {
@@ -93,6 +141,7 @@ export class Transport {
     const retryable = op.method === 'GET' || (op.headers.includes(IDEMPOTENCY) && Boolean(headers[IDEMPOTENCY]));
     const attempts = retryable ? this.config.maxRetries + 1 : 1;
     const url = this.url(service, op, args.path, args.query);
+    let renewed = false;
     for (let attempt = 0; ; attempt++) {
       let response: Response;
       try {
@@ -100,6 +149,11 @@ export class Transport {
       } catch (e) {
         if (attempt + 1 >= attempts) throw e;
         await sleep(backoff(attempt));
+        continue;
+      }
+      if (response.status === 401 && !renewed && (await this.renew(headers))) {
+        renewed = true;
+        attempt -= 1;
         continue;
       }
       if (RETRY_STATUS.has(response.status) && attempt + 1 < attempts) {
@@ -117,7 +171,10 @@ export class Transport {
       headers['Content-Type'] = 'application/json';
       init.body = JSON.stringify(args.body);
     }
-    const response = await this.fetch(this.url(service, op, args.path, args.query), init);
+    let response = await this.fetch(this.url(service, op, args.path, args.query), init);
+    if (response.status === 401 && (await this.renew(headers))) {
+      response = await this.fetch(this.url(service, op, args.path, args.query), init);
+    }
     if (!response.ok || !response.body) {
       await result(response);
       return;

@@ -3,8 +3,10 @@ profile file is `~/.config/ops-ai/config.json`, or $OPS_CONFIG; nothing writes i
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -27,6 +29,17 @@ def _profile(name: str | None) -> dict[str, Any]:
 
 
 @dataclass
+class Session:
+    """A signed-in person's tokens, shared by every client made from one sign-in (`with_team`): a refresh token works
+    once, so the first call that renews it changes it for all of them."""
+
+    access_token: str
+    refresh_token: str
+    lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    async_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
+
+
+@dataclass
 class Config:
     base_url: str
     api_key: str | None = None
@@ -34,6 +47,9 @@ class Config:
     # one is given it is who the call acts as, ahead of an API key: some changes (editing a workflow) are a person's.
     access_token: str | None = None
     team: str | None = None
+    # A session from `sign_in`: its token is sent instead of `access_token`, and a 401 renews it once and retries,
+    # as after a role change (`permissions_changed`) or an expired token.
+    session: Session | None = None
     # A service reached at its own address instead of through the origin, e.g. {"agents": "http://localhost:8700"}.
     services: dict[str, str] = field(default_factory=dict)
     timeout: float = 30.0
@@ -51,6 +67,7 @@ class Config:
         services: dict[str, str] | None = None,
         timeout: float | None = None,
         max_retries: int | None = None,
+        session: Session | None = None,
     ) -> Config:
         saved = _profile(profile or os.environ.get("OPS_PROFILE"))
         url = base_url or os.environ.get("OPS_BASE_URL") or saved.get("baseUrl")
@@ -66,4 +83,5 @@ class Config:
             services={**(saved.get("services") or {}), **(services or {})},
             timeout=timeout if timeout is not None else 30.0,
             max_retries=max_retries if max_retries is not None else 2,
+            session=session,
         )

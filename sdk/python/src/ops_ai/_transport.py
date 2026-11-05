@@ -14,7 +14,7 @@ from urllib.parse import quote
 import httpx
 
 from ._config import Config
-from .errors import OpsError, error_for
+from .errors import error_for
 
 # Every service is reached through one origin under its own prefix (deploy/fly/Caddyfile); a local stack without the
 # proxy is reached by port through Config.services.
@@ -44,10 +44,29 @@ def _url(config: Config, service: str, op: Operation, path: Mapping[str, Any]) -
     return f"{base.rstrip('/')}{route}"
 
 
+def _refresh_url(config: Config) -> str:
+    base = config.services.get("platform") or f"{config.base_url.rstrip('/')}{PREFIX['platform']}"
+    return f"{base.rstrip('/')}/v1/auth/refresh"
+
+
+def _bearer(config: Config) -> str | None:
+    token = config.session.access_token if config.session else config.access_token
+    return f"Bearer {token}" if token else None
+
+
+def _renewed(config: Config, sent: Mapping[str, str], response: httpx.Response) -> bool:
+    """Stores the tokens a refresh answered; False when the session is over (the refresh was refused)."""
+    if response.status_code != 200 or config.session is None:
+        return False
+    data = response.json()["data"]
+    config.session.access_token, config.session.refresh_token = str(data["token"]), str(data["refreshToken"])
+    return True
+
+
 def _headers(config: Config, extra: Mapping[str, Any]) -> dict[str, str]:
     h = {"Accept": "application/json", "User-Agent": "ops-ai-python"}
-    if config.access_token:
-        h["Authorization"] = f"Bearer {config.access_token}"
+    if bearer := _bearer(config):
+        h["Authorization"] = bearer
     elif config.api_key:
         h["X-Api-Key"] = config.api_key
     if config.team:
@@ -138,7 +157,29 @@ class _Events:
 class Transport:
     def __init__(self, config: Config, client: httpx.Client | None = None) -> None:
         self.config = config
+        # A client the caller passed stays theirs to close.
+        self._owns = client is None
         self.http = client or httpx.Client(timeout=config.timeout)
+
+    def _renew(self, sent: dict[str, str]) -> bool:
+        """After a 401 under a session: a new token from its refresh token, once; a call that went out before another
+        renewed it retries with the newer token instead of spending the refresh token again."""
+        s = self.config.session
+        if s is None:
+            return False
+        with s.lock:
+            if sent.get("Authorization") != _bearer(self.config):
+                ok = True
+            else:
+                answer = self.http.post(
+                    _refresh_url(self.config),
+                    json={"refreshToken": s.refresh_token},
+                    headers={"Accept": "application/json"},
+                )
+                ok = _renewed(self.config, sent, answer)
+        if ok:
+            sent["Authorization"] = _bearer(self.config) or ""
+        return ok
 
     def call(  # noqa: PLR0917 - the generated operations pass these in order
         self,
@@ -153,19 +194,24 @@ class Transport:
             return self.stream(service, op, path, query, headers, body)
         req = _request(self.config, service, op, path, query, headers, body)
         attempts = self.config.max_retries + 1 if _retryable(op, req["headers"]) else 1
-        for attempt in range(attempts):
+        attempt, renewed = 0, False
+        while True:
             try:
                 response = self.http.request(**req)
             except httpx.TransportError:
-                if attempt + 1 == attempts:
+                attempt += 1
+                if attempt == attempts:
                     raise
-                time.sleep(_backoff(attempt))
+                time.sleep(_backoff(attempt - 1))
+                continue
+            if response.status_code == 401 and not renewed and self._renew(req["headers"]):
+                renewed = True
                 continue
             if response.status_code in RETRY_STATUS and attempt + 1 < attempts:
                 time.sleep(_backoff(attempt))
+                attempt += 1
                 continue
             return _result(response)
-        raise OpsError(0, "unreachable", "no attempt was made")
 
     def stream(  # noqa: PLR0917 - matches call(); the generated stream routes pass these in order
         self,
@@ -178,25 +224,54 @@ class Transport:
     ) -> Iterator[dict[str, Any]]:
         req = _request(self.config, service, op, path, query, headers, body)
         req["headers"]["Accept"] = "text/event-stream"
+        with self.http.stream(**req, timeout=httpx.Timeout(self.config.timeout, read=None)) as first:
+            if first.status_code != 401 or not self._renew(req["headers"]):
+                yield from self._events(first)
+                return
         with self.http.stream(**req, timeout=httpx.Timeout(self.config.timeout, read=None)) as response:
-            if response.is_error:
-                response.read()
-                _result(response)
-            parser = _Events()
-            for line in response.iter_lines():
-                if (event := parser.feed(line)) is not None:
-                    yield event
-            if (event := parser.flush()) is not None:
+            yield from self._events(response)
+
+    def _events(self, response: httpx.Response) -> Iterator[dict[str, Any]]:
+        if response.is_error:
+            response.read()
+            _result(response)
+        parser = _Events()
+        for line in response.iter_lines():
+            if (event := parser.feed(line)) is not None:
                 yield event
+        if (event := parser.flush()) is not None:
+            yield event
 
     def close(self) -> None:
-        self.http.close()
+        if self._owns:
+            self.http.close()
 
 
 class AsyncTransport:
     def __init__(self, config: Config, client: httpx.AsyncClient | None = None) -> None:
         self.config = config
+        # A client the caller passed stays theirs to close.
+        self._owns = client is None
         self.http = client or httpx.AsyncClient(timeout=config.timeout)
+
+    async def _renew(self, sent: dict[str, str]) -> bool:
+        """`Transport._renew`, awaited."""
+        s = self.config.session
+        if s is None:
+            return False
+        async with s.async_lock:
+            if sent.get("Authorization") != _bearer(self.config):
+                ok = True
+            else:
+                answer = await self.http.post(
+                    _refresh_url(self.config),
+                    json={"refreshToken": s.refresh_token},
+                    headers={"Accept": "application/json"},
+                )
+                ok = _renewed(self.config, sent, answer)
+        if ok:
+            sent["Authorization"] = _bearer(self.config) or ""
+        return ok
 
     async def call(  # noqa: PLR0917 - the generated operations pass these in order
         self,
@@ -211,19 +286,24 @@ class AsyncTransport:
             return self.stream(service, op, path, query, headers, body)
         req = _request(self.config, service, op, path, query, headers, body)
         attempts = self.config.max_retries + 1 if _retryable(op, req["headers"]) else 1
-        for attempt in range(attempts):
+        attempt, renewed = 0, False
+        while True:
             try:
                 response = await self.http.request(**req)
             except httpx.TransportError:
-                if attempt + 1 == attempts:
+                attempt += 1
+                if attempt == attempts:
                     raise
-                await asyncio.sleep(_backoff(attempt))
+                await asyncio.sleep(_backoff(attempt - 1))
+                continue
+            if response.status_code == 401 and not renewed and await self._renew(req["headers"]):
+                renewed = True
                 continue
             if response.status_code in RETRY_STATUS and attempt + 1 < attempts:
                 await asyncio.sleep(_backoff(attempt))
+                attempt += 1
                 continue
             return _result(response)
-        raise OpsError(0, "unreachable", "no attempt was made")
 
     async def stream(  # noqa: PLR0917 - matches call(); the generated stream routes pass these in order
         self,
@@ -248,7 +328,8 @@ class AsyncTransport:
                 yield event
 
     async def close(self) -> None:
-        await self.http.aclose()
+        if self._owns:
+            await self.http.aclose()
 
 
 def page_items(data: Any) -> tuple[list[Any], dict[str, Any] | None]:

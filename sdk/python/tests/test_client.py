@@ -152,3 +152,55 @@ def test_a_person_token_from_the_profile_or_ops_token_acts_as_that_person(
     OpsAI(profile="local", http=http).agents.get("ag_1")
     got = [(r.headers.get("authorization"), r.headers.get("x-api-key")) for r in seen]
     assert got == [("Bearer person_from_profile", None), ("Bearer person_from_env", None)], got
+
+
+def _session_handler(seen: list[httpx.Request]) -> Any:
+    """A platform that signs in with token t1, refuses t1 once its roles changed, and renews r1 to t2 exactly once."""
+
+    def handler(r: httpx.Request) -> httpx.Response:
+        seen.append(r)
+        if r.url.path.endswith("/v1/auth/sign-in"):
+            return ok({"token": "t1", "refreshToken": "r1", "expiresAt": "x", "principal": {}})
+        if r.url.path.endswith("/v1/auth/refresh"):
+            if json.loads(r.content)["refreshToken"] != "r1":
+                return httpx.Response(401, json={"success": False, "error": {"code": "unauthorized", "message": "x"}})
+            return ok({"token": "t2", "refreshToken": "r2", "expiresAt": "x", "principal": {}})
+        if r.headers.get("authorization") == "Bearer t1":
+            error = {"code": "permissions_changed", "message": "Your roles changed.", "status": 401}
+            return httpx.Response(401, json={"success": False, "error": error})
+        return ok({"id": "ag_1"})
+
+    return handler
+
+
+def test_a_signed_in_client_renews_once_when_its_roles_changed_and_retries() -> None:
+    seen: list[httpx.Request] = []
+    ops = OpsAI.sign_in(
+        "james@bank.example",
+        "pw",
+        base_url=BASE,
+        team="team_a",
+        http=httpx.Client(transport=httpx.MockTransport(_session_handler(seen))),
+    )
+    assert ops.agents.get("ag_1") == {"id": "ag_1"}
+    # Another team's client shares the renewed session: a refresh token works once, so it is never spent twice.
+    assert ops.with_team("team_b").agents.get("ag_1") == {"id": "ag_1"}
+    assert [r.url.path for r in seen].count("/api/platform/v1/auth/refresh") == 1
+    assert seen[-1].headers["authorization"] == "Bearer t2"
+
+
+def test_the_async_client_renews_the_same_way() -> None:
+    seen: list[httpx.Request] = []
+
+    async def run() -> Any:
+        ops = await AsyncOpsAI.sign_in(
+            "james@bank.example",
+            "pw",
+            base_url=BASE,
+            team="team_a",
+            http=httpx.AsyncClient(transport=httpx.MockTransport(_session_handler(seen))),
+        )
+        return await ops.agents.get("ag_1")
+
+    assert asyncio.run(run()) == {"id": "ag_1"}
+    assert seen[-1].headers["authorization"] == "Bearer t2"
