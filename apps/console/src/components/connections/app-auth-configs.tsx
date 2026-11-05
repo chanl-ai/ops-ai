@@ -33,12 +33,13 @@ export type ConfigAccount = NonNullable<AuthConfig['accounts']>[number];
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+// The Apps design's three account states; a refused or revoked sign-in reads Expired, its reason beside it.
 const STATE: Record<ConfigAccount['state'], { label: string; className: string }> = {
   connected: { label: 'Connected', className: 'border-success/40 bg-success/10 text-success-text' },
   not_signed_in: { label: 'Not signed in', className: '' },
   expired: { label: 'Expired', className: 'border-warning/40 bg-warning/10 text-warning-text' },
-  refused: { label: 'Refused', className: 'border-destructive/40 bg-destructive/10 text-destructive' },
-  revoked: { label: 'Revoked', className: 'border-destructive/40 bg-destructive/10 text-destructive' },
+  refused: { label: 'Expired', className: 'border-warning/40 bg-warning/10 text-warning-text' },
+  revoked: { label: 'Expired', className: 'border-warning/40 bg-warning/10 text-warning-text' },
 };
 
 /** Whose sign-in an account is, by name: the team's, or one person's own. */
@@ -196,7 +197,11 @@ function AccountRow({
           <span className="flex flex-wrap items-center gap-2" data-testid={`account-${a.name}`}>
             {a.name}
             {a.default && <Badge variant="secondary">Default</Badge>}
-            {a.sandbox && <Badge variant="outline">Sandbox</Badge>}
+            {a.sandbox && (
+              <Badge variant="outline" data-testid={`account-sandbox-${a.name}`}>
+                Sandbox
+              </Badge>
+            )}
             <Badge variant="outline" className={STATE[a.state].className} data-testid={`account-state-${a.name}`} data-state={a.state}>
               {STATE[a.state].label}
             </Badge>

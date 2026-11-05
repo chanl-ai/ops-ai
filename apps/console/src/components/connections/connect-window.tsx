@@ -191,6 +191,9 @@ export function ConnectWindow({
     setWaiting(true);
     try {
       const draft = draftFor(pluginGroups(kind, kinds, plugin));
+      // Only what the window asked goes out: a field it did not show holds its default, which would replace the address
+      // the app's account already signs in at.
+      for (const k of Object.keys(draft.settings)) if (!asked.some((a) => a.name === k)) delete draft.settings[k];
       for (const x of asked.filter((a) => a.perAccount)) draft.settings[x.name] = values[x.name] ?? '';
       const teamSettings = Object.fromEntries(asked.filter((a) => !a.perAccount).map((a) => [a.name, values[a.name] ?? '']));
       const accountName = (values.accountName ?? '').trim() || suggested;
