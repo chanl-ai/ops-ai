@@ -35,16 +35,12 @@ def http_introspect(client: httpx.AsyncClient, url: str, token: str | Callable[[
     return introspect
 
 
-def http_current_version(
-    client: httpx.AsyncClient, internal_url: str, token: str | Callable[[], str]
-) -> CurrentVersion:
-    """`internal_url` is platform-service's internal mount; `token` as for `http_introspect`."""
+def http_current_version(client: httpx.AsyncClient, internal_url: str, token: Callable[[str], str]) -> CurrentVersion:
+    """`internal_url` is platform-service's internal mount; `token` mints this service's token naming the tenant."""
 
     async def current(tenant_id: str) -> int | None:
-        bearer = token() if callable(token) else token
         r = await client.get(
-            f"{internal_url.rstrip('/')}/v1/tenants/{tenant_id}/permission-version",
-            headers={"Authorization": f"Bearer {bearer}"},
+            f"{internal_url.rstrip('/')}/v1/permission-version", headers={"Authorization": f"Bearer {token(tenant_id)}"}
         )
         r.raise_for_status()
         return int(r.json()["data"]["permissionVersion"])

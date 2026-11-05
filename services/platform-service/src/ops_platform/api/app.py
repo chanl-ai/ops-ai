@@ -1058,15 +1058,17 @@ def create_internal_app(store: IdentityStore, *, services: ServiceAuth, signer: 
         return ok(await keys.introspect(body.api_key))
 
     @app.get(
-        "/v1/tenants/{tenant_id}/permission-version",
+        "/v1/permission-version",
         tags=["auth"],
-        dependencies=[Depends(services.principal)],
         response_model=Envelope[PermissionVersionOut],
         responses=ERRORS,
     )
-    async def permission_version(tenant_id: Annotated[str, Path(pattern=RECORD_ID)]) -> Any:  # pyright: ignore[reportUnusedFunction]
-        """What each service compares a person's token with, so a role change decides on the next request."""
-        return ok({"permissionVersion": await store.permission_version(tenant_id)})
+    async def permission_version(caller: Annotated[Caller, Depends(services.principal)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """The tenant's permission version, which each service compares a person's token with so a role change decides
+        on the next request. The service token names the tenant, never the request (I1)."""
+        if not caller.tenant_id:
+            raise Forbidden("The service token names no tenant.", code="tenant_required")
+        return ok({"permissionVersion": await store.permission_version(caller.tenant_id)})
 
     if signer is not None:
         acting = ActingFor(store, signer)

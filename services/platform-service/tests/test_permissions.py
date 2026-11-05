@@ -12,13 +12,13 @@ import pytest
 import sqlalchemy as sa
 
 from ops_access import ACTIONS, AREAS, BUILTIN_ROLES, can
-from ops_identity import Identity, http_current_version
+from ops_identity import Identity, http_current_version, mint_service_token
 from ops_platform.store.roles import mirror_membership
 from ops_platform.store.tables import members, role_assignments
 from ops_service_kit.errors import Forbidden, Unauthorized
 from ops_service_kit.ids import new_id, now_iso
 
-from .conftest import SERVICE_TOKEN, Person, Platform
+from .conftest import CALLER, Person, Platform
 
 
 async def bearer(platform: Platform, p: Person) -> dict[str, str]:
@@ -217,7 +217,10 @@ async def _principal(platform: Platform, h: dict[str, str], team: str, *, live: 
     async def no_keys(_key: str) -> dict[str, Any] | None:
         return None
 
-    current = http_current_version(platform.internal, "http://platform-internal", SERVICE_TOKEN) if live else None
+    def service_token(tenant: str) -> str:
+        return mint_service_token(CALLER, service="agents", audience="platform", tenant_id=tenant)
+
+    current = http_current_version(platform.internal, "http://platform-internal", service_token) if live else None
     identity = Identity(audience="agents", jwks=jwks, introspect=no_keys, current_version=current, version_cache_s=0)
     return await identity.principal(_Post(), authorization=h["Authorization"], x_team_id=team)  # pyright: ignore[reportArgumentType]
 

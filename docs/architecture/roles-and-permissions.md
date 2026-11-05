@@ -53,7 +53,7 @@ assignment in the same transaction) or a grant, in one team or in every team (`*
 the union of their unexpired assignments there, `all` over `own`. The token carries team → role ids as the `access`
 claim, each of those roles' stored cells as the `grids` claim (`ops_access.encode_grid`), and the tenant's
 `perm_version`; every service reads them locally. A service also asks platform-service for the tenant's current
-version (internal `GET /v1/tenants/{id}/permission-version`, cached for one second) and refuses an older token with
+version (internal `GET /v1/permission-version`, for the tenant its service token names, cached for one second) and refuses an older token with
 401 `permissions_changed`; the console renews the token and retries, so a role, grid, assignment or policy change
 decides on the person's next request (`packages/ops_identity/src/ops_identity/resolve.py`, D62). When platform-service
 does not answer, the last version seen, else the token, decides.

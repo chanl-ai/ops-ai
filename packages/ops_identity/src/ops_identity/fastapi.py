@@ -92,7 +92,7 @@ class Auth:
             current_version=http_current_version(
                 http,
                 internal,
-                lambda: mint_service_token(signer, service=audience, audience="platform", tenant_id=None),
+                lambda t: mint_service_token(signer, service=audience, audience="platform", tenant_id=t),
             ),
             services=services,
         )
