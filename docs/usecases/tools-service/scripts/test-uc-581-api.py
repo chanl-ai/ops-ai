@@ -97,7 +97,7 @@ with ExitStack() as stack:
     started = gw.post(f"/v1/apps/plugin:{PLUGIN}/accounts/{connection_id}/sign-in", json={}, headers=priya)
     back = sf["sign_in"]((data(started) or {}).get("authorizeUrl", ""), "acme.integration")
     done = gw.post(
-        f"/v1/apps/plugin:{PLUGIN}/accounts/{connection_id}/sign-in/complete",
+        "/v1/sign-ins/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=priya,
     )

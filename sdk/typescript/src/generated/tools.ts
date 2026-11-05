@@ -256,28 +256,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/apps/{app_id}/accounts/{account_id}/sign-in/complete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Complete Sign In
-         * @description The console hands back the state with the code, or with the error the system refused the sign-in with;
-         *     only the person who started may finish, once. A refusal, there or at the token exchange, answers 422
-         *     sign_in_refused with details {message, who, providerCode} and marks the account refused.
-         */
-        post: operations["apps_complete_sign_in"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/apps/{app_id}/accounts/{account_id}/sign-out": {
         parameters: {
             query?: never;
@@ -330,9 +308,9 @@ export interface paths {
         put?: never;
         /**
          * Check Credential
-         * @description An admin's Test with my account of the app credential: signs in through the account's app (the team's own
-         *     or Ops AI's) and answers whether it worked and as whom, keeping no token. Only an admin, as only an admin
-         *     sets app credentials.
+         * @description An admin's Test with my account of the app credential: starts a sign-in through the account's app (the
+         *     team's own or Ops AI's) that keeps no token; the return page finishes it on /v1/sign-ins/complete. Only an
+         *     admin, as only an admin sets app credentials.
          */
         post: operations["apps_check_credential"];
         delete?: never;
@@ -794,6 +772,29 @@ export interface paths {
          */
         put: operations["send_policy_save_send_policy"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sign-ins/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish Sign In
+         * @description The return page hands back what the system sent: the state with the code, or with the error it refused
+         *     the sign-in with. The state alone names the account, so any window of the person who started finishes it,
+         *     once. A refusal, there or at the token exchange, answers 422 sign_in_refused with details {message, who,
+         *     providerCode, appId, app} and marks the account refused.
+         */
+        post: operations["apps_finish_sign_in"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2202,21 +2203,6 @@ export interface components {
             /** Status */
             status: string;
         };
-        /** CredentialCheck */
-        CredentialCheck: {
-            health: components["schemas"]["CheckedCredential"];
-        };
-        /**
-         * CredentialCheckIn
-         * @description Test with my account: an empty body starts it; the `state` and `code` the sign-in page was handed back
-         *     finish it, on the same route.
-         */
-        CredentialCheckIn: {
-            /** Code */
-            code?: string | null;
-            /** State */
-            state?: string | null;
-        };
         /** CredentialDeleted */
         CredentialDeleted: {
             /** Moved */
@@ -2594,6 +2580,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[SignInFinished] */
+        Envelope_SignInFinished_: {
+            data: components["schemas"]["SignInFinished"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[SignInStart] */
         Envelope_SignInStart_: {
             data: components["schemas"]["SignInStart"];
@@ -2660,16 +2655,6 @@ export interface components {
         /** Envelope[Union[SendPolicyView, NoneType]] */
         Envelope_Union_SendPolicyView__NoneType__: {
             data: components["schemas"]["SendPolicyView"] | null;
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[Union[SignInStart, CredentialCheck]] */
-        Envelope_Union_SignInStart__CredentialCheck__: {
-            /** Data */
-            data: components["schemas"]["SignInStart"] | components["schemas"]["CredentialCheck"];
             /**
              * Success
              * @constant
@@ -4241,6 +4226,21 @@ export interface components {
             errorDescription?: string | null;
             /** State */
             state: string;
+        };
+        /**
+         * SignInFinished
+         * @description A finished sign-in, as the return page tells the window that started it: the account and its app, and either
+         *     the account signed in or, for Test with my account (`check`), the check's outcome.
+         */
+        SignInFinished: {
+            account?: components["schemas"]["AccountDetail"] | null;
+            /** Accountid */
+            accountId: string;
+            /** Appid */
+            appId: string;
+            /** Check */
+            check: boolean;
+            health?: components["schemas"]["CheckedCredential"] | null;
         };
         /** SignInIn */
         SignInIn: {
@@ -6807,114 +6807,6 @@ export interface operations {
             };
         };
     };
-    apps_complete_sign_in: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                app_id: string;
-                account_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SignInCompleteIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Envelope_AccountDetail_"];
-                };
-            };
-            /** @description Invalid request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Not signed in */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Not allowed */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Conflicts with the current state */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Refused by a rule */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Over a budget or rate limit */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description Service unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-        };
-    };
     apps_sign_out: {
         parameters: {
             query?: never;
@@ -7137,11 +7029,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CredentialCheckIn"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -7149,7 +7037,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_Union_SignInStart__CredentialCheck__"];
+                    "application/json": components["schemas"]["Envelope_SignInStart_"];
                 };
             };
             /** @description Invalid request */
@@ -10233,6 +10121,111 @@ export interface operations {
             };
             /** @description The source could not be reached */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    apps_finish_sign_in: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignInCompleteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SignInFinished_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

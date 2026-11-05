@@ -33,11 +33,21 @@ export interface SignedIn {
   expiresAt?: string | null;
 }
 
-/** What finishing a sign-in answers: the account it signed in. */
-export interface SignedInAccount {
-  id: string;
+/** What the system sent back to the return page: the state with the code, or with the error it refused with. */
+export interface SignInReturn {
+  state: string;
+  code?: string;
+  error?: string;
+  errorDescription?: string;
+}
+
+/** A finished sign-in: its account and app, and the account signed in or, for Test with my account, the check. */
+export interface SignInFinished {
   appId: string;
-  name: string;
+  accountId: string;
+  check: boolean;
+  account?: { id: string; name: string } | null;
+  health?: CredentialCheck['health'] | null;
 }
 
 export interface PersonSignedIn {
@@ -132,6 +142,6 @@ export interface ConnectionRequired {
 }
 
 /** Test with my account: whether signing in through the app credential worked, and as whom. */
-export interface CredentialCheck {
+interface CredentialCheck {
   health: { status: 'ok' | 'failed'; account?: string | null; message?: string | null; at: string; by: string };
 }

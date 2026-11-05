@@ -155,7 +155,7 @@ export default function AppCredentialPage() {
     if (!w || !c || !first) return;
     setBusy('check');
     const ref = { appId: c.app, accountId: first.id };
-    startCheck.mutate(ref, { onSuccess: (s) => w.go(s, ref, { check: true }), onError: (e) => (w.fail(e.message), setBusy(null)) });
+    startCheck.mutate(ref, { onSuccess: (s) => w.go(s, ref), onError: (e) => (w.fail(e.message), setBusy(null)) });
   };
 
   const rows: Account[] = (c?.accountsList ?? []).map((a) => ({ ...a, onReconnect: reconnect, onDisconnect: disconnect, busy, team: team?.name ?? 'The team' }));

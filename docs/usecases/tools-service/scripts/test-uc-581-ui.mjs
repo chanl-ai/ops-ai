@@ -107,14 +107,14 @@ try {
       // Set-up through the API, as uc-564's api layer does: hosts, team switch, the team's sign-in.
       for (const host of sf.info.hosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-581' });
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: sf.info.range, note: 'uc-581' });
-      const login = sf.info.authorize_url.replace(/\/authorize$/, '');
+      const login = sf.info.login_url;
       // The team's own client is made under Credentials, with no account, and the turn-on picks it.
       const own = await call(tools, 'POST', '/v1/app-credentials', priya, { app: `plugin:${PLUGIN}`, clientId: 'ops-ai-acme', clientSecret: 'acme-connected-app-secret' });
       const on = await call(tools, 'PUT', `/v1/apps/plugin:${PLUGIN}/team`, priya, { enabled: true, settings: { login_url: login }, credentialId: own.data?.id });
       const connectionId = on.data?.connectionId;
       const started = await call(tools, 'POST', `/v1/apps/plugin:${PLUGIN}/accounts/${connectionId}/sign-in`, priya, { account: 'team' });
       const back = started.data?.authorizeUrl ? await signInAt(started.data.authorizeUrl, 'acme.integration') : {};
-      const signed = await call(tools, 'POST', `/v1/apps/plugin:${PLUGIN}/accounts/${connectionId}/sign-in/complete`, priya, { state: back.state ?? '', code: back.code ?? '' });
+      const signed = await call(tools, 'POST', '/v1/sign-ins/complete', priya, { state: back.state ?? '', code: back.code ?? '' });
       const base = (await call(kb, 'POST', '/v1/knowledge-bases', priya, { name: 'Salesforce articles', owner: 'p.shah@harborpine.example' })).data ?? {};
       const agent = (await call(agents, 'POST', '/v1/agents', priya, { name: 'Case helper', role: 'Works Salesforce cases' })).data ?? {};
       check(

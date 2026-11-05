@@ -131,14 +131,14 @@ try {
       // Set-up through the API, as the api layer's steps 2-6 do: hosts, team switch, the team's sign-in.
       for (const host of sf.info.hosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-564' });
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: sf.info.range, note: 'uc-564' });
-      const login = sf.info.authorize_url.replace(/\/authorize$/, '');
+      const login = sf.info.login_url;
       // The team's own client is made under Credentials, with no account, and the turn-on picks it.
       const own = await call(tools, 'POST', '/v1/app-credentials', priya, { app: `plugin:${PLUGIN}`, clientId: 'ops-ai-acme', clientSecret: 'acme-connected-app-secret' });
       const on = await call(tools, 'PUT', `/v1/apps/plugin:${PLUGIN}/team`, priya, { enabled: true, settings: { login_url: login }, credentialId: own.data?.id });
       const connectionId = on.data?.connectionId;
       const started = await call(tools, 'POST', `/v1/apps/plugin:${PLUGIN}/accounts/${connectionId}/sign-in`, priya, { account: 'team' });
       const back = started.data?.authorizeUrl ? await signInAt(started.data.authorizeUrl, 'acme.integration') : {};
-      const signed = await call(tools, 'POST', `/v1/apps/plugin:${PLUGIN}/accounts/${connectionId}/sign-in/complete`, priya, { state: back.state ?? '', code: back.code ?? '' });
+      const signed = await call(tools, 'POST', '/v1/sign-ins/complete', priya, { state: back.state ?? '', code: back.code ?? '' });
 
       // The knowledge base the source fills, and the case helper holding the plugin's case tools and that base.
       const made = await call(kb, 'POST', '/v1/knowledge-bases', priya, { name: 'Salesforce articles', owner: 'p.shah@harborpine.example' });

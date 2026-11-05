@@ -213,8 +213,8 @@ async def _signing_in(client: httpx.AsyncClient, tenant: str) -> tuple[dict[str,
 
 
 async def test_a_sign_in_is_finished_once_by_who_started_it(client: httpx.AsyncClient, tenant: str) -> None:
-    conn, state = await _signing_in(client, tenant)
-    path = f"{_at(conn)}/sign-in/complete"
+    _, state = await _signing_in(client, tenant)
+    path = "/v1/sign-ins/complete"
     other = person(tenant, "Maya Okafor", {TEAM: "admin"})
     stolen = await client.post(path, json={"state": state, "code": "c"}, headers=other)
     assert stolen.status_code == 400 and stolen.json()["error"]["code"] == "sign_in_expired", stolen.text
@@ -245,7 +245,7 @@ async def test_an_expired_sign_in_is_refused(client: httpx.AsyncClient, tenant: 
         now=now - timedelta(minutes=20),
     )
     res = await client.post(
-        f"{_at(conn)}/sign-in/complete",
+        "/v1/sign-ins/complete",
         json={"state": "old-state-0123456789", "code": "c"},
         headers=admin(tenant),
     )

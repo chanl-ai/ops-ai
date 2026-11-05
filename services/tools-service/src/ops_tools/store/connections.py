@@ -1131,6 +1131,17 @@ class ConnectionStore:
             await c.execute(oauth_states.insert().values(**row, team_id=team))
         return pruned
 
+    async def state_account(self, tenant_id: str, state_hash: str) -> Row | None:
+        """The account and whose token a sign-in's state was sent out for, read without spending it: what the return
+        page finishes, which `take_state` then checks and spends. None for an unknown state."""
+        s = oauth_states.c
+        q = sa.select(s.connection_id, s.token_for).where(
+            s.tenant_id == tenant_id, s.state_hash == state_hash, team_visible(oauth_states)
+        )
+        async with self._tx() as c:
+            row = (await c.execute(q)).mappings().first()
+            return dict(row) if row else None
+
     async def take_state(
         self, tenant_id: str, state_hash: str, *, connection_id: str, person: str, now: datetime
     ) -> Row | None:

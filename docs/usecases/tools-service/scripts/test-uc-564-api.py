@@ -103,7 +103,7 @@ def sign_in_team(gw: httpx.Client, sf: dict[str, Any], who: dict[str, str], conn
     if not back.get("code"):
         print(f"sign-in gave no code: start {started.status_code} {started.text[:300]}; back {back}", flush=True)
     return gw.post(
-        f"{account(connection_id)}/sign-in/complete",
+        "/v1/sign-ins/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=who,
     )
@@ -470,7 +470,7 @@ with ExitStack() as stack:
     own = gw.post(f"{account(mine_id)}/sign-in", json={}, headers=security)
     back = sf["sign_in"]((data(own) or {}).get("authorizeUrl", ""), "sam.own") if own.status_code == 200 else {}
     own_done = gw.post(
-        f"{account(mine_id)}/sign-in/complete",
+        "/v1/sign-ins/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=security,
     )

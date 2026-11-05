@@ -733,7 +733,9 @@ class ConnectionService:
             await self.egress.check_url(who.tenant_id, url, await self.tokens.hosts(who.tenant_id, connection_id))
         except EgressDenied as e:
             raise ValidationFailed(f"The sign-in address: {e}", code="egress_denied") from e
-        state, secret = random.token_urlsafe(32), verifier()
+        # The state starts with the account's team, so the return page finishes it in that team whatever the window it
+        # lands in remembers; the rest is the secret part, which only the system and this sign-in hold.
+        state, secret = f"{conn['team_id']}.{random.token_urlsafe(32)}", verifier()
         redirect = self._redirect()
         now = self.clock()
         # The team's account signs calls nobody can be asked for, so it asks up front for every scope its operations
@@ -889,6 +891,41 @@ class ConnectionService:
             task.add_done_callback(self._after_sign_in.discard)
         return await self.detail(who, connection_id)
 
+    async def finish(
+        self, who: Caller, state: str, *, code: str | None, error: str | None, description: str | None
+    ) -> dict[str, Any]:
+        """The return page's one call: the sign-in its state was sent out for, finished from the state alone, so a
+        window with no record of it (another tab, a fresh browser) finishes it too. A sign-in finishes as signed in,
+        a Test with my account as its check; a refusal answers 422 sign_in_refused as `refuse_sign_in` says. An
+        unknown, used or another person's state is refused as sign_in_expired."""
+        found = await self.store.state_account(who.tenant_id, _hash(state))
+        if found is None:
+            raise ValidationFailed(
+                "This sign-in has expired or was already used. Start it again.", code="sign_in_expired"
+            )
+        connection_id = str(found["connection_id"])
+        conn = await self._get(who, connection_id)
+        out: dict[str, Any] = {
+            "appId": str(conn["app_id"]),
+            "accountId": connection_id,
+            "check": found["token_for"] == CHECK,
+        }
+        if out["check"]:
+            if code is None:
+                message, _ = await self._refusal_words(who, conn, str(error), description, token_exchange=False)
+                taken, _ = await self._taken(who, connection_id, state, check=True)
+                await self.credentials.delete(
+                    str(taken["verifier_ct"]), context=verifier_context(who.tenant_id, str(taken["state_hash"]))
+                )
+                return out | {
+                    "health": {"status": "failed", "message": message, "at": _iso(self.clock()), "by": who.name}
+                }
+            return out | await self.check_credential(who, connection_id, state, code)
+        if code is None:
+            await self.refuse_sign_in(who, connection_id, state, str(error), description)
+        assert code is not None
+        return out | {"account": await self.complete_sign_in(who, connection_id, state, code)}
+
     async def refuse_sign_in(
         self, who: Caller, connection_id: str, state: str, error: str, description: str | None
     ) -> NoReturn:
@@ -933,8 +970,12 @@ class ConnectionService:
             await self.store.mark_refused(who.tenant_id, connection_id, token_for, reason=message, at=now)
         detail = {"code": error, "who": whose, **({"own": True} if own else {})}
         await self.store.note(who.tenant_id, connection_id, self._event(who, "sign_in_refused", detail))
+        app = (await self._app_display(who, str(conn["app_id"]), {**conn, "connection_id": conn["id"]}))[0]
         return Unprocessable(
-            message, code="sign_in_refused", details={"message": message, "who": whose, "providerCode": error}
+            message,
+            code="sign_in_refused",
+            # The app, so the return page's Try again names it.
+            details={"message": message, "who": whose, "providerCode": error, "appId": str(conn["app_id"]), "app": app},
         )
 
     async def _refusal_words(

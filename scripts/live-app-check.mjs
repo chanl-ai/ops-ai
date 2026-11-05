@@ -191,7 +191,7 @@ if (handoff) {
   await context.close();
 }
 if (!step(`${P.title} sends the sign-in back`, Boolean(back?.searchParams.get('code')), back ? [back.searchParams.get('error'), back.searchParams.get('error_description')].filter(Boolean).join(': ') : `no answer in ${waitMinutes} minutes`)) stop();
-const done = await api('POST', `${accountPath}/sign-in/complete`, { state: back.searchParams.get('state'), code: back.searchParams.get('code') });
+const done = await api('POST', '/v1/sign-ins/complete', { state: back.searchParams.get('state'), code: back.searchParams.get('code') });
 if (!step('Ops AI finishes the sign-in', done.status === 200, done.error?.message)) stop();
 
 // 4. The account's test call and a real read.

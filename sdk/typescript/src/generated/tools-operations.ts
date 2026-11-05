@@ -55,22 +55,10 @@ export const toolsOperations = {
     "stream": false
   },
   "apps_check_credential": {
-    "body": "json",
+    "body": null,
     "headers": [],
     "method": "POST",
     "path": "/v1/apps/{app_id}/accounts/{account_id}/test-credential",
-    "pathParams": [
-      "app_id",
-      "account_id"
-    ],
-    "query": [],
-    "stream": false
-  },
-  "apps_complete_sign_in": {
-    "body": "json",
-    "headers": [],
-    "method": "POST",
-    "path": "/v1/apps/{app_id}/accounts/{account_id}/sign-in/complete",
     "pathParams": [
       "app_id",
       "account_id"
@@ -130,6 +118,15 @@ export const toolsOperations = {
     "pathParams": [
       "account_id"
     ],
+    "query": [],
+    "stream": false
+  },
+  "apps_finish_sign_in": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/sign-ins/complete",
+    "pathParams": [],
     "query": [],
     "stream": false
   },

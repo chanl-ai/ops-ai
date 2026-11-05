@@ -56,19 +56,10 @@ OPERATIONS: dict[str, Operation] = {
         "stream": False,
     },
     "apps_check_credential": {
-        "body": "json",
+        "body": None,
         "headers": [],
         "method": "POST",
         "path": "/v1/apps/{app_id}/accounts/{account_id}/test-credential",
-        "pathParams": ["app_id", "account_id"],
-        "query": [],
-        "stream": False,
-    },
-    "apps_complete_sign_in": {
-        "body": "json",
-        "headers": [],
-        "method": "POST",
-        "path": "/v1/apps/{app_id}/accounts/{account_id}/sign-in/complete",
         "pathParams": ["app_id", "account_id"],
         "query": [],
         "stream": False,
@@ -115,6 +106,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "DELETE",
         "path": "/v1/me/accounts/{account_id}",
         "pathParams": ["account_id"],
+        "query": [],
+        "stream": False,
+    },
+    "apps_finish_sign_in": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/sign-ins/complete",
+        "pathParams": [],
         "query": [],
         "stream": False,
     },
@@ -800,12 +800,6 @@ class Operations:
             SERVICE, OPERATIONS["apps_start_sign_in"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    def apps_complete_sign_in(self, app_id: str, account_id: str, body: SignInCompleteIn) -> AccountDetail:
-        "Complete Sign In"
-        return self._t.call(
-            SERVICE, OPERATIONS["apps_complete_sign_in"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
-        )  # type: ignore[no-any-return]
-
     def apps_sign_out(self, app_id: str, account_id: str) -> AccountDetail:
         "Sign Out"
         return self._t.call(
@@ -818,10 +812,10 @@ class Operations:
             SERVICE, OPERATIONS["apps_test_account"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    def apps_check_credential(self, app_id: str, account_id: str, body: CredentialCheckIn) -> Any:
+    def apps_check_credential(self, app_id: str, account_id: str) -> SignInStart:
         "Check Credential"
         return self._t.call(
-            SERVICE, OPERATIONS["apps_check_credential"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
+            SERVICE, OPERATIONS["apps_check_credential"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     def plugins_list_app_resources(self, app_id: str) -> list[AppResource]:
@@ -985,6 +979,10 @@ class Operations:
     def send_policy_save_send_policy(self, body: SendPolicyIn) -> SendPolicyView:
         "Save Send Policy"
         return self._t.call(SERVICE, OPERATIONS["send_policy_save_send_policy"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def apps_finish_sign_in(self, body: SignInCompleteIn) -> SignInFinished:
+        "Finish Sign In"
+        return self._t.call(SERVICE, OPERATIONS["apps_finish_sign_in"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     def tool_modules_list_modules(
         self,
@@ -1290,12 +1288,6 @@ class AsyncOperations:
             SERVICE, OPERATIONS["apps_start_sign_in"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def apps_complete_sign_in(self, app_id: str, account_id: str, body: SignInCompleteIn) -> AccountDetail:
-        "Complete Sign In"
-        return await self._t.call(
-            SERVICE, OPERATIONS["apps_complete_sign_in"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
-        )  # type: ignore[no-any-return]
-
     async def apps_sign_out(self, app_id: str, account_id: str) -> AccountDetail:
         "Sign Out"
         return await self._t.call(
@@ -1308,10 +1300,10 @@ class AsyncOperations:
             SERVICE, OPERATIONS["apps_test_account"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def apps_check_credential(self, app_id: str, account_id: str, body: CredentialCheckIn) -> Any:
+    async def apps_check_credential(self, app_id: str, account_id: str) -> SignInStart:
         "Check Credential"
         return await self._t.call(
-            SERVICE, OPERATIONS["apps_check_credential"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
+            SERVICE, OPERATIONS["apps_check_credential"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     async def plugins_list_app_resources(self, app_id: str) -> list[AppResource]:
@@ -1481,6 +1473,10 @@ class AsyncOperations:
     async def send_policy_save_send_policy(self, body: SendPolicyIn) -> SendPolicyView:
         "Save Send Policy"
         return await self._t.call(SERVICE, OPERATIONS["send_policy_save_send_policy"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def apps_finish_sign_in(self, body: SignInCompleteIn) -> SignInFinished:
+        "Finish Sign In"
+        return await self._t.call(SERVICE, OPERATIONS["apps_finish_sign_in"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def tool_modules_list_modules(
         self,

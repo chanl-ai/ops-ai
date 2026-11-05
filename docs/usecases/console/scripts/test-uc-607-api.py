@@ -156,7 +156,7 @@ with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
     started = w.kept(w.gw.post(f"{at}/sign-in", json={"account": "team"}, headers=w.who["admin"]))
     state = parse_qs(urlsplit(str((data(started) or {}).get("authorizeUrl") or "")).query).get("state", [""])[0]
     refusal = {"state": state, "error": "access_denied", "errorDescription": "end-user denied authorization"}
-    refused = w.kept(w.gw.post(f"{at}/sign-in/complete", json=refusal, headers=w.who["admin"]))
+    refused = w.kept(w.gw.post("/v1/sign-ins/complete", json=refusal, headers=w.who["admin"]))
     said = (refused.json().get("error") or {}) if refused.status_code == 422 else {}
     page = data(w.kept(w.gw.get(app_path("plugin:test.person"), headers=w.who["admin"]))) or {}
     row = next((a for a in page.get("accounts") or [] if a.get("id") == person_app), {})

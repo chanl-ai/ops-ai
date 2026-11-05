@@ -3084,53 +3084,6 @@
         "title": "CredentialAccount",
         "type": "object"
       },
-      "CredentialCheck": {
-        "additionalProperties": false,
-        "properties": {
-          "health": {
-            "$ref": "#/components/schemas/CheckedCredential"
-          }
-        },
-        "required": [
-          "health"
-        ],
-        "title": "CredentialCheck",
-        "type": "object"
-      },
-      "CredentialCheckIn": {
-        "additionalProperties": false,
-        "description": "Test with my account: an empty body starts it; the `state` and `code` the sign-in page was handed back\nfinish it, on the same route.",
-        "properties": {
-          "code": {
-            "anyOf": [
-              {
-                "maxLength": 2000,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Code"
-          },
-          "state": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "minLength": 16,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "State"
-          }
-        },
-        "title": "CredentialCheckIn",
-        "type": "object"
-      },
       "CredentialDeleted": {
         "additionalProperties": false,
         "properties": {
@@ -4025,6 +3978,25 @@
         "title": "Envelope[SendPolicyView]",
         "type": "object"
       },
+      "Envelope_SignInFinished_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SignInFinished"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[SignInFinished]",
+        "type": "object"
+      },
       "Envelope_SignInStart_": {
         "additionalProperties": false,
         "properties": {
@@ -4182,33 +4154,6 @@
           "data"
         ],
         "title": "Envelope[Union[SendPolicyView, NoneType]]",
-        "type": "object"
-      },
-      "Envelope_Union_SignInStart__CredentialCheck__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/SignInStart"
-              },
-              {
-                "$ref": "#/components/schemas/CredentialCheck"
-              }
-            ],
-            "title": "Data"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[Union[SignInStart, CredentialCheck]]",
         "type": "object"
       },
       "Envelope_Union_list_SecretMeta___SecretList__": {
@@ -9073,6 +9018,51 @@
           "state"
         ],
         "title": "SignInCompleteIn",
+        "type": "object"
+      },
+      "SignInFinished": {
+        "additionalProperties": false,
+        "description": "A finished sign-in, as the return page tells the window that started it: the account and its app, and either\nthe account signed in or, for Test with my account (`check`), the check's outcome.",
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "accountId": {
+            "title": "Accountid",
+            "type": "string"
+          },
+          "appId": {
+            "title": "Appid",
+            "type": "string"
+          },
+          "check": {
+            "title": "Check",
+            "type": "boolean"
+          },
+          "health": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CheckedCredential"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "appId",
+          "accountId",
+          "check"
+        ],
+        "title": "SignInFinished",
         "type": "object"
       },
       "SignInIn": {
@@ -14735,213 +14725,6 @@
         "x-ops-public": "sdk"
       }
     },
-    "/v1/apps/{app_id}/accounts/{account_id}/sign-in/complete": {
-      "post": {
-        "description": "The console hands back the state with the code, or with the error the system refused the sign-in with;\nonly the person who started may finish, once. A refusal, there or at the token exchange, answers 422\nsign_in_refused with details {message, who, providerCode} and marks the account refused.",
-        "operationId": "apps_complete_sign_in",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "app_id",
-            "required": true,
-            "schema": {
-              "title": "App Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "account_id",
-            "required": true,
-            "schema": {
-              "title": "Account Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-api-key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-team-id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Team-Id"
-            }
-          },
-          {
-            "in": "header",
-            "name": "x-dev-user",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Dev-User"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SignInCompleteIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope_AccountDetail_"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Invalid request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not signed in"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not allowed"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Conflicts with the current state"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Refused by a rule"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Over a budget or rate limit"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Server error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Service unavailable"
-          }
-        },
-        "summary": "Complete Sign In",
-        "tags": [
-          "apps"
-        ],
-        "x-ops-public": "sdk"
-      }
-    },
     "/v1/apps/{app_id}/accounts/{account_id}/sign-out": {
       "post": {
         "description": "Ends the team's sign-in on the account; each person's own stays.",
@@ -15348,7 +15131,7 @@
     },
     "/v1/apps/{app_id}/accounts/{account_id}/test-credential": {
       "post": {
-        "description": "An admin's Test with my account of the app credential: signs in through the account's app (the team's own\nor Ops AI's) and answers whether it worked and as whom, keeping no token. Only an admin, as only an admin\nsets app credentials.",
+        "description": "An admin's Test with my account of the app credential: starts a sign-in through the account's app (the\nteam's own or Ops AI's) that keeps no token; the return page finishes it on /v1/sign-ins/complete. Only an\nadmin, as only an admin sets app credentials.",
         "operationId": "apps_check_credential",
         "parameters": [
           {
@@ -15434,22 +15217,12 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CredentialCheckIn"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_Union_SignInStart__CredentialCheck__"
+                  "$ref": "#/components/schemas/Envelope_SignInStart_"
                 }
               }
             },
@@ -22202,6 +21975,195 @@
         "summary": "Save Send Policy",
         "tags": [
           "send-policy"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/sign-ins/complete": {
+      "post": {
+        "description": "The return page hands back what the system sent: the state with the code, or with the error it refused\nthe sign-in with. The state alone names the account, so any window of the person who started finishes it,\nonce. A refusal, there or at the token exchange, answers 422 sign_in_refused with details {message, who,\nproviderCode, appId, app} and marks the account refused.",
+        "operationId": "apps_finish_sign_in",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignInCompleteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SignInFinished_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Finish Sign In",
+        "tags": [
+          "apps"
         ],
         "x-ops-public": "sdk"
       }

@@ -98,7 +98,7 @@ def sign_in(
     started = gw.post(f"{path}/sign-in", json={"account": account}, headers=who)
     back = browser((data(started) or {}).get("authorizeUrl", ""), user) if started.status_code == 200 else {}
     done = gw.post(
-        f"{path}/sign-in/complete",
+        "/v1/sign-ins/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=who,
     )

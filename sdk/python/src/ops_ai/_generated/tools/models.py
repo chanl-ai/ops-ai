@@ -303,15 +303,6 @@ class CredentialAccount(TypedDict, closed=True):
     status: str
 
 
-class CredentialCheck(TypedDict, closed=True):
-    health: CheckedCredential
-
-
-class CredentialCheckIn(TypedDict, closed=True):
-    code: NotRequired[str | None]
-    state: NotRequired[str | None]
-
-
 class CredentialDeleted(TypedDict, closed=True):
     moved: int
 
@@ -1476,11 +1467,6 @@ class EnvelopeUnionSendPolicyViewNoneType(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeUnionSignInStartCredentialCheck(TypedDict, closed=True):
-    data: SignInStart | CredentialCheck
-    success: Literal[True]
-
-
 class EnvelopeWaitOut(TypedDict, closed=True):
     data: WaitOut
     success: Literal[True]
@@ -1726,6 +1712,14 @@ class SecretMeta(TypedDict, closed=True):
     version: int
 
 
+class SignInFinished(TypedDict, closed=True):
+    account: NotRequired[AccountDetail | None]
+    accountId: str
+    appId: str
+    check: bool
+    health: NotRequired[CheckedCredential | None]
+
+
 class SystemPlugin(TypedDict, closed=True):
     fixed: list[str]
     kinds: list[str]
@@ -1837,6 +1831,11 @@ class EnvelopePluginUpdateView(TypedDict, closed=True):
 
 class EnvelopeSecretMeta(TypedDict, closed=True):
     data: SecretMeta
+    success: Literal[True]
+
+
+class EnvelopeSignInFinished(TypedDict, closed=True):
+    data: SignInFinished
     success: Literal[True]
 
 

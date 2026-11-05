@@ -58,7 +58,7 @@ async def _account(client: httpx.AsyncClient, tenant: str, **body: Any) -> str:
 
 
 async def _complete(client: httpx.AsyncClient, headers: dict[str, str], account: str, **body: Any) -> httpx.Response:
-    return await client.post(f"/v1/apps/{APP}/accounts/{account}/sign-in/complete", json=body, headers=headers)
+    return await client.post("/v1/sign-ins/complete", json=body, headers=headers)
 
 
 APP_NAME = "Signin desk"
@@ -89,7 +89,8 @@ async def test_a_refusal_answers_one_sentence_and_who_acts(
     assert refused.status_code == 422, refused.text
     body = refused.json()["error"]
     assert body["code"] == "sign_in_refused" and body["message"] == message, body
-    assert body["details"] == {"message": message, "who": who, "providerCode": error}, body
+    said = {"message": message, "who": who, "providerCode": error, "appId": APP, "app": "Signin desk"}
+    assert body["details"] == said, body
 
 
 async def test_a_refusal_is_recorded_and_the_account_reads_refused(client: httpx.AsyncClient, tenant: str) -> None:
@@ -139,6 +140,24 @@ async def test_a_wrong_client_secret_at_the_token_exchange_names_the_credential_
         "message": said,
         "who": "admin",
         "providerCode": "incorrect_client_credentials",
+        "appId": APP,
+        "app": "Signin desk",
     }, refused.text
     page = (await client.get(f"/v1/apps/{APP}", headers=admin(tenant))).json()["data"]
     assert next(a for a in page["accounts"] if a["id"] == account)["state"] == "refused", page["accounts"]
+
+
+async def test_a_sign_in_finishes_from_its_state_in_a_window_that_knows_nothing_else(
+    client: httpx.AsyncClient, tenant: str
+) -> None:
+    """The return page holds only what the system sent back; the state names the account, its app and its team, so
+    a window that started nothing (another tab, a fresh browser) finishes the sign-in that the state was sent for."""
+    account = await _account(client, tenant)
+    state = await _started(client, admin(tenant), account)
+    assert state.startswith(f"{TEAM}."), state
+    finished = await client.post(
+        "/v1/sign-ins/complete", json={"state": state, "error": "access_denied"}, headers=admin(tenant)
+    )
+    assert finished.status_code == 422, finished.text
+    details = finished.json()["error"]["details"]
+    assert (details["appId"], details["app"]) == (APP, "Signin desk"), details

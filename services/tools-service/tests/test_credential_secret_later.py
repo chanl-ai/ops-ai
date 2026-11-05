@@ -85,4 +85,6 @@ async def test_a_credential_with_no_secret_says_so_rather_than_wrong(
         "message": "Signin prod has no client secret yet. Add it on its Credentials page.",
         "who": "admin",
         "providerCode": "incorrect_client_credentials",
+        "appId": APP,
+        "app": "Signin desk",
     }, refused.text

@@ -55,7 +55,7 @@ with ExitStack() as stack:
     check("3 the sign-in names the server as its resource", asked.get("resource") == server, asked)
     consent = httpx.get(f"https://{address}{url.path}?{url.query}", verify=False, follow_redirects=False)
     back = {k: v[0] for k, v in parse_qs(urlsplit(consent.headers.get("location", "")).query).items()}
-    done = gw.post(f"{path}/sign-in/complete", json={"state": back.get("state", ""), "code": back.get("code", "")})
+    done = gw.post("/v1/sign-ins/complete", json={"state": back.get("state", ""), "code": back.get("code", "")})
     check("3 the sign-in finishes (200)", done.status_code == 200, done.text[:300])
 
     # 4. With the account, the tools are listed with their inputs.

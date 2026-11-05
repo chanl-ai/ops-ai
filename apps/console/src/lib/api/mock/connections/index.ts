@@ -59,13 +59,15 @@ export function createConnectionsMock(deps: { me: string }): ConnectionsApi {
   return {
     kinds: () => respond(() => KINDS),
     startSignIn: (a) => respond(() => signIn(under(a.appId, a.accountId))),
-    completeSignIn: (a) =>
+    // The mock's state is the account's id, as its sign-in address carries it.
+    finishSignIn: (i) =>
       respond(() => {
-        const row = under(a.appId, a.accountId);
+        const row = find(i.state);
+        if (i.error) throw new ApiError(`${row.name} access was not given. Connect again to retry.`, 422, undefined, 'sign_in_refused', { who: 'person', providerCode: i.error, appId: row.appId, app: row.name });
         if (!mine.some((m) => m.connectionId === row.id)) {
           mine.push({ ...own(row), account: `${deps.me.toLowerCase().replace(/\s+/g, '.')}@example.com`, scopes: ['api'] });
         }
-        return { id: row.id, appId: row.appId, name: row.name };
+        return { appId: row.appId, accountId: row.id, check: false, account: { id: row.id, name: row.name } };
       }),
     openConnectLink: (link) => respond(() => signIn(rows.find((r) => r.id === link.split(':')[0]) ?? rows[0])),
     mine: (every) =>
@@ -96,9 +98,5 @@ export function createConnectionsMock(deps: { me: string }): ConnectionsApi {
       }),
     startCredentialCheck: (a) =>
       respond(() => ({ ...signIn(rows.find((r) => r.id === a.accountId) ?? rows[0]), connectionId: a.accountId, appId: a.appId })),
-    finishCredentialCheck: (a) =>
-      respond(() => {
-        return { health: { status: 'ok' as const, account: `${deps.me.toLowerCase().replace(/\s+/g, '.')}@example.com`, at: new Date().toISOString(), by: deps.me } };
-      }),
   };
 }

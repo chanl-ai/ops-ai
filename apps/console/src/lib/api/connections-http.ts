@@ -12,12 +12,11 @@ export function createConnectionsHttp(get: Get, send: Send): ConnectionsApi {
   return {
     kinds: async () => (await get<{ kinds: AuthKind[] }>('/connection-kinds')).kinds,
     startSignIn: (a, i) => send('POST', `${one(a)}/sign-in`, i),
-    completeSignIn: (a, i) => send('POST', `${one(a)}/sign-in/complete`, i),
+    finishSignIn: (i) => send('POST', '/sign-ins/complete', i),
     openConnectLink: (link) => send('POST', '/connect-links/sign-in', { link }),
     mine: (every) => get(every ? '/me/accounts?every=true' : '/me/accounts'),
     giveOwn: (id, i) => send('PUT', `${mine(id)}/credentials`, i),
     disconnect: (id) => send('DELETE', mine(id)),
     startCredentialCheck: (a) => send('POST', `${one(a)}/test-credential`, {}),
-    finishCredentialCheck: (a, i) => send('POST', `${one(a)}/test-credential`, i),
   };
 }

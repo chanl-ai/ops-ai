@@ -129,14 +129,6 @@ class SignInCompleteIn(_In):
         return self
 
 
-class CredentialCheckIn(_In):
-    """Test with my account: an empty body starts it; the `state` and `code` the sign-in page was handed back
-    finish it, on the same route."""
-
-    state: str | None = Field(default=None, min_length=16, max_length=200)
-    code: str | None = Field(default=None, min_length=1, max_length=2000)
-
-
 class CheckedCredential(Out):
     status: Literal["ok", "failed"]
     # Who signed in, when the system's answer says; for display only.
@@ -346,3 +338,14 @@ class SignInStart(Out):
     connection_id: str | None = None
     # The account's app: the return page finishes the sign-in under it.
     app_id: str | None = None
+
+
+class SignInFinished(Out):
+    """A finished sign-in, as the return page tells the window that started it: the account and its app, and either
+    the account signed in or, for Test with my account (`check`), the check's outcome."""
+
+    app_id: str
+    account_id: str
+    check: bool
+    account: AccountDetail | None = None
+    health: CheckedCredential | None = None

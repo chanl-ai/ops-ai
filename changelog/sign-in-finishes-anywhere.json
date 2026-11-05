@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-04",
+  "title": "Connect finishes in any window",
+  "description": "A sign-in finishes wherever the app sends you back, even in a new tab or another browser, and the window you started from shows Connected. A refusal shows one plain sentence naming who acts.",
+  "tag": "fix"
+}
