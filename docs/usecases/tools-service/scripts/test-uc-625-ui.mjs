@@ -196,7 +196,7 @@ try {
       try {
         const page = await signedIn(browser, consoleUrl, PRIYA);
         for (const [n, app] of APPS.entries()) {
-          const at = (k) => `${n + 1}.${k}`;
+          const at = (k) => `${(n + 1) * 10 + k}`;
 
           await step(`${at(1)} ${app.name}: a sign-in window left open from before is never reused; Connect opens one of its own`, async () => {
             // The name every sign-in window once shared; a window of that name still open must stay as it is.
@@ -243,7 +243,7 @@ try {
 
           await step(`${at(5)} ${app.name}: a sign-in finished in a fresh browser with no storage still reads Connected in the window that started it`, async () => {
             await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(app.id)}`, { waitUntil: 'domcontentloaded' });
-            await page.getByTestId('app-connect-another').click({ timeout: 60_000 });
+            await page.locator('[data-testid^="auth-config-add-"]').first().click({ timeout: 60_000 });
             const win = page.getByTestId('connect-window');
             await win.waitFor({ timeout: 30_000 });
             if (!(await win.getByTestId('connect-window-name').isVisible())) await win.getByTestId('connect-window-more').click();
