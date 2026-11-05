@@ -55,7 +55,7 @@ gateway_calls = sa.Table(
     # The team the call was made in: the caller's acting team, or its module's team for a caller with none (tools
     # migration 0051). Usage reads only its own team's rows; a row with none is read by nobody.
     sa.Column("team_id", sa.String(64)),
-    # Which of the connection's environments the call used (test or production) and which connection signed it in;
+    # The kind of run the call was made in (test or live) and which connection signed it in;
     # null for a call that used no connection.
     sa.Column("environment", sa.String(16)),
     sa.Column("connection_id", sa.String(64)),

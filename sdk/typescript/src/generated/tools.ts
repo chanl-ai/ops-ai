@@ -3459,7 +3459,7 @@ export interface components {
              * @default test
              * @enum {string}
              */
-            environment: "test" | "production";
+            environment: "test" | "live";
             /** Input */
             input: {
                 [key: string]: unknown;
@@ -4030,7 +4030,7 @@ export interface components {
             /** Act */
             act?: string | null;
             /** Environment */
-            environment?: ("test" | "production") | null;
+            environment?: ("test" | "live") | null;
             /** Step */
             step?: string | null;
             /** Thread */
@@ -4621,7 +4621,7 @@ export interface components {
              */
             effect: boolean;
             /** Environment */
-            environment?: ("test" | "production") | null;
+            environment?: ("test" | "live") | null;
             /** Errorcode */
             errorCode?: string | null;
             /** Errormessage */
@@ -4947,7 +4947,7 @@ export interface components {
          */
         ToolRunIn: {
             /** Environment */
-            environment?: ("test" | "production") | null;
+            environment?: ("test" | "live") | null;
             /** Input */
             input?: {
                 [key: string]: unknown;

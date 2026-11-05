@@ -79,5 +79,5 @@ async def test_a_removed_plugins_tool_refuses_with_that_reason(rig: Rig, engine:
         module = await ModuleStore(engine).get(tenant, module_id_of(desk.manifest))
     assert module is not None
     host.loaded = []
-    seen = await host.for_call(tenant, "team_platform", module, "production")
+    seen = await host.for_call(tenant, "team_platform", module, "live")
     assert "no longer installed" in str(seen["plugin_off"]), seen

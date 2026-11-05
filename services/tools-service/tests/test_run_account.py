@@ -33,7 +33,7 @@ def test_a_test_run_uses_the_sandbox_account_else_the_default_and_a_live_run_the
     live, sandbox = {"id": "live", "sandbox": False}, {"id": "sbx", "sandbox": True}
     assert account_for(live, [live, sandbox], "test") == sandbox
     assert account_for(live, [live], "test") == live
-    assert account_for(live, [live, sandbox], "production") == live
+    assert account_for(live, [live, sandbox], "live") == live
     assert account_for(None, [], "test") is None
 
 
@@ -107,7 +107,7 @@ async def test_a_test_runs_write_on_the_live_account_waits_for_a_person(gateway_
         held = await call("place_hold", HOLD, "test", "w1")
         assert held.status_code == 403, held.text
         assert held.json()["error"]["details"]["reasons"] == ["write needs an approval token"], held.text
-        live = await call("place_hold", HOLD, "production", "w2")
+        live = await call("place_hold", HOLD, "live", "w2")
         assert live.status_code == 200 and live.json()["data"]["ok"] is True, live.text
 
 
@@ -119,6 +119,6 @@ async def test_a_test_runs_write_on_the_sandbox_account_runs(gateway_on: Any) ->
 
 async def test_a_live_run_never_signs_in_with_a_sandbox_account(gateway_on: Any) -> None:
     async for call in gateway_on(("sandbox",)):
-        r = await call("get_account", ACCOUNT, "production", "r2")
+        r = await call("get_account", ACCOUNT, "live", "r2")
         out = r.json()["data"]
         assert out["ok"] is False and out["output"]["error"]["code"] == "CONNECTION_NOT_SET", r.text

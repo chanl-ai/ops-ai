@@ -96,10 +96,8 @@ class Rig:
             return ToolOutcome(False, {"error": {"code": refused[1], "status": refused[0], "message": refused[2]}})
         assert r.module is not None and r.operation is not None
         if r.executor == "plugin":
-            return await self.plugins.run(
-                r.module, r.operation, given, actor="t", environment="production", acting_for=None
-            )
-        return await self.http.run(r.module, r.operation, given, actor="t", environment="production")
+            return await self.plugins.run(r.module, r.operation, given, actor="t", environment="live", acting_for=None)
+        return await self.http.run(r.module, r.operation, given, actor="t", environment="live")
 
 
 @pytest.fixture
@@ -267,7 +265,7 @@ async def test_a_plugins_token_call_sends_the_client_as_basic_auth_and_never_in_
     assert module is not None
     seen = await host.for_call(tenant, TEAM, module, "production")
     op = next(o for o in seen["operations"] if o["name"] == "fields_zoom_get_record")
-    out = await http.run(seen, op, {"id": "rec-1042"}, actor="t", environment="production")
+    out = await http.run(seen, op, {"id": "rec-1042"}, actor="t", environment="live")
     assert out.ok, out.output
     assert desk.token_requests and all(r["basic"] and "client_id" not in r for r in desk.token_requests), (
         desk.token_requests

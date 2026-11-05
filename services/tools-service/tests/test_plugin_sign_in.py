@@ -177,7 +177,7 @@ async def call_as_team(rig: Rig, tenant: str, plugin: str, tool: str = "get_reco
     seen = await rig.host.for_call(tenant, TEAM, module, "production")
     op = next(o for o in seen["operations"] if o["name"] == manifest.operation(tool))
     args = {"id": "rec-1042"} if tool == "get_record" else {}
-    return await rig.executor.run(seen, op, args, actor="test", environment="production", acting_for=None)
+    return await rig.executor.run(seen, op, args, actor="test", environment="live", acting_for=None)
 
 
 async def account_url(rig: Rig, tenant: str, connection_id: str) -> str:

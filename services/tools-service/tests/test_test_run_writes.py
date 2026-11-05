@@ -85,6 +85,6 @@ async def test_a_live_runs_write_follows_the_teams_approval_policy(g: Gateway, e
     # The bank's place_hold asks for approval; a person who holds the approver role approves their own live write,
     # as every live call by them does.
     await _on_accounts(g, engine, test_account=False)
-    out = await _real(g, "production")
+    out = await _real(g, "live")
     assert out["decision"] == "allow", out
     assert len([r for r in g.received if r["path"] == "/v1/holds"]) == 1, g.received

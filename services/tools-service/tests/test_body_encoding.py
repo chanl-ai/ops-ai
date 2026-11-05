@@ -77,7 +77,7 @@ async def _call(bank: Bank, tool: str, args: dict[str, Any], key: str) -> Any:
         "tool": tool,
         "input": args,
         "key": key,
-        "runContext": {"act": "workflow:dispute_email", "environment": "production"},
+        "runContext": {"act": "workflow:dispute_email", "environment": "live"},
     }
     return await bank.api.client.post("/v1/calls", json=body, headers=service_headers(bank.api.tenant))
 
@@ -142,7 +142,7 @@ async def test_request_sent_shows_the_content_type_its_encoding_set(encoded: Ban
         "contextId": "owner",
         "target": "sandbox",
         "input": {"email": "a@b.c"},
-        "environment": "production",
+        "environment": "live",
     }
     out = (await encoded.api.call("POST", f"/{MODULE}/test", json=run)).json()["data"]
     headers = {h["key"].lower(): h["value"] for h in out["request"]["headers"]}

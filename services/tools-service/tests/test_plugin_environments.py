@@ -99,7 +99,7 @@ async def test_a_sandbox_sign_in_leaves_the_live_accounts_instance_and_hosts_apa
     assert live is not None and live["plugin_settings"]["instance_url"] == LIVE, "the sandbox sign-in overwrote it"
     module = await ModuleStore(engine).get(tenant, module_id_of(desk.manifest))
     assert module is not None
-    production = await host.for_call(tenant, TEAM, module, "production")
+    production = await host.for_call(tenant, TEAM, module, "live")
     trial = await host.for_call(tenant, TEAM, module, "test")
     assert production["connection_id"] == live_id and not production["sandbox"], production
     assert str(production["endpoint"]).startswith(LIVE), production["endpoint"]
@@ -145,13 +145,13 @@ async def test_a_new_account_never_calls_the_instance_a_removed_one_signed_in_to
     assert again.status_code == 200 and again.json()["data"]["connectionId"] != old, again.text
     module = await ModuleStore(engine).get(tenant, module_id_of(desk.manifest))
     assert module is not None
-    seen = await host.for_call(tenant, TEAM, module, "production")
+    seen = await host.for_call(tenant, TEAM, module, "live")
     assert "acme.my.desk.test" not in str(seen.get("endpoint")), "the new account calls the removed one's instance"
     # Not signed in yet reads as a missing instance, not as the plugin being off.
     assert seen.get("instance_missing") and not seen.get("plugin_off"), seen
     # Signed in again, the new account's own instance is the one a call uses.
     await host.on_token(tenant, str(again.json()["data"]["connectionId"]), {"instance_url": "https://new.my.desk.test"})
-    seen = await host.for_call(tenant, TEAM, module, "production")
+    seen = await host.for_call(tenant, TEAM, module, "live")
     assert str(seen["endpoint"]).startswith("https://new.my.desk.test"), seen["endpoint"]
 
 

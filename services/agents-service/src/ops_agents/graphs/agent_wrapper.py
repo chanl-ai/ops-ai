@@ -19,7 +19,7 @@ from langgraph.types import interrupt
 from ops_agent_kernel.types import AttachedFile, Passage, Resume, ToolGrant, TranscriptMessage, TurnRequest
 from ops_agents.activities.attachments import ATTACHMENT_KB, WithAttachments
 from ops_agents.activities.catalog import AgentDefinition
-from ops_agents.activities.gateway import PRODUCTION, TEST, acting_as, current_run_context
+from ops_agents.activities.gateway import LIVE, TEST, acting_as, current_run_context
 from ops_agents.activities.overrides import limits_for
 from ops_agents.activities.tools import fill
 from ops_contracts.chat import EffectiveSettings
@@ -39,11 +39,11 @@ from .common import (
 
 
 def turn_environment(state: Mapping[str, Any]) -> str:
-    """Which connection environment a turn's tool calls use: a test chat's test, a live chat's production,
+    """The kind of run a turn's tool calls are made in: a test chat's test, a live chat's live,
     unless the run it serves is a test run."""
     if state.get("test_agent") is not None:
         return TEST
-    return current_run_context().environment or PRODUCTION
+    return current_run_context().environment or LIVE
 
 
 class AgentState(TypedDict):

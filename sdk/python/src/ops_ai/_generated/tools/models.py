@@ -767,7 +767,7 @@ class RotateIn(TypedDict, closed=True):
 class RunContext(TypedDict, closed=True):
     account: NotRequired[str | None]
     act: NotRequired[str | None]
-    environment: NotRequired[Literal["test", "production"] | None]
+    environment: NotRequired[Literal["test", "live"] | None]
     step: NotRequired[str | None]
     thread: NotRequired[str | None]
 
@@ -988,7 +988,7 @@ class ToolCallRow(TypedDict, closed=True):
     denyReason: NotRequired[str | None]
     deploymentId: NotRequired[str | None]
     effect: NotRequired[bool]
-    environment: NotRequired[Literal["test", "production"] | None]
+    environment: NotRequired[Literal["test", "live"] | None]
     errorCode: NotRequired[str | None]
     errorMessage: NotRequired[str | None]
     failureSide: NotRequired[Literal["ours", "upstream"] | None]
@@ -1083,7 +1083,7 @@ class ToolModule(TypedDict, closed=True):
 
 
 class ToolRunIn(TypedDict, closed=True):
-    environment: NotRequired[Literal["test", "production"] | None]
+    environment: NotRequired[Literal["test", "live"] | None]
     input: NotRequired[dict[str, Any]]
     mode: Literal["mock", "real"]
 
@@ -1614,7 +1614,7 @@ class ModuleOperation(TypedDict, closed=True):
 class ModuleTestIn(TypedDict, closed=True):
     contextId: str
     draft: NotRequired[TestDraftIn | None]
-    environment: NotRequired[Literal["test", "production"]]
+    environment: NotRequired[Literal["test", "live"]]
     input: dict[str, Any]
     operation: str
     secretValues: NotRequired[dict[str, str] | None]

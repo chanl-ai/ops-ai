@@ -8,7 +8,7 @@ Status: current for connections and the one executor, MCP sign-in, mock answers,
 
 | # | Step | Where | State |
 |---|---|---|---|
-| 1 | A run calls `POST /v1/calls` with its `runContext.environment`: live runs and chats production, test runs and test chats test; absent is test | agents-service `activities/gateway.py` | built |
+| 1 | A run calls `POST /v1/calls` with its `runContext.environment`: live runs and chats live, test runs and test chats test; absent is test | agents-service `activities/gateway.py` | built |
 | 2 | Registry, schema, OPA, approval token, rate limit, check before sending | `app.py` | built |
 | 3 | The executor asks `Authenticator.prepare` for the module's connection: refused unless the module's address is the connection's system address (scheme, host, port); then the strategy for its auth kind adds headers, query values or a client certificate for the environment | `auth/__init__.py` `STRATEGIES` | built |
 | 4 | A kind that holds a token gets it from `Tokens`: the stored one while fresh, else a refresh or a client-credentials fetch under the token row's lock, through the egress client | `auth/tokens.py`, `store/connections.py` | built |
@@ -16,7 +16,7 @@ Status: current for connections and the one executor, MCP sign-in, mock answers,
 | 6 | A read answered 401 is sent once more with a new token; a write is not (`AUTH_EXPIRED`) | `executor.py` | built |
 | 7 | Every value resolved joins the scrub set; the call log keeps environment and connection | `executor.py`, `store/calls.py` | built |
 | 8 | An MCP server's sign-in found from its 401 and metadata, issuer checked, run as the authorization code strategy with the server as `resource`; the MCP path signs in through the same authenticator | `auth/discovery.py`, `executor.py` | built |
-| 9 | A call that says test answered from the operation's first matching mock answer, else its default, before step 5: error status, delay or timeout as a real answer would give them; production, and a call naming no environment, never | `executor.py`, `mocks.py` | built |
+| 9 | A call that says test answered from the operation's first matching mock answer, else its default, before step 5: error status, delay or timeout as a real answer would give them; a live call, and a call naming no environment, never | `executor.py`, `mocks.py` | built |
 
 ## Screens
 
@@ -39,7 +39,7 @@ screens were retired with them.
 | GET `/v1/me/accounts`, PUT `/v1/me/accounts/{id}/credentials`, DELETE `/v1/me/accounts/{id}` | The caller's own sign-ins and keys | own | `connections/routes.py` | built |
 | GET · POST `/v1/app-credentials`, PUT `…/{id}/secret` | The team's own OAuth clients, one row each | connections.manage | `apps.py` | built |
 | POST `/v1/tool-modules/discover` | An MCP source with `connectionId` lists the tools with the connection's token; without sign-in, 400 `sign_in_required` | tools.create | `modules/routes.py` | built |
-| POST `/v1/calls` | `runContext.environment`, the kind of run (test or production; absent is test): a test run uses the app's sandbox account when it has one | service token | `app.py` | built |
+| POST `/v1/calls` | `runContext.environment`, the kind of run (test or live; absent is test): a test run uses the app's test account when it has one | service token | `app.py` | built |
 | GET `/v1/executions` | Each row adds the run's `environment` and the `connectionId` of the account it signed in with | signed in | `modules/routes.py` | built |
 | GET `/v1/secrets` | Each row adds `connectionId`; rotate, scope and delete of a connection's part are 409 `connection_secret` | as before | `secrets/routes.py` | built |
 | GET · POST `/v1/tool-modules/{id}/operations/{op}/mocks`, PATCH · DELETE `…/mocks/{mockId}` | An operation's mock answers in test: name, match, status, body, headers, delayMs, timeout, default | tools.view; changes tools.edit | `mock_routes.py` | built |
@@ -64,7 +64,7 @@ All in tools-service's own chain (`tools_0028_connections`), every table keyed b
 
 ### A call that refreshes a token
 
-1. agents-service: `POST /v1/calls`, `environment: production`
+1. agents-service: `POST /v1/calls`, `environment: live`
 1. The registry picks the account (`records.account_for`: a live run never a sandbox one); gateway checks pass; `Authenticator.prepare` reads it
 1. `Tokens.access`: read the token; inside 60 s of expiry, POST the token address with the refresh token (egress client, no lock held); store the new tokens against the rotation read, or read the winner's
 1. Send with `Authorization: Bearer`; on 401 for a read, step 3 again for that token only, then send once more

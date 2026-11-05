@@ -644,7 +644,7 @@ class PluginHost:
         account: str | None = None,
         person: str | None = None,
     ) -> Aggregate:
-        """The module as this team's call made in `run` (test or production) sees it: the account it signs in with
+        """The module as this team's call made in `run` (test or live) sees it: the account it signs in with
         (`connection_id`, from records.account_for, and whether it is a `sandbox`), the endpoint and egress hosts
         rendered with that account's settings, and the merged settings for the transform and a Python tool. A plugin
         that is off for the team, or not loaded, is marked so the gateway refuses the call before anything else."""
