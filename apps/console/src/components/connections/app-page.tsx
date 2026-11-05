@@ -239,7 +239,7 @@ export function AppPageView({ appId }: { appId: string }) {
           <ToolsTab app={data} />
         </TabsContent>
         <TabsContent value="resources">
-          <ResourcesTab appName={data.card.name} pluginId={data.card.pluginId} />
+          <ResourcesTab appName={data.card.name} pluginId={data.card.pluginId} onConnect={() => setConnecting(true)} />
         </TabsContent>
         <TabsContent value="credentials">
           <CredentialsTab app={data} onReconnect={() => setDialog({ mode: 'edit' })} />

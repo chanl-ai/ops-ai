@@ -71,7 +71,7 @@ function StateBadge({ r, app }: { r: AppResource; app: string }) {
  * flow with one item, made at once when it brings nothing else. An added copy opens, takes the app's update, or is
  * removed through its own delete.
  */
-export function ResourcesTab({ appName, pluginId }: { appName: string; pluginId?: string | null }) {
+export function ResourcesTab({ appName, pluginId, onConnect }: { appName: string; pluginId?: string | null; onConnect?: () => void }) {
   const router = useRouter();
   const source = pluginId ? `plugin:${pluginId}` : '';
   const list = useAppResources(source);
@@ -98,13 +98,14 @@ export function ResourcesTab({ appName, pluginId }: { appName: string; pluginId?
       </Section>
     );
 
-  const start = (resources: string[]) =>
+  // Add selected always previews; Add to team on a row previews only when the resource brings others or needs a pick.
+  const start = (resources: string[], { preview: always = false }: { preview?: boolean } = {}) =>
     plan.mutate(resources, {
       onSuccess: (p) => {
         const toMake = p.items.filter((i) => !i.heldRecordId);
         const [only] = toMake;
         // One resource bringing nothing else, refused for nothing and needing no pick: made at once, then opened.
-        if (toMake.length === 1 && only && !only.refusal && only.service !== 'kb' && resources.length === 1) {
+        if (!always && toMake.length === 1 && only && !only.refusal && only.service !== 'kb' && resources.length === 1) {
           add.mutate(
             { plan: p, bindings: { names: {} } },
             {
@@ -138,7 +139,7 @@ export function ResourcesTab({ appName, pluginId }: { appName: string; pluginId?
           variant="outline"
           disabled={selected.length === 0}
           isLoading={plan.isPending && (plan.variables?.length ?? 0) > 1}
-          onClick={() => start([...new Set([...selected, ...brought])])}
+          onClick={() => start([...new Set([...selected, ...brought])], { preview: true })}
           data-testid="resources-add-selected"
         >
           {selected.length ? `Add selected (${selected.length})` : 'Add selected'}
@@ -188,13 +189,18 @@ export function ResourcesTab({ appName, pluginId }: { appName: string; pluginId?
                     <StateBadge r={r} app={appName} />
                   </span>
                 }
-                description={!r.canAdd && r.reason && r.state === 'available' ? r.reason : undefined}
+                description={!r.canAdd && r.reason && (r.state === 'available' || r.state === 'needs_sign_in') ? r.reason : undefined}
                 trailing={
                   <span className="flex flex-wrap items-center gap-2">
                     {addable && (
                       <LoadingButton size="sm" variant="outline" isLoading={busy(r)} onClick={() => start([id])} data-testid={`resource-add-${r.id}`}>
                         {r.kind === 'knowledge_source' ? 'Add to a knowledge base' : 'Add to team'}
                       </LoadingButton>
+                    )}
+                    {r.state === 'needs_sign_in' && !r.reason && onConnect && (
+                      <Button size="sm" variant="outline" onClick={onConnect} data-testid={`resource-connect-${r.id}`}>
+                        Connect
+                      </Button>
                     )}
                     {r.state === 'update_available' && r.copy && (
                       <Button size="sm" variant="outline" onClick={() => setUpdating(r)} data-testid={`resource-update-${r.id}`}>
@@ -220,20 +226,22 @@ export function ResourcesTab({ appName, pluginId }: { appName: string; pluginId?
           })}
         </Rows>
       )}
-      <AddPreviewDialog
-        plan={preview}
-        onOpenChange={(o) => {
-          if (!o) {
-            setPreview(null);
-            add.reset();
-          }
-        }}
-        adding={add.isPending}
-        outcomes={add.data}
-        onAdd={(bindings) => add.mutate({ plan: preview!, bindings }, { onSuccess: () => setTicked([]) })}
-      />
-      <UpdateDialog resource={updating} app={source} onOpenChange={(o) => !o && setUpdating(null)} />
-      <RemoveDialog resource={removing} app={source} onOpenChange={(o) => !o && setRemoving(null)} />
+      {preview && (
+        <AddPreviewDialog
+          plan={preview}
+          onOpenChange={(o) => {
+            if (!o) {
+              setPreview(null);
+              add.reset();
+            }
+          }}
+          adding={add.isPending}
+          outcomes={add.data}
+          onAdd={(bindings) => add.mutate({ plan: preview, bindings }, { onSuccess: () => setTicked([]) })}
+        />
+      )}
+      {updating && <UpdateDialog resource={updating} app={source} onOpenChange={(o) => !o && setUpdating(null)} />}
+      {removing && <RemoveDialog resource={removing} app={source} onOpenChange={(o) => !o && setRemoving(null)} />}
     </Section>
   );
 }
@@ -310,7 +318,9 @@ function AddPreviewDialog({
               )}
             </li>
           ))}
-          {failed && <li className="py-2 text-sm text-muted-foreground">The ones made before it are drafts of your team’s; open or remove each from its row.</li>}
+          {failed && outcomes.some((o) => o.recordId) && (
+            <li className="py-2 text-sm text-muted-foreground">The ones made before it are drafts of your team’s; open or remove each from its row.</li>
+          )}
         </ul>
       ) : (
         <div className="flex flex-col gap-4">
