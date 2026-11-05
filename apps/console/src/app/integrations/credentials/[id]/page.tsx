@@ -122,7 +122,7 @@ export default function AppCredentialPage() {
   const signIn = useSignInWindow({
     onConnected: (m) => {
       setBusy(null);
-      toast.success(`Signed in through ${c?.name ?? 'the app credential'}`, { description: m.account ? `As ${m.account}.` : undefined });
+      toast.success(`Signed in through ${c?.name ?? 'the auth config'}`, { description: m.account ? `As ${m.account}.` : undefined });
       void q.refetch();
     },
     onFailed: (why) => {
@@ -162,7 +162,7 @@ export default function AppCredentialPage() {
   return (
     <PageLayout
       icon={KeyRound}
-      title={c?.name ?? 'App credential'}
+      title={c?.name ?? 'Auth config'}
       description={c ? `${c.appName} · ${own ? 'Your own app' : 'Ops AI’s app'}` : undefined}
       backHref="/integrations/credentials"
       actions={
@@ -183,12 +183,12 @@ export default function AppCredentialPage() {
       }
     >
       {q.isError || !c ? (
-        <QueryError what="this app credential" error={q.error} onRetry={() => q.refetch()} retrying={q.isFetching} />
+        <QueryError what="this auth config" error={q.error} onRetry={() => q.refetch()} retrying={q.isFetching} />
       ) : (
         <RecordLayout
           rail={
             <AttributeCard
-              title="App credential"
+              title="Auth config"
               icon={KeyRound}
               testId="credential-details"
               action={
@@ -234,7 +234,7 @@ export default function AppCredentialPage() {
             </AttributeCard>
           }
         >
-          <Section title="Connected accounts" description="The accounts signing in with this app credential." flush>
+          <Section title="Connected accounts" description="The accounts signing in with this auth config." flush>
             <div className="p-2" data-testid="credential-accounts">
               <DataTableWithViews
                 columns={COLUMNS}

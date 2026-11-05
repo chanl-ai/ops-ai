@@ -51,7 +51,9 @@ async def test_accounts_sit_under_the_config_they_sign_in_with_and_only_an_admin
     assert ours["canEdit"] and ours["canDelete"] and ours["clientId"] == "eu-app", ours
     assert next(c for c in page["authConfigs"] if first in [a["id"] for a in c["accounts"]])["default"], page
     rows = {a["id"]: a for c in page["authConfigs"] for a in c["accounts"]}
-    assert "make_default" in rows[second]["actions"] and "make_default" not in rows[first]["actions"], rows
+    # Make my default picks among the caller's own sign-ins; with none, no account offers it.
+    assert not any("make_default" in a["actions"] for a in rows.values()), rows
+    assert {"rename", "delete", "move", "sign_in"} <= set(rows[second]["actions"]), rows[second]
     assert rows[first]["owner"]["kind"] == "team" and rows[first]["owner"]["name"], rows[first]
 
     seen = await _page(world, person(tenant, *BUILDER))

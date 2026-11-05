@@ -58,7 +58,7 @@ with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
 
     # 23. The app's page reads Connected · team account.
     page = data(w.kept(w.gw.get(app_path(APP), headers=w.who["admin"]))) or {}
-    accounts = page.get("accounts") or []
+    accounts = [a for c in page.get("authConfigs") or [] for a in c["accounts"]]
     first = accounts[0] if accounts else {}
     check(
         "23 the app's page lists the team account first, as the default, in state connected",
@@ -102,7 +102,7 @@ with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
     # 30. Signing in is what connects an account; its test then runs on its own, and the outcome is kept on the row.
     def own_row(role: str) -> dict[str, Any]:
         page = data(w.kept(w.gw.get(app_path("plugin:test.person"), headers=w.who[role]))) or {}
-        return next((a for a in page.get("accounts") or [] if a.get("mine")), {})
+        return next((a for c in page.get("authConfigs") or [] for a in c["accounts"] if a.get("mine")), {})
 
     james_test = until(lambda: (own_row("builder").get("test") or {}).get("status"), timeout=20)
     check(
@@ -159,7 +159,7 @@ with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
     refused = w.kept(w.gw.post("/v1/sign-ins/complete", json=refusal, headers=w.who["admin"]))
     said = (refused.json().get("error") or {}) if refused.status_code == 422 else {}
     page = data(w.kept(w.gw.get(app_path("plugin:test.person"), headers=w.who["admin"]))) or {}
-    row = next((a for a in page.get("accounts") or [] if a.get("id") == person_app), {})
+    row = next((a for c in page.get("authConfigs") or [] for a in c["accounts"] if a.get("id") == person_app), {})
     check(
         "34 a refused sign-in answers one plain sentence naming who acts, and the account reads refused",
         said.get("code") == "sign_in_refused"

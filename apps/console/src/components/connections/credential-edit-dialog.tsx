@@ -87,7 +87,7 @@ function EditForm({ id, onClose }: { id: string; onClose: () => void }) {
       open
       onOpenChange={(o) => !o && onClose()}
       size="md"
-      title={c ? `Edit ${c.name}` : 'Edit app credential'}
+      title={c ? `Edit ${c.name}` : 'Edit auth config'}
       description={c ? `Your own ${c.appName} app, as you registered it with ${c.appName}.` : undefined}
       data-testid="credential-edit"
       footer={
@@ -102,7 +102,7 @@ function EditForm({ id, onClose }: { id: string; onClose: () => void }) {
       }
     >
       {q.isError ? (
-        <QueryError what="this app credential" error={q.error} onRetry={() => q.refetch()} retrying={q.isFetching} />
+        <QueryError what="this auth config" error={q.error} onRetry={() => q.refetch()} retrying={q.isFetching} />
       ) : !c ? (
         <Skeleton className="h-48 w-full" />
       ) : (

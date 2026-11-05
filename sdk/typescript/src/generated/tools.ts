@@ -1467,6 +1467,8 @@ export interface components {
             /** Name */
             name: string;
             owner: components["schemas"]["AccountOwner"];
+            /** Revision */
+            revision: number;
             /** Sandbox */
             sandbox: boolean;
             /**
@@ -1682,12 +1684,10 @@ export interface components {
         /**
          * AppPage
          * @description One app's page, joined here: its card, its default account, the caller's own sign-in, how many people
-         *     signed in, its accounts, its auth configs with their accounts, its tools, the plugin's skills and the latest runs
+         *     signed in, its auth configs with their accounts, its tools, the plugin's skills and the latest runs
          *     of its tools.
          */
         AppPage: {
-            /** Accounts */
-            accounts?: components["schemas"]["AppAccount"][];
             /** Authconfigs */
             authConfigs?: components["schemas"]["AuthConfig"][];
             card: components["schemas"]["SystemCard"];

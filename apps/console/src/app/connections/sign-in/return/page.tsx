@@ -44,7 +44,7 @@ function SignInReturnPage() {
             announceSignIn({ type: FAILED_MESSAGE, state, message: done.health?.message ?? 'The test with your account did not pass.' });
             return;
           }
-          announceSignIn({ type: CONNECTED_MESSAGE, state, connectionId: done.accountId, connection: done.account?.name ?? 'the app credential', account: done.health?.account });
+          announceSignIn({ type: CONNECTED_MESSAGE, state, connectionId: done.accountId, connection: done.account?.name ?? 'the auth config', account: done.health?.account });
           if (window.opener) window.close();
         },
         onError: (e) => announceSignIn({ type: FAILED_MESSAGE, state, message: e.message }),
@@ -87,7 +87,7 @@ function SignInReturnPage() {
     return (
       <SignInCard
         testId="sign-in-check-ok"
-        title="The app credential works"
+        title="The auth config works"
         description={finish.data.health?.account ? `Signed in as ${finish.data.health.account}. You can close this window.` : 'You can close this window.'}
         footer={back}
       >

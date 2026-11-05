@@ -39,6 +39,15 @@ export function connectsInWindow(card: SystemCard, kinds: Kinds | undefined): bo
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+/** `wanted`, or `wanted 2`, `wanted 3`… once an account of the app has that name; names compare without case. */
+function freeName(wanted: string, taken: string[]): string {
+  const used = new Set(taken.map((t) => t.trim().toLowerCase()));
+  if (!used.has(wanted.toLowerCase())) return wanted;
+  let n = 2;
+  while (used.has(`${wanted} ${n}`.toLowerCase())) n++;
+  return `${wanted} ${n}`;
+}
+
 /**
  * The one Connect window for an app that signs in with an account: which app credential it signs in with (Ops AI's
  * app or one the team made under Credentials, the account's own when it has one), the access it asks for, then
@@ -54,6 +63,7 @@ export function ConnectWindow({
   another = false,
   sandbox = false,
   credential,
+  taken = [],
   open,
   onOpenChange,
 }: {
@@ -62,6 +72,8 @@ export function ConnectWindow({
   another?: boolean;
   sandbox?: boolean;
   credential?: string | null;
+  /** The app's account names already used, so the name it suggests is free. */
+  taken?: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -99,7 +111,7 @@ export function ConnectWindow({
   // Whose account it is and its name sit under More options; another account or a sandbox opens with them showing.
   const [more, setMore] = React.useState(another || sandbox);
   const [team, setTeam] = React.useState(true);
-  const suggested = sandbox ? `${card.name} sandbox` : another ? `${card.name} · second account` : `${card.name} · ${current?.name ?? 'Team'}`;
+  const suggested = freeName(sandbox ? `${card.name} sandbox` : another ? `${card.name} · second account` : `${card.name} · ${current?.name ?? 'Team'}`, taken);
 
   const [waiting, setWaiting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -156,7 +168,7 @@ export function ConnectWindow({
     const errors = fieldErrors(schema.safeParse(values));
     form.clearErrors();
     if (!managed && client === null) {
-      setError(`Pick the app credential ${card.name} signs in with.`);
+      setError(`Pick the auth config ${card.name} signs in with.`);
       return;
     }
     if (Object.keys(errors).length) {

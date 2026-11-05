@@ -82,7 +82,7 @@ export function NewAppCredentialDialog({
       open={open}
       onOpenChange={(o) => !o && close()}
       size="md"
-      title={app ? `${app.name} app credential` : 'New app credential'}
+      title={app ? `${app.name} auth config` : 'New auth config'}
       description={app ? `Register an app with ${app.name}, then give its client ID and secret.` : 'Pick the app your OAuth client is for.'}
       headerExtra={<Stepper steps={['App', 'Your own app']} current={app ? 2 : 1} className="pt-3" testId="new-credential-steps" />}
       data-testid="new-credential"

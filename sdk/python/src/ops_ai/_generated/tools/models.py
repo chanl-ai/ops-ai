@@ -1208,6 +1208,7 @@ class AppAccount(TypedDict, closed=True):
     myDefault: NotRequired[bool | None]
     name: str
     owner: AccountOwner
+    revision: int
     sandbox: bool
     state: Literal["connected", "not_signed_in", "expired", "refused", "revoked"]
     stateReason: NotRequired[str | None]
@@ -1912,7 +1913,6 @@ class SystemCard(TypedDict, closed=True):
 
 
 class AppPage(TypedDict, closed=True):
-    accounts: NotRequired[list[AppAccount]]
     authConfigs: NotRequired[list[AuthConfig]]
     card: SystemCard
     connection: NotRequired[AccountDetail | None]

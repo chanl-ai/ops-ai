@@ -260,7 +260,7 @@ try {
             const there = await done.innerText({ timeout: 60_000 }).catch(async () => `not connected: ${(await other.locator('body').innerText().catch(() => '')).slice(0, 200)}`);
             // The window that started it learns from the account itself, closes its sign-in window and moves on.
             const here = await page.getByTestId('connect-window').waitFor({ state: 'detached', timeout: 15_000 }).then(() => true, () => false);
-            const accounts = (await call('GET', `/v1/apps/${encodeURIComponent(app.id)}`, priya)).data?.accounts ?? [];
+            const accounts = ((await call('GET', `/v1/apps/${encodeURIComponent(app.id)}`, priya)).data?.authConfigs ?? []).flatMap((c) => c.accounts);
             const made = accounts.find((a) => a.name === `${app.name} · elsewhere`);
             check(
               `${at(5)} ${app.name}: a sign-in finished in a fresh browser with no storage still reads Connected in the window that started it`,

@@ -3,8 +3,8 @@
 import * as React from 'react';
 import { AppCredentialPicker } from '@/components/connections/app-credential-picker';
 import { ResourcesTab } from '@/components/connections/app-resources';
-import { AppCredentialsPanel } from '@/components/connections/app-credentials-panel';
-import { Bot, ChevronDown, CircleCheck, ExternalLink, FlaskConical, KeyRound, Plug, Plus, RefreshCw, Users, Workflow } from 'lucide-react';
+import { AuthConfigsTab, type AuthConfig } from '@/components/connections/app-auth-configs';
+import { Bot, ChevronDown, CircleCheck, ExternalLink, FlaskConical, KeyRound, Plug, RefreshCw, Workflow } from 'lucide-react';
 import { toast } from 'sonner';
 
 import type { ColumnDef } from '@tanstack/react-table';
@@ -46,13 +46,12 @@ import {
   useAppUsers,
   useChangeAccount,
   useConnectionKinds,
-  usePinDefault,
   useSetTeamApp,
-  useSignOutMine,
   useStartSignIn,
   useTestAccount,
 } from '@/hooks/systems-queries';
 import { useCanBuild } from '@/hooks/me-queries';
+import { useTeam } from '@/hooks/use-team';
 import type { Kinds } from '@/lib/connect-plan';
 import { plural, shortDate } from '@/lib/format';
 
@@ -74,22 +73,6 @@ function Logo({ name, logo }: { name: string; logo?: string | null }) {
       {logo && <AvatarImage src={logo} alt="" />}
       <AvatarFallback className="rounded-md text-xs font-semibold">{initials(name)}</AvatarFallback>
     </Avatar>
-  );
-}
-
-/** An account's state, as the final Apps design names them: Connected, Expired, Not signed in. */
-function AccountState({ status }: { status: 'connected' | 'expired' | 'unsigned' }) {
-  if (status === 'expired')
-    return (
-      <Badge variant="outline" className="border-warning/40 bg-warning/10 text-warning-text">
-        Expired
-      </Badge>
-    );
-  if (status === 'unsigned') return <Badge variant="outline">Not signed in</Badge>;
-  return (
-    <Badge variant="outline" className={OK}>
-      Connected
-    </Badge>
   );
 }
 
@@ -119,6 +102,9 @@ export function AppPageView({ appId }: { appId: string }) {
   // The Connect window, opened from the header's Connect: the small one when the app signs in through an OAuth app.
   const [connecting, setConnecting] = React.useState(false);
   const [another, setAnother] = React.useState(false);
+  // The auth config Add account or Connect opens the Connect window on: its id, or null for Ops AI's own app.
+  const [on, setOn] = React.useState<string | null | undefined>(undefined);
+  const { team } = useTeam();
   const [sandboxing, setSandboxing] = React.useState(false);
 
   const test = useTestAccount();
@@ -146,7 +132,12 @@ export function AppPageView({ appId }: { appId: string }) {
   const installed = Boolean(card.appState) && card.appState !== 'not_installed';
   // People connect their own account only where the connection lets them; a team-only one shows its accounts alone.
   const signsIn = Boolean(kind?.signsIn) && conn?.signIn !== 'team';
-  const accounts = data.accounts ?? [];
+  const configs = data.authConfigs ?? [];
+  const accounts = configs.flatMap((c) => c.accounts ?? []);
+  // Connect opens on the default account's config; Ops AI's own app is no credential.
+  const credentialOf = (c?: AuthConfig) => (c && c.type === 'own' ? c.id : null);
+  const defaultConfig = configs.find((c) => c.default);
+  const addAccount = (c: AuthConfig) => (setOn(credentialOf(c)), card.connectionId ? setAnother(true) : setConnecting(true));
   // A team admin adds the app's sandbox account, which test runs use, once the app has its first account.
   const addsSandbox = card.mayManage && Boolean(conn) && installed && !card.sandboxId;
 
@@ -163,10 +154,9 @@ export function AppPageView({ appId }: { appId: string }) {
   };
 
   const tabs: [string, string][] = [
-    ...(builtIn ? [] : ([['accounts', 'Accounts'], ['people', 'People']] as [string, string][])),
+    ...(builtIn ? [] : ([['auth', 'Auth configs']] as [string, string][])),
     ['tools', 'Tools'],
     ['resources', 'Resources'],
-    ['credentials', 'Credentials'],
     ['logs', 'Logs'],
     ['settings', 'Settings'],
   ];
@@ -184,7 +174,7 @@ export function AppPageView({ appId }: { appId: string }) {
           <HeaderAction
             app={data}
             signsIn={Boolean(kind?.signsIn)}
-            onConnect={() => setConnecting(true)}
+            onConnect={() => (setOn(credentialOf(defaultConfig)), setConnecting(true))}
             onSignIn={signIn}
             onEdit={() => setDialog({ mode: 'edit' })}
             starting={start.isPending}
@@ -204,35 +194,16 @@ export function AppPageView({ appId }: { appId: string }) {
         {/* Seven tabs are wider than a phone: the row scrolls sideways inside its box instead of clipping the last. */}
         <ScrollTabsList tabs={tabs.map(([value, label]) => ({ value, label }))} testId="app-tabs-row" triggerTestId={(v) => `app-tab-${v}`} />
         {!builtIn && (
-          <TabsContent value="accounts">
-            <AccountsTab
-              app={data}
-              signsIn={signsIn}
-              onSignIn={signIn}
-              actions={
-                addsSandbox || conn?.mayManage ? (
-                  <span className="flex flex-wrap gap-2">
-                    {conn?.mayManage && (
-                      <Button size="sm" variant="outline" onClick={() => setAnother(true)} data-testid="app-connect-another">
-                        <Plus />
-                        Add account
-                      </Button>
-                    )}
-                    {addsSandbox && (
-                      <Button size="sm" variant="outline" onClick={() => setSandboxing(true)} data-testid="app-add-sandbox">
-                        <FlaskConical />
-                        Add a sandbox account
-                      </Button>
-                    )}
-                  </span>
-                ) : undefined
-              }
-            />
-          </TabsContent>
-        )}
-        {!builtIn && (
-          <TabsContent value="people">
-            <PeopleTab app={data} signsIn={signsIn} onConnectMine={() => signIn('self')} starting={start.isPending} />
+          <TabsContent value="auth" className="flex flex-col gap-4">
+            {addsSandbox && (
+              <div className="flex justify-end">
+                <Button size="sm" variant="outline" onClick={() => setSandboxing(true)} data-testid="app-add-sandbox">
+                  <FlaskConical />
+                  Add a sandbox account
+                </Button>
+              </div>
+            )}
+            <AuthConfigsTab app={data} team={team?.name ?? 'The team'} onAddAccount={addAccount} onSignIn={signIn} />
           </TabsContent>
         )}
         <TabsContent value="tools">
@@ -240,9 +211,6 @@ export function AppPageView({ appId }: { appId: string }) {
         </TabsContent>
         <TabsContent value="resources">
           <ResourcesTab appName={data.card.name} pluginId={data.card.pluginId} onConnect={() => setConnecting(true)} />
-        </TabsContent>
-        <TabsContent value="credentials">
-          <CredentialsTab app={data} onReconnect={() => setDialog({ mode: 'edit' })} />
         </TabsContent>
         <TabsContent value="logs">
           {/* The same call log as Tool calls, fixed to this app's tools. */}
@@ -264,7 +232,7 @@ export function AppPageView({ appId }: { appId: string }) {
         />
       )}
       {another && card.pluginId && all && connectsInWindow(card, all) ? (
-        <ConnectWindow card={card} kinds={all} another open onOpenChange={(o) => !o && (setAnother(false), void app.refetch())} />
+        <ConnectWindow card={card} kinds={all} another credential={on} taken={accounts.map((a) => a.name)} open onOpenChange={(o) => !o && (setAnother(false), void app.refetch())} />
       ) : another && card.pluginId ? (
         <AnotherAccountDialog
           app={card.name}
@@ -292,7 +260,7 @@ export function AppPageView({ appId }: { appId: string }) {
         ))}
       {connecting &&
         (all && connectsInWindow(card, all) ? (
-          <ConnectWindow card={card} kinds={all} open onOpenChange={(o) => !o && (setConnecting(false), void app.refetch())} />
+          <ConnectWindow card={card} kinds={all} credential={on} taken={accounts.map((a) => a.name)} open onOpenChange={(o) => !o && (setConnecting(false), void app.refetch())} />
         ) : (
           <ConnectSystemDialog
             target={
@@ -311,9 +279,8 @@ export function AppPageView({ appId }: { appId: string }) {
   );
 }
 
-type Account = NonNullable<AppData['accounts']>[number];
+type Account = NonNullable<NonNullable<AppData['authConfigs']>[number]['accounts']>[number];
 const BROKEN = new Set(['expired', 'refused', 'revoked']);
-const accountStatus = (a: Pick<Account, 'state'>) => (BROKEN.has(a.state) ? 'expired' : a.state === 'not_signed_in' ? 'unsigned' : 'connected');
 
 /**
  * The header's one main action, from the team account's state: Connect while it is not signed in, Reconnect once its
@@ -337,7 +304,7 @@ function HeaderAction({
   starting: boolean;
 }) {
   const { card, connection: conn, me } = app;
-  const team = (app.accounts ?? []).find((a) => a.default);
+  const team = (app.authConfigs ?? []).flatMap((c) => c.accounts ?? []).find((a) => a.default);
   const installed = Boolean(card.appState) && card.appState !== 'not_installed';
   const teamTestFailed = team?.test?.status === 'failed' || (card.appState === 'test_failed' && conn?.signIn === 'team');
   const broken = Boolean(team && (BROKEN.has(team.state) || teamTestFailed));
@@ -395,190 +362,6 @@ function ConnectedAs({ who }: { who?: string | null }) {
       <CircleCheck className="size-4 text-success-text" />
       {who ? `Connected as ${who}` : 'Connected'}
     </span>
-  );
-}
-
-/** Accounts: the team's shared logins, the default first and a sandbox marked, with Add account. */
-function AccountsTab({
-  app,
-  signsIn,
-  onSignIn,
-  actions,
-}: {
-  app: AppData;
-  signsIn: boolean;
-  onSignIn: (account: 'self' | 'team', accountId?: string) => void;
-  actions?: React.ReactNode;
-}) {
-  const { card, connection: conn } = app;
-  const accounts = app.accounts ?? [];
-  const failure = card.appState === 'test_failed' ? (card.appStateReason ?? 'no reason given') : null;
-  // A row's failed test: the account's own when the answer carries it, else the app's for its default account.
-  const testFailed = (a: Account) => (a.test?.status === 'failed' ? a.test.message || 'no reason given' : a.default ? failure : null);
-  return (
-    <Section title="Accounts" description="Calls use the default account unless a step names another." flush actions={actions}>
-      {!conn || !accounts.length ? (
-        <div className="p-4" data-testid="app-not-connected">
-          <ListEmpty icon={Plug} noun="accounts" filtered={false} description={`${card.name} has no account yet.`} />
-        </div>
-      ) : (
-        <Rows testId="app-accounts">
-          {accounts.map((a) => (
-            <Row
-              key={a.id}
-              wrap
-              leading={<Logo name={card.name} logo={card.logo} />}
-              title={
-                <span className="flex flex-wrap items-center gap-2" data-testid={`account-${a.name}`}>
-                  {a.name}
-                  {a.default && <Badge variant="secondary">Default</Badge>}
-                  {a.sandbox && (
-                    <Badge variant="outline" data-testid={`account-sandbox-${a.name}`}>
-                      Sandbox
-                    </Badge>
-                  )}
-                  <AccountState status={accountStatus(a)} />
-                </span>
-              }
-              description={
-                testFailed(a) ? (
-                  <span className="text-warning-text" data-testid={a.default ? 'app-test-failed' : `account-test-failed-${a.name}`}>
-                    Signed in, but a test call failed: {testFailed(a)}
-                  </span>
-                ) : (
-                  (a.statusDetail ?? undefined)
-                )
-              }
-              trailing={
-                testFailed(a) && a.mine && conn.signIn !== 'team' ? (
-                  // The person's own sign-in failed its test: they sign in again as themselves.
-                  <Button size="sm" onClick={() => onSignIn('self', a.id)} data-testid={`account-reconnect-mine-${a.name}`}>
-                    <RefreshCw />
-                    Reconnect
-                  </Button>
-                ) : a.default ? undefined : conn.mayManage && (BROKEN.has(a.state) || a.status === 'needs_reconnect' || testFailed(a)) ? (
-                  // The default account's Reconnect and Connect are the header's; another account's are on its row.
-                  <Button size="sm" onClick={() => onSignIn('team', a.id)} data-testid={`account-reconnect-${a.name}`}>
-                    <RefreshCw />
-                    Reconnect
-                  </Button>
-                ) : conn.mayManage && a.state === 'not_signed_in' && !a.mine ? (
-                  <Button size="sm" onClick={() => onSignIn('team', a.id)} data-testid={`account-sign-in-${a.name}`}>
-                    <ExternalLink />
-                    Sign in
-                  </Button>
-                ) : !a.mine && signsIn ? (
-                  <Button size="sm" variant="outline" onClick={() => onSignIn('self', a.id)} data-testid={`account-connect-${a.name}`}>
-                    <ExternalLink />
-                    Connect my account
-                  </Button>
-                ) : undefined
-              }
-            />
-          ))}
-        </Rows>
-      )}
-    </Section>
-  );
-}
-
-const PERSON_STATE = {
-  connected: { label: 'Connected', className: OK },
-  expired: { label: 'Expired', className: 'border-warning/40 bg-warning/10 text-warning-text' },
-  refused: { label: 'Refused', className: 'border-destructive/40 bg-destructive/10 text-destructive' },
-} as const;
-
-/**
- * People: each person who signed in with their own login, on which account, when, and its state, as the API joins
- * them (a team admin reads everyone's, anyone else their own). The caller connects or disconnects their own here and,
- * holding several, picks which one their calls use when a step names no account.
- */
-function PeopleTab({ app, signsIn, onConnectMine, starting }: { app: AppData; signsIn: boolean; onConnectMine: () => void; starting: boolean }) {
-  const { card, connection: conn, me } = app;
-  const signOut = useSignOutMine();
-  const pin = usePinDefault();
-  const people = app.people ?? [];
-  // On an app only each person signs in to, the header carries Connect my account; here it is the second way in.
-  const connectsHere = signsIn && !me.connected && conn?.signIn !== 'person';
-  return (
-    <Section
-      title="People"
-      description={signsIn ? 'Each person who signed in with their own login. Calls they start run as them.' : `Every call signs in as a team account; nobody signs in to ${card.name} with their own login.`}
-      flush
-      actions={
-        connectsHere ? (
-          <LoadingButton size="sm" isLoading={starting} onClick={onConnectMine} data-testid="app-connect-me">
-            <ExternalLink />
-            Connect my account
-          </LoadingButton>
-        ) : undefined
-      }
-    >
-      {signsIn && (
-        <p className="border-b px-4 py-3 text-sm" data-testid="app-me-state">
-          {me.connected ? `Connected as ${me.account ?? 'you'}` : 'You have not connected your own account.'}
-        </p>
-      )}
-      {people.length ? (
-        <Rows testId="app-people">
-          {people.map((p) => (
-            <Row
-              key={`${p.accountId}:${p.personId}`}
-              wrap
-              leading={<Logo name={p.account ?? p.personId} />}
-              title={
-                <span className="flex flex-wrap items-center gap-2" data-testid={`person-${p.personId}`}>
-                  {p.account ?? p.personId}
-                  {p.mine && <Badge variant="secondary">You</Badge>}
-                  <Badge variant="outline" className={PERSON_STATE[p.state].className}>
-                    {PERSON_STATE[p.state].label}
-                  </Badge>
-                  {p.default && <Badge variant="outline">{p.mine ? 'Your default' : 'Default'}</Badge>}
-                </span>
-              }
-              description={
-                p.testFailed ? (
-                  <span className="text-warning-text">Signed in, but a test call failed: {p.testFailed}</span>
-                ) : (
-                  `${p.accountName}${p.since ? ` · signed in ${shortDate(p.since)}` : ''}`
-                )
-              }
-              trailing={
-                p.mine && conn ? (
-                  <span className="flex flex-wrap gap-2">
-                    {/* One of several of the caller's own sign-ins that their calls do not use yet. */}
-                    {p.default === false && p.state === 'connected' && (
-                      <LoadingButton
-                        size="sm"
-                        variant="outline"
-                        isLoading={pin.isPending && pin.variables?.accountId === p.accountId}
-                        onClick={() => pin.mutate({ appId: card.id, accountId: p.accountId }, { onError: (e) => toast.error('Couldn’t make it your default', { description: e.message }) })}
-                        data-testid={`account-pin-${p.accountName}`}
-                      >
-                        Make my default
-                      </LoadingButton>
-                    )}
-                    <LoadingButton
-                      size="sm"
-                      variant="ghost"
-                      isLoading={signOut.isPending && signOut.variables === p.accountId}
-                      onClick={() => signOut.mutate(p.accountId, { onError: (e) => toast.error('Couldn’t disconnect', { description: e.message }) })}
-                      data-testid={p.accountId === conn.id ? 'app-disconnect' : `person-disconnect-${p.accountName}`}
-                    >
-                      Disconnect
-                    </LoadingButton>
-                  </span>
-                ) : undefined
-              }
-            />
-          ))}
-        </Rows>
-      ) : (
-        <div className="p-4">
-          <ListEmpty icon={Users} noun="people" filtered={false} description="Nobody has signed in with their own login yet." />
-        </div>
-      )}
-    </Section>
   );
 }
 
@@ -646,50 +429,6 @@ function ToolsTab({ app }: { app: AppData }) {
         emptyState={<ListEmpty icon={KeyRound} noun="tools" filtered={false} description={`${app.card.name} has no tools.`} />}
       />
       <GrantToAgentDialog tool={granting && { id: granting.name, title: granting.title }} onOpenChange={(o) => !o && setGranting(null)} />
-    </div>
-  );
-}
-
-/**
- * Credentials: the app's own credentials (the team's own apps and Ops AI's app it signs in with), editable here by a
- * team admin, then the keys the default account holds. Values are never shown, only a secret's last four characters.
- */
-function CredentialsTab({ app, onReconnect }: { app: AppData; onReconnect: () => void }) {
-  const conn = app.connection;
-  const credential = app.card.credential;
-  const sealed = Object.entries(conn?.secrets ?? {}).filter(([field, v]) => v.set && field !== 'clientSecret');
-  return (
-    <div className="flex flex-col gap-4" data-testid="app-credentials-tab">
-      {credential && app.card.mayManage && <AppCredentialsPanel app={app.card.id} />}
-      {credential && !app.card.mayManage && (
-        <Section title="App credential" flush>
-          <Rows>
-            <Row
-              wrap
-              leading={<KeyRound className="size-4 text-muted-foreground" />}
-              title={<span data-testid="app-credential-name">{credential.type === 'ops_ai' ? 'Ops AI’s app' : credential.name}</span>}
-              description="Only a team admin changes the app it signs in with."
-            />
-          </Rows>
-        </Section>
-      )}
-      {(sealed.length > 0 || !credential) && (
-        <Section title="Keys" description="The keys the default account holds." flush>
-          <Rows testId="app-secrets">
-            {sealed.map(([name]) => (
-              <Row key={name} leading={<KeyRound className="size-4 text-muted-foreground" />} title={name} description="Sealed" />
-            ))}
-            {!sealed.length && <Row title="Nothing saved yet" />}
-          </Rows>
-          {conn?.mayManage && (
-            <div className="border-t p-3">
-              <Button size="sm" variant="outline" onClick={onReconnect} data-testid="app-keys-replace">
-                Replace keys
-              </Button>
-            </div>
-          )}
-        </Section>
-      )}
     </div>
   );
 }

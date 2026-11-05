@@ -661,7 +661,7 @@ try {
           const rows = (await page.getByTestId('app-accounts').innerText()).replace(/\s+/g, ' ');
           await shoot(page, 'app-accounts');
           const page_ = (await call(tools, 'GET', `/v1/apps/${encodeURIComponent(APP)}`, priya)).data ?? {};
-          const accounts = (page_.accounts ?? []).map((a) => [a.name, a.default, a.status]);
+          const accounts = (page_.authConfigs ?? []).flatMap((c) => c.accounts).map((a) => [a.name, a.default, a.status]);
           check(
             '11 Priya connects another account named EU desk and allows it as the EU team account; both are listed, the first the default',
             accounts.length === 2 && accounts[0][1] === true && accounts[1][0] === 'EU desk' && accounts[1][1] === false && /EU desk/.test(rows),
@@ -1055,7 +1055,7 @@ try {
         for (let i = 0; i < 20 && !((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).some((c) => c.pluginId === 'opsai.salesforce'); i++) await page.waitForTimeout(1000);
         const SF = 'plugin:opsai.salesforce';
         /** The app's accounts, its default first, each with its last test, as its page reads them. */
-        const sfAccounts = async () => (await call(tools, 'GET', `/v1/apps/${encodeURIComponent(SF)}`, priya)).data?.accounts ?? [];
+        const sfAccounts = async () => ((await call(tools, 'GET', `/v1/apps/${encodeURIComponent(SF)}`, priya)).data?.authConfigs ?? []).flatMap((c) => c.accounts);
         /** The team's own client, made under Credentials with no account, as the Connect window then offers it. */
         const credentialFor = async (clientId, clientSecret) =>
           (await call(tools, 'POST', '/v1/app-credentials', priya, { app: SF, name: `Salesforce ${clientId}`, clientId, clientSecret })).data?.id;

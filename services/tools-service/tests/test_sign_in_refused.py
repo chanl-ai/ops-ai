@@ -99,7 +99,7 @@ async def test_a_refusal_is_recorded_and_the_account_reads_refused(client: httpx
     await _complete(client, admin(tenant), account, state=state, error="OAUTH_APP_BLOCKED")
     said = "Your admin has blocked Signin desk's app. Ask them to allow it."
     page = (await client.get(f"/v1/apps/{APP}", headers=admin(tenant))).json()["data"]
-    row = next(a for a in page["accounts"] if a["id"] == account)
+    row = next(a for c in page["authConfigs"] for a in c["accounts"] if a["id"] == account)
     assert (row["state"], row["stateReason"]) == ("refused", said), row
     assert row["health"]["status"] == "failed" and row["health"]["message"] == said, row["health"]
     assert page["card"]["appState"] == "needs_sign_in" and page["card"]["appStateReason"] == said, page["card"]
@@ -144,7 +144,7 @@ async def test_a_wrong_client_secret_at_the_token_exchange_names_the_credential_
         "app": "Signin desk",
     }, refused.text
     page = (await client.get(f"/v1/apps/{APP}", headers=admin(tenant))).json()["data"]
-    assert next(a for a in page["accounts"] if a["id"] == account)["state"] == "refused", page["accounts"]
+    assert next(a for c in page["authConfigs"] for a in c["accounts"] if a["id"] == account)["state"] == "refused", page
 
 
 async def test_a_sign_in_finishes_from_its_state_in_a_window_that_knows_nothing_else(

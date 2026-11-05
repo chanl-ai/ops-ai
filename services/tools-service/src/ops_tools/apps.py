@@ -320,7 +320,8 @@ class AccountOwner(Out):
     name: str
 
 
-# What the caller may do to an account on the app page, decided here so the console offers only these.
+# What the caller may do to an account on the app page, decided here so the console offers only these. make_default
+# makes it the caller's own default among their sign-ins to the app's accounts.
 AccountAction = Literal[
     "rename", "sign_in", "reconnect", "make_default", "disconnect", "delete", "move", "connect_mine"
 ]
@@ -332,6 +333,8 @@ class AppAccount(Out):
 
     id: str
     name: str
+    # The revision a rename or a move to another auth config is sent with.
+    revision: int
     default: bool
     sandbox: bool
     status: str
@@ -377,15 +380,14 @@ class AuthConfig(Out):
 
 class AppPage(Out):
     """One app's page, joined here: its card, its default account, the caller's own sign-in, how many people
-    signed in, its accounts, its auth configs with their accounts, its tools, the plugin's skills and the latest runs
+    signed in, its auth configs with their accounts, its tools, the plugin's skills and the latest runs
     of its tools."""
 
     card: SystemCard
     connection: AccountDetail | None = None
     me: AppMe
     people_count: int
-    # The team's accounts of the app, the default first; `auth_configs` nests the same rows under their config.
-    accounts: list[AppAccount] = Field(default_factory=list[AppAccount])
+    # The app's auth configs, each with the team's accounts that sign in through it.
     auth_configs: list[AuthConfig] = Field(default_factory=list[AuthConfig])
     tools: list[AppTool]
     skills: list[AppSkill]
@@ -1177,7 +1179,6 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
         "connection": detail,
         "me": {"connected": bool(signed), "account": signed[0].get("account") if signed else None},
         "peopleCount": len(people),
-        "accounts": accounts,
         "authConfigs": await _auth_configs(apps, who, card, accounts),
         "tools": tools,
         "skills": skills,
@@ -1227,12 +1228,12 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
         if may or mine_alone:
             actions += ["rename"] if may else []
             actions.append("reconnect" if state != "not_signed_in" else "sign_in")
-            if may and not is_default and not a.get("sandbox"):
-                actions.append("make_default")
             if connected:
                 actions.append("disconnect")
             if may:
                 actions += ["delete"] + (["move"] if configs > 1 else [])
+        if pick is not None and aid not in sandboxes and str(pick["connection_id"]) != aid and own is not None:
+            actions.append("make_default")
         # A person signs in with their own account only where the account lets each person do so beside the team's.
         if sign_in == "person_or_team" and own is None:
             actions.append("connect_mine")
@@ -1245,6 +1246,7 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
             {
                 "id": aid,
                 "name": a.get("account_name") or a["name"],
+                "revision": int(a["revision"]),
                 "default": is_default,
                 "sandbox": bool(a.get("sandbox")),
                 "state": state,

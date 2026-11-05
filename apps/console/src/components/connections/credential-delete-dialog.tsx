@@ -53,7 +53,7 @@ export function CredentialDeleteDialog({
     <DeleteDialog
       open={Boolean(credential)}
       onOpenChange={onOpenChange}
-      entityType="app credential"
+      entityType="auth config"
       entityName={credential?.name}
       isLoading={remove.isPending}
       onConfirm={() => {
@@ -62,14 +62,14 @@ export function CredentialDeleteDialog({
       testIdPrefix="credential"
       description={
         accounts.length
-          ? `${plural(accounts.length, 'account')} sign in with it: ${accounts.map((a) => a.name).join(', ')}. They move to the app credential you pick, and each signs in again.`
+          ? `${plural(accounts.length, 'account')} sign in with it: ${accounts.map((a) => a.name).join(', ')}. They move to the auth config you pick, and each signs in again.`
           : 'Its client secret is deleted with it.'
       }
     >
       {accounts.length > 0 &&
         (stranded ? (
           <p className="text-sm text-destructive" data-testid="credential-delete-stranded">
-            {`Add another ${credential?.appName ?? ''} app credential first, so its accounts have somewhere to move.`}
+            {`Add another ${credential?.appName ?? ''} auth config first, so its accounts have somewhere to move.`}
           </p>
         ) : (
           <FormField id="credential-move-to" label="Move its accounts to">

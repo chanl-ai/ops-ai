@@ -117,10 +117,8 @@ async def test_a_second_named_account_is_made_beside_the_first_which_stays_the_d
     second = made.json()["data"]
     assert second["id"].startswith("ca_") and second["accountName"] == "EU org" and second["appId"] == APP
     page = (await world.client.get(f"/v1/apps/plugin:{ID}", headers=admin(tenant))).json()["data"]
-    assert [(a["id"], a["name"], a["default"]) for a in page["accounts"]] == [
-        (first, "Desk", True),
-        (second["id"], "EU org", False),
-    ]
+    listed = sorted((a["id"], a["name"], a["default"]) for c in page["authConfigs"] for a in c["accounts"])
+    assert listed == sorted([(first, "Desk", True), (second["id"], "EU org", False)]), listed
     again = await another(world, tenant, "eu ORG")
     assert again.status_code == 409, again.text
 
@@ -167,7 +165,7 @@ async def test_a_persons_call_uses_the_account_they_pinned_else_their_newest_sig
     async def shown() -> dict[str, bool | None]:
         """Her accounts on the app page: which one it names as her default."""
         page = (await world.client.get(f"/v1/apps/plugin:{ID}", headers=admin(tenant))).json()["data"]
-        return {a["name"]: a["myDefault"] for a in page["accounts"] if a["mine"]}
+        return {a["name"]: a["myDefault"] for c in page["authConfigs"] for a in c["accounts"] if a["mine"]}
 
     assert await used() == second  # the newest of her sign-ins
     assert await shown() == {"Desk": False, "EU org": True}

@@ -44,15 +44,15 @@ export function AppCredentialPicker({
       Add your own app
     </Button>
   );
-  const hint = creds.isError ? 'Couldn’t load the team’s app credentials.' : none ? <>This install has no app of its own for it. {add}</> : add;
+  const hint = creds.isError ? 'Couldn’t load the team’s auth configs.' : none ? <>This install has no app of its own for it. {add}</> : add;
   return (
-    <FormField id={id} label="App credential" hint={hint}>
+    <FormField id={id} label="Auth config" hint={hint}>
       {creds.isPending ? (
         <Skeleton className="h-9 w-full" />
       ) : (
         <Select value={value ?? (platform ? OPS_AI : '')} onValueChange={(v) => onChange(v === OPS_AI ? null : v)} disabled={disabled || none}>
           <SelectTrigger id={id} className="w-full" data-testid={testId}>
-            <SelectValue placeholder="Pick an app credential" />
+            <SelectValue placeholder="Pick an auth config" />
           </SelectTrigger>
           <SelectContent>
             {platform && <SelectItem value={OPS_AI}>Ops AI’s app</SelectItem>}

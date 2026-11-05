@@ -223,7 +223,7 @@ async def _app(client: httpx.AsyncClient, tenant: str) -> tuple[dict[str, Any], 
     """The plugin's card in the grid and the default account on its page."""
     card = next(c for c in await systems(client, tenant) if c["id"] == f"plugin:{ID}")
     page = (await client.get(f"/v1/apps/plugin:{ID}", headers=admin(tenant))).json()["data"]
-    return card, page["accounts"][0]
+    return card, next(a for c in page["authConfigs"] for a in c["accounts"] if a["default"])
 
 
 def _token(**extra: Any) -> dict[str, Any]:

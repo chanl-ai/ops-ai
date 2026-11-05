@@ -104,7 +104,7 @@ export function AppCredentialsPanel({ app }: { app?: string }) {
   const cols = React.useMemo(() => columns(setEditing, Boolean(app)), [app]);
   const wanted = app ? null : params.get('app');
   // A first answer that failed shows the error with Retry at once, not a skeleton while the retries run.
-  if (!creds.data && (creds.isError || creds.failureCount > 0)) return <QueryError what="the app credentials" error={creds.error ?? creds.failureReason} onRetry={() => creds.refetch()} retrying={creds.isFetching} />;
+  if (!creds.data && (creds.isError || creds.failureCount > 0)) return <QueryError what="the auth configs" error={creds.error ?? creds.failureReason} onRetry={() => creds.refetch()} retrying={creds.isFetching} />;
   if (creds.isPending) return <PageSkeleton statCards={0} tableRows={4} />;
   const apps = [...new Map(creds.data.map((c) => [c.app, c.appName])).entries()].map(([value, label]) => ({ value, label }));
   const rows = [...creds.data].sort((a, b) => a.appName.localeCompare(b.appName) || a.name.localeCompare(b.name));
@@ -114,7 +114,7 @@ export function AppCredentialsPanel({ app }: { app?: string }) {
       <div className="flex justify-end">
         <Button size="sm" onClick={() => setAdding(true)} data-testid="new-app-credential">
           <Plus />
-          New app credential
+          New auth config
         </Button>
       </div>
       <DataTableWithViews
@@ -122,11 +122,11 @@ export function AppCredentialsPanel({ app }: { app?: string }) {
         data={rows.map((c) => ({ ...c, onRowClick: () => router.push(credentialHref(c)), href: credentialHref(c), rowTestId: `app-credential-row-${c.id}` }))}
         getRowId={(c) => c.id}
         searchColumn="name"
-        searchPlaceholder="Search app credentials…"
+        searchPlaceholder="Search auth configs…"
         hideViewSwitcher
         filters={app ? undefined : [{ column: 'app', title: 'App', options: apps }]}
         initialColumnFilters={wanted ? [{ id: 'app', value: [wanted] }] : undefined}
-        emptyState={<ListEmpty icon={KeyRound} noun="app credentials" filtered={false} description="No app credentials yet. Connecting an app that signs in uses Ops AI’s app; add your own with New app credential." />}
+        emptyState={<ListEmpty icon={KeyRound} noun="auth configs" filtered={false} description="No auth configs yet. Connecting an app that signs in uses Ops AI’s app; add your own with New auth config." />}
       />
       <CredentialEditDialog credentialId={editing?.id ?? null} onClose={() => setEditing(null)} />
       <NewAppCredentialDialog open={adding} onOpenChange={setAdding} app={app} />

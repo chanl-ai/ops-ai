@@ -835,6 +835,10 @@
           "owner": {
             "$ref": "#/components/schemas/AccountOwner"
           },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
           "sandbox": {
             "title": "Sandbox",
             "type": "boolean"
@@ -890,6 +894,7 @@
         "required": [
           "id",
           "name",
+          "revision",
           "default",
           "sandbox",
           "status",
@@ -1526,15 +1531,8 @@
       },
       "AppPage": {
         "additionalProperties": false,
-        "description": "One app's page, joined here: its card, its default account, the caller's own sign-in, how many people\nsigned in, its accounts, its auth configs with their accounts, its tools, the plugin's skills and the latest runs\nof its tools.",
+        "description": "One app's page, joined here: its card, its default account, the caller's own sign-in, how many people\nsigned in, its auth configs with their accounts, its tools, the plugin's skills and the latest runs\nof its tools.",
         "properties": {
-          "accounts": {
-            "items": {
-              "$ref": "#/components/schemas/AppAccount"
-            },
-            "title": "Accounts",
-            "type": "array"
-          },
           "authConfigs": {
             "items": {
               "$ref": "#/components/schemas/AuthConfig"

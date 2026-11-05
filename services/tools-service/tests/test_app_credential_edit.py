@@ -51,7 +51,7 @@ async def _signed_in(client: httpx.AsyncClient, tenant: str, **credential: Any) 
 
 async def _row(client: httpx.AsyncClient, tenant: str, account: str) -> dict[str, Any]:
     page = (await client.get(f"/v1/apps/{APP}", headers=admin(tenant))).json()["data"]
-    return next(a for a in page["accounts"] if a["id"] == account)
+    return next(a for c in page["authConfigs"] for a in c["accounts"] if a["id"] == account)
 
 
 async def test_a_new_client_id_marks_every_account_on_it_to_sign_in_again(

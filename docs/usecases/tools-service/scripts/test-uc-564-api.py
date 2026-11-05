@@ -195,7 +195,9 @@ with ExitStack() as stack:
     # 51. The team account reads connected at once, and its test runs on its own right after the sign-in.
     def team_row() -> dict[str, Any]:
         page = data(gw.get(f"/v1/apps/plugin:{PLUGIN}", headers=priya)) or {}
-        return next((a for a in page.get("accounts") or [] if a.get("id") == connection_id), {})
+        return next(
+            (a for c in page.get("authConfigs") or [] for a in c["accounts"] if a.get("id") == connection_id), {}
+        )
 
     first_row = team_row()
     team_test = until(lambda: (team_row().get("test") or {}).get("status"), timeout=20)
@@ -475,7 +477,7 @@ with ExitStack() as stack:
         headers=security,
     )
     page_mine = data(gw.get(f"/v1/apps/plugin:{PLUGIN}", headers=security)) or {}
-    accounts_mine = page_mine.get("accounts") or []
+    accounts_mine = [a for c in page_mine.get("authConfigs") or [] for a in c["accounts"]]
     check(
         "48 a person signs in with their own account before any team account exists",
         own_done.status_code == 200 and any(a.get("id") == mine_id and a.get("mine") for a in accounts_mine),
