@@ -28,6 +28,7 @@ from ops_plugin_sdk.versions import headers_of as declared_headers
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
 
+from ..auth.tokens import SIGNED_IN_AS, person_named
 from ..connections.records import account_for, default_sign_in
 from ..egress import EgressDenied, EgressPolicy, for_tenant
 from ..modules.seed import blank
@@ -752,7 +753,7 @@ class PluginHost:
 
     async def _look_up(
         self, tenant_id: str, m: Manifest, lookup: AfterSignIn, settings: Mapping[str, Any], token: str
-    ) -> str:
+    ) -> tuple[str, str | None]:
         """One GET with the token just issued, to an https address on one of the plugin's egress hosts, through the
         tenant's egress policy, following no redirect; the value at `lookup.read`, checked as `from_token` checks an
         address, or as a plain id. Any failure refuses the sign-in."""
@@ -790,9 +791,10 @@ class PluginHost:
         if r.status_code != 200:
             raise SignInRefused(f"{m.title}'s lookup after sign-in answered {r.status_code}", "lookup_failed")
         try:
-            found = at(r.json(), lookup.read)
+            doc = r.json()
         except ValueError:
-            found = None
+            doc = None
+        found = at(doc, lookup.read) if doc is not None else None
         if isinstance(found, bool) or not isinstance(found, (str, int)) or found == "":
             raise SignInRefused(f"{m.title}'s lookup after sign-in named no {lookup.setting}", "lookup_failed")
         value = str(found)
@@ -809,7 +811,8 @@ class PluginHost:
             raise SignInRefused(
                 f"the lookup after sign-in named a {lookup.setting} {m.title} cannot use in an address", "lookup_failed"
             )
-        return value
+        # The same answer often names who signed in (Salesforce's userinfo: preferred_username, email).
+        return value, person_named(doc)
 
     def operation(self, module: Mapping[str, Any], op: dict[str, Any]) -> dict[str, Any]:
         """The operation as this call runs it, from the loaded manifest rather than the module row, which is written
@@ -860,8 +863,8 @@ class PluginHost:
         from the answer, refused unless it is an https host under the plugin's token hosts; then the lookup after
         sign-in, if the plugin has one, fills its setting. `own` is a person's own sign-in, which may not
         change what the team's holds (`settle_at_sign_in`). Nothing is saved until every check passes, then all of it
-        on the account. Returns where Test connection reads: the instance and the plugin's health-check
-        path."""
+        on the account. Returns where Test connection reads, the instance and the plugin's health-check path, and
+        under SIGNED_IN_AS whom the lookup named."""
         b = await self.binding_of(tenant_id, connection_id)
         plugin = self.plugins.get(str(b["plugin_id"])) if b else None
         if b is None or plugin is None:
@@ -881,9 +884,11 @@ class PluginHost:
             read[setting] = value
         held = await self.own_settings(tenant_id, connection_id)
         lookup = m.connection.after_sign_in
+        named: str | None = None
         if lookup is not None:
             now = self.settings(plugin, dict(b.get("settings") or {}), {**held, **read})
-            read[lookup.setting] = await self._look_up(tenant_id, m, lookup, now, str(answer.get("access_token") or ""))
+            token = str(answer.get("access_token") or "")
+            read[lookup.setting], named = await self._look_up(tenant_id, m, lookup, now, token)
         read = settle_at_sign_in(held, read, own=own)
         # Saved as the signed-in account's own: a sandbox sign-in leaves the live account's instance as it was.
         if read and self.connections is not None:
@@ -892,8 +897,9 @@ class PluginHost:
         merged = self.settings(plugin, dict(b.get("settings") or {}), values)
         endpoint = render(m.endpoint, merged)
         check = m.connection.health_check
+        said = {SIGNED_IN_AS: named} if named else {}
         if endpoint is None or check is None:
-            return None
+            return said or None
         origin = urlsplit(endpoint)
         path = render(check.path, merged)
-        return {"baseUrl": f"{origin.scheme}://{origin.netloc}", **({"testPath": path} if path else {})}
+        return {"baseUrl": f"{origin.scheme}://{origin.netloc}", **({"testPath": path} if path else {}), **said}

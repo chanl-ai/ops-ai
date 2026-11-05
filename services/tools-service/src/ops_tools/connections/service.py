@@ -37,7 +37,7 @@ from ..auth.assertion import SigningError, key_matches, read_certificate
 from ..auth.discovery import Discovery
 from ..auth.kinds import BY_ID, CERTIFICATE, Kind, kind_of, views
 from ..auth.pkce import challenge, verifier
-from ..auth.tokens import ClientProof, Tokens, account_of
+from ..auth.tokens import SIGNED_IN_AS, ClientProof, Tokens, account_of, person_named
 from ..egress import EgressDenied, EgressPolicy, for_tenant
 from ..environments import TEST
 from ..executor import transport_failure
@@ -868,7 +868,10 @@ class ConnectionService:
                 await self.store.note(who.tenant_id, connection_id, self._event(who, "sign_in_failed", {"code": code}))
                 raise ValidationFailed(f"{conn['name']} did not finish the sign-in: {e}", code="sign_in_failed") from e
         requested = str(taken.get("scopes") or "").split()
+        named = extra.pop(SIGNED_IN_AS, None)
         token = await self.tokens.store_answer(who.tenant_id, connection_id, answer, token_for, requested=requested)
+        if isinstance(named, str):
+            await self.store.name_token(who.tenant_id, connection_id, token_for, named)
         if token_for == SHARED:
             await self.store.set_status(who.tenant_id, connection_id, "healthy", None)
         if self.on_signed_in is not None:
@@ -1300,6 +1303,13 @@ class ConnectionService:
             health["httpStatus"] = res.status_code
             if res.status_code < 400:
                 health["status"] = "ok"
+                # A test read often names who signed in (GitHub's /user: login), kept when the sign-in did not.
+                try:
+                    named = person_named(res.json())
+                except ValueError:
+                    named = None
+                if named:
+                    await self.store.name_token(who.tenant_id, connection_id, own_key(who) if own else SHARED, named)
             else:
                 message = f"{urlsplit(url).hostname} answered {res.status_code} to the test address."
                 health |= {"status": "failed", "code": "UPSTREAM_STATUS", "message": message}
