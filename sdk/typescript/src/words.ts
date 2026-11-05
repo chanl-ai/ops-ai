@@ -202,13 +202,34 @@ export class Tools {
   }
 }
 
-/** The agents, skills, workflows and document types an app brings, each added to the team as a copy. */
+/** A copy's kind, record id and resource id, from an answer of `add`, a row of `list`, or the copy itself. */
+function copyOf(made: Obj): { kind: string; record: string; resource: string } {
+  const c = made.copy && typeof made.copy === 'object' ? made.copy : made;
+  if (!c.recordId) throw new TypeError('no copy here: add the resource to the team first');
+  return { kind: String(c.kind), record: String(c.recordId), resource: `${c.source}:${c.templateId}` };
+}
+
+// The delete each kind's copy goes through, by the service that keeps it, and the path field naming the record.
+const DELETES: Record<string, ['agents' | 'documents', string, string]> = {
+  agent: ['agents', 'agents_delete_agent', 'agent_id'],
+  skill: ['agents', 'agents_delete_skill', 'skill_id'],
+  workflow: ['agents', 'workflows_delete_definition', 'workflow_id'],
+  [DOCUMENT_TYPE]: ['documents', 'document_types_delete_type', 'type_id'],
+};
+
+/** The agents, skills, workflows, document types and knowledge sources an app brings, each added to the team as a copy. */
 export class Resources {
   constructor(private readonly raw: Raw) {}
 
-  async list(app?: string): Promise<Obj[]> {
-    const found = (await call(this.raw, 'tools', 'plugins_list_plugin_templates')) as Obj[];
-    return found.filter((r) => app === undefined || r.source === app);
+  /** The app's Resources tab: each resource with its state for the team, the team's copy, and whether you may add it. */
+  list(app: string): Promise<Obj[]> {
+    return call(this.raw, 'tools', 'plugins_list_app_resources', { path: { app_id: app } });
+  }
+
+  /** The preview of adding several: what each brings, what the team holds, the bindings and refusals, in add order. */
+  plan(resources: Array<Obj | string>): Promise<Obj> {
+    const ids = resources.map((r) => (typeof r === 'string' ? r : `${r.source}:${r.id}`));
+    return call(this.raw, 'agents', 'resources_plan_resources', { body: { resources: ids } });
   }
 
   /** Adds a copy to the team: an item of `list`, or its source and id (`plugin:<plugin>:<id>`) with its kind. */
@@ -216,6 +237,20 @@ export class Resources {
     const id = typeof resource === 'string' ? resource : `${resource.source}:${resource.id}`;
     const k = typeof resource === 'string' ? kind : (resource.kind ?? kind);
     return call(this.raw, k === DOCUMENT_TYPE ? 'documents' : 'agents', 'resources_copy_resource', { path: { resource: id }, body: fields });
+  }
+
+  /** Takes the app's current template as a new draft version of the copy; an edited copy is refused until `confirm`. */
+  update(copy: Obj, { confirm = false }: { confirm?: boolean } = {}): Promise<Obj> {
+    const c = copyOf(copy);
+    if (c.kind === DOCUMENT_TYPE) throw new TypeError("a document type's copy is updated as a new version on its own page");
+    return call(this.raw, 'agents', 'resources_take_update', { path: { resource: c.resource, copy: c.record }, body: { confirm } });
+  }
+
+  /** Deletes the team's copy through its kind's own delete, which refuses (409 in_use) while others use it. */
+  async remove(copy: Obj): Promise<void> {
+    const c = copyOf(copy);
+    const [service, op, field] = DELETES[c.kind]!;
+    await call(this.raw, service, op, { path: { [field]: c.record } });
   }
 }
 

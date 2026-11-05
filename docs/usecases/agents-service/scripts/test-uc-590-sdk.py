@@ -15,7 +15,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "sdk" / "python" / "src"))
 from apps_walk import sdk_op, signed_sdk, target
 from ops_ai import OpsAI
-from resources_desk import AGENT, DOCUMENT_TYPE, SKILL, WORKFLOW, write_desk
+from resources_desk import AGENT, DOCUMENT_TYPE, KNOWLEDGE, SKILL, WORKFLOW, write_desk
 from resources_desk import SOURCE as DESK
 from usecase_harness import (
     AGENTS_PORT,
@@ -26,6 +26,7 @@ from usecase_harness import (
     bearer,
     check,
     finish,
+    kb,
     platform,
     signed_in,
     tools,
@@ -51,7 +52,10 @@ def main() -> None:
     with (
         platform() as (accounts, _),
         tools({**AUTH, **PLUGINS}) as gw,
-        agents(gateway_url=str(gw.base_url).rstrip("/"), env=AUTH) as api,
+        # documents-service keeps the document type copies the app's resource list joins; it reads the team's
+        # document type templates from this tools-service.
+        kb(DESK_DIR / "kb", documents_env={**AUTH, "OPS_TOOLS_URL": str(gw.base_url).rstrip("/")}) as knowledge,
+        agents(gateway_url=str(gw.base_url).rstrip("/"), kb_url=str(knowledge.base_url).rstrip("/"), env=AUTH) as api,
     ):
         priya = bearer(signed_in(accounts, "p.shah@harborpine.example"), "team_ops")
         gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json={"enabled": True}, headers=priya)
@@ -89,13 +93,16 @@ def desk_steps(gw: Any, api: Any, priya: dict[str, str]) -> None:
     on = gw.put(f"/v1/apps/{DESK}/team", json={"enabled": True}, headers=priya)
     ops = signed_sdk("builder")
 
-    # 60. The SDK's list says, for each resource, its state for the team.
+    # 60. The SDK's list says, for each resource, its state for the team; the knowledge source is one of them, with no
+    # single copy to count, since a team adds it to any of its knowledge bases.
     listed = ops.resources.list(DESK)
+    copied = [r for r in listed if r.get("kind") != "knowledge_source"]
     check(
-        "60 the SDK lists the app's four resources, each with its state for the team and the copies the team holds",
+        "60 the SDK lists the app's resources, each with its state for the team and the copies the team holds",
         on.status_code == 200
-        and sorted(str(r.get("id")) for r in listed) == sorted([AGENT, SKILL, WORKFLOW, DOCUMENT_TYPE])
-        and all(r.get("state") == "available" and (r.get("installed") or {}).get("copies") == 0 for r in listed),
+        and sorted(str(r.get("id")) for r in listed) == sorted([AGENT, SKILL, WORKFLOW, DOCUMENT_TYPE, KNOWLEDGE])
+        and all(r.get("state") == "available" for r in listed)
+        and all((r.get("installed") or {}).get("copies") == 0 for r in copied),
         [{k: r.get(k) for k in ("id", "kind", "state", "installed")} for r in listed],
     )
 

@@ -513,6 +513,9 @@ def tools(settings: dict[str, str] | None = None) -> Generator[httpx.Client]:
     env["OPS_GATEWAY_PORT"] = str(TOOLS_PORT)
     # A tool module review opens in agents-service's Reviews; a stack that publishes modules runs agents too.
     env.setdefault("OPS_AGENTS_URL", f"http://127.0.0.1:{AGENTS_PORT}")
+    # An app's resources join the copies documents-service keeps, on this run's port when the run names one.
+    if DOCUMENTS_PORT:
+        env.setdefault("OPS_DOCUMENTS_URL", f"http://127.0.0.1:{DOCUMENTS_PORT}")
     # send_reply sends through the provider settings pick and fails with none: the dev fake writes each mail
     # to a folder of this run's.
     env.setdefault("OPS_MAIL_PROVIDER", "fake")

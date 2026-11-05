@@ -123,3 +123,24 @@ def test_a_sandbox_account_is_added_as_a_sandbox_under_its_app() -> None:
     made = seen[-1]
     assert (made.method, made.url.path) == ("POST", "/api/tools/v1/apps/plugin:desk/accounts")
     assert body(made) == {"name": "Desk sandbox", "sandbox": True, "credentialId": "cred_uat"}
+
+
+def test_a_copy_is_removed_by_the_delete_of_the_service_that_keeps_its_kind() -> None:
+    seen: list[httpx.Request] = []
+    ops = client({}, seen)
+    made = {"copy": {"kind": "document_type", "recordId": "dt_1", "source": "plugin:desk", "templateId": "case-letter"}}
+    ops.resources.remove(made)
+    assert (seen[-1].method, seen[-1].url.path) == ("DELETE", "/api/documents/v1/document-types/dt_1")
+    ops.resources.remove(made["copy"] | {"kind": "workflow", "recordId": "case_review_1"})
+    assert (seen[-1].method, seen[-1].url.path) == ("DELETE", "/api/agents/v1/workflows/definitions/case_review_1")
+
+
+def test_the_resources_list_is_the_apps_one_list_and_an_update_names_the_copy() -> None:
+    seen: list[httpx.Request] = []
+    ops = client({}, seen)
+    ops.resources.list("plugin:desk")
+    assert seen[-1].url.path == "/api/tools/v1/apps/plugin:desk/resources"
+    copy = {"kind": "agent", "recordId": "ag_1", "source": "plugin:desk", "templateId": "case-helper"}
+    ops.resources.update({"copy": copy}, confirm=True)
+    assert seen[-1].url.path == "/api/agents/v1/resources/plugin:desk:case-helper/copies/ag_1/update"
+    assert body(seen[-1]) == {"confirm": True}

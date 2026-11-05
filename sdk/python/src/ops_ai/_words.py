@@ -50,6 +50,23 @@ def _resource(resource: dict[str, Any] | str, kind: str | None) -> tuple[str, st
     return f"{resource['source']}:{resource['id']}", str(resource.get("kind") or kind or "")
 
 
+def _copy(made: dict[str, Any]) -> tuple[str, str, str]:
+    """A copy's kind, record id and resource id, from an answer of `add`, a row of `list`, or the copy itself."""
+    c = cast(dict[str, Any], made.get("copy") if isinstance(made.get("copy"), dict) else made)
+    if not c.get("recordId"):
+        raise ValueError("no copy here: add the resource to the team first")
+    return str(c["kind"]), str(c["recordId"]), f"{c['source']}:{c['templateId']}"
+
+
+# The delete each kind's copy goes through, by the service that keeps it.
+_DELETES = {
+    "agent": ("agents", "agents_delete_agent"),
+    "skill": ("agents", "agents_delete_skill"),
+    "workflow": ("agents", "workflows_delete_definition"),
+    DOCUMENT_TYPE: ("documents", "document_types_delete_type"),
+}
+
+
 def _rows(found: Any) -> list[dict[str, Any]]:
     return list(cast(dict[str, Any], found).get("data") or []) if isinstance(found, dict) else list(found)
 
@@ -249,15 +266,36 @@ class Resources:
     def __init__(self, raw: Any) -> None:
         self._raw = raw
 
-    def list(self, app: str | None = None) -> list[dict[str, Any]]:
-        found = cast(list[dict[str, Any]], self._raw.tools.plugins_list_plugin_templates())
-        return [r for r in found if app is None or r.get("source") == app]
+    def list(self, app: str) -> list[dict[str, Any]]:
+        """The app's resources as its Resources tab shows them: each with its state for the team, the team's copy, and
+        whether you may add it (`canAdd`, with `reason` naming who can when you cannot)."""
+        return cast(list[dict[str, Any]], self._raw.tools.plugins_list_app_resources(app))
+
+    def plan(self, resources: list[dict[str, Any] | str]) -> dict[str, Any]:
+        """The preview of adding several: each resource, each one it brings with it, the copies the team already holds,
+        the bindings to fill and anything refused, in the order the adds run. Nothing is made."""
+        ids = [_resource(r, None)[0] for r in resources]
+        return cast(dict[str, Any], self._raw.agents.resources_plan_resources({"resources": ids}))
 
     def add(self, resource: dict[str, Any] | str, *, kind: str | None = None, **fields: Any) -> dict[str, Any]:
         """Adds a copy to the team: an item of `list`, or its source and id (`plugin:<plugin>:<id>`) with its kind."""
         rid, kind = _resource(resource, kind)
         service = self._raw.documents if kind == DOCUMENT_TYPE else self._raw.agents
         return cast(dict[str, Any], service.resources_copy_resource(rid, fields))
+
+    def update(self, copy: dict[str, Any], *, confirm: bool = False) -> dict[str, Any]:
+        """Takes the app's current template as a new draft version of the copy (an answer of `add` or a row of `list`).
+        A copy the team edited since is refused (409 copy_edited, listing the edits) until `confirm` is True."""
+        kind, record, rid = _copy(copy)
+        if kind == DOCUMENT_TYPE:
+            raise ValueError("a document type's copy is updated as a new version on its own page")
+        return cast(dict[str, Any], self._raw.agents.resources_take_update(rid, record, {"confirm": confirm}))
+
+    def remove(self, copy: dict[str, Any]) -> None:
+        """Deletes the team's copy through its kind's own delete, which refuses (409 in_use) while others use it."""
+        kind, record, _ = _copy(copy)
+        service, op = _DELETES[kind]
+        getattr(getattr(self._raw, service), op)(record)
 
 
 class Usage:
@@ -429,14 +467,28 @@ class AsyncResources:
     def __init__(self, raw: Any) -> None:
         self._raw = raw
 
-    async def list(self, app: str | None = None) -> list[dict[str, Any]]:
-        found = cast(list[dict[str, Any]], await self._raw.tools.plugins_list_plugin_templates())
-        return [r for r in found if app is None or r.get("source") == app]
+    async def list(self, app: str) -> list[dict[str, Any]]:
+        return cast(list[dict[str, Any]], await self._raw.tools.plugins_list_app_resources(app))
+
+    async def plan(self, resources: list[dict[str, Any] | str]) -> dict[str, Any]:
+        ids = [_resource(r, None)[0] for r in resources]
+        return cast(dict[str, Any], await self._raw.agents.resources_plan_resources({"resources": ids}))
 
     async def add(self, resource: dict[str, Any] | str, *, kind: str | None = None, **fields: Any) -> dict[str, Any]:
         rid, kind = _resource(resource, kind)
         service = self._raw.documents if kind == DOCUMENT_TYPE else self._raw.agents
         return cast(dict[str, Any], await service.resources_copy_resource(rid, fields))
+
+    async def update(self, copy: dict[str, Any], *, confirm: bool = False) -> dict[str, Any]:
+        kind, record, rid = _copy(copy)
+        if kind == DOCUMENT_TYPE:
+            raise ValueError("a document type's copy is updated as a new version on its own page")
+        return cast(dict[str, Any], await self._raw.agents.resources_take_update(rid, record, {"confirm": confirm}))
+
+    async def remove(self, copy: dict[str, Any]) -> None:
+        kind, record, _ = _copy(copy)
+        service, op = _DELETES[kind]
+        await getattr(getattr(self._raw, service), op)(record)
 
 
 class AsyncUsage:
