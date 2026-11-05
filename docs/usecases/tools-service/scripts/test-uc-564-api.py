@@ -317,6 +317,13 @@ with ExitStack() as stack:
     maya = bearer(signed_in(api, "m.okafor@harborpine.example"), "team_ops")
     # Every agent publish in team_ops waits for review here, so the first request is still waiting at the second.
     policy = api.put("/v1/policies/publishReview", json={"value": {"agents": "always"}}, headers=priya)
+    # A policy change refuses every token issued before it (401 permissions_changed), as a role change does; each
+    # person signs in again, as the console renews.
+    sam = bearer(signed_in(api, "s.adeyemi@harborpine.example"), "team_security")
+    priya = bearer(signed_in(api, "p.shah@harborpine.example"), "team_ops")
+    james = bearer(signed_in(api, "j.richardson@harborpine.example"), "team_ops")
+    wanjiru = bearer(signed_in(api, "w.kamau@harborpine.example"), "team_platform")
+    maya = bearer(signed_in(api, "m.okafor@harborpine.example"), "team_ops")
     helper = data(chat.post("/v1/agents", json={"name": "Case desk", "role": "Finds cases"}, headers=james)) or {}
     first = (
         data(chat.patch(f"/v1/agents/{helper.get('id')}", json={"instructions": "Find cases."}, headers=james)) or {}
