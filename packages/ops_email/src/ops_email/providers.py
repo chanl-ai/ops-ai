@@ -7,8 +7,6 @@ mailbox records, each read by its own provider, never a setting."""
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-
 import httpx
 
 from ops_service_kit.settings import Settings
@@ -23,8 +21,6 @@ from .outbound import (
     UnconfiguredSender,
 )
 
-SecretRead = Callable[[str], Awaitable[str]]
-
 
 class EmailProviders:
     def __init__(
@@ -32,11 +28,8 @@ class EmailProviders:
         settings: Settings,
         *,
         transport: httpx.AsyncBaseTransport | None = None,
-        secret: SecretRead | None = None,
     ) -> None:
-        """`secret` reads a Secrets-page secret by name; only tools-service, which holds them, passes one."""
         self.settings = settings
-        self._secret = secret
         self._clients: list[httpx.AsyncClient] = []
         self._transport = transport
         self._graph: tuple[httpx.AsyncClient, GraphToken] | None = None
@@ -51,10 +44,8 @@ class EmailProviders:
         self._sender = self._build_sender()
 
     @classmethod
-    def from_settings(
-        cls, settings: Settings, *, transport: httpx.AsyncBaseTransport | None = None, secret: SecretRead | None = None
-    ) -> EmailProviders:
-        return cls(settings, transport=transport, secret=secret)
+    def from_settings(cls, settings: Settings, *, transport: httpx.AsyncBaseTransport | None = None) -> EmailProviders:
+        return cls(settings, transport=transport)
 
     def _client(self, base_url: str) -> httpx.AsyncClient:
         client = httpx.AsyncClient(base_url=base_url, timeout=30, transport=self._transport)
@@ -88,17 +79,6 @@ class EmailProviders:
         if s.mail_provider == "smtp":
             if not s.smtp_host:
                 raise MailNotConfiguredError("mail_provider 'smtp' needs OPS_SMTP_HOST.")
-            source: Callable[[], Awaitable[str]] | None = None
-            if s.smtp_password_secret:
-                if self._secret is None:
-                    raise MailNotConfiguredError("smtp_password_secret is read by tools-service, which holds secrets.")
-                name, read = s.smtp_password_secret, self._secret
-
-                async def from_secret() -> str:
-                    return await read(name)
-
-                source = from_secret
-
             return SmtpSender(
                 s.smtp_host,
                 s.smtp_port,
@@ -106,7 +86,6 @@ class EmailProviders:
                 username=s.smtp_username,
                 password=s.smtp_password.get_secret_value() if s.smtp_password else None,
                 starttls=s.smtp_starttls,
-                password_source=source,
             )
         if s.mail_provider == "resend":
             if not s.resend_api_key:

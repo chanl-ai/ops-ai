@@ -123,11 +123,9 @@ class Settings(BaseSettings):
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_username: str | None = None
+    # The install's own SMTP account: system-wide. A team sends from its own mailbox records, each with its secret.
     smtp_password: SecretStr | None = None
     smtp_starttls: bool = True
-    # A secret on the Secrets page holding the SMTP password, read by tools-service at each send; used in place of
-    # smtp_password when set.
-    smtp_password_secret: str | None = None
     # How long one IDLE on an IMAP mailbox waits before the listener asks again.
     email_idle_seconds: float = 25.0
     resend_url: str = "https://api.resend.com"
