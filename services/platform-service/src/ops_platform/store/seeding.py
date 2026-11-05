@@ -56,7 +56,8 @@ async def write_seed(
             )
             .on_conflict_do_nothing(index_elements=[tenants.c.id])
         )
-        if security_team in {str(t["id"]) for t in data.get("teams") or []}:
+        seeded: list[dict[str, Any]] = data.get("teams") or []
+        if security_team in {str(t["id"]) for t in seeded}:
             # The workspace's record names its Security team; a workspace that already names one keeps it.
             await c.execute(
                 tenants.update()
