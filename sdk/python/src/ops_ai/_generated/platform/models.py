@@ -294,6 +294,10 @@ class PermissionOut(TypedDict, closed=True):
     scope: Literal["all", "own"]
 
 
+class PermissionVersionOut(TypedDict, closed=True):
+    permissionVersion: int
+
+
 class PersonName(TypedDict, closed=True):
     email: str
     name: str
@@ -630,6 +634,11 @@ class EnvelopeInvitePreview(TypedDict, closed=True):
 
 class EnvelopeOptionsPage(TypedDict, closed=True):
     data: OptionsPage
+    success: Literal[True]
+
+
+class EnvelopePermissionVersionOut(TypedDict, closed=True):
+    data: PermissionVersionOut
     success: Literal[True]
 
 

@@ -96,6 +96,7 @@ from .schemas import (
     OptionsIn,
     OptionsOut,
     PermissionsOut,
+    PermissionVersionOut,
     PersonName,
     PolicyIn,
     PolicyOut,
@@ -1055,6 +1056,19 @@ def create_internal_app(store: IdentityStore, *, services: ServiceAuth, signer: 
     )
     async def introspect(body: Introspect) -> Any:  # pyright: ignore[reportUnusedFunction]
         return ok(await keys.introspect(body.api_key))
+
+    @app.get(
+        "/v1/permission-version",
+        tags=["auth"],
+        response_model=Envelope[PermissionVersionOut],
+        responses=ERRORS,
+    )
+    async def permission_version(caller: Annotated[Caller, Depends(services.principal)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """The tenant's permission version, which each service compares a person's token with so a role change decides
+        on the next request. The service token names the tenant, never the request (I1)."""
+        if not caller.tenant_id:
+            raise Forbidden("The service token names no tenant.", code="tenant_required")
+        return ok({"permissionVersion": await store.permission_version(caller.tenant_id)})
 
     if signer is not None:
         acting = ActingFor(store, signer)

@@ -45,6 +45,8 @@ class Platform:
         self.jwks_calls = 0
         self.introspect_calls = 0
         self.api_keys: dict[str, dict[str, Any]] = {}
+        self.versions: dict[str, int] = {}
+        self.version_calls = 0
 
     async def jwks(self) -> dict[str, Any]:
         self.jwks_calls += 1
@@ -53,6 +55,12 @@ class Platform:
     async def introspect(self, api_key: str) -> dict[str, Any] | None:
         self.introspect_calls += 1
         return self.api_keys.get(api_key)
+
+    async def current_version(self, tenant_id: str) -> int | None:
+        self.version_calls += 1
+        if tenant_id not in self.versions:
+            raise httpx.ConnectError("platform-service is down")
+        return self.versions[tenant_id]
 
 
 def key_principal(scopes: list[str]) -> dict[str, Any]:
@@ -235,3 +243,29 @@ async def test_a_token_whose_kind_is_not_person_is_401_on_a_public_route(kind: s
     app = app_for(identity(Platform()))
     r = await call(app, "GET", "/v1/things", **bearer(person(kind=kind, typ=kind)))
     assert r.status_code == 401, r.text
+
+
+async def test_a_token_issued_before_a_permission_change_is_401_until_refreshed() -> None:
+    platform = Platform()
+    platform.versions["ten_a"] = 4
+    app = app_for(identity(platform, current_version=platform.current_version, version_cache_s=0))
+    assert (await call(app, "GET", "/v1/things", **bearer(person(perm_version=4)))).status_code == 200
+    platform.versions["ten_a"] = 5
+    r = await call(app, "GET", "/v1/things", **bearer(person(perm_version=4)))
+    assert r.status_code == 401 and r.json()["error"]["code"] == "permissions_changed"
+    assert (await call(app, "GET", "/v1/things", **bearer(person(perm_version=5)))).status_code == 200
+
+
+async def test_the_current_version_is_asked_once_per_tenant_within_the_cache_window() -> None:
+    platform = Platform()
+    platform.versions["ten_a"] = 4
+    app = app_for(identity(platform, current_version=platform.current_version, version_cache_s=60))
+    for _ in range(3):
+        assert (await call(app, "GET", "/v1/things", **bearer(person(perm_version=4)))).status_code == 200
+    assert platform.version_calls == 1
+
+
+async def test_a_platform_that_cannot_answer_leaves_the_token_deciding() -> None:
+    platform = Platform()
+    app = app_for(identity(platform, current_version=platform.current_version, version_cache_s=0))
+    assert (await call(app, "GET", "/v1/things", **bearer(person(perm_version=4)))).status_code == 200

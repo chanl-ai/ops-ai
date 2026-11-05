@@ -12,13 +12,13 @@ import pytest
 import sqlalchemy as sa
 
 from ops_access import ACTIONS, AREAS, BUILTIN_ROLES, can
-from ops_identity import Identity
+from ops_identity import Identity, http_current_version, mint_service_token
 from ops_platform.store.roles import mirror_membership
 from ops_platform.store.tables import members, role_assignments
-from ops_service_kit.errors import Forbidden
+from ops_service_kit.errors import Forbidden, Unauthorized
 from ops_service_kit.ids import new_id, now_iso
 
-from .conftest import Person, Platform
+from .conftest import CALLER, Person, Platform
 
 
 async def bearer(platform: Platform, p: Person) -> dict[str, str]:
@@ -208,14 +208,20 @@ async def test_a_platform_token_decides_through_ops_access(platform: Platform) -
     assert e.value.code == "role_required"
 
 
-async def _principal(platform: Platform, h: dict[str, str], team: str) -> Any:
+async def _principal(platform: Platform, h: dict[str, str], team: str, *, live: bool = False) -> Any:
+    """`live`: the service asks platform's internal app for the tenant's permission version, as a deployed one does."""
+
     async def jwks() -> dict[str, Any]:
         return {"keys": [platform.signer.public_jwk()]}
 
     async def no_keys(_key: str) -> dict[str, Any] | None:
         return None
 
-    identity = Identity(audience="agents", jwks=jwks, introspect=no_keys)
+    def service_token(tenant: str) -> str:
+        return mint_service_token(CALLER, service="agents", audience="platform", tenant_id=tenant)
+
+    current = http_current_version(platform.internal, "http://platform-internal", service_token) if live else None
+    identity = Identity(audience="agents", jwks=jwks, introspect=no_keys, current_version=current, version_cache_s=0)
     return await identity.principal(_Post(), authorization=h["Authorization"], x_team_id=team)  # pyright: ignore[reportArgumentType]
 
 
@@ -267,3 +273,26 @@ async def test_only_a_workspace_admin_edits_a_role_and_admin_keeps_every_cell(pl
     bad = [{"area": "agents", "action": "fly", "scope": "all"}]
     unknown = await platform.public.put("/v1/roles/viewer/permissions", headers=th, json={"permissions": bad})
     assert unknown.status_code in (400, 422), unknown.text
+
+
+async def test_a_token_from_before_a_role_edit_is_refused_by_a_service_on_its_next_request(platform: Platform) -> None:
+    """The real seam: a service resolving a token asks platform for the tenant's permission version, so a role edit
+    applies on the next request instead of at the token's expiry; the refreshed token carries the edited cell."""
+    viewer = await platform.person(roles=("viewer",))
+    team = next(iter(viewer.teams))
+    owner = await platform.person(roles=("admin",), tenant_id=viewer.tenant_id)
+    await grant(platform, owner, "*", "admin")
+    ah = await bearer(platform, owner)
+    old = await bearer(platform, viewer)
+    assert (await _principal(platform, old, team, live=True)).sub == viewer.user_id
+    seed = next(r for r in BUILTIN_ROLES if r.id == "viewer").grants
+    cells = [{"area": a, "action": x, "scope": s} for a, x, s in seed] + [
+        {"area": "agents", "action": "publish", "scope": "all"}
+    ]
+    r = await platform.public.put("/v1/roles/viewer/permissions", headers=ah, json={"permissions": cells})
+    assert r.status_code == 200, r.text
+    with pytest.raises(Unauthorized) as refused:
+        await _principal(platform, old, team, live=True)
+    assert refused.value.code == "permissions_changed"
+    who = await _principal(platform, await bearer(platform, viewer), team, live=True)
+    assert can(who, "agents", "publish", team=team) == "all"

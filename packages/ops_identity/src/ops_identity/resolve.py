@@ -27,6 +27,7 @@ from fastapi import Header, Request
 
 from ops_policy import Ed25519Signer, Ed25519Verifier, TokenError, header_of, mint, verify
 from ops_service_kit.errors import Forbidden, Unauthorized, ValidationFailed
+from ops_service_kit.logging import get_logger
 
 from .acting_for import ActingForPerson, person_of
 from .acting_for import refused as acting_for_refused
@@ -34,8 +35,12 @@ from .jwks import JwksCache, JwksFetch
 from .principal import Principal
 
 Introspect = Callable[[str], Awaitable[dict[str, Any] | None]]
+# The tenant's permission version now, from platform-service; it rises with every role, grid, assignment, membership
+# or policy change.
+CurrentVersion = Callable[[str], Awaitable[int | None]]
 READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 KEY_PREFIX = "ok_"
+log = get_logger(__name__)
 
 
 def _refused() -> Unauthorized:
@@ -62,6 +67,8 @@ class Identity:
         dev_user: dict[str, Any] | None = None,
         services: ServiceAuth | None = None,
         key_cache_s: float = 30.0,
+        current_version: CurrentVersion | None = None,
+        version_cache_s: float = 1.0,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if not audience:
@@ -76,6 +83,11 @@ class Identity:
         self.clock = clock
         # Keyed by the key's SHA-256, so no key text is held in memory beyond the request.
         self._key_cache: dict[str, tuple[float, Principal]] = {}
+        # A person's token carries their roles and grids as of `perm_version`; a token older than the tenant's
+        # version is refused, so the client refreshes and every role change decides on the next request.
+        self.current_version = current_version
+        self.version_cache_s = version_cache_s
+        self._versions: dict[str, tuple[float, int]] = {}
 
     async def principal(
         self,
@@ -164,6 +176,7 @@ class Identity:
         version = claims.get("perm_version")
         policies: dict[str, Any] = claims.get("policies") or {}
         grids_claim: dict[str, Any] = claims.get("grids") or {}
+        await self._require_current(str(claims["tenant_id"]), version if isinstance(version, int) else None)
         return Principal(
             kind="person",
             sub=str(claims["sub"]),
@@ -181,6 +194,28 @@ class Identity:
             policies={str(k): v for k, v in policies.items()},
             security_team=str(claims["security_team"]) if claims.get("security_team") else None,
         )
+
+    async def _require_current(self, tenant_id: str, version: int | None) -> None:
+        if self.current_version is None:
+            return
+        now = self.clock()
+        cached = self._versions.get(tenant_id)
+        current = cached[1] if cached is not None else None
+        if cached is None or cached[0] <= now:
+            try:
+                found = await self.current_version(tenant_id)
+            except Exception as e:
+                # platform-service unreachable: the last version seen, else the token, decides.
+                log.warning("permission version unavailable", tenant=tenant_id, error=type(e).__name__)
+                found = None
+            if found is not None:
+                current = found
+                self._versions[tenant_id] = (now + self.version_cache_s, found)
+        if current is not None and (version is None or version < current):
+            raise Unauthorized(
+                "Your roles or permissions changed since this token was issued. Refresh it or sign in again.",
+                code="permissions_changed",
+            )
 
     async def _from_key(self, api_key: str, team: str | None) -> Principal:
         digest = hashlib.sha256(api_key.encode()).hexdigest()
