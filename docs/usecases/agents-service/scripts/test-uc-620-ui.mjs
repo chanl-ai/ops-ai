@@ -82,6 +82,24 @@ await withUiStack(
         check('10 the message links the file into Files, where it is listed as a chat attachment', /^\/files\/fil_/.test(href ?? '') && opened && /Chat attachment/.test(listed), { href, opened, listed });
       });
 
+      await step('12 the file cited in the reply opens in Files from its source chip and its citation', async () => {
+        const opens = async (open) => {
+          await page.goto(`${consoleUrl}/chat/${tid}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await page.getByText('is Marcus Bell, held for 3,250.00').last().waitFor({ timeout: 60_000 });
+          await open();
+          const moved = await page.waitForURL((u) => u.pathname.startsWith('/files/fil_'), { timeout: 15_000 }).then(() => true, () => false);
+          const missing = await page.getByText(/not found/i).first().isVisible().catch(() => false);
+          const shown = moved && (await page.getByText(NOTICE).first().waitFor({ timeout: 60_000 }).then(() => true, () => false));
+          return { moved, shown, missing, url: page.url() };
+        };
+        const chip = await opens(() => page.getByLabel(`Open ${NOTICE}`).first().click());
+        const cite = await opens(async () => {
+          await page.getByRole('button', { name: new RegExp(`^Citation 1: ${NOTICE.replace('.', '\\.')}`) }).last().click();
+          await page.getByRole('dialog').getByRole('link', { name: 'Open in Files' }).click();
+        });
+        check('12 the file cited in the reply opens in Files from its source chip and its citation', [chip, cite].every((o) => o.moved && o.shown && !o.missing), { chip, cite });
+      });
+
       await step('11 a type chat cannot read is refused on the chip in plain words', async () => {
         await page.goto(`${consoleUrl}/chat/${tid}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.locator('#chat-attach').setInputFiles({ name: 'photo.png', mimeType: 'image/png', buffer: Buffer.from('\x89PNG\r\n\x1a\n') });

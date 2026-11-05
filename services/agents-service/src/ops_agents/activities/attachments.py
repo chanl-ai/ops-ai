@@ -12,6 +12,8 @@ from ops_agent_kernel.types import Passage
 
 # The attached text one turn may read, across every file in the thread; a file past it says so in the reply.
 TURN_TEXT_CHARS = 24_000
+# The knowledge id an attached file's passages carry: a citation of one names a Files file, not a knowledge item.
+ATTACHMENT_KB = "attachment"
 # A page longer than this is cited in pieces, so one long page does not take the whole share.
 CHUNK_CHARS = 2_000
 
@@ -45,7 +47,7 @@ def passages(name: str, file_id: str, pages: list[Page], budget: int) -> tuple[l
         if budget - len(p.text) < 0:
             return out, True
         budget -= len(p.text)
-        out.append(Passage(file_id, name, p.section or name, "attached", p.text, "attachment", p.page))
+        out.append(Passage(file_id, name, p.section or name, "attached", p.text, ATTACHMENT_KB, p.page))
     return out, False
 
 
@@ -60,6 +62,6 @@ class WithAttachments:
     async def search(self, query: str, kb_ids: list[str], *, k: int) -> list[Passage]:
         words = {w for w in query.lower().split() if len(w) > 3}
         ranked = sorted(self.attached, key=lambda p: -sum(w in p.text.lower() for w in words))
-        bases = [i for i in kb_ids if i != "attachment"]
+        bases = [i for i in kb_ids if i != ATTACHMENT_KB]
         found = await self.inner.search(query, bases, k=k) if bases else []
         return [*ranked[:k], *found]

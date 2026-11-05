@@ -360,6 +360,8 @@ export interface Citation {
   page?: number;
   version: string;
   snippet: string;
+  /** Set when the passage is from a file attached in the conversation: the citation opens it in Files. */
+  fileId?: string;
   url?: string;
   precedenceNote?: string;
   /** Past its review-by date; still served, flagged wherever the citation shows. */

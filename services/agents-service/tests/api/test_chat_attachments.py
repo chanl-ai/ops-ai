@@ -68,6 +68,8 @@ async def test_an_attached_files_text_is_read_and_its_page_is_cited(
     _, events = await send(client, tid, {"content": ASK, "attachments": [file]})
     cited = next(e["citations"] for e in events if e["type"] == "citations")
     assert cited[0]["title"] == "fees.pdf" and cited[0]["page"] == 3, cited
+    # The citation names the file, so the console opens it in Files rather than as a knowledge item.
+    assert cited[0]["fileId"] == file["fileId"], cited
     assert "replacement debit card" in cited[0]["snippet"].lower()
     reply = events[-1]["message"]
     assert reply["citations"][0]["documentId"] == file["fileId"] and "[1]" in reply["content"]
