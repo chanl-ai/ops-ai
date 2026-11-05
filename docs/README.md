@@ -496,3 +496,4 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/agents-service/a-builder-validates-applies-and-test.md` | uc-623: A builder validates, applies and test-runs the three-node workflow |
 | `usecases/agents-service/a-builder-runs-the-two-composition.md` | uc-624: A builder runs the two composition Examples |
 | `usecases/tools-service/sign-in-return-any-window.md` | uc-625: Connect comes back Connected in any window, for every sign-in app |
+| `usecases/tools-service/apps-screens-for-each-role.md` | uc-626: Apps screens offer only what you may do, in plain words |

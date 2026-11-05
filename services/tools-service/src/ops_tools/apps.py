@@ -847,7 +847,7 @@ def _signs_in_with_client(conn: dict[str, Any]) -> bool:
 async def add_app_credential(apps: Apps, who: Caller, i: AppCredentialIn) -> dict[str, Any]:
     """The team's own OAuth client for one of its apps, with no account: its secret is sealed as the team's, marked
     as the credential's, and an account picks the credential when it is connected (credentialId)."""
-    apps.connections.check(who, "manage", what="app credentials")
+    apps.connections.check(who, "manage", what="auth configs")
     card = await apps.card(who, i.app)
     if card["kind"] not in ("plugin", "connection"):
         raise ValidationFailed(f"{card['name']} signs in with no OAuth app.", code="no_app_credential")
@@ -956,7 +956,7 @@ async def edit_app_credential(apps: Apps, who: Caller, credential_id: str, i: Ap
     """Edits the team's own app credential. A new client id, other permissions or other settings make every account
     signing in with it sign in again (their sign-ins were issued to the registration as it was): each is marked so,
     and the answer says how many. A plugin account's sign-in addresses are written again from the new settings."""
-    apps.connections.check(who, "manage", what="app credentials")
+    apps.connections.check(who, "manage", what="auth configs")
     if credential_id.startswith(OPS_AI):
         raise ValidationFailed("Ops AI's app is the install's; nothing on it is changed here.", code="ops_ai_app")
     store = apps.connections.store
@@ -1001,7 +1001,7 @@ async def remove_app_credential(
     """Deletes the team's own app credential with its client secret. While accounts sign in with it, the delete is
     refused naming them, unless `move` says where they go: another of the team's credentials of the same app
     (`move_to`), or Ops AI's app (`move_to` none, where the install has one). Moved accounts sign in again."""
-    apps.connections.check(who, "manage", what="app credentials")
+    apps.connections.check(who, "manage", what="auth configs")
     if credential_id.startswith(OPS_AI):
         raise ValidationFailed("Ops AI's app is the install's; it is not deleted here.", code="ops_ai_app")
     store = apps.connections.store
@@ -1054,7 +1054,7 @@ async def replace_credential_secret(apps: Apps, who: Caller, credential_id: str,
     """A new client secret for the team's own app credential, sealed as the team's; the client id, permissions and
     every account on it stay, and the next sign-in of each uses it. Ops AI's app is the install's, never changed
     here."""
-    apps.connections.check(who, "manage", what="app credentials")
+    apps.connections.check(who, "manage", what="auth configs")
     store = apps.connections.store
     cred = await store.credential(who.tenant_id, credential_id)
     if cred is None or cred["team_id"] != who.team.id:
@@ -1076,7 +1076,7 @@ Held = tuple[dict[str, Any] | None, dict[str, Any], list[dict[str, Any]]]
 async def _credentials(apps: Apps, who: Caller) -> list[Held]:
     """Each of the team's credentials with its app's card and its accounts, then Ops AI's app of each app whose
     accounts sign in with it; an app no longer listed is left out."""
-    apps.connections.check(who, "manage", what="app credentials")
+    apps.connections.check(who, "manage", what="auth configs")
     store = apps.connections.store
     cards = {str(c["id"]): c for c in await apps.cards(who)}
     creds = await store.team_credentials(who.tenant_id, who.team.id)

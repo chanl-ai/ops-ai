@@ -107,7 +107,7 @@ def _iso(at: datetime | None) -> str | None:
     return at.astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z") if at else None
 
 
-def connection_rights(p: Principal, action: str, *, security_team: str, what: str = "connections") -> None:
+def connection_rights(p: Principal, action: str, *, security_team: str, what: str = "the team's apps") -> None:
     """`can(connections, action)`: the one check every connection route runs, or Forbidden."""
     Access(security_team=security_team).can(p, "connections", action, what=what)
 
@@ -203,7 +203,7 @@ class ConnectionService:
 
     # ── Who may ───────────────────────────────────────────────────────────
 
-    def _can(self, who: Caller, action: str, what: str = "connections") -> None:
+    def _can(self, who: Caller, action: str, what: str = "the team's apps") -> None:
         if who.principal is None:
             return
         if action == OWN:
@@ -214,7 +214,7 @@ class ConnectionService:
             action = "view"
         connection_rights(who.principal, action, security_team=self.security_team, what=what)
 
-    def check(self, who: Caller, action: str, what: str = "connections") -> None:
+    def check(self, who: Caller, action: str, what: str = "the team's apps") -> None:
         """Refuses a caller who may not take `action` on the team's connections, by the same rights every route here
         reads; for an answer joined outside this service, such as the app credentials list."""
         self._can(who, action, what)

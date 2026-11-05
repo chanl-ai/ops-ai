@@ -131,7 +131,7 @@ def egress_router(store: EgressStore, *, security_team: str | None = None) -> AP
         """A Security admin's decision on a held host, sent by agents-service with its own token: a person
         decides in Human Tasks, never here. Approved lists the host, in the name of whoever approved it. The token must
         hold secrets_egress:manage, which only agents-service's scope cap allows (Settings.service_scopes)."""
-        Access(security_team=team).can(svc, "secrets_egress", "manage", what="the egress list")
+        Access(security_team=team).can(svc, "secrets_egress", "manage", what="the allowed hosts")
         host = _valid("host", body.host)
         if body.decision != "approved":
             return ok({"kind": "host", "value": host, "changed": False})

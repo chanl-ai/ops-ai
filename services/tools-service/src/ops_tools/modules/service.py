@@ -1124,7 +1124,7 @@ class ModuleService:
         return name not in await self.store.names(who.tenant_id, who.team.id)
 
     async def create(self, who: Caller, i: dict[str, Any]) -> dict[str, Any]:
-        _can(who, "tools", "create", what="tool modules", security_team=self.security_team)
+        _can(who, "tools", "create", what="tools", security_team=self.security_team)
         template = _provisioned(who, i)
         base = _kebab(i["name"])
         if not base:
@@ -1258,7 +1258,7 @@ class ModuleService:
 
     def _manages_egress(self, who: Caller) -> bool:
         try:
-            _can(who, "secrets_egress", "manage", what="the egress list", security_team=self.security_team)
+            _can(who, "secrets_egress", "manage", what="the allowed hosts", security_team=self.security_team)
         except Forbidden:
             return False
         return True
@@ -1292,7 +1292,7 @@ class ModuleService:
         return connection_base(conn) if conn else ""
 
     async def create_blank(self, who: Caller, i: dict[str, Any]) -> dict[str, Any]:
-        _can(who, "tools", "create", what="tool modules", security_team=self.security_team)
+        _can(who, "tools", "create", what="tools", security_team=self.security_team)
         template = _provisioned(who, i)
         name = _kebab(i["name"])
         if not i["display_name"].strip():
@@ -1329,7 +1329,7 @@ class ModuleService:
     # ── Editing ───────────────────────────────────────────────────────────
 
     async def update_details(self, who: Caller, module_id: str, patch: dict[str, Any]) -> dict[str, Any]:
-        _can(who, "tools", "edit", what="tool modules", security_team=self.security_team)
+        _can(who, "tools", "edit", what="tools", security_team=self.security_team)
         m = await self._changeable(who, module_id)
         if patch.get("display_name") is not None:
             if not patch["display_name"].strip():
@@ -1387,7 +1387,7 @@ class ModuleService:
             self._stage(m, changes)
 
     async def add_operation(self, who: Caller, module_id: str, h: dict[str, Any]) -> dict[str, Any]:
-        _can(who, "tools", "edit", what="tool modules", security_team=self.security_team)
+        _can(who, "tools", "edit", what="tools", security_team=self.security_team)
         m = await self._changeable(who, module_id)
         conn = await self.connections.get(who.tenant_id, m["connection_id"]) if m.get("connection_id") else None
         op, origin = self._http_operation(h, connection_base(conn) if conn else "")
@@ -1406,7 +1406,7 @@ class ModuleService:
         return await self._detail(await self._save(m), who.team, who)
 
     async def set_connection(self, who: Caller, module_id: str, connection_id: str | None) -> dict[str, Any]:
-        _can(who, "tools", "edit", what="tool modules", security_team=self.security_team)
+        _can(who, "tools", "edit", what="tools", security_team=self.security_team)
         m = await self._changeable(who, module_id)
         if connection_id is None:
             if m["status"] != "draft":
@@ -1430,7 +1430,7 @@ class ModuleService:
         return list(dict.fromkeys(a["workflow_name"] for a in self._approvals(m) if a["status"] == "approved"))
 
     async def remove(self, who: Caller, module_id: str) -> None:
-        _can(who, "tools", "delete", what="tool modules", security_team=self.security_team)
+        _can(who, "tools", "delete", what="tools", security_team=self.security_team)
         m = await self._changeable(who, module_id, "delete")
         holders = self._holders(m)
         if holders:
@@ -1439,7 +1439,7 @@ class ModuleService:
         await self.store.delete(who.tenant_id, module_id)
 
     async def bulk_remove(self, who: Caller, ids: list[str]) -> dict[str, Any]:
-        _can(who, "tools", "delete", what="tool modules", security_team=self.security_team)
+        _can(who, "tools", "delete", what="tools", security_team=self.security_team)
         out: dict[str, Any] = {"updated": [], "skipped": []}
         for module_id in ids:
             m = await self.store.get(who.tenant_id, module_id)
@@ -1473,7 +1473,7 @@ class ModuleService:
         self, who: Caller, module_id: str, op_id: str, patch: dict[str, Any], fields: set[str]
     ) -> dict[str, Any]:
         """`fields` names the keys the caller sent, so `binding: null` (remove it) differs from leaving it out."""
-        _can(who, "tools", "edit", what="tool modules", security_team=self.security_team)
+        _can(who, "tools", "edit", what="tools", security_team=self.security_team)
         m = await self._changeable(who, module_id)
         o = next((x for x in m["operations"] if x["id"] == op_id), None)
         if o is None:
@@ -1667,7 +1667,7 @@ class ModuleService:
 
     async def add_function(self, who: Caller, module_id: str, f: dict[str, Any]) -> dict[str, Any]:
         """Adds a function to a code module."""
-        _can(who, "tools", "edit", what="tool modules", security_team=self.security_team)
+        _can(who, "tools", "edit", what="tools", security_team=self.security_team)
         m = await self._changeable(who, module_id)
         if kind_of(m) != "code" or m["connection_id"]:
             raise ValidationFailed(f"{m['display_name']} is not a code module; add its operations from its system.")
@@ -1862,7 +1862,7 @@ class ModuleService:
         return out
 
     async def publish(self, who: Caller, module_id: str, note: str) -> dict[str, Any]:
-        _can(who, "tools", "publish", what="tool modules", security_team=self.security_team)
+        _can(who, "tools", "publish", what="tools", security_team=self.security_team)
         m = await self._find(who, module_id)
         _not_a_plugin(m)
         reviewed_change = _differs_from_published(m)
@@ -1943,7 +1943,7 @@ class ModuleService:
         )
 
     async def discard(self, who: Caller, module_id: str) -> dict[str, Any]:
-        _can(who, "tools", "edit", what="tool modules", security_team=self.security_team)
+        _can(who, "tools", "edit", what="tools", security_team=self.security_team)
         m = await self._changeable(who, module_id)
         _refuse_during_review(m, "discard changes")
         if m["baseline"] is None:
@@ -1952,7 +1952,7 @@ class ModuleService:
         return await self._detail(await self._save(m), who.team, who)
 
     async def request_review(self, who: Caller, module_id: str, note: str) -> dict[str, Any]:
-        _can(who, "tools", "publish", what="tool modules", security_team=self.security_team)
+        _can(who, "tools", "publish", what="tools", security_team=self.security_team)
         m = await self._find(who, module_id)
         _not_a_plugin(m)
         if any(v["status"] == "in_review" for v in m["versions"]):
@@ -2016,7 +2016,7 @@ class ModuleService:
     # ── Workflow approvals ────────────────────────────────────────────────
 
     async def request_approval(self, who: Caller, module_id: str, i: dict[str, Any]) -> dict[str, Any]:
-        _can(who, "tools", "edit", what="tool modules", security_team=self.security_team)
+        _can(who, "tools", "edit", what="tools", security_team=self.security_team)
         m = await self._find(who, module_id)
         _not_a_plugin(m)
         if m["status"] == "draft":
@@ -2137,7 +2137,7 @@ class ModuleService:
             who,
             "tools",
             "decide",
-            what="this module approval",
+            what="this tool approval",
             security_team=self.security_team,
             requested_by=(a.get("requested_by_email"),),
         )
@@ -2150,7 +2150,7 @@ class ModuleService:
         return self._approval_out(a)
 
     async def revoke_approvals(self, who: Caller, module_id: str, ids: list[str], reason: str) -> dict[str, Any]:
-        _can(who, "tools", "decide", what="module approvals", security_team=self.security_team)
+        _can(who, "tools", "decide", what="tool approvals", security_team=self.security_team)
         m = await self._find(who, module_id)
         if not reason.strip():
             raise ValidationFailed("Give a reason.")
@@ -2186,7 +2186,7 @@ class ModuleService:
         if who.principal is not None and who.principal.kind == "api_key":
             # A key's tools.run is for the gateway's call path over MCP; the test console is a person's page.
             raise Forbidden("An API key runs tools over MCP, not the test console.", code="role_required")
-        _can(who, "tools", "run", what="tool modules", security_team=self.security_team)
+        _can(who, "tools", "run", what="tools", security_team=self.security_team)
         m = await self._find(who, module_id)
         o = next((x for x in m["operations"] if x["name"] == i["operation"]), None)
         if o is None:
@@ -2471,7 +2471,7 @@ class ModuleService:
         return {**result, "operations": ops}
 
     async def discover(self, who: Caller, source: dict[str, Any]) -> dict[str, Any]:
-        _can(who, "tools", "create", what="tool modules", security_team=self.security_team)
+        _can(who, "tools", "create", what="tools", security_team=self.security_team)
         return self._public(await self._discover(who, source))
 
     @staticmethod
@@ -2488,7 +2488,7 @@ class ModuleService:
     async def import_operations(self, who: Caller, module_id: str, i: dict[str, Any]) -> dict[str, Any]:
         """Appends the chosen operations as the source describes them now; the caller picks which, and confirms each
         one's access class, but never supplies their method, path, inputs or headers."""
-        _can(who, "tools", "create", what="tool modules", security_team=self.security_team)
+        _can(who, "tools", "create", what="tools", security_team=self.security_team)
         m = await self._changeable(who, module_id)
         chosen: list[dict[str, Any]] = i["operations"]
         if not chosen:

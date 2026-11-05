@@ -116,7 +116,7 @@ def mocks_router(mocks: MockStore, modules: ModuleStore, directory: Directory, *
     def _may_edit(who: Caller, m: dict[str, Any]) -> None:
         if who.principal is not None:
             Access(security_team=security_team).can(
-                who.principal, "tools", "edit", what="tool modules", protection=m.get("protection")
+                who.principal, "tools", "edit", what="tools", protection=m.get("protection")
             )
 
     def _checked(i: dict[str, Any], op: dict[str, Any]) -> None:
