@@ -47,7 +47,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 from fake_bank_https import private_address
-from fake_salesforce import AUDIENCE, ISSUER_ID, oauth_server
+from fake_salesforce import AUDIENCE, ISSUER_ID, oauth_server, with_username_claim
 from fake_salesforce import _serve as serve_https  # pyright: ignore[reportPrivateUsage]
 
 LOGIN_HOST = "login.multi.test"
@@ -298,6 +298,8 @@ class MultiAuth:
         from starlette.responses import JSONResponse, Response
 
         path = request.url.path
+        if path.endswith("/authorize") and request.method == "POST":
+            body = with_username_claim(body)
         if path.endswith("/authorize") and request.method == "GET":
             self.authorize_requests.append({k: v[0] for k, v in parse_qs(request.url.query).items()})
         if path.endswith("/token"):
