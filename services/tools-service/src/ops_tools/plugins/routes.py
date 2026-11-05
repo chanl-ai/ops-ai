@@ -483,12 +483,12 @@ def plugins_router(
     async def _update(who: Caller, app_id: str) -> tuple[Plugin, dict[str, Any]]:
         """The plugin and the team's binding, for a team admin, with plugin_updates on (404 otherwise)."""
         if not host.versions:
-            raise NotFound("Plugin updates are off for this install")
+            raise NotFound("Plugin updates are off for this install.")
         accounts.manages(who)
         plugin = accounts.plugin(app_id)
         b = await host.bindings.get(who.tenant_id, who.team.id, plugin.manifest.id)
         if b is None:
-            raise NotFound(f"{plugin.manifest.title} is not turned on for this team")
+            raise NotFound(f"{plugin.manifest.title} is not turned on for this team.")
         return plugin, b
 
     def _review(plugin: Plugin, b: dict[str, Any]) -> dict[str, Any]:
