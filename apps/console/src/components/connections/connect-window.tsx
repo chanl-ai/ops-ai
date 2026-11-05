@@ -233,12 +233,11 @@ export function ConnectWindow({
             <p className="text-sm text-muted-foreground">{client ? `Your ${card.name} app asks for:` : `Ops AI’s ${card.name} app gets access to:`}</p>
             <div className="flex flex-wrap gap-1.5">
               {plugin.scopes.map((s) => (
-                <Badge key={s} variant="outline" className="font-mono">
-                  {s}
+                <Badge key={s.id} variant="outline" title={s.id}>
+                  {s.label}
                 </Badge>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">Asking for more later needs another sign-in.</p>
           </div>
         )}
 

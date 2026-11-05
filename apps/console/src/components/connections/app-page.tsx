@@ -2,8 +2,8 @@
 
 import * as React from 'react';
 import { AppCredentialPicker } from '@/components/connections/app-credential-picker';
+import { AppCredentialsPanel } from '@/components/connections/app-credentials-panel';
 import { Bot, ChevronDown, CircleCheck, ExternalLink, FileText, FlaskConical, KeyRound, Plug, Plus, RefreshCw, Sparkles, Users, Workflow } from 'lucide-react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -167,7 +167,7 @@ export function AppPageView({ appId }: { appId: string }) {
     ...(builtIn ? [] : ([['accounts', 'Accounts'], ['people', 'People']] as [string, string][])),
     ['tools', 'Tools'],
     ['resources', 'Resources'],
-    ['secrets', 'Secrets'],
+    ['credentials', 'Credentials'],
     ['logs', 'Logs'],
     ['settings', 'Settings'],
   ];
@@ -242,8 +242,8 @@ export function AppPageView({ appId }: { appId: string }) {
         <TabsContent value="resources">
           <ResourcesTab app={data} />
         </TabsContent>
-        <TabsContent value="secrets">
-          <SecretsTab app={data} onReconnect={() => setDialog({ mode: 'edit' })} />
+        <TabsContent value="credentials">
+          <CredentialsTab app={data} onReconnect={() => setDialog({ mode: 'edit' })} />
         </TabsContent>
         <TabsContent value="logs">
           {/* The same call log as Tool calls, fixed to this app's tools. */}
@@ -420,7 +420,7 @@ function AccountsTab({
     <Section title="Accounts" description="Calls use the default account unless a step names another." flush actions={actions}>
       {!conn || !accounts.length ? (
         <div className="p-4" data-testid="app-not-connected">
-          <ListEmpty icon={Plug} noun="accounts" filtered={false} description={`${card.name} has no account yet. Calls stay off until one is connected.`} />
+          <ListEmpty icon={Plug} noun="accounts" filtered={false} description={`${card.name} has no account yet.`} />
         </div>
       ) : (
         <Rows testId="app-accounts">
@@ -734,44 +734,46 @@ function ResourcesTab({ app }: { app: AppData }) {
 }
 
 /**
- * Secrets: which app credential the app signs in with (Ops AI's app, or the team's own under Credentials) and the
- * secrets its tools use. Values are never shown.
+ * Credentials: the app's own credentials (the team's own apps and Ops AI's app it signs in with), editable here by a
+ * team admin, then the keys the default account holds. Values are never shown, only a secret's last four characters.
  */
-function SecretsTab({ app, onReconnect }: { app: AppData; onReconnect: () => void }) {
+function CredentialsTab({ app, onReconnect }: { app: AppData; onReconnect: () => void }) {
   const conn = app.connection;
   const credential = app.card.credential;
   const sealed = Object.entries(conn?.secrets ?? {}).filter(([field, v]) => v.set && field !== 'clientSecret');
   return (
-    <Section title="Secrets" description="The app credential it signs in with, and the secrets its tools use. Values are never shown." flush>
-      <Rows testId="app-secrets">
-        {credential && (
-          <Row
-            wrap
-            leading={<KeyRound className="size-4 text-muted-foreground" />}
-            title={<span data-testid="app-credential-name">{`App credential · ${credential.type === 'ops_ai' ? 'Ops AI’s app' : credential.name}`}</span>}
-            description={conn?.signedIn ? `Signed in${conn.signedIn.account ? ` as ${conn.signedIn.account}` : ''} · refreshes on use` : 'Not signed in yet'}
-            trailing={
-              <Button size="sm" variant="ghost" asChild>
-                <Link href="/integrations/credentials" data-testid="app-credential-link">
-                  Credentials
-                </Link>
-              </Button>
-            }
-          />
-        )}
-        {sealed.map(([name]) => (
-          <Row key={name} leading={<KeyRound className="size-4 text-muted-foreground" />} title={name} description="Sealed" />
-        ))}
-        {!credential && !sealed.length && <Row title="Nothing saved yet" />}
-      </Rows>
-      {conn?.mayManage && (credential || sealed.length > 0) && (
-        <div className="border-t p-3">
-          <Button size="sm" variant="outline" onClick={onReconnect}>
-            Replace keys or sign in again
-          </Button>
-        </div>
+    <div className="flex flex-col gap-4" data-testid="app-credentials-tab">
+      {credential && app.card.mayManage && <AppCredentialsPanel app={app.card.id} />}
+      {credential && !app.card.mayManage && (
+        <Section title="App credential" flush>
+          <Rows>
+            <Row
+              wrap
+              leading={<KeyRound className="size-4 text-muted-foreground" />}
+              title={<span data-testid="app-credential-name">{credential.type === 'ops_ai' ? 'Ops AI’s app' : credential.name}</span>}
+              description="Only a team admin changes the app it signs in with."
+            />
+          </Rows>
+        </Section>
       )}
-    </Section>
+      {(sealed.length > 0 || !credential) && (
+        <Section title="Keys" description="The keys the default account holds." flush>
+          <Rows testId="app-secrets">
+            {sealed.map(([name]) => (
+              <Row key={name} leading={<KeyRound className="size-4 text-muted-foreground" />} title={name} description="Sealed" />
+            ))}
+            {!sealed.length && <Row title="Nothing saved yet" />}
+          </Rows>
+          {conn?.mayManage && (
+            <div className="border-t p-3">
+              <Button size="sm" variant="outline" onClick={onReconnect} data-testid="app-keys-replace">
+                Replace keys
+              </Button>
+            </div>
+          )}
+        </Section>
+      )}
+    </div>
   );
 }
 
@@ -851,7 +853,7 @@ function SettingsTab({ app, kinds, onSetUp }: { app: AppData; kinds?: Kinds; onS
           </CollapsibleContent>
         </Collapsible>
       )}
-      <Section title="Keys" description="The default account’s settings and keys. Each account keeps its own." flush>
+      <Section title="Keys" description="The default account’s settings and keys." flush>
         <Rows testId="app-keys">
           <Row
             wrap

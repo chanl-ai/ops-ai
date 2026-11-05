@@ -5,7 +5,7 @@ Status: draft. Id: `uc-607`. Service: `console`. Layers: api, sdk, cli, ui.
 Connections was a grid of systems and one large dialog, so connecting an app took many fields and a person could not
 see whether they were signed in. Connections is now a catalog of apps: a plugin connects in one
 Connect window, and each app has its own page with its accounts, the person's own sign-in, and tabs for
-Tools, Skills, Sign-in and secrets, Usage and Settings. The catalog reads `GET /v1/apps` and the page reads
+Tools, Resources, Credentials, Logs and Settings. The catalog reads `GET /v1/apps` and the page reads
 `GET /v1/apps/{id}`, each already joined, so the console never joins lists itself.
 
 The walk runs on its own stack with the test plugins of `services/tools-service/tests/plugin_kinds` and the fake
@@ -28,7 +28,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | S14 | One Connect window: Ops AI's app or the team's own, the access asked for, then Authorize; the sign-in window opens at once; a refused sign-in shows in both windows and Authorize works again; an app turned on again continues with its app credential | ui | 3 | 3 |
 | S3 | A person presses Connect my account, allows access, and the page reads Connected as their account; a tool the agent then calls runs with it, shown on Usage | ui | 5-7 | 7 |
 | S4 | Ops AI's own tools show as Built in apps that open the page managing them | ui | 8 | 8 |
-| S5 | The app's tabs show its tools by title, its sign-ins with no secret, and its Settings with the one sign-in switch and the default account's keys | ui | 9 | 9 |
+| S5 | The app's tabs show its tools by title, its credentials with no secret, and its Settings with the one sign-in switch and the default account's keys | ui | 9 | 9 |
 | S6 | An admin connects another account of the app under its own name; both are listed and the first stays the default | ui | 11 | 11 |
 | S7 | A call naming an account runs with it, a call naming none with the default, and an unknown name is refused | ui | 12 | 12 |
 | S8 | A person signed in to two accounts reads with their newest, and Make my default picks the other | ui | 13 | 13 |
@@ -61,7 +61,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | 6 | He presses it and allows access as james.person | the page reads Connected as james.person |
 | 7 | He asks the agent in chat for a record, then opens the app's Logs tab | the chat answers with the record read as james.person; Logs lists Read a record as James, Succeeded |
 | 8 | Priya opens Connections | each Built in card present opens its managing page (Knowledge bases at /knowledge, Mailboxes at /channels/email) |
-| 9 | Priya opens Tools, Sign-in and secrets and Settings | Read a record with its name; the team account's sign-in with no secret on the page; the switch and the Keys row, Working |
+| 9 | Priya opens Tools, Credentials and Settings | Read a record with its name; Ops AI's app listed with no secret on the page; the switch and the Keys row, Working |
 | 11 | Priya presses Connect another account, which opens the Connect window with its name showing, names it EU desk, presses Authorize and allows access as harbor.eu | Accounts lists Person desk (Default) and EU desk |
 | 12 | A run with nobody behind it calls Read a record naming EU desk, then naming nothing, then naming Nowhere desk | The system reads as harbor.eu, then harbor.ops; the third is refused 404 ACCOUNT_NOT_FOUND |
 | 13 | James connects his own EU desk account (james.eu) and asks the agent for a record; then presses Make my default on Person desk and asks again | The first read is as james.eu, his newest sign-in; the second as james.person |

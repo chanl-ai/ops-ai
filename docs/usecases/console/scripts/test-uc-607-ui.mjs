@@ -590,7 +590,7 @@ try {
           );
         }, page);
 
-        await step('9 the app page has the frame’s Accounts and tabs; Tools by title, Secrets with no secret, Settings with the switch and the default account’s keys', async () => {
+        await step('9 the app page has the frame’s Accounts and tabs; Tools by title, Credentials with no secret, Settings with the switch and the default account’s keys', async () => {
           await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await page.getByTestId('app-accounts').waitFor({ timeout: 60_000 });
           const head = ((await page.locator('main').innerText()) ?? '').replace(/\s+/g, ' ');
@@ -603,10 +603,10 @@ try {
           await page.getByTestId('app-tab-resources').click();
           await page.getByTestId('app-skills-none').waitFor({ timeout: 30_000 });
           await shoot(page, 'app-resources');
-          await page.getByTestId('app-tab-secrets').click();
-          const secrets = (await page.getByTestId('app-secrets').innerText()).replace(/\s+/g, ' ');
-          const credentialLink = await page.getByTestId('app-credential-link').getAttribute('href').catch(() => null);
-          await shoot(page, 'app-secrets');
+          await page.getByTestId('app-tab-credentials').click();
+          await page.getByTestId('app-credentials-panel').waitFor({ timeout: 30_000 });
+          const credentials = (await page.getByTestId('app-credentials-tab').innerText()).replace(/\s+/g, ' ');
+          await shoot(page, 'app-credentials');
           await page.getByTestId('app-tab-settings').click();
           await page.getByTestId('app-keys').waitFor({ timeout: 30_000 });
           const everyone = await page.getByTestId('app-everyone').getAttribute('aria-checked');
@@ -616,10 +616,10 @@ try {
           await shoot(page, 'app-settings');
           const html = await page.content();
           check(
-            '9 the app page has the frame’s Accounts and tabs; Tools by title, Secrets with no secret, Settings with the switch and the default account’s keys',
-            tabs.join() === 'Accounts,People,Tools,Resources,Secrets,Logs,Settings' && /Calls use the default account unless a step names another/.test(head) && !/\bPlugin\b/.test(head) &&
-              /Ticket desk/.test(usedBy) && /harbor\.ops/.test(secrets) && /App credential · Ops AI’s app/.test(secrets) && credentialLink === '/integrations/credentials' && everyone === 'true' && /Person desk/.test(keys) && /Working/.test(keys) && !/Production/.test(keys) && !html.includes(fake.info.clients['multi-app']),
-            { tabs, usedBy, secrets, credentialLink, everyone, keys },
+            '9 the app page has the frame’s Accounts and tabs; Tools by title, Credentials with no secret, Settings with the switch and the default account’s keys',
+            tabs.join() === 'Accounts,People,Tools,Resources,Credentials,Logs,Settings' && /Calls use the default account unless a step names another/.test(head) && !/\bPlugin\b/.test(head) &&
+              /Ticket desk/.test(usedBy) && /Ops AI’s app/.test(credentials) && /Kept by Ops AI/.test(credentials) && everyone === 'true' && /Person desk/.test(keys) && /Working/.test(keys) && !/Production/.test(keys) && !html.includes(fake.info.clients['multi-app']),
+            { tabs, usedBy, credentials, everyone, keys },
           );
         }, page);
 
