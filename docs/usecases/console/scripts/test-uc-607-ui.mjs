@@ -624,7 +624,7 @@ try {
           check(
             '9 the app page has Auth configs and the tabs; Tools by title, Ops AI’s config with no Edit or Delete, Settings with the switch and the default account’s keys',
             tabs.join() === 'Auth configs,Tools,Resources,Logs,Settings' && /team sign-in/.test(head) && !/\bPlugin\b/.test(head) &&
-              /Ticket desk/.test(usedBy) && /Ops AI/.test(credentials) && /Built in/.test(credentials) && /Kept by Ops AI/.test(credentials) && builtInEditable === 0 && everyone === 'true' && /Person desk/.test(keys) && /Working/.test(keys) && !/Production/.test(keys) && !html.includes(fake.info.clients['multi-app']),
+              /Ticket desk/.test(usedBy) && /Ops AI/.test(credentials) && /Built in/.test(credentials) && /Kept by Ops AI/.test(credentials) && builtInEditable === 0 && everyone === 'true' && /Person desk/.test(keys) && /Connected/.test(keys) && /Last test passed/.test(keys) && !/Production/.test(keys) && !html.includes(fake.info.clients['multi-app']),
             { tabs, usedBy, credentials, everyone, keys },
           );
         }, page);
