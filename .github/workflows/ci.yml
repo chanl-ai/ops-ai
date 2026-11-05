@@ -156,9 +156,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      # The examples check reads YAML on the workspace's Python (uv run), which a bare runner's python3 lacks.
+      - uses: ./.github/actions/setup
       - run: make -s docs-verify
 
   full:
