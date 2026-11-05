@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Connect asks where you sign in",
+  "description": "Connecting Salesforce, or adding another of its accounts, asks where you sign in: login.salesforce.com, test.salesforce.com or your company's address. Add account starts from where the first account signs in.",
+  "tag": "improved"
+}

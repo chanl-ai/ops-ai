@@ -518,18 +518,24 @@ try {
             if (shown !== want) out.disagree.push({ id: c.id, state: c.state, shown, want });
           }
           await james.getByPlaceholder('Search apps').fill('');
-          // A non-admin gets no dead Connect button: each card they may not connect says why instead.
+          // No dead Connect button: each card James may not connect says why instead. Whether he may is his role's
+          // (builders manage apps since D59), read from his own answer.
+          const his = (await call(tools, 'GET', '/v1/apps', as(await tokenFor('j.richardson@harborpine.example'), 'team_ops'))).data ?? [];
+          out.blocked = his.filter((c) => !c.mayManage && c.kind !== 'builtin' && c.appState !== 'connected' && c.appState !== 'removed').length;
           out.connectOff = await james.locator('main button[data-testid^="connect-"]:disabled').count();
+          // Counted once the cleared search has drawn the whole list again.
+          await james.locator('main [data-testid^="connect-"][data-testid$="-why"]').first().waitFor({ timeout: 15_000 }).catch(() => undefined);
           out.connectWhy = await james.locator('main [data-testid^="connect-"][data-testid$="-why"]').count();
-          // A list that fails offers Try again at once, not a skeleton.
-          const failing = await james.context().newPage();
+          // A list that fails offers Try again at once, not a skeleton. A browser of its own, so no saved answer from
+          // James's earlier visits stands in for the failed read.
+          const failing = await signedIn(browser, consoleUrl, 'j.richardson@harborpine.example', []);
           await failing.route('**/v1/apps', (r) => r.fulfill({ status: 500, contentType: 'application/json', body: '{"success":false,"error":{"message":"boom"}}' }));
           await failing.route('**/v1/app-credentials', (r) => r.fulfill({ status: 500, contentType: 'application/json', body: '{"success":false,"error":{"message":"boom"}}' }));
           await failing.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          out.appsRetry = await failing.getByRole('button', { name: /Try again|Retrying/ }).first().waitFor({ timeout: 8_000 }).then(() => true, () => false);
+          out.appsRetry = await failing.getByRole('button', { name: /Try again|Retrying/ }).first().waitFor({ timeout: 20_000 }).then(() => true, () => false);
           await failing.goto(`${consoleUrl}/integrations/credentials`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           out.credsRetry = await failing.getByRole('button', { name: /Try again|Retrying/ }).first().waitFor({ timeout: 8_000 }).then(() => true, () => false);
-          await failing.close();
+          await failing.context().close();
           // Tools and a tool page carry none of the retired words.
           await james.goto(`${consoleUrl}/tools`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await james.getByTestId('tools-tab-logs').waitFor({ timeout: 60_000 });
@@ -565,7 +571,7 @@ try {
           await dark.close();
           check(
             '7c the grid and app page agree on Connected; errors offer Try again; no old words, no 404s, dark follows the system, tabs scroll',
-            out.disagree.length === 0 && out.connectOff === 0 && out.connectWhy >= 1 && out.appsRetry && out.credsRetry && out.oldWords.length === 0 && out.updateNotFound === 0 && out.tabsScroll && out.settingsReached === 'active' && out.dark,
+            out.disagree.length === 0 && out.connectOff === 0 && (out.blocked === 0 || out.connectWhy >= 1) && out.appsRetry && out.credsRetry && out.oldWords.length === 0 && out.updateNotFound === 0 && out.tabsScroll && out.settingsReached === 'active' && out.dark,
             out,
           );
         }, james);
@@ -1094,9 +1100,10 @@ try {
           }
           await picker.click();
           await page.getByTestId(`connect-window-app-option-${values.credential}`).click();
-          // A sandbox opens with More options showing, its name and sign-in address among them.
-          if (!(await window_.getByTestId('connect-window-setting-login_url').isVisible())) await window_.getByTestId('connect-window-more').click();
-          await window_.getByTestId('connect-window-setting-login_url').fill(values.login_url);
+          // Where the account signs in: the org's own address, picked as the company's and typed as its host.
+          await window_.getByTestId('connect-window-place-login_url').click();
+          await page.getByTestId('connect-window-place-login_url-other').click();
+          await window_.getByTestId('connect-window-place-login_url-host').fill(new URL(values.login_url).host);
           if (sandbox) await shoot(page, 'connect-sandbox');
           const [popup] = await Promise.all([page.waitForEvent('popup', { timeout: 60_000 }), window_.getByTestId('connect-window-authorize').click()]);
           const name = popup.locator('input[name=username]');

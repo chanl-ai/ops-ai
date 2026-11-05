@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { AppCredentialPicker } from '@/components/connections/app-credential-picker';
 import { appHref } from '@/components/connections/systems-grid';
 import { useSignInWindow } from '@/components/connections/sign-in';
+import { isSignInPlace, SignInPlace } from '@/components/connections/sign-in-place';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormTextField } from '@/components/shared/form-text-field';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -22,6 +23,7 @@ import {
   type AccountBody,
   type SystemCard,
   type TeamAppBody,
+  useAccountDetail,
   useAddAccount,
   useDeleteAccount,
   useSetTeamApp,
@@ -98,12 +100,20 @@ export function ConnectWindow({
   const [client, setClient] = React.useState<string | null>(credential !== undefined ? credential : held);
   // The plugin's own settings (Salesforce's sign-in address) when the app is first connected; kept after. A sandbox
   // asks the ones each account keeps its own, as the team's settings stay the app's.
-  const asked = reusing ? [] : (plugin?.settings ?? []).filter((x) => !x.locked && (!sandbox || x.perAccount));
-  const fields: KindField[] = asked.map((x) => ({ name: x.name, label: x.label, secret: x.secret, required: !x.default, advanced: Boolean(x.default), default: x.default }));
+  // Another account is asked where it signs in, as every Salesforce org has its own address; a turn-on again asks nothing.
+  const places = (plugin?.settings ?? []).filter(isSignInPlace);
+  const asked = reusing ? (another ? places : []) : (plugin?.settings ?? []).filter((x) => !x.locked && (!sandbox || x.perAccount));
+  const fields: KindField[] = asked.filter((x) => !isSignInPlace(x)).map((x) => ({ name: x.name, label: x.label, secret: x.secret, required: !x.default, advanced: Boolean(x.default), default: x.default }));
   const schema = schemaForFields(fields);
   const form = useForm<Record<string, string>>({
     defaultValues: { accountName: '', ...Object.fromEntries((plugin?.settings ?? []).map((x) => [x.name, x.default ?? ''])) },
   });
+  // Another account starts from where the app's default account signs in.
+  const first = useAccountDetail(another && card.connectionId ? { appId: card.id, accountId: card.connectionId } : null);
+  React.useEffect(() => {
+    const held = (first.data?.pluginSettings ?? {}) as Record<string, unknown>;
+    for (const x of places) if (typeof held[x.name] === 'string' && held[x.name]) form.setValue(x.name, String(held[x.name]));
+  }, [first.data]);
   // Settings with a default wait under More options, so the default path stays the app credential and Authorize.
   const needed = fields.filter((f) => !f.advanced);
   const tuned = fields.filter((f) => f.advanced);
@@ -267,6 +277,10 @@ export function ConnectWindow({
       <Form {...form}>
       <div className="flex min-w-0 flex-col gap-4">
         <AppCredentialPicker app={card.id} value={client} onChange={setClient} platform={managed && Boolean(plugin.platformApp)} id="connect-window-app" testId="connect-window-app" />
+
+        {asked.filter(isSignInPlace).map((x) => (
+          <SignInPlace key={x.name} setting={x} value={form.watch(x.name) ?? ''} onChange={(v) => form.setValue(x.name, v)} testId={`connect-window-place-${x.name}`} />
+        ))}
 
         {needed.map(setting)}
 
