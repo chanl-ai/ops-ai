@@ -20,7 +20,9 @@ from .catalogue import (
     Scope,
     active,
     builtin_roles_for,
+    decode_grid,
     effective,
+    encode_grid,
     scope_in,
 )
 from .check import (
@@ -82,7 +84,9 @@ __all__ = [
     "builtin_roles_for",
     "can",
     "check_value",
+    "decode_grid",
     "effective",
+    "encode_grid",
     "granted_by",
     "policy",
     "publish_mode",

@@ -104,6 +104,7 @@ from .schemas import (
     ProviderOut,
     Refresh,
     ResetIn,
+    RoleCellsIn,
     RoleDetail,
     RoleIn,
     RoleOut,
@@ -739,6 +740,27 @@ def create_public_app(
     async def on_workspace(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Actor:
         """A workspace route acts on the workspace, not one team: no X-Team-Id, rights read in every team (`*`)."""
         return Actor(str(claims["tenant_id"]), "*", str(claims["sub"]), new_id("req"))
+
+    @app.put("/v1/roles/{role_id}/permissions", tags=["roles"], response_model=Envelope[RoleDetail], responses=ERRORS)
+    async def edit_role(  # pyright: ignore[reportUnusedFunction]
+        role_id: Annotated[str, Path(pattern=RECORD_ID)],
+        body: RoleCellsIn,
+        actor: Annotated[Actor, Depends(on_workspace)],
+    ) -> Any:
+        """Sets a role's cells, built-in or custom; every service decides from them once the holders' tokens refresh.
+        A workspace admin's (access.manage in every team): roles apply in every team. Audited; 409
+        `admin_holds_every_cell` for Admin, 400 `unknown_cell` for a cell outside the catalogue."""
+        await people.require_admin(actor, "access", "manage")
+        cells = [(c.area, c.action, c.scope) for c in body.permissions]
+        return ok(await roles.edit(actor.tenant_id, role_id, cells, by=actor.user_id, request_id=actor.request_id))
+
+    @app.post("/v1/roles/{role_id}/reset", tags=["roles"], response_model=Envelope[RoleDetail], responses=ERRORS)
+    async def reset_role(  # pyright: ignore[reportUnusedFunction]
+        role_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
+    ) -> Any:
+        """Reset to default: a built-in role's cells back to the ones it ships with. Audited; 400 `not_builtin`."""
+        await people.require_admin(actor, "access", "manage")
+        return ok(await roles.reset(actor.tenant_id, role_id, by=actor.user_id, request_id=actor.request_id))
 
     @app.get(
         "/v1/settings/teams",

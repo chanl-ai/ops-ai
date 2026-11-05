@@ -320,12 +320,14 @@ def platform_admin(area: str, action: str) -> Verdict:
 
 # Agreed rules: written in the shared tree and agreed (interview Q1-Q5) but not at HEAD, where these routes check team
 # membership or separation of duties only. Each is the agreed answer until the routes call the functions here.
+# Builders decide and cancel as reviewers do since D59 gave them every cell but people, access and the
+# workspace's settings (2026-11-05).
 def c122_decides(p: Principal) -> Scope | None:
-    return yes(p.role in ("approver", "admin"))
+    return yes(p.role in ("approver", "admin", "builder"))
 
 
 def c122_cancel(p: Principal) -> Scope | None:
-    return "all" if p.role in ("approver", "admin") else "own"
+    return "all" if p.role in ("approver", "admin", "builder") else "own"
 
 
 TODAY: dict[tuple[str, str], Verdict] = {
@@ -403,12 +405,12 @@ def granted(role: str, team: str, area: str, action: str) -> Scope | None:
 @pytest.mark.parametrize("team", [TEAM, SECURITY])
 @pytest.mark.parametrize("role", ROLES)
 def test_builtin_grid_equals_todays_checks(role: str, team: str) -> None:
-    """Every cell a service checks gives each role what the grid says. A cell no service checks yet is the admin's
-    alone (admins hold every cell), so a later check on it opens to admins first."""
+    """Every cell a service checks gives each role what the grid says. A cell no service checks yet is held by admins
+    and builders only (each holds every cell of its kind), so a later check on it opens to them first."""
     wrong: list[str] = []
     for area, action in CELLS:
         if TODAY.get((area, action), nobody) is nobody:
-            if role != "admin" and granted(role, team, area, action) is not None:
+            if role not in ("admin", "builder") and granted(role, team, area, action) is not None:
                 wrong.append(f"{area}.{action}: no service checks it, grid {granted(role, team, area, action)}")
             continue
         today = TODAY[(area, action)](person(role, team))

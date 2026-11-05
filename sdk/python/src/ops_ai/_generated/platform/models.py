@@ -65,6 +65,12 @@ class BackgroundProcessOut(TypedDict, closed=True):
     waiting: int | None
 
 
+class CellIn(TypedDict, closed=True):
+    action: str
+    area: str
+    scope: NotRequired[Literal["all", "own"]]
+
+
 class CheckRefusal(TypedDict, closed=True):
     code: str
     reason: str
@@ -325,6 +331,10 @@ class Refresh(TypedDict, closed=True):
 class ResetIn(TypedDict, closed=True):
     password: str
     token: str
+
+
+class RoleCellsIn(TypedDict, closed=True):
+    permissions: list[CellIn]
 
 
 class RoleDetail(TypedDict, closed=True):

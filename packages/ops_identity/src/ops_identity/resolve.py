@@ -163,6 +163,7 @@ class Identity:
         access_claim: dict[str, Any] = claims.get("access") or {}
         version = claims.get("perm_version")
         policies: dict[str, Any] = claims.get("policies") or {}
+        grids_claim: dict[str, Any] = claims.get("grids") or {}
         return Principal(
             kind="person",
             sub=str(claims["sub"]),
@@ -175,6 +176,7 @@ class Identity:
             scopes=[],
             auth_method="session" if claims.get("auth_method") != "dev" else "dev",
             access={str(k): [str(r) for r in v] for k, v in access_claim.items()},
+            grids={str(r): {str(a): str(x) for a, x in dict(g).items()} for r, g in grids_claim.items()},
             permission_version=int(version) if isinstance(version, int) else None,
             policies={str(k): v for k, v in policies.items()},
             security_team=str(claims["security_team"]) if claims.get("security_team") else None,

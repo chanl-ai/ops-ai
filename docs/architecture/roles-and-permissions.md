@@ -1,6 +1,6 @@
 # Roles and permissions
 
-Status: current, 2026-10-19. This is the one page for who may do what in Ops AI. Before asking an access
+Status: current, 2026-11-05. This is the one page for who may do what in Ops AI. Before asking an access
 question, look it up in [Decided questions](#decided-questions); before writing a refusal, a role check, a lock or a
 closed default, look it up in the [Exceptions register](#exceptions-register). Code is cited at commit `c96319da`.
 The grid below is generated from `packages/ops_access` and checked by `make python-verify`; the register is checked by
@@ -51,12 +51,13 @@ A person has roles per team through assignments: a membership role (`members.rol
 assignment in the same transaction) or a grant, in one team or in every team (`*`), with an optional expiry
 (`services/platform-service/src/ops_platform/store/tables.py`, migration `0006_roles`). What they may do in a team is
 the union of their unexpired assignments there, `all` over `own`. The token carries team → role ids as the `access`
-claim and the tenant's `perm_version`; every service reads it locally, so a change applies at the next token refresh.
+claim, each of those roles' stored cells as the `grids` claim (`ops_access.encode_grid`), and the tenant's
+`perm_version`; every service reads them locally, so a change applies at the next token refresh.
 
 | Built-in role | Stored membership value | Meaning | Who holds it |
 |---|---|---|---|
 | Admin | `admin` | Every cell in the team. Security-team actions still need a role in the Security team | Team admins; Admin in `*` is a workspace admin who acts in any team |
-| Builder | `builder` | Reads the team's work; creates, edits, tests and publishes its definitions | Team builders |
+| Builder | `builder` | Every cell in the team except people and access (members, roles, assignments) and the workspace's settings: connections, secrets and auth configs included (D59) | Team builders |
 | Reviewer | `approver` (people read Reviewer) | Reads; decides the team's reviews; in the Security team, decides module security reviews | Team reviewers |
 | Viewer | `viewer` | Reads the team's work, chats with its agents | Team viewers; every invite starts here |
 | Security admin | (none; given with Admin in the Security team) | Egress, any team's secrets (naming the team), storage settings, module security reviews | Admins of the Security team (`builtin_roles_for`, `catalogue.py:187`) |
@@ -77,128 +78,128 @@ role holds are left out.
 | agents | publish | all | all | no | no | no | no | no |
 | agents | delete | all | all | no | no | no | no | no |
 | agents | run | all | all | no | no | no | no | no |
-| agents | decide | all | no | all | no | no | no | no |
-| agents | manage | all | no | no | no | no | no | no |
+| agents | decide | all | all | all | no | no | no | no |
+| agents | manage | all | all | no | no | no | no | no |
 | workflows | view | all | all | all | all | no | no | no |
 | workflows | create | all | all | no | no | no | no | no |
 | workflows | edit | all | all | no | no | no | no | no |
 | workflows | publish | all | all | no | no | no | no | no |
 | workflows | delete | all | all | no | no | no | no | no |
 | workflows | run | all | all | no | no | no | no | no |
-| workflows | decide | all | no | all | no | no | no | no |
-| workflows | manage | all | no | no | no | no | no | no |
+| workflows | decide | all | all | all | no | no | no | no |
+| workflows | manage | all | all | no | no | no | no | no |
 | skills | view | all | all | all | all | no | no | no |
 | skills | create | all | all | no | no | no | no | no |
 | skills | edit | all | all | no | no | no | no | no |
 | skills | publish | all | all | no | no | no | no | no |
-| skills | delete | all | own | own | own | no | no | no |
-| skills | run | all | no | no | no | no | no | no |
-| skills | decide | all | no | all | no | no | no | no |
-| skills | manage | all | no | no | no | no | no | no |
+| skills | delete | all | all | own | own | no | no | no |
+| skills | run | all | all | no | no | no | no | no |
+| skills | decide | all | all | all | no | no | no | no |
+| skills | manage | all | all | no | no | no | no | no |
 | guardrails | view | all | all | all | all | no | no | no |
 | guardrails | create | all | all | no | no | no | no | no |
 | guardrails | edit | all | all | no | no | no | no | no |
 | guardrails | publish | all | all | no | no | no | no | no |
-| guardrails | delete | all | own | own | own | no | no | no |
-| guardrails | run | all | no | no | no | no | no | no |
-| guardrails | decide | all | no | all | no | no | no | no |
-| guardrails | manage | all | no | no | no | no | no | no |
+| guardrails | delete | all | all | own | own | no | no | no |
+| guardrails | run | all | all | no | no | no | no | no |
+| guardrails | decide | all | all | all | no | no | no | no |
+| guardrails | manage | all | all | no | no | no | no | no |
 | widgets | view | all | all | all | all | no | no | no |
 | widgets | create | all | all | no | no | no | no | no |
 | widgets | edit | all | all | no | no | no | no | no |
 | widgets | publish | all | all | no | no | no | no | no |
-| widgets | delete | all | no | no | no | no | no | no |
-| widgets | run | all | no | no | no | no | no | no |
-| widgets | decide | all | no | all | no | no | no | no |
-| widgets | manage | all | no | no | no | no | no | no |
+| widgets | delete | all | all | no | no | no | no | no |
+| widgets | run | all | all | no | no | no | no | no |
+| widgets | decide | all | all | all | no | no | no | no |
+| widgets | manage | all | all | no | no | no | no | no |
 | knowledge | view | all | all | all | all | no | no | no |
 | knowledge | create | all | all | no | no | no | no | no |
 | knowledge | edit | all | all | no | no | no | no | no |
-| knowledge | publish | all | no | no | no | no | no | no |
+| knowledge | publish | all | all | no | no | no | no | no |
 | knowledge | delete | all | all | no | no | no | no | no |
-| knowledge | run | all | no | no | no | no | no | no |
-| knowledge | decide | all | no | no | no | no | no | no |
-| knowledge | manage | all | no | no | no | no | no | no |
+| knowledge | run | all | all | no | no | no | no | no |
+| knowledge | decide | all | all | no | no | no | no | no |
+| knowledge | manage | all | all | no | no | no | no | no |
 | tools | view | all | all | all | all | no | no | no |
 | tools | create | all | all | no | no | no | no | no |
 | tools | edit | all | all | no | no | no | no | no |
 | tools | publish | all | all | no | no | no | no | no |
 | tools | delete | all | all | no | no | no | no | no |
 | tools | run | all | all | no | no | no | no | no |
-| tools | decide | all | no | all | no | no | no | no |
-| tools | manage | all | no | no | no | no | no | no |
+| tools | decide | all | all | all | no | no | no | no |
+| tools | manage | all | all | no | no | no | no | no |
 | secrets_egress | view | all | all | all | all | all | no | no |
 | secrets_egress | create | all | all | no | no | all | no | no |
 | secrets_egress | edit | all | all | no | no | all | no | no |
-| secrets_egress | publish | all | no | no | no | no | no | no |
+| secrets_egress | publish | all | all | no | no | no | no | no |
 | secrets_egress | delete | all | all | no | no | all | no | no |
-| secrets_egress | run | all | no | no | no | no | no | no |
-| secrets_egress | decide (Security team) | all | no | all | no | all | no | no |
-| secrets_egress | manage (Security team) | all | no | no | no | all | no | no |
+| secrets_egress | run | all | all | no | no | no | no | no |
+| secrets_egress | decide (Security team) | all | all | all | no | all | no | no |
+| secrets_egress | manage (Security team) | all | all | no | no | all | no | no |
 | connections | view | all | all | all | all | no | no | no |
-| connections | create | all | no | no | no | no | no | no |
-| connections | edit | all | no | no | no | no | no | no |
-| connections | publish | all | no | no | no | no | no | no |
-| connections | delete | all | no | no | no | no | no | no |
-| connections | run | all | no | no | no | no | no | no |
-| connections | decide | all | no | no | no | no | no | no |
-| connections | manage | all | no | no | no | no | no | no |
+| connections | create | all | all | no | no | no | no | no |
+| connections | edit | all | all | no | no | no | no | no |
+| connections | publish | all | all | no | no | no | no | no |
+| connections | delete | all | all | no | no | no | no | no |
+| connections | run | all | all | no | no | no | no | no |
+| connections | decide | all | all | no | no | no | no | no |
+| connections | manage | all | all | no | no | no | no | no |
 | files | view | all | all | all | all | no | no | no |
 | files | create | all | all | all | all | no | no | no |
-| files | edit | all | no | no | no | no | no | no |
-| files | publish | all | no | no | no | no | no | no |
+| files | edit | all | all | no | no | no | no | no |
+| files | publish | all | all | no | no | no | no | no |
 | files | delete | all | all | all | all | no | no | no |
-| files | run | all | no | no | no | no | no | no |
-| files | decide | all | no | no | no | no | no | no |
-| files | manage | all | no | no | no | no | no | no |
+| files | run | all | all | no | no | no | no | no |
+| files | decide | all | all | no | no | no | no | no |
+| files | manage | all | all | no | no | no | no | no |
 | documents | view | all | all | all | all | no | no | no |
-| documents | create | all | no | no | no | no | no | no |
+| documents | create | all | all | no | no | no | no | no |
 | documents | edit | all | all | all | all | no | no | no |
-| documents | publish | all | no | no | no | no | no | no |
-| documents | delete | all | no | no | no | no | no | no |
+| documents | publish | all | all | no | no | no | no | no |
+| documents | delete | all | all | no | no | no | no | no |
 | documents | run | all | all | all | all | no | no | no |
-| documents | decide | all | no | no | no | no | no | no |
-| documents | manage | all | no | no | no | no | no | no |
-| chat | view | all | own | own | own | no | own | no |
-| chat | create | all | no | no | no | no | no | no |
-| chat | edit | all | no | no | no | no | no | no |
-| chat | publish | all | no | no | no | no | no | no |
-| chat | delete | all | no | no | no | no | no | no |
+| documents | decide | all | all | no | no | no | no | no |
+| documents | manage | all | all | no | no | no | no | no |
+| chat | view | all | all | own | own | no | own | no |
+| chat | create | all | all | no | no | no | no | no |
+| chat | edit | all | all | no | no | no | no | no |
+| chat | publish | all | all | no | no | no | no | no |
+| chat | delete | all | all | no | no | no | no | no |
 | chat | run | all | all | all | all | no | all | no |
-| chat | decide | all | no | all | no | no | no | no |
-| chat | manage | all | no | no | no | no | no | no |
-| memory | view | all | no | no | no | no | no | no |
-| memory | create | all | no | no | no | no | no | no |
+| chat | decide | all | all | all | no | no | no | no |
+| chat | manage | all | all | no | no | no | no | no |
+| memory | view | all | all | no | no | no | no | no |
+| memory | create | all | all | no | no | no | no | no |
 | memory | edit | own | own | own | own | no | own | no |
-| memory | publish | all | no | no | no | no | no | no |
-| memory | delete | all | no | no | no | no | no | no |
-| memory | run | all | no | no | no | no | no | no |
-| memory | decide | all | no | no | no | no | no | no |
-| memory | manage | all | no | no | no | no | no | no |
+| memory | publish | all | all | no | no | no | no | no |
+| memory | delete | all | all | no | no | no | no | no |
+| memory | run | all | all | no | no | no | no | no |
+| memory | decide | all | all | no | no | no | no | no |
+| memory | manage | all | all | no | no | no | no | no |
 | reviews | view | all | all | all | all | no | no | no |
-| reviews | create | all | no | no | no | no | no | no |
-| reviews | edit | all | no | no | no | no | no | no |
-| reviews | publish | all | no | no | no | no | no | no |
-| reviews | delete | all | no | no | no | no | no | no |
-| reviews | run | all | no | no | no | no | no | no |
-| reviews | decide | all | no | all | no | no | no | no |
-| reviews | manage | all | no | no | no | no | no | no |
+| reviews | create | all | all | no | no | no | no | no |
+| reviews | edit | all | all | no | no | no | no | no |
+| reviews | publish | all | all | no | no | no | no | no |
+| reviews | delete | all | all | no | no | no | no | no |
+| reviews | run | all | all | no | no | no | no | no |
+| reviews | decide | all | all | all | no | no | no | no |
+| reviews | manage | all | all | no | no | no | no | no |
 | cases | view | all | all | all | all | no | no | no |
 | cases | create | all | all | all | all | no | no | no |
 | cases | edit | all | all | all | all | no | no | no |
-| cases | publish | all | no | no | no | no | no | no |
-| cases | delete | all | no | no | no | no | no | no |
-| cases | run | all | no | no | no | no | no | no |
-| cases | decide | all | no | no | no | no | no | no |
-| cases | manage | all | own | all | own | no | no | no |
+| cases | publish | all | all | no | no | no | no | no |
+| cases | delete | all | all | no | no | no | no | no |
+| cases | run | all | all | no | no | no | no | no |
+| cases | decide | all | all | no | no | no | no | no |
+| cases | manage | all | all | all | own | no | no | no |
 | deployments | view | all | all | all | all | no | no | no |
 | deployments | create | all | all | no | no | no | no | no |
 | deployments | edit | all | all | no | no | no | no | no |
-| deployments | publish | all | no | no | no | no | no | no |
-| deployments | delete | all | no | no | no | no | no | no |
+| deployments | publish | all | all | no | no | no | no | no |
+| deployments | delete | all | all | no | no | no | no | no |
 | deployments | run | all | all | no | no | no | no | no |
-| deployments | decide | all | no | no | no | no | no | no |
-| deployments | manage | all | no | no | no | no | no | no |
+| deployments | decide | all | all | no | no | no | no | no |
+| deployments | manage | all | all | no | no | no | no | no |
 | settings | view (Security team) | all | no | no | no | all | no | no |
 | settings | create | all | no | no | no | no | no | no |
 | settings | edit | all | no | no | no | no | no | no |
@@ -215,20 +216,25 @@ role holds are left out.
 | access | run | all | no | no | no | no | no | no |
 | access | decide | all | no | no | no | no | no | no |
 | access | manage | all | no | no | no | no | no | no |
-| audit | view | all | no | no | no | no | no | no |
-| audit | create | all | no | no | no | no | no | no |
-| audit | edit | all | no | no | no | no | no | no |
-| audit | publish | all | no | no | no | no | no | no |
-| audit | delete | all | no | no | no | no | no | no |
-| audit | run | all | no | no | no | no | no | no |
-| audit | decide | all | no | no | no | no | no | no |
-| audit | manage | all | no | no | no | no | no | no |
+| audit | view | all | all | no | no | no | no | no |
+| audit | create | all | all | no | no | no | no | no |
+| audit | edit | all | all | no | no | no | no | no |
+| audit | publish | all | all | no | no | no | no | no |
+| audit | delete | all | all | no | no | no | no | no |
+| audit | run | all | all | no | no | no | no | no |
+| audit | decide | all | all | no | no | no | no | no |
+| audit | manage | all | all | no | no | no | no | no |
 | workspace | manage | no | no | no | no | no | no | all |
 
 <!-- roles-matrix:end -->
 
-Built-in grids are answered from code (`check.py:73`), not from the `role_permissions` rows platform-service stores;
-custom roles are fetched from those rows. Editing a built-in role's cells is decided and not built (row E04).
+Every role's cells, built-in or custom, are the `role_permissions` rows platform-service stores. The grid above is
+the seed: platform-service writes it for a new workspace and **Reset to default** puts a built-in role back to it.
+A workspace admin edits any role but Admin on Access › Roles (`PUT /v1/roles/{id}/permissions`,
+`POST /v1/roles/{id}/reset`, both audited as `role.edit` and `role.reset` and raising `perm_version`); Admin keeps
+every cell (409 `admin_holds_every_cell`). `can()` decides from the token's `grids` claim, and platform-service from
+the rows it reads at the moment of the check. A token minted without the claim (a test token, the dev header
+caller) is answered from the seed.
 
 ## Policies
 
@@ -295,7 +301,7 @@ exception stays (decided), is to go (to fix), or has no decision yet (no decisio
 | E01 | Publish reviews default to `major`: a first publish or a major change waits for a second person | `policies.py:69`; `publish_mode` | Major changes only is the default; never still reviews a security change | 2026-10-17 | decided |
 | E02 | Chat threads are private by default; admins do not read the team's threads | `policies.py:80`; `check.py:112` | People's chats stay private; off lets admins read them | 2026-10-17 | decided |
 | E03 | AI features are off per team: `aiSteps`, `taskAssist`, `checkBeforeSend`, `pageImages` | `policies.py:116-146` | Off by default, turned on through `can()` (`workflows.manage`; `settings.manage` in the Security team for `pageImages`) | 2026-10-18 | decided |
-| E04 | Built-in roles cannot be edited: `/v1/roles` is read only, and built-in grids answer from code, so an edited `role_permissions` row would change no decision | `check.py:73`; `services/platform-service/src/ops_platform/api/app.py:390-400` | Admins edit built-in roles' cells as a checkbox matrix | 2026-10-18 | to fix |
+| E04 | Resolved 2026-11-05: built-in roles are edited like custom ones, every service decides from the stored rows the token carries, and Admin keeps every cell | `check.py` (`Access.scope`), `services/platform-service/src/ops_platform/roles.py` | Admins edit built-in roles' cells as a checkbox matrix | 2026-10-18 | resolved |
 | E05 | A `system` record needs `<area>.manage` (admins) to edit or delete; tools-service's bulk delete asks the same `can()` per module | `check.py:151`; `services/tools-service/src/ops_tools/modules/service.py` (`bulk_remove`) | `check.py`: admins may change system records, the next provisioning run restores template fields. The bulk-delete refusal of admins was removed under the rule that admins do everything | 2026-10-17 | decided; the bulk-delete refusal removed in cad384d1 |
 | E06 | `apply_access` runs only from the `tool_access_request` system workflow; system-only platform tools are kept out of modules | `services/tools-service/src/ops_tools/app.py:145,457-467`; `modules/review_events.py:17`; `registry.py:28,172` | Each such lock becomes a grid cell or a policy | 2026-10-18 | to fix |
 | E07 | tools-service accepts a review decision only from `service:agents`, compared as a string | `modules/routes.py:227-228` | Becomes a scope check; the route goes when reviews run as workflows | 2026-10-18 | to fix |
@@ -406,6 +412,8 @@ when a question comes up again.
 | D56 | Is the extraction floor an access rule? | No, a quality threshold with the engine's default | 2026-10-17 |
 | D57 | How does a password or SSO account step up? | Password plus TOTP when enrolled; SSO and Google at their IdP | 2026-10-16 |
 | D58 | Do money approvals need two people and a step-up? | Two distinct approvers when the operation says so, each with a step-up under five minutes old | 2026-10-11 |
+| D59 | What does Builder hold by default? | Every cell in the team except people and access (members, roles, assignments) and the workspace's settings: connections, secrets, auth configs and testing a connection included. Admin keeps every cell | 2026-11-05 |
+| D60 | Where do role permissions live, and who changes them? | In the database, managed centrally and defined from the UI: a workspace admin edits any role's cells on Access › Roles, built-in or custom, each change audited; the code grid is seed data only, with Reset to default per built-in role | 2026-11-05 |
 
 ## Open questions
 

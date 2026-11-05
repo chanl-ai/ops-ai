@@ -196,6 +196,8 @@ class Auth:
         version = await self.store.permission_version(user.tenant_id)
         access = await self.store.access(user.tenant_id, user.id, now=_iso(now))
         policies = await PolicyStore(self.store.db).token_values(user.tenant_id)
+        # The stored cells of every role the person holds, so an admin's edit of a role decides in every service.
+        grids = await self.store.grids(user.tenant_id, sorted({r for held in access.values() for r in held}))
         claims = {
             "sub": user.id,
             "sid": session_id,
@@ -208,6 +210,7 @@ class Auth:
             "roles": roles,
             "perm_version": version,
             "access": access,
+            "grids": grids,
             "policies": policies,
             "kind": "person",
             "auth_method": method,

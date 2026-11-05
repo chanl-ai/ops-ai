@@ -370,6 +370,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "roles_edit_role": {
+        "body": "json",
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/roles/{role_id}/permissions",
+        "pathParams": ["role_id"],
+        "query": [],
+        "stream": False,
+    },
     "roles_list_roles": {
         "body": None,
         "headers": [],
@@ -384,6 +393,15 @@ OPERATIONS: dict[str, Operation] = {
         "headers": [],
         "method": "GET",
         "path": "/v1/roles/{role_id}",
+        "pathParams": ["role_id"],
+        "query": [],
+        "stream": False,
+    },
+    "roles_reset_role": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/roles/{role_id}/reset",
         "pathParams": ["role_id"],
         "query": [],
         "stream": False,
@@ -776,6 +794,14 @@ class Operations:
         "Read Role"
         return self._t.call(SERVICE, OPERATIONS["roles_read_role"], {"role_id": role_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def roles_edit_role(self, role_id: str, body: RoleCellsIn) -> RoleDetail:
+        "Edit Role"
+        return self._t.call(SERVICE, OPERATIONS["roles_edit_role"], {"role_id": role_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def roles_reset_role(self, role_id: str) -> RoleDetail:
+        "Reset Role"
+        return self._t.call(SERVICE, OPERATIONS["roles_reset_role"], {"role_id": role_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     def members_list_members(
         self, *, role: list[str] | None = None, status: list[str] | None = None
     ) -> ListResultMemberOut:
@@ -1111,6 +1137,14 @@ class AsyncOperations:
     async def roles_read_role(self, role_id: str) -> RoleDetail:
         "Read Role"
         return await self._t.call(SERVICE, OPERATIONS["roles_read_role"], {"role_id": role_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def roles_edit_role(self, role_id: str, body: RoleCellsIn) -> RoleDetail:
+        "Edit Role"
+        return await self._t.call(SERVICE, OPERATIONS["roles_edit_role"], {"role_id": role_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def roles_reset_role(self, role_id: str) -> RoleDetail:
+        "Reset Role"
+        return await self._t.call(SERVICE, OPERATIONS["roles_reset_role"], {"role_id": role_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def members_list_members(
         self, *, role: list[str] | None = None, status: list[str] | None = None

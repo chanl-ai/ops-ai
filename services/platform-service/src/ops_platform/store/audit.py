@@ -45,6 +45,8 @@ KIND = {
     "workspace.purge": "deleted",
     "policy.set": "edited",
     "access.check": "checked",
+    "role.edit": "edited",
+    "role.reset": "edited",
 }
 
 # Every route that changes a workspace or a team, and the audit action it writes in the same transaction. The
@@ -66,11 +68,13 @@ ROUTE_ACTIONS: dict[tuple[str, str], str] = {
     ("POST", "/v1/workspace/restore"): "workspace.restore",
     ("POST", "/v1/settings/teams/{team_id}/leave"): "team.leave",
     ("DELETE", "/v1/settings/teams/{team_id}"): "team.delete",
+    ("PUT", "/v1/roles/{role_id}/permissions"): "role.edit",
+    ("POST", "/v1/roles/{role_id}/reset"): "role.reset",
 }
 
 # The audit page's views, as the platform actions each holds; platform-service records no publishes.
 VIEWS: dict[str, frozenset[str]] = {
-    "access": frozenset(a for a in KIND if a.startswith(("member.", "key."))),
+    "access": frozenset(a for a in KIND if a.startswith(("member.", "key.", "role."))),
     "deletions": frozenset(
         {"member.remove", "key.revoke", "team.delete", "workspace.close", "workspace.purge", "workspace.leave"}
     ),

@@ -98,19 +98,14 @@ _MEMBER: list[Grant] = [
     # Anyone in the team opens a case and works it: status, assignee, notes. Closing it is cases.manage.
     *_all("cases", "create", "edit"),
 ]
+# Builders do everything in their team except people and access and the workspace's settings (D59):
+# connections, secrets and auth configs included. What agents remember about a person stays that person's to edit.
+_NOT_BUILDERS = ("access", "settings", "workspace")
 _BUILDS: list[Grant] = [
-    *_all("agents", "create", "edit", "publish", "delete", "run"),
-    *_all("workflows", "create", "edit", "publish", "delete", "run"),
-    *_all("skills", "create", "edit", "publish"),
-    *_all("guardrails", "create", "edit", "publish"),
-    # A widget is retired (an edit), never deleted; a deployment is paused (an edit) or polled (a run), never deleted.
-    *_all("widgets", "create", "edit", "publish"),
-    *_all("tools", "create", "edit", "publish", "delete", "run"),
-    *_all("deployments", "create", "edit", "run"),
-    # Knowledge is shared by its team: any builder changes the team's bases and sources.
-    *_all("knowledge", "create", "edit", "delete"),
-    # A team's secrets are its own: its builders add, change and remove them.
-    *_all("secrets_egress", "create", "edit", "delete"),
+    (area, action, "own" if (area, action) == ("memory", "edit") else "all")
+    for area in AREAS
+    if area not in _NOT_BUILDERS
+    for action in ACTIONS
 ]
 
 
@@ -149,7 +144,7 @@ ADMIN = BuiltinRole(
 BUILDER = BuiltinRole(
     "builder",
     "Builder",
-    "Reads the team's work, and creates, edits, tests and publishes its definitions.",
+    "Everything in the team except people and access and the workspace's settings.",
     _merge(_READS, _MEMBER, _BUILDS),
 )
 REVIEWER = BuiltinRole(
@@ -268,3 +263,39 @@ def scope_in(
     """The widest scope the person holds for one action in one team, or None."""
     g = effective(assignments, grids, [team], now).get(team, {}).get((area, action))
     return g.scope if g else None
+
+
+# A grid as a token carries it: area to the actions it grants, one letter each, upper case for `own`, so a person's
+# roles fit in the token every service reads (a full grid is about 300 characters).
+_LETTER = {
+    "view": "v",
+    "create": "c",
+    "edit": "e",
+    "publish": "p",
+    "delete": "d",
+    "run": "r",
+    "decide": "x",
+    "manage": "m",
+}
+_ACTION_OF = {v: k for k, v in _LETTER.items()}
+
+
+def encode_grid(grants: Iterable[Grant]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for area, action, scope in grants:
+        letter = _LETTER[action]
+        out[area] = out.get(area, "") + (letter.upper() if scope == "own" else letter)
+    return out
+
+
+def decode_grid(claim: Mapping[str, str]) -> tuple[Grant, ...]:
+    """The grants an encoded grid holds; an area or letter outside the catalogue is left out."""
+    out: list[Grant] = []
+    for area, letters in claim.items():
+        if area not in AREAS:
+            continue
+        for ch in str(letters):
+            action = _ACTION_OF.get(ch.lower())
+            if action is not None:
+                out.append((area, action, "own" if ch.isupper() else "all"))
+    return tuple(out)

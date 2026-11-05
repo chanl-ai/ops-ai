@@ -114,14 +114,13 @@ async def test_roles_lists_the_five_builtin_roles_with_their_grids(platform: Pla
 
 
 async def test_two_roles_in_one_team_add_up(platform: Platform) -> None:
-    p = await platform.person(roles=("builder",))
+    p = await platform.person(roles=("viewer",))
     team = next(iter(p.teams))
     await grant(platform, p, team, "reviewer")
     mine = held(await permissions(platform, await bearer(platform, p)), team)
-    assert mine["agents.create"]["roles"] == [{"id": "builder", "name": "Builder", "via": "person"}]
     assert mine["agents.decide"]["roles"] == [{"id": "reviewer", "name": "Reviewer", "via": "person"}]
-    assert {r["id"] for r in mine["agents.view"]["roles"]} == {"builder", "reviewer"}
-    # Builder deletes only its own skills, Reviewer cancels any run: the wider scope wins across the two.
+    assert {r["id"] for r in mine["agents.view"]["roles"]} == {"viewer", "reviewer"}
+    # Viewer closes only its own cases, Reviewer any case: the wider scope wins across the two.
     assert mine["cases.manage"]["scope"] == "all"
 
 
@@ -207,3 +206,60 @@ async def test_a_platform_token_decides_through_ops_access(platform: Platform) -
     with pytest.raises(Forbidden) as e:
         can(who, "agents", "edit", team=team)
     assert e.value.code == "role_required"
+
+
+async def _principal(platform: Platform, h: dict[str, str], team: str) -> Any:
+    async def jwks() -> dict[str, Any]:
+        return {"keys": [platform.signer.public_jwk()]}
+
+    async def no_keys(_key: str) -> dict[str, Any] | None:
+        return None
+
+    identity = Identity(audience="agents", jwks=jwks, introspect=no_keys)
+    return await identity.principal(_Post(), authorization=h["Authorization"], x_team_id=team)  # pyright: ignore[reportArgumentType]
+
+
+async def test_an_edit_to_a_built_in_role_reaches_every_services_decision_and_reset_undoes_it(
+    platform: Platform,
+) -> None:
+    """The real seam: a workspace admin edits Viewer's cells; the viewer's next token carries them and a service's
+    `can` decides from them; Reset to default puts the seed grid back. Each change is audited."""
+    viewer = await platform.person(roles=("viewer",))
+    team = next(iter(viewer.teams))
+    owner = await platform.person(roles=("admin",), tenant_id=viewer.tenant_id)
+    await grant(platform, owner, "*", "admin")
+    ah = await bearer(platform, owner)
+    seed = next(r for r in BUILTIN_ROLES if r.id == "viewer").grants
+    cells = [{"area": a, "action": x, "scope": s} for a, x, s in seed] + [
+        {"area": "agents", "action": "publish", "scope": "all"}
+    ]
+    before = claims(await bearer(platform, viewer))
+    r = await platform.public.put("/v1/roles/viewer/permissions", headers=ah, json={"permissions": cells})
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["grid"][AREAS.index("agents")]["actions"]["publish"] == "all"
+    vh = await bearer(platform, viewer)
+    assert claims(vh)["perm_version"] > before["perm_version"]
+    who = await _principal(platform, vh, team)
+    assert can(who, "agents", "publish", team=team) == "all"
+    r = await platform.public.post("/v1/roles/viewer/reset", headers=ah)
+    assert r.status_code == 200, r.text
+    who = await _principal(platform, await bearer(platform, viewer), team)
+    with pytest.raises(Forbidden):
+        can(who, "agents", "publish", team=team)
+    audit = (await platform.public.get("/v1/audit", headers={**ah, "X-Team-Id": team})).json()["data"]["data"]
+    assert {"role.edit", "role.reset"} <= {e.get("platformAction") or e.get("action") for e in audit}, audit[:3]
+
+
+async def test_only_a_workspace_admin_edits_a_role_and_admin_keeps_every_cell(platform: Platform) -> None:
+    team_admin = await platform.person(roles=("admin",))
+    th = await bearer(platform, team_admin)
+    cells = [{"area": "agents", "action": "view", "scope": "all"}]
+    refused = await platform.public.put("/v1/roles/viewer/permissions", headers=th, json={"permissions": cells})
+    assert refused.status_code == 403, refused.text
+    await grant(platform, team_admin, "*", "admin")
+    th = await bearer(platform, team_admin)
+    kept = await platform.public.put("/v1/roles/admin/permissions", headers=th, json={"permissions": cells})
+    assert kept.status_code == 409 and kept.json()["error"]["code"] == "admin_holds_every_cell", kept.text
+    bad = [{"area": "agents", "action": "fly", "scope": "all"}]
+    unknown = await platform.public.put("/v1/roles/viewer/permissions", headers=th, json={"permissions": bad})
+    assert unknown.status_code in (400, 422), unknown.text

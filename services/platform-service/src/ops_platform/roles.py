@@ -10,8 +10,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from ops_access import ACTIONS, ANY_TEAM, AREAS, SECURITY_TEAM_ACTIONS, effective
-from ops_service_kit.errors import NotFound
+from ops_access import ACTIONS, ANY_TEAM, AREAS, BUILTIN_GRIDS, SECURITY_TEAM_ACTIONS, Grant, effective
+from ops_access.catalogue import ADMIN
+from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.ids import now_iso
 
 from .store.roles import Holdings, RoleStore
@@ -39,6 +40,32 @@ class Roles:
                 {"area": area, "actions": {action: held.get((area, action)) for action in ACTIONS}} for area in AREAS
             ],
         }
+
+    async def edit(
+        self, tenant_id: str, role_id: str, cells: list[Grant], *, by: str, request_id: str
+    ) -> dict[str, Any]:
+        """Sets a role's cells, built-in or custom. Admin keeps every cell: 409
+        `admin_holds_every_cell`. A cell outside the catalogue is 400 `unknown_cell`. The caller's right to change roles
+        is checked by the route."""
+        if role_id == ADMIN.id:
+            raise Conflict("Admin holds every permission in its team; it is not edited.", code="admin_holds_every_cell")
+        for area, action, scope in cells:
+            if area not in AREAS or action not in ACTIONS or scope not in ("all", "own"):
+                raise ValidationFailed(f"{area}.{action} ({scope}) is not a permission.", code="unknown_cell")
+        if not await self.store.set_grid(tenant_id, role_id, cells, by=by, request_id=request_id, action="role.edit"):
+            raise NotFound("No role with that id.")
+        return await self.get(tenant_id, role_id)
+
+    async def reset(self, tenant_id: str, role_id: str, *, by: str, request_id: str) -> dict[str, Any]:
+        """Puts a built-in role back to the cells it ships with; a custom role has none to go back to (400
+        `not_builtin`)."""
+        seed = BUILTIN_GRIDS.get(role_id)
+        if seed is None:
+            raise ValidationFailed("Only a built-in role has a default to go back to.", code="not_builtin")
+        if role_id == ADMIN.id:
+            raise Conflict("Admin holds every permission in its team; it is not edited.", code="admin_holds_every_cell")
+        await self.store.set_grid(tenant_id, role_id, list(seed), by=by, request_id=request_id, action="role.reset")
+        return await self.get(tenant_id, role_id)
 
     async def of_me(self, tenant_id: str, user_id: str) -> dict[str, Any]:
         mine = await self.store.holdings(tenant_id, user_id)

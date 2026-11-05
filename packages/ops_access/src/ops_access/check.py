@@ -43,6 +43,7 @@ from .catalogue import (
     Grant,
     Scope,
     builtin_roles_for,
+    decode_grid,
 )
 from .policies import policy
 
@@ -73,14 +74,16 @@ class Grids:
     )
 
     def known(self, tenant_id: str, version: int | None, role_ids: Iterable[str]) -> dict[str, tuple[Grant, ...]]:
-        """The grids `can` uses synchronously: built-in roles and whatever the cache holds for this version."""
+        """The grids `can` uses synchronously: what the cache holds for this version, the stored rows, built-in roles
+        included; a built-in role not fetched answers its seed grid."""
         cached = self._cache.get(tenant_id)
         extra = cached[1] if cached and cached[0] == version else {}
-        return {r: BUILTIN_GRIDS.get(r) or extra.get(r, ()) for r in role_ids}
+        return {r: extra[r] if r in extra else BUILTIN_GRIDS.get(r, ()) for r in role_ids}
 
     async def load(self, tenant_id: str, version: int | None, role_ids: Iterable[str]) -> None:
-        """Fetches the custom roles the cache lacks for this version; a no-op for built-in roles or with no fetcher."""
-        missing = [r for r in role_ids if r not in BUILTIN_GRIDS]
+        """Fetches the roles the cache lacks for this version, built-in ones too, since an admin may have edited them;
+        a no-op with no fetcher."""
+        missing = list(role_ids)
         cached = self._cache.get(tenant_id)
         have = cached[1] if cached and cached[0] == version else {}
         missing = [r for r in missing if r not in have]
@@ -112,7 +115,10 @@ class Access:
     def scope(self, p: Principal, area: str, action: str, team: str) -> Scope | None:
         """The widest scope the person's roles in `team` grant for the action, or None. While the workspace keeps chat
         threads private (`chatThreadsOwnerOnly`, on by default) a chat read is one's own whatever the grid says."""
-        grids = self.grids.known(p.tenant_id, p.permission_version, self.roles_in(p, team))
+        roles = self.roles_in(p, team)
+        # The token's stored grids decide for the roles it carries; others (a token issued without them) the cache.
+        grids = self.grids.known(p.tenant_id, p.permission_version, [r for r in roles if r not in p.grids])
+        grids |= {r: decode_grid(p.grids[r]) for r in roles if r in p.grids}
         scopes = {s for grants in grids.values() for a, x, s in grants if (a, x) == (area, action)}
         widest: Scope | None = "all" if "all" in scopes else "own" if "own" in scopes else None
         if widest == "all" and (area, action) == ("chat", "view") and policy(p, "chatThreadsOwnerOnly"):
