@@ -1770,6 +1770,17 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "workflows_list_document_type_uses": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/document-type-uses",
+    "pathParams": [],
+    "query": [
+      "types"
+    ],
+    "stream": false
+  },
   "workflows_list_engine_runs": {
     "body": null,
     "headers": [],

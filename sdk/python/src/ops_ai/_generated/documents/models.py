@@ -299,6 +299,7 @@ class TemplateView(TypedDict, closed=True):
     installed: Installed
     kind: Literal["document_type"]
     plugin: TemplatePlugin
+    removeCell: NotRequired[AddCell | None]
     requires: TemplateRequires
     source: str
     state: Literal["available", "added", "update_available", "removed_upstream"]
@@ -327,6 +328,19 @@ class TestRun(TypedDict, closed=True):
     status: Literal["queued", "running", "done", "failed"]
     typeId: str
     version: int
+
+
+class UpdateInput(TypedDict, closed=True):
+    confirm: NotRequired[bool]
+
+
+class UpdateReview(TypedDict, closed=True):
+    changes: list[str]
+    copy: CopyRef
+    edits: list[str]
+    fromVersion: int
+    taken: NotRequired[bool]
+    toVersion: int
 
 
 class BackgroundHealthOut(TypedDict, closed=True):
@@ -388,6 +402,11 @@ class EnvelopeTestEstimate(TypedDict, closed=True):
 
 class EnvelopeTestRun(TypedDict, closed=True):
     data: TestRun
+    success: Literal[True]
+
+
+class EnvelopeUpdateReview(TypedDict, closed=True):
+    data: UpdateReview
     success: Literal[True]
 
 

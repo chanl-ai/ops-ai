@@ -105,6 +105,7 @@ class FakeCopies:
                 "copy": copy,
                 "installed": none | {"copies": 1, "version": 1},
                 "addCell": {"area": "agents", "action": "create"},
+                "removeCell": {"area": "agents", "action": "delete"},
             },
             base
             | {
@@ -117,6 +118,12 @@ class FakeCopies:
                 "addCell": {"area": "workflows", "action": "create"},
             },
         ]
+
+    # Whether the team has made a source of the desk's articles yet.
+    made = False
+
+    async def sources(self, tenant_id: str, team_id: str, plugin: str) -> list[dict[str, Any]]:
+        return [{"id": "src_1", "name": "Help articles", "source": "articles", "kbIds": ["kb_1"]}] if self.made else []
 
 
 @pytest.fixture
@@ -238,6 +245,16 @@ async def test_the_apps_resources_say_who_may_add_each_and_hold_its_knowledge_so
     # The linked desk signs in with nothing, so its knowledge source can be added at once.
     assert (builder["articles"]["state"], builder["articles"]["canAdd"]) == ("available", True)
     assert builder["articles"]["service"] == "kb"
+    # Remove is offered only to a role whose delete the API would take.
+    assert (viewer["helper"]["canRemove"], builder["helper"]["canRemove"]) == (False, True)
+    # Once the team made a source of it, the knowledge source reads added, its copy that source.
+    FakeCopies.made = True
+    try:
+        added = (await tab({ON: "builder"}))["articles"]
+    finally:
+        FakeCopies.made = False
+    assert (added["state"], added["canAdd"], added["copy"]["recordId"]) == ("added", False, "src_1")
+    assert added["canRemove"] is True
 
 
 def test_a_body_outside_the_plugin_folder_is_never_read(tmp_path: Path) -> None:

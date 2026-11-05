@@ -321,6 +321,13 @@ class PlaygroundAnswer(TypedDict, closed=True):
     synthesisMs: int
 
 
+class PluginSource(TypedDict, closed=True):
+    id: str
+    kbIds: list[str]
+    name: str
+    source: str
+
+
 class QueryIn(TypedDict):
     question: str
 
@@ -559,6 +566,11 @@ class EnvelopeSyncRun(TypedDict, closed=True):
 
 class EnvelopeListNamedRef(TypedDict, closed=True):
     data: list[NamedRef]
+    success: Literal[True]
+
+
+class EnvelopeListPluginSource(TypedDict, closed=True):
+    data: list[PluginSource]
     success: Literal[True]
 
 

@@ -324,6 +324,17 @@ export const kbOperations = {
     ],
     "stream": false
   },
+  "sources_list_plugin_sources": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/sources/from-plugin",
+    "pathParams": [],
+    "query": [
+      "plugin"
+    ],
+    "stream": false
+  },
   "sources_list_runs": {
     "body": null,
     "headers": [],

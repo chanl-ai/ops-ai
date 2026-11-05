@@ -128,6 +128,14 @@ class AddCell(WireModel):
     action: str
 
 
+class RemoveCell(WireModel):
+    # The grid cell the copy's own delete checks, and the record's creator where that cell may be held on one's own
+    # records only (a skill), so another service listing it answers whether the caller may remove it.
+    area: str
+    action: str
+    owner: str | None = None
+
+
 class TemplateView(WireModel):
     source: str
     plugin: TemplatePlugin
@@ -143,6 +151,7 @@ class TemplateView(WireModel):
     # Whether the caller's roles let them add it, so a screen offers Add only then.
     can_add: bool
     add_cell: AddCell
+    remove_cell: RemoveCell | None = None
     # The team's newest live copy, which Open, Remove and an update act on.
     copy_: CopyRef | None = Field(default=None, alias="copy")
 
@@ -348,6 +357,7 @@ async def list_templates(
                     "state": _state(installed, True),
                     "canAdd": _may_add(me, t["kind"], team),
                     "addCell": {"area": AREAS[t["kind"]], "action": "create"},
+                    "removeCell": await _remove_cell(rt, latest) if latest else None,
                     "copy": _copy_view(latest) if latest else None,
                 }
             ).model_dump(by_alias=True)
@@ -378,11 +388,25 @@ async def list_templates(
                     "state": "removed_upstream" if c["source"] in on_sources else "added",
                     "canAdd": False,
                     "addCell": {"area": AREAS[str(c["kind"])], "action": "create"},
+                    "removeCell": await _remove_cell(rt, c),
                     "copy": _copy_view(c),
                 }
             ).model_dump(by_alias=True)
         )
     return ok(out)
+
+
+async def _remove_cell(rt: Runtime, copy: dict[str, Any]) -> dict[str, Any]:
+    """The cell the copy's delete route checks: an agent's or workflow's delete, and a skill's delete held on one's own
+    skills, so the skill's creator is named."""
+    kind, record = str(copy["kind"]), str(copy["record_id"])
+    if kind != "skill":
+        return {"area": AREAS[kind], "action": "delete"}
+    try:
+        created_by = (await skills(rt).row(record)).get("created_by")
+    except NotFound:
+        created_by = None
+    return {"area": "skills", "action": "delete", "owner": created_by}
 
 
 def _plugin_of(source: str) -> dict[str, str]:

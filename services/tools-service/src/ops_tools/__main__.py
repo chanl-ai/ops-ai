@@ -228,7 +228,9 @@ def main() -> None:
     # An app's Resources tab joins the copies agents-service and documents-service keep, read as the caller's team.
     documents_url = settings.documents_url or f"http://127.0.0.1:{settings.documents_port}"
     resource_copies = ServiceCopies(
-        client("agents", agents_url, ["agents:view"]), client("documents", documents_url, ["documents:view"])
+        client("agents", agents_url, ["agents:view"]),
+        client("documents", documents_url, ["documents:view"]),
+        client("kb", settings.kb_url, ["knowledge:view"]) if settings.kb_url else None,
     )
     apps = Apps(connection_service, store, plugins, modules, tool_users)
     app = create_gateway_app(

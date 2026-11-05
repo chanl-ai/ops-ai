@@ -175,6 +175,8 @@ class AppResource(_Wire):
     # needs_sign_in (a knowledge source of an app whose team account is not signed in: its syncs run as that account).
     state: State
     can_add: bool
+    # Whether the caller's roles let them remove the team's copy, by the cell its own delete checks.
+    can_remove: bool = False
     # Why the caller cannot add it, in words naming who can; None when they can.
     reason: str | None = None
     # The team's copy, which Open, Remove and an update act on.
@@ -184,17 +186,36 @@ class AppResource(_Wire):
 
 
 class Copies(Protocol):
-    """The template lists of the services that keep copies, as the caller's team sees them."""
+    """The template lists of the services that keep copies, as the caller's team sees them, and the knowledge
+    sources the team made from a plugin."""
 
     async def of(self, tenant_id: str, team_id: str, source: str) -> list[dict[str, Any]]: ...
+
+    async def sources(self, tenant_id: str, team_id: str, plugin: str) -> list[dict[str, Any]]: ...
 
 
 class ServiceCopies:
     """agents-service's `GET /v1/templates?source=` and documents-service's `GET /v1/templates`, each read with a
     service token naming the caller's team."""
 
-    def __init__(self, agents: ServiceClient, documents: ServiceClient) -> None:
-        self.agents, self.documents = agents, documents
+    def __init__(self, agents: ServiceClient, documents: ServiceClient, kb: ServiceClient | None = None) -> None:
+        self.agents, self.documents, self.kb = agents, documents, kb
+
+    async def sources(self, tenant_id: str, team_id: str, plugin: str) -> list[dict[str, Any]]:
+        """kb-service's `GET /v1/sources/from-plugin` as the caller's team; none while this service has no address for
+        kb-service, which then lists no knowledge source as added."""
+        if self.kb is None:
+            return []
+        try:
+            found = await self.kb.get(
+                "/v1/sources/from-plugin", params={"plugin": plugin}, tenant=tenant_id, team=team_id
+            )
+        except (ServiceCallError, ServiceUnreachable) as e:
+            raise ServiceUnavailable(
+                "kb-service did not answer with the team's knowledge sources. Try again shortly.",
+                code="resources_unavailable",
+            ) from e
+        return cast(list[dict[str, Any]], found)
 
     async def of(self, tenant_id: str, team_id: str, source: str) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
@@ -257,6 +278,10 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
             cell = cast(dict[str, str], row.get("addCell") or {})
             held = row.get("state") != "available"
             may = row.get("state") != "removed_upstream" and access.may(who, cell["area"], cell["action"])
+            gone = cast(dict[str, Any], row.get("removeCell") or {})
+            removes = bool(row.get("copy") and gone) and access.may(
+                who, str(gone.get("area")), str(gone.get("action")), owner=gone.get("owner")
+            )
             view = {k: row[k] for k in ("source", "kind", "id", "version", "title", "requires", "installed", "copy")}
             out.append(
                 AppResource.model_validate(
@@ -265,6 +290,7 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
                         "plugin": {"id": m.id, "title": m.title, "version": m.version},
                         "state": row["state"],
                         "canAdd": may and not held,
+                        "canRemove": removes,
                         "reason": None if may or held else who_adds(cell["area"], cell["action"]),
                         "service": SERVICES[str(row["kind"])],
                     }
@@ -273,14 +299,34 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
         if m.knowledge_sources and await host.off_reason(who.tenant_id, who.team_id, plugin) is None:
             signed_out = await needs_sign_in(who.tenant_id, who.team_id, plugin)
             may = access.may(who, KNOWLEDGE_CELL["area"], KNOWLEDGE_CELL["action"])
+            removes = access.may(who, "knowledge", "delete")
+            made = await copies.sources(who.tenant_id, who.team_id, m.id)
             for s in m.knowledge_sources:
                 view = {k: v for k, v in source_view(plugin, s).items() if k not in ("body", "digest")}
+                # Added once the team made a source of it in any of its knowledge bases; the newest is the copy.
+                mine = [x for x in made if x.get("source") == s.name]
+                copy = (
+                    {
+                        "id": mine[0]["id"],
+                        "kind": "knowledge_source",
+                        "recordId": mine[0]["id"],
+                        "source": f"plugin:{m.id}",
+                        "templateId": s.name,
+                        "version": 1,
+                    }
+                    if mine
+                    else None
+                )
+                state = "added" if mine else "needs_sign_in" if signed_out else "available"
                 out.append(
                     AppResource.model_validate(
                         view
                         | {
-                            "state": "needs_sign_in" if signed_out else "available",
-                            "canAdd": may and not signed_out,
+                            "state": state,
+                            "copy": copy,
+                            "installed": {"copies": len(mine), "version": 1 if mine else None, "newerAvailable": False},
+                            "canRemove": bool(mine) and removes,
+                            "canAdd": may and state == "available",
                             "reason": None if may else who_adds(KNOWLEDGE_CELL["area"], KNOWLEDGE_CELL["action"]),
                             "service": "kb",
                         }

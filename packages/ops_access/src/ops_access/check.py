@@ -219,6 +219,11 @@ def granted_by(area: str, action: str) -> list[BuiltinRole]:
     )
 
 
+def who_can(area: str, action: str) -> str:
+    """Who holds a cell, in the words a sentence reads: "a Builder or Admin"."""
+    return _who_can(granted_by(area, action))
+
+
 def _who_can(roles: list[BuiltinRole]) -> str:
     """The roles that grant a cell, in the words a refusal reads: "a Builder or Admin"."""
     names = [r.name for r in roles]

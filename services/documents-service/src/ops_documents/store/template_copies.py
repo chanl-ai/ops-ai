@@ -38,6 +38,8 @@ template_copies = sa.Table(
     sa.Column("version", sa.Integer, nullable=False),
     # sha256 of the template body the copy was made from, as tools-service answers it: the baseline for changed since.
     sa.Column("digest", sa.String(64)),
+    # The type version the copy (or its last update taken) made: a newer version of the type is the team's own edit.
+    sa.Column("record_version", sa.Integer),
     sa.Column("installed_by", sa.String(320), nullable=False),
     sa.Column("installed_at", sa.String(32), nullable=False),
     sa.Column("removed_at", sa.String(32)),
@@ -96,6 +98,7 @@ class TemplateCopies:
         version: int,
         by: str,
         digest: str | None = None,
+        record_version: int | None = None,
     ) -> tuple[dict[str, Any], bool]:
         """Records a new copy and answers it with True; when another install of the same version won the race, answers
         that one's row with False."""
@@ -109,6 +112,7 @@ class TemplateCopies:
             "template_id": template_id,
             "version": version,
             "digest": digest,
+            "record_version": record_version,
             "installed_by": by,
             "installed_at": now_iso(),
         }
@@ -121,6 +125,25 @@ class TemplateCopies:
                 raise
             return first, False
         return {**row, "removed_at": None}, True
+
+    async def of_record(self, record_id: str) -> dict[str, Any] | None:
+        """The acting team's live copy row of this type, if the type is a copy."""
+        t = template_copies
+        q = sa.select(t).where(t.c.tenant_id == isolation.tenant(), t.c.record_id == record_id, LIVE, team_visible(t))
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+            found = (await c.execute(q)).mappings().first()
+        return dict(found) if found is not None else None
+
+    async def updated(self, copy_id: str, *, version: int, digest: str | None, record_version: int) -> None:
+        """The copy took its template's update: it now stands for that version and body, and the type version made."""
+        t = template_copies
+        values = {"version": version, "digest": digest, "record_version": record_version}
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+            await c.execute(
+                t.update()
+                .where(t.c.tenant_id == isolation.tenant(), t.c.id == copy_id, team_visible(t))
+                .values(**values)
+            )
 
     async def removed_record(self, record_id: str) -> None:
         """The type a copy made was deleted: its live row, if any, stops counting."""

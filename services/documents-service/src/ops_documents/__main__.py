@@ -13,6 +13,7 @@ import httpx
 import uvicorn
 from fastapi import FastAPI
 
+from ops_documents.agents_client import type_uses
 from ops_documents.app import create_documents_app
 from ops_documents.document_types import default_document_types
 from ops_documents.extraction import default_extractor
@@ -51,6 +52,7 @@ def build(settings: Settings) -> FastAPI:
         document_types=types,
         auth=Auth.from_settings(settings, audience="documents"),
         plugin_templates=plugin_templates(settings),
+        type_uses=type_uses(settings),
         background=background,
     )
 

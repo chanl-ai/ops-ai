@@ -1063,6 +1063,27 @@ export interface paths {
         patch: operations["deployments_pause_deployment"];
         trace?: never;
     };
+    "/v1/document-type-uses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Document Type Uses
+         * @description `types` is a comma-separated list of document type ids; each comes back with the workflows that read it. A
+         *     person with workflows.view in their team, or a service holding `workflows:view` for the team its token names.
+         */
+        get: operations["workflows_list_document_type_uses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/events": {
         parameters: {
             query?: never;
@@ -7715,6 +7736,15 @@ export interface components {
              */
             kind: "run" | "thread" | "chat" | "review" | "email" | "case" | "workflow" | "process";
         };
+        /** RemoveCell */
+        RemoveCell: {
+            /** Action */
+            action: string;
+            /** Area */
+            area: string;
+            /** Owner */
+            owner?: string | null;
+        };
         /** ReplyCase */
         ReplyCase: {
             /** Caseid */
@@ -9146,6 +9176,7 @@ export interface components {
              */
             kind: "agent" | "skill" | "workflow";
             plugin: components["schemas"]["TemplatePlugin"];
+            removeCell?: components["schemas"]["RemoveCell"] | null;
             requires: components["schemas"]["TemplateRequires"];
             /** Source */
             source: string;
@@ -16792,6 +16823,109 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_DeploymentPaused_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    workflows_list_document_type_uses: {
+        parameters: {
+            query: {
+                types: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_str__list_ToolUser___"];
                 };
             };
             /** @description Invalid request */

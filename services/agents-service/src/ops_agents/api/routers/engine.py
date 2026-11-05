@@ -343,9 +343,7 @@ async def create_definition(rt: Rt, me: Me, body: DefinitionInput) -> JSONRespon
         )
     owner = held["team_id"] if held is not None else current_team() or me.team_id or None
     if (uses := ai_steps_gate.ai_nodes(d, REGISTRY)) and not await ai_steps_gate.allowed(rt, owner):
-        raise Unprocessable(
-            f"{ai_steps_gate.OFF} Steps: {', '.join(uses)}.", code="ai_steps_off", details={"nodes": uses}
-        )
+        raise Unprocessable(ai_steps_gate.OFF, code="ai_steps_off", details={"nodes": uses})
     if wanted := unpinned(d.wire()):
         acting = current_team() or (held["team_id"] if held is not None else None) or me.team_id
         d = parse(pinned(d.wire(), await _newest_versions(rt, wanted, team=acting)))

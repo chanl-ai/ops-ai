@@ -23,7 +23,18 @@ from .catalogue import (
     effective,
     scope_in,
 )
-from .check import BUILTIN_GRIDS, DEFAULT, KEY_GRANTS, PROTECTIONS, Access, Grids, can, require_provisioner
+from .check import (
+    BUILTIN_GRIDS,
+    DEFAULT,
+    KEY_GRANTS,
+    PROTECTIONS,
+    Access,
+    Grids,
+    can,
+    granted_by,
+    require_provisioner,
+    who_can,
+)
 from .policies import (
     BY_KEY,
     DEFAULT_PUBLISH_MODE,
@@ -72,6 +83,7 @@ __all__ = [
     "can",
     "check_value",
     "effective",
+    "granted_by",
     "policy",
     "publish_mode",
     "require_provisioner",
@@ -80,4 +92,5 @@ __all__ = [
     "team_off",
     "team_on",
     "team_writes_need_approval",
+    "who_can",
 ]

@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
+from ops_access import BY_KEY, who_can
 from ops_agent_kernel.events import TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.models import ModelsServiceModels, NoModelKeyError, build_model
@@ -41,8 +42,11 @@ class AgentUnavailableError(RuntimeError):
     """The step's agent is unknown, unpublished or paused, or the turn could not reach a model."""
 
 
+# Who may turn AI steps on is the policy's own grid cell, so the sentence follows the roles grid.
+_AI_STEPS_BY = who_can(*BY_KEY["aiSteps"].changed_by)
 AI_STEPS_OFF = (
-    "AI steps are off for this team. Someone who may manage workflow settings turns on AI steps in workflows."
+    f"AI steps are off for this team. {_AI_STEPS_BY[0].upper()}{_AI_STEPS_BY[1:]} can turn them on in Settings, "
+    "Policies."
 )
 
 

@@ -271,6 +271,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["page", "pageSize", "search"],
         "stream": False,
     },
+    "sources_list_plugin_sources": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/sources/from-plugin",
+        "pathParams": [],
+        "query": ["plugin"],
+        "stream": False,
+    },
     "sources_list_runs": {
         "body": None,
         "headers": [],
@@ -516,6 +525,10 @@ class Operations:
         "Create Source"
         return self._t.call(SERVICE, OPERATIONS["sources_create_source"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def sources_list_plugin_sources(self, *, plugin: str | None = None) -> list[PluginSource]:
+        "List Plugin Sources"
+        return self._t.call(SERVICE, OPERATIONS["sources_list_plugin_sources"], {}, {"plugin": plugin}, {}, None)  # type: ignore[no-any-return]
+
     def sources_get_source(self, source_id: str) -> SourceDetail:
         "Get Source"
         return self._t.call(SERVICE, OPERATIONS["sources_get_source"], {"source_id": source_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -757,6 +770,10 @@ class AsyncOperations:
     async def sources_create_source(self, body: SourceIn) -> Source:
         "Create Source"
         return await self._t.call(SERVICE, OPERATIONS["sources_create_source"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def sources_list_plugin_sources(self, *, plugin: str | None = None) -> list[PluginSource]:
+        "List Plugin Sources"
+        return await self._t.call(SERVICE, OPERATIONS["sources_list_plugin_sources"], {}, {"plugin": plugin}, {}, None)  # type: ignore[no-any-return]
 
     async def sources_get_source(self, source_id: str) -> SourceDetail:
         "Get Source"

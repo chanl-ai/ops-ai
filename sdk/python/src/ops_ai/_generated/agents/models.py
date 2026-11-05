@@ -1316,6 +1316,12 @@ class Ref(TypedDict, closed=True):
     kind: Literal["run", "thread", "chat", "review", "email", "case", "workflow", "process"]
 
 
+class RemoveCell(TypedDict, closed=True):
+    action: str
+    area: str
+    owner: NotRequired[str | None]
+
+
 class ReplyCase(TypedDict, closed=True):
     caseId: str | None
     runId: str
@@ -1865,6 +1871,7 @@ class TemplateView(TypedDict, closed=True):
     installed: Installed
     kind: Literal["agent", "skill", "workflow"]
     plugin: TemplatePlugin
+    removeCell: NotRequired[RemoveCell | None]
     requires: TemplateRequires
     source: str
     state: Literal["available", "added", "update_available", "removed_upstream"]

@@ -284,6 +284,30 @@ export const documentsOperations = {
     "query": [],
     "stream": false
   },
+  "resources_review_update": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/resources/{resource}/copies/{copy}/update",
+    "pathParams": [
+      "resource",
+      "copy"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "resources_take_update": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/resources/{resource}/copies/{copy}/update",
+    "pathParams": [
+      "resource",
+      "copy"
+    ],
+    "query": [],
+    "stream": false
+  },
   "templates_list_templates": {
     "body": null,
     "headers": [],

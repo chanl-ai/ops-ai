@@ -415,7 +415,8 @@ class Settings(BaseSettings):
             # sample's file with a reference; settings:view: the extractionFloor policy.
             # events:emit: it reports a person's correction as a service event, which saves it on the file.
             # tools:view: it reads the document type templates of the plugins on for the caller's team.
-            "documents": ["files:view", "files:edit", "settings:view", "events:emit", "tools:view"],
+            # workflows:view: before a document type is deleted it asks agents-service which workflows read it.
+            "documents": ["files:view", "files:edit", "settings:view", "events:emit", "tools:view", "workflows:view"],
             # workflows:view: it reads a team's runs in progress and live workflows before the team is deleted or its
             # workspace closed. connections:delete: a member removed from a team has their own accounts on its
             # apps deleted in tools-service. tools:create, agents:create: a new team's defaults are written

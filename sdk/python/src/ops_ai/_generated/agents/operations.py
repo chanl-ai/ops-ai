@@ -1423,6 +1423,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["page", "pageSize", "search", "sortBy", "sortOrder"],
         "stream": False,
     },
+    "workflows_list_document_type_uses": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/document-type-uses",
+        "pathParams": [],
+        "query": ["types"],
+        "stream": False,
+    },
     "workflows_list_engine_runs": {
         "body": None,
         "headers": [],
@@ -2134,6 +2143,10 @@ class Operations:
         return self._t.call(
             SERVICE, OPERATIONS["deployments_pause_deployment"], {"deployment_id": deployment_id}, {}, {}, body
         )  # type: ignore[no-any-return]
+
+    def workflows_list_document_type_uses(self, *, types: str | None = None) -> Any:
+        "List Document Type Uses"
+        return self._t.call(SERVICE, OPERATIONS["workflows_list_document_type_uses"], {}, {"types": types}, {}, None)  # type: ignore[no-any-return]
 
     def threads_team_stream(self, *, after: int | None = None, follow: bool | None = None) -> Any:
         "Team Stream"
@@ -3360,6 +3373,12 @@ class AsyncOperations:
         "Pause Deployment"
         return await self._t.call(
             SERVICE, OPERATIONS["deployments_pause_deployment"], {"deployment_id": deployment_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    async def workflows_list_document_type_uses(self, *, types: str | None = None) -> Any:
+        "List Document Type Uses"
+        return await self._t.call(
+            SERVICE, OPERATIONS["workflows_list_document_type_uses"], {}, {"types": types}, {}, None
         )  # type: ignore[no-any-return]
 
     async def threads_team_stream(self, *, after: int | None = None, follow: bool | None = None) -> Any:

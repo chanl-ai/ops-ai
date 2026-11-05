@@ -244,6 +244,24 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "resources_review_update": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/resources/{resource}/copies/{copy}/update",
+        "pathParams": ["resource", "copy"],
+        "query": [],
+        "stream": False,
+    },
+    "resources_take_update": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/resources/{resource}/copies/{copy}/update",
+        "pathParams": ["resource", "copy"],
+        "query": [],
+        "stream": False,
+    },
     "templates_list_templates": {
         "body": None,
         "headers": [],
@@ -405,6 +423,18 @@ class Operations:
         "Copy Resource"
         return self._t.call(SERVICE, OPERATIONS["resources_copy_resource"], {"resource": resource}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def resources_review_update(self, resource: str, copy: str) -> UpdateReview:
+        "Review Update"
+        return self._t.call(
+            SERVICE, OPERATIONS["resources_review_update"], {"resource": resource, "copy": copy}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def resources_take_update(self, resource: str, copy: str, body: UpdateInput) -> UpdateReview:
+        "Take Update"
+        return self._t.call(
+            SERVICE, OPERATIONS["resources_take_update"], {"resource": resource, "copy": copy}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
     def templates_list_templates(self, *, kind: str | None = None) -> list[TemplateView]:
         "List Templates"
         return self._t.call(SERVICE, OPERATIONS["templates_list_templates"], {}, {"kind": kind}, {}, None)  # type: ignore[no-any-return]
@@ -564,6 +594,18 @@ class AsyncOperations:
     async def resources_copy_resource(self, resource: str, body: InstallInput) -> Installation:
         "Copy Resource"
         return await self._t.call(SERVICE, OPERATIONS["resources_copy_resource"], {"resource": resource}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def resources_review_update(self, resource: str, copy: str) -> UpdateReview:
+        "Review Update"
+        return await self._t.call(
+            SERVICE, OPERATIONS["resources_review_update"], {"resource": resource, "copy": copy}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def resources_take_update(self, resource: str, copy: str, body: UpdateInput) -> UpdateReview:
+        "Take Update"
+        return await self._t.call(
+            SERVICE, OPERATIONS["resources_take_update"], {"resource": resource, "copy": copy}, {}, {}, body
+        )  # type: ignore[no-any-return]
 
     async def templates_list_templates(self, *, kind: str | None = None) -> list[TemplateView]:
         "List Templates"
