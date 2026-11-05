@@ -15,7 +15,7 @@ chat components never import them directly; `components/shared/chat-blocks.tsx` 
 | `ChatResponse` | MessageResponse (Streamdown) | Markdown as it streams; `[n]` markers drawn as citation buttons |
 | `ChatThinking` | Shimmer | What the agent is doing before text arrives |
 | `ChatToolCall` | Tool | A tool call's name and state, open to show input and output |
-| `ChatPrompt` | PromptInput | The message box; attachments go through the Files API, not the block |
+| `ChatPrompt` | PromptInput | The message box; Attach uploads through the Files API as a chat attachment (not through the block), a refused file says why on its chip, and the sent message and every citation of an attached file link to the file's page in Files |
 | `ApprovalCard`, `StepList` | Confirmation, Task | The decision and steps widgets (`components/shared/approval-card.tsx`, `step-list.tsx`) |
 
 The vendored blocks keep the console's own `components/ui` primitives; the upstream install would rewrite 13 of them.

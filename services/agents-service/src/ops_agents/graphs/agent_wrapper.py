@@ -16,8 +16,8 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import interrupt
 
-from ops_agent_kernel.types import Passage, Resume, ToolGrant, TranscriptMessage, TurnRequest
-from ops_agents.activities.attachments import WithAttachments
+from ops_agent_kernel.types import AttachedFile, Passage, Resume, ToolGrant, TranscriptMessage, TurnRequest
+from ops_agents.activities.attachments import ATTACHMENT_KB, WithAttachments
 from ops_agents.activities.catalog import AgentDefinition
 from ops_agents.activities.gateway import PRODUCTION, TEST, acting_as, current_run_context
 from ops_agents.activities.overrides import limits_for
@@ -72,6 +72,8 @@ class AgentState(TypedDict):
     overrides: NotRequired[dict[str, Any]]
     # Passages of the files attached in this thread, capped by the chat route; searched before the knowledge bases.
     attached_passages: NotRequired[list[dict[str, Any]]]
+    # Every file attached in this thread, {fileId, name, unread?}: named to the model whether or not it was read.
+    attached_files: NotRequired[list[dict[str, Any]]]
 
 
 def build(
@@ -103,7 +105,7 @@ def build(
         effective = _effective(state)
         grants = _kb_grants(a, deps.model_alias, effective)
         attached = [
-            Passage(p["documentId"], p["title"], p["section"], "attached", p["text"], "attachment", p.get("page"))
+            Passage(p["documentId"], p["title"], p["section"], "attached", p["text"], ATTACHMENT_KB, p.get("page"))
             for p in state.get("attached_passages") or []
         ]
         if attached:
@@ -115,7 +117,11 @@ def build(
             tools=[*_switched_on(await agent_grants(deps, a), effective), *offers],
             transcript=transcript,
             user_turn=state["message"],
-            kb_ids=[*_granted(state, grants), *(["attachment"] if attached else [])],
+            kb_ids=[*_granted(state, grants), *([ATTACHMENT_KB] if attached else [])],
+            attachments=[
+                AttachedFile(str(f["fileId"]), str(f["name"]), f.get("unread"))
+                for f in state.get("attached_files") or []
+            ],
             knowledge_withdrawn=bool(state.get("kb_ids")) and not _granted(state, grants) and not attached,
             # A conversation that named knowledge bases, or attached a file, asked for knowledge; one that named none
             # gets the agent's passages when they match, and finding none is not a no-answer.

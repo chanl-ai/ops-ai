@@ -174,7 +174,8 @@ def check_limits(config: FilesConfig, request: UploadRequest) -> None:
     limit = next((item for item in config.limits if item.purpose == request.purpose), None)
     max_bytes = limit.max_size_mb * 1024 * 1024 if limit else config.max_upload_bytes
     if request.size > max_bytes:
-        raise UploadTooLargeError(f"{request.size} bytes exceeds the {max_bytes}-byte limit for {request.purpose}")
+        kind = request.purpose.replace("_", " ")
+        raise UploadTooLargeError(f"This file is over the {max_bytes // (1024 * 1024)} MB a {kind} can be.")
 
 
 def check_type(config: FilesConfig, purpose: str, mime: str, extensions: frozenset[str]) -> None:
@@ -183,7 +184,8 @@ def check_type(config: FilesConfig, purpose: str, mime: str, extensions: frozens
     limit = next((item for item in config.limits if item.purpose == purpose), None)
     if limit and limit.allowed_types and not extensions & {t.lower().lstrip(".") for t in limit.allowed_types}:
         accepted = ", ".join(limit.allowed_types)
-        raise TypeNotAllowedError(f"the file is {mime}, which {purpose} does not accept (accepted: {accepted})")
+        kind = purpose.replace("_", " ")
+        raise TypeNotAllowedError(f"A {kind} cannot be {mime}. Accepted: {accepted}.")
 
 
 def default_class(config: FilesConfig, request: UploadRequest) -> str:

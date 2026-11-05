@@ -116,3 +116,20 @@ async def test_wildcards_in_the_search_match_only_themselves(client: Client) -> 
         for term, want in (("100%", ["rate 100%.pdf"]), ("a_b", ["a_b.pdf"])):
             got = _data(await _list(c, search=term))
             assert [f["name"] for f in got["data"]] == want, term
+
+
+async def test_email_texts_are_left_out_of_the_list_until_asked_for(
+    client: Client,  # noqa: F811
+    engine: AsyncEngine,
+) -> None:
+    async with client() as c:
+        notice = await _stored(c, "notice.pdf")
+        body = await _stored(c, "Notice of levy.txt", b"Please hold the funds listed in the notice.\n")
+        async with engine.begin() as conn:
+            await conn.execute(sa.update(files_table).where(files_table.c.id == body).values(purpose="email_body"))
+        listed = _data(await _list(c, pageSize=25))
+        assert [f["id"] for f in listed["data"]] == [notice] and listed["viewCounts"]["all"] == 1, listed
+        assert listed["facets"]["purpose"] == {"chat_attachment": 1, "email_body": 1}, "the filter still offers them"
+        asked = _data(await _list(c, pageSize=25, purpose="email_body"))
+        assert [f["id"] for f in asked["data"]] == [body]
+        assert (await c.get(f"/v1/files/{body}", headers=OPS)).status_code == 200, "a run or case still opens it"

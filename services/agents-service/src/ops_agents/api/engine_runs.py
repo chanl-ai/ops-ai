@@ -66,7 +66,7 @@ async def start_run(
             }
         )
     except DefinitionGoneError as e:
-        raise NotFound(f"Workflow definition {stored['workflow_id']}: {e}") from e
+        raise NotFound(f"Workflow definition {stored['workflow_id']} was not found: {str(e).rstrip('.')}.") from e
     except NotLiveError as e:
         code = {"paused": "workflow_paused", "archived": "workflow_archived"}.get(e.stage, "not_live")
         raise Conflict(f"v{stored['version']} of {stored['workflow_id']}: {e}.", code=code) from e

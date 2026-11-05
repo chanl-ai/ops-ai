@@ -24,6 +24,7 @@ The service map that applies to every service is `docs/architecture/service-map.
 | `POST /v1/documents/purge` is for services only (`documents:delete`) and removes a file's extractions and samples | Called by a system workflow on the file-deleted trigger (workflows lane). files-service calls nobody when it deletes |
 | A document type version never changes once saved; a workflow save pins the newest version | A running workflow reads the fields it was tested with |
 | A test run reads at most 20 samples, and its estimate is shown before it starts | Each sample is one model call |
+| A full-text read (`read: text`) of a file is keyed by its bytes (`DocumentsClient.read_text`, key `text:<sha256>`), whoever asks: the read_file tool and a chat turn reading an attached file share one read, and no model is called | A chat turn reads every attachment in its thread on each message; the second and later reads answer the stored one |
 | The workflow runner and the agent kernel never import `ops_extract` | The checks run in one place; `scripts/tests/test_no_cross_service_imports.py` enforces it |
 
 ## Routes

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-04",
+  "title": "Files you attach in chat are read and kept in Files",
+  "description": "A file attached to a chat message is stored in Files as a chat attachment, the agent reads it to answer, and the message links to it. A file the agent cannot read, such as a scan with no text, is named in the reply with the reason.",
+  "tag": "fix"
+}

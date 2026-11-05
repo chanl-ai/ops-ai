@@ -275,7 +275,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-617 | tools-service | An app that fails says why: an expired account, a run waiting for a person's account, an unknown host | api | draft |
 | uc-618 | tools-service | Turning an app off names its users, a leaver loses their accounts, and Replace rotates a key | api | draft |
 | uc-619 | agents-service | A new team's assistant answers from its knowledge and files | api | passing |
-| uc-620 | agents-service | Any file a workflow or chat reads ends read or with a reason | api | draft |
+| uc-620 | agents-service | Any file a workflow or chat reads ends read or with a reason | api, ui | draft |
 | uc-621 | agents-service | A builder runs the three foundation Examples | sdk | current |
 | uc-622 | agents-service | A builder asks the first three published agents | sdk | current |
 | uc-623 | agents-service | A builder validates, applies and test-runs the three-node workflow | sdk, cli | current |

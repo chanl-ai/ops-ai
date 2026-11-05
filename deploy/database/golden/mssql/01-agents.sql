@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0096_system_reads_team_defaults
+-- agents-service, stamped at 0097_chat_attachments_in_files
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -568,22 +568,6 @@ CREATE TABLE channel_files (
 	content VARCHAR(max) NOT NULL, 
 	CONSTRAINT channel_files_pkey PRIMARY KEY (file_id)
 );
-GO
-CREATE TABLE chat_attachments (
-	id VARCHAR(64) NOT NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
-	team_id VARCHAR(64) NOT NULL, 
-	owner_email VARCHAR(320) NOT NULL, 
-	name VARCHAR(255) NOT NULL, 
-	mime VARCHAR(127) NOT NULL, 
-	size INTEGER NOT NULL, 
-	pages NVARCHAR(max) NOT NULL, 
-	truncated BIT NOT NULL, 
-	created_at VARCHAR(32) NOT NULL, 
-	CONSTRAINT chat_attachments_pkey PRIMARY KEY (id)
-);
-GO
-CREATE INDEX ix_chat_attachments_tenant_id ON chat_attachments (tenant_id);
 GO
 CREATE TABLE chat_search (
 	thread_id VARCHAR(64) NOT NULL, 
@@ -1189,12 +1173,6 @@ CREATE SECURITY POLICY ops_security.poll_cursors_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.poll_cursors AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.chat_attachments_isolation
-    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.chat_attachments,
-    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.chat_attachments AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.chat_attachments AFTER UPDATE
-    WITH (STATE = ON, SCHEMABINDING = ON);
-GO
 CREATE SECURITY POLICY ops_security.chat_search_isolation
     ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.chat_search,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.chat_search AFTER INSERT,
@@ -1298,5 +1276,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0096_system_reads_team_defaults');
+INSERT INTO alembic_version (version_num) VALUES ('0097_chat_attachments_in_files');
 GO

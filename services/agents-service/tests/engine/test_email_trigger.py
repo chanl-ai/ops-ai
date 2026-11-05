@@ -213,13 +213,24 @@ async def test_mail_already_there_starts_nothing_and_new_mail_with_a_pdf_starts_
     [body] = [f for f in env.files.stored.values() if f["purpose"] == "email_body"]
     assert run["input"]["bodyFile"] == {
         "fileId": body["id"],
-        "name": "email-body.txt",
+        "name": "Notice of garnishment judgment debtors Marcus Bell, Priya Natarajan, Jordan Whitfield.txt",
         "mime": "text/plain",
         "size": len(body["bytes"]),
     }
     assert body["bytes"].decode() == NOTICE["body"]["content"]
     assert run["input"]["from"] == "registry@court.example" and "garnishment" in run["input"]["subject"]
     assert "contentBytes" not in json.dumps(run["input"])
+
+
+async def test_an_emails_text_is_named_from_its_subject_else_its_sender(env: Env) -> None:
+    await env.publish()
+    await env.listener().poll_all()
+    env.drop(mail(1, subject="Re: levy / case 12", body={"contentType": "text", "content": "Hold case 12."}))
+    env.drop(mail(2, subject="", body={"contentType": "text", "content": "No subject here."}))
+    await env.listener().poll_all()
+    names = sorted(str(r["input"]["bodyFile"]["name"]) for r in await env.runs())
+    stored = sorted(str(f["name"]) for f in env.files.stored.values() if f["purpose"] == "email_body")
+    assert names == stored == ["Email from registry@court.example.txt", "Re levy case 12.txt"], (names, stored)
 
 
 async def test_a_redelivery_starts_no_second_run_and_stores_nothing_again(env: Env) -> None:
@@ -422,7 +433,7 @@ async def test_an_email_with_no_attachment_carries_its_text_as_a_file(env: Env) 
     env.drop(mail(7, attachments=[], hasAttachments=False))
     await env.listener().poll_all()
     [run] = await env.runs()
-    assert run["input"]["attachments"] == [] and run["input"]["bodyFile"]["name"] == "email-body.txt", run["input"]
+    assert run["input"]["attachments"] == [] and run["input"]["bodyFile"]["name"].startswith("Notice of garnishment")
     [stored] = env.files.stored.values()
     assert (stored["purpose"], stored["bytes"].decode()) == ("email_body", NOTICE["body"]["content"])
 

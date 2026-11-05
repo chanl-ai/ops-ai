@@ -31,6 +31,7 @@ from ops_agent_kernel.types import (
     TurnRequest,
     TurnResult,
 )
+from ops_agents.activities.attachments import ATTACHMENT_KB
 from ops_agents.activities.catalog import AgentDefinition, Catalog
 from ops_agents.activities.tool_directory import CatalogTools, ToolDirectory, grants_for
 from ops_agents.activities.tools import ReplySender
@@ -327,6 +328,8 @@ async def _kernel_turn(node: str, req: TurnRequest, ports: KernelPorts) -> TurnR
                             "section": r.passage.section,
                             "version": r.passage.version,
                             **({"page": r.passage.page} if r.passage.page else {}),
+                            # An attached file opens in Files; every other passage is a knowledge item.
+                            **({"fileId": r.passage.document_id} if r.passage.kb_id == ATTACHMENT_KB else {}),
                             "snippet": r.passage.text[:280],
                         }
                         for r in refs

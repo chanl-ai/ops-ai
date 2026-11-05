@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import { AlertTriangle, BookOpenCheck, Brain, Copy, ListTree, Paperclip, Pencil, RefreshCw, SearchX, ShieldAlert, Square, ThumbsDown, ThumbsUp } from 'lucide-react';
 
 import { DialogShell } from '@/components/shared/dialog-shell';
@@ -64,9 +65,9 @@ export function UserMessage({ message, onEdit, disabled }: { message: ChatMessag
   return (
     <div className="flex flex-col items-end gap-1">
       {message.attachments?.map((a) => (
-        <span key={a.name} className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground">
+        <Link key={a.fileId} href={`/files/${encodeURIComponent(a.fileId)}`} className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground underline-offset-2 hover:underline" data-testid="chat-message-attachment">
           <Paperclip className="size-3" /> {a.name} · {bytes(a.size)}
-        </span>
+        </Link>
       ))}
       <ChatBubble
         from="user"

@@ -31,6 +31,8 @@ class Citation(WireModel):
     page: int | None = None
     version: str
     snippet: str
+    # Set when the passage is from a file attached in the conversation: the citation opens it in Files.
+    file_id: str | None = None
     url: str | None = None
     precedence_note: str | None = None
     stale: bool | None = None

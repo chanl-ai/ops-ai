@@ -1,5 +1,5 @@
 """The database holds memories, their audit and the memories an answer used, mailboxes, embeds, trigger mail,
-chat search, chat attachments and team defaults to the caller's team (migration 0077), with raw SQL and no WHERE
+chat search and team defaults to the caller's team (migration 0077), with raw SQL and no WHERE
 clause as ops_runtime_tenant, by failure mode: a team transaction reading or writing another team's row, and a
 tenant-wide one reading another tenant's. On the PostgreSQL test database migrated to head."""
 
@@ -10,7 +10,6 @@ from collections.abc import AsyncIterator
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from ops_agents.store.chat_attachments import chat_attachments
 from ops_agents.store.chat_search import chat_search
 from ops_agents.store.mailboxes import mailboxes
 from ops_agents.store.memories import agent_memories, memory_audit, message_memory_use
@@ -22,7 +21,6 @@ from ops_store.conformance import isolation_suite
 
 TABLES = (
     agent_memories,
-    chat_attachments,
     chat_search,
     mailboxes,
     memory_audit,
