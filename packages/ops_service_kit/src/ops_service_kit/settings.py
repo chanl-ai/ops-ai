@@ -260,9 +260,6 @@ class Settings(BaseSettings):
     # OPS_MODEL_PROVIDER_KEYS, behind the keys an account admin saves on Settings > Model providers. Outside dev a key
     # here stops models-service's start-up.
     model_provider_keys: dict[str, SecretStr] = Field(default_factory=dict[str, SecretStr])
-    # The tenant whose provider keys a model call naming no tenant (no X-Tenant-Id) uses: one bank per deployment.
-    # "local" is the dev seed's tenant.
-    model_keys_tenant: str = "local"
     # models-service dev seed: with this set (the fake OpenAI's /v1 URL, services/models-service/scripts/fake_openai),
     # it seeds connection openai-local at that URL and binds alias default to it. The row is the switch afterwards:
     # PUT the connection's baseUrl to https://api.openai.com/v1 to make the same alias real.

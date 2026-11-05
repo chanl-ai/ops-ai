@@ -143,6 +143,15 @@ async def test_a_connection_whose_key_is_not_saved_is_refused_without_calling_th
     assert [c["reason"] for c in await rig.models.calls(rig.key_id)] == ["provider_key_missing"]
 
 
+async def test_a_call_naming_no_account_uses_no_accounts_key(rig: Rig) -> None:
+    """A provider key is an account's own; a call that names no tenant is refused, never signed with the key of an
+    account the install names."""
+    assert (await rig.save("sk-mine")).status_code == 200
+    r = await rig.models.complete(rig.secret, alias=rig.alias)
+    assert (r.status_code, r.json()["error"]["code"]) == (400, "tenant_required"), r.text
+    assert rig.seen == []
+
+
 async def test_a_value_is_never_read_back_nor_stored_in_the_clear(rig: Rig) -> None:
     saved = await rig.save("sk-do-not-show")
     listed = await rig.client.get("/v1/provider-keys")
