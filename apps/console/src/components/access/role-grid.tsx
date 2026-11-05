@@ -54,5 +54,7 @@ export function RoleGrid({ grid, onToggle }: { grid: GridRow[]; onToggle?: (area
     ],
     [actions, onToggle],
   );
-  return <DataTableWithViews columns={columns} data={grid} getRowId={(r) => r.area} hideViewSwitcher />;
+  // Every area on one page: a matrix with areas paged away reads as "not allowed" and hides cells from an edit.
+  const onePage = { enabled: true, total: grid.length, page: 1, pageSize: Math.max(grid.length, 1), onPaginationChange: () => undefined };
+  return <DataTableWithViews columns={columns} data={grid} getRowId={(r) => r.area} hideViewSwitcher serverPagination={onePage} />;
 }

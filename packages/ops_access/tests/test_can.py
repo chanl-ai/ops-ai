@@ -345,7 +345,7 @@ async def test_a_platform_check_reads_a_built_in_roles_stored_cells() -> None:
 
 
 def test_a_grid_encodes_into_a_short_claim_and_back() -> None:
-    grants = [("agents", "view", "all"), ("memory", "edit", "own"), ("chat", "view", "own")]
+    grants: list[Grant] = [("agents", "view", "all"), ("memory", "edit", "own"), ("chat", "view", "own")]
     claim = encode_grid(grants)
     assert sorted(decode_grid(claim)) == sorted(grants)
     assert len(str(encode_grid([(a, x, "all") for a in AREAS for x in ACTIONS]))) < 600

@@ -302,7 +302,7 @@ exception stays (decided), is to go (to fix), or has no decision yet (no decisio
 | E02 | Chat threads are private by default; admins do not read the team's threads | `policies.py:80`; `check.py:112` | People's chats stay private; off lets admins read them | 2026-10-17 | decided |
 | E03 | AI features are off per team: `aiSteps`, `taskAssist`, `checkBeforeSend`, `pageImages` | `policies.py:116-146` | Off by default, turned on through `can()` (`workflows.manage`; `settings.manage` in the Security team for `pageImages`) | 2026-10-18 | decided |
 | E04 | Resolved 2026-11-05: built-in roles are edited like custom ones, every service decides from the stored rows the token carries, and Admin keeps every cell | `check.py` (`Access.scope`), `services/platform-service/src/ops_platform/roles.py` | Admins edit built-in roles' cells as a checkbox matrix | 2026-10-18 | resolved |
-| E05 | A `system` record needs `<area>.manage` (admins) to edit or delete; tools-service's bulk delete asks the same `can()` per module | `check.py:151`; `services/tools-service/src/ops_tools/modules/service.py` (`bulk_remove`) | `check.py`: admins may change system records, the next provisioning run restores template fields. The bulk-delete refusal of admins was removed under the rule that admins do everything | 2026-10-17 | decided; the bulk-delete refusal removed in cad384d1 |
+| E05 | A `system` record needs `<area>.manage` to edit or delete: roles holding manage, Builder and Admin by default (D59), and any role an admin ticks it on; tools-service's bulk delete asks the same `can()` per module | `check.py` (`_may_change_system`); `services/tools-service/src/ops_tools/modules/service.py` (`bulk_remove`) | Roles with `manage` change system records; the next provisioning run restores template fields. Was admins only until D59 | 2026-10-17 | decided; widened to roles with manage 2026-11-05 |
 | E06 | `apply_access` runs only from the `tool_access_request` system workflow; system-only platform tools are kept out of modules | `services/tools-service/src/ops_tools/app.py:145,457-467`; `modules/review_events.py:17`; `registry.py:28,172` | Each such lock becomes a grid cell or a policy | 2026-10-18 | to fix |
 | E07 | tools-service accepts a review decision only from `service:agents`, compared as a string | `modules/routes.py:227-228` | Becomes a scope check; the route goes when reviews run as workflows | 2026-10-18 | to fix |
 | E08 | agents-service opens a tool module review for a person only beside `service:tools`'s token in `X-Service-Authorization`, compared as a string | `services/agents-service/src/ops_agents/api/tool_module_reviews.py:40-41` | The import route is deleted and tools-service's seed opens its waiting reviews with its own `tools:publish` token, which the scope cap gives tools-service only; the person path's string compare remains | 2026-10-18 | to fix |
@@ -414,6 +414,7 @@ when a question comes up again.
 | D58 | Do money approvals need two people and a step-up? | Two distinct approvers when the operation says so, each with a step-up under five minutes old | 2026-10-11 |
 | D59 | What does Builder hold by default? | Every cell in the team except people and access (members, roles, assignments) and the workspace's settings: connections, secrets, auth configs and testing a connection included. Admin keeps every cell | 2026-11-05 |
 | D60 | Where do role permissions live, and who changes them? | In the database, managed centrally and defined from the UI: a workspace admin edits any role's cells on Access › Roles, built-in or custom, each change audited; the code grid is seed data only, with Reset to default per built-in role | 2026-11-05 |
+| D61 | Where is an auth config's client secret changed? | On its auth config only. The Secrets page lists it read only with a link to the config, and the secrets API refuses a rotate or delete of it (409 `credential_secret`) naming the config | 2026-11-05 |
 
 ## Open questions
 
@@ -427,13 +428,14 @@ Still open. A recommendation is not an answer; nothing here may be quoted as dec
 | O04 | Should a step-up bind to what it approves (review ids, amounts)? | sign-in Q3 | Bulk money approvals |
 | O05 | Does turning MFA off, self-signup on, or removing the last verified domain need a second admin? | sign-in Q5 | Sign-in settings |
 | O06 | Does the session keep a workspace role (`admin`, `member`, `viewer`), or only teams? | sign-in Q6 | E22 |
-| O07 | Once built-in cells are editable (D22), may an admin tick secrets, egress or Security-team cells on them? D40 forbids it for custom roles | D22 | Built-in role editing |
+| O07 | Built-in cells are editable since 2026-11-05 and an admin may tick any cell, secrets, egress and Security-team cells included; should those be refused, as D40 says for custom roles? | D22 | Built-in role editing (`PUT /v1/roles/{id}/permissions`) |
 | O08 | Do admin and Security roles expire and need a second admin to grant, in v1? | — | Access requests |
 | O09 | May a first SSO sign-in or an IdP group give Admin? | E30 | `signin_settings.py:30` |
 | O10 | How does an admin give someone Chat user: an invite role, a role change, or a grant? | E31 | — |
 | O11 | May an agent open a case without approval, and do test runs open real cases? | Unanswered; built that way | E23 |
 | O12 | Should a person with a cell read every team's API key summaries? | E21 | `app.py:699` |
 | O13 | Should tools-service's bulk delete skip system modules for admins? | E05 | `modules/service.py:1109` |
+| O14 | Five install settings still hold a value one team or workspace owns, which the rule "env is system-wide; team configs live in the database" would move to records: `security_team_id` (a team id, the fallback for each workspace's Security team), `mailbox_source=graph` with `graph_tenant_id`, `graph_client_id`, `graph_client_secret` (one mailbox read for the process, not a team's Email record), `smtp_password_secret` (names a team's secret on the Secrets page), `model_keys_tenant` (the tenant a model call naming none bills) and `signin_secrets` (each workspace's sign-in provider secrets) | 2026-11-05 env audit | `packages/ops_service_kit/src/ops_service_kit/settings.py` |
 
 ## Errors
 
