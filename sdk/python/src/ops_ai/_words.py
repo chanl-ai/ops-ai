@@ -64,6 +64,7 @@ _DELETES = {
     "skill": ("agents", "agents_delete_skill"),
     "workflow": ("agents", "workflows_delete_definition"),
     DOCUMENT_TYPE: ("documents", "document_types_delete_type"),
+    "knowledge_source": ("kb", "sources_remove_source"),
 }
 
 
@@ -287,9 +288,8 @@ class Resources:
         """Takes the app's current template as a new draft version of the copy (an answer of `add` or a row of `list`).
         A copy the team edited since is refused (409 copy_edited, listing the edits) until `confirm` is True."""
         kind, record, rid = _copy(copy)
-        if kind == DOCUMENT_TYPE:
-            raise ValueError("a document type's copy is updated as a new version on its own page")
-        return cast(dict[str, Any], self._raw.agents.resources_take_update(rid, record, {"confirm": confirm}))
+        service = self._raw.documents if kind == DOCUMENT_TYPE else self._raw.agents
+        return cast(dict[str, Any], service.resources_take_update(rid, record, {"confirm": confirm}))
 
     def remove(self, copy: dict[str, Any]) -> None:
         """Deletes the team's copy through its kind's own delete, which refuses (409 in_use) while others use it."""
@@ -481,9 +481,8 @@ class AsyncResources:
 
     async def update(self, copy: dict[str, Any], *, confirm: bool = False) -> dict[str, Any]:
         kind, record, rid = _copy(copy)
-        if kind == DOCUMENT_TYPE:
-            raise ValueError("a document type's copy is updated as a new version on its own page")
-        return cast(dict[str, Any], await self._raw.agents.resources_take_update(rid, record, {"confirm": confirm}))
+        service = self._raw.documents if kind == DOCUMENT_TYPE else self._raw.agents
+        return cast(dict[str, Any], await service.resources_take_update(rid, record, {"confirm": confirm}))
 
     async def remove(self, copy: dict[str, Any]) -> None:
         kind, record, _ = _copy(copy)

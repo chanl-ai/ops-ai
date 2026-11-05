@@ -29,7 +29,7 @@ function accountOf(page: Obj): string {
   return String(page.connection.id);
 }
 
-const call = (raw: Raw, service: 'tools' | 'agents' | 'documents', id: string, args: Obj = {}): Promise<any> =>
+const call = (raw: Raw, service: 'tools' | 'agents' | 'documents' | 'kb', id: string, args: Obj = {}): Promise<any> =>
   (raw[service] as unknown as Record<string, (a: Obj) => Promise<any>>)[id]!(args);
 
 const at = (app: string, account: string) => ({ app_id: app, account_id: account });
@@ -210,11 +210,12 @@ function copyOf(made: Obj): { kind: string; record: string; resource: string } {
 }
 
 // The delete each kind's copy goes through, by the service that keeps it, and the path field naming the record.
-const DELETES: Record<string, ['agents' | 'documents', string, string]> = {
+const DELETES: Record<string, ['agents' | 'documents' | 'kb', string, string]> = {
   agent: ['agents', 'agents_delete_agent', 'agent_id'],
   skill: ['agents', 'agents_delete_skill', 'skill_id'],
   workflow: ['agents', 'workflows_delete_definition', 'workflow_id'],
   [DOCUMENT_TYPE]: ['documents', 'document_types_delete_type', 'type_id'],
+  knowledge_source: ['kb', 'sources_remove_source', 'source_id'],
 };
 
 /** The agents, skills, workflows, document types and knowledge sources an app brings, each added to the team as a copy. */
@@ -239,11 +240,10 @@ export class Resources {
     return call(this.raw, k === DOCUMENT_TYPE ? 'documents' : 'agents', 'resources_copy_resource', { path: { resource: id }, body: fields });
   }
 
-  /** Takes the app's current template as a new draft version of the copy; an edited copy is refused until `confirm`. */
+  /** Takes the app's current template as a new version of the copy; an edited copy is refused until `confirm`. */
   update(copy: Obj, { confirm = false }: { confirm?: boolean } = {}): Promise<Obj> {
     const c = copyOf(copy);
-    if (c.kind === DOCUMENT_TYPE) throw new TypeError("a document type's copy is updated as a new version on its own page");
-    return call(this.raw, 'agents', 'resources_take_update', { path: { resource: c.resource, copy: c.record }, body: { confirm } });
+    return call(this.raw, c.kind === DOCUMENT_TYPE ? 'documents' : 'agents', 'resources_take_update', { path: { resource: c.resource, copy: c.record }, body: { confirm } });
   }
 
   /** Deletes the team's copy through its kind's own delete, which refuses (409 in_use) while others use it. */

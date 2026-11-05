@@ -144,3 +144,13 @@ def test_the_resources_list_is_the_apps_one_list_and_an_update_names_the_copy() 
     ops.resources.update({"copy": copy}, confirm=True)
     assert seen[-1].url.path == "/api/agents/v1/resources/plugin:desk:case-helper/copies/ag_1/update"
     assert body(seen[-1]) == {"confirm": True}
+
+
+def test_a_document_types_update_and_a_knowledge_sources_removal_go_to_the_service_that_keeps_them() -> None:
+    seen: list[httpx.Request] = []
+    ops = client({}, seen)
+    copy = {"kind": "document_type", "recordId": "dt_1", "source": "plugin:desk", "templateId": "case-letter"}
+    ops.resources.update(copy)
+    assert seen[-1].url.path == "/api/documents/v1/resources/plugin:desk:case-letter/copies/dt_1/update"
+    ops.resources.remove(copy | {"kind": "knowledge_source", "recordId": "src_1", "templateId": "articles"})
+    assert (seen[-1].method, seen[-1].url.path) == ("DELETE", "/api/kb/v1/sources/src_1")
