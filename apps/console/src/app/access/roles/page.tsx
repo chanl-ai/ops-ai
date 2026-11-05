@@ -40,7 +40,7 @@ export default function RolesPage() {
   const roles = useRoles();
   const rows = React.useMemo(() => (roles.data ?? []).map((r) => ({ ...r, onRowClick: () => router.push(`/access/roles/${encodeURIComponent(r.id)}`), rowTestId: `role-row-${r.id}` })), [roles.data, router]);
   return (
-    <PageLayout icon={ShieldCheck} title="Roles" switcher description="What each role allows; built-in roles are read-only">
+    <PageLayout icon={ShieldCheck} title="Roles" switcher description="What each role allows; a workspace admin changes any role but Admin">
       {roles.isPending ? (
         <PageSkeleton statCards={0} tableRows={6} />
       ) : roles.isError ? (

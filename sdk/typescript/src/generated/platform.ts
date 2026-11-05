@@ -677,7 +677,8 @@ export interface paths {
         };
         /**
          * Read Role
-         * @description One role and its grid: every area and action in the catalogue, with the scope it grants or null.
+         * @description One role and its grid: every area and action in the catalogue, with the scope it grants or null, and
+         *     whether the caller may change it (`canEdit`: a workspace admin, for any role but Admin).
          */
         get: operations["roles_read_role"];
         put?: never;
@@ -2408,12 +2409,19 @@ export interface components {
             assignmentCount: number;
             /** Builtin */
             builtin: boolean;
+            /**
+             * Canedit
+             * @default false
+             */
+            canEdit: boolean;
             /** Description */
             description: string;
             /** Grid */
             grid: components["schemas"]["GridRow"][];
             /** Id */
             id: string;
+            /** Lockedreason */
+            lockedReason?: string | null;
             /** Name */
             name: string;
             /** Permissioncount */

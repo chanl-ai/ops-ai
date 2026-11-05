@@ -237,6 +237,10 @@ async def test_an_edit_to_a_built_in_role_reaches_every_services_decision_and_re
     r = await platform.public.put("/v1/roles/viewer/permissions", headers=ah, json={"permissions": cells})
     assert r.status_code == 200, r.text
     assert r.json()["data"]["grid"][AREAS.index("agents")]["actions"]["publish"] == "all"
+    assert (await platform.public.get("/v1/roles/viewer", headers=ah)).json()["data"]["canEdit"] is True
+    assert (await platform.public.get("/v1/roles/admin", headers=ah)).json()["data"]["canEdit"] is False
+    vh0 = await bearer(platform, viewer)
+    assert (await platform.public.get("/v1/roles/viewer", headers=vh0)).json()["data"]["canEdit"] is False
     vh = await bearer(platform, viewer)
     assert claims(vh)["perm_version"] > before["perm_version"]
     who = await _principal(platform, vh, team)

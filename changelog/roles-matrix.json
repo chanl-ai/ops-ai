@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Tick what each role allows",
+  "description": "On Access, Roles, a workspace admin opens a role and ticks or unticks what it allows, then saves; a built-in role has Reset to default. Everyone else sees each role's permissions read only, and Admin always holds every permission.",
+  "tag": "new"
+}

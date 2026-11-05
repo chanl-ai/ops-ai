@@ -431,6 +431,10 @@ class GridRow(Out):
 class RoleDetail(RoleOut):
     permissions: list[PermissionOut]
     grid: list[GridRow]
+    # Whether the caller may change this role's cells: a workspace admin, for any role but Admin.
+    can_edit: bool = False
+    # Why the caller may not change it, in words; None when they may.
+    locked_reason: str | None = None
 
 
 class GrantingRole(Out):

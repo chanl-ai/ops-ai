@@ -6,12 +6,17 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { actionLabel, areaLabel, byActionOrder } from '@/components/access/access-words';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import type { RoleDetail } from '@/lib/types/settings';
 
 type GridRow = RoleDetail['grid'][number];
 
-/** A role's grid: one row per area, one column per action; a cell says All or Own, or nothing when not granted. */
-export function RoleGrid({ grid }: { grid: GridRow[] }) {
+/**
+ * A role's grid: one row per area, one column per action; a cell says All or Own, or nothing when not granted. With
+ * `onToggle` each cell is a checkbox: ticking grants it on every record, unticking takes it away, and a cell held on
+ * one's own records keeps that scope while ticked.
+ */
+export function RoleGrid({ grid, onToggle }: { grid: GridRow[]; onToggle?: (area: string, action: string, on: boolean) => void }) {
   const actions = React.useMemo(() => [...new Set(grid.flatMap((r) => Object.keys(r.actions)))].sort(byActionOrder), [grid]);
   const columns = React.useMemo<ColumnDef<GridRow>[]>(
     () => [
@@ -26,6 +31,18 @@ export function RoleGrid({ grid }: { grid: GridRow[] }) {
           enableHiding: false,
           cell: ({ row }) => {
             const scope = row.original.actions[action];
+            if (onToggle)
+              return (
+                <label className="flex items-center gap-1.5">
+                  <Checkbox
+                    checked={!!scope}
+                    onCheckedChange={(on) => onToggle(row.original.area, action, on === true)}
+                    aria-label={`${areaLabel(row.original.area)}: ${actionLabel(action)}`}
+                    data-testid={`cell-${row.original.area}-${action}`}
+                  />
+                  {scope === 'own' && <span className="text-xs text-muted-foreground">Own</span>}
+                </label>
+              );
             return scope ? (
               <Badge variant="outline" className={scope === 'all' ? 'border-success/40 bg-success/10 text-success-text' : ''} data-testid={`cell-${row.original.area}-${action}`}>
                 {scope === 'all' ? 'All' : 'Own'}
@@ -35,7 +52,7 @@ export function RoleGrid({ grid }: { grid: GridRow[] }) {
         }),
       ),
     ],
-    [actions],
+    [actions, onToggle],
   );
   return <DataTableWithViews columns={columns} data={grid} getRowId={(r) => r.area} hideViewSwitcher />;
 }

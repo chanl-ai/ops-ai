@@ -340,9 +340,11 @@ class RoleCellsIn(TypedDict, closed=True):
 class RoleDetail(TypedDict, closed=True):
     assignmentCount: int
     builtin: bool
+    canEdit: NotRequired[bool]
     description: str
     grid: list[GridRow]
     id: str
+    lockedReason: NotRequired[str | None]
     name: str
     permissionCount: int
     permissions: list[PermissionOut]

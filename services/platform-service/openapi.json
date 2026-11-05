@@ -3460,6 +3460,11 @@
             "title": "Builtin",
             "type": "boolean"
           },
+          "canEdit": {
+            "default": false,
+            "title": "Canedit",
+            "type": "boolean"
+          },
           "description": {
             "title": "Description",
             "type": "string"
@@ -3474,6 +3479,17 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "lockedReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lockedreason"
           },
           "name": {
             "title": "Name",
@@ -9355,7 +9371,7 @@
     },
     "/v1/roles/{role_id}": {
       "get": {
-        "description": "One role and its grid: every area and action in the catalogue, with the scope it grants or null.",
+        "description": "One role and its grid: every area and action in the catalogue, with the scope it grants or null, and\nwhether the caller may change it (`canEdit`: a workspace admin, for any role but Admin).",
         "operationId": "roles_read_role",
         "parameters": [
           {

@@ -66,6 +66,17 @@ export interface RoleSummary {
 /** A role and its grid (GET /v1/roles/{id}): every area, each action's scope or null when not granted. */
 export interface RoleDetail extends RoleSummary {
   grid: { area: string; actions: Record<string, 'own' | 'all' | null> }[];
+  /** Whether the signed-in person may change this role's cells: a workspace admin, for any role but Admin. */
+  canEdit?: boolean;
+  /** Why the signed-in person may not change it, in words. */
+  lockedReason?: string | null;
+}
+
+/** One cell a role holds after a save (PUT /v1/roles/{id}/permissions). */
+export interface RoleCell {
+  area: string;
+  action: string;
+  scope: 'own' | 'all';
 }
 
 /** One action checked for one person (POST /v1/access/check): allowed with the granting roles, or refused. */
