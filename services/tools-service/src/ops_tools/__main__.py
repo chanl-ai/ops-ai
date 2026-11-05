@@ -59,7 +59,7 @@ from .opa import OpaClient
 from .platform_events import member_removed_handlers, team_created_handlers
 from .plugins.host import PluginHost
 from .plugins.routes import plugins_router
-from .plugins.templates import plugin_templates_router
+from .plugins.templates import ServiceCopies, plugin_templates_router
 from .registry import ToolRegistry
 from .secrets import SecretResolver
 from .secrets.routes import secrets_router
@@ -225,6 +225,11 @@ def main() -> None:
     )
     connection_service.app_display = plugins.display_of if plugins else None
     tool_users = AgentsToolUsers(client("agents", agents_url, ["agents:view"]))
+    # An app's Resources tab joins the copies agents-service and documents-service keep, read as the caller's team.
+    documents_url = settings.documents_url or f"http://127.0.0.1:{settings.documents_port}"
+    resource_copies = ServiceCopies(
+        client("agents", agents_url, ["agents:view"]), client("documents", documents_url, ["documents:view"])
+    )
     apps = Apps(connection_service, store, plugins, modules, tool_users)
     app = create_gateway_app(
         opa=OpaClient(httpx.AsyncClient(base_url=settings.opa_url, timeout=5)),
@@ -321,7 +326,7 @@ def main() -> None:
                 if apps.plugin_accounts
                 else []
             ),
-            *([plugin_templates_router(plugins)] if plugins else []),
+            *([plugin_templates_router(plugins, resource_copies)] if plugins else []),
             accounts_router(connection_service, directory),
             apps_router(apps, directory),
             platform_events_router(

@@ -33,6 +33,7 @@ from ops_service_kit.http import Envelope, ok
 
 Kind = Literal["document_type"]
 KIND: Kind = "document_type"
+State = Literal["available", "added", "update_available", "removed_upstream"]
 # Keys of a template body the copy never takes: the type id is the team's own (ids are unique per tenant, so a body's
 # id would collide with another team's copy), and a sample file is one team's file.
 NOT_COPIED = ("id", "sampleFileId", "sample_file_id")
@@ -47,6 +48,7 @@ class TemplatePlugin(Model):
 class TemplateRequires(Model):
     tools: list[str]
     bind: list[dict[str, str]]
+    resources: list[str] = Field(default_factory=list[str])
 
 
 class Installed(Model):
@@ -59,6 +61,21 @@ class Installed(Model):
     changed: bool = False
 
 
+class CopyRef(Model):
+    id: str
+    kind: Kind
+    record_id: str
+    source: str
+    template_id: str
+    version: int
+
+
+class AddCell(Model):
+    # The roles grid cell a person needs to add this resource, so another service listing it says the same.
+    area: str
+    action: str
+
+
 class TemplateView(Model):
     source: str
     plugin: TemplatePlugin
@@ -68,6 +85,14 @@ class TemplateView(Model):
     title: str
     requires: TemplateRequires
     installed: Installed
+    # available, added, update_available (the app ships a newer or changed template than the copy was made from), or
+    # removed_upstream (the team holds a copy the app, still on, no longer ships).
+    state: State
+    # Whether the caller's roles let them add it: every member keeps the team's document types (documents.edit).
+    can_add: bool
+    add_cell: AddCell
+    # The team's newest live copy, which Open and Remove act on.
+    copy_: CopyRef | None = Field(default=None, alias="copy")
 
 
 class InstallInput(Model):
@@ -75,15 +100,6 @@ class InstallInput(Model):
     version: int | None = Field(default=None, ge=1)
     # The copy's name; the template's when left out. Unique in the team, as on create (409 name_taken).
     name: str | None = Field(default=None, min_length=1, max_length=200)
-
-
-class CopyRef(Model):
-    id: str
-    kind: Kind
-    record_id: str
-    source: str
-    template_id: str
-    version: int
 
 
 class Installation(Model):
@@ -117,18 +133,21 @@ def templates_router(
     # same route agents-service answers for agents, skills and workflows), and the first tag names the SDK operation.
     router = APIRouter(responses=responses)
 
-    async def listed(request: Request, who: Who) -> list[dict[str, Any]]:
-        """The document type templates of the plugins on for the caller's team, from tools-service."""
+    async def offered(request: Request, who: Who) -> list[dict[str, Any]]:
+        """Every resource of the plugins on for the caller's team, from tools-service."""
         tools = cast(PluginTemplates | None, getattr(request.app.state, "plugin_templates", None))
         if tools is None:
             raise ServiceUnavailable("Templates come from tools-service, and this service has no address for it.")
         try:
-            rows = await tools.document_types(who)
+            return await tools.offered(who)
         except (ServiceCallError, ServiceUnreachable) as e:
             raise ServiceUnavailable(
                 "tools-service did not answer with the team's templates. Try again shortly."
             ) from e
-        return [t for t in rows if t.get("kind") == KIND]
+
+    async def listed(request: Request, who: Who) -> list[dict[str, Any]]:
+        """The document type templates of the plugins on for the caller's team."""
+        return [t for t in await offered(request, who) if t.get("kind") == KIND]
 
     @router.get(
         "/v1/templates", tags=["templates"], response_model=Envelope[list[TemplateView]], dependencies=[scope("view")]
@@ -138,10 +157,17 @@ def templates_router(
         who: Annotated[Who, Depends(caller)],
         kind: Annotated[Kind | None, Query()] = None,
     ) -> JSONResponse:
-        """The document types the team's plugins bring, each with the copies the team holds of it."""
+        """The document types the team's plugins bring, each with its state for the team, the copies the team holds of
+        it and whether the caller may add it. A copy whose template the app no longer ships, while the app is still on,
+        is listed too, as `removed_upstream`; a copy of an app turned off for the team reads `added`."""
         held = await copies.of_team()
+        everything = await offered(request, who)
+        on_sources = {str(t["source"]) for t in everything}
+        shipped: set[tuple[str, str]] = set()
         out: list[dict[str, Any]] = []
-        for t in await listed(request, who):
+        cell = {"area": "documents", "action": "edit"}
+        for t in (x for x in everything if x.get("kind") == KIND):
+            shipped.add((str(t["source"]), str(t["id"])))
             mine = [c for c in held if c["source"] == t["source"] and c["template_id"] == t["id"]]
             newest = max((int(c["version"]) for c in mine), default=None)
             latest = max(mine, key=lambda c: (int(c["version"]), str(c["installed_at"])), default=None)
@@ -151,8 +177,46 @@ def templates_router(
                 "newerAvailable": newest is not None and newest < t["version"],
                 "changed": latest is not None and bool(t.get("digest")) and latest.get("digest") != t.get("digest"),
             }
+            state = (
+                "available"
+                if not mine
+                else "update_available"
+                if installed["newerAvailable"] or installed["changed"]
+                else "added"
+            )
             view = {k: t[k] for k in ("source", "plugin", "kind", "id", "version", "title", "requires")}
-            out.append(TemplateView.model_validate(view | {"installed": installed}).model_dump(by_alias=True))
+            mine_now = _copy_view(latest) if latest else None
+            extra = {"state": state, "canAdd": who.edits, "addCell": cell, "copy": mine_now}
+            out.append(TemplateView.model_validate(view | {"installed": installed} | extra).model_dump(by_alias=True))
+        plugins = {str(t["source"]): t["plugin"] for t in everything}
+        for c in held:
+            at = (str(c["source"]), str(c["template_id"]))
+            if at in shipped:
+                continue
+            name = await document_types.name(who, str(c["record_id"]))
+            if name is None:
+                continue
+            shipped.add(at)
+            view: dict[str, Any] = {
+                "source": c["source"],
+                "plugin": plugins.get(str(c["source"]))
+                or {
+                    "id": str(c["source"]).removeprefix("plugin:"),
+                    "title": str(c["source"]).removeprefix("plugin:"),
+                    "version": "",
+                },
+                "kind": KIND,
+                "id": c["template_id"],
+                "version": int(c["version"]),
+                "title": name,
+                "requires": {"tools": [], "bind": []},
+                "installed": {"copies": 1, "version": int(c["version"]), "newerAvailable": False, "changed": False},
+                "state": "removed_upstream" if c["source"] in on_sources else "added",
+                "canAdd": False,
+                "addCell": cell,
+                "copy": _copy_view(c),
+            }
+            out.append(TemplateView.model_validate(view).model_dump(by_alias=True))
         return ok(out)
 
     async def make_type(who: Who, t: dict[str, Any], body: InstallInput) -> str:
@@ -172,7 +236,13 @@ def templates_router(
         try:
             made = await document_types.create(who, asked)
         except NameTakenError as e:
-            raise Conflict(f"A document type named {parsed.name} exists.", code="name_taken") from e
+            suggestion = f"{parsed.name}, {t['plugin']['title']}"
+            raise Conflict(
+                f"Your team already has a document type named {parsed.name}. Add this one under another name, such as "
+                f"{suggestion}.",
+                code="name_taken",
+                details={"suggestion": suggestion},
+            ) from e
         return str(made["id"])
 
     @router.post(

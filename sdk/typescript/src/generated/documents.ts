@@ -76,7 +76,12 @@ export interface paths {
         get: operations["document_types_get_type"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Type
+         * @description Deletes the team's type with its versions and samples; reads already made keep their fields. An app's
+         *     resource row reads not added again once its copy is deleted.
+         */
+        delete: operations["document_types_delete_type"];
         options?: never;
         head?: never;
         patch?: never;
@@ -473,7 +478,9 @@ export interface paths {
         };
         /**
          * List Templates
-         * @description The document types the team's plugins bring, each with the copies the team holds of it.
+         * @description The document types the team's plugins bring, each with its state for the team, the copies the team holds of
+         *     it and whether the caller may add it. A copy whose template the app no longer ships, while the app is still on,
+         *     is listed too, as `removed_upstream`; a copy of an app turned off for the team reads `added`.
          */
         get: operations["templates_list_templates"];
         put?: never;
@@ -488,6 +495,13 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AddCell */
+        AddCell: {
+            /** Action */
+            action: string;
+            /** Area */
+            area: string;
+        };
         /** BackgroundHealthOut */
         BackgroundHealthOut: {
             /** Processes */
@@ -1312,6 +1326,8 @@ export interface components {
             bind: {
                 [key: string]: string;
             }[];
+            /** Resources */
+            resources?: string[];
             /** Tools */
             tools: string[];
         };
@@ -1340,6 +1356,10 @@ export interface components {
         };
         /** TemplateView */
         TemplateView: {
+            addCell: components["schemas"]["AddCell"];
+            /** Canadd */
+            canAdd: boolean;
+            copy?: components["schemas"]["CopyRef"] | null;
             /** Id */
             id: string;
             installed: components["schemas"]["Installed"];
@@ -1352,6 +1372,11 @@ export interface components {
             requires: components["schemas"]["TemplateRequires"];
             /** Source */
             source: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "available" | "added" | "update_available" | "removed_upstream";
             /** Title */
             title: string;
             /** Version */
@@ -1696,6 +1721,107 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Envelope_DocumentType_"];
                 };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not ready or already in another state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    document_types_delete_type: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                type_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Invalid request */
             400: {

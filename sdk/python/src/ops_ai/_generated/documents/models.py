@@ -8,6 +8,11 @@ from typing import Any, Literal, NotRequired
 from typing_extensions import TypedDict
 
 
+class AddCell(TypedDict, closed=True):
+    action: str
+    area: str
+
+
 class BackgroundProcessOut(TypedDict, closed=True):
     does: str
     doneHour: int
@@ -273,6 +278,7 @@ class TemplatePlugin(TypedDict, closed=True):
 
 class TemplateRequires(TypedDict, closed=True):
     bind: list[dict[str, str]]
+    resources: NotRequired[list[str]]
     tools: list[str]
 
 
@@ -286,12 +292,16 @@ class TemplateSuggestion(TypedDict, closed=True):
 
 
 class TemplateView(TypedDict, closed=True):
+    addCell: AddCell
+    canAdd: bool
+    copy: NotRequired[CopyRef | None]
     id: str
     installed: Installed
     kind: Literal["document_type"]
     plugin: TemplatePlugin
     requires: TemplateRequires
     source: str
+    state: Literal["available", "added", "update_available", "removed_upstream"]
     title: str
     version: int
 

@@ -341,11 +341,13 @@ def resource_stories(
         {"team": said(on), "seen": {k: [(t.get("id"), t.get("installed")) for t in v] for k, v in seen.items()}},
     )
 
-    # 41. Each resource says its state in one word and whether the caller may add it: the viewer may not.
+    # 41. Each resource says its state in one word and whether the caller may add it: the viewer may not add the
+    # agent, skill or workflow, and may add the document type, since every member keeps the team's document types.
     check(
-        "41 each resource reads available, and says the viewer may not add it while the builder may",
+        "41 each resource reads available, and says the viewer may add only the document type while the builder may "
+        "add each",
         all(t.get("state") == "available" for s in seen.values() for t in s)
-        and all(t.get("canAdd") is False for t in seen["viewer"])
+        and all(t.get("canAdd") is (t.get("kind") == "document_type") for t in seen["viewer"])
         and all(t.get("canAdd") is True for t in seen["builder"]),
         {k: [{x: t.get(x) for x in ("id", "state", "canAdd")} for t in v] for k, v in seen.items()},
     )

@@ -202,7 +202,9 @@ class SkillRegistry:
                 )
             ).first()
             if taken is not None:
-                raise Conflict(f"The slug {content['slug']} is taken; rename the skill.", code="slug_taken")
+                raise Conflict(
+                    f"A skill named {content['name']} exists; give this one another name.", code="name_taken"
+                )
             await c.execute(
                 registry_skills.insert().values(
                     id=sid,

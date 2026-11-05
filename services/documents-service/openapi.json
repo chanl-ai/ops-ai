@@ -1,6 +1,25 @@
 {
   "components": {
     "schemas": {
+      "AddCell": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "area": {
+            "title": "Area",
+            "type": "string"
+          }
+        },
+        "required": [
+          "area",
+          "action"
+        ],
+        "title": "AddCell",
+        "type": "object"
+      },
       "BackgroundHealthOut": {
         "additionalProperties": false,
         "properties": {
@@ -2380,6 +2399,13 @@
             "title": "Bind",
             "type": "array"
           },
+          "resources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Resources",
+            "type": "array"
+          },
           "tools": {
             "items": {
               "type": "string"
@@ -2443,6 +2469,23 @@
       "TemplateView": {
         "additionalProperties": false,
         "properties": {
+          "addCell": {
+            "$ref": "#/components/schemas/AddCell"
+          },
+          "canAdd": {
+            "title": "Canadd",
+            "type": "boolean"
+          },
+          "copy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CopyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -2465,6 +2508,16 @@
             "title": "Source",
             "type": "string"
           },
+          "state": {
+            "enum": [
+              "available",
+              "added",
+              "update_available",
+              "removed_upstream"
+            ],
+            "title": "State",
+            "type": "string"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -2482,7 +2535,10 @@
           "version",
           "title",
           "requires",
-          "installed"
+          "installed",
+          "state",
+          "canAdd",
+          "addCell"
         ],
         "title": "TemplateView",
         "type": "object"
@@ -3059,6 +3115,185 @@
       }
     },
     "/v1/document-types/{type_id}": {
+      "delete": {
+        "description": "Deletes the team's type with its versions and samples; reads already made keep their fields. An app's\nresource row reads not added again once its copy is deleted.",
+        "operationId": "document_types_delete_type",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "type_id",
+            "required": true,
+            "schema": {
+              "title": "Type Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not ready or already in another state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Delete Type",
+        "tags": [
+          "document-types"
+        ],
+        "x-ops-public": "sdk"
+      },
       "get": {
         "operationId": "document_types_get_type",
         "parameters": [
@@ -7194,7 +7429,7 @@
     },
     "/v1/templates": {
       "get": {
-        "description": "The document types the team's plugins bring, each with the copies the team holds of it.",
+        "description": "The document types the team's plugins bring, each with its state for the team, the copies the team holds of\nit and whether the caller may add it. A copy whose template the app no longer ships, while the app is still on,\nis listed too, as `removed_upstream`; a copy of an app turned off for the team reads `added`.",
         "operationId": "templates_list_templates",
         "parameters": [
           {

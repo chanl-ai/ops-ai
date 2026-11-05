@@ -59,7 +59,8 @@ class Tools:
     async def get(
         self, path: str, *, params: dict[str, Any] | None = None, tenant: str | None = None, team: str | None = None
     ) -> Any:
-        assert path == "/v1/plugin-templates" and params == {"kind": "document_type"}
+        # Every kind: a copy whose app ships other resources but not its own reads as removed by the app.
+        assert path == "/v1/plugin-templates" and params is None
         self.asked.append((tenant, team))
         return list(self.listed) if team in self.on else []
 
@@ -197,3 +198,20 @@ async def test_a_role_that_cannot_edit_types_or_no_tools_address_makes_nothing(m
     unwired = make()
     assert code(await unwired.client.get("/v1/templates", headers=OPS), 503) == "unavailable"
     assert code(await install(unwired), 503) == "unavailable"
+
+
+async def test_a_deleted_copy_reads_available_again_and_one_the_app_dropped_reads_removed(make: Make) -> None:
+    svc = make()
+    other = LETTER | {"id": "case-note", "title": "Case note", "body": {**LETTER["body"], "name": "Case note"}}
+    wire(svc, [LETTER, other])
+    made = data(await install(svc), 201)["copy"]["recordId"]
+    [held] = [t for t in await listed(svc) if t["id"] == "case-letter"]
+    assert (held["state"], held["copy"]["recordId"]) == ("added", made)
+    assert (await svc.client.delete(f"/v1/document-types/{made}", headers=OPS)).status_code == 204
+    [again] = [t for t in await listed(svc) if t["id"] == "case-letter"]
+    assert again["state"] == "available" and again["installed"]["copies"] == 0 and again["copy"] is None
+    # The app, still on, stops shipping the letter: the team's copy stays, listed as removed by the app.
+    kept = data(await install(svc), 201)["copy"]["recordId"]
+    wire(svc, [other])
+    [dropped] = [t for t in await listed(svc) if t["id"] == "case-letter"]
+    assert (dropped["state"], dropped["canAdd"], dropped["copy"]["recordId"]) == ("removed_upstream", False, kept)

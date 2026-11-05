@@ -13,6 +13,11 @@ class ActionField(TypedDict, closed=True):
     value: str
 
 
+class AddCell(TypedDict, closed=True):
+    action: str
+    area: str
+
+
 class AgentControls(TypedDict, closed=True):
     channels: list[Literal["voice", "chat", "email", "api"]]
     evals: bool
@@ -911,6 +916,7 @@ class InboxPosted(TypedDict, closed=True):
 
 
 class InstallInput(TypedDict, closed=True):
+    copies: NotRequired[dict[str, str]]
     knowledgeBases: NotRequired[list[str]]
     modelAlias: NotRequired[str | None]
     name: NotRequired[str | None]
@@ -1204,6 +1210,16 @@ class PendingPublish(TypedDict, closed=True):
 class PersonRef(TypedDict, closed=True):
     email: str
     name: str
+
+
+class PlanInput(TypedDict, closed=True):
+    resources: list[str]
+
+
+class PlanRefusal(TypedDict, closed=True):
+    code: str
+    message: str
+    suggestion: NotRequired[str | None]
 
 
 class PlatformEventIn(TypedDict, closed=True):
@@ -1837,16 +1853,21 @@ class TemplatePlugin(TypedDict, closed=True):
 
 class TemplateRequires(TypedDict, closed=True):
     bind: list[dict[str, str]]
+    resources: NotRequired[list[str]]
     tools: list[str]
 
 
 class TemplateView(TypedDict, closed=True):
+    addCell: AddCell
+    canAdd: bool
+    copy: NotRequired[CopyRef | None]
     id: str
     installed: Installed
     kind: Literal["agent", "skill", "workflow"]
     plugin: TemplatePlugin
     requires: TemplateRequires
     source: str
+    state: Literal["available", "added", "update_available", "removed_upstream"]
     title: str
     version: int
 
@@ -1977,6 +1998,19 @@ class TypedTask(TypedDict, closed=True):
     regions: list[TaskRegion]
     type: TaskTypeRef
     warnings: list[TaskWarning]
+
+
+class UpdateInput(TypedDict, closed=True):
+    confirm: NotRequired[bool]
+
+
+class UpdateReview(TypedDict, closed=True):
+    changes: list[str]
+    copy: CopyRef
+    edits: list[str]
+    fromVersion: int
+    taken: NotRequired[bool]
+    toVersion: int
 
 
 class UploadedFile(TypedDict, closed=True):
@@ -2745,6 +2779,11 @@ class EnvelopeThreadEventResult(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeUpdateReview(TypedDict, closed=True):
+    data: UpdateReview
+    success: Literal[True]
+
+
 class EnvelopeUploadedFile(TypedDict, closed=True):
     data: UploadedFile
     success: Literal[True]
@@ -2975,6 +3014,19 @@ class OverviewCounts(TypedDict, closed=True):
     runsInFlight: list[OverviewRunRow]
     urgentReviews: list[dict[str, Any]]
     waitingForMe: list[OverviewTaskRow]
+
+
+class PlanItem(TypedDict, closed=True):
+    bindings: list[dict[str, str]]
+    broughtBy: list[str]
+    held: NotRequired[CopyRef | None]
+    heldRecordId: NotRequired[str | None]
+    kind: Literal["agent", "skill", "workflow", "document_type", "knowledge_source"]
+    refusal: NotRequired[PlanRefusal | None]
+    resource: str
+    service: str
+    title: str
+    tools: list[str]
 
 
 class PublishRequestInfo(TypedDict, closed=True):
@@ -3532,6 +3584,11 @@ class Live(TypedDict, closed=True):
     versions: list[LiveVersion]
 
 
+class Plan(TypedDict, closed=True):
+    items: list[PlanItem]
+    ready: bool
+
+
 class SkillDetail(TypedDict, closed=True):
     activity: dict[str, Any]
     content: SkillContent
@@ -3689,6 +3746,11 @@ class EnvelopeListResultWorkflow(TypedDict, closed=True):
 
 class EnvelopeLive(TypedDict, closed=True):
     data: Live
+    success: Literal[True]
+
+
+class EnvelopePlan(TypedDict, closed=True):
+    data: Plan
     success: Literal[True]
 
 

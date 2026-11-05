@@ -76,6 +76,49 @@ def linked_desk(parent: Path) -> Path:
     return root
 
 
+class FakeCopies:
+    """agents-service's and documents-service's template lists for the linked desk, as their own tests prove them:
+    the helper agent is added, the triage workflow is not."""
+
+    def __init__(self) -> None:
+        self.asked: list[tuple[str, str, str]] = []
+
+    async def of(self, tenant_id: str, team_id: str, source: str) -> list[dict[str, Any]]:
+        self.asked.append((tenant_id, team_id, source))
+        base: dict[str, Any] = {"source": source, "version": 1, "requires": {"tools": [], "bind": [], "resources": []}}
+        none = {"copies": 0, "version": None, "newerAvailable": False, "changed": False}
+        copy = {
+            "id": "tcp_1",
+            "kind": "agent",
+            "recordId": "ag_1",
+            "source": source,
+            "templateId": "helper",
+            "version": 1,
+        }
+        return [
+            base
+            | {
+                "kind": "agent",
+                "id": "helper",
+                "title": "Helper",
+                "state": "added",
+                "copy": copy,
+                "installed": none | {"copies": 1, "version": 1},
+                "addCell": {"area": "agents", "action": "create"},
+            },
+            base
+            | {
+                "kind": "workflow",
+                "id": "triage",
+                "title": "Triage",
+                "state": "available",
+                "copy": None,
+                "installed": none,
+                "addCell": {"area": "workflows", "action": "create"},
+            },
+        ]
+
+
 @pytest.fixture
 async def client(
     engine: AsyncEngine, seed: dict[str, Any], tenant: str, tmp_path: Path
@@ -93,7 +136,7 @@ async def client(
         Identity(audience="tools", jwks=jwks, introspect=introspect, key_cache_s=0, services=dev.services), dev.services
     )
     app = build_app(engine, seed, tenant, auth=auth)
-    app.include_router(plugin_templates_router(host))
+    app.include_router(plugin_templates_router(host, FakeCopies()))
     hooks = {"response": [response_checker(app)]}
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://tools", event_hooks=hooks
@@ -173,6 +216,28 @@ async def test_a_workflow_names_the_resources_it_needs_and_a_knowledge_source_is
     assert articles["requires"]["bind"] == [{"knowledge_base": "Help articles"}]
     only = await listed(client, service(tenant, ON), kind="knowledge_source")
     assert [t["id"] for t in only] == ["articles"]
+
+
+async def test_the_apps_resources_say_who_may_add_each_and_hold_its_knowledge_source(
+    client: httpx.AsyncClient, tenant: str
+) -> None:
+    async def tab(roles: dict[str, str]) -> dict[str, dict[str, Any]]:
+        r = await client.get(f"/v1/apps/plugin:{LINKED}/resources", headers=person(tenant, "Ravi Menon", roles))
+        assert r.status_code == 200, r.text
+        return {row["id"]: row for row in r.json()["data"]}
+
+    viewer, builder = await tab({ON: "viewer"}), await tab({ON: "builder"})
+    assert sorted(viewer) == ["articles", "helper", "triage"]
+    # Added already: nothing to add, and Open finds the team's copy.
+    assert (viewer["helper"]["canAdd"], viewer["helper"]["copy"]["recordId"]) == (False, "ag_1")
+    assert viewer["helper"]["reason"] is None and viewer["helper"]["service"] == "agents"
+    # A viewer's role cannot create workflows or edit knowledge: told who can, in words.
+    assert (viewer["triage"]["canAdd"], viewer["triage"]["reason"]) == (False, "A builder adds this.")
+    assert (viewer["articles"]["kind"], viewer["articles"]["canAdd"]) == ("knowledge_source", False)
+    assert builder["triage"]["canAdd"] is True and builder["triage"]["reason"] is None
+    # The linked desk signs in with nothing, so its knowledge source can be added at once.
+    assert (builder["articles"]["state"], builder["articles"]["canAdd"]) == ("available", True)
+    assert builder["articles"]["service"] == "kb"
 
 
 def test_a_body_outside_the_plugin_folder_is_never_read(tmp_path: Path) -> None:

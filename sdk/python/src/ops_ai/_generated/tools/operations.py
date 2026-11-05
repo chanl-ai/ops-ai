@@ -370,6 +370,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "plugins_list_app_resources": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/apps/{app_id}/resources",
+        "pathParams": ["app_id"],
+        "query": [],
+        "stream": False,
+    },
     "plugins_list_plugin_templates": {
         "body": None,
         "headers": [],
@@ -814,6 +823,10 @@ class Operations:
         return self._t.call(
             SERVICE, OPERATIONS["apps_check_credential"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
+
+    def plugins_list_app_resources(self, app_id: str) -> list[AppResource]:
+        "List App Resources"
+        return self._t.call(SERVICE, OPERATIONS["plugins_list_app_resources"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def apps_set_team_app(self, app_id: str, body: TeamPluginIn) -> SystemCard:
         "Set Team App"
@@ -1300,6 +1313,10 @@ class AsyncOperations:
         return await self._t.call(
             SERVICE, OPERATIONS["apps_check_credential"], {"app_id": app_id, "account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
+
+    async def plugins_list_app_resources(self, app_id: str) -> list[AppResource]:
+        "List App Resources"
+        return await self._t.call(SERVICE, OPERATIONS["plugins_list_app_resources"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def apps_set_team_app(self, app_id: str, body: TeamPluginIn) -> SystemCard:
         "Set Team App"

@@ -23,12 +23,11 @@ log = get_logger("ops_documents.tools_client")
 class PluginTemplates:
     client: ServiceClient
 
-    async def document_types(self, who: Who) -> list[dict[str, Any]]:
-        """GET /v1/plugin-templates?kind=document_type as the caller's team; ServiceCallError or ServiceUnreachable
-        when tools-service refuses or does not answer."""
-        rows = await self.client.get(
-            "/v1/plugin-templates", params={"kind": "document_type"}, tenant=who.tenant_id, team=who.team
-        )
+    async def offered(self, who: Who) -> list[dict[str, Any]]:
+        """GET /v1/plugin-templates as the caller's team: every resource of the apps on for it, of every kind, so a
+        copy whose app still ships other resources but not its own reads as removed by the app. ServiceCallError or
+        ServiceUnreachable when tools-service refuses or does not answer."""
+        rows = await self.client.get("/v1/plugin-templates", tenant=who.tenant_id, team=who.team)
         return cast(list[dict[str, Any]], rows)
 
 

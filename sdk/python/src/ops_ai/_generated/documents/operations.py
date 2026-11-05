@@ -37,6 +37,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "document_types_delete_type": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/document-types/{type_id}",
+        "pathParams": ["type_id"],
+        "query": [],
+        "stream": False,
+    },
     "document_types_get_test": {
         "body": None,
         "headers": [],
@@ -273,6 +282,10 @@ class Operations:
         "Get Type"
         return self._t.call(SERVICE, OPERATIONS["document_types_get_type"], {"type_id": type_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def document_types_delete_type(self, type_id: str) -> Any:
+        "Delete Type"
+        return self._t.call(SERVICE, OPERATIONS["document_types_delete_type"], {"type_id": type_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     def document_types_list_examples(self, type_id: str) -> list[DocumentTypeExample]:
         "List Examples"
         return self._t.call(SERVICE, OPERATIONS["document_types_list_examples"], {"type_id": type_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -422,6 +435,10 @@ class AsyncOperations:
     async def document_types_get_type(self, type_id: str) -> DocumentType:
         "Get Type"
         return await self._t.call(SERVICE, OPERATIONS["document_types_get_type"], {"type_id": type_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def document_types_delete_type(self, type_id: str) -> Any:
+        "Delete Type"
+        return await self._t.call(SERVICE, OPERATIONS["document_types_delete_type"], {"type_id": type_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def document_types_list_examples(self, type_id: str) -> list[DocumentTypeExample]:
         "List Examples"

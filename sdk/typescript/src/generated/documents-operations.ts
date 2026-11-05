@@ -31,6 +31,17 @@ export const documentsOperations = {
     "query": [],
     "stream": false
   },
+  "document_types_delete_type": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/document-types/{type_id}",
+    "pathParams": [
+      "type_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "document_types_get_test": {
     "body": null,
     "headers": [],

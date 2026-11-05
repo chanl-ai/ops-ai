@@ -402,6 +402,23 @@ class DocumentTypesStore:
             )
         return bool(gone.rowcount)
 
+    async def delete(self, team: str, type_id: str) -> bool:
+        """Deletes the team's type with its versions, samples, examples and tests; reads already made keep their own
+        fields. False when the team holds no such type."""
+        tenant = isolation.tenant()
+        t = document_types.c
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+            gone = await c.execute(
+                sa.delete(document_types).where(
+                    t.tenant_id == tenant, t.team == team, t.id == type_id, team_visible(document_types)
+                )
+            )
+            if not gone.rowcount:
+                return False
+            for table in (document_type_versions, document_type_samples, document_type_examples, document_type_tests):
+                await c.execute(sa.delete(table).where(table.c.tenant_id == tenant, table.c.type_id == type_id))
+        return True
+
     async def insert_test(self, values: Mapping[str, Any]) -> None:
         async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             await c.execute(sa.insert(document_type_tests).values(**values))

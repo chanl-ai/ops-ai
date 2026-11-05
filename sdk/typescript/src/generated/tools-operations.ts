@@ -437,6 +437,17 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "plugins_list_app_resources": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/apps/{app_id}/resources",
+    "pathParams": [
+      "app_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "plugins_list_plugin_templates": {
     "body": null,
     "headers": [],

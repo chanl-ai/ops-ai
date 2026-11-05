@@ -321,6 +321,7 @@ def create_documents_app(
         return ok({"extractions": removed, "samples": samples})
 
     types = APIRouter(prefix="/v1/document-types", tags=["document-types"], responses=errors)
+    copies = TemplateCopies(engine)
 
     @types.post("", status_code=201, response_model=Envelope[DocumentType], dependencies=[service_scope("edit")])
     async def create_type(body: DocumentTypeIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -343,6 +344,15 @@ def create_documents_app(
     @types.get("/{type_id}", response_model=Envelope[DocumentType], dependencies=[service_scope("view")])
     async def get_type(type_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(found(await document_types.get(who, type_id), "Document type"))
+
+    @types.delete("/{type_id}", status_code=204, response_class=Response, dependencies=[service_scope("edit")])
+    async def delete_type(type_id: str, who: Caller) -> Response:  # pyright: ignore[reportUnusedFunction]
+        """Deletes the team's type with its versions and samples; reads already made keep their fields. An app's
+        resource row reads not added again once its copy is deleted."""
+        if not await document_types.delete(who, type_id):
+            raise NotFound(f"Document type {type_id}")
+        await copies.removed_record(type_id)
+        return Response(status_code=204)
 
     @types.post(
         "/{type_id}/versions",
@@ -447,7 +457,7 @@ def create_documents_app(
     app.state.plugin_templates = plugin_templates
     app.include_router(
         templates_router(
-            copies=TemplateCopies(engine),
+            copies=copies,
             document_types=document_types,
             caller=who,
             scope=service_scope,

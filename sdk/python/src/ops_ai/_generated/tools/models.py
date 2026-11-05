@@ -747,6 +747,22 @@ class RemoveIn(TypedDict, closed=True):
     value: str
 
 
+class ResourceCopy(TypedDict):
+    id: str
+    kind: str
+    recordId: str
+    source: str
+    templateId: str
+    version: int
+
+
+class ResourceInstalled(TypedDict):
+    changed: NotRequired[bool]
+    copies: int
+    newerAvailable: bool
+    version: int | None
+
+
 class ReviewDecisionIn(TypedDict, closed=True):
     by: NotRequired[str | None]
     decision: Literal["approved", "rejected", "returned"]
@@ -1261,6 +1277,22 @@ class AppCredentialDetail(TypedDict, closed=True):
     updated: NotRequired[str | None]
 
 
+class AppResource(TypedDict):
+    canAdd: bool
+    copy: NotRequired[ResourceCopy | None]
+    id: str
+    installed: NotRequired[ResourceInstalled | None]
+    kind: Literal["agent", "skill", "workflow", "document_type", "knowledge_source"]
+    plugin: PluginRef
+    reason: NotRequired[str | None]
+    requires: TemplateRequires
+    service: str
+    source: str
+    state: Literal["available", "added", "update_available", "removed_upstream", "needs_sign_in"]
+    title: str
+    version: int
+
+
 class AuthKind(TypedDict, closed=True):
     fields: list[KindField]
     holdsToken: bool
@@ -1456,6 +1488,11 @@ class EnvelopeWaitOut(TypedDict, closed=True):
 
 class EnvelopeListAppCredential(TypedDict, closed=True):
     data: list[AppCredential]
+    success: Literal[True]
+
+
+class EnvelopeListAppResource(TypedDict, closed=True):
+    data: list[AppResource]
     success: Literal[True]
 
 

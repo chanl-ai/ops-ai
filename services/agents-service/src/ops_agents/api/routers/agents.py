@@ -38,7 +38,7 @@ from ..agent_registry import (
 )
 from ..agent_test import one_test_turn
 from ..auth import Principal, caller, caller_in, caller_of, principal, require_builder
-from ..child_runs import engine_workflows, refusal
+from ..child_runs import engine_workflows, refusal, team_workflows
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..guardrails import resolve_pins
@@ -521,9 +521,41 @@ async def _widget_pins(rt: Runtime, wanted: list[WidgetPinInput]) -> list[dict[s
     return out
 
 
+async def agent_users(rt: Runtime, agent_id: str) -> list[dict[str, str]]:
+    """The team's workflows that run the agent, each `{kind, id, name}` once: those `used_in_all` names (its own
+    one-step workflow aside, which goes with it), and every v2 workflow whose newest version, draft or live, has an
+    agent step on it, since a draft names an agent before either is published."""
+    out: list[dict[str, str]] = []
+
+    def add(workflow_id: str, name: str) -> None:
+        if all(u["id"] != workflow_id for u in out):
+            out.append({"kind": "workflow", "id": workflow_id, "name": name})
+
+    for use in (await used_in_all(rt)).get(agent_id, []):
+        if not use.get("own"):
+            add(str(use["workflowId"]), str(use["workflowName"]))
+    for d in await team_workflows(rt):
+        if d.get("archived_at"):
+            continue
+        for node in cast(list[dict[str, Any]], dict(d.get("definition") or {}).get("nodes") or []):
+            if node.get("type") == "ops.ai.agent" and dict(node.get("parameters") or {}).get("agent") == agent_id:
+                add(str(d["workflow_id"]), str(d["name"]))
+    return out
+
+
 @router.delete("/{agent_id}", status_code=204, response_model=None)
 async def delete_agent(rt: Rt, me: Cl, agent_id: str) -> Response:
+    """Deletes the agent. 409 `in_use` while a workflow of the team runs it, naming each in `details.usedBy`, so the
+    person changes or removes those first."""
     await changeable(rt, me, agent_id, "delete")
+    if users := await agent_users(rt, agent_id):
+        names = ", ".join(u["name"] for u in users)
+        raise Conflict(
+            f"{names} {'runs' if len(users) == 1 else 'run'} this agent. Change or remove "
+            f"{'it' if len(users) == 1 else 'them'} first.",
+            code="in_use",
+            details={"usedBy": users},
+        )
     await registry(rt).delete(agent_id)
     take_down(rt, agent_id)
     await TemplateCopies(rt.db).removed_record("agent", agent_id)

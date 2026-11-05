@@ -1197,6 +1197,39 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "resources_plan_resources": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/resources/plan",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "resources_review_update": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/resources/{resource}/copies/{copy}/update",
+    "pathParams": [
+      "resource",
+      "copy"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "resources_take_update": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/resources/{resource}/copies/{copy}/update",
+    "pathParams": [
+      "resource",
+      "copy"
+    ],
+    "query": [],
+    "stream": false
+  },
   "reviews_assign": {
     "body": "json",
     "headers": [],

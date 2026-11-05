@@ -5,7 +5,7 @@ Status: current. Id: `uc-590`. Service: `agents-service`. Layers: api, sdk, cli,
 A plugin brings tools, and it can also bring the agents, skills, workflows and document types that use them. Until
 now a team that turned a plugin on got its tools and nothing else: the templates were checked when the plugin was
 validated and never offered. This use case lists a plugin's templates for the team that has it on, and installs each
-one as the team's own copy through the checks a person's create goes through. Stories S10 to S14 cover adding an
+one as the team's own copy through the checks a person's create goes through. Stories S10 to S16 cover adding an
 app's resources selectively once its sign-in is resolved: the state each resource shows, a preview of what a resource
 brings with it, the dependencies a copy needs, names that clash, updates and removal, and an app's knowledge source.
 They run on a second plugin, the service desk, written for each run by `scripts/resources_desk.py`: an agent, a skill,
@@ -26,11 +26,13 @@ it asserts.
 | S7 | A developer adds a resource to the team through the SDK's `resources_copy_resource` | sdk | 22 | 22 |
 | S8 | A team admin lists the app's resources and adds one with `ops resources` | cli | 23 | 23 |
 | S9 | On the app's Resources tab a person adds a resource to the team, and Added opens the team's copy | ui | 32 | 32 |
-| S10 | Everyone in the team sees each resource and its state; a viewer cannot add one and is told so in plain words, a builder can | api, sdk, ui | 40-42, 60, 70 | 41 |
-| S11 | A builder previews several resources and adds them with what they depend on: a workflow before the agent it runs is refused naming it, bindings are the team's own, and the workflow runs the team's copy | api, sdk, ui | 43-47, 61-62, 71-72 | 44 |
+| S10 | Everyone in the team sees each resource and its state; a viewer cannot add one and is told so in plain words, a builder can | api | 40-42 | 41 |
+| S11 | A builder previews several resources and adds them with what they depend on: a workflow before the agent it runs is refused naming it, bindings are the team's own, and the workflow runs the team's copy | api | 43-47 | 44 |
 | S12 | A resource whose name the team already uses is refused with name_taken, and added under a name of the team's choosing | api | 48-50 | 48 |
-| S13 | A changed template reads update available and never overwrites the team's edited copy; removing a copy names what uses it first; a template the app stops shipping leaves the copy, marked as removed by the app | api, sdk, ui | 51-55, 63, 73-74 | 53 |
-| S14 | An app's knowledge source is one of its resources, added to the team's knowledge base and synced; a team with the app off is refused | api, ui | 56-58, 75 | 57 |
+| S13 | A changed template reads update available and never overwrites the team's edited copy; removing a copy names what uses it first; a template the app stops shipping leaves the copy, marked as removed by the app | api | 51-55 | 53 |
+| S14 | An app's knowledge source is one of its resources, added to the team's knowledge base and synced; a team with the app off is refused | api | 56-58 | 57 |
+| S15 | A developer lists an app's resources with their state, adds one with a binding, previews several, and removes a copy through the SDK's words | sdk | 60-63 | 60 |
+| S16 | On the app's Resources tab a viewer reads who adds each resource; a builder ticks several, is told a workflow needs its agent first, sees Update available and Remove, and finds the app's knowledge source | ui | 70-76 | 72 |
 
 ## Preconditions
 
@@ -40,8 +42,8 @@ it asserts.
 | agents-service reading tools-service's operations and templates | `agents(gateway_url=<tools>, kb_url=<that kb>)` |
 | documents-service reading templates from tools-service | `kb(..., documents_env={OPS_TOOLS_URL: <tools>, platform sign-in})`, so one files-service serves both |
 | People | Dev auth: Priya Shah (team_ops admin) turns the plugin on for team_ops; William Kamau (team_platform admin) is the team with it off |
-| The service desk (S10 to S14) | `scripts/resources_desk.py` writes plugin `test.resources` 0.1.0 into the run's folder, beside the test plugin in `OPS_PLUGIN_PATHS`; step 55 starts tools-service again on 0.2.0, which drops the skill. kb-service starts with plugins on and the run's tools-service address, so it takes the desk's knowledge source |
-| More people (S10 to S14) | James Richardson (team_ops builder) adds; Ravi Menon (team_ops viewer) only looks |
+| The service desk (S10 to S16) | `scripts/resources_desk.py` writes plugin `test.resources` 0.1.0 into the run's folder, beside the test plugin in `OPS_PLUGIN_PATHS`; step 55 starts tools-service again on 0.2.0, which drops the skill. kb-service starts with plugins on and the run's tools-service address, so it takes the desk's knowledge source |
+| More people (S10 to S16) | James Richardson (team_ops builder) adds; Ravi Menon (team_ops viewer) only looks |
 
 ## Steps and expected results
 
@@ -65,7 +67,7 @@ it asserts.
 | 31 | `POST /v1/resources/plugin:test.templates:case-helper/copies` on agents-service twice (the agent was deleted in step 11), and `POST /v1/resources/plugin:test.templates:case-letter/copies` on documents-service | 201 then 200 with the same copy; the document type answers the copy step 7 made |
 | 32 | (ui) Priya opens the templates desk's page › Resources, presses Add to team on the agent, comes back and presses Open, then adds the document type | Four rows each offer Add to team; the agent's copy opens at `/agents/{id}`, the row then reads Added and Open lands on the same copy; the document type's copy opens at `/document-types/{id}` |
 | 40 | (api) Priya turns the desk on; Ravi and James list `GET /v1/templates?source=plugin:test.resources` on agents-service and documents-service | 200; each sees the ticket helper, close-ticket skill, ticket triage workflow and ticket form, each with `installed.copies` 0 |
-| 41 | (api) The same lists | Each row has `state` `available`; `canAdd` false for Ravi and true for James |
+| 41 | (api) The same lists | Each row has `state` `available`; `canAdd` true for James on every row, and for Ravi only on the ticket form, since every member keeps the team's document types |
 | 42 | (api) Ravi adds the agent | 403, the reason free of grid cells and team ids; nothing made |
 | 43 | (api) James asks `POST /v1/resources/plan` for the workflow | 200 naming the ticket helper it runs, the tool `resources_get_ticket`, and the knowledge base and model alias left to bind |
 | 44 | (api) James adds the workflow before the agent | 422 naming `ticket-helper`; no workflow made (one made is deleted) |

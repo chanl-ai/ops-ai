@@ -341,6 +341,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/apps/{app_id}/resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List App Resources
+         * @description The app's Resources tab: every agent, skill, workflow, document type and knowledge source the app brings,
+         *     and every copy the team holds of one it no longer ships or of an app turned off, each with its state, the
+         *     team's copy, and whether the caller may add it (with who can, when they cannot).
+         */
+        get: operations["plugins_list_app_resources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/apps/{app_id}/team": {
         parameters: {
             query?: never;
@@ -1686,6 +1708,37 @@ export interface components {
             /** Testfailed */
             testFailed?: string | null;
         };
+        /** AppResource */
+        AppResource: {
+            /** Canadd */
+            canAdd: boolean;
+            copy?: components["schemas"]["ResourceCopy"] | null;
+            /** Id */
+            id: string;
+            installed?: components["schemas"]["ResourceInstalled"] | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "agent" | "skill" | "workflow" | "document_type" | "knowledge_source";
+            plugin: components["schemas"]["PluginRef"];
+            /** Reason */
+            reason?: string | null;
+            requires: components["schemas"]["TemplateRequires"];
+            /** Service */
+            service: string;
+            /** Source */
+            source: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "available" | "added" | "update_available" | "removed_upstream" | "needs_sign_in";
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+        };
         /** AppSkill */
         AppSkill: {
             /** Id */
@@ -2646,6 +2699,16 @@ export interface components {
         Envelope_list_AppCredential__: {
             /** Data */
             data: components["schemas"]["AppCredential"][];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[list[AppResource]] */
+        Envelope_list_AppResource__: {
+            /** Data */
+            data: components["schemas"]["AppResource"][];
             /**
              * Success
              * @constant
@@ -3863,6 +3926,35 @@ export interface components {
         RemoveIn: {
             /** Value */
             value: string;
+        };
+        /** ResourceCopy */
+        ResourceCopy: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Recordid */
+            recordId: string;
+            /** Source */
+            source: string;
+            /** Templateid */
+            templateId: string;
+            /** Version */
+            version: number;
+        };
+        /** ResourceInstalled */
+        ResourceInstalled: {
+            /**
+             * Changed
+             * @default false
+             */
+            changed: boolean;
+            /** Copies */
+            copies: number;
+            /** Neweravailable */
+            newerAvailable: boolean;
+            /** Version */
+            version: number | null;
         };
         /**
          * ReviewDecisionIn
@@ -7125,6 +7217,127 @@ export interface operations {
             };
             /** @description Server error */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    plugins_list_app_resources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_AppResource__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -187,6 +187,25 @@
         "title": "ActorView",
         "type": "object"
       },
+      "AddCell": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "area": {
+            "title": "Area",
+            "type": "string"
+          }
+        },
+        "required": [
+          "area",
+          "action"
+        ],
+        "title": "AddCell",
+        "type": "object"
+      },
       "Agent": {
         "additionalProperties": false,
         "properties": {
@@ -7034,6 +7053,25 @@
         "title": "Envelope[OverviewCounts]",
         "type": "object"
       },
+      "Envelope_Plan_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Plan"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[Plan]",
+        "type": "object"
+      },
       "Envelope_PlatformEventOut_": {
         "additionalProperties": false,
         "properties": {
@@ -7742,6 +7780,25 @@
           "data"
         ],
         "title": "Envelope[Union[list[WidgetTemplateOut], WidgetTemplateList]]",
+        "type": "object"
+      },
+      "Envelope_UpdateReview_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/UpdateReview"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[UpdateReview]",
         "type": "object"
       },
       "Envelope_UploadedFile_": {
@@ -10063,6 +10120,14 @@
       "InstallInput": {
         "additionalProperties": false,
         "properties": {
+          "copies": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "maxProperties": 50,
+            "title": "Copies",
+            "type": "object"
+          },
           "knowledgeBases": {
             "items": {
               "type": "string"
@@ -12483,6 +12548,171 @@
           "name"
         ],
         "title": "PersonRef",
+        "type": "object"
+      },
+      "Plan": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlanItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "ready"
+        ],
+        "title": "Plan",
+        "type": "object"
+      },
+      "PlanInput": {
+        "additionalProperties": false,
+        "properties": {
+          "resources": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Resources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "resources"
+        ],
+        "title": "PlanInput",
+        "type": "object"
+      },
+      "PlanItem": {
+        "additionalProperties": false,
+        "properties": {
+          "bindings": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Bindings",
+            "type": "array"
+          },
+          "broughtBy": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Broughtby",
+            "type": "array"
+          },
+          "held": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CopyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "heldRecordId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heldrecordid"
+          },
+          "kind": {
+            "enum": [
+              "agent",
+              "skill",
+              "workflow",
+              "document_type",
+              "knowledge_source"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanRefusal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resource": {
+            "title": "Resource",
+            "type": "string"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "resource",
+          "kind",
+          "title",
+          "service",
+          "broughtBy",
+          "tools",
+          "bindings"
+        ],
+        "title": "PlanItem",
+        "type": "object"
+      },
+      "PlanRefusal": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "suggestion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggestion"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "PlanRefusal",
         "type": "object"
       },
       "PlatformEventIn": {
@@ -17633,6 +17863,13 @@
             "title": "Bind",
             "type": "array"
           },
+          "resources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Resources",
+            "type": "array"
+          },
           "tools": {
             "items": {
               "type": "string"
@@ -17651,6 +17888,23 @@
       "TemplateView": {
         "additionalProperties": false,
         "properties": {
+          "addCell": {
+            "$ref": "#/components/schemas/AddCell"
+          },
+          "canAdd": {
+            "title": "Canadd",
+            "type": "boolean"
+          },
+          "copy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CopyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -17677,6 +17931,16 @@
             "title": "Source",
             "type": "string"
           },
+          "state": {
+            "enum": [
+              "available",
+              "added",
+              "update_available",
+              "removed_upstream"
+            ],
+            "title": "State",
+            "type": "string"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -17694,7 +17958,10 @@
           "version",
           "title",
           "requires",
-          "installed"
+          "installed",
+          "state",
+          "canAdd",
+          "addCell"
         ],
         "title": "TemplateView",
         "type": "object"
@@ -19259,6 +19526,62 @@
           "warnings"
         ],
         "title": "TypedTask",
+        "type": "object"
+      },
+      "UpdateInput": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          }
+        },
+        "title": "UpdateInput",
+        "type": "object"
+      },
+      "UpdateReview": {
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "copy": {
+            "$ref": "#/components/schemas/CopyRef"
+          },
+          "edits": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Edits",
+            "type": "array"
+          },
+          "fromVersion": {
+            "title": "Fromversion",
+            "type": "integer"
+          },
+          "taken": {
+            "default": false,
+            "title": "Taken",
+            "type": "boolean"
+          },
+          "toVersion": {
+            "title": "Toversion",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "copy",
+          "fromVersion",
+          "toVersion",
+          "changes",
+          "edits"
+        ],
+        "title": "UpdateReview",
         "type": "object"
       },
       "UploadedFile": {
@@ -24361,6 +24684,7 @@
     },
     "/v1/agents/{agent_id}": {
       "delete": {
+        "description": "Deletes the agent. 409 `in_use` while a workflow of the team runs it, naming each in `details.usedBy`, so the\nperson changes or removes those first.",
         "operationId": "agents_delete_agent",
         "parameters": [
           {
@@ -40376,9 +40700,199 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/resources/plan": {
+      "post": {
+        "description": "The preview of Add selected: each ticked resource and each one it brings with it, the ones the team already\nholds (used as they are), the tools each uses, the bindings to fill, and anything the caller would be refused, in\nthe order the adds run (document types and skills, then agents, then workflows). Nothing is made.",
+        "operationId": "resources_plan_resources",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_Plan_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Plan Resources",
+        "tags": [
+          "Resources",
+          "resources"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/resources/{resource}/copies": {
       "post": {
-        "description": "Add to team: makes the team's own copy of the resource, 201 with it, or 200 with the copy the team already holds\nof this version. 404 `template_not_found` when the team's apps bring no such resource (its app off for the team),\n`template_version_not_found` for a version they do not ship.",
+        "description": "Add to team: makes the team's own copy of the resource, 201 with it, or 200 with the copy the team already holds\nof this version. 404 `template_not_found` when the team's apps bring no such resource (its app off for the team),\n`template_version_not_found` for a version they do not ship; 409 `name_taken` when the team already has a record\nof the kind by that name; 422 `dependency_missing` naming each resource it needs that the team has not added.",
         "operationId": "resources_copy_resource",
         "parameters": [
           {
@@ -40578,6 +41092,410 @@
           }
         },
         "summary": "Copy Resource",
+        "tags": [
+          "Resources",
+          "resources"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/resources/{resource}/copies/{copy}/update": {
+      "get": {
+        "description": "Review update: what taking the app's current template would change in the team's copy (`copy` is the copy's\nrecord id), and the edits the team made to its copy since, which the new draft does not carry.",
+        "operationId": "resources_review_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resource",
+            "required": true,
+            "schema": {
+              "title": "Resource",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "copy",
+            "required": true,
+            "schema": {
+              "title": "Copy",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_UpdateReview_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Review Update",
+        "tags": [
+          "Resources",
+          "resources"
+        ],
+        "x-ops-public": "sdk"
+      },
+      "post": {
+        "description": "Take update: a new draft version of the copy made from the app's current template; the published version keeps\nrunning until the draft goes through its publish review, and earlier versions stay in the copy's history. A copy the\nteam edited since it was added is refused with 409 `copy_edited`, listing the edits, until `confirm` says the\nperson saw that the new draft does not carry them; nothing is merged.",
+        "operationId": "resources_take_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "resource",
+            "required": true,
+            "schema": {
+              "title": "Resource",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "copy",
+            "required": true,
+            "schema": {
+              "title": "Copy",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_UpdateReview_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Take Update",
         "tags": [
           "Resources",
           "resources"
@@ -45435,7 +46353,7 @@
     },
     "/v1/templates": {
       "get": {
-        "description": "The agents, skills and workflows the team's plugins bring, each with the copies the team holds of it; `source`\nkeeps one plugin's (a plugin update's review shows the version each copy came from).",
+        "description": "The agents, skills and workflows the team's plugins bring, each with its state for the team, the copies the team\nholds of it and whether the caller may add it; `source` keeps one plugin's. A copy whose template the app no longer\nships, while the app is still on, is listed too, as `removed_upstream`; a copy of an app turned off for the team\nreads `added`, with nothing to add.",
         "operationId": "templates_list_templates",
         "parameters": [
           {

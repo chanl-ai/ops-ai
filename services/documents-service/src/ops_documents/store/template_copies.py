@@ -122,6 +122,16 @@ class TemplateCopies:
             return first, False
         return {**row, "removed_at": None}, True
 
+    async def removed_record(self, record_id: str) -> None:
+        """The type a copy made was deleted: its live row, if any, stops counting."""
+        t = template_copies
+        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+            await c.execute(
+                t.update()
+                .where(t.c.tenant_id == isolation.tenant(), t.c.record_id == record_id, LIVE, team_visible(t))
+                .values(removed_at=now_iso())
+            )
+
     async def removed(self, copy_id: str) -> None:
         """The copy's type is gone: its row stops counting, so the next install makes a new copy."""
         t = template_copies

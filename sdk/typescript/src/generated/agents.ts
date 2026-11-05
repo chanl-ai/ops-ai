@@ -276,7 +276,11 @@ export interface paths {
         get: operations["agents_get_agent"];
         put?: never;
         post?: never;
-        /** Delete Agent */
+        /**
+         * Delete Agent
+         * @description Deletes the agent. 409 `in_use` while a workflow of the team runs it, naming each in `details.usedBy`, so the
+         *     person changes or removes those first.
+         */
         delete: operations["agents_delete_agent"];
         options?: never;
         head?: never;
@@ -1597,6 +1601,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/resources/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Plan Resources
+         * @description The preview of Add selected: each ticked resource and each one it brings with it, the ones the team already
+         *     holds (used as they are), the tools each uses, the bindings to fill, and anything the caller would be refused, in
+         *     the order the adds run (document types and skills, then agents, then workflows). Nothing is made.
+         */
+        post: operations["resources_plan_resources"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/resources/{resource}/copies": {
         parameters: {
             query?: never;
@@ -1610,9 +1636,38 @@ export interface paths {
          * Copy Resource
          * @description Add to team: makes the team's own copy of the resource, 201 with it, or 200 with the copy the team already holds
          *     of this version. 404 `template_not_found` when the team's apps bring no such resource (its app off for the team),
-         *     `template_version_not_found` for a version they do not ship.
+         *     `template_version_not_found` for a version they do not ship; 409 `name_taken` when the team already has a record
+         *     of the kind by that name; 422 `dependency_missing` naming each resource it needs that the team has not added.
          */
         post: operations["resources_copy_resource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/{resource}/copies/{copy}/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Review Update
+         * @description Review update: what taking the app's current template would change in the team's copy (`copy` is the copy's
+         *     record id), and the edits the team made to its copy since, which the new draft does not carry.
+         */
+        get: operations["resources_review_update"];
+        put?: never;
+        /**
+         * Take Update
+         * @description Take update: a new draft version of the copy made from the app's current template; the published version keeps
+         *     running until the draft goes through its publish review, and earlier versions stay in the copy's history. A copy the
+         *     team edited since it was added is refused with 409 `copy_edited`, listing the edits, until `confirm` says the
+         *     person saw that the new draft does not carry them; nothing is merged.
+         */
+        post: operations["resources_take_update"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2069,8 +2124,10 @@ export interface paths {
         };
         /**
          * List Templates
-         * @description The agents, skills and workflows the team's plugins bring, each with the copies the team holds of it; `source`
-         *     keeps one plugin's (a plugin update's review shows the version each copy came from).
+         * @description The agents, skills and workflows the team's plugins bring, each with its state for the team, the copies the team
+         *     holds of it and whether the caller may add it; `source` keeps one plugin's. A copy whose template the app no longer
+         *     ships, while the app is still on, is listed too, as `removed_upstream`; a copy of an app turned off for the team
+         *     reads `added`, with nothing to add.
          */
         get: operations["templates_list_templates"];
         put?: never;
@@ -3132,6 +3189,13 @@ export interface components {
             /** Runid */
             runId?: string | null;
             via?: components["schemas"]["AgentRef"] | null;
+        };
+        /** AddCell */
+        AddCell: {
+            /** Action */
+            action: string;
+            /** Area */
+            area: string;
         };
         /** Agent */
         Agent: {
@@ -5356,6 +5420,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[Plan] */
+        Envelope_Plan_: {
+            data: components["schemas"]["Plan"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[PlatformEventOut] */
         Envelope_PlatformEventOut_: {
             data: components["schemas"]["PlatformEventOut"];
@@ -5669,6 +5742,15 @@ export interface components {
         Envelope_Union_list_WidgetTemplateOut___WidgetTemplateList__: {
             /** Data */
             data: components["schemas"]["WidgetTemplateOut"][] | components["schemas"]["WidgetTemplateList"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[UpdateReview] */
+        Envelope_UpdateReview_: {
+            data: components["schemas"]["UpdateReview"];
             /**
              * Success
              * @constant
@@ -6580,6 +6662,10 @@ export interface components {
         };
         /** InstallInput */
         InstallInput: {
+            /** Copies */
+            copies?: {
+                [key: string]: string;
+            };
             /** Knowledgebases */
             knowledgeBases?: string[];
             /** Modelalias */
@@ -7325,6 +7411,53 @@ export interface components {
             email: string;
             /** Name */
             name: string;
+        };
+        /** Plan */
+        Plan: {
+            /** Items */
+            items: components["schemas"]["PlanItem"][];
+            /** Ready */
+            ready: boolean;
+        };
+        /** PlanInput */
+        PlanInput: {
+            /** Resources */
+            resources: string[];
+        };
+        /** PlanItem */
+        PlanItem: {
+            /** Bindings */
+            bindings: {
+                [key: string]: string;
+            }[];
+            /** Broughtby */
+            broughtBy: string[];
+            held?: components["schemas"]["CopyRef"] | null;
+            /** Heldrecordid */
+            heldRecordId?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "agent" | "skill" | "workflow" | "document_type" | "knowledge_source";
+            refusal?: components["schemas"]["PlanRefusal"] | null;
+            /** Resource */
+            resource: string;
+            /** Service */
+            service: string;
+            /** Title */
+            title: string;
+            /** Tools */
+            tools: string[];
+        };
+        /** PlanRefusal */
+        PlanRefusal: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Suggestion */
+            suggestion?: string | null;
         };
         /** PlatformEventIn */
         PlatformEventIn: {
@@ -8993,11 +9126,17 @@ export interface components {
             bind: {
                 [key: string]: string;
             }[];
+            /** Resources */
+            resources?: string[];
             /** Tools */
             tools: string[];
         };
         /** TemplateView */
         TemplateView: {
+            addCell: components["schemas"]["AddCell"];
+            /** Canadd */
+            canAdd: boolean;
+            copy?: components["schemas"]["CopyRef"] | null;
             /** Id */
             id: string;
             installed: components["schemas"]["Installed"];
@@ -9010,6 +9149,11 @@ export interface components {
             requires: components["schemas"]["TemplateRequires"];
             /** Source */
             source: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "available" | "added" | "update_available" | "removed_upstream";
             /** Title */
             title: string;
             /** Version */
@@ -9494,6 +9638,31 @@ export interface components {
             type: components["schemas"]["TaskTypeRef"];
             /** Warnings */
             warnings: components["schemas"]["TaskWarning"][];
+        };
+        /** UpdateInput */
+        UpdateInput: {
+            /**
+             * Confirm
+             * @default false
+             */
+            confirm: boolean;
+        };
+        /** UpdateReview */
+        UpdateReview: {
+            /** Changes */
+            changes: string[];
+            copy: components["schemas"]["CopyRef"];
+            /** Edits */
+            edits: string[];
+            /** Fromversion */
+            fromVersion: number;
+            /**
+             * Taken
+             * @default false
+             */
+            taken: boolean;
+            /** Toversion */
+            toVersion: number;
         };
         /** UploadedFile */
         UploadedFile: {
@@ -20266,6 +20435,111 @@ export interface operations {
             };
         };
     };
+    resources_plan_resources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_Plan_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     resources_copy_resource: {
         parameters: {
             query?: never;
@@ -20297,6 +20571,218 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_Installation_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    resources_review_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                resource: string;
+                copy: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_UpdateReview_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    resources_take_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                resource: string;
+                copy: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_UpdateReview_"];
                 };
             };
             /** @description Invalid request */

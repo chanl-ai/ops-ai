@@ -148,7 +148,7 @@ def test_a_team_secret_is_posted_to_the_tools_api_for_that_team(monkeypatch: pyt
 
 def test_a_named_team_has_its_own_skill_names_and_mailbox_and_its_agents_pin_them() -> None:
     """A skill's slug and a mailbox address are unique in the workspace, so a second team that reused the first team's
-    was refused at its skills (slug_taken) and its mailbox (address_taken)."""
+    was refused at its skills (name_taken) and its mailbox (address_taken)."""
     team = manifest()
     first = {s["name"] for s in team["skills"]}, team["mailbox"]["address"]
     sample_team.named(team, "Probe Team")
