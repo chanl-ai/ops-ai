@@ -354,16 +354,21 @@ def chat_reads_an_attached_pdf(api: httpx.Client, files: httpx.Client) -> None:
         {"file": notice, "status": res.status_code, "reply": str(reply.get("content"))[:300], "cited": cited[:1]},
     )  # fmt: skip
 
-    # 7. Files lists it as a chat attachment, used by the conversation.
+    # 7. Files lists it as a chat attachment; the person deletes it there, and the next turn says it is gone.
     listed = (got(files.get("/v1/files", params={"purpose": "chat_attachment", "pageSize": 100})) or {}).get("data")
     row = next((f for f in listed or [] if f.get("id") == notice["fileId"]), {})
-    detail = got(files.get(f"/v1/files/{notice['fileId']}")) or {}
-    refs = [(r.get("type"), r.get("id")) for r in detail.get("references") or []]
+    deleted = files.delete(f"/v1/files/{notice['fileId']}")
+    res, reply = ask(api, tid, "uc620 what did I attach?", [])
     check(
-        "7 Files lists the attached PDF as a chat attachment, used by the conversation",
-        row.get("purpose") == "chat_attachment" and ("chat", tid) in refs,
-        {"row": {k: row.get(k) for k in ("id", "name", "purpose")}, "references": refs},
-    )
+        "7 Files lists the attached PDF as a chat attachment, the person can delete it, and the next turn tells the "
+        "agent it is no longer in Files",
+        row.get("purpose") == "chat_attachment"
+        and deleted.status_code == 204
+        and f"{notice['name']} ({notice['fileId']}): could not be read: it is no longer in Files"
+        in str(reply.get("content")),
+        {"row": {k: row.get(k) for k in ("id", "name", "purpose")}, "delete": said(deleted),
+         "reply": str(reply.get("content"))[:300]},
+    )  # fmt: skip
 
     # 8. A scan with no text layer is told plainly to the person and the agent, not answered as if read.
     scan = attach(files, f"scan-{RUN}.pdf", SCAN + f"\n% uc-620 scan {RUN}\n".encode())

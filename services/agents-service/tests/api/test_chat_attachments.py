@@ -1,8 +1,8 @@
 """Files attached to a chat message, read through files-service and documents-service, by failure mode: the file's
 text never reaching the model; the model not told the file's name and id; a file with no text answered as if read;
 another team's file read by id; an earlier file gone from Files stopping the conversation; a file cut for length
-without saying so; Files not showing the conversation that uses a file; a message with files answered without them
-where Files is not run. files-service and documents-service are their clients' fakes."""
+without saying so; a file attached in chat kept from being deleted in Files; a message with files answered without
+them where Files is not run. files-service and documents-service are their clients' fakes."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ class Rig:
     def __init__(self, rt: Runtime) -> None:
         self.files, self.documents = FakeFilesService(), FakeDocumentsService()
         rt.chat_attachments = ChatAttachmentReader(
-            self.files.client(service="agents", scopes=["files:view", "files:edit"]), self.documents.client(), wait_s=0
+            self.files.client(service="agents", scopes=["files:view"]), self.documents.client(), wait_s=0
         )
         self.rt = rt
 
@@ -131,14 +131,15 @@ async def test_a_file_cut_for_length_says_so_in_the_reply(
     assert "Only part of fees.pdf was read" in reloaded["content"], "a reload says the same"
 
 
-async def test_files_shows_the_conversation_that_uses_the_file(
+async def test_a_file_attached_in_chat_can_still_be_deleted_from_files(
     stack: tuple[AsyncClient, Runtime],  # noqa: F811
     rig: Rig,
 ) -> None:
     client, _ = stack
     tid, file = await thread_and_file(client, rig, "fees.pdf", FEES)
     await send(client, tid, {"content": ASK, "attachments": [file]})
-    assert rig.files.references[file["fileId"]] == {("chat", tid)}
+    # files-service refuses to delete a file while anything references it; a conversation holds none.
+    assert not rig.files.references.get(file["fileId"]), rig.files.references
 
 
 async def test_a_message_with_files_is_refused_where_files_is_not_run(

@@ -348,9 +348,9 @@ def create_app(
                 settings, service="agents", scopes=["files:view", "files:create"]
             )
             if settings.documents_url:
-                # A chat turn reads its attached files; recording the conversation on a file takes files:edit.
+                # A chat turn reads its attached files as the person's team.
                 rt.chat_attachments = ChatAttachmentReader(
-                    FilesClient.from_settings(settings, service="agents", scopes=["files:view", "files:edit"]),
+                    FilesClient.from_settings(settings, service="agents", scopes=["files:view"]),
                     DocumentsClient.from_settings(
                         settings, service="agents", scopes=["documents:view", "documents:run"]
                     ),

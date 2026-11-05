@@ -3,7 +3,8 @@ the console as `chat_attachment`, or any file of the team named by its id), read
 documents-service's full-text read, the same read an agent's read_file tool makes, so a file is read once whoever
 asks. A file named on the message being sent that the team does not hold is a 404. Every other problem (a file no
 longer in Files, one the scan has not cleared, one with no text) is told to the agent beside the file's name and id,
-and, for a file on this message, to the person in the reply."""
+and, for a file on this message, to the person in the reply. The conversation records no reference on the file, so a
+person can delete a file they attached; the message keeps its name and a later turn says it is no longer in Files."""
 
 from __future__ import annotations
 
@@ -14,12 +15,9 @@ from ops_agent_kernel.types import AttachedFile
 from ops_agents.activities import attachments
 from ops_contracts.chat import ChatAttachment
 from ops_documents_client import READING, DocumentsClient, DocumentsRefused
-from ops_files_client import FileInfo, FileNotFound, FileNotReady, FilesClient, FilesRefused
+from ops_files_client import FileInfo, FileNotFound, FilesClient, FilesRefused
 from ops_identity import ServiceUnreachable
 from ops_service_kit.errors import NotFound, ServiceUnavailable
-from ops_service_kit.logging import get_logger
-
-log = get_logger("ops_agents.chat_attachments")
 
 # How long a turn waits for documents-service to read a large file in the background before answering without it.
 READ_WAIT_S = 20.0
@@ -54,8 +52,6 @@ class ChatAttachmentReader:
         *,
         asked: list[ChatAttachment],
         earlier: list[ChatAttachment],
-        thread_id: str,
-        title: str,
     ) -> TurnFiles:
         out, budget, cut = TurnFiles(), attachments.TURN_TEXT_CHARS, list[str]()
         new = {a.file_id for a in asked}
@@ -66,8 +62,6 @@ class ChatAttachmentReader:
             if isinstance(found, str):
                 out.files.append(AttachedFile(file_id, given.name, unread=found))
                 continue
-            if file_id in new:
-                await self._reference(tenant, team, found, thread_id, title)
             unread, pages = await self._text(tenant, team, found)
             out.files.append(AttachedFile(file_id, found.name, unread=unread))
             if unread:
@@ -99,15 +93,6 @@ class ChatAttachmentReader:
         except (FilesRefused, ServiceUnreachable) as e:
             raise ServiceUnavailable("Files cannot be reached, so the attached files cannot be read.") from e
         return found if found.scan.status == "clean" else SCAN[found.scan.status]
-
-    async def _reference(self, tenant: str, team: str, file: FileInfo, thread_id: str, title: str) -> None:
-        """Files shows the conversation that uses the file, and keeps the file while it does."""
-        try:
-            await self.files.attach(
-                tenant, team, file.id, type="chat", ref_id=thread_id, name=title, href=f"/chat/{thread_id}"
-            )
-        except (FileNotReady, FilesRefused, ServiceUnreachable) as e:
-            log.warning("chat reference not recorded", extra={"file": file.id, "error": str(e)})
 
     async def _text(self, tenant: str, team: str, file: FileInfo) -> tuple[str | None, list[attachments.Page]]:
         try:

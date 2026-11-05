@@ -661,10 +661,7 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         reader = cast(ChatAttachmentReader | None, rt.chat_attachments)
         if reader is None:
             raise Unavailable("Attached files are read through Files, which this installation does not run.")
-        read = await reader.read(
-            current_tenant(), str(row["team_id"]), asked=asked, earlier=earlier, thread_id=thread_id,
-            title=str(meta.get("title") or NEW_TITLE),
-        )  # fmt: skip
+        read = await reader.read(current_tenant(), str(row["team_id"]), asked=asked, earlier=earlier)
         notes = read.notes
         graph_input["attached_files"] = [
             {"fileId": f.file_id, "name": f.name, **({"unread": f.unread} if f.unread else {})} for f in read.files

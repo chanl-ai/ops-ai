@@ -316,14 +316,14 @@ attachment, and the message carries its `fil_` id. agents-service keeps no copy 
 | Each turn reads every file attached in the thread, this message's first, through files-service as the person's team, and its text through documents-service's full-text read, the read the read_file tool makes | `api/chat_attachments.py` |
 | The agent is told each file's name and id in an `<attachments>` data block, and the text it could read arrives as passages it cites by page, within 24,000 characters a turn (`activities/attachments.TURN_TEXT_CHARS`) | `ops_agent_kernel.context.attachments_block`, `graphs/agent_wrapper.py` |
 | A file named on the message that the team does not hold is 404. A file no longer in Files, not cleared by the scan, with no text, or still being read after 20 seconds is told to the agent with the reason; for a file on this message the reply also ends with that reason in words, and with "Only part of ... was read" when the text was cut | `api/chat_attachments.py` |
-| The conversation is recorded on the file as a `chat` reference, so Files shows it | `ChatAttachmentReader._reference` |
+| The conversation records no reference on the file, so the person can delete it in Files; the message keeps its name, and a later turn tells the agent it is no longer in Files | `api/chat_attachments.py` |
 | Without files-service and documents-service configured, a message with attachments is 503 rather than answered without them | `routers/chat.py` |
 | Files are the team's, as in Files: any member of the team may attach one by id | files-service |
 
 Migration 0097 dropped `chat_attachments`, the table of the earlier store inside agents-service (`fl_` ids, bytes on
 the agents host's disk). Those rows were not moved to files-service: their bytes were never in a store files-service
 reads. A thread that named one keeps its name, and a later turn tells the agent it is no longer in Files. Proof:
-`tests/api/test_chat_attachments.py`, uc-620 steps 6-11.
+`tests/api/test_chat_attachments.py`, uc-620 steps 6-11 (step 7 deletes an attached file).
 
 ## Testing an agent and its replies
 
