@@ -1,7 +1,11 @@
 # The Python and TypeScript SDKs in sdk/ (docs/sdk/): the generated layer, its drift check and the SDKs' tests.
 
 # The sdk/ folder exists, so without .PHONY `make sdk` reports it up to date and generates nothing.
-.PHONY: sdk sdk-verify sdk-check
+.PHONY: openapi sdk sdk-verify sdk-check
+openapi: ## After a route or DTO change: regenerate every service's openapi.json, then the SDKs, in one step
+	@for svc in services/*/; do if [ -f "$$svc/scripts/check_openapi.py" ]; then (cd "$$svc" && uv run --quiet python scripts/check_openapi.py --write) || exit 1; fi; done
+	$(MAKE) -s sdk
+
 sdk: ## Regenerate the SDKs' generated layer after a route changes (sdk/generate.py)
 	uv run python sdk/generate.py
 

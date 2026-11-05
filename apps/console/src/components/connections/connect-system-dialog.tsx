@@ -94,7 +94,7 @@ export function ConnectSystemDialog({
     mode === 'edit' ? 'A saved key stays unless you type a new one. It is tested before it is called working.' : 'It is tested before it is called working.';
   if (failed || loading || !kinds.data) {
     return (
-      <DialogShell open={open} onOpenChange={onOpenChange} size="sm" title={title} description={description} data-testid="connect-dialog">
+      <DialogShell open={open} onOpenChange={onOpenChange} size="md" title={title} description={description} data-testid="connect-dialog">
         {failed ? (
           <QueryError what="what this app needs" error={failed.error} onRetry={() => void failed.refetch()} retrying={failed.isFetching} />
         ) : (
@@ -318,7 +318,7 @@ function ConnectForm({
     <DialogShell
       open={open}
       onOpenChange={(o) => !o && void cancel()}
-      size="sm"
+      size="md"
       title={title}
       description={description}
       data-testid="connect-dialog"

@@ -256,7 +256,7 @@ export function TemplateWizard({
                 {templatesError ? (
                   <QueryError what="templates" onRetry={onRetryTemplates} />
                 ) : templatesLoading ? (
-                  <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="grid gap-2">
                     {Array.from({ length: 6 }, (_, i) => (
                       <Skeleton key={i} className="h-28" />
                     ))}
@@ -268,7 +268,7 @@ export function TemplateWizard({
                     {groups.map((c) => (
                       <section key={c} aria-label={c}>
                         <h3 className="mb-1.5 text-xs font-medium text-muted-foreground">{c}</h3>
-                        <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="grid gap-2">
                           {templates
                             .filter((t) => t.category === c)
                             .map((t) => (
@@ -300,7 +300,7 @@ export function TemplateWizard({
         {step > 1 && !ready && (
           <div className="flex flex-col gap-3" aria-busy="true">
             <Skeleton className="h-9" />
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3">
               <Skeleton className="h-40" />
               <Skeleton className="h-40" />
             </div>
@@ -309,18 +309,18 @@ export function TemplateWizard({
 
         {step === 2 && cfg && detail && (
           <div className="flex flex-col gap-4">
-            <div className="grid gap-4 md:grid-cols-3">
-              <FormField id="tw-name" label="Name" error={err('name')} className="md:col-span-3">
+            <div className="grid gap-4">
+              <FormField id="tw-name" label="Name" error={err('name')}>
                 <Input id="tw-name" value={cfg.name} onChange={(e) => (set('name', e.target.value), serverError?.field === 'name' && setServerError(null))} placeholder="e.g. Hardship Reply Drafter" autoFocus aria-invalid={!!err('name')} />
               </FormField>
               <FormField id="tw-owner" label="Owning team" hint="The team you are working as.">
                 <Input id="tw-owner" value={team?.name ?? ''} readOnly disabled />
               </FormField>
-              <FormField id="tw-model" label="Model" error={err('model')} hint={modelHint(models, cfg.model, `The template is tested on ${detail.model}.`)} className="md:col-span-2">
+              <FormField id="tw-model" label="Model" error={err('model')} hint={modelHint(models, cfg.model, `The template is tested on ${detail.model}.`)}>
                 <ModelSelect id="tw-model" value={cfg.model} onValueChange={(v) => set('model', v)} aliases={models} invalid={!!err('model')} />
               </FormField>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4">
               <FormField id="tw-kb" label="Knowledge bases" optional hint="Agents cite only what is attached.">
                 <div className="flex flex-col gap-1.5" data-testid="tw-kb-list">
                   {missingKb.length > 0 && (
@@ -414,7 +414,7 @@ export function TemplateWizard({
         {step === 5 && cfg && (
           <div className="flex flex-col gap-4">
             <p className="text-sm text-muted-foreground">The template’s defaults. They apply in every workflow that uses the agent.</p>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4">
               <FormField id="tw-unsure" label="When unsure">
                 <Select value={cfg.guardrails.whenUnsure} onValueChange={(v) => set('guardrails', { ...cfg.guardrails, whenUnsure: v as AgentGuardrails['whenUnsure'] })}>
                   <SelectTrigger id="tw-unsure" className="w-full">

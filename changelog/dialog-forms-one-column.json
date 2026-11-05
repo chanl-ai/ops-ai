@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-04",
+  "title": "Dialog forms are one column",
+  "description": "Every dialog lays out its fields in one column, and the Connect dialog for an app that takes a key is wider, with its Connect button at full size.",
+  "tag": "improved"
+}
