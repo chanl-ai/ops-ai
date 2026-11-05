@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Auth configs page grouped by app",
+  "description": "The Auth configs page in the sidebar lists each app's auth configs under the app, with Edit and Delete on your team's own.",
+  "tag": "improved"
+}

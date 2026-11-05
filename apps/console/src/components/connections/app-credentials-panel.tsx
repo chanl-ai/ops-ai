@@ -4,13 +4,15 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
-import { KeyRound, Plus } from 'lucide-react';
+import { KeyRound, Pencil, Plus, Trash2 } from 'lucide-react';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { credentialHref, secretShown } from '@/components/connections/credential-display';
 import { CredentialEditDialog } from '@/components/connections/credential-edit-dialog';
+import { DeleteConfig } from '@/components/connections/app-auth-configs';
 import { NewAppCredentialDialog } from '@/components/connections/new-app-credential-dialog';
+import { Row, Rows, Section } from '@/components/shared/surface';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { Badge } from '@/components/ui/badge';
@@ -101,6 +103,7 @@ export function AppCredentialsPanel({ app }: { app?: string }) {
   const params = useSearchParams();
   const [editing, setEditing] = React.useState<AppCredential | null>(null);
   const [adding, setAdding] = React.useState(false);
+  const [deleting, setDeleting] = React.useState<AppCredential | null>(null);
   const cols = React.useMemo(() => columns(setEditing, Boolean(app)), [app]);
   const wanted = app ? null : params.get('app');
   // A first answer that failed shows the error with Retry at once, not a skeleton while the retries run.
@@ -117,6 +120,9 @@ export function AppCredentialsPanel({ app }: { app?: string }) {
           New auth config
         </Button>
       </div>
+      {!app ? (
+        <ByApp rows={rows} onEdit={setEditing} onDelete={setDeleting} />
+      ) : (
       <DataTableWithViews
         columns={cols}
         data={rows.map((c) => ({ ...c, onRowClick: () => router.push(credentialHref(c)), href: credentialHref(c), rowTestId: `app-credential-row-${c.id}` }))}
@@ -128,8 +134,74 @@ export function AppCredentialsPanel({ app }: { app?: string }) {
         initialColumnFilters={wanted ? [{ id: 'app', value: [wanted] }] : undefined}
         emptyState={<ListEmpty icon={KeyRound} noun="auth configs" filtered={false} description="No auth configs yet. Connecting an app that signs in uses Ops AI’s app; add your own with New auth config." />}
       />
+      )}
+      {deleting && <DeleteConfig id={deleting.id} platform={rows.some((c) => c.app === deleting.app && c.type === 'ops_ai')} onClose={() => setDeleting(null)} />}
       <CredentialEditDialog credentialId={editing?.id ?? null} onClose={() => setEditing(null)} />
       <NewAppCredentialDialog open={adding} onOpenChange={setAdding} app={app} />
+    </div>
+  );
+}
+
+/**
+ * The sidebar's Auth configs, one section per app: each config with its kind, client secret, accounts and state, and
+ * the app page's actions on it (Edit and Delete on the team's own; Ops AI's own is kept by Ops AI). A config opens its
+ * page, and the app's name opens the app, where its accounts sit under each config.
+ */
+function ByApp({ rows, onEdit, onDelete }: { rows: AppCredential[]; onEdit: (c: AppCredential) => void; onDelete: (c: AppCredential) => void }) {
+  const apps = [...new Map(rows.map((c) => [c.app, c.appName])).entries()];
+  if (!apps.length)
+    return <ListEmpty icon={KeyRound} noun="auth configs" filtered={false} description="No auth configs yet. Connecting an app that signs in uses Ops AI’s app; add your own with New auth config." />;
+  return (
+    <div className="flex flex-col gap-4" data-testid="auth-configs-by-app">
+      {apps.map(([id, name]) => (
+        <Section
+          key={id}
+          title={
+            <Link href={`/integrations/apps/${encodeURIComponent(id)}`} className="underline-offset-4 hover:underline" data-testid={`auth-configs-app-${id}`}>
+              {name}
+            </Link>
+          }
+          flush
+        >
+          <Rows>
+            {rows
+              .filter((c) => c.app === id)
+              .map((c) => (
+                <Row
+                  key={c.id}
+                  wrap
+                  leading={<KeyRound className="size-4 text-muted-foreground" />}
+                  title={
+                    <span className="flex flex-wrap items-center gap-2" data-testid={`app-credential-row-${c.id}`}>
+                      <Link href={credentialHref(c)} className="font-medium underline-offset-4 hover:underline">
+                        {c.type === 'own' ? c.name : 'Ops AI'}
+                      </Link>
+                      {c.type === 'ops_ai' && <Badge variant="secondary">Built in</Badge>}
+                      <Badge variant="outline" data-status={c.status}>
+                        {CREDENTIAL_STATUS[c.status]}
+                      </Badge>
+                    </span>
+                  }
+                  description={`${c.type === 'own' ? `Client secret: ${secretShown(c)}` : 'Kept by Ops AI'} · ${c.accounts} ${c.accounts === 1 ? 'account' : 'accounts'}`}
+                  trailing={
+                    c.type === 'own' ? (
+                      <span className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => onEdit(c)} data-testid={`app-credential-edit-${c.id}`}>
+                          <Pencil />
+                          Edit
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => onDelete(c)} data-testid={`app-credential-delete-${c.id}`}>
+                          <Trash2 />
+                          Delete
+                        </Button>
+                      </span>
+                    ) : undefined
+                  }
+                />
+              ))}
+          </Rows>
+        </Section>
+      ))}
     </div>
   );
 }
