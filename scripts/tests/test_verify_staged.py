@@ -1,7 +1,7 @@
 """The commit gate runs only the checks the staged paths can affect, by failure mode: a docs-only commit runs
 the console's typecheck and tests anyway; a docs-only commit with a private path in it gets through once the full
-scans are skipped; a console change no longer runs the console's typecheck; a staged test with a type error reaches
-HEAD; a typed file that is clean fails because one module reads as two. Each case stages its change in a private index
+scans are skipped; a console change no longer runs the console's typecheck; a typed file that is clean fails because
+one module reads as two. Types are CI's to check, not the commit's. Each case stages its change in a private index
 over HEAD and runs scripts/verify-staged.sh on it, as the pre-commit hook does; the working tree is untouched."""
 
 from __future__ import annotations
@@ -52,15 +52,6 @@ def test_a_console_change_still_runs_the_console_typecheck(tmp_path: Path) -> No
     done = gate(tmp_path, {"apps/console/src/lib/c566-gate-probe.ts": 'export const n: number = "not a number";\n'})
     out = done.stdout + done.stderr
     assert done.returncode != 0 and "c566-gate-probe.ts" in out and "TS2322" in out, out[-2000:]
-
-
-def test_a_staged_test_with_a_type_error_fails_the_commit(tmp_path: Path) -> None:
-    # The error kb's test_tool_sources.py took to HEAD on 10-30: a private name imported from outside its module.
-    probe = "services/kb-service/tests/test_c566_typed_probe.py"
-    body = "from ops_kb.app import _tools_service\n\n\ndef test_probe() -> None:\n    assert _tools_service\n"
-    done = gate(tmp_path, {probe: body})
-    out = done.stdout + done.stderr
-    assert done.returncode != 0 and "reportPrivateUsage" in out and "test_c566_typed_probe.py" in out, out[-2000:]
 
 
 def test_a_clean_typed_file_passes_with_its_imports_read_once(tmp_path: Path) -> None:
