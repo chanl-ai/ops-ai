@@ -3,7 +3,7 @@
 # with `make -C services/agents-service <target>`; the root `make up` runs it in the background.
 STACK_SVC := agents
 include ../../make/service-common.mk
-.PHONY: install run worker test lint typecheck verify migrate clean db-up db-down standards sbom openapi openapi-check
+.PHONY: install run worker test lint typecheck verify checks migrate clean db-up db-down standards sbom openapi openapi-check
 
 export PYDANTIC_AI_NO_BANNER := 1
 
@@ -35,7 +35,9 @@ test: ## pytest on the test database (needs db-up)
 loader-test: ## The embedded chat loader's rules in a real browser
 	node --test tests/loader/loader.browser.mjs
 
-verify: lint typecheck db-up test loader-test standards openapi-check ## lint, typecheck, test and standards; the root runs it with model keys unset
+verify: checks db-up test ## lint, typecheck, test and standards; the root runs it with model keys unset
+
+checks: lint typecheck loader-test standards openapi-check ## Everything verify runs but the tests; CI runs it beside the test shards
 
 migrate: ## Alembic upgrade head
 	uv run alembic upgrade head
