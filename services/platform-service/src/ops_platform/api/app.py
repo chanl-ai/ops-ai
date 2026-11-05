@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
 from ops_access import ACTIONS, ANY_TEAM, AREAS, SECURITY_TEAM_ACTIONS
-from ops_access.catalogue import ADMIN
+from ops_access.catalogue import ADMIN, Grant
 from ops_identity import Principal as Caller
 from ops_identity import ServiceAuth, ServiceClient, service_verifiers
 from ops_policy import STEP_UP_TTL_S, Ed25519Signer
@@ -761,7 +761,7 @@ def create_public_app(
         A workspace admin's (access.manage in every team): roles apply in every team. Audited; 409
         `admin_holds_every_cell` for Admin, 400 `unknown_cell` for a cell outside the catalogue."""
         await people.require_admin(actor, "access", "manage")
-        cells = [(c.area, c.action, c.scope) for c in body.permissions]
+        cells: list[Grant] = [(c.area, c.action, c.scope) for c in body.permissions]
         edited = await roles.edit(actor.tenant_id, role_id, cells, by=actor.user_id, request_id=actor.request_id)
         return ok(edited | {"canEdit": True})
 
