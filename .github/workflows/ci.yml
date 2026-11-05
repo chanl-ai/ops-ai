@@ -58,7 +58,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # node: the pre-commit gate's own test (scripts/tests/test_verify_staged.py) runs the console typecheck with pnpm.
       - uses: ./.github/actions/setup
+        with:
+          node: "true"
       - name: Lint and format the changed Python
         run: |
           base=$(git merge-base "${{ github.event.pull_request.base.sha }}" HEAD)
