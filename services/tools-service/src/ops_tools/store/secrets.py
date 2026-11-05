@@ -177,6 +177,29 @@ class SecretStore:
             await self._audit(c, tenant_id, team_id, change)
         return True
 
+    async def missing_ends(self, tenant_id: str, team_id: str, name: str) -> str | None:
+        """The reference of a secret kept before its last four characters were, so they can be read once and kept;
+        None once it has them or when the team has no such secret."""
+        q = sa.select(tool_secrets.c.ciphertext).where(
+            _of(tenant_id, team_id),
+            tool_secrets.c.name == name,
+            tool_secrets.c.ends.is_(None),
+            team_visible(tool_secrets),
+        )
+        async with self._tx() as c:
+            found = (await c.execute(q)).first()
+        return str(found.ciphertext) if found else None
+
+    async def keep_ends(self, tenant_id: str, team_id: str, name: str, ref: str, ends: str) -> None:
+        """Keeps the last four characters read from `ref`, unless the secret was replaced since."""
+        q = (
+            tool_secrets.update()
+            .where(_of(tenant_id, team_id), tool_secrets.c.name == name, tool_secrets.c.ciphertext == ref)
+            .values(ends=ends)
+        )
+        async with self._tx() as c:
+            await c.execute(q)
+
     async def rotate(
         self, tenant_id: str, team_id: str, name: str, ref: str, *, actor: str, at: datetime, ends: str | None = None
     ) -> tuple[int, str] | None:

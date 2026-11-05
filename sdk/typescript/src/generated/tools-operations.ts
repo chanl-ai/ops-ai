@@ -208,6 +208,18 @@ export const toolsOperations = {
     ],
     "stream": false
   },
+  "apps_make_team_default": {
+    "body": null,
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/apps/{app_id}/accounts/{account_id}/team-default",
+    "pathParams": [
+      "app_id",
+      "account_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "apps_my_accounts": {
     "body": null,
     "headers": [],

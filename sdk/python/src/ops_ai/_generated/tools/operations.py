@@ -181,6 +181,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["include"],
         "stream": False,
     },
+    "apps_make_team_default": {
+        "body": None,
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/apps/{app_id}/accounts/{account_id}/team-default",
+        "pathParams": ["app_id", "account_id"],
+        "query": [],
+        "stream": False,
+    },
     "apps_my_accounts": {
         "body": None,
         "headers": [],
@@ -806,6 +815,12 @@ class Operations:
             SERVICE, OPERATIONS["apps_sign_out"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
+    def apps_make_team_default(self, app_id: str, account_id: str) -> AccountDetail:
+        "Make Team Default"
+        return self._t.call(
+            SERVICE, OPERATIONS["apps_make_team_default"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
     def apps_test_account(self, app_id: str, account_id: str, body: AccountTestIn) -> AccountDetail:
         "Test Account"
         return self._t.call(
@@ -1292,6 +1307,12 @@ class AsyncOperations:
         "Sign Out"
         return await self._t.call(
             SERVICE, OPERATIONS["apps_sign_out"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def apps_make_team_default(self, app_id: str, account_id: str) -> AccountDetail:
+        "Make Team Default"
+        return await self._t.call(
+            SERVICE, OPERATIONS["apps_make_team_default"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     async def apps_test_account(self, app_id: str, account_id: str, body: AccountTestIn) -> AccountDetail:

@@ -232,6 +232,29 @@ class PluginAccounts:
             # A team turning a plugin on takes the installed version; a later upgrade waits for its review.
             await self.host.take_installed(who.tenant_id, who.team.id, plugin)
 
+    async def make_team_default(self, who: Caller, app_id: str, account_id: str) -> None:
+        """Makes one of the team's live accounts of a plugin's app the one calls naming no account use: a team admin's
+        alone. A sandbox only test runs use, so it is refused."""
+        self.manages(who)
+        m = self.plugin(app_id).manifest
+        before = await self.host.bindings.get(who.tenant_id, who.team.id, m.id)
+        account = await self.connections.store.get(who.tenant_id, account_id)
+        if before is None or account is None or account["app_id"] != app_id or account["team_id"] != who.team.id:
+            raise NotFound(f"Account {account_id}")
+        if account.get("sandbox"):
+            raise ValidationFailed(
+                "A sandbox account is used by test runs only, so it cannot be the default.", code="sandbox_default"
+            )
+        await self.host.bindings.put(
+            who.tenant_id,
+            who.team.id,
+            m.id,
+            enabled=bool(before.get("enabled")),
+            connection_id=account_id,
+            settings=dict(before.get("settings") or {}),
+            by=who.name,
+        )
+
     async def add_account(self, who: Caller, app_id: str, body: AccountIn) -> str:
         """Another account of a plugin's app the team has connected, a test account or another live one (a second org
         of the same system), made with the first's contract. The first stays the default."""

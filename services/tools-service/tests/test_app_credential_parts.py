@@ -1,6 +1,7 @@
 """An app credential's parts as its pages show and change them, through the real routes, by failure mode: the
 permissions the app's answer offers are refused when a credential is made with them (the window offered labels, the
-service takes ids); nothing shows which client secret a credential holds, or a short one is shown nearly whole; and a
+service takes ids); nothing shows which client secret a credential holds, even one kept before its last four were, or
+a short one is shown nearly whole; and a
 credential with accounts on it is deleted from under them, or cannot be deleted at all, rather than offering to move
 them to another credential or to Ops AI's app."""
 
@@ -11,7 +12,10 @@ from typing import Any
 
 import httpx
 import pytest
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
+
+from ops_tools.store.secrets import tool_secrets
 
 from .conftest import team_credential
 from .test_app_credential_edit import granting
@@ -51,6 +55,16 @@ async def test_a_credential_shows_which_secret_it_holds_and_no_more(client: http
     page = (await client.get(f"/v1/app-credentials/{short}", headers=admin(tenant))).json()["data"]
     assert (page["secretEnds"], page["holdsSecret"]) == (None, True), page
     assert "abc12" not in str(page)
+
+
+async def test_a_secret_kept_before_its_last_four_were_still_shows_them(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    made = await team_credential(client, admin(tenant), APP, "signin-old", "older-secret-5d3e")
+    async with engine.begin() as c:
+        await c.execute(sa.update(tool_secrets).where(tool_secrets.c.tenant_id == tenant).values(ends=None))
+    page = (await client.get(f"/v1/app-credentials/{made}", headers=admin(tenant))).json()["data"]
+    assert (page["secretEnds"], page["holdsSecret"]) == ("5d3e", True), page
 
 
 async def test_a_credential_in_use_names_its_accounts_and_moves_them_when_asked(

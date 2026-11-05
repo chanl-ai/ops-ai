@@ -321,9 +321,17 @@ class AccountOwner(Out):
 
 
 # What the caller may do to an account on the app page, decided here so the console offers only these. make_default
-# makes it the caller's own default among their sign-ins to the app's accounts.
+# makes it the caller's own default among their sign-ins to the app's accounts; make_team_default the team's.
 AccountAction = Literal[
-    "rename", "sign_in", "reconnect", "make_default", "disconnect", "delete", "move", "connect_mine"
+    "rename",
+    "sign_in",
+    "reconnect",
+    "make_default",
+    "make_team_default",
+    "disconnect",
+    "delete",
+    "move",
+    "connect_mine",
 ]
 
 
@@ -676,6 +684,13 @@ class Apps:
             return await self.connections.connect_mcp(who, i.model_dump())
         return await self.connections.create(who, i.model_dump())
 
+    async def make_team_default(self, who: Caller, app_id: str, account_id: str) -> dict[str, Any]:
+        """Makes an account the team's default of a plugin's app; a custom app's default is its first account."""
+        if plugin_of({"app_id": app_id}) is None or self.plugin_accounts is None:
+            raise NotFound(f"App {app_id}")
+        await self.plugin_accounts.make_team_default(who, app_id, account_id)
+        return await self.connections.detail(who, account_id)
+
     async def add_account(self, who: Caller, app_id: str, i: AccountIn) -> dict[str, Any]:
         """Another account of one of the team's apps: a plugin's from its definition, a custom app's with the app's
         sign-in kind and the kind's fields as given."""
@@ -813,9 +828,12 @@ async def _secret_row(apps: Apps, who: Caller, cred: dict[str, Any] | None) -> d
     """The team secret holding a credential's client secret, as listed (never its value); None while it holds none."""
     if cred is None or not cred.get("secret_name"):
         return None
-    name = str(cred["secret_name"])
-    rows = await apps.connections.secrets.store.listed(who.tenant_id, str(cred["team_id"]))
-    return next((r for r in rows if r["name"] == name), None)
+    name, team = str(cred["secret_name"]), str(cred["team_id"])
+    rows = await apps.connections.secrets.store.listed(who.tenant_id, team)
+    row = next((r for r in rows if r["name"] == name), None)
+    if row is not None and row.get("ends") is None:
+        row = {**row, "ends": await apps.connections.secrets.ends_of(who.tenant_id, team, name)}
+    return row
 
 
 def _plugin(apps: Apps, card: dict[str, Any]) -> Plugin | None:
@@ -1232,6 +1250,8 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
                 actions.append("disconnect")
             if may:
                 actions += ["delete"] + (["move"] if configs > 1 else [])
+        if may and not is_default and not a.get("sandbox") and card["kind"] == "plugin":
+            actions.append("make_team_default")
         if pick is not None and aid not in sandboxes and str(pick["connection_id"]) != aid and own is not None:
             actions.append("make_default")
         # A person signs in with their own account only where the account lets each person do so beside the team's.
@@ -1414,6 +1434,14 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
             raise NotFound(f"App {app_id}")
         await apps.plugin_accounts.switch(who, app_id, body)
         return ok(SystemCard(**await apps.card(who, app_id)).model_dump(by_alias=True))
+
+    @r.put("/v1/apps/{app_id}/accounts/{account_id}/team-default", response_model=Envelope[AccountDetail])
+    async def make_team_default(  # pyright: ignore[reportUnusedFunction]
+        app_id: str, account_id: str, who: Annotated[Caller, Depends(caller)]
+    ) -> JSONResponse:
+        """Makes the account the one the team's calls use when they name none. Team admins only; a sandbox is
+        refused, as only test runs use it."""
+        return ok(await apps.make_team_default(who, app_id, account_id))
 
     @r.post("/v1/apps/{app_id}/accounts", response_model=Envelope[AccountDetail], status_code=201)
     async def add_account(  # pyright: ignore[reportUnusedFunction]

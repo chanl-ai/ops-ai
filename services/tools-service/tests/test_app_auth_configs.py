@@ -92,3 +92,25 @@ async def test_an_account_only_its_owner_signs_in_to_reads_that_sign_ins_state_a
         await world.store.mark_refused(tenant, account, "usr_priya", reason="invalid_grant", at=datetime.now(UTC))
     rows = {a["id"]: a for c in (await _page(world, admin(tenant)))["authConfigs"] for a in c["accounts"]}
     assert rows[account]["state"] == "refused", rows[account]
+
+
+async def test_an_admin_makes_another_account_the_teams_default_and_a_builder_may_not(
+    world: World,  # noqa: F811
+    tenant: str,
+) -> None:
+    first = await connected(world, tenant)
+    made = await world.client.post(f"/v1/apps/plugin:{ID}/accounts", json={"name": "EU org"}, headers=admin(tenant))
+    assert made.status_code == 201, made.text
+    second = made.json()["data"]["id"]
+    path = f"/v1/apps/{APP}/accounts/{second}/team-default"
+    refused = await world.client.put(path, headers=person(tenant, *BUILDER))
+    assert refused.status_code == 403, refused.text
+    rows = {a["id"]: a for c in (await _page(world, admin(tenant)))["authConfigs"] for a in c["accounts"]}
+    assert "make_team_default" in rows[second]["actions"] and "make_team_default" not in rows[first]["actions"], rows
+
+    done = await world.client.put(path, headers=admin(tenant))
+    assert done.status_code == 200, done.text
+    page = await _page(world, admin(tenant))
+    rows = {a["id"]: a for c in page["authConfigs"] for a in c["accounts"]}
+    assert rows[second]["default"] and not rows[first]["default"], rows
+    assert page["card"]["connectionId"] == second, page["card"]

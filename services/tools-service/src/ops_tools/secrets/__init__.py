@@ -75,6 +75,17 @@ class SecretResolver:
             await self.credentials.delete(ref, context=context)
         return made
 
+    async def ends_of(self, tenant_id: str, team_id: str, name: str) -> str | None:
+        """A secret's last four characters. One kept before they were stored is read once and they are kept, so a
+        person can still tell which value it holds."""
+        ref = await self.store.missing_ends(tenant_id, team_id, name)
+        if ref is None:
+            return None
+        ends = ending(await self.credentials.get(ref, context=context_of(tenant_id, name)))
+        if ends is not None:
+            await self.store.keep_ends(tenant_id, team_id, name, ref, ends)
+        return ends
+
     async def rotate(
         self, tenant_id: str, team_id: str, name: str, value: str, *, actor: str, at: datetime
     ) -> int | None:

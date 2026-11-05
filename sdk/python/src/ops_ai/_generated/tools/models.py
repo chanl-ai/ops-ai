@@ -1193,6 +1193,7 @@ class AppAccount(TypedDict, closed=True):
                 "sign_in",
                 "reconnect",
                 "make_default",
+                "make_team_default",
                 "disconnect",
                 "delete",
                 "move",

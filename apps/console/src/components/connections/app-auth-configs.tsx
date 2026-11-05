@@ -22,6 +22,7 @@ import {
   useAppCredential,
   useChangeAccount,
   useDeleteAccount,
+  useMakeTeamDefault,
   usePinDefault,
   useSignOutMine,
   useSignOutTeam,
@@ -41,7 +42,7 @@ const STATE: Record<ConfigAccount['state'], { label: string; className: string }
 };
 
 /** Whose sign-in an account is, by name: the team's, or one person's own. */
-const whose = (a: ConfigAccount, team: string) => (a.owner.kind === 'team' ? `${team}’s sign-in` : `${a.owner.name}’s own sign-in`);
+const whose = (a: ConfigAccount, team: string) => (a.owner.kind === 'team' ? `${team} team sign-in` : `${a.owner.name}’s own sign-in`);
 
 /**
  * Auth configs: how the app's accounts sign in, each config with the accounts under it. Ops AI's own app is never
@@ -134,7 +135,7 @@ export function AuthConfigsTab({
 }
 
 /** Delete on a config: its page answer names the accounts on it, which the dialog offers to move. */
-function DeleteConfig({ id, platform, onClose }: { id: string; platform: boolean; onClose: () => void }) {
+export function DeleteConfig({ id, platform, onClose }: { id: string; platform: boolean; onClose: () => void }) {
   const q = useAppCredential(id);
   return <CredentialDeleteDialog credential={q.data ?? null} platform={platform} onOpenChange={(o) => !o && onClose()} onDeleted={onClose} />;
 }
@@ -158,6 +159,7 @@ function AccountRow({
   const signOutTeam = useSignOutTeam();
   const signOutMine = useSignOutMine();
   const pin = usePinDefault();
+  const teamDefault = useMakeTeamDefault();
   const [dialog, setDialog] = React.useState<'rename' | 'move' | 'delete' | null>(null);
   const can = (x: NonNullable<ConfigAccount['actions']>[number]) => (a.actions ?? []).includes(x);
   // An account only its owner signs in to is signed in, renewed and ended as that person's own.
@@ -170,6 +172,14 @@ function AccountRow({
     );
   const menu = [
     can('rename') && { label: 'Rename', onClick: () => setDialog('rename') },
+    can('make_team_default') && {
+      label: 'Make the team’s default',
+      onClick: () =>
+        teamDefault.mutate(ref, {
+          onSuccess: () => toast.success(`${a.name} is the team’s default`, { description: 'Calls that name no account use it.' }),
+          onError: (e) => toast.error('Couldn’t make it the default', { description: e.message }),
+        }),
+    },
     can('make_default') && {
       label: 'Make my default',
       onClick: () => pin.mutate(ref, { onError: (e) => toast.error('Couldn’t make it your default', { description: e.message }) }),
