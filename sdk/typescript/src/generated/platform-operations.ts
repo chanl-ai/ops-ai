@@ -400,6 +400,17 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "roles_edit_role": {
+    "body": "json",
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/roles/{role_id}/permissions",
+    "pathParams": [
+      "role_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "roles_list_roles": {
     "body": null,
     "headers": [],
@@ -414,6 +425,17 @@ export const platformOperations = {
     "headers": [],
     "method": "GET",
     "path": "/v1/roles/{role_id}",
+    "pathParams": [
+      "role_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "roles_reset_role": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/roles/{role_id}/reset",
     "pathParams": [
       "role_id"
     ],

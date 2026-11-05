@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
-import type { MemberRole } from '@/lib/types/settings';
+import type { MemberRole, RoleCell } from '@/lib/types/settings';
 
 import { useSession } from './auth-queries';
 import { useTeam } from './use-team';
@@ -50,6 +50,14 @@ export function useCanInWorkspace(area: string, action: string): boolean | undef
 /** The workspace's roles, one role with its grid, and a person's grants; disabled off platform sign-in. */
 export const useRoles = () => useTeamQuery({ queryKey: ['access', 'roles'], queryFn: () => api.teams.roles!(), enabled: !!api.teams.roles });
 export const useRole = (id: string) => useTeamQuery({ queryKey: ['access', 'role', id], queryFn: () => api.teams.role!(id), enabled: !!api.teams.role && !!id });
+/** Saves every cell of a role, or puts a built-in role back to its default; both refresh the role and the role list. */
+export function useEditRole(id: string) {
+  const qc = useQueryClient();
+  const settled = () => Promise.all([qc.invalidateQueries({ queryKey: ['access', 'role', id] }), qc.invalidateQueries({ queryKey: ['access', 'roles'] })]);
+  const save = useMutation({ mutationFn: (cells: RoleCell[]) => api.teams.editRole!(id, cells), onSuccess: settled });
+  const reset = useMutation({ mutationFn: () => api.teams.resetRole!(id), onSuccess: settled });
+  return { save, reset };
+}
 export const usePersonPermissions = (id: string) =>
   useTeamQuery({ queryKey: ['access', 'person', id], queryFn: () => api.teams.personPermissions!(id), enabled: !!api.teams.personPermissions && !!id });
 

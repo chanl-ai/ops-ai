@@ -193,8 +193,8 @@ async def test_a_person_signed_in_with_the_dev_password_approves_only_in_the_thr
     """A dev stack signs people in through platform-service with the demo password; they keep their teams, unlike the
     dev header caller, so a Fraud Operations approver does not reach Operations' write, and Operations' does."""
     monkeypatch.setattr(hitl_facade, "policy_of", policy())
-    # James builds and does not decide reviews, so his write waits for an approver.
-    url = await drafted(dev_platform, person("usr_james", ["team_ops"], auth_method="dev", role="builder"))
+    # A viewer does not decide reviews, so their write waits for an approver (builders decide since D59).
+    url = await drafted(dev_platform, person("usr_james", ["team_ops"], auth_method="dev", role="viewer"))
     omar = person("usr_omar", ["team_fraud"], auth_method="dev")
     assert (await dev_platform.post(url, json={"type": "approve"}, headers=omar)).status_code == 404
     maya = person("usr_maya", ["team_ops"], auth_method="dev")

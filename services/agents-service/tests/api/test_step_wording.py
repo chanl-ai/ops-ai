@@ -140,8 +140,8 @@ async def test_a_task_list_reads_the_directory_once(
     dev_platform: AsyncClient,  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # James builds and does not decide reviews, so his write waits for an approver.
-    james = person("usr_james", ["team_ops"], role="builder")
+    # A viewer does not decide reviews, so their write waits for an approver (builders decide since D59).
+    james = person("usr_james", ["team_ops"], role="viewer")
     for _ in range(3):
         await drafted(dev_platform, james)
     transport = cast(ASGITransport, dev_platform._transport)  # pyright: ignore[reportPrivateUsage]

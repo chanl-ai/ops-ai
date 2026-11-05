@@ -31,8 +31,8 @@ async def test_the_runs_team_decides_whatever_team_tools_service_names(dev_platf
     # The app behind the fixture's client: its runtime asks tools-service through `tools`.
     app = cast(Any, c._transport).app  # pyright: ignore[reportPrivateUsage]
     app.state.runtime.tools = _StaleTools()
-    # James builds and does not decide reviews, so his write waits for an approver.
-    james = person("usr_james", ["team_ops"], role="builder")
+    # A viewer does not decide reviews, so their write waits for an approver (builders decide since D59).
+    james = person("usr_james", ["team_ops"], role="viewer")
     url = await drafted(c, james)
     thread = url.split("/chat/threads/")[1].split("/")[0]
     sam = person("usr_sam", ["team_security"])

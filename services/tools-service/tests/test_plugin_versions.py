@@ -288,7 +288,7 @@ async def test_only_a_team_admin_reviews_or_takes_and_the_flag_off_hides_both(
     await c.put(
         f"/v1/apps/plugin:{ID}/team", json={"enabled": True, "credentials": {"token": "t-1"}}, headers=admin(tenant)
     )
-    builder = person(tenant, "James Richardson", {"team_ops": "builder"})
+    builder = person(tenant, "Ravi Menon", {"team_ops": "viewer"})
     assert (await c.get(f"/v1/apps/plugin:{ID}/update", headers=builder)).status_code == 403
     host.versions = False
     assert (await c.get(f"/v1/apps/plugin:{ID}/update", headers=admin(tenant))).status_code == 404

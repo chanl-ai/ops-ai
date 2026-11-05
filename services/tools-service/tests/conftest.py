@@ -344,6 +344,7 @@ def build_app(
         on_token=plugins.on_token if plugins else None,
         plugin_settings=plugins.account_settings if plugins else None,
         sign_in_errors=plugins.sign_in_error if plugins else None,
+        on_signed_in=plugins.on_signed_in if plugins else None,
     )
     tokens.plugin_hosts = plugins.connection_hosts if plugins else None
     accounts.app_display = plugins.display_of if plugins else None
@@ -365,7 +366,7 @@ def build_app(
             modules_router(service, directory),
             executions_router(service, directory),
             egress_router(EgressStore(engine)),
-            secrets_router(resolver, modules=ModuleStore(engine)),
+            secrets_router(resolver, modules=ModuleStore(engine), credentials=connections),
             send_policy_router(SendPolicies(engine), directory),
             mocks_router(MockStore(engine), ModuleStore(engine), directory, security_team="team_security"),
             accounts_router(accounts, directory),

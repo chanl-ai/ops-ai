@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { AppCredentialPicker } from '@/components/connections/app-credential-picker';
 import { appHref } from '@/components/connections/systems-grid';
 import { useSignInWindow } from '@/components/connections/sign-in';
+import { isSignInPlace, SignInPlace } from '@/components/connections/sign-in-place';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormTextField } from '@/components/shared/form-text-field';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -22,6 +23,7 @@ import {
   type AccountBody,
   type SystemCard,
   type TeamAppBody,
+  useAccountDetail,
   useAddAccount,
   useDeleteAccount,
   useSetTeamApp,
@@ -98,12 +100,20 @@ export function ConnectWindow({
   const [client, setClient] = React.useState<string | null>(credential !== undefined ? credential : held);
   // The plugin's own settings (Salesforce's sign-in address) when the app is first connected; kept after. A sandbox
   // asks the ones each account keeps its own, as the team's settings stay the app's.
-  const asked = reusing ? [] : (plugin?.settings ?? []).filter((x) => !x.locked && (!sandbox || x.perAccount));
-  const fields: KindField[] = asked.map((x) => ({ name: x.name, label: x.label, secret: x.secret, required: !x.default, advanced: Boolean(x.default), default: x.default }));
+  // Another account is asked where it signs in, as every Salesforce org has its own address; a turn-on again asks nothing.
+  const places = (plugin?.settings ?? []).filter(isSignInPlace);
+  const asked = reusing ? (another ? places : []) : (plugin?.settings ?? []).filter((x) => !x.locked && (!sandbox || x.perAccount));
+  const fields: KindField[] = asked.filter((x) => !isSignInPlace(x)).map((x) => ({ name: x.name, label: x.label, secret: x.secret, required: !x.default, advanced: Boolean(x.default), default: x.default }));
   const schema = schemaForFields(fields);
   const form = useForm<Record<string, string>>({
     defaultValues: { accountName: '', ...Object.fromEntries((plugin?.settings ?? []).map((x) => [x.name, x.default ?? ''])) },
   });
+  // Another account starts from where the app's default account signs in.
+  const first = useAccountDetail(another && card.connectionId ? { appId: card.id, accountId: card.connectionId } : null);
+  React.useEffect(() => {
+    const held = (first.data?.pluginSettings ?? {}) as Record<string, unknown>;
+    for (const x of places) if (typeof held[x.name] === 'string' && held[x.name]) form.setValue(x.name, String(held[x.name]));
+  }, [first.data]);
   // Settings with a default wait under More options, so the default path stays the app credential and Authorize.
   const needed = fields.filter((f) => !f.advanced);
   const tuned = fields.filter((f) => f.advanced);
@@ -114,6 +124,9 @@ export function ConnectWindow({
   const suggested = freeName(sandbox ? `${card.name} sandbox` : another ? `${card.name} · second account` : `${card.name} · ${current?.name ?? 'Team'}`, taken);
 
   const [waiting, setWaiting] = React.useState(false);
+  // The account a sign-in window was closed on before access was allowed: Try again signs it in again, as it is.
+  const [closedOn, setClosedOn] = React.useState<string | null>(null);
+  const signingIn = React.useRef<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   // What this window made, until the sign-in answers: Cancel removes it (and turns a plugin it turned on off again).
   const made = React.useRef<{ id: string | null; turnedOn: boolean } | null>(null);
@@ -127,6 +140,11 @@ export function ConnectWindow({
       // Connected once access is allowed; the first test runs after, and a failure shows on the account's row.
       test.mutate({ appId: card.id, accountId: m.connectionId });
       router.push(appHref(card));
+    },
+    onClosed: () => {
+      setWaiting(false);
+      setClosedOn(signingIn.current);
+      setError(`The window was closed before access was allowed. Try again to open it once more.`);
     },
     onFailed: (why) => {
       setError(why);
@@ -183,6 +201,9 @@ export function ConnectWindow({
     setWaiting(true);
     try {
       const draft = draftFor(pluginGroups(kind, kinds, plugin));
+      // Only what the window asked goes out: a field it did not show holds its default, which would replace the address
+      // the app's account already signs in at.
+      for (const k of Object.keys(draft.settings)) if (!asked.some((a) => a.name === k)) delete draft.settings[k];
       for (const x of asked.filter((a) => a.perAccount)) draft.settings[x.name] = values[x.name] ?? '';
       const teamSettings = Object.fromEntries(asked.filter((a) => !a.perAccount).map((a) => [a.name, values[a.name] ?? '']));
       const accountName = (values.accountName ?? '').trim() || suggested;
@@ -199,12 +220,31 @@ export function ConnectWindow({
         id = String(view.connectionId ?? card.connectionId ?? '');
         made.current = { id: card.connectionId ? null : id, turnedOn: true };
       }
+      signingIn.current = id;
       const s = await start.mutateAsync({ appId: card.id, accountId: id, account: team ? 'team' : 'self' });
       w.go(s, { appId: card.id, accountId: id });
     } catch (e) {
       w.fail(message(e));
       setError(message(e));
       void undo().finally(() => setWaiting(false));
+    }
+  };
+
+  /** Try again after the window was closed: a new window, signing in the account already made. */
+  const again = async (id: string) => {
+    const w = signIn.open(card.name, card.logo);
+    if (!w) return;
+    setError(null);
+    setClosedOn(null);
+    setWaiting(true);
+    try {
+      signingIn.current = id;
+      const s = await start.mutateAsync({ appId: card.id, accountId: id, account: team ? 'team' : 'self' });
+      w.go(s, { appId: card.id, accountId: id });
+    } catch (e) {
+      w.fail(message(e));
+      setError(message(e));
+      setWaiting(false);
     }
   };
 
@@ -227,9 +267,9 @@ export function ConnectWindow({
           <Button variant="outline" onClick={() => void cancel()} data-testid="connect-window-cancel">
             Cancel
           </Button>
-          <LoadingButton isLoading={waiting} onClick={() => void authorize()} data-testid="connect-window-authorize">
+          <LoadingButton isLoading={waiting} onClick={() => void (closedOn ? again(closedOn) : authorize())} data-testid="connect-window-authorize">
             <ExternalLink />
-            {waiting ? 'Connecting…' : 'Connect'}
+            {waiting ? 'Connecting…' : closedOn ? 'Try again' : 'Connect'}
           </LoadingButton>
         </>
       }
@@ -237,6 +277,10 @@ export function ConnectWindow({
       <Form {...form}>
       <div className="flex min-w-0 flex-col gap-4">
         <AppCredentialPicker app={card.id} value={client} onChange={setClient} platform={managed && Boolean(plugin.platformApp)} id="connect-window-app" testId="connect-window-app" />
+
+        {asked.filter(isSignInPlace).map((x) => (
+          <SignInPlace key={x.name} setting={x} value={form.watch(x.name) ?? ''} onChange={(v) => form.setValue(x.name, v)} testId={`connect-window-place-${x.name}`} />
+        ))}
 
         {needed.map(setting)}
 

@@ -205,7 +205,8 @@ async def test_a_proxy_body_longer_than_its_ticket_is_refused(client: Client) ->
 
 
 async def test_a_held_file_is_not_deleted_and_only_an_admin_holds(client: Client) -> None:
-    async with client(admin=True) as admin, client() as member:
+    async with client(admin=True) as admin, client(role="viewer") as member:
+        # A viewer: builders hold files.manage since D59, as admins do.
         ticket = await _upload(admin)
         file_id = _data(await admin.post(f"/v1/files/uploads/{ticket['fileId']}/complete", headers=OPS))["file"]["id"]
         hold = {"ids": [file_id], "hold": True, "reason": "Litigation 2026-114"}
@@ -388,7 +389,8 @@ async def test_two_completes_of_one_ticket_keep_the_file(client: Client) -> None
 
 
 async def test_the_storage_location_is_shown_to_the_teams_admins_only(client: Client) -> None:
-    async with client(admin=True) as admin, client() as member:
+    async with client(admin=True) as admin, client(role="viewer") as member:
+        # A viewer: builders hold files.manage since D59, as admins do.
         ticket = await _upload(member)
         file_id = _data(await member.post(f"/v1/files/uploads/{ticket['fileId']}/complete", headers=OPS))["file"]["id"]
         assert _data(await member.get(f"/v1/files/{file_id}", headers=OPS)).get("storage") is None

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Edit what every role may do",
+  "description": "A workspace admin can change what any role allows, the built-in ones included, and every part of Ops AI follows the change once people's sign-ins refresh; each built-in role can go back to its default. Builders can now do everything in their team except managing people, roles and the workspace's settings, so they connect apps and keep secrets too.",
+  "tag": "new"
+}

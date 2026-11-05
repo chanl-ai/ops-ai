@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
 from ops_access import ACTIONS, ANY_TEAM, AREAS, SECURITY_TEAM_ACTIONS
-from ops_access.catalogue import ADMIN
+from ops_access.catalogue import ADMIN, Grant
 from ops_identity import Principal as Caller
 from ops_identity import ServiceAuth, ServiceClient, service_verifiers
 from ops_policy import STEP_UP_TTL_S, Ed25519Signer
@@ -104,6 +104,7 @@ from .schemas import (
     ProviderOut,
     Refresh,
     ResetIn,
+    RoleCellsIn,
     RoleDetail,
     RoleIn,
     RoleOut,
@@ -518,8 +519,18 @@ def create_public_app(
     async def read_role(  # pyright: ignore[reportUnusedFunction]
         role_id: Annotated[str, Path(pattern=RECORD_ID)], claims: Annotated[dict[str, Any], Depends(claims_of)]
     ) -> Any:
-        """One role and its grid: every area and action in the catalogue, with the scope it grants or null."""
-        return ok(await roles.get(str(claims["tenant_id"]), role_id))
+        """One role and its grid: every area and action in the catalogue, with the scope it grants or null, and
+        whether the caller may change it (`canEdit`: a workspace admin, for any role but Admin)."""
+        role = await roles.get(str(claims["tenant_id"]), role_id)
+        actor = Actor(str(claims["tenant_id"]), "*", str(claims["sub"]), new_id("req"))
+        locked: str | None = None
+        try:
+            await people.require_admin(actor, "access", "manage")
+        except Forbidden:
+            locked = "A workspace admin changes roles."
+        if role_id == ADMIN.id:
+            locked = "Admin holds every permission in its team, so it is not edited."
+        return ok(role | {"canEdit": locked is None, "lockedReason": locked})
 
     holder_store = HolderStore(store.db)
 
@@ -739,6 +750,31 @@ def create_public_app(
     async def on_workspace(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Actor:
         """A workspace route acts on the workspace, not one team: no X-Team-Id, rights read in every team (`*`)."""
         return Actor(str(claims["tenant_id"]), "*", str(claims["sub"]), new_id("req"))
+
+    @app.put("/v1/roles/{role_id}/permissions", tags=["roles"], response_model=Envelope[RoleDetail], responses=ERRORS)
+    async def edit_role(  # pyright: ignore[reportUnusedFunction]
+        role_id: Annotated[str, Path(pattern=RECORD_ID)],
+        body: RoleCellsIn,
+        actor: Annotated[Actor, Depends(on_workspace)],
+    ) -> Any:
+        """Sets a role's cells, built-in or custom; every service decides from them once the holders' tokens refresh.
+        A workspace admin's (access.manage in every team): roles apply in every team. Audited; 409
+        `admin_holds_every_cell` for Admin, 400 `unknown_cell` for a cell outside the catalogue."""
+        await people.require_admin(actor, "access", "manage")
+        cells: list[Grant] = [(c.area, c.action, c.scope) for c in body.permissions]
+        edited = await roles.edit(actor.tenant_id, role_id, cells, by=actor.user_id, request_id=actor.request_id)
+        return ok(edited | {"canEdit": True})
+
+    @app.post("/v1/roles/{role_id}/reset", tags=["roles"], response_model=Envelope[RoleDetail], responses=ERRORS)
+    async def reset_role(  # pyright: ignore[reportUnusedFunction]
+        role_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
+    ) -> Any:
+        """Reset to default: a built-in role's cells back to the ones it ships with. Audited; 400 `not_builtin`."""
+        await people.require_admin(actor, "access", "manage")
+        return ok(
+            (await roles.reset(actor.tenant_id, role_id, by=actor.user_id, request_id=actor.request_id))
+            | {"canEdit": True}
+        )
 
     @app.get(
         "/v1/settings/teams",

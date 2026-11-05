@@ -333,7 +333,7 @@ async def test_a_builder_of_another_team_cannot_change_this_teams_records(
     assert not problems, "\n".join(problems)
 
 
-async def test_a_skill_is_deleted_by_its_creator_not_its_last_saver(
+async def test_a_skill_is_deleted_by_any_builder_of_its_team_and_not_by_a_viewer(
     stack: tuple[AsyncClient, AsyncEngine],  # noqa: F811
 ) -> None:
     c, _ = stack
@@ -343,9 +343,10 @@ async def test_a_skill_is_deleted_by_its_creator_not_its_last_saver(
     # Another builder of the team saves the unpublished draft, which rewrites version 1's saver.
     saved = await c.put(f"/v1/skills/{sid}/draft", json={"note": "x", "baseVersion": 1}, headers=SECOND_BUILDER)
     assert saved.status_code == 200, saved.text
-    refused = await c.delete(f"/v1/skills/{sid}", headers=SECOND_BUILDER)
+    # Builders delete any of the team's skills since D59; a viewer deletes only skills they created.
+    refused = await c.delete(f"/v1/skills/{sid}", headers=VIEWER)
     assert refused.status_code == 403, refused.text
-    assert (await c.delete(f"/v1/skills/{sid}", headers=BUILDER)).status_code == 204
+    assert (await c.delete(f"/v1/skills/{sid}", headers=SECOND_BUILDER)).status_code == 204
 
 
 async def test_a_graph_version_needs_a_builder_and_a_workflow_needs_its_review(

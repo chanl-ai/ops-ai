@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "The callback URL to register is shown",
+  "description": "New auth config, Edit and each of your team's auth configs show the callback URL to register in your Salesforce connected app or GitHub app, with a copy button.",
+  "tag": "improved"
+}

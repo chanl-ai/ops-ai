@@ -75,8 +75,8 @@ async def test_a_credential_check_signs_in_through_the_app_and_keeps_no_token(
     assert await ConnectionStore(engine).token(tenant, conn, SHARED) is None
 
 
-async def test_a_builder_may_not_check_an_app_credential(client: httpx.AsyncClient, tenant: str) -> None:
+async def test_a_viewer_may_not_check_an_app_credential(client: httpx.AsyncClient, tenant: str) -> None:
     conn = await team_app(client, tenant)
-    builder = person(tenant, "James Richardson", {TEAM: "builder"})
+    builder = person(tenant, "Ravi Menon", {TEAM: "viewer"})
     r = await client.post(f"/v1/apps/{conn}/accounts/{conn}/test-credential", json={}, headers=builder)
     assert r.status_code == 403, r.text

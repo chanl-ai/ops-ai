@@ -38,16 +38,18 @@ async def _copy(c: AsyncClient, type_id: str = "vendor_bank_change") -> dict[str
     return ok(await c.post("/v1/task-types", json=body, headers=BUILDER), 201)
 
 
-async def test_seeded_types_are_listed_and_changed_only_by_an_admin(c: AsyncClient) -> None:
+async def test_seeded_types_are_listed_and_changed_by_whoever_holds_manage(c: AsyncClient) -> None:
     listed = ok(await c.get("/v1/task-types", headers=VIEWER))
     ids = {t["id"] for t in listed if t["origin"] == "seed"}
     assert {"generic_decision", "document_check", "write_approval", "acknowledgement", "data_entry"} <= ids
     seed = next(t for t in listed if t["id"] == "write_approval")
     record = ok(await c.get("/v1/task-types/write_approval", headers=VIEWER))["versions"][0]["record"]
-    res = await c.put("/v1/task-types/write_approval/draft", json=record, headers=BUILDER)
-    assert res.status_code == 403 and res.json()["error"]["code"] == "system_record", res.text
+    # A viewer holds no edit; a builder holds edit and manage since D59, as an admin does.
+    res = await c.put("/v1/task-types/write_approval/draft", json=record, headers=VIEWER)
+    assert res.status_code == 403, res.text
+    ok(await c.put("/v1/task-types/write_approval/draft", json=record, headers=BUILDER))
     assert seed["teamId"] == "team_ops", "each team holds its own copy of a seeded type"
-    # A system record as any other (register E05): admins change it, decided by can(), not by its origin.
+    # A system record as any other (register E05): roles with manage change it, decided by can(), not its origin.
     ok(await c.put("/v1/task-types/write_approval/draft", json=record, headers=ADMIN))
 
 

@@ -65,6 +65,12 @@ class BackgroundProcessOut(TypedDict, closed=True):
     waiting: int | None
 
 
+class CellIn(TypedDict, closed=True):
+    action: str
+    area: str
+    scope: NotRequired[Literal["all", "own"]]
+
+
 class CheckRefusal(TypedDict, closed=True):
     code: str
     reason: str
@@ -327,12 +333,18 @@ class ResetIn(TypedDict, closed=True):
     token: str
 
 
+class RoleCellsIn(TypedDict, closed=True):
+    permissions: list[CellIn]
+
+
 class RoleDetail(TypedDict, closed=True):
     assignmentCount: int
     builtin: bool
+    canEdit: NotRequired[bool]
     description: str
     grid: list[GridRow]
     id: str
+    lockedReason: NotRequired[str | None]
     name: str
     permissionCount: int
     permissions: list[PermissionOut]

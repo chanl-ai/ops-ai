@@ -79,6 +79,8 @@ async def client(
 
 PRIYA = ("Priya Shah", {TEAM: "admin"})
 JAMES = ("James Richardson", {TEAM: "builder"})
+# Builders run the team account since D59; a viewer does not.
+RAVI = ("Ravi Menon", {TEAM: "viewer"})
 MAYA = ("Maya Okafor", {TEAM: "builder"})
 
 
@@ -122,7 +124,7 @@ async def test_the_test_signs_in_with_the_account_asked_for_and_stores_whose_it_
     assert system.seen == ["at-james"]
     assert (health["status"], health["account"]) == ("ok", "own"), health
     assert isinstance(health["latencyMs"], int) and health["at"] and health["by"]
-    refused = await press_test(client, tenant, conn, JAMES, account="team")
+    refused = await press_test(client, tenant, conn, RAVI, account="team")
     assert refused.status_code == 403, refused.text
     team = await press_test(client, tenant, conn, PRIYA, account="team")
     assert team.status_code == 200, team.text

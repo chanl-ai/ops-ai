@@ -858,6 +858,15 @@ class ConnectionStore:
         async with self._tx() as c:
             return (await c.execute(q.values(refused_at=at, refused_reason=reason[:300]))).rowcount > 0
 
+    async def name_token(self, tenant_id: str, connection_id: str, person: str, account: str) -> bool:
+        """Who a sign-in signed in as, kept on its row when the token answer did not say; False when the row holds a
+        name already or there is no row."""
+        q = connection_tokens.update().where(
+            *self._token_key(tenant_id, connection_id, person), connection_tokens.c.account.is_(None)
+        )
+        async with self._tx() as c:
+            return (await c.execute(q.values(account=account))).rowcount > 0
+
     async def set_token_test(self, tenant_id: str, connection_id: str, person: str, test: Row) -> bool:
         """The account's last test on its own row, the team's (SHARED) or a person's; False when it holds none."""
         q = connection_tokens.update().where(*self._token_key(tenant_id, connection_id, person))

@@ -13,6 +13,7 @@ import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_access import BUILTIN_GRIDS, encode_grid
 from ops_identity import Auth, Identity, ServiceAuth, dev_service_signer, mint_service_token, service_verifiers
 from ops_identity.testing import TEST_TOKEN_TTL_S
 from ops_kb.agents import StaticAgents
@@ -41,9 +42,10 @@ async def _no_keys(_key: str) -> dict[str, Any] | None:
     return None
 
 
-def person(tenant: str, email: str, role: str) -> dict[str, str]:
-    """A person in team_ops as platform-service signs them in; an admin also holds knowledge.manage."""
-    claims = {
+def person(tenant: str, email: str, role: str, *, unticked: tuple[tuple[str, str], ...] = ()) -> dict[str, str]:
+    """A person in team_ops as platform-service signs them in; admins and builders also hold knowledge.manage.
+    `unticked` names cells an admin took off the role, which the token's stored grid then leaves out."""
+    claims: dict[str, Any] = {
         "sub": f"usr_{email.split('@', maxsplit=1)[0]}",
         "email": email,
         "name": email,
@@ -54,6 +56,9 @@ def person(tenant: str, email: str, role: str) -> dict[str, str]:
         "roles": {"team_ops": role},
         "auth_method": "session",
     }
+    if unticked:
+        kept = [g for g in BUILTIN_GRIDS[role] if (g[0], g[1]) not in set(unticked)]
+        claims |= {"access": {"team_ops": [role]}, "grids": {role: encode_grid(kept)}}
     return {"Authorization": f"Bearer {mint(claims, PLATFORM, ttl_s=TEST_TOKEN_TTL_S)}", "X-Team-Id": "team_ops"}
 
 
@@ -104,13 +109,15 @@ async def test_only_the_provisioner_sets_template_fields(kb: httpx.AsyncClient, 
     assert unscoped.status_code == 403, unscoped.text
 
 
-async def test_a_system_base_is_changed_by_an_admin_or_the_provisioner_not_a_builder(
+async def test_a_system_base_is_changed_by_manage_or_the_provisioner_not_by_edit_alone(
     kb: httpx.AsyncClient, tenant: str
 ) -> None:
     made = await _provisioned(kb, tenant, "system")
-    edit = await kb.patch(f"/v1/knowledge-bases/{made['id']}", json={"description": "Changed"})
+    # Builders hold knowledge.manage since D59; a builder whose role lost it edits bases but not a system one.
+    jo = person(tenant, "jo@harborpine.example", "builder", unticked=(("knowledge", "manage"),))
+    edit = await kb.patch(f"/v1/knowledge-bases/{made['id']}", json={"description": "Changed"}, headers=jo)
     assert (edit.status_code, edit.json()["error"]["code"]) == (403, "system_record"), edit.text
-    gone = await kb.delete(f"/v1/knowledge-bases/{made['id']}")
+    gone = await kb.delete(f"/v1/knowledge-bases/{made['id']}", headers=jo)
     assert (gone.status_code, gone.json()["error"]["code"]) == (403, "system_record"), gone.text
     _data(
         await kb.patch(f"/v1/knowledge-bases/{made['id']}", json={"description": "Synced"}, headers=provisioner(tenant))

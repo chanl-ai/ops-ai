@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "A closed sign-in window says so",
+  "description": "Closing the app's sign-in window before allowing access no longer leaves Connect waiting: it says the window was closed and offers Try again.",
+  "tag": "fix"
+}

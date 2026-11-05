@@ -37,7 +37,7 @@ from ..auth.assertion import SigningError, key_matches, read_certificate
 from ..auth.discovery import Discovery
 from ..auth.kinds import BY_ID, CERTIFICATE, Kind, kind_of, views
 from ..auth.pkce import challenge, verifier
-from ..auth.tokens import ClientProof, Tokens, account_of
+from ..auth.tokens import SIGNED_IN_AS, ClientProof, Tokens, account_of, person_named
 from ..egress import EgressDenied, EgressPolicy, for_tenant
 from ..environments import TEST
 from ..executor import transport_failure
@@ -71,6 +71,8 @@ OWN = "own"
 # tenant, account, the token answer, and whether it is a person's own sign-in, which may not change what the
 # team's sign-in set -> account settings to add, or None. A ValueError with a `code` names why for the event.
 OnToken = Callable[[str, str, dict[str, Any], bool], Awaitable[dict[str, Any] | None]]
+# tenant, account, who signed in -> after a finished sign-in: the account's app is turned on for its team.
+OnSignedIn = Callable[[str, str, str], Awaitable[None]]
 # tenant, account -> the plugin's settings on it as a person may read them.
 PluginSettings = Callable[[str, str], Awaitable[dict[str, Any]]]
 # tenant, account, the system's error code and description -> what the plugin behind the account says of that refusal,
@@ -166,6 +168,7 @@ class ConnectionService:
         on_token: OnToken | None = None,
         plugin_settings: PluginSettings | None = None,
         sign_in_errors: SignInErrors | None = None,
+        on_signed_in: OnSignedIn | None = None,
     ) -> None:
         """`console_url` is where a sign-in returns (`SIGN_IN_RETURN_PATH` on it); without it no sign-in starts.
         `discovery` finds an MCP server's sign-in; without it no MCP connection is made from an address.
@@ -186,6 +189,7 @@ class ConnectionService:
         self.http = http
         # A plugin's connection reads settings from the token answer (Salesforce's instance_url).
         self.on_token = on_token
+        self.on_signed_in = on_signed_in
         # A plugin's settings on an account as a person may read them (PluginHost.account_settings); without it an
         # account's page shows none.
         self.plugin_settings = plugin_settings
@@ -864,9 +868,14 @@ class ConnectionService:
                 await self.store.note(who.tenant_id, connection_id, self._event(who, "sign_in_failed", {"code": code}))
                 raise ValidationFailed(f"{conn['name']} did not finish the sign-in: {e}", code="sign_in_failed") from e
         requested = str(taken.get("scopes") or "").split()
+        named = extra.pop(SIGNED_IN_AS, None)
         token = await self.tokens.store_answer(who.tenant_id, connection_id, answer, token_for, requested=requested)
+        if isinstance(named, str):
+            await self.store.name_token(who.tenant_id, connection_id, token_for, named)
         if token_for == SHARED:
             await self.store.set_status(who.tenant_id, connection_id, "healthy", None)
+        if self.on_signed_in is not None:
+            await self.on_signed_in(who.tenant_id, connection_id, who.name)
         if extra:
             # Where Test connection reads, from what the token said (the instance), never typed by a person.
             fresh = await self._get(who, connection_id)
@@ -1294,6 +1303,13 @@ class ConnectionService:
             health["httpStatus"] = res.status_code
             if res.status_code < 400:
                 health["status"] = "ok"
+                # A test read often names who signed in (GitHub's /user: login), kept when the sign-in did not.
+                try:
+                    named = person_named(res.json())
+                except ValueError:
+                    named = None
+                if named:
+                    await self.store.name_token(who.tenant_id, connection_id, own_key(who) if own else SHARED, named)
             else:
                 message = f"{urlsplit(url).hostname} answered {res.status_code} to the test address."
                 health |= {"status": "failed", "code": "UPSTREAM_STATUS", "message": message}

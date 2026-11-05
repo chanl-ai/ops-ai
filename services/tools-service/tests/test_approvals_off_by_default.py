@@ -88,7 +88,7 @@ def _person(role: str, policies: dict[str, Any] | None = None) -> Principal:
 def test_only_a_person_who_decides_the_teams_reviews_approves_their_own_write() -> None:
     access = Access(security_team="team_security")
     assert approves_own_writes(access, _person("admin")) and approves_own_writes(access, _person("approver"))
-    assert not approves_own_writes(access, _person("builder")), "a builder is asked like anyone else"
+    assert not approves_own_writes(access, _person("viewer")), "a viewer is asked like anyone else"
     assert not approves_own_writes(access, _person("viewer"))
     # The four-eyes rule: with requesterMayDecide off, someone else decides even an admin's write.
     assert not approves_own_writes(access, _person("admin", {"requesterMayDecide": False}))

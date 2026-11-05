@@ -90,7 +90,8 @@ def needs_ocr() -> None:
 
 
 async def test_turning_page_images_on_needs_documents_manage_and_a_later_version_keeps_it(make: Make) -> None:
-    builder = served(make, FakeModels(), Policy(True), role="builder")
+    # A viewer keeps document types but holds no documents.manage (builders do since D59).
+    builder = served(make, FakeModels(), Policy(True), role="viewer")
     async with builder.client as c:
         r = await c.post("/v1/document-types", json={**TYPE, "pageImages": True}, headers=OPS)
         assert (r.status_code, r.json()["error"]["code"]) == (403, "role_required"), r.text

@@ -87,12 +87,28 @@ def _claims(raw: Any) -> dict[str, Any]:
     return cast(dict[str, Any], claims) if isinstance(claims, dict) else {}
 
 
+# The key under which a plugin's sign-in hook hands back whom a lookup after sign-in named; never an account setting.
+SIGNED_IN_AS = "signedInAs"
+# The fields a system names the signed-in person by, best first: OIDC's (id token, userinfo) and GitHub's `login`.
+PERSON_FIELDS = ("email", "preferred_username", "login", "username")
+
+
+def person_named(doc: Any) -> str | None:
+    """The signed-in person as a system's answer names them, for display only: an email or username, never an id or
+    an address (Salesforce's `sub` is its identity URL), so nothing shown reads as a link or a number."""
+    if not isinstance(doc, dict):
+        return None
+    for name in PERSON_FIELDS:
+        value = cast(dict[str, Any], doc).get(name)
+        if isinstance(value, str) and value.strip() and "://" not in value:
+            return value.strip()
+    return None
+
+
 def account_of(answer: dict[str, Any]) -> str | None:
-    """Who signed in, for display only: the id token's email or subject when the system sends one. The id token is not
-    verified here; nothing is decided from it."""
-    c = _claims(answer.get("id_token"))
-    found = c.get("email") or c.get("preferred_username") or c.get("sub")
-    return str(found) if found else None
+    """Who signed in, from the token answer's id token when it names a person. The id token is not verified here;
+    nothing is decided from it."""
+    return person_named(_claims(answer.get("id_token")))
 
 
 def scope_list(value: Any) -> list[str]:

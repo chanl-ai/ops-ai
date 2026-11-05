@@ -27,6 +27,10 @@ class Principal(BaseModel):
     # Team id (or `*` for every team) to the role ids the person holds there, from the token's `access` claim; empty for
     # a token issued before roles were data, which ops_access maps from `roles`.
     access: dict[str, list[str]] = Field(default_factory=dict[str, list[str]])
+    # Role id to its grid as platform-service stored it when the token was issued (`grids` claim, ops_access
+    # `encode_grid`): area to action letters. ops_access decides from these, so an admin's edit of a role reaches every
+    # service at the next token refresh. Empty for a token issued without it, which the code defaults answer.
+    grids: dict[str, dict[str, str]] = Field(default_factory=dict[str, dict[str, str]])
     # The tenant's permission version when the token was issued; ops_access caches role grids under it.
     permission_version: int | None = None
     # The tenant's access policies when the token was issued, key to value; a key missing here has its open

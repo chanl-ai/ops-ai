@@ -39,7 +39,8 @@ def who(sub: str, role: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {mint(claims, PLATFORM, ttl_s=TEST_TOKEN_TTL_S)}", "X-Team-Id": "team_ops"}
 
 
-OWNER, ADMIN, OTHER = who("usr_owner", "builder"), who("usr_admin", "admin"), who("usr_other", "builder")
+# OTHER is a viewer: builders hold chat.manage and cases.decide since D59, so they continue and raise as an admin does.
+OWNER, ADMIN, OTHER = who("usr_owner", "builder"), who("usr_admin", "admin"), who("usr_other", "viewer")
 VIEWER = who("usr_viewer", "viewer")
 
 
@@ -112,7 +113,7 @@ async def test_only_the_owner_continues_and_continue_finishes_the_turn(dev_platf
     assert budget is not None and budget.max_calls is not None and budget.max_calls > 1
 
 
-@pytest.mark.parametrize("person", [OWNER, OTHER])
+@pytest.mark.parametrize("person", [OTHER])
 async def test_only_a_team_admin_raises(dev_platform: AsyncClient, person: dict[str, str]) -> None:  # noqa: F811
     tid, _ = await paused(dev_platform)
     refused = await dev_platform.post(
@@ -206,7 +207,8 @@ async def test_a_run_api_thread_answers_its_budget_pause_by_the_chats_rules(dev_
     state = (await dev_platform.get(f"/v1/threads/{tid}/state", headers=OWNER)).json()["data"]
     assert state["interrupt"]["payload"]["kind"] == "budget_exhausted", state
     raise_ = {"resume": {"decision": "approved", "budget": {"maxCalls": 100000}}}
-    owner_raises = await dev_platform.post(url, json=raise_, headers=OWNER)
+    # A viewer may not raise (a builder, the owner here, may since D59).
+    owner_raises = await dev_platform.post(url, json=raise_, headers=OTHER)
     other_continues = await dev_platform.post(url, json={"resume": {"decision": "approved"}}, headers=OTHER)
     too_low = await dev_platform.post(
         url, json={"resume": {"decision": "approved", "budget": {"maxCalls": 1}}}, headers=ADMIN

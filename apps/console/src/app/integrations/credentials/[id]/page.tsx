@@ -129,6 +129,10 @@ export default function AppCredentialPage() {
       setBusy(null);
       toast.error('The sign-in did not pass', { description: why });
     },
+    onClosed: () => {
+      setBusy(null);
+      toast.error('The window was closed', { description: 'Access was not allowed, so nothing changed. Press it again to try once more.' });
+    },
   });
   if (q.isPending) return <RecordSkeleton />;
   const own = c?.type === 'own';

@@ -58,7 +58,8 @@ async def test_a_credential_needs_no_account_and_its_secret_is_not_a_value_tools
     shown = await secrets.page(tenant, str(cred["team_id"]), "", offset=0, limit=100)
     held = [s for s in await secrets.listed(tenant, str(cred["team_id"])) if s["name"] == cred["secret_name"]]
     assert held and held[0]["credential_id"] == row["id"] and held[0]["connection_id"] is None, held
-    assert cred["secret_name"] not in [s["name"] for s in shown]
+    # Listed read only beside the team's secrets, and changed on the credential (test_secrets_auth_config_read_only).
+    assert cred["secret_name"] in [s["name"] for s in shown]
     assert SECRET not in str(row) + listed.text
 
 
@@ -93,9 +94,10 @@ async def test_scopes_are_the_apps_own_and_its_required_ones_stay(world: World, 
     assert row["permissions"] == [{"id": "api", "label": "Read and change records", "required": True}], row
 
 
-async def test_a_builder_cannot_add_one_and_an_unknown_app_has_none(world: World, tenant: str) -> None:  # noqa: F811
-    builder = person(tenant, "James Richardson", {"team_platform": "builder"})
-    r = await world.client.post("/v1/app-credentials", json=body(), headers=builder)
+async def test_a_viewer_cannot_add_one_and_an_unknown_app_has_none(world: World, tenant: str) -> None:  # noqa: F811
+    # Builders hold connections.manage since D59; a viewer does not.
+    viewer = person(tenant, "Ravi Menon", {"team_platform": "viewer"})
+    r = await world.client.post("/v1/app-credentials", json=body(), headers=viewer)
     assert r.status_code == 403, r.text
     missing = await world.client.post("/v1/app-credentials", json=body(app="plugin:nope"), headers=admin(tenant))
     assert missing.status_code == 404, missing.text
@@ -151,9 +153,9 @@ async def test_replacing_the_secret_changes_the_teams_own_client_only(world: Wor
     """Replace on the Credentials page reaches the team's own client and keeps its accounts on it."""
     row = await made(world, tenant)
     conn = await turned_on(world, tenant, credentialId=row["id"])
-    builder = person(tenant, "James Richardson", {"team_platform": "builder"})
+    viewer = person(tenant, "Ravi Menon", {"team_platform": "viewer"})
     url = f"/v1/app-credentials/{row['id']}/secret"
-    assert (await world.client.put(url, json={"clientSecret": "x"}, headers=builder)).status_code == 403
+    assert (await world.client.put(url, json={"clientSecret": "x"}, headers=viewer)).status_code == 403
     replaced = await world.client.put(url, json={"clientSecret": "bank-rotated-secret-2"}, headers=admin(tenant))
     assert replaced.status_code == 200 and "bank-rotated-secret-2" not in replaced.text, replaced.text
     fresh = await world.store.get(tenant, conn)

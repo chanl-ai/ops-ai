@@ -276,6 +276,17 @@ class RoleIn(In):
     role: str = Field(pattern=ROLE)
 
 
+class CellIn(In):
+    area: str = Field(min_length=1, max_length=32)
+    action: str = Field(min_length=1, max_length=16)
+    scope: Literal["all", "own"] = "all"
+
+
+class RoleCellsIn(In):
+    # Every cell the role holds after the save; a cell left out is no longer granted.
+    permissions: list[CellIn] = Field(max_length=400)
+
+
 class DeleteIn(In):
     ids: list[Annotated[str, StringConstraints(pattern=MEMBER_ID)]] = Field(min_length=1, max_length=100)
 
@@ -420,6 +431,10 @@ class GridRow(Out):
 class RoleDetail(RoleOut):
     permissions: list[PermissionOut]
     grid: list[GridRow]
+    # Whether the caller may change this role's cells: a workspace admin, for any role but Admin.
+    can_edit: bool = False
+    # Why the caller may not change it, in words; None when they may.
+    locked_reason: str | None = None
 
 
 class GrantingRole(Out):

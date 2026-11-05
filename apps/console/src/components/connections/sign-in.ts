@@ -182,10 +182,11 @@ export function useSignInWindow(handlers: { onConnected?: (m: ConnectedMessage) 
     } catch {
       // The opener's postMessage and the account poll still arrive.
     }
-    // A window closed before any word arrived: the person closed it, or it never reached the return page.
+    // A window closed before any word arrived: the person closed it, or it never reached the return page; also one
+    // closed before its sign-in was sent on, while the calls that start it ran.
     const watch = window.setInterval(() => {
       const w = current.current?.window;
-      if (!w || !w.closed || !state.current) return;
+      if (!w || !w.closed) return;
       const asked = state.current;
       window.setTimeout(() => {
         if (state.current !== asked || current.current?.window !== w) return;

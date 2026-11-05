@@ -325,7 +325,7 @@ function HeaderAction({
           Reconnect
         </Button>
       );
-    return <ConnectedAs who={me.account} />;
+    return <ConnectedAs account={team?.name} who={me.account} />;
   }
   if ((broken || unsigned) && !card.mayManage)
     return (
@@ -353,14 +353,15 @@ function HeaderAction({
         Connect
       </Button>
     );
-  return <ConnectedAs who={conn?.signedIn?.account ?? team?.name} />;
+  return <ConnectedAs account={team?.name} who={conn?.signedIn?.account} />;
 }
 
-function ConnectedAs({ who }: { who?: string | null }) {
+/** Connected, with the default account's name and, when the system said, whom it signed in as. */
+function ConnectedAs({ account, who }: { account?: string | null; who?: string | null }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-sm" data-testid="app-connected-as">
       <CircleCheck className="size-4 text-success-text" />
-      {who ? `Connected as ${who}` : 'Connected'}
+      {['Connected', account ? ` · ${account}` : '', who ? ` as ${who}` : ''].join('')}
     </span>
   );
 }

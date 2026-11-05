@@ -18,7 +18,7 @@ from ops_agents.store.base import metadata
 from ops_engine.store import metadata as engine_metadata
 from ops_identity import Auth, Identity, ServiceAuth, dev_service_signer, mint_service_token, service_verifiers
 from ops_service_kit.settings import Settings
-from tests.engine.test_lifecycle_rights import ADMIN, BUILDER, jwks
+from tests.engine.test_lifecycle_rights import ADMIN, BUILDER, BUILDER_WITHOUT_MANAGE, jwks
 
 # Signed-in people: a builder of team_ops, and its admin, who also holds agents.manage.
 PERSON = BUILDER
@@ -90,11 +90,12 @@ async def test_only_the_provisioner_sets_template_fields(client: AsyncClient) ->
     assert (locked.status_code, locked.json()["error"]["code"]) == (403, "provisioner_only"), locked.text
 
 
-async def test_a_system_agent_is_changed_by_an_admin_or_the_provisioner_not_a_builder(client: AsyncClient) -> None:
+async def test_a_system_agent_is_changed_by_manage_or_the_provisioner_not_by_edit_alone(client: AsyncClient) -> None:
     made = await _provisioned(client, "system")
-    edit = await client.patch(f"/v1/agents/{made['id']}", json={"role": "Changed"}, headers=PERSON)
+    # A builder whose role lost agents.manage edits agents but not a system one (builders hold manage since D59).
+    edit = await client.patch(f"/v1/agents/{made['id']}", json={"role": "Changed"}, headers=BUILDER_WITHOUT_MANAGE)
     assert (edit.status_code, edit.json()["error"]["code"]) == (403, "system_record"), edit.text
-    gone = await client.delete(f"/v1/agents/{made['id']}", headers=PERSON)
+    gone = await client.delete(f"/v1/agents/{made['id']}", headers=BUILDER_WITHOUT_MANAGE)
     assert (gone.status_code, gone.json()["error"]["code"]) == (403, "system_record"), gone.text
     _data(await client.patch(f"/v1/agents/{made['id']}", json={"role": "Synced"}, headers=provisioner()))
     _data(await client.patch(f"/v1/agents/{made['id']}", json={"role": "Admin's"}, headers=ADMIN))

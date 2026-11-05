@@ -12,7 +12,18 @@ from typing import Any
 
 import pytest
 
-from ops_access import Access, Grant, Grids, check_value, publish_mode, require_provisioner
+from ops_access import (
+    ACTIONS,
+    AREAS,
+    Access,
+    Grant,
+    Grids,
+    check_value,
+    decode_grid,
+    encode_grid,
+    publish_mode,
+    require_provisioner,
+)
 from ops_identity import Identity, Principal, ServiceAuth, mint_service_token
 from ops_identity.testing import TEST_TOKEN_TTL_S
 from ops_policy import Ed25519Signer, mint
@@ -63,7 +74,7 @@ async def test_a_role_is_held_in_the_records_team_only() -> None:
     p = await person(access={"team_a": ["builder"]}, perm_version=3)
     assert p.access == {"team_a": ["builder"]} and p.permission_version == 3
     assert ACCESS.can(p, "agents", "edit", team="team_a") == "all"
-    refused("role_required", ACCESS.can, p, "agents", "decide", team="team_a")
+    refused("role_required", ACCESS.can, p, "access", "edit", team="team_a")
     refused("team_forbidden", ACCESS.can, p, "agents", "edit", team="team_b")
 
 
@@ -224,11 +235,12 @@ async def _provisioner(scopes: list[str]) -> Principal:
     return await auth.principal(authorization=f"Bearer {token}")
 
 
-async def test_a_system_record_is_changed_by_an_admin_or_the_provisioner_not_a_builder() -> None:
+async def test_a_system_record_is_changed_by_whoever_holds_manage_or_the_provisioner() -> None:
+    # A reviewer holds no agents.manage; a builder now does (D59), as an admin does.
+    reviewer = await person(access={"team_a": ["reviewer"]})
+    refused("system_record", ACCESS.can, reviewer, "agents", "edit", team="team_a", protection="system")
     builder = await person(access={"team_a": ["builder"]})
-    refused("system_record", ACCESS.can, builder, "agents", "edit", team="team_a", protection="system")
-    refused("system_record", ACCESS.can, builder, "agents", "delete", team="team_a", protection="system")
-    assert ACCESS.can(builder, "agents", "view", team="team_a", protection="system") == "all"
+    assert ACCESS.can(builder, "agents", "edit", team="team_a", protection="system") == "all"
     assert ACCESS.can(builder, "agents", "edit", team="team_a", protection="managed") == "all"
     admin = await person(access={"team_a": ["admin"]})
     assert ACCESS.can(admin, "agents", "edit", team="team_a", protection="system") == "all"
@@ -293,3 +305,47 @@ def test_a_publish_mode_is_read_per_team_and_defaults_to_major() -> None:
     for bad in ({"agents": "sometimes"}, {"cases": "always"}, ["always"]):
         with pytest.raises(ValueError, match="publishReview"):
             check_value("publishReview", bad)
+
+
+async def test_a_builder_holds_every_cell_but_people_access_and_workspace_settings() -> None:
+    """Owner, 5 November: builders do everything in their team except people and access and the workspace's
+    settings, connections and secrets included."""
+    builder = await person(access={"team_a": ["builder"]})
+    for area, action in (
+        ("connections", "manage"),
+        ("connections", "delete"),
+        ("secrets_egress", "edit"),
+        ("tools", "manage"),
+    ):
+        assert ACCESS.can(builder, area, action, team="team_a") == "all", (area, action)
+    for area, action in (("access", "edit"), ("access", "manage"), ("settings", "edit"), ("workspace", "manage")):
+        refused("role_required", ACCESS.can, builder, area, action, team="team_a")
+
+
+async def test_a_built_in_roles_cells_come_from_the_token_once_it_carries_them() -> None:
+    """An admin's edit of a built-in role reaches every service: the token carries the role's stored cells, and they
+    decide over the code's defaults, both ways."""
+    edited = {"viewer": encode_grid([("agents", "view", "all"), ("agents", "publish", "all")])}
+    viewer = await person(access={"team_a": ["viewer"]}, grids=edited)
+    assert ACCESS.can(viewer, "agents", "publish", team="team_a") == "all"
+    refused("role_required", ACCESS.can, viewer, "workflows", "view", team="team_a")
+
+
+async def test_a_platform_check_reads_a_built_in_roles_stored_cells() -> None:
+    """platform-service decides from the rows it holds now, built-in roles included, so an edit applies at once."""
+
+    async def fetch(tenant: str, version: int, role_ids: list[str]) -> dict[str, Iterable[Grant]]:
+        return {r: [("audit", "view", "all")] for r in role_ids}
+
+    access = Access(grids=Grids(fetch=fetch))
+    p = await person(access={"team_a": ["builder"]}, perm_version=3)
+    await access.grids.load(p.tenant_id, p.permission_version, ["builder"])
+    assert access.can(p, "audit", "view", team="team_a") == "all"
+    refused("role_required", access.can, p, "agents", "edit", team="team_a")
+
+
+def test_a_grid_encodes_into_a_short_claim_and_back() -> None:
+    grants: list[Grant] = [("agents", "view", "all"), ("memory", "edit", "own"), ("chat", "view", "own")]
+    claim = encode_grid(grants)
+    assert sorted(decode_grid(claim)) == sorted(grants)
+    assert len(str(encode_grid([(a, x, "all") for a in AREAS for x in ACTIONS]))) < 600

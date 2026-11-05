@@ -19,6 +19,8 @@ export function createPlatformTeamsHttp(baseUrl: string): OpsApi['teams'] {
     me: () => get<Me>('/me'),
     roles: () => get<RoleSummary[]>('/roles'),
     role: (id) => get<RoleDetail>(`/roles/${encodeURIComponent(id)}`),
+    editRole: (id, permissions) => send<RoleDetail>('PUT', `/roles/${encodeURIComponent(id)}/permissions`, { permissions }),
+    resetRole: (id) => send<RoleDetail>('POST', `/roles/${encodeURIComponent(id)}/reset`),
     personPermissions: (id) => get<PersonPermissions>(`/people/${encodeURIComponent(id)}/permissions`),
     why: (area, action) => get<WhyNot>(`/me/why?area=${encodeURIComponent(area)}&action=${encodeURIComponent(action)}`),
     checkAccess: (input) => send<AccessCheck>('POST', '/access/check', input),

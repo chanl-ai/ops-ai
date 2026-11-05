@@ -12,6 +12,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from ops_access import AREAS, BUILTIN_GRIDS, encode_grid
 from ops_agents.api.app import create_app
 from ops_agents.store.base import metadata
 from ops_agents.store.engine import EngineTransactions
@@ -29,7 +30,16 @@ PLATFORM = Ed25519Signer.generate("platform-test")
 TENANT = "acme"
 
 
-def person(sub: str, team: str, role: str, *, policies: dict[str, Any] | None = None) -> dict[str, str]:
+def person(
+    sub: str,
+    team: str,
+    role: str,
+    *,
+    policies: dict[str, Any] | None = None,
+    unticked: tuple[tuple[str, str], ...] = (),
+) -> dict[str, str]:
+    """A platform token for `role` in `team`. `unticked` names cells an admin took off the role on the Roles page: the
+    token then carries the role's stored grid without them, as platform-service issues it after that edit."""
     claims: dict[str, Any] = {
         "sub": sub,
         "email": f"{sub}@harborpine.example",
@@ -41,10 +51,16 @@ def person(sub: str, team: str, role: str, *, policies: dict[str, Any] | None = 
         "roles": {team: role},
         **({"policies": policies} if policies is not None else {}),
     }
+    if unticked:
+        kept = [g for g in BUILTIN_GRIDS[role] if (g[0], g[1]) not in set(unticked)]
+        claims |= {"access": {team: [role]}, "grids": {role: encode_grid(kept)}}
     return {"Authorization": f"Bearer {mint(claims, PLATFORM, ttl_s=TEST_TOKEN_TTL_S)}", "X-Team-Id": team}
 
 
 BUILDER = person("james", "team_ops", "builder")
+# A builder whose role an admin took every manage cell off: edits definitions, never a system record.
+NO_MANAGE = tuple((area, "manage") for area in AREAS)
+BUILDER_WITHOUT_MANAGE = person("jo", "team_ops", "builder", unticked=NO_MANAGE)
 ADMIN = person("priya", "team_ops", "admin")
 VIEWER = person("vera", "team_ops", "viewer")
 

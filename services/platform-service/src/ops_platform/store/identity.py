@@ -13,7 +13,7 @@ from typing import Any, ClassVar
 
 import sqlalchemy as sa
 
-from ops_access import ANY_TEAM, OWNER, active
+from ops_access import ANY_TEAM, OWNER, active, encode_grid
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
 
@@ -143,6 +143,11 @@ class IdentityStore:
             if a.role_id not in out.setdefault(a.team_id, []):
                 out[a.team_id].append(a.role_id)
         return out
+
+    async def grids(self, tenant_id: str, role_ids: list[str]) -> dict[str, dict[str, str]]:
+        """Each role's cells as stored now, encoded for the token's `grids` claim, which every service decides from."""
+        found = await RoleStore(self.db).grids(tenant_id, role_ids) if role_ids else {}
+        return {r: encode_grid(found.get(r, [])) for r in role_ids}
 
     async def open_session(
         self,

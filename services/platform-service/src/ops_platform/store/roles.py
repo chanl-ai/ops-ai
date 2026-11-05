@@ -207,6 +207,46 @@ class RoleStore:
         async with self.db.tenant_tx(tenant_id) as c:
             return {str(r[0]): str(r[1]) for r in (await c.execute(q)).all()}
 
+    async def set_grid(
+        self, tenant_id: str, role_id: str, grants: list[Grant], *, by: str, request_id: str, action: str
+    ) -> bool:
+        """Replaces the role's cells with `grants`, audited as `action` (`role.edit`, `role.reset`) with what changed,
+        and raises the permission version so every token issued after carries the new grid. False for no such role."""
+        async with self.db.tenant_tx(tenant_id) as c:
+            if (await c.execute(sa.select(roles.c.id).where(roles.c.id == role_id))).first() is None:
+                return False
+            before = {(a, x): s for a, x, s in (await _grids(c, [role_id])).get(role_id, [])}
+            after = {(a, x): s for a, x, s in grants}
+            await c.execute(role_permissions.delete().where(role_permissions.c.role_id == role_id))
+            if grants:
+                await c.execute(
+                    role_permissions.insert(),
+                    [
+                        {"tenant_id": tenant_id, "role_id": role_id, "area": a, "action": x, "scope": s}
+                        for (a, x), s in after.items()
+                    ],
+                )
+            await bump_version(c, tenant_id)
+            changed = sorted(
+                f"{a}.{x}" for a, x in before.keys() | after.keys() if before.get((a, x)) != after.get((a, x))
+            )
+            await record(
+                c,
+                tenant_id=tenant_id,
+                team_id=None,
+                actor=by,
+                action=action,
+                target_kind="role",
+                target_id=role_id,
+                request_id=request_id,
+                detail={
+                    "changed": changed,
+                    "before": {k: before.get(tuple(k.split(".", 1))) for k in changed},  # type: ignore[arg-type]
+                    "after": {k: after.get(tuple(k.split(".", 1))) for k in changed},  # type: ignore[arg-type]
+                },
+            )
+        return True
+
     async def grids(self, tenant_id: str, role_ids: list[str]) -> dict[str, list[Grant]]:
         async with self.db.tenant_tx(tenant_id) as c:
             return await _grids(c, role_ids)

@@ -8669,6 +8669,20 @@
       "SecretMeta": {
         "additionalProperties": false,
         "properties": {
+          "authConfig": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authconfig"
+          },
           "connectionId": {
             "anyOf": [
               {
@@ -8739,6 +8753,11 @@
               }
             ],
             "title": "Protection"
+          },
+          "readOnly": {
+            "default": false,
+            "title": "Readonly",
+            "type": "boolean"
           },
           "rotatedAt": {
             "anyOf": [

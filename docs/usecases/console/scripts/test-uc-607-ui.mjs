@@ -244,7 +244,7 @@ try {
           await first.close();
           check(
             '3 one Connect window: Ops AI’s app or your own, the access asked for and Authorize; the sign-in window opens at once on the console’s connect page; a refusal shows in both windows and Authorize works again',
-            /Ops AI’s/.test(said) && /App credential/.test(said) && /Add one under Credentials/.test(said) && /gets access to/.test(said) && button === 'Connect' && !/Authorize with/.test(said) && /More options/.test(said) && folded &&
+            /Ops AI’s/.test(said) && /Auth config/.test(said) && /Add your own app/.test(said) && /gets access to/.test(said) && button === 'Connect' && !/Authorize with/.test(said) && /More options/.test(said) && folded &&
               new URL(openedAt).pathname === '/connections/connect' && new URL(openedAt).searchParams.get('app') === 'Person desk' &&
               deniedShown && closeOffered && /not given/.test(told) && again,
             { said, button, folded, openedAt, deniedShown, closeOffered, told, again },
@@ -256,9 +256,9 @@ try {
           const [popup] = await Promise.all([page.waitForEvent('popup', { timeout: 60_000 }), page.getByTestId('connect-window-authorize').click()]);
           await allow(popup, 'harbor.ops', 'allow');
           await page.waitForURL((u) => u.pathname.startsWith('/integrations/apps/'), { timeout: 60_000 });
-          await page.getByTestId('app-accounts').waitFor({ timeout: 60_000 });
+          await page.getByTestId('app-auth-configs').waitFor({ timeout: 60_000 });
           await page.getByTestId('app-status').filter({ hasText: 'Connected' }).waitFor({ timeout: 30_000 });
-          const accounts = (await page.getByTestId('app-accounts').innerText()).replace(/\s+/g, ' ');
+          const accounts = (await page.getByTestId('app-auth-configs').innerText()).replace(/\s+/g, ' ');
           await shoot(page, 'app-connected-team');
           const conn = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.id === APP);
           const detail = (await call(tools, 'GET', `/v1/apps/${APP}/accounts/${conn?.connectionId}`, priya)).data ?? {};
@@ -278,7 +278,8 @@ try {
           await fakeDown(true);
           const failed = await call(tools, 'POST', `/v1/apps/${APP}/accounts/${conn?.connectionId}/test`, priya, { account: 'team' });
           await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          const row = await page.getByTestId('app-test-failed').waitFor({ timeout: 60_000 }).then(async () => ((await page.getByTestId('app-test-failed').innerText()) ?? '').trim(), () => '');
+          const failedRow = page.getByTestId('account-test-failed-Person desk');
+          const row = await failedRow.waitFor({ timeout: 60_000 }).then(async () => ((await failedRow.innerText()) ?? '').trim(), () => '');
           const rowReconnect = await page.getByTestId('app-reconnect').isVisible().catch(() => false);
           await shoot(page, 'app-test-failed');
           await page.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -357,22 +358,20 @@ try {
           await james.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           // A builder's header says a team admin connects the app only while the team account is not signed in.
           await james.getByTestId('app-connected-as').waitFor({ timeout: 90_000 });
-          await james.getByTestId('app-tab-people').click();
-          const button = james.getByTestId('app-connect-me');
+          // A person signs in with their own account on the account's row, labelled as their own.
+          const button = james.getByTestId('account-connect-mine-Person desk');
           await button.waitFor({ timeout: 90_000 });
           await shoot(james, 'app-connect-my-account');
           const [popup] = await Promise.all([james.waitForEvent('popup', { timeout: 60_000 }), button.click()]);
           await allow(popup, 'james.person');
           // The person's own line is always drawn; it reads Connected as them once the page refetches after the sign-in.
-          const me = james.getByTestId('app-me-state');
-          await me.getByText(/Connected as/).waitFor({ timeout: 60_000 }).catch(() => {});
-          const said = (await me.innerText()).replace(/\s+/g, ' ');
-          const listed = ((await james.getByTestId('app-people').innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ');
+          await james.getByText(/as james\.person/).first().waitFor({ timeout: 60_000 }).catch(() => {});
+          const said = ((await james.getByTestId('app-auth-configs').innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ');
           await shoot(james, 'app-connected-as');
           check(
             '6 James presses Connect my account, allows access as himself, and the page reads Connected as james.person',
-            /Connected as james\.person/.test(said) && /james\.person/.test(listed) && /You/.test(listed) && /Connected/.test(listed),
-            { said, listed },
+            /as james\.person/.test(said) && /Connected/.test(said) && (await james.getByTestId('account-connect-mine-Person desk').count()) === 0,
+            { said },
           );
         }, james);
 
@@ -446,7 +445,7 @@ try {
           );
         }, james);
 
-        await step('7b the Apps menu: Apps, Credentials, My accounts and Tools in the sidebar, no tab row; the old My connections, Secrets and call log addresses land in it', async () => {
+        await step('7b the Apps menu: Apps, Auth configs, My accounts and Tools in the sidebar, no tab row; the old My connections, Secrets and call log addresses land in it', async () => {
           await james.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await james.getByTestId('systems-grid').waitFor({ timeout: 60_000 });
           // The four places are sidebar items under Data Hub, side by side; no page repeats them as a tab row.
@@ -484,7 +483,7 @@ try {
           await james.goto(`${consoleUrl}/integrations/credentials`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           const credsState = await Promise.race([
             james.getByTestId('app-credentials-panel').waitFor({ timeout: 60_000 }).then(() => 'list'),
-            james.getByText(/Couldn’t load the app credentials|app credentials/i).first().waitFor({ timeout: 60_000 }).then(() => 'error or empty'),
+            james.getByText(/Couldn’t load the auth configs|auth configs/i).first().waitFor({ timeout: 60_000 }).then(() => 'error or empty'),
           ]).catch(() => 'blank');
           await shoot(james, 'creds');
           await james.goto(`${consoleUrl}/settings/security/secrets`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -493,8 +492,8 @@ try {
           const tabsOnCredentials = await tabRows();
           await shoot(james, 'creds-secrets');
           check(
-            '7b the Apps menu: Apps, Credentials, My accounts and Tools in the sidebar, no tab row; the old My connections, Secrets and call log addresses land in it',
-            menu === 'Apps,Credentials,My accounts,Tools' && /Connected/.test(views) && /Available/.test(views) &&
+            '7b the Apps menu: Apps, Auth configs, My accounts and Tools in the sidebar, no tab row; the old My connections, Secrets and call log addresses land in it',
+            menu === 'Apps,Auth configs,My accounts,Tools' && /Connected/.test(views) && /Available/.test(views) &&
               /My accounts/.test(mine) && /Person desk/.test(mine) && !/Settings \/ My accounts/.test(mine) && !/sample data/.test(mine) && moved &&
               credsState !== 'blank' && secretsMoved && secretsShown && tabsOnApps + tabsOnCalls + tabsOnTools + tabsOnCredentials === 0,
             { sidebar, menu, views, mine: mine.slice(0, 400), moved, credsState, secretsMoved, secretsShown, tabsOnApps, tabsOnCalls, tabsOnTools, tabsOnCredentials },
@@ -519,18 +518,24 @@ try {
             if (shown !== want) out.disagree.push({ id: c.id, state: c.state, shown, want });
           }
           await james.getByPlaceholder('Search apps').fill('');
-          // A non-admin gets no dead Connect button: each card they may not connect says why instead.
+          // No dead Connect button: each card James may not connect says why instead. Whether he may is his role's
+          // (builders manage apps since D59), read from his own answer.
+          const his = (await call(tools, 'GET', '/v1/apps', as(await tokenFor('j.richardson@harborpine.example'), 'team_ops'))).data ?? [];
+          out.blocked = his.filter((c) => !c.mayManage && c.kind !== 'builtin' && c.appState !== 'connected' && c.appState !== 'removed').length;
           out.connectOff = await james.locator('main button[data-testid^="connect-"]:disabled').count();
+          // Counted once the cleared search has drawn the whole list again.
+          await james.locator('main [data-testid^="connect-"][data-testid$="-why"]').first().waitFor({ timeout: 15_000 }).catch(() => undefined);
           out.connectWhy = await james.locator('main [data-testid^="connect-"][data-testid$="-why"]').count();
-          // A list that fails offers Try again at once, not a skeleton.
-          const failing = await james.context().newPage();
+          // A list that fails offers Try again at once, not a skeleton. A browser of its own, so no saved answer from
+          // James's earlier visits stands in for the failed read.
+          const failing = await signedIn(browser, consoleUrl, 'j.richardson@harborpine.example', []);
           await failing.route('**/v1/apps', (r) => r.fulfill({ status: 500, contentType: 'application/json', body: '{"success":false,"error":{"message":"boom"}}' }));
           await failing.route('**/v1/app-credentials', (r) => r.fulfill({ status: 500, contentType: 'application/json', body: '{"success":false,"error":{"message":"boom"}}' }));
           await failing.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          out.appsRetry = await failing.getByRole('button', { name: /Try again|Retrying/ }).first().waitFor({ timeout: 8_000 }).then(() => true, () => false);
+          out.appsRetry = await failing.getByRole('button', { name: /Try again|Retrying/ }).first().waitFor({ timeout: 20_000 }).then(() => true, () => false);
           await failing.goto(`${consoleUrl}/integrations/credentials`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           out.credsRetry = await failing.getByRole('button', { name: /Try again|Retrying/ }).first().waitFor({ timeout: 8_000 }).then(() => true, () => false);
-          await failing.close();
+          await failing.context().close();
           // Tools and a tool page carry none of the retired words.
           await james.goto(`${consoleUrl}/tools`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await james.getByTestId('tools-tab-logs').waitFor({ timeout: 60_000 });
@@ -566,7 +571,7 @@ try {
           await dark.close();
           check(
             '7c the grid and app page agree on Connected; errors offer Try again; no old words, no 404s, dark follows the system, tabs scroll',
-            out.disagree.length === 0 && out.connectOff === 0 && out.connectWhy >= 1 && out.appsRetry && out.credsRetry && out.oldWords.length === 0 && out.updateNotFound === 0 && out.tabsScroll && out.settingsReached === 'active' && out.dark,
+            out.disagree.length === 0 && out.connectOff === 0 && (out.blocked === 0 || out.connectWhy >= 1) && out.appsRetry && out.credsRetry && out.oldWords.length === 0 && out.updateNotFound === 0 && out.tabsScroll && out.settingsReached === 'active' && out.dark,
             out,
           );
         }, james);
@@ -590,9 +595,9 @@ try {
           );
         }, page);
 
-        await step('9 the app page has the frame’s Accounts and tabs; Tools by title, Credentials with no secret, Settings with the switch and the default account’s keys', async () => {
+        await step('9 the app page has Auth configs and the tabs; Tools by title, Ops AI’s config with no Edit or Delete, Settings with the switch and the default account’s keys', async () => {
           await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          await page.getByTestId('app-accounts').waitFor({ timeout: 60_000 });
+          await page.getByTestId('app-auth-configs').waitFor({ timeout: 60_000 });
           const head = ((await page.locator('main').innerText()) ?? '').replace(/\s+/g, ' ');
           await page.getByTestId('app-tab-tools').click();
           await page.getByTestId('app-tools').getByText('Read a record').waitFor({ timeout: 60_000 });
@@ -603,10 +608,11 @@ try {
           await page.getByTestId('app-tab-resources').click();
           await page.getByTestId('app-skills-none').waitFor({ timeout: 30_000 });
           await shoot(page, 'app-resources');
-          await page.getByTestId('app-tab-credentials').click();
-          await page.getByTestId('app-credentials-panel').waitFor({ timeout: 30_000 });
-          const credentials = (await page.getByTestId('app-credentials-tab').innerText()).replace(/\s+/g, ' ');
-          await shoot(page, 'app-credentials');
+          await page.getByTestId('app-tab-auth').click();
+          const credentials = (await page.getByTestId('app-auth-configs').innerText()).replace(/\s+/g, ' ');
+          // Ops AI's own config is never edited or deleted.
+          const builtInEditable = (await page.getByTestId('auth-config-edit-Ops AI').count()) + (await page.getByTestId('auth-config-delete-Ops AI').count());
+          await shoot(page, 'app-auth-configs');
           await page.getByTestId('app-tab-settings').click();
           await page.getByTestId('app-keys').waitFor({ timeout: 30_000 });
           const everyone = await page.getByTestId('app-everyone').getAttribute('aria-checked');
@@ -616,9 +622,9 @@ try {
           await shoot(page, 'app-settings');
           const html = await page.content();
           check(
-            '9 the app page has the frame’s Accounts and tabs; Tools by title, Credentials with no secret, Settings with the switch and the default account’s keys',
-            tabs.join() === 'Accounts,People,Tools,Resources,Credentials,Logs,Settings' && /Calls use the default account unless a step names another/.test(head) && !/\bPlugin\b/.test(head) &&
-              /Ticket desk/.test(usedBy) && /Ops AI’s app/.test(credentials) && /Kept by Ops AI/.test(credentials) && everyone === 'true' && /Person desk/.test(keys) && /Working/.test(keys) && !/Production/.test(keys) && !html.includes(fake.info.clients['multi-app']),
+            '9 the app page has Auth configs and the tabs; Tools by title, Ops AI’s config with no Edit or Delete, Settings with the switch and the default account’s keys',
+            tabs.join() === 'Auth configs,Tools,Resources,Logs,Settings' && /team sign-in/.test(head) && !/\bPlugin\b/.test(head) &&
+              /Ticket desk/.test(usedBy) && /Ops AI/.test(credentials) && /Built in/.test(credentials) && /Kept by Ops AI/.test(credentials) && builtInEditable === 0 && everyone === 'true' && /Person desk/.test(keys) && /Working/.test(keys) && !/Production/.test(keys) && !html.includes(fake.info.clients['multi-app']),
             { tabs, usedBy, credentials, everyone, keys },
           );
         }, page);
@@ -648,7 +654,8 @@ try {
 
         await step('11 Priya connects another account named EU desk and allows it as the EU team account; both are listed, the first the default', async () => {
           await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          await page.getByTestId('app-connect-another').click();
+          // Add account on the config the first account signs in with opens the Connect window on it.
+          await page.getByTestId('auth-config-add-Ops AI').click();
           // Another account opens the same Connect window, its name field showing.
           const dialog = page.getByTestId('connect-window');
           await dialog.waitFor({ timeout: 30_000 });
@@ -658,13 +665,13 @@ try {
           await allow(popup, 'harbor.eu');
           await page.getByTestId('account-EU desk').waitFor({ timeout: 60_000 });
           await page.waitForTimeout(800);
-          const rows = (await page.getByTestId('app-accounts').innerText()).replace(/\s+/g, ' ');
+          const rows = (await page.getByTestId('app-auth-configs').innerText()).replace(/\s+/g, ' ');
           await shoot(page, 'app-accounts');
           const page_ = (await call(tools, 'GET', `/v1/apps/${encodeURIComponent(APP)}`, priya)).data ?? {};
           const accounts = (page_.authConfigs ?? []).flatMap((c) => c.accounts).map((a) => [a.name, a.default, a.status]);
           check(
             '11 Priya connects another account named EU desk and allows it as the EU team account; both are listed, the first the default',
-            accounts.length === 2 && accounts[0][1] === true && accounts[1][0] === 'EU desk' && accounts[1][1] === false && /EU desk/.test(rows),
+            accounts.length === 2 && accounts.find((a) => a[0] === 'EU desk')?.[1] === false && accounts.filter((a) => a[1]).length === 1 && /EU desk/.test(rows),
             { accounts, rows: rows.slice(0, 300) },
           );
         }, page);
@@ -684,14 +691,15 @@ try {
 
         await step('13 James connects his own EU desk account; his chat then reads with his newest, and Make my default puts it back on Person desk', async () => {
           await james.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          const connect = james.getByTestId('account-connect-EU desk');
+          const connect = james.getByTestId('account-connect-mine-EU desk');
           await connect.waitFor({ timeout: 60_000 });
           const [popup] = await Promise.all([james.waitForEvent('popup', { timeout: 60_000 }), connect.click()]);
           await allow(popup, 'james.eu');
-          // A person's own sign-ins, and which one their calls use, are on the People tab.
-          await james.getByTestId('app-tab-people').click();
-          await james.getByTestId('account-pin-Person desk').waitFor({ timeout: 60_000 });
-          await shoot(james, 'app-people-mine');
+          // Which of a person's own sign-ins their calls use is the account menu's Make my default.
+          await james.getByTestId('account-menu-Person desk').click();
+          await james.getByTestId('account-action-Make my default-Person desk').waitFor({ timeout: 60_000 });
+          await shoot(james, 'app-make-my-default');
+          await james.keyboard.press('Escape');
           const ask = async () => {
             await james.goto(`${consoleUrl}/chat?agent=${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
             const box = james.getByLabel('Message');
@@ -704,9 +712,9 @@ try {
           };
           const newest = await ask();
           await james.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          await james.getByTestId('app-tab-people').click();
-          await james.getByTestId('account-pin-Person desk').click();
-          await james.getByTestId('account-pin-EU desk').waitFor({ timeout: 60_000 });
+          await james.getByTestId('account-menu-Person desk').click();
+          await james.getByTestId('account-action-Make my default-Person desk').click();
+          await james.getByTestId('account-Person desk').getByText('Your default').waitFor({ timeout: 60_000 });
           const pinned = await ask();
           check(
             '13 James connects his own EU desk account; his chat then reads with his newest, and Make my default puts it back on Person desk',
@@ -715,7 +723,7 @@ try {
           );
         }, james);
 
-        await step('13a Priya’s Credentials list Person desk’s OAuth app as Ops AI’s app, from GET /v1/app-credentials', async () => {
+        await step('13a Priya’s Auth configs list Person desk under its app with Ops AI’s built-in config, from GET /v1/app-credentials', async () => {
           const listed = page.waitForResponse((r) => r.request().method() === 'GET' && r.url().includes('/v1/app-credentials'), { timeout: 60_000 });
           await page.goto(`${consoleUrl}/integrations/credentials`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           const res = await listed;
@@ -723,7 +731,7 @@ try {
           await panel.getByText('Person desk').first().waitFor({ timeout: 60_000 });
           const text = ((await panel.innerText()) ?? '').replace(/\s+/g, ' ');
           await shoot(page, 'creds');
-          check('13a Priya’s Credentials list Person desk’s OAuth app as Ops AI’s app, from GET /v1/app-credentials', res.status() === 200 && /Person desk/.test(text) && /Ops AI’s app/.test(text), { status: res.status(), text: text.slice(0, 300) });
+          check('13a Priya’s Auth configs list Person desk under its app with Ops AI’s built-in config, from GET /v1/app-credentials', res.status() === 200 && /Person desk/.test(text) && /Ops AI Built in/.test(text) && (await page.getByTestId('auth-configs-app-plugin:test.person').count()) === 1, { status: res.status(), text: text.slice(0, 300) });
         }, page);
 
         // Apps (final) frame 11: a run that acts for a person who has not connected their own account waits on a Human
@@ -1043,12 +1051,17 @@ try {
       const priya = as(await tokenFor('p.shah@harborpine.example'), 'team_ops');
       for (const host of sf.hosts) await call(tools, 'POST', '/v1/egress/hosts', sam, { value: host, note: 'uc-607' });
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: sf.range, note: 'uc-607' });
+      // Every host of the fake, the org's own address (My Domain) among them, reaches it on this machine's address.
       const toLogin = (context) =>
-        context.route(`https://${SF_LOGIN}/**`, async (route) => {
-          const u = new URL(route.request().url());
-          const response = await route.fetch({ url: `https://${sfAddress}:${sfPort}${u.pathname}${u.search}`, headers: { ...route.request().headers(), host: SF_LOGIN }, maxRedirects: 0 });
-          await route.fulfill({ response });
-        });
+        Promise.all(
+          sf.hosts.map((host) =>
+            context.route(`https://${host}/**`, async (route) => {
+              const u = new URL(route.request().url());
+              const response = await route.fetch({ url: `https://${sfAddress}:${sfPort}${u.pathname}${u.search}`, headers: { ...route.request().headers(), host }, maxRedirects: 0 });
+              await route.fulfill({ response });
+            }),
+          ),
+        );
       const browser = await chromium.launch();
       try {
         const page = await adminPage(browser, consoleUrl, 'p.shah@harborpine.example', toLogin);
@@ -1072,23 +1085,25 @@ try {
           if (!sandbox) {
             // No client is typed in the window: it is picked from the team's app credentials, with a link to add one.
             const typed = await window_.getByTestId('connect-window-client-id').count();
-            const add = await window_.getByTestId('connect-window-app-add').getAttribute('href').catch(() => null);
+            // Add your own app opens the new auth config window in place.
+            const add = (await window_.getByTestId('connect-window-app-add').count()) > 0;
             let opened = false;
             const onPopup = () => (opened = true);
-            const unpicked = /Pick an app credential/.test(await picker.innerText());
+            const unpicked = /Pick an auth config/.test(await picker.innerText());
             page.on('popup', onPopup);
             if (unpicked) await window_.getByTestId('connect-window-authorize').click();
             const error = unpicked ? await window_.getByTestId('connect-window-error').innerText({ timeout: 10_000 }).catch(() => '') : '';
             await page.waitForTimeout(500);
             page.off('popup', onPopup);
             await shoot(page, 'connect-required');
-            check('43 the Connect window types no client: it picks an app credential, links to Credentials to add one, and Authorize with none picked says so and opens no sign-in window', typed === 0 && add === '/integrations/credentials' && (!unpicked || (/Pick the app credential/.test(error) && !opened)), { typed, add, unpicked, error, opened });
+            check('43 the Connect window types no client: it picks an auth config, offers to add one in place, and Authorize with none picked says so and opens no sign-in window', typed === 0 && add && (!unpicked || (/Pick the auth config/.test(error) && !opened)), { typed, add, unpicked, error, opened });
           }
           await picker.click();
           await page.getByTestId(`connect-window-app-option-${values.credential}`).click();
-          // A sandbox opens with More options showing, its name and sign-in address among them.
-          if (!(await window_.getByTestId('connect-window-setting-login_url').isVisible())) await window_.getByTestId('connect-window-more').click();
-          await window_.getByTestId('connect-window-setting-login_url').fill(values.login_url);
+          // Where the account signs in: the org's own address, picked as the company's and typed as its host.
+          await window_.getByTestId('connect-window-place-login_url').click();
+          await page.getByTestId('connect-window-place-login_url-other').click();
+          await window_.getByTestId('connect-window-place-login_url-host').fill(new URL(values.login_url).host);
           if (sandbox) await shoot(page, 'connect-sandbox');
           const [popup] = await Promise.all([page.waitForEvent('popup', { timeout: 60_000 }), window_.getByTestId('connect-window-authorize').click()]);
           const name = popup.locator('input[name=username]');
@@ -1105,7 +1120,8 @@ try {
           }
           return health;
         };
-        const loginUrl = sf.authorize_url.replace(/\/authorize$/, '');
+        // The org's own address (My Domain), one of the places the plugin lets a person sign in.
+        const loginUrl = sf.login_url;
         await step("19 Salesforce's own app on each account: the live one in the Connect window, a sandbox account from the app page, each on its own instance", async () => {
           // Both clients are made under Credentials first, so the window's list has them when it opens.
           const liveCredential = await credentialFor('ops-ai-acme', 'acme-connected-app-secret');
@@ -1116,10 +1132,10 @@ try {
           await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(SF)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await page.getByTestId('app-add-sandbox').click({ timeout: 60_000 });
           const suggested = await page.getByTestId('connect-window-name').getAttribute('placeholder').catch(() => null);
-          const sandbox = await ownWindow({ credential: sandboxCredential, login_url: sf.sandbox_login }, 'priya.sandbox', { sandbox: true });
+          const sandbox = await ownWindow({ credential: sandboxCredential, login_url: sf.sandbox_login_url }, 'priya.sandbox', { sandbox: true });
           await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(SF)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          await page.getByTestId('app-accounts').waitFor({ timeout: 60_000 });
-          const rows = ((await page.getByTestId('app-accounts').innerText()) ?? '').replace(/\s+/g, ' ');
+          await page.getByTestId('app-auth-configs').waitFor({ timeout: 60_000 });
+          const rows = ((await page.getByTestId('app-auth-configs').innerText()) ?? '').replace(/\s+/g, ' ');
           const badge = await page.locator('[data-testid^="account-sandbox-"]').count();
           const addAgain = await page.getByTestId('app-add-sandbox').count();
           await shoot(page, 'app-salesforce-sandbox');
@@ -1171,7 +1187,7 @@ try {
             console.log('accounts:', ((await page.locator('main').innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ').slice(0, 500), 'card:', JSON.stringify({ state: card?.state, status: card?.status }));
             throw e;
           });
-          const accounts = ((await page.getByTestId('app-accounts').innerText()) ?? '').replace(/\s+/g, ' ');
+          const accounts = ((await page.getByTestId('app-auth-configs').innerText()) ?? '').replace(/\s+/g, ' ');
           await shoot(page, 'app-account-expired');
           const [again] = await Promise.all([page.waitForEvent('popup', { timeout: 60_000 }), button.click()]);
           const name = again.locator('input[name=username]');

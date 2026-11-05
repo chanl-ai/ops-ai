@@ -51,9 +51,9 @@ await withUiStack(
       const closed = await popup.waitForEvent('close', { timeout: 60_000 }).then(() => true, () => false);
       const mine = page.getByTestId('app-connected-as');
       const state = await page
-        .waitForFunction(() => /Connected as/.test(document.querySelector('[data-testid=app-connected-as]')?.textContent ?? ''), null, { timeout: 30_000 })
+        .waitForFunction(() => /Connected\b.* as /.test(document.querySelector('[data-testid=app-connected-as]')?.textContent ?? ''), null, { timeout: 30_000 })
         .then(async () => (await mine.innerText()).replace(/\s+/g, ' '), async () => (await mine.innerText().catch(() => '')).replace(/\s+/g, ' '));
-      check('7 she signs in once through the pop-up, and her row says whom she is connected as', closed && /Connected as/.test(state), { closed, state });
+      check('7 she signs in once through the pop-up, and her row says whom she is connected as', closed && /Connected\b.* as /.test(state), { closed, state });
 
       const t = await testTeamAccount(page, consoleUrl, { appId: app });
       check('8 Test works with her own account, answered 200', t.status === 'ok' && /\b200\b/.test(t.said) && /your own account/.test(t.said), t.said);

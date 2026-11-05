@@ -14,13 +14,13 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic_ai.models.test import TestModel
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from ops_agents.activities.tool_directory import OperationRef
@@ -100,7 +100,7 @@ async def client() -> AsyncGenerator[AsyncClient]:
 
 
 def wire(client: AsyncClient, listed: list[dict[str, Any]], tools: list[str] = TOOLS) -> Templates:
-    rt = client._transport.app.state.runtime  # type: ignore[attr-defined]
+    rt: Any = client._transport.app.state.runtime  # type: ignore[attr-defined]
     templates = Templates(listed)
     rt.tool_reviews = SimpleNamespace(tools=templates)
     rt.tool_directory = Directory(tools)
@@ -232,3 +232,33 @@ async def test_deleting_a_copy_marks_it_removed_and_a_changed_template_shows_as_
     # The delete marks the copy removed at once, before any reinstall looks.
     after = ok(await client.get("/v1/templates", params={"kind": "agent"}, headers=OPS))[0]["installed"]
     assert after["copies"] == 0, after
+
+
+async def test_an_update_takes_an_unedited_copy_at_once_and_asks_first_for_one_with_no_baseline(
+    client: AsyncClient,
+) -> None:
+    """A copy made before copies kept their record's digest has none: it reads as edited, so the update asks the person
+    before it leaves anything of theirs out, and the review still answers."""
+    import sqlalchemy as sa  # noqa: PLC0415 - only this test writes the table directly
+
+    from ops_agents.store.template_copies import template_copies  # noqa: PLC0415
+
+    wire(client, [AGENT])
+    made = ok(await install(client, {"knowledgeBases": ["kb_support"]}), 201)["copy"]
+    path = f"/v1/resources/{SOURCE}:case-helper/copies/{made['recordId']}/update"
+    body = cast(dict[str, Any], AGENT["body"])
+    edited = {**body, "instructions": "Read it twice."}
+    changed: dict[str, Any] = AGENT | {"version": 3, "digest": "b" * 64, "body": edited}
+    wire(client, [changed])
+    review = ok(await client.get(path, headers=OPS))
+    assert (review["fromVersion"], review["toVersion"], review["edits"]) == (2, 3, [])
+    assert "instructions" in review["changes"]
+    assert ok(await client.post(path, json={}, headers=OPS))["taken"] is True
+    db = cast(AsyncEngine, client._transport.app.state.runtime.db)  # type: ignore[attr-defined]
+    async with db.begin() as c:
+        await c.execute(sa.update(template_copies).values(record_digest=None))
+    wire(client, [changed | {"version": 4, "digest": "c" * 64}])
+    assert ok(await client.get(path, headers=OPS))["edits"]
+    refused = await client.post(path, json={}, headers=OPS)
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "copy_edited", refused.text
+    assert ok(await client.post(path, json={"confirm": True}, headers=OPS))["copy"]["version"] == 4

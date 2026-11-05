@@ -46,7 +46,7 @@ async def test_a_module_approval_is_decided_in_human_tasks_not_on_the_module(
     # Who decides is can(reviews.decide) on the request's workflow run (agents-service's tests); here, no
     # person decides it, an approver included (test_apply_tool_access covers the run's apply). Revoking stays here.
     james = person(tenant, "James Richardson", {"team_platform": "builder"})
-    bob = person(tenant, "Bob Tanaka", {"team_platform": "builder"})
+    bob = person(tenant, "Bob Tanaka", {"team_platform": "viewer"})
     maya = person(tenant, "Maya Okafor", {"team_platform": "approver"})
     r = await client.post(f"{MODULES}/mod_core_banking/approvals", json=ACCESS, headers=james)
     assert r.status_code == 201 and r.json()["data"]["reviewId"], r.text

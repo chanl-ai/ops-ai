@@ -39,11 +39,12 @@ async def test_can_decide_matches_the_decision_route(stack: tuple[AsyncClient, A
     url = f"/reviews/{tid}"
     flags = {
         name: await flag(c, url, "canDecide", who)
-        for name, who in (("builder", SECOND_BUILDER), ("asker", BUILDER), ("reviewer", REVIEWER))
+        for name, who in (("viewer", VIEWER), ("asker", BUILDER), ("reviewer", REVIEWER))
     }
-    assert flags == {"builder": False, "asker": False, "reviewer": True}, flags
+    # The asker, a builder, decides too while requesterMayDecide is on (its default; D59 gave builders decide).
+    assert flags == {"viewer": False, "asker": True, "reviewer": True}, flags
     body = {"decision": "rejected", "reason": "not this one"}
-    refused = await c.post(f"{url}/decision", json=body, headers=SECOND_BUILDER)
+    refused = await c.post(f"{url}/decision", json=body, headers=VIEWER)
     decided = await c.post(f"{url}/decision", json=body, headers=REVIEWER)
     assert refused.status_code == 403 and decided.status_code == 200, (refused.text, decided.text)
     assert await flag(c, url, "canDecide", REVIEWER) is False, "a decided review is decided by nobody"
@@ -58,12 +59,10 @@ async def test_can_decide_on_a_publish_matches_its_route(stack: tuple[AsyncClien
     rid = req.json()["data"]["id"]
     flags = {
         name: await flag(c, f"/reviews/{rid}", "canDecide", who)
-        for name, who in (("asker", BUILDER), ("builder", SECOND_BUILDER), ("reviewer", REVIEWER))
+        for name, who in (("asker", BUILDER), ("viewer", VIEWER), ("reviewer", REVIEWER))
     }
-    assert flags == {"asker": False, "builder": False, "reviewer": True}, flags
-    refused = await c.post(
-        f"/v1/publish-requests/{rid}/decision", json={"decision": "approved"}, headers=SECOND_BUILDER
-    )
+    assert flags == {"asker": True, "viewer": False, "reviewer": True}, flags
+    refused = await c.post(f"/v1/publish-requests/{rid}/decision", json={"decision": "approved"}, headers=VIEWER)
     assert refused.status_code == 403, refused.text
 
 
@@ -82,10 +81,11 @@ async def test_can_cancel_matches_the_cancel_route(stack: tuple[AsyncClient, Asy
             ("admin", ADMIN),
         )
     }
-    assert flags == {"starter": True, "other builder": False, "viewer": False, "reviewer": True, "admin": True}, flags
-    listed = (await c.get("/v1/runs", headers=SECOND_BUILDER)).json()["data"]["data"]
+    # Another builder cancels any run since D59 gave builders cases.manage, as reviewers have.
+    assert flags == {"starter": True, "other builder": True, "viewer": False, "reviewer": True, "admin": True}, flags
+    listed = (await c.get("/v1/runs", headers=VIEWER)).json()["data"]["data"]
     assert [r["canCancel"] for r in listed if r["id"] == run_id] == [False]
-    refused = await c.post(f"{url}/cancel", headers=SECOND_BUILDER)
+    refused = await c.post(f"{url}/cancel", headers=VIEWER)
     cancelled = await c.post(f"{url}/cancel", headers=BUILDER)
     assert refused.status_code == 403 and cancelled.status_code == 200, (refused.text, cancelled.text)
     assert await flag(c, url, "canCancel", BUILDER) is False, "a cancelled run is cancelled by nobody"
@@ -93,20 +93,20 @@ async def test_can_cancel_matches_the_cancel_route(stack: tuple[AsyncClient, Asy
 
 async def test_can_decide_on_a_chat_approval_matches_the_route(stack: tuple[AsyncClient, AsyncEngine]) -> None:  # noqa: F811
     c, _ = stack
-    tid = (await c.post("/chat/threads", json={"agentId": "ag_dispute", "kbIds": []}, headers=BUILDER)).json()["data"][
+    tid = (await c.post("/chat/threads", json={"agentId": "ag_dispute", "kbIds": []}, headers=VIEWER)).json()["data"][
         "id"
     ]
     await c.post(
-        f"/chat/threads/{tid}/messages", json={"content": WRITE}, headers={**BUILDER, "Accept": "text/event-stream"}
+        f"/chat/threads/{tid}/messages", json={"content": WRITE}, headers={**VIEWER, "Accept": "text/event-stream"}
     )
-    thread: dict[str, Any] = (await c.get(f"/chat/threads/{tid}", headers=BUILDER)).json()["data"]
+    thread: dict[str, Any] = (await c.get(f"/chat/threads/{tid}", headers=VIEWER)).json()["data"]
     messages: list[dict[str, Any]] = thread["messages"]
     widgets = [
         w for m in messages for w in cast(list[dict[str, Any]], m.get("widgets") or []) if w["kind"] == "approval"
     ]
     assert widgets and "canDecide" in widgets[-1], thread["messages"][-1]
     allowed = widgets[-1]["canDecide"]
-    res = await c.post(f"/reviews/{tid}/decision", json={"decision": "approved"}, headers=BUILDER)
+    res = await c.post(f"/reviews/{tid}/decision", json={"decision": "approved"}, headers=VIEWER)
     assert (allowed and res.status_code == 200) or (not allowed and res.status_code == 403), (allowed, res.text)
 
 

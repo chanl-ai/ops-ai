@@ -27,11 +27,13 @@ Open **Data Hub › Apps** in the sidebar. Four tabs sit at the top of every pag
 | 1. Press **Connect** on the App's card | A small window opens |
 | 2. Name the Account, or keep the suggested name (the App and your team) | Steps and Tools pick an Account by this name |
 | 3. Keep **Team account** ticked for an Account anyone in the team can run Tools as, or untick it to connect your own | Untick it and the Account is yours alone |
-| 4. Keep **App credential** on Ops AI's app, and press **Connect** | The App's own sign-in page opens; allow access there |
-| 5. The window closes | The App's page opens with the Account listed as **Default** and **Connected** |
+| 4. For an App that asks where you sign in (Salesforce), pick the place: login.salesforce.com, test.salesforce.com, or your company's address (My Domain), typed as its host | The sign-in opens there |
+| 5. Keep **Auth config** on Ops AI's app, and press **Connect** | The App's own sign-in page opens; allow access there |
+| 6. The window closes | The App's page opens with the Account listed as **Default** and **Connected**, and its header reads **Connected · <Account name>** |
 
 An App is **Connected** only once an Account has signed in or a test has passed; saving settings alone does not count.
-A team admin turns an App on.
+Signing in an Account turns its App on for the team, and **Add account** works on an App with no Account yet: the
+first Account becomes the default. A team admin connects an App.
 
 ### The first time a team turns on a plugin's App
 
@@ -60,20 +62,27 @@ The App's page lists its Accounts.
 Without a sandbox account, a test run signs in with the live account. It can read, but every write it makes waits for
 a person to approve it first, so testing never changes live data unseen.
 
-- **Connect another account** adds a second Account of the same App, under its own name, for example a second region.
-  A step or a call names it to use it.
+- **Add account** on an auth config adds a second Account of the same App, under its own name, for example a second
+  region. It starts from where the default Account signs in. A step or a call names it to use it.
 - **Make my default** makes one Account the one your own calls use when they name none.
 - An Account the App stopped accepting reads **Expired** with **Reconnect**. Reconnect opens the App's sign-in page
   again; nothing is typed into Ops AI.
 - On the App's **Settings**, **Everyone signs in with their own account** decides whether each person connects their own
   Account. Off, every call runs as the team Account.
 
-## App credentials and Secrets
+## Auth configs and Secrets
 
-**Credentials › App credentials** lists the OAuth app each App signs in with: **Ops AI's app**, or **Your own app** when
-your team registered its own. **Edit** replaces your own app's client secret; it is sealed when saved and never shown
-again. To bring your own app, open the App's **Settings › Use your own app**, enter its client ID and secret, and
-register the return address it shows. Changing the app or its permissions makes everyone connect again.
+An App's **Auth configs** tab, and **Auth configs** in the sidebar, list the OAuth app each App signs in with: **Ops AI**,
+kept by Ops AI, or your team's own app. To bring your own app (a Salesforce connected app, a GitHub OAuth app):
+
+| Step | Where |
+|---|---|
+| 1. Copy the **Callback URL** Ops AI shows | **New auth config**, **Edit**, and the auth config's row on the App's page |
+| 2. Register it as the callback URL of your app at the system | Salesforce: the connected app's Callback URL. GitHub: the OAuth app's Authorization callback URL |
+| 3. Enter the app's client ID and secret in Ops AI | **New auth config** or **Edit**; the secret is sealed and only its last four characters are shown |
+
+Ops AI builds the callback URL from its console address (`OPS_CONSOLE_URL`), so it must match the address people open.
+Changing the client ID or permissions makes the accounts on it sign in again.
 
 **Credentials › Secrets** lists the values Tools send, such as an API key in a header. A value is encrypted, never shown
 again, and removed from whatever an App answers. A Security admin adds, rotates and deletes Secrets.

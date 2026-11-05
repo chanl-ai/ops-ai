@@ -23,6 +23,8 @@ from .test_app_accounts import (
 from .test_review_decisions import person
 
 BUILDER = ("James Richardson", {TEAM: "builder"})
+# Builders hold connections.manage since D59; a viewer holds none of it.
+VIEWER = ("Ravi Menon", {TEAM: "viewer"})
 
 
 async def _page(w: World, headers: dict[str, str]) -> dict[str, Any]:
@@ -56,7 +58,7 @@ async def test_accounts_sit_under_the_config_they_sign_in_with_and_only_an_admin
     assert {"rename", "delete", "move", "sign_in"} <= set(rows[second]["actions"]), rows[second]
     assert rows[first]["owner"]["kind"] == "team" and rows[first]["owner"]["name"], rows[first]
 
-    seen = await _page(world, person(tenant, *BUILDER))
+    seen = await _page(world, person(tenant, *VIEWER))
     mine = next(c for c in seen["authConfigs"] if c["id"] == eu)
     assert not mine["canEdit"] and not mine["canDelete"] and mine["clientId"] is None, mine
     assert all(
@@ -94,7 +96,7 @@ async def test_an_account_only_its_owner_signs_in_to_reads_that_sign_ins_state_a
     assert rows[account]["state"] == "refused", rows[account]
 
 
-async def test_an_admin_makes_another_account_the_teams_default_and_a_builder_may_not(
+async def test_an_admin_makes_another_account_the_teams_default_and_a_viewer_may_not(
     world: World,  # noqa: F811
     tenant: str,
 ) -> None:
@@ -103,7 +105,7 @@ async def test_an_admin_makes_another_account_the_teams_default_and_a_builder_ma
     assert made.status_code == 201, made.text
     second = made.json()["data"]["id"]
     path = f"/v1/apps/{APP}/accounts/{second}/team-default"
-    refused = await world.client.put(path, headers=person(tenant, *BUILDER))
+    refused = await world.client.put(path, headers=person(tenant, *VIEWER))
     assert refused.status_code == 403, refused.text
     rows = {a["id"]: a for c in (await _page(world, admin(tenant)))["authConfigs"] for a in c["accounts"]}
     assert "make_team_default" in rows[second]["actions"] and "make_team_default" not in rows[first]["actions"], rows

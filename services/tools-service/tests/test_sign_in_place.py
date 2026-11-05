@@ -136,6 +136,14 @@ async def test_another_account_is_checked_as_the_first_was(client: httpx.AsyncCl
     assert refused.status_code == 400 and refused.json()["error"]["code"] == "setting_not_offered", refused.text
 
 
+async def test_another_live_account_signs_in_where_the_first_does(client: httpx.AsyncClient, tenant: str) -> None:
+    assert (await _turn_on(client, tenant, "https://acme.my.signin.test/oauth2")).status_code == 200
+    made = await client.post(f"/v1/apps/{APP}/accounts", json={"name": "Second org"}, headers=admin(tenant))
+    assert made.status_code == 201, made.text
+    detail = (await client.get(f"/v1/apps/{APP}/accounts/{made.json()['data']['id']}", headers=admin(tenant))).json()
+    assert detail["data"]["settings"]["authorizeUrl"] == "https://acme.my.signin.test/oauth2/common/authorize", detail
+
+
 async def test_the_apps_answer_carries_each_settings_choices_and_typed_host(
     client: httpx.AsyncClient, tenant: str
 ) -> None:

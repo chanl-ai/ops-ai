@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Signed in as a person, not a link",
+  "description": "An app reads as signed in as the person's username or email, such as their Salesforce username or GitHub login, never the system's identity link or an id.",
+  "tag": "fix"
+}

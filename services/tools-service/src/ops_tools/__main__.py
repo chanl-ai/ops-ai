@@ -222,6 +222,8 @@ def main() -> None:
         plugin_settings=plugins.account_settings if plugins else None,
         # A refused sign-in says what the plugin's sign_in_errors say of its code.
         sign_in_errors=plugins.sign_in_error if plugins else None,
+        # A finished sign-in turns the account's app on for its team.
+        on_signed_in=plugins.on_signed_in if plugins else None,
     )
     connection_service.app_display = plugins.display_of if plugins else None
     tool_users = AgentsToolUsers(client("agents", agents_url, ["agents:view"]))
@@ -314,7 +316,7 @@ def main() -> None:
             mailboxes_router(settings, secrets, policy, graph),
             egress_router(EgressStore(engine)),
             expressions_router(),
-            secrets_router(secrets, modules=store),
+            secrets_router(secrets, modules=store, credentials=connection_store),
             send_policy_router(SendPolicies(engine), directory),
             mocks_router(MockStore(engine), store, directory, security_team=settings.security_team_id),
             *(
