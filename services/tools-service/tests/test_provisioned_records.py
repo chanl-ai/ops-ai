@@ -65,6 +65,8 @@ async def tools(
     app = build_app(engine, seed, tenant, auth=auth)
     people = {
         "james": person(tenant, "James Richardson", {"team_platform": "builder"}),
+        # Builders hold every manage cell since D59; a viewer holds none.
+        "ravi": person(tenant, "Ravi Menon", {"team_platform": "viewer"}),
         "sam": person(tenant, "Sam Adeyemi", {"team_security": "admin"}),
         "ana": person(tenant, "Ana Lopez", {"team_platform": "admin"}),
     }
@@ -145,14 +147,16 @@ async def test_only_the_provisioner_sets_template_fields(
     assert (await c.post("/v1/tool-modules/blank", json=blank, headers=no_provision)).status_code == 403
 
 
-async def test_a_system_record_is_changed_by_an_admin_or_the_provisioner_not_a_builder(
+async def test_a_system_record_is_changed_by_whoever_holds_manage_or_the_provisioner(
     tools: tuple[httpx.AsyncClient, dict[str, dict[str, str]]], tenant: str
 ) -> None:
     c, people = tools
     made = await _module(c, tenant, "core-system", "system")
     url = f"/v1/tool-modules/{made['id']}"
-    _refused(await c.patch(url, json={"description": "Changed"}, headers=people["james"]), "system_record")
-    _refused(await c.delete(url, headers=people["james"]), "system_record")
+    # A viewer holds neither edit nor manage; a builder holds both since D59, as an admin does.
+    _refused(await c.patch(url, json={"description": "Changed"}, headers=people["ravi"]), "role_required")
+    _refused(await c.delete(url, headers=people["ravi"]), "role_required")
+    _data(await c.patch(url, json={"description": "Builder's"}, headers=people["james"]))
     _data(await c.patch(url, json={"description": "Synced"}, headers=provisioner(tenant)))
     _data(await c.patch(url, json={"description": "Admin's"}, headers=people["ana"]))
 
@@ -206,7 +210,7 @@ async def test_bulk_delete_follows_can_for_a_system_module_as_a_single_delete_do
     c, people = tools
     made = await _module(c, tenant, "core-bulk", "system")
     body = {"ids": [made["id"]]}
+    viewer = await c.post("/v1/tool-modules/bulk-delete", json=body, headers=people["ravi"])
+    assert viewer.status_code == 403, viewer.text
     builder = _data(await c.post("/v1/tool-modules/bulk-delete", json=body, headers=people["james"]))
-    assert (builder["updated"], [s["id"] for s in builder["skipped"]]) == ([], [made["id"]]), builder
-    admin = _data(await c.post("/v1/tool-modules/bulk-delete", json=body, headers=people["ana"]))
-    assert admin["updated"] == [made["id"]], admin
+    assert builder["updated"] == [made["id"]], builder

@@ -61,7 +61,7 @@ def _at(account: dict[str, Any]) -> str:
 
 
 async def test_only_someone_who_manages_connections_changes_one(client: httpx.AsyncClient, tenant: str) -> None:
-    builder = person(tenant, "James Richardson", {TEAM: "builder"})
+    builder = person(tenant, "Ravi Menon", {TEAM: "viewer"})
     refused = await client.post("/v1/apps", json={"name": "x", "authKind": "api_key"}, headers=builder)
     assert refused.status_code == 403, refused.text
     service = await client.post(

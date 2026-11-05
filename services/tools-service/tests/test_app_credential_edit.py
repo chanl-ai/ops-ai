@@ -79,7 +79,7 @@ async def test_a_rename_alone_keeps_every_sign_in(client: httpx.AsyncClient, ten
 
 async def test_only_a_team_admin_edits_a_credential(client: httpx.AsyncClient, tenant: str) -> None:
     credential = await team_credential(client, admin(tenant), APP, "signin-own", "s3cret")
-    builder = person(tenant, "James Richardson", {TEAM: "builder"})
+    builder = person(tenant, "Ravi Menon", {TEAM: "viewer"})
     refused = await client.patch(f"/v1/app-credentials/{credential}", json={"clientId": "x"}, headers=builder)
     assert refused.status_code == 403, refused.text
     kept = (await client.get(f"/v1/app-credentials/{credential}", headers=admin(tenant))).json()["data"]

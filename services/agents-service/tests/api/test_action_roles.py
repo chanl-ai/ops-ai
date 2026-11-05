@@ -122,7 +122,7 @@ async def test_a_run_is_cancelled_by_its_starter_or_an_admin_or_reviewer(
     await unowned_live(engine, "refunds", by="seed")
     ids = [(await c.post("/v1/runs", json=live_run(n), headers=BUILDER)).json()["data"]["runId"] for n in range(3)]
     cancel = [f"/v1/runs/{i}/cancel" for i in ids]
-    others = [await c.post(cancel[0], headers=h) for h in (SECOND_BUILDER, VIEWER, KEY)]
+    others = [await c.post(cancel[0], headers=h) for h in (VIEWER, VIEWER, KEY)]
     assert all(refused(r) for r in others), [r.text for r in others]
     allowed = [await c.post(cancel[0], headers=BUILDER), await c.post(cancel[1], headers=REVIEWER)]
     allowed.append(await c.post(cancel[2], headers=ADMIN))
@@ -161,11 +161,11 @@ async def test_routing_to_people_and_the_manual_step_need_a_reviewer(stack: tupl
     run = await c.post(f"/v1/threads/{tid}/runs/stream", json={"input": {"email": EMAILS[1]}}, headers=BUILDER)
     assert sse_events(run.text)[-1]["data"]["status"] == "interrupted", run.text
     route = f"/v1/threads/{tid}/route-to-people"
-    builder_routes = await c.post(route, json={"reason": "bad version"}, headers=SECOND_BUILDER)
+    builder_routes = await c.post(route, json={"reason": "bad version"}, headers=VIEWER)
     routed = await c.post(route, json={"reason": "bad version"}, headers=REVIEWER)
     assert refused(builder_routes) and routed.status_code == 202, (builder_routes.text, routed.text)
     url = f"/v1/threads/{tid}/runs/stream"
-    answers = [await c.post(url, json={"resume": {"decision": "rejected"}}, headers=h) for h in (SECOND_BUILDER, KEY)]
+    answers = [await c.post(url, json={"resume": {"decision": "rejected"}}, headers=h) for h in (VIEWER, KEY)]
     assert all(refused(r) for r in answers), [r.text for r in answers]
     assert (await c.post(url, json={"resume": {"decision": "rejected"}}, headers=REVIEWER)).status_code == 200
 
@@ -175,7 +175,7 @@ async def test_a_review_is_decided_by_a_reviewer_of_its_team(stack: tuple[AsyncC
     tid = await paused_case(c)
     url = f"/reviews/{tid}/decision"
     body = {"decision": "rejected", "reason": "not this one"}
-    wrong = [await c.post(url, json=body, headers=h) for h in (SECOND_BUILDER, KEY)]
+    wrong = [await c.post(url, json=body, headers=h) for h in (VIEWER, KEY)]
     assert all(r.status_code == 403 for r in wrong), [r.text for r in wrong]
     assert refused(wrong[0]) and refused(wrong[1])
     # A reviewer of another team does not see the review at all.
@@ -192,7 +192,7 @@ async def test_a_publish_is_decided_by_a_reviewer_of_the_owning_team(stack: tupl
     )
     assert req.status_code == 201, req.text
     url = f"/v1/publish-requests/{req.json()['data']['id']}/decision"
-    wrong = [await c.post(url, json={"decision": "approved"}, headers=h) for h in (SECOND_BUILDER, KEY, OTHER_REVIEWER)]
+    wrong = [await c.post(url, json={"decision": "approved"}, headers=h) for h in (VIEWER, KEY, OTHER_REVIEWER)]
     assert all(refused(r) for r in wrong), [r.text for r in wrong]
     assert (await c.post(url, json={"decision": "approved"}, headers=REVIEWER)).status_code == 200
 
@@ -214,16 +214,16 @@ async def test_a_write_in_chat_is_approved_by_a_reviewer_of_the_threads_team(
     stack: tuple[AsyncClient, AsyncEngine],
 ) -> None:
     c, _ = stack
-    made = await c.post("/chat/threads", json={"agentId": "ag_dispute", "kbIds": []}, headers=BUILDER)
+    made = await c.post("/chat/threads", json={"agentId": "ag_dispute", "kbIds": []}, headers=VIEWER)
     tid = made.json()["data"]["id"]
     sent = await c.post(
-        f"/chat/threads/{tid}/messages", json={"content": WRITE}, headers={**BUILDER, "Accept": "text/event-stream"}
+        f"/chat/threads/{tid}/messages", json={"content": WRITE}, headers={**VIEWER, "Accept": "text/event-stream"}
     )
     events = sse_events(sent.text)
     widget = next(e["widget"] for e in events if e["type"] == "widget" and e["widget"]["kind"] == "approval")
     action = f"/chat/threads/{tid}/messages/{events[0]['messageId']}/widgets/{widget['id']}/actions"
-    in_chat = await c.post(action, json={"type": "approve"}, headers=SECOND_BUILDER)
-    direct = await c.post(f"/v1/threads/{tid}/approvals", json={}, headers=SECOND_BUILDER)
+    in_chat = await c.post(action, json={"type": "approve"}, headers=VIEWER)
+    direct = await c.post(f"/v1/threads/{tid}/approvals", json={}, headers=VIEWER)
     assert in_chat.status_code == 403 and refused(direct), (in_chat.text, direct.text)
     assert (await c.post(action, json={"type": "approve"}, headers=REVIEWER)).status_code == 200
 
@@ -236,6 +236,6 @@ async def test_a_guardrail_publish_is_decided_by_a_reviewer_of_its_team(stack: t
     request_id = asked.json()["data"]["pendingRequestId"]
     assert request_id, asked.text
     url = f"/v1/guardrails/{g['id']}/publish-requests/{request_id}/decision"
-    wrong = [await c.post(url, json={"decision": "approved"}, headers=h) for h in (SECOND_BUILDER, KEY)]
+    wrong = [await c.post(url, json={"decision": "approved"}, headers=h) for h in (VIEWER, KEY)]
     assert all(refused(r) for r in wrong), [r.text for r in wrong]
     assert (await c.post(url, json={"decision": "approved"}, headers=REVIEWER)).status_code == 200

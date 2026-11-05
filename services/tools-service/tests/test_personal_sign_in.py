@@ -274,9 +274,9 @@ async def test_an_expired_connect_link_starts_nothing(
     assert r.status_code == 400 and r.json()["error"]["code"] == "connect_link_expired", r.text
 
 
-async def test_a_builder_starts_their_own_sign_in_but_not_the_teams(client: httpx.AsyncClient, tenant: str) -> None:
+async def test_a_viewer_starts_their_own_sign_in_but_not_the_teams(client: httpx.AsyncClient, tenant: str) -> None:
     conn = await personal_connection(client, tenant)
-    builder = person(tenant, "James Richardson", {TEAM: "builder"})
+    builder = person(tenant, "Ravi Menon", {TEAM: "viewer"})
     own = await client.post(f"/v1/apps/{conn}/accounts/{conn}/sign-in", json={}, headers=builder)
     assert own.status_code == 200, own.text
     team = await client.post(f"/v1/apps/{conn}/accounts/{conn}/sign-in", json={"account": "team"}, headers=builder)
