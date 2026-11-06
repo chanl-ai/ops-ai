@@ -424,6 +424,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["page", "pageSize", "search", "templateId", "teamId"],
         "stream": False,
     },
+    "secrets_rename_secret": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/secrets/{name}/rename",
+        "pathParams": ["name"],
+        "query": ["teamId"],
+        "stream": False,
+    },
     "secrets_rotate_secret": {
         "body": "json",
         "headers": [],
@@ -983,6 +992,10 @@ class Operations:
         "Delete Secret"
         return self._t.call(SERVICE, OPERATIONS["secrets_delete_secret"], {"name": name}, {"teamId": team_id}, {}, None)  # type: ignore[no-any-return]
 
+    def secrets_rename_secret(self, name: str, body: RenameIn, *, team_id: str | None = None) -> SecretMeta:
+        "Rename Secret"
+        return self._t.call(SERVICE, OPERATIONS["secrets_rename_secret"], {"name": name}, {"teamId": team_id}, {}, body)  # type: ignore[no-any-return]
+
     def secrets_rotate_secret(self, name: str, body: RotateIn, *, team_id: str | None = None) -> SecretMeta:
         "Rotate Secret"
         return self._t.call(SERVICE, OPERATIONS["secrets_rotate_secret"], {"name": name}, {"teamId": team_id}, {}, body)  # type: ignore[no-any-return]
@@ -1479,6 +1492,12 @@ class AsyncOperations:
         "Delete Secret"
         return await self._t.call(
             SERVICE, OPERATIONS["secrets_delete_secret"], {"name": name}, {"teamId": team_id}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def secrets_rename_secret(self, name: str, body: RenameIn, *, team_id: str | None = None) -> SecretMeta:
+        "Rename Secret"
+        return await self._t.call(
+            SERVICE, OPERATIONS["secrets_rename_secret"], {"name": name}, {"teamId": team_id}, {}, body
         )  # type: ignore[no-any-return]
 
     async def secrets_rotate_secret(self, name: str, body: RotateIn, *, team_id: str | None = None) -> SecretMeta:

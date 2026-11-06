@@ -505,6 +505,19 @@ export const toolsOperations = {
     ],
     "stream": false
   },
+  "secrets_rename_secret": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/secrets/{name}/rename",
+    "pathParams": [
+      "name"
+    ],
+    "query": [
+      "teamId"
+    ],
+    "stream": false
+  },
   "secrets_rotate_secret": {
     "body": "json",
     "headers": [],
