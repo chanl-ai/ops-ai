@@ -52,7 +52,7 @@ const COLUMNS: ColumnDef<Row>[] = [
         <span className="block truncate font-medium">{row.original.title}</span>
         <span className="block truncate text-xs text-muted-foreground">
           {KIND[row.original.kind] ?? row.original.kind} · {actorOf(row.original)}
-          {activityStatus(row.original).note ? ` · ${activityStatus(row.original).note}` : ''}
+          {activityStatus(row.original).note ? ` · Result: ${activityStatus(row.original).note}` : ''}
         </span>
         {row.original.detail && (
           <span className="block whitespace-normal break-words text-xs text-muted-foreground" data-testid="activity-detail">

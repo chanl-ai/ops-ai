@@ -125,7 +125,7 @@ export function DataTablePagination<TData>({
         <div className="hidden items-center space-x-2 sm:flex">
           <p className="text-sm font-medium">Rows per page</p>
           <Select value={`${pageSize}`} onValueChange={handlePageSizeChange}>
-            <SelectTrigger className="h-8 w-[70px]">
+            <SelectTrigger className="h-8 w-[70px]" aria-label="Rows per page">
               <SelectValue placeholder={pageSize} />
             </SelectTrigger>
             <SelectContent side="top">
