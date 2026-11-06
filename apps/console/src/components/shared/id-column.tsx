@@ -6,8 +6,8 @@ import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { StopRowClick } from '@/components/shared/form-field';
 import { CopyId } from '@/components/shared/setting/copy-field';
 
-/** The record id as a column: middle-truncated, whole value in the title, copyable. DataTableWithViews shows it last,
- * before the row's actions, wherever a page lists it. */
+/** The record id as a column: middle-truncated, whole value in the title, copyable. The table shows it after the data
+ * columns and before the row actions (lib/column-order.ts). */
 export function idColumn<T>(get: (row: T) => string): ColumnDef<T> {
   return {
     id: 'recordId',

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Lists lead with the record, not its id",
+  "description": "Every list shows what each row is first and its id last, the same way for every role.",
+  "tag": "fix"
+}

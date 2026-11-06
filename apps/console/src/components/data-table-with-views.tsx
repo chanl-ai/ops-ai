@@ -41,6 +41,7 @@ import { PaginationState, PAGINATION_DEFAULTS } from '@/lib/types/pagination';
 import { useBulkSelectionTransport } from '@/components/bulk-selection-context';
 import { useCurrentPerson } from '@/hooks/auth-queries';
 import { type ColumnMeta, kindClass } from '@/components/data-table-column-kinds';
+import { idLast } from '@/lib/column-order';
 
 // Re-export ExternalFilter for backwards compatibility
 export type { ExternalFilter };
@@ -245,22 +246,17 @@ export function DataTableWithViews<TData, TValue>({
       1
     : 0;
 
-  // The record id is looked up, not read: it sits last, before the row's actions, so a row leads with what it is.
-  const columnOrder = React.useMemo(() => {
-    const ids = columns.map(keyOf).filter((k): k is string => !!k);
-    const last = ids.filter((k) => k === 'recordId');
-    const actions = ids.filter((k) => k === 'actions');
-    return [...ids.filter((k) => k !== 'recordId' && k !== 'actions'), ...last, ...actions];
-  }, [columns]);
+  // The record id after the data columns for every person, whatever order or columns a page gives.
+  const columnOrder = React.useMemo(() => idLast(columns.map((c) => c.id ?? (c as { accessorKey?: string }).accessorKey ?? '').filter(Boolean)), [columns]);
   const table = useReactTable({
     data,
     columns,
     state: {
+      columnOrder,
       sorting,
       columnVisibility,
       rowSelection,
       columnFilters,
-      columnOrder,
       pagination: clientPagination,
     },
     // Server-side pagination configuration

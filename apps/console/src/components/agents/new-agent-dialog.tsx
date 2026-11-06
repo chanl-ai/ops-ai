@@ -19,6 +19,7 @@ export function NewAgentDialog({
   open,
   onOpenChange,
   models,
+  modelsUnavailable = false,
   team,
   isPending,
   onSubmit,
@@ -26,6 +27,8 @@ export function NewAgentDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
   models: ModelAlias[];
+  /** The model list could not be read: said under the field, and the agent saves on the default model. */
+  modelsUnavailable?: boolean;
   /** The owning team the agent is created under; changeable on the agent page. */
   /** The current team's name; the server makes the agent that team's from the person's token. */
   team: string;
@@ -83,7 +86,11 @@ export function NewAgentDialog({
         <FormField id="na-role" label="Role" error={errors.role} hint="One line. The instructions come next, on the agent page.">
           <Input id="na-role" aria-invalid={!!errors.role} value={role} onChange={(e) => setRole(e.target.value)} placeholder="e.g. Answers statement copy requests from the servicing mailbox" />
         </FormField>
-        <FormField id="na-model" label="Model" hint={modelHint(models, chosenModel)}>
+        <FormField
+          id="na-model"
+          label="Model"
+          hint={modelsUnavailable ? 'The model list can’t be read right now; the agent starts on the default model, which you can change on its page.' : modelHint(models, chosenModel)}
+        >
           <ModelSelect id="na-model" value={chosenModel} onValueChange={setModel} aliases={models} />
         </FormField>
       </div>
