@@ -22,7 +22,7 @@ ENV_FILE = RUN_DIR / "dev-admin.env"
 # bootstrap's insert-if-missing leaves both as they are on a stack that still seeds them.
 DEFAULTS = {
     "OPS_BOOTSTRAP_TENANT_ID": "local",
-    "OPS_BOOTSTRAP_TENANT_NAME": "Local tenant",
+    "OPS_BOOTSTRAP_TENANT_NAME": "Harbor & Pine Bank",
     "OPS_BOOTSTRAP_TEAM_NAME": "Security",
     "OPS_BOOTSTRAP_ADMIN_EMAIL": "dev-admin@harborpine.example",
     "OPS_BOOTSTRAP_ADMIN_NAME": "Dev Admin",
