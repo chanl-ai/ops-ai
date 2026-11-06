@@ -382,8 +382,10 @@ def _thread_tool_calls(scope: Scope) -> sa.Select[*tuple[Any, ...]]:
 
 def _workflow_tool_calls(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
     """A tool a workflow's step called: one row per attempt, since each attempt reached the tool gateway."""
-    s, r = engine_steps, engine_runs
-    joined = s.join(r, sa.and_(r.c.tenant_id == s.c.tenant_id, r.c.id == s.c.run_id))
+    s, r, d = engine_steps, engine_runs, engine_definitions
+    joined = s.join(r, sa.and_(r.c.tenant_id == s.c.tenant_id, r.c.id == s.c.run_id)).outerjoin(
+        d, sa.and_(d.c.tenant_id == r.c.tenant_id, d.c.workflow_id == r.c.workflow_id, d.c.version == r.c.version)
+    )
     status = sa.case(
         (s.c.status == "ok", "done"),
         (s.c.status.in_(("running", "pinned")), "running"),
@@ -400,7 +402,7 @@ def _workflow_tool_calls(teams: tuple[str, ...]) -> sa.Select[*tuple[Any, ...]]:
             r.c.team_id.label("team_id"),
             sa.literal("workflow").label("source_type"),
             r.c.workflow_id.label("source_id"),
-            r.c.workflow_id.label("source_name"),
+            sa.func.coalesce(d.c.name, r.c.workflow_id).label("source_name"),
             _starter(r).label("actor"),
             s.c.started_at.label("at"),
             sa.literal("run").label("ref_kind"),

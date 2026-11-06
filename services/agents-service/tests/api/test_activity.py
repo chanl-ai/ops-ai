@@ -238,6 +238,8 @@ async def test_a_workflows_tool_step_lists_as_a_tool_call(stack: Stack) -> None:
         "ops_check",
         {"kind": "run", "id": run},
     ), row
+    # The source reads as the workflow's name, never its id.
+    assert row["source"]["name"] != "ops_check", row["source"]
 
 
 async def test_a_cases_activity_is_its_own_entries_and_what_its_linked_run_did(stack: Stack) -> None:  # noqa: F811
