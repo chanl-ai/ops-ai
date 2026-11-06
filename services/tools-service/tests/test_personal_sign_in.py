@@ -117,8 +117,9 @@ async def test_each_persons_call_carries_their_own_token_never_anothers_or_the_t
 async def test_a_person_with_no_sign_in_gets_a_link_made_for_them_not_the_teams_token(
     engine: AsyncEngine, tenant: str
 ) -> None:
+    # On an account only each person signs in to; with the team as backup the team's sign-in serves them (below).
     store, tokens, auth = rig(engine)
-    conn = await connection(store, tenant, "person_or_team", backup=True)
+    conn = await connection(store, tenant, "person")
     await tokens.store_answer(tenant, conn, {"access_token": "at-team", "expires_in": 3600})
     with pytest.raises(AuthFailed) as e:
         await bearer(auth, tenant, conn, JAMES)
@@ -128,6 +129,19 @@ async def test_a_person_with_no_sign_in_gets_a_link_made_for_them_not_the_teams_
     assert url.startswith(f"{CONSOLE_URL}/connections/connect?")
     row = await store.link(tenant, hashlib.sha256(link.encode()).hexdigest())
     assert row is not None and (row["person_id"], row["team_id"], row["connection_id"]) == (JAMES.sub, TEAM, conn)
+
+
+async def test_with_the_team_as_backup_a_person_without_their_own_sign_in_uses_the_teams(
+    engine: AsyncEngine, tenant: str
+) -> None:
+    # Letting people add their own account must not block those who have not: their calls keep the team's sign-in,
+    # and a person who signed in gets theirs.
+    store, tokens, auth = rig(engine)
+    conn = await connection(store, tenant, "person_or_team", backup=True)
+    await tokens.store_answer(tenant, conn, {"access_token": "at-team", "expires_in": 3600})
+    await tokens.store_answer(tenant, conn, {"access_token": "at-maya", "expires_in": 3600}, MAYA.sub)
+    assert await bearer(auth, tenant, conn, JAMES) == "Bearer at-team"
+    assert await bearer(auth, tenant, conn, MAYA) == "Bearer at-maya"
 
 
 async def test_a_call_with_nobody_behind_it_uses_the_team_account_only_where_the_backup_is_on(
