@@ -22,26 +22,27 @@ export function modelHint(aliases: ModelAlias[], value: string, fallback?: React
 }
 
 /**
- * The aliases publish accepts. An agent saved on an alias no longer offered still shows it, marked, so it can be
- * changed; an unpriced alias is marked in the list.
+ * The models publish accepts. An agent saved on a model no longer offered still shows it, marked, so it can be changed;
+ * with no list (it did not load) nothing is claimed about it. An unpriced model is marked in the list.
  */
 export function ModelSelect({ id, value, onValueChange, aliases, className, invalid }: { id: string; value: string; onValueChange: (v: string) => void; aliases: ModelAlias[]; className?: string; invalid?: boolean }) {
   const offered = aliases.some((a) => a.name === value);
   return (
     <Select value={value} onValueChange={onValueChange}>
-      <SelectTrigger id={id} className={cn('w-full font-mono text-xs', className)} aria-invalid={invalid}>
+      <SelectTrigger id={id} className={cn('w-full', className)} aria-invalid={invalid}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
         {value && !offered && (
-          <SelectItem value={value} className="font-mono text-xs">
-            {value} (publish refuses this alias)
+          <SelectItem value={value}>
+            {value}
+            {aliases.length > 0 && <span className="text-muted-foreground"> · no longer offered, choose another to publish</span>}
           </SelectItem>
         )}
         {aliases.map((a) => (
-          <SelectItem key={a.name} value={a.name} className="font-mono text-xs">
+          <SelectItem key={a.name} value={a.name}>
             {a.name}
-            {isUnpriced(a) && <span className="font-sans text-muted-foreground"> · no price</span>}
+            {isUnpriced(a) && <span className="text-muted-foreground"> · no price</span>}
           </SelectItem>
         ))}
       </SelectContent>

@@ -8,7 +8,7 @@ import { UiFeedback } from '@/components/shared/ui-feedback';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { useSession } from '@/hooks/auth-queries';
 import { buildCommit, buildTag, cacheSetting, queriesNeedTeam, uiFeedback } from '@/lib/api';
-import { isUnreachable } from '@/lib/api/unreachable';
+import { isUnreachable, retryRead, retryReadOnMount } from '@/lib/api/unreachable';
 import { teamStore } from '@/lib/api/team-context';
 import { cacheBuster, cacheOn, MAX_AGE_MS, openSavedQueries, wipeSavedQueries } from '@/lib/query-cache';
 
@@ -52,9 +52,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            // Reads only: mutations keep their default of no retry, so a decision or a save is never sent twice. An outage
-            // (a 5xx or no answer) is asked again four times, 1, 2, 4 then 8 seconds apart; anything else once, at once.
-            retry: (failures, e) => (isUnreachable(e) ? failures < 4 : ![403, 404].includes((e as { status?: number }).status ?? 0) && failures < 1),
+            // Reads only: mutations keep their default of no retry, so a decision or a save is never sent twice.
+            retry: retryRead,
+            // Parts mounting just after a read failed share its failure instead of each asking again.
+            retryOnMount: (query) => retryReadOnMount(query.state),
             retryDelay: (failures, e) => (isUnreachable(e) ? Math.min(1000 * 2 ** failures, 8000) : 0),
             // A read the outage left failed asks again every 10 seconds, so the page comes back on its own once the
             // services answer.
