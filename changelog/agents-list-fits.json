@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "The Agents list fits its page",
+  "description": "Long agent descriptions are trimmed to one line, so every agent's id shows with its Copy button.",
+  "tag": "fix"
+}

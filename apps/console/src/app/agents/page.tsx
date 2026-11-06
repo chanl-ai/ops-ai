@@ -49,8 +49,11 @@ function columns(open: (a: Agent) => void, onDelete: (a: Agent) => void, canBuil
     {
       accessorKey: 'name',
       header: ({ column }) => <DataTableColumnHeader column={column} title="Agent" />,
+      // The name column takes the free space and trims its lines, so a long description never pushes the Id and its
+      // Copy button under the pinned row actions.
+      meta: { kind: 'name' },
       cell: ({ row }) => (
-        <div className="flex min-w-56 items-center gap-3">
+        <div className="flex items-center gap-3">
           <AgentAvatar name={row.original.name} className="size-8 text-xs" />
           <div className="min-w-0">
             <div className="flex items-center gap-2 font-medium">
