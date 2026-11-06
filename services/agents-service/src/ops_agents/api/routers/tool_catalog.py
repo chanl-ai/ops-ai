@@ -132,7 +132,8 @@ async def tool_rows(rt: Runtime, person: str | None, team: str | None) -> list[d
     of this service's own grants and workflow steps."""
     from .tool_uses import tool_uses  # noqa: PLC0415 - keep the catalog import cycle out of the module top
 
-    tools = await known_tools(rt)
+    # A person's page reads the list fresh: a tool added to the team a moment ago shows at once.
+    tools = await known_tools(rt, fresh=True)
     cards = await rt.app_states.cards(person, team) if rt.app_states is not None else []
     by_module = {str(m): c for c in cards for m in cast(list[str], c.get("moduleIds") or [])}
     uses = await tool_uses(rt, team or current_team(), [str(t["id"]) for t in tools])
@@ -232,7 +233,8 @@ async def tool_options(
         for w in await published_workflows(rt)
         if team and w.get("team_id") not in (None, "", team)
     }
-    tools = [t for t in await known_tools(rt) if t["id"] not in others]
+    # The agent and workflow pickers read it fresh, so a tool just added to the team is offered at once.
+    tools = [t for t in await known_tools(rt, fresh=True) if t["id"] not in others]
     if ids is not None:
         wanted = set(ids)
         hits = [t for t in tools if t["id"] in wanted]
