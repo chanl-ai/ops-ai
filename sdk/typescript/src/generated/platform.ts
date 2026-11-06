@@ -601,6 +601,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/people/{person_id}/role-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Person Role Grants
+         * @description The custom roles given to a person on their own, each with its team; read by whoever shares a team with
+         *     them, as their permissions are (404 otherwise).
+         */
+        get: operations["people_person_role_grants"];
+        put?: never;
+        /**
+         * Give Role
+         * @description Gives a person a custom role in the team the request acts in, one of theirs: an admin of that team or a
+         *     workspace admin (access.manage there). Audited; applies on their next request.
+         */
+        post: operations["people_give_role"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/people/{person_id}/role-grants/{grant_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Take Role
+         * @description Takes a given role away: an admin of its team or a workspace admin. Audited.
+         */
+        delete: operations["people_take_role"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/policies": {
         parameters: {
             query?: never;
@@ -661,7 +707,13 @@ export interface paths {
          */
         get: operations["roles_list_roles"];
         put?: never;
-        post?: never;
+        /**
+         * Create Role
+         * @description A custom role, from scratch (`permissions`) or as a copy of another (`copyOf`), less the cells a custom role
+         *     may not hold: secrets, egress and Security-team ones (400 `not_for_custom_roles` when given; named in
+         *     `leftOut` when copied). A workspace admin's (access.manage); audited; 409 `name_taken`.
+         */
+        post: operations["roles_create_role"];
         delete?: never;
         options?: never;
         head?: never;
@@ -681,6 +733,35 @@ export interface paths {
          *     whether the caller may change it (`canEdit`: a workspace admin, for any role but Admin).
          */
         get: operations["roles_read_role"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Role
+         * @description Deletes a custom role. While anyone holds it, 409 `role_in_use` names them, unless `moveTo` names the role
+         *     their assignments move to. A built-in role is not deleted (409 `builtin_role`). Audited.
+         */
+        delete: operations["roles_delete_role"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename Role
+         * @description A custom role's name and description; a built-in role keeps its own (409 `builtin_role`). Audited.
+         */
+        patch: operations["roles_rename_role"];
+        trace?: never;
+    };
+    "/v1/roles/{role_id}/holders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Role Holders
+         * @description Who holds the role and in which team: what deleting it would take from them. A workspace admin's.
+         */
+        get: operations["roles_role_holders"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1685,9 +1766,27 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[RoleCreatedOut] */
+        Envelope_RoleCreatedOut_: {
+            data: components["schemas"]["RoleCreatedOut"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[RoleDetail] */
         Envelope_RoleDetail_: {
             data: components["schemas"]["RoleDetail"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[RoleGrantOut] */
+        Envelope_RoleGrantOut_: {
+            data: components["schemas"]["RoleGrantOut"];
             /**
              * Success
              * @constant
@@ -1828,6 +1927,26 @@ export interface components {
         Envelope_list_ProviderOut__: {
             /** Data */
             data: components["schemas"]["ProviderOut"][];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[list[RoleGrantOut]] */
+        Envelope_list_RoleGrantOut__: {
+            /** Data */
+            data: components["schemas"]["RoleGrantOut"][];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[list[RoleHolderOut]] */
+        Envelope_list_RoleHolderOut__: {
+            /** Data */
+            data: components["schemas"]["RoleHolderOut"][];
             /**
              * Success
              * @constant
@@ -2481,6 +2600,50 @@ export interface components {
             /** Permissions */
             permissions: components["schemas"]["CellIn"][];
         };
+        /** RoleCreateIn */
+        RoleCreateIn: {
+            /** Copyof */
+            copyOf?: string | null;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Name */
+            name: string;
+            /** Permissions */
+            permissions?: components["schemas"]["CellIn"][] | null;
+        };
+        /** RoleCreatedOut */
+        RoleCreatedOut: {
+            /** Assignmentcount */
+            assignmentCount: number;
+            /** Builtin */
+            builtin: boolean;
+            /**
+             * Canedit
+             * @default false
+             */
+            canEdit: boolean;
+            /** Description */
+            description: string;
+            /** Grid */
+            grid: components["schemas"]["GridRow"][];
+            /** Id */
+            id: string;
+            /** Leftout */
+            leftOut?: string[];
+            /** Lockedreason */
+            lockedReason?: string | null;
+            /** Name */
+            name: string;
+            /** Notheld */
+            notHeld?: string[];
+            /** Permissioncount */
+            permissionCount: number;
+            /** Permissions */
+            permissions: components["schemas"]["PermissionOut"][];
+        };
         /** RoleDetail */
         RoleDetail: {
             /** Assignmentcount */
@@ -2502,10 +2665,50 @@ export interface components {
             lockedReason?: string | null;
             /** Name */
             name: string;
+            /** Notheld */
+            notHeld?: string[];
             /** Permissioncount */
             permissionCount: number;
             /** Permissions */
             permissions: components["schemas"]["PermissionOut"][];
+        };
+        /** RoleGrantIn */
+        RoleGrantIn: {
+            /** Roleid */
+            roleId: string;
+        };
+        /** RoleGrantOut */
+        RoleGrantOut: {
+            /** Createdat */
+            createdAt: string;
+            /** Expiresat */
+            expiresAt?: string | null;
+            /** Grantedby */
+            grantedBy: string;
+            /** Id */
+            id: string;
+            /** Roleid */
+            roleId: string;
+            /** Rolename */
+            roleName: string;
+            /** Teamid */
+            teamId: string;
+        };
+        /** RoleHolderOut */
+        RoleHolderOut: {
+            /** Email */
+            email?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "person" | "team";
+            /** Name */
+            name: string;
+            /** Teamid */
+            teamId: string;
         };
         /** RoleIn */
         RoleIn: {
@@ -2528,6 +2731,13 @@ export interface components {
             name: string;
             /** Permissioncount */
             permissionCount: number;
+        };
+        /** RolePatchIn */
+        RolePatchIn: {
+            /** Description */
+            description?: string | null;
+            /** Name */
+            name: string;
         };
         /** RoleRef */
         RoleRef: {
@@ -5922,6 +6132,318 @@ export interface operations {
             };
         };
     };
+    people_person_role_grants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                person_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_RoleGrantOut__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    people_give_role: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                person_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleGrantIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RoleGrantOut_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    people_take_role: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                person_id: string;
+                grant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     policies_list_policies: {
         parameters: {
             query?: never;
@@ -6334,6 +6856,111 @@ export interface operations {
             };
         };
     };
+    roles_create_role: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RoleCreatedOut_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     roles_read_role: {
         parameters: {
             query?: never;
@@ -6352,6 +6979,319 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_RoleDetail_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    roles_delete_role: {
+        parameters: {
+            query?: {
+                moveTo?: string | null;
+            };
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    roles_rename_role: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RolePatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RoleDetail_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    roles_role_holders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_RoleHolderOut__"];
                 };
             };
             /** @description Invalid request */

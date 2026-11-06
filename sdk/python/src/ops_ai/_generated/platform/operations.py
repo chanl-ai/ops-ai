@@ -325,6 +325,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "people_give_role": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/people/{person_id}/role-grants",
+        "pathParams": ["person_id"],
+        "query": [],
+        "stream": False,
+    },
     "people_people_names": {
         "body": None,
         "headers": [],
@@ -340,6 +349,24 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/people/{person_id}/permissions",
         "pathParams": ["person_id"],
+        "query": [],
+        "stream": False,
+    },
+    "people_person_role_grants": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/people/{person_id}/role-grants",
+        "pathParams": ["person_id"],
+        "query": [],
+        "stream": False,
+    },
+    "people_take_role": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/people/{person_id}/role-grants/{grant_id}",
+        "pathParams": ["person_id", "grant_id"],
         "query": [],
         "stream": False,
     },
@@ -370,6 +397,24 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "roles_create_role": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/roles",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "roles_delete_role": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/roles/{role_id}",
+        "pathParams": ["role_id"],
+        "query": ["moveTo"],
+        "stream": False,
+    },
     "roles_edit_role": {
         "body": "json",
         "headers": [],
@@ -397,11 +442,29 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "roles_rename_role": {
+        "body": "json",
+        "headers": [],
+        "method": "PATCH",
+        "path": "/v1/roles/{role_id}",
+        "pathParams": ["role_id"],
+        "query": [],
+        "stream": False,
+    },
     "roles_reset_role": {
         "body": None,
         "headers": [],
         "method": "POST",
         "path": "/v1/roles/{role_id}/reset",
+        "pathParams": ["role_id"],
+        "query": [],
+        "stream": False,
+    },
+    "roles_role_holders": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/roles/{role_id}/holders",
         "pathParams": ["role_id"],
         "query": [],
         "stream": False,
@@ -801,6 +864,20 @@ class Operations:
         "Person Permissions"
         return self._t.call(SERVICE, OPERATIONS["people_person_permissions"], {"person_id": person_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def people_person_role_grants(self, person_id: str) -> list[RoleGrantOut]:
+        "Person Role Grants"
+        return self._t.call(SERVICE, OPERATIONS["people_person_role_grants"], {"person_id": person_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def people_give_role(self, person_id: str, body: RoleGrantIn) -> RoleGrantOut:
+        "Give Role"
+        return self._t.call(SERVICE, OPERATIONS["people_give_role"], {"person_id": person_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def people_take_role(self, person_id: str, grant_id: str) -> Any:
+        "Take Role"
+        return self._t.call(
+            SERVICE, OPERATIONS["people_take_role"], {"person_id": person_id, "grant_id": grant_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
     def policies_list_policies(self) -> list[PolicyOut]:
         "List Policies"
         return self._t.call(SERVICE, OPERATIONS["policies_list_policies"], {}, {}, {}, None)  # type: ignore[no-any-return]
@@ -817,9 +894,27 @@ class Operations:
         "List Roles"
         return self._t.call(SERVICE, OPERATIONS["roles_list_roles"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def roles_create_role(self, body: RoleCreateIn) -> RoleCreatedOut:
+        "Create Role"
+        return self._t.call(SERVICE, OPERATIONS["roles_create_role"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     def roles_read_role(self, role_id: str) -> RoleDetail:
         "Read Role"
         return self._t.call(SERVICE, OPERATIONS["roles_read_role"], {"role_id": role_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def roles_rename_role(self, role_id: str, body: RolePatchIn) -> RoleDetail:
+        "Rename Role"
+        return self._t.call(SERVICE, OPERATIONS["roles_rename_role"], {"role_id": role_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def roles_delete_role(self, role_id: str, *, move_to: str | None = None) -> Any:
+        "Delete Role"
+        return self._t.call(
+            SERVICE, OPERATIONS["roles_delete_role"], {"role_id": role_id}, {"moveTo": move_to}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def roles_role_holders(self, role_id: str) -> list[RoleHolderOut]:
+        "Role Holders"
+        return self._t.call(SERVICE, OPERATIONS["roles_role_holders"], {"role_id": role_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def roles_edit_role(self, role_id: str, body: RoleCellsIn) -> RoleDetail:
         "Edit Role"
@@ -1157,6 +1252,22 @@ class AsyncOperations:
             SERVICE, OPERATIONS["people_person_permissions"], {"person_id": person_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
+    async def people_person_role_grants(self, person_id: str) -> list[RoleGrantOut]:
+        "Person Role Grants"
+        return await self._t.call(
+            SERVICE, OPERATIONS["people_person_role_grants"], {"person_id": person_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def people_give_role(self, person_id: str, body: RoleGrantIn) -> RoleGrantOut:
+        "Give Role"
+        return await self._t.call(SERVICE, OPERATIONS["people_give_role"], {"person_id": person_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def people_take_role(self, person_id: str, grant_id: str) -> Any:
+        "Take Role"
+        return await self._t.call(
+            SERVICE, OPERATIONS["people_take_role"], {"person_id": person_id, "grant_id": grant_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
     async def policies_list_policies(self) -> list[PolicyOut]:
         "List Policies"
         return await self._t.call(SERVICE, OPERATIONS["policies_list_policies"], {}, {}, {}, None)  # type: ignore[no-any-return]
@@ -1173,9 +1284,27 @@ class AsyncOperations:
         "List Roles"
         return await self._t.call(SERVICE, OPERATIONS["roles_list_roles"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
+    async def roles_create_role(self, body: RoleCreateIn) -> RoleCreatedOut:
+        "Create Role"
+        return await self._t.call(SERVICE, OPERATIONS["roles_create_role"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     async def roles_read_role(self, role_id: str) -> RoleDetail:
         "Read Role"
         return await self._t.call(SERVICE, OPERATIONS["roles_read_role"], {"role_id": role_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def roles_rename_role(self, role_id: str, body: RolePatchIn) -> RoleDetail:
+        "Rename Role"
+        return await self._t.call(SERVICE, OPERATIONS["roles_rename_role"], {"role_id": role_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def roles_delete_role(self, role_id: str, *, move_to: str | None = None) -> Any:
+        "Delete Role"
+        return await self._t.call(
+            SERVICE, OPERATIONS["roles_delete_role"], {"role_id": role_id}, {"moveTo": move_to}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def roles_role_holders(self, role_id: str) -> list[RoleHolderOut]:
+        "Role Holders"
+        return await self._t.call(SERVICE, OPERATIONS["roles_role_holders"], {"role_id": role_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def roles_edit_role(self, role_id: str, body: RoleCellsIn) -> RoleDetail:
         "Edit Role"

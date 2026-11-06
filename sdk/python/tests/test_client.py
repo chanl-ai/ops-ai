@@ -204,3 +204,22 @@ def test_the_async_client_renews_the_same_way() -> None:
 
     assert asyncio.run(run()) == {"id": "ag_1"}
     assert seen[-1].headers["authorization"] == "Bearer t2"
+
+
+def test_a_profile_session_renews_on_401_and_keeps_the_new_tokens(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The `ops` CLI's profile: its refresh token works once, so the renewed pair is written back for the next run."""
+    seen: list[httpx.Request] = []
+    profile = {"baseUrl": BASE, "team": "team_a", "accessToken": "t1", "refreshToken": "r1"}
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"current": "local", "profiles": {"local": profile}}))
+    monkeypatch.setenv("OPS_CONFIG", str(config))
+    monkeypatch.delenv("OPS_TOKEN", raising=False)
+    monkeypatch.delenv("OPS_API_KEY", raising=False)
+    http = httpx.Client(transport=httpx.MockTransport(_session_handler(seen)))
+    assert OpsAI(profile="local", http=http).agents.get("ag_1") == {"id": "ag_1"}
+    saved = json.loads(config.read_text())["profiles"]["local"]
+    assert (saved["accessToken"], saved["refreshToken"]) == ("t2", "r2"), saved
+    assert OpsAI(profile="local", http=http).agents.get("ag_1") == {"id": "ag_1"}
+    assert [r.url.path for r in seen].count("/api/platform/v1/auth/refresh") == 1

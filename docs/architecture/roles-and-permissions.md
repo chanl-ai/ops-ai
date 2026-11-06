@@ -424,6 +424,7 @@ when a question comes up again.
 | D64 | Where do the install's own mail settings stop? | The install sends its own mail (password resets, a send_reply that names no mailbox) with its own provider and password from the environment; a team reads and sends mail only through its mailbox records, each with its own secret. No setting names a mailbox or a team's secret | 2026-11-05 |
 | D65 | Whose provider key does a model call use? | The account the call names (`X-Tenant-Id`, which every calling service sends); a call that uses an account's key without naming one is refused, 400 `tenant_required` | 2026-11-05 |
 | D66 | Where are a workspace's sign-in secrets kept? | In the workspace, sealed under the install's secrets key: a Security team admin saves or deletes one through `can()` (`settings.manage`), each change audited, and a provider names it as `clientSecretRef`; no value is read back, and one a provider names is not deleted (409 `secret_in_use`) | 2026-11-05 |
+| D67 | Can a workspace make its own roles, and how does a person get one? | Yes: a workspace admin creates a custom role from scratch or as a copy (less the cells D40 keeps from custom roles), renames, edits and deletes it on Access › Roles; a delete names the holders and moves them to another role. An admin of a team gives a person a custom role in that team on Access › People; a built-in role still comes with the team role. Every change through `can()` and audited (`role.create`, `role.rename`, `role.delete`, `role.grant`, `role.ungrant`) | 2026-11-05 |
 
 ## Open questions
 

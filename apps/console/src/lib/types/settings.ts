@@ -70,6 +70,41 @@ export interface RoleDetail extends RoleSummary {
   canEdit?: boolean;
   /** Why the signed-in person may not change it, in words. */
   lockedReason?: string | null;
+  /** Cells this role may never hold (area.action): a custom role's secrets, egress and Security-team ones. */
+  notHeld?: string[];
+}
+
+/** A new custom role (POST /v1/roles): from nothing, from `permissions`, or a copy of `copyOf`. */
+export interface RoleInput {
+  name: string;
+  description?: string;
+  copyOf?: string | null;
+  permissions?: RoleCell[];
+}
+
+/** The answer to a create: the role, and the cells of the copied role a custom role may not hold, left out. */
+export interface RoleCreated extends RoleDetail {
+  leftOut: string[];
+}
+
+/** A custom role given to a person in one of their teams (GET /v1/people/{id}/role-grants). */
+export interface RoleGrant {
+  id: string;
+  roleId: string;
+  roleName: string;
+  teamId: string;
+  expiresAt?: string | null;
+  grantedBy: string;
+  createdAt: string;
+}
+
+/** Who holds a role and in which team (GET /v1/roles/{id}/holders). */
+export interface RoleHolder {
+  kind: 'person' | 'team';
+  id: string;
+  teamId: string;
+  name: string;
+  email?: string | null;
 }
 
 /** One cell a role holds after a save (PUT /v1/roles/{id}/permissions). */

@@ -60,6 +60,8 @@ def _renewed(config: Config, sent: Mapping[str, str], response: httpx.Response) 
         return False
     data = response.json()["data"]
     config.session.access_token, config.session.refresh_token = str(data["token"]), str(data["refreshToken"])
+    if config.session.on_renew is not None:
+        config.session.on_renew(config.session.access_token, config.session.refresh_token)
     return True
 
 

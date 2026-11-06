@@ -78,3 +78,34 @@ def test_ops_resources_add_copies_the_resource_the_id_names(
 def test_ops_as_signs_in_on_a_local_stack_only(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["resources", "list", "plugin:x", "--as", "a@b.example", "--base-url", "https://ops.bank.example"]) == 1
     assert "local stack only" in capsys.readouterr().err
+
+
+def test_ops_login_keeps_the_session_in_the_profile_and_prints_no_token(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(r: httpx.Request) -> httpx.Response:
+        seen.append(r)
+        principal = {"email": "ana@bank.example", "teamId": "team_ops", "teamIds": ["team_ops"]}
+        return httpx.Response(
+            200, json={"success": True, "data": {"token": "t1", "refreshToken": "r1", "principal": principal}}
+        )
+
+    real = OpsAI
+    monkeypatch.setattr(
+        "ops_ai._cli.common.OpsAI", lambda **kw: real(http=httpx.Client(transport=httpx.MockTransport(handler)), **kw)
+    )
+    config = tmp_path / "ops" / "config.json"
+    monkeypatch.setenv("OPS_CONFIG", str(config))
+    monkeypatch.setattr("sys.stdin", types.SimpleNamespace(readline=lambda: "pw-123\n"))
+    code = main(["login", "--base-url", "https://ops.bank.example", "--email", "ana@bank.example", "--password-stdin"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "ana@bank.example" in out and "t1" not in out and "r1" not in out
+    assert json.loads(seen[0].content) == {"email": "ana@bank.example", "password": "pw-123"}
+    saved = json.loads(config.read_text())
+    profile = saved["profiles"]["default"]
+    assert saved["current"] == "default" and (profile["accessToken"], profile["refreshToken"]) == ("t1", "r1")
+    assert (profile["baseUrl"], profile["team"]) == ("https://ops.bank.example", "team_ops")
+    assert oct(config.stat().st_mode & 0o777) == "0o600"
