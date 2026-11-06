@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Lists lead with names; a phone shows more columns",
+  "description": "Every list now shows a record's id last, and on a phone an arrow says more columns sit past the edge. Long client IDs are cut short with a Copy button, and the header names your team beside the workspace.",
+  "tag": "improved"
+}

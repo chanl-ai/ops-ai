@@ -13,7 +13,7 @@ import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { ListEmpty } from '@/components/shared/query-states';
 import { Row, Rows, Section } from '@/components/shared/surface';
-import { plural } from '@/lib/format';
+import { CopyButton } from '@/components/shared/copy-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -29,6 +29,7 @@ import {
   useSignOutMine,
   useSignOutTeam,
 } from '@/hooks/systems-queries';
+import { plural } from '@/lib/format';
 
 export type AuthConfig = NonNullable<AppPage['authConfigs']>[number];
 export type ConfigAccount = NonNullable<AuthConfig['accounts']>[number];
@@ -100,7 +101,22 @@ export function AuthConfigsTab({
               ? `Ops AI’s own ${app.card.name} app. Kept by Ops AI; it cannot be edited or deleted.`
               : c.type === 'account'
                 ? 'Each account holds its own key.'
-                : [c.clientId ? `Client ID ${c.clientId}` : null, c.secretEnds ? `secret ending ${c.secretEnds}` : null].filter(Boolean).join(' · ') || 'The team’s own app.'
+                : c.clientId || c.secretEnds ? (
+                    <span className="flex min-w-0 flex-wrap items-center gap-x-1">
+                      {c.clientId && (
+                        <>
+                          {/* A client ID runs to 80 characters (Salesforce): shown cut short, copied whole. */}
+                          <span className="max-w-48 truncate font-mono text-xs" title={c.clientId} data-testid={`auth-config-client-id-${c.name}`}>
+                            Client ID {c.clientId}
+                          </span>
+                          <CopyButton text={c.clientId} size="icon" className="size-6" />
+                        </>
+                      )}
+                      {c.secretEnds && <span>{c.clientId ? '· ' : ''}secret ending {c.secretEnds}</span>}
+                    </span>
+                  ) : (
+                    'The team’s own app.'
+                  )
           }
           flush
           actions={
