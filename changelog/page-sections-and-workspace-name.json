@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Page sections read as links to screen readers",
+  "description": "The section links at the top of Tools, a tool, a file and Channels are announced as links to other pages, with the current one marked, instead of as tabs that open nothing.",
+  "tag": "improved"
+}
