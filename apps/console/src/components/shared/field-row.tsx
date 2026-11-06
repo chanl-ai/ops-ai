@@ -43,7 +43,7 @@ export function FieldSectionLabel({
   return (
     <p
       className={cn(
-        'px-1 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70',
+        'px-1 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground',
         className
       )}
     >

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Human Tasks reads well with a screen reader",
+  "description": "Small section headings are drawn at full contrast, and each task in the queue is announced as an item of the list.",
+  "tag": "improved"
+}

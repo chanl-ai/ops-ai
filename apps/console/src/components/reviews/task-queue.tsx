@@ -102,6 +102,8 @@ export function TaskQueue({
                   <span className="truncate">{r.caseTitle ?? 'Case'}</span>
                 </div>
               )}
+              {/* The group is a list, so each task is a list item holding its button. */}
+              <div role="listitem">
               <Item
                 asChild
                 size="sm"
@@ -129,6 +131,7 @@ export function TaskQueue({
                   </ItemContent>
                 </button>
               </Item>
+              </div>
             </React.Fragment>
           );
         })}
