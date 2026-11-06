@@ -183,7 +183,7 @@ export function IngestForm({
             </div>
           ))}
           {noSearchable && (
-            <p role="alert" id={`${idPrefix}-columns-error`} data-field-error className="text-xs text-destructive">
+            <p role="alert" id={`${idPrefix}-columns-error`} data-field-error className="text-xs text-destructive-text">
               Mark at least one column as searchable, so questions and lookups can match a row.
             </p>
           )}

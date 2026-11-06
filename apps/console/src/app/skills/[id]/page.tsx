@@ -149,7 +149,7 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
               <DropdownMenuItem disabled={s.status === 'deprecated' || !s.publishedVersion} onClick={() => setDialog('deprecate')}>
                 <Archive className="size-4" /> Deprecate
               </DropdownMenuItem>
-              <DropdownMenuItem className="flex-col items-start text-destructive" disabled={live.length > 0} onClick={() => setDialog('delete')}>
+              <DropdownMenuItem className="flex-col items-start text-destructive-text" disabled={live.length > 0} onClick={() => setDialog('delete')}>
                 <span className="flex items-center gap-2">
                   <Trash2 className="size-4" /> Delete skill
                 </span>

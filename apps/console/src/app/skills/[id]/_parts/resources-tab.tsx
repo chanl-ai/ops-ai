@@ -72,7 +72,7 @@ export function ResourcesTab({ skill: s }: { skill: SkillDetail }) {
                   }
                 >
                   {r.blocked && (
-                    <p className="flex items-center gap-1 text-xs text-destructive">
+                    <p className="flex items-center gap-1 text-xs text-destructive-text">
                       <ShieldX className="size-3" /> {r.blocked} The skill loads without it.
                     </p>
                   )}

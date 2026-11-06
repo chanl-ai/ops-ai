@@ -130,7 +130,7 @@ export function NewSourceDialog({
         description="Each file goes to Files first, then into the source. Sync reads them and indexes their pages and sections."
         footer={
           <div className="flex w-full items-center justify-end gap-2">
-            {errors.submit && <p className="mr-auto text-xs text-destructive">{errors.submit}</p>}
+            {errors.submit && <p className="mr-auto text-xs text-destructive-text">{errors.submit}</p>}
             <Button variant="outline" onClick={() => finish(false)} disabled={syncing}>
               Sync later
             </Button>
@@ -156,7 +156,7 @@ export function NewSourceDialog({
       description="Saves a draft. Set scope, ingestion, rules and schedule on the source page, then sync it."
       footer={
         <div className="flex w-full items-center justify-end gap-2">
-          {errors.submit && <p className="mr-auto text-xs text-destructive">{errors.submit}</p>}
+          {errors.submit && <p className="mr-auto text-xs text-destructive-text">{errors.submit}</p>}
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
             Cancel
           </Button>

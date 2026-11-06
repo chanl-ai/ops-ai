@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { money, relativeTime } from './format.ts';
+import { initials, money, relativeTime } from './format.ts';
 
 // A Human Task whose step read no account has an amount but no currency; naming one would be invented.
 test('money shows a bare amount when the currency is unknown', () => {
@@ -22,4 +22,11 @@ test('a time ahead reads as ahead, never "just now"; one behind reads as behind'
   assert.equal(relativeTime('2026-10-19T11:59:40Z', now), 'just now');
   // Ninety days ahead is a date, as a grant's end reads.
   assert.equal(relativeTime('2027-01-17T12:00:00Z', now), 'Jan 17');
+});
+
+test('initials come from the person or app name, or the part of an email before the @', () => {
+  assert.equal(initials('Priya Shah'), 'PS');
+  assert.equal(initials('GitHub · Operations'), 'GO');
+  assert.equal(initials('r.menon@harborpine.example'), 'RM');
+  assert.equal(initials('Salesforce'), 'S');
 });

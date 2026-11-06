@@ -111,7 +111,7 @@ export default function SourcePage() {
                 {s.status === 'paused' ? <Play className="size-4" /> : <Pause className="size-4" />} {s.status === 'paused' ? 'Resume schedule' : 'Pause schedule'}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive" disabled={s.canDelete === false} onClick={() => setDeleteOpen(true)}>
+              <DropdownMenuItem className="text-destructive-text" disabled={s.canDelete === false} onClick={() => setDeleteOpen(true)}>
                 <Trash2 className="size-4" /> Delete
               </DropdownMenuItem>
             </DropdownMenuContent>

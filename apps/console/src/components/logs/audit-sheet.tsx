@@ -54,7 +54,7 @@ export function AuditSheet({ entry, navigation, onOpenChange }: { entry: AuditEn
                     <TableRow key={d.field}>
                       <TableCell className="align-top text-xs text-muted-foreground">{d.field}</TableCell>
                       <TableCell className="align-top whitespace-normal">
-                        {d.before != null ? <span className="rounded-sm bg-destructive/10 px-1 text-destructive line-through decoration-destructive/60">{d.before}</span> : <span className="text-muted-foreground">—</span>}
+                        {d.before != null ? <span className="rounded-sm bg-destructive/10 px-1 text-destructive-text line-through decoration-destructive/60">{d.before}</span> : <span className="text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell className="align-top">
                         <ArrowRight className="size-3.5 text-muted-foreground" />

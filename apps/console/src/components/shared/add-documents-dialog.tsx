@@ -79,7 +79,7 @@ export function AddDocumentsDialog({
       description={description}
       footer={
         <div className="flex w-full items-center justify-end gap-2">
-          {error && <p className="mr-auto text-xs text-destructive">{error}</p>}
+          {error && <p className="mr-auto text-xs text-destructive-text">{error}</p>}
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
             Cancel
           </Button>

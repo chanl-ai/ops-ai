@@ -41,12 +41,12 @@ function StatusLine({ item }: { item: UploadItem }) {
     );
   if (item.phase === 'blocked')
     return (
-      <span className="inline-flex items-center gap-1 text-destructive">
+      <span className="inline-flex items-center gap-1 text-destructive-text">
         <ShieldX className="size-3" /> {item.error}
       </span>
     );
   return (
-    <span className="inline-flex items-center gap-1 text-destructive">
+    <span className="inline-flex items-center gap-1 text-destructive-text">
       <AlertCircle className="size-3" /> {item.error}
     </span>
   );
@@ -125,6 +125,8 @@ export function FileUpload({
       accept={accept}
       className="sr-only"
       tabIndex={-1}
+      // Hidden behind the Attach button or the drop zone, but still in the accessibility tree, so it carries a name.
+      aria-label={title ?? (multiple ? 'Choose files' : 'Choose a file')}
       disabled={disabled || up.limitsLoading}
       onChange={(e) => {
         pick(e.target.files);
@@ -140,7 +142,7 @@ export function FileUpload({
         const Icon = fileIcon(it.name);
         if (variant === 'compact')
           return (
-            <li key={it.key} className={cn('inline-flex max-w-full items-center gap-1 rounded-md border bg-muted/40 py-0.5 pr-1 pl-2 text-xs', (it.phase === 'error' || it.phase === 'blocked') && 'border-destructive/40 text-destructive')} data-phase={it.phase} title={it.error}>
+            <li key={it.key} className={cn('inline-flex max-w-full items-center gap-1 rounded-md border bg-muted/40 py-0.5 pr-1 pl-2 text-xs', (it.phase === 'error' || it.phase === 'blocked') && 'border-destructive/40 text-destructive-text')} data-phase={it.phase} title={it.error}>
               {it.phase === 'ready' ? <Paperclip className="size-3" /> : it.phase === 'error' || it.phase === 'blocked' ? <AlertCircle className="size-3" /> : <Loader2 className="size-3 animate-spin" />}
               <span className="max-w-40 truncate">{it.name}</span>
               {/* A composer has no room for a status line, so the chip itself says why a file was refused. */}

@@ -21,7 +21,7 @@ export const KIND: Record<IntegrationKind, { label: string; icon: LucideIcon; ti
   zendesk: { label: 'Zendesk', icon: LifeBuoy, tint: 'bg-success/10 text-success-text' },
   github: { label: 'GitHub', icon: Github, tint: 'bg-muted text-foreground' },
   notion: { label: 'Notion', icon: StickyNote, tint: 'bg-stone-500/10 text-stone-700 dark:text-stone-300' },
-  credit_bureau: { label: 'Credit bureau', icon: Gauge, tint: 'bg-destructive/10 text-destructive' },
+  credit_bureau: { label: 'Credit bureau', icon: Gauge, tint: 'bg-destructive/10 text-destructive-text' },
   internal_api: { label: 'Internal API', icon: Server, tint: 'bg-muted text-foreground' },
   aws_s3: { label: 'Amazon S3', icon: Archive, tint: 'bg-orange-500/10 text-orange-700 dark:text-orange-300' },
   azure_blob: { label: 'Azure Blob Storage', icon: CloudCog, tint: 'bg-sky-500/10 text-sky-700 dark:text-sky-300' },
@@ -44,8 +44,8 @@ const STATUS: Record<IntegrationStatus, { label: string; cls: string; dot: strin
   draft: { label: 'Draft', cls: 'border-border bg-muted text-muted-foreground', dot: 'bg-muted-foreground' },
   healthy: { label: 'Healthy', cls: 'border-success/40 bg-success/10 text-success-text', dot: 'bg-success' },
   expiring: { label: 'Expiring', cls: 'border-warning/40 bg-warning/10 text-warning-text', dot: 'bg-warning' },
-  needs_reconnect: { label: 'Needs reconnect', cls: 'border-destructive/40 bg-destructive/10 text-destructive', dot: 'bg-destructive' },
-  error: { label: 'Error', cls: 'border-destructive/40 bg-destructive/10 text-destructive', dot: 'bg-destructive' },
+  needs_reconnect: { label: 'Needs reconnect', cls: 'border-destructive/40 bg-destructive/10 text-destructive-text', dot: 'bg-destructive' },
+  error: { label: 'Error', cls: 'border-destructive/40 bg-destructive/10 text-destructive-text', dot: 'bg-destructive' },
   revoked: { label: 'Revoked', cls: 'border-border bg-muted text-muted-foreground', dot: 'bg-muted-foreground' },
 };
 export const STATUS_LABEL = Object.fromEntries(Object.entries(STATUS).map(([k, v]) => [k, v.label])) as Record<IntegrationStatus, string>;
@@ -63,7 +63,7 @@ export function IntegrationStatusBadge({ status }: { status: IntegrationStatus }
 export const TONE_TEXT: Record<Tone, string> = {
   ok: 'text-success-text',
   warn: 'text-warning-text',
-  bad: 'font-medium text-destructive',
+  bad: 'font-medium text-destructive-text',
   muted: 'text-muted-foreground',
 };
 

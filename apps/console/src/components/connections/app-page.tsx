@@ -27,15 +27,8 @@ import { AppStateBadge } from '@/components/connections/systems-grid';
 import { ToolCallsView } from '@/components/tools/tool-calls-view';
 import { type SystemCard, useApp, useConnectionKinds, useStartSignIn, useTestAccount } from '@/hooks/systems-queries';
 import type { Kinds } from '@/lib/connect-plan';
-import { plural } from '@/lib/format';
+import { initials, plural } from '@/lib/format';
 
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
 
 function Logo({ name, logo }: { name: string; logo?: string | null }) {
   return (

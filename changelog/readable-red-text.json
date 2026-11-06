@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Red warnings are easier to read",
+  "description": "Overdue times, errors and other red text use a darker red that stays readable on cards and selected rows. The hidden file picker behind Attach now has a name for screen readers.",
+  "tag": "improved"
+}

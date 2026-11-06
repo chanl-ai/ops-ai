@@ -36,6 +36,7 @@ import { pct } from '@/lib/format';
 import type { Review, ReviewDecision } from '@/lib/types/domain';
 import type { ReviewFilters, ReviewView } from '@/lib/types/query';
 import { serverPagination } from '@/components/shared/server-pagination';
+import { useCan } from '@/hooks/me-queries';
 
 const RISK_OPTIONS = (['critical', 'high', 'medium', 'low'] as const).map((r) => ({ label: r[0].toUpperCase() + r.slice(1), value: r }));
 const KIND_OPTIONS = Object.entries(KIND_LABEL).map(([value, label]) => ({ label, value }));
@@ -50,6 +51,7 @@ const decidable = (rows: Review[]) => rows.filter((r) => r.canDecide !== false);
 export default function AllTasksPage() {
   // Tool module reviews are publish requests in this one queue, not a tab of their own.
   const [view, setView] = React.useState<ReviewView>('open');
+  const mayDecide = useCan('reviews', 'decide') === true;
   const list = useListParams<ReviewFilters>('title');
   const query = useReviews({ ...list.params, view });
   const { data: lookups } = useLookups();
@@ -208,7 +210,8 @@ export default function AllTasksPage() {
             selectionResetKey={selectionResetKey}
             serverPagination={serverPagination(list, query)}
             bulkActions={
-              view === 'resolved'
+              // Assigning and deciding are the deciders'; anyone else reads the list.
+              view === 'resolved' || !mayDecide
                 ? []
                 : [
                     {

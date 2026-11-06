@@ -19,7 +19,7 @@ export function CitationFlags({ citation: c, className }: { citation: Citation; 
         </Badge>
       )}
       {c.connectionRevoked && (
-        <Badge variant="outline" className="h-4 border-destructive/40 px-1 text-[10px] font-normal whitespace-nowrap text-destructive">
+        <Badge variant="outline" className="h-4 border-destructive/40 px-1 text-[10px] font-normal whitespace-nowrap text-destructive-text">
           Connection revoked
         </Badge>
       )}

@@ -47,7 +47,7 @@ export function HealthLine({ health, testId = 'health', who = true }: { health: 
       <div className="flex flex-wrap items-center gap-2">
         <Badge
           variant="outline"
-          className={cn(ok ? 'border-success/40 bg-success/10 text-success-text' : 'border-destructive/40 bg-destructive/10 text-destructive')}
+          className={cn(ok ? 'border-success/40 bg-success/10 text-success-text' : 'border-destructive/40 bg-destructive/10 text-destructive-text')}
         >
           {ok ? <CircleCheck /> : <CircleX />}
           {ok ? 'Working' : 'Failed'}

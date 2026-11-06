@@ -141,7 +141,7 @@ function TargetForm({ t, onChange, onRemove, credentials, disabled, error }: { t
         )}
       </div>
       {error && (
-        <p className="mt-3 text-sm text-destructive" role="alert" data-testid="storage-target-error">
+        <p className="mt-3 text-sm text-destructive-text" role="alert" data-testid="storage-target-error">
           {error}
         </p>
       )}

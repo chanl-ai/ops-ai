@@ -49,7 +49,7 @@ export function DeploymentStatusBadge({ status, sync }: { status: Deployment['st
     status !== 'active'
       ? { label: 'Paused', cls: 'border-warning/40 bg-warning/10 text-warning-text', dot: 'bg-warning' }
       : sync?.status === 'error'
-        ? { label: 'Not reading mail', cls: 'border-destructive/30 bg-destructive/10 text-destructive', dot: 'bg-destructive' }
+        ? { label: 'Not reading mail', cls: 'border-destructive/30 bg-destructive/10 text-destructive-text', dot: 'bg-destructive' }
         : sync?.status === 'syncing'
           ? { label: 'Syncing mail', cls: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300', dot: 'bg-sky-500' }
           : { label: 'Active', cls: 'border-success/40 bg-success/10 text-success-text', dot: 'bg-success' };
@@ -161,7 +161,7 @@ export function DeploymentSetup({ d, onReconnect, reconnecting }: { d: Deploymen
           <div
             className={cn(
               'flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-sm',
-              d.email.sync.status === 'error' ? 'border-destructive/30 bg-destructive/5 text-destructive' : 'bg-muted/30',
+              d.email.sync.status === 'error' ? 'border-destructive/30 bg-destructive/5 text-destructive-text' : 'bg-muted/30',
             )}
             data-testid="mailbox-sync"
           >

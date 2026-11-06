@@ -89,7 +89,7 @@ export function LoginForm({
                 </Link>
               </div>
               <Input id="password" type="password" autoComplete="current-password" value={password} aria-invalid={!!missing.password} onChange={(e) => (setPassword(e.target.value), setMissing({}))} />
-              {missing.password && <p className="text-xs text-destructive">{missing.password}</p>}
+              {missing.password && <p className="text-xs text-destructive-text">{missing.password}</p>}
             </div>
           )}
           <AuthError message={error} />

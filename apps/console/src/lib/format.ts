@@ -24,12 +24,15 @@ export function relativeTime(iso?: string, now: number = Date.now()) {
   return new Date(iso).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', ...(Math.abs(ms) > 300 * 86_400_000 ? { year: 'numeric' } : {}) });
 }
 
+/** Up to two initials of a name, or of an email's part before the @: "Priya Shah" → "PS", "GitHub · Operations" → "GO". */
 export const initials = (name: string) =>
   name
-    .split(/\s+/)
+    .replace(/@.*/, '')
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean)
     .map((w) => w[0])
-    .join('')
     .slice(0, 2)
+    .join('')
     .toUpperCase();
 
 /** A record id shortened for display: the prefix dropped, last six characters, e.g. `evr_9f3a21c7` → `#3a21c7`. */

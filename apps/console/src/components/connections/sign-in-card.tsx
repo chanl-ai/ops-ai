@@ -4,15 +4,8 @@ import { Plus } from 'lucide-react';
 import { HarborPineMark } from '@/components/auth/auth-form-wrapper';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { initials } from '@/lib/format';
 
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase();
 
 /** The console's mark beside the app's, so the person sees which app the window signs them in to. */
 function Brand({ app, logo }: { app: string; logo?: string | null }) {

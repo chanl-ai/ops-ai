@@ -80,7 +80,7 @@ export function CheckAccessDialog({ open, onOpenChange, personId, personName, te
             <Input id="check-requested" value={requestedBy} onChange={(e) => (setRequestedBy(e.target.value), setAnswer(null))} placeholder="e.g. m.okafor@bank.example" className="bg-card" data-testid="check-requested" />
           </FormField>
         </div>
-        {check.isError && <p className="text-sm text-destructive">{(check.error as Error).message}</p>}
+        {check.isError && <p className="text-sm text-destructive-text">{(check.error as Error).message}</p>}
         {answer &&
           (answer.allowed ? (
             <Alert data-testid="check-result" data-allowed="true">

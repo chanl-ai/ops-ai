@@ -72,7 +72,7 @@ export function SkillTestDialog({
       description="Runs when someone runs the skill’s tests, and before a version can go to review."
       footer={
         <div className="flex w-full items-center justify-end gap-2">
-          {errors.submit && <p className="mr-auto text-xs text-destructive">{errors.submit}</p>}
+          {errors.submit && <p className="mr-auto text-xs text-destructive-text">{errors.submit}</p>}
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
             Cancel
           </Button>
@@ -106,7 +106,7 @@ export function SkillTestDialog({
               onRemove={() => setV({ ...v, checks: v.checks.filter((_, j) => j !== i) })}
             />
           ))}
-          {errors.checks && <p className="text-xs text-destructive">{errors.checks}</p>}
+          {errors.checks && <p className="text-xs text-destructive-text">{errors.checks}</p>}
         </div>
       </div>
     </DialogShell>

@@ -22222,7 +22222,7 @@
     },
     "/reviews/assign": {
       "post": {
-        "description": "Assigns each open review to `assignee`, the caller when left out. Only someone who may decide a review\nassigns it; assigning routes the review and changes nothing about who may decide it. A result per id.",
+        "description": "Assigns each open review to `assignee`, the caller when left out. Only someone who may decide a review\nassigns it; assigning routes the review and changes nothing about who may decide it. Someone whose role decides\nno reviews in the team they act in is refused outright (403); anyone else gets a result per id.",
         "operationId": "reviews_assign",
         "parameters": [
           {

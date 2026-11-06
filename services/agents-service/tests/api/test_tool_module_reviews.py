@@ -147,8 +147,8 @@ async def test_tools_service_alone_opens_a_tool_module_review_on_a_persons_behal
     stack: tuple[AsyncClient, FakeTools],
 ) -> None:
     """Its seed's versions waiting for review: tools-service's own token scoped to the module's team, with
-    tools:publish, opens a tool module review naming who asked, recorded as opened on their behalf. A person's token
-    cannot name someone else, tools-service cannot open another kind, and no other service opens one."""
+    tools:publish, opens a tool module review naming who asked, the service kept as the one that opened it. A
+    person's token cannot name someone else, tools-service cannot open another kind, and no other service opens one."""
     c, _ = stack
     asked = {**BODY, "requestedBy": "james@harborpine.example"}
 
@@ -161,7 +161,9 @@ async def test_tools_service_alone_opens_a_tool_module_review_on_a_persons_behal
     opened = await c.post("/v1/publish-requests", json=asked, headers=token("tools", ["tools:publish"]))
     assert opened.status_code == 201, opened.text
     review = opened.json()["data"]
-    assert review["customer"] == "Requested by tools-service on behalf of james@harborpine.example", review
+    # Human Tasks names the person who asked; the service that opened it for them stays on the record.
+    assert review["customer"] == "Requested by james@harborpine.example", review
+    assert review["toolModule"].get("openedBy") == "tools-service" or "openedBy" not in review["toolModule"], review
     person = await c.post(
         "/v1/publish-requests", json=asked, headers={**BUILDER, "X-Service-Authorization": service("tools")}
     )

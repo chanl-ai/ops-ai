@@ -196,6 +196,23 @@ async def test_a_bases_counts_and_health_come_from_its_documents(client: httpx.A
     assert listed["stats"]["documents"] == 1, listed["stats"]
 
 
+async def test_a_base_reads_as_synced_when_its_source_last_synced(client: httpx.AsyncClient) -> None:
+    """The base's overview showed when its content last changed beside each source's last sync, two clocks for one
+    base; the base now says when it was last read, the newest of its sources' syncs."""
+    src = await file_source(client)
+    body = {"name": "Branch", "owner": "maya@harborpine.example", "sourceIds": [src["id"]]}
+    kb = data(await client.post("/v1/knowledge-bases", json=body), 201)
+    assert "lastSyncAt" not in data(await client.get(f"/v1/knowledge-bases/{kb['id']}"))
+    await upload(client, src["id"], "hardship.pdf", HARDSHIP)
+    data(await client.post(f"/v1/sources/{src['id']}/sync"))
+    data(await client.post(f"/v1/sources/{src['id']}/sync"))
+    source = data(await client.get(f"/v1/sources/{src['id']}"))
+    got = data(await client.get(f"/v1/knowledge-bases/{kb['id']}"))
+    assert got["lastSyncAt"] == source["lastSyncAt"], (got.get("lastSyncAt"), source.get("lastSyncAt"))
+    # The second sync changed nothing, so content last changed before the base was last read.
+    assert got["lastRefreshedAt"] < got["lastSyncAt"], got
+
+
 async def test_a_draft_source_becomes_active_on_its_first_sync_that_indexes(engine: AsyncEngine, tenant: str) -> None:
     """knowledge-2: the page says a draft activates on its first sync, but a successful sync left it draft, so the
     banner stayed and a person could not tell the document was live. A sync that indexes nothing keeps it draft."""

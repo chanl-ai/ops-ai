@@ -1,6 +1,6 @@
 """Assigning Human Tasks, by failure mode: Assign to me doing nothing (every id skipped), an assigned review
-missing from Assigned to me, a reassignment losing who had it before, someone who may not decide a review taking it,
-and a decided review being assigned."""
+missing from Assigned to me, a reassignment losing who had it before, someone who may not decide a review taking it
+or being answered 200 as if it went through, and a decided review being assigned."""
 
 from __future__ import annotations
 

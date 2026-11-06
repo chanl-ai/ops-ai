@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "A knowledge base shows when it last synced",
+  "description": "A knowledge base now shows when its sources were last read, the same time its sources show, with when its content last changed underneath. The overview no longer links to a Retrieval tab that does not exist, and people who cannot change the base see no build or refresh buttons.",
+  "tag": "fix"
+}

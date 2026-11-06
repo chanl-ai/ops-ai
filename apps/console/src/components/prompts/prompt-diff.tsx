@@ -31,12 +31,12 @@ export function PromptDiff({ before, after }: { before: string; after: string })
   return (
     <div className="flex flex-col gap-2" data-testid="prompt-diff">
       <p className="text-xs text-muted-foreground tabular-nums">
-        <span className="text-success-text">+{added}</span> <span className="text-destructive">−{removed}</span> lines against the current instructions
+        <span className="text-success-text">+{added}</span> <span className="text-destructive-text">−{removed}</span> lines against the current instructions
         {!before.trim() && ' (currently empty)'}
       </p>
       <pre className="overflow-x-auto rounded-md border bg-muted/30 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap">
         {lines.map((l, i) => (
-          <div key={i} className={cn('px-3', l.kind === 'add' && 'bg-success/10 text-success-text', l.kind === 'del' && 'bg-destructive/10 text-destructive line-through decoration-destructive/60')}>
+          <div key={i} className={cn('px-3', l.kind === 'add' && 'bg-success/10 text-success-text', l.kind === 'del' && 'bg-destructive/10 text-destructive-text line-through decoration-destructive/60')}>
             <span className="mr-2 inline-block w-3 select-none text-muted-foreground">{l.kind === 'add' ? '+' : l.kind === 'del' ? '−' : ' '}</span>
             {l.text || ' '}
           </div>

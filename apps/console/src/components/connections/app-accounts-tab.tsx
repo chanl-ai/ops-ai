@@ -27,18 +27,10 @@ import {
   useTestAccount,
 } from '@/hooks/systems-queries';
 import { facetFilterFn } from '@/hooks/use-list-params';
+import { initials } from '@/lib/format';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-const initials = (name: string) =>
-  name
-    .replace(/@.*/, '')
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter(Boolean)
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
 
 /** Who may run tools as the row: the team, one person, or each person with their own. */
 const whoCan = (a: ConfigAccount) => (a.owner.kind === 'team' ? 'Team' : a.owner.kind === 'person' ? `Only ${a.owner.name}` : 'Each person');
@@ -287,7 +279,7 @@ function AccountActions({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {menu.map((m) => (
-            <DropdownMenuItem key={m.label} onClick={m.onClick} className={m.destructive ? 'text-destructive' : undefined} data-testid={`account-action-${m.label}-${a.name}`}>
+            <DropdownMenuItem key={m.label} onClick={m.onClick} className={m.destructive ? 'text-destructive-text' : undefined} data-testid={`account-action-${m.label}-${a.name}`}>
               {m.label}
             </DropdownMenuItem>
           ))}

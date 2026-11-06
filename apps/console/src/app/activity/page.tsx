@@ -25,7 +25,7 @@ import { serverPagination } from '@/components/shared/server-pagination';
 
 const KIND: Record<ActivityKind, string> = { workflow_run: 'Workflow run', agent_run: 'Agent run', chat: 'Chat', email: 'Email received', decision: 'Human Task decision', tool_call: 'Tool call', case: 'Case', reminder: 'Reminder', system_workflow: 'Shipped workflow update', background: 'Background job' };
 const STATUS = ACTIVITY_STATUS;
-const TONE: Record<ActivityStatus, string> = { running: '', waiting: 'border-warning/40 bg-warning/10 text-warning-text', done: 'border-success/40 bg-success/10 text-success-text', failed: 'border-destructive/40 bg-destructive/10 text-destructive', skipped: 'text-muted-foreground' };
+const TONE: Record<ActivityStatus, string> = { running: '', waiting: 'border-warning/40 bg-warning/10 text-warning-text', done: 'border-success/40 bg-success/10 text-success-text', failed: 'border-destructive/40 bg-destructive/10 text-destructive-text', skipped: 'text-muted-foreground' };
 
 /** The page a row opens; an email has no page of its own, so its row opens nothing. */
 function hrefOf(r: ActivityRow): string | undefined {

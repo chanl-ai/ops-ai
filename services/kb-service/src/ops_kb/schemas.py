@@ -91,7 +91,10 @@ class KnowledgeBase(Out):
     stats: Json
     health: str
     health_reasons: list[str]
+    # When an index last changed what the base holds.
     last_refreshed_at: str | None = None
+    # When its sources were last read: the newest of their syncs.
+    last_sync_at: str | None = None
     indexing: Json | None = None
     jobs: list[Json]
     created_at: str

@@ -273,7 +273,7 @@ export function TestConsole({
 
       <Section title="Response" description={result ? `Test call ${result.callId.slice(-6)}` : 'The gateway’s decision and what the app returned.'}>
         {error ? (
-          <p className="text-sm text-destructive">{error}</p>
+          <p className="text-sm text-destructive-text">{error}</p>
         ) : !result ? (
           <p className="py-10 text-center text-sm text-muted-foreground">Run the operation to see the response.</p>
         ) : (
@@ -301,7 +301,7 @@ export function ResultBody({ result, op, running, onSimulate, badge, labels, bri
               <CircleAlert className="size-4" /> Invalid input · not sent
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 font-medium text-destructive">
+            <span className="inline-flex items-center gap-1 font-medium text-destructive-text">
               <ShieldX className="size-4" /> Denied · {DENY_LABEL[result.denyReason ?? ''] ?? 'refused by the gateway'}
             </span>
           )}

@@ -20,7 +20,7 @@ const TONE: Record<Tone, string> = {
   info: 'border-primary/30 bg-primary/10 text-primary',
   success: 'border-success/30 bg-success/10 text-success-text',
   warning: 'border-warning/30 bg-warning/10 text-warning-text',
-  danger: 'border-destructive/30 bg-destructive/10 text-destructive',
+  danger: 'border-destructive/30 bg-destructive/10 text-destructive-text',
 };
 const GAP = { sm: 'gap-2', md: 'gap-3', lg: 'gap-4' } as const;
 const ALIGN = { start: 'items-start', center: 'items-center', end: 'items-end', between: 'items-center justify-between' } as const;

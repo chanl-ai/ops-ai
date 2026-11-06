@@ -152,7 +152,7 @@ export function ConnectProviderDialog({
             <AlertDescription>Global and Data Zone deployments may process a request outside this region. Use a Standard (regional) deployment to keep data in it.</AlertDescription>
           </Alert>
         )}
-        {errors.submit && <p className="text-sm text-destructive">{errors.submit}</p>}
+        {errors.submit && <p className="text-sm text-destructive-text">{errors.submit}</p>}
       </div>
     </DialogShell>
   );

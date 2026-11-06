@@ -454,7 +454,7 @@ export function AddSourceDialog({
         </div>
       }
     >
-      {stepError && <p className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{stepError}</p>}
+      {stepError && <p className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive-text">{stepError}</p>}
 
       {step === 1 && (
         <div className="flex flex-col gap-5">
@@ -783,7 +783,7 @@ export function AddSourceDialog({
 
       {step === 6 && meta && (
         <div className="flex flex-col gap-4">
-          {submitError && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{submitError}</p>}
+          {submitError && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive-text">{submitError}</p>}
           {reviewSections.map(([title, target, rows]) => (
             <div key={title} className="rounded-lg border">
               <div className="flex items-center justify-between border-b px-3 py-2">

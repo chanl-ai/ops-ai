@@ -112,7 +112,7 @@ export function EntityPicker<P extends OptionsPage = OptionsPage>({
                   <Loader2 className="size-4 animate-spin" /> Searching…
                 </div>
               ) : results.isError ? (
-                <p className="px-3 py-6 text-sm text-destructive">Couldn’t search. Try again.</p>
+                <p className="px-3 py-6 text-sm text-destructive-text">Couldn’t search. Try again.</p>
               ) : (
                 <>
                   <CommandEmpty>{emptyText}</CommandEmpty>

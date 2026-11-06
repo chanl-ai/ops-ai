@@ -146,12 +146,18 @@ function ToolModuleReviewBody({ review }: { review: Review }) {
           </Section>
         </>
       ) : (
-        <Section title={`Changes · ${review.reasoning.length}`}>
-          <ul className="flex flex-col gap-1.5 rounded-lg border p-3 text-sm">
-            {review.reasoning.map((c) => (
-              <li key={c}>{c}</li>
-            ))}
-          </ul>
+        <Section title={review.reasoning.length ? `Changes · ${review.reasoning.length}` : 'Changes'}>
+          {review.reasoning.length ? (
+            <ul className="flex flex-col gap-1.5 rounded-lg border p-3 text-sm">
+              {review.reasoning.map((c) => (
+                <li key={c}>{c}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground" data-testid="review-no-changes">
+              This request lists no changes.
+            </p>
+          )}
         </Section>
       )}
       {!isOpen(review) && (review.decidedBy || review.decisionReason) && (
@@ -449,7 +455,7 @@ export function ReviewDecisionForm({
           autoFocus={layout === 'footer'}
         />
         {missing ? (
-          <p className="text-xs text-destructive">{reasonToApprove ? 'Add a reason. Approving with failing evals needs one, and so do reject and return.' : 'Add a reason before rejecting or returning this review.'}</p>
+          <p className="text-xs text-destructive-text">{reasonToApprove ? 'Add a reason. Approving with failing evals needs one, and so do reject and return.' : 'Add a reason before rejecting or returning this review.'}</p>
         ) : (
           <p className="text-xs text-muted-foreground">Recorded in the audit log and sent to the {isTemplate ? 'submitter' : isPublish ? 'requester' : 'agent'}.</p>
         )}

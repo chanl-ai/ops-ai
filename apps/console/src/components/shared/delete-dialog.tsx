@@ -76,7 +76,7 @@ export function DeleteDialog({
       <DialogContent className="sm:max-w-[400px]" data-testid={`delete-${prefix}-dialog`}>
         <DialogHeader className="items-center text-center">
           <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
-            <TriangleAlert className="h-6 w-6 text-destructive" />
+            <TriangleAlert className="h-6 w-6 text-destructive-text" />
           </div>
           <DialogTitle className="break-words">{title}</DialogTitle>
           <DialogDescription className="text-center">

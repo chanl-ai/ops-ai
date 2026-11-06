@@ -218,7 +218,7 @@ function TestResult({
                   <TableCell
                     className={
                       s?.misses
-                        ? "text-right tabular-nums text-destructive"
+                        ? "text-right tabular-nums text-destructive-text"
                         : "text-right tabular-nums"
                     }
                   >
@@ -292,7 +292,7 @@ function TestResult({
                                 <CheckCircle2 className="size-4" /> Match
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-sm text-destructive">
+                              <span className="inline-flex items-center gap-1 text-sm text-destructive-text">
                                 <XCircle className="size-4" /> Miss
                               </span>
                             )}
@@ -407,7 +407,7 @@ function RunTestDialog({
               : "."}
           </p>
           {e.samples === 0 && (
-            <p className="text-sm text-destructive">
+            <p className="text-sm text-destructive-text">
               Add a sample on the Samples tab first.
             </p>
           )}

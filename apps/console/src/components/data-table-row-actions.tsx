@@ -56,7 +56,7 @@ export function DataTableRowActions<TData>({
               key={index}
               onClick={() => action.onClick(row)}
               disabled={!!action.disabledReason}
-              className={action.variant === 'destructive' ? 'text-destructive' : ''}
+              className={action.variant === 'destructive' ? 'text-destructive-text' : ''}
             >
               {Icon && <Icon className="mr-2 h-4 w-4" />}
               <span className="flex flex-col">

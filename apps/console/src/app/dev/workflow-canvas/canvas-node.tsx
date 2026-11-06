@@ -59,7 +59,7 @@ export const CanvasNode = memo(function CanvasNode({ data, selected }: NodeProps
           <p className="truncate text-sm font-medium">{data.title}</p>
           <p className="truncate text-xs text-muted-foreground">{data.typeLabel}</p>
         </div>
-        {broken && <AlertTriangle className="size-4 shrink-0 text-destructive" aria-label="Has an error" />}
+        {broken && <AlertTriangle className="size-4 shrink-0 text-destructive-text" aria-label="Has an error" />}
       </div>
       {trigger && (
         <div className="px-3 pb-2">

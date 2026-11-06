@@ -46,7 +46,7 @@ export function ConflictChip({ resolved, className }: { resolved?: boolean; clas
       Conflict resolved
     </Badge>
   ) : (
-    <Badge variant="outline" className={cn('border-destructive/40 bg-destructive/10 text-destructive', className)}>
+    <Badge variant="outline" className={cn('border-destructive/40 bg-destructive/10 text-destructive-text', className)}>
       Conflict
     </Badge>
   );

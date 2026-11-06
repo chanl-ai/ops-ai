@@ -125,7 +125,7 @@ export function DocumentSheet({
         }
       >
         {error ? (
-          <p className="text-sm text-destructive">{error}</p>
+          <p className="text-sm text-destructive-text">{error}</p>
         ) : !item || !d ? (
           <div className="flex flex-col gap-3">
             <Skeleton className="h-6 w-48" />
@@ -382,7 +382,7 @@ export function DocumentSheet({
                             </TableCell>
                             <TableCell>{r.author}</TableCell>
                             <TableCell className="text-muted-foreground">{shortDate(r.date)}</TableCell>
-                            <TableCell className={cn('text-right tabular-nums', r.sizeDelta < 0 && 'text-destructive')}>
+                            <TableCell className={cn('text-right tabular-nums', r.sizeDelta < 0 && 'text-destructive-text')}>
                               {r.sizeDelta >= 0 ? '+' : '−'}
                               {bytes(Math.abs(r.sizeDelta))}
                             </TableCell>

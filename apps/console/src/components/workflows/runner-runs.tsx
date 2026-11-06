@@ -57,7 +57,7 @@ const columns: ColumnDef<Row>[] = [
       row.original.outcome ? (
         <span data-testid={`run-outcome-${row.original.id}`}>{row.original.outcomeText ?? row.original.outcome}</span>
       ) : row.original.error ? (
-        <span className="text-destructive" title={row.original.error} data-testid={`run-outcome-${row.original.id}`}>
+        <span className="text-destructive-text" title={row.original.error} data-testid={`run-outcome-${row.original.id}`}>
           {row.original.error}
         </span>
       ) : null,

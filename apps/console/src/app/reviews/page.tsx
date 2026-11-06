@@ -12,7 +12,6 @@ import { DecisionPanel } from '@/components/reviews/decision-panel';
 import { type ReadEdits, useReadConfirmations } from '@/components/reviews/document-read';
 import { QueueDone, TaskQueue } from '@/components/reviews/task-queue';
 import { useReviewDecider } from '@/components/reviews/use-review-decider';
-import { useCollapsedSidebar } from '@/components/shared/collapsed-sidebar';
 import { QueryError } from '@/components/shared/query-states';
 import { countLabel, SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { taskView } from '@/components/tasks/task-regions';
@@ -33,12 +32,11 @@ const PAGE = 50;
  * Human Tasks as queue and task (layout A): the queue grouped by case on the left, the open
  * task's evidence beside a decision panel that keeps Decide in view. From 1280 px the queue and the task sit side by
  * side, below that they take turns; from 1024 px the evidence and the decision sit side by side, below that they take
- * turns behind an Evidence and Decide switch. The app's navigation folds while the page is open, so the document has
- * room. The open task is ?review= (and ?runKey= resolves to one), as every link into a task already reads it. Every
+ * turns behind an Evidence and Decide switch. The app's navigation stays as on every other page. The open task is
+ * ?review= (and ?runKey= resolves to one), as every link into a task already reads it. Every
  * view as a table, with bulk decisions and export, is All tasks.
  */
 export default function HumanTasksPage() {
-  useCollapsedSidebar();
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();

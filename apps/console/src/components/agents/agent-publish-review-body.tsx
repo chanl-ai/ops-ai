@@ -96,14 +96,14 @@ export function AgentPublishBody({ review }: { review: Review }) {
             </TableRow>
             <TableRow>
               <TableCell className="text-muted-foreground">Regressions</TableCell>
-              <TableCell className={p.candidate?.regressions ? 'font-medium text-destructive tabular-nums' : 'tabular-nums'}>{p.candidate ? p.candidate.regressions : '—'}</TableCell>
+              <TableCell className={p.candidate?.regressions ? 'font-medium text-destructive-text tabular-nums' : 'tabular-nums'}>{p.candidate ? p.candidate.regressions : '—'}</TableCell>
               <TableCell className="tabular-nums text-muted-foreground">—</TableCell>
             </TableRow>
           </TableBody>
         </Table>
         {p.candidate && <p className="text-xs text-muted-foreground">Candidate run finished {relativeTime(p.candidate.ranAt)}.</p>}
         {p.blockers.length > 0 ? (
-          <ul className="flex flex-col gap-1 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive" data-testid="agent-publish-blockers">
+          <ul className="flex flex-col gap-1 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive-text" data-testid="agent-publish-blockers">
             {p.blockers.map((b) => (
               <li key={b} className="flex items-start gap-1.5">
                 <XCircle className="mt-0.5 size-4 shrink-0" /> {b}

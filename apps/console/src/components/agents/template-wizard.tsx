@@ -251,7 +251,7 @@ export function TemplateWizard({
                 <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input value={search} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search templates…" className="pl-8" aria-label="Search templates" autoFocus />
               </div>
-              {err('template') && <p className="text-xs text-destructive">{err('template')}</p>}
+              {err('template') && <p className="text-xs text-destructive-text">{err('template')}</p>}
               <div className="min-h-0 flex-1 overflow-y-auto pr-1">
                 {templatesError ? (
                   <QueryError what="templates" onRetry={onRetryTemplates} />
@@ -407,7 +407,7 @@ export function TemplateWizard({
               placeholder="e.g. You draft replies to hardship emails. Always offer the hardship line first."
               aria-invalid={!!err('instructions')}
             />
-            {err('instructions') ? <p className="text-xs text-destructive">{err('instructions')}</p> : <p className="text-xs text-muted-foreground">Prefilled from the template. Shared wording such as disclosures comes from the always-on skills chosen in Skills.</p>}
+            {err('instructions') ? <p className="text-xs text-destructive-text">{err('instructions')}</p> : <p className="text-xs text-muted-foreground">Prefilled from the template. Shared wording such as disclosures comes from the always-on skills chosen in Skills.</p>}
           </div>
         )}
 
@@ -461,7 +461,7 @@ export function TemplateWizard({
 
         {step === 6 && cfg && detail && (
           <div className="flex flex-col gap-3">
-            {serverError?.step === 6 && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{serverError.message}</p>}
+            {serverError?.step === 6 && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive-text">{serverError.message}</p>}
             {(
               [
                 ['Template', 1, [['Template', `${detail.name} v${detail.version}`], ['Risk tier', detail.riskTier]]],

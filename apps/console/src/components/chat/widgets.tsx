@@ -78,7 +78,7 @@ function TableView({ widget }: WidgetProps<TableWidget>) {
             {widget.rows.map((r, i) => (
               <TableRow key={i}>
                 {widget.columns.map((c) => (
-                  <TableCell key={c.key} className={cn('py-1.5 text-xs whitespace-nowrap', c.align === 'right' && 'text-right tabular-nums', c.tone && Number(r[c.key]) > 0 && 'font-medium text-destructive')}>
+                  <TableCell key={c.key} className={cn('py-1.5 text-xs whitespace-nowrap', c.align === 'right' && 'text-right tabular-nums', c.tone && Number(r[c.key]) > 0 && 'font-medium text-destructive-text')}>
                     {r[c.key]}
                   </TableCell>
                 ))}
@@ -164,7 +164,7 @@ function MetricView({ widget }: WidgetProps<MetricWidget>) {
           <div key={m.label} className="bg-card p-3">
             <p className="text-xs text-muted-foreground">{m.label}</p>
             <p className="text-xl font-semibold tabular-nums">{m.value}</p>
-            {m.delta && <p className={cn('text-xs', m.tone === 'good' ? 'text-success-text' : m.tone === 'bad' ? 'text-destructive' : 'text-muted-foreground')}>{m.delta}</p>}
+            {m.delta && <p className={cn('text-xs', m.tone === 'good' ? 'text-success-text' : m.tone === 'bad' ? 'text-destructive-text' : 'text-muted-foreground')}>{m.delta}</p>}
           </div>
         ))}
       </div>
@@ -176,7 +176,7 @@ const APPROVAL_STATE: Record<ApprovalWidget['state'], { label: string; icon: typ
   pending: { label: 'Waiting for approval', icon: Clock, cls: 'text-warning-text' },
   awaiting_second: { label: 'Waiting on a second reviewer', icon: ShieldCheck, cls: 'text-sky-700 dark:text-sky-300' },
   approved: { label: 'Approved', icon: CheckCircle2, cls: 'text-success-text' },
-  rejected: { label: 'Rejected', icon: XCircle, cls: 'text-destructive' },
+  rejected: { label: 'Rejected', icon: XCircle, cls: 'text-destructive-text' },
 };
 
 function ApprovalView({ widget, onAction }: WidgetProps<ApprovalWidget>) {

@@ -114,7 +114,7 @@ export function ApprovalsTable({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem className="text-destructive" onClick={() => onRevoke(a)}>
+                        <DropdownMenuItem className="text-destructive-text" onClick={() => onRevoke(a)}>
                           Revoke
                         </DropdownMenuItem>
                       </DropdownMenuContent>

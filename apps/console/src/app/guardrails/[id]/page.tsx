@@ -139,7 +139,7 @@ function GuardrailView({ guardrail: g }: { guardrail: Guardrail }) {
                   {g.status === 'live' ? <Archive className="size-4" /> : <ArchiveRestore className="size-4" />} {g.status === 'live' ? 'Deprecate' : 'Make live'}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-destructive" disabled={g.usedBy.length > 0} onClick={() => setDeleteOpen(true)}>
+                <DropdownMenuItem className="text-destructive-text" disabled={g.usedBy.length > 0} onClick={() => setDeleteOpen(true)}>
                   <Trash2 className="size-4" /> Delete guardrail
                 </DropdownMenuItem>
               </DropdownMenuContent>

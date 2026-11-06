@@ -33,12 +33,12 @@ export function AssetCell({ asset, sub }: { asset: AssetRef; sub?: string }) {
 
 export function OutcomeText({ outcome }: { outcome: CaseOutcome | null }) {
   if (!outcome) return <span className="text-muted-foreground">—</span>;
-  return <span className={cn('font-medium', outcome === 'pass' ? 'text-success-text' : 'text-destructive')}>{outcome === 'pass' ? 'Pass' : 'Fail'}</span>;
+  return <span className={cn('font-medium', outcome === 'pass' ? 'text-success-text' : 'text-destructive-text')}>{outcome === 'pass' ? 'Pass' : 'Fail'}</span>;
 }
 
 const STEP_TONE: Record<GateStep['result'], string> = {
   pass: 'border-success/40 bg-success/10 text-success-text',
-  fail: 'border-destructive/30 bg-destructive/10 text-destructive',
+  fail: 'border-destructive/30 bg-destructive/10 text-destructive-text',
   pending: 'border-border bg-muted text-muted-foreground',
 };
 

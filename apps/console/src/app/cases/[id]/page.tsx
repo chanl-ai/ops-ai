@@ -331,7 +331,7 @@ export default function CasePage() {
                     <ItemActions>
                       <Badge
                         variant={a.status === 'approved' ? 'secondary' : 'outline'}
-                        className={a.status === 'refused' ? 'border-destructive/40 bg-destructive/10 font-normal text-destructive' : 'font-normal'}
+                        className={a.status === 'refused' ? 'border-destructive/40 bg-destructive/10 font-normal text-destructive-text' : 'font-normal'}
                         title={a.status === 'refused' ? 'Approved, but the call answered with an error' : undefined}
                       >
                         {ACTION_STATUS[a.status] ?? a.status}

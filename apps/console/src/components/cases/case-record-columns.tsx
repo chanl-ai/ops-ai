@@ -37,7 +37,7 @@ export function Deadline({ left, at, paused, met, testId }: { left: number | nul
   if (met || left === null) return <span className="text-xs text-muted-foreground" title={`Due ${due}`} data-testid={testId} data-state="met">Met</span>;
   if (left < 0)
     return (
-      <span className="text-xs font-medium whitespace-nowrap text-destructive" title={`Was due ${due}`} data-testid={testId} data-state="overdue">
+      <span className="text-xs font-medium whitespace-nowrap text-destructive-text" title={`Was due ${due}`} data-testid={testId} data-state="overdue">
         Overdue by {span(left)}
       </span>
     );
@@ -91,7 +91,7 @@ export const caseRecordColumns: ColumnDef<CaseRecord>[] = [
     id: 'priority',
     accessorKey: 'priority',
     header: ({ column }) => <DataTableColumnHeader column={column} title="Priority" />,
-    cell: ({ row }) => <span className={row.original.priority === 'urgent' ? 'text-sm font-medium text-destructive' : 'text-sm'}>{CASE_PRIORITY[row.original.priority]}</span>,
+    cell: ({ row }) => <span className={row.original.priority === 'urgent' ? 'text-sm font-medium text-destructive-text' : 'text-sm'}>{CASE_PRIORITY[row.original.priority]}</span>,
   },
   {
     id: 'response',

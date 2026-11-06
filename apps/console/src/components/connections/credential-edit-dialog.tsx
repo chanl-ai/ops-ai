@@ -166,7 +166,7 @@ function EditForm({ id, onClose }: { id: string; onClose: () => void }) {
               </Alert>
             )}
             {error && (
-              <p className="text-sm text-destructive" role="alert" data-testid="credential-edit-error">
+              <p className="text-sm text-destructive-text" role="alert" data-testid="credential-edit-error">
                 {error}
               </p>
             )}

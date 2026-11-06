@@ -190,17 +190,17 @@ function RunResults({ run }: { run: SkillTestRun }) {
       <ul className="divide-y">
         {run.results.map((r) => (
           <li key={r.caseId} className="flex items-start gap-2 px-3 py-2 text-sm">
-            {r.status === 'pass' ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success-text" /> : <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />}
+            {r.status === 'pass' ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success-text" /> : <XCircle className="mt-0.5 size-4 shrink-0 text-destructive-text" />}
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium">{r.caseName}</span>
                 {!r.skillLoaded && <Badge variant="outline" className="border-warning/40 text-[10px] text-warning-text">Skill not chosen</Badge>}
                 <span className="ml-auto text-xs text-muted-foreground tabular-nums">{ms(r.latencyMs)}</span>
               </div>
-              {r.failure && <p className="text-xs text-destructive">{r.failure}</p>}
+              {r.failure && <p className="text-xs text-destructive-text">{r.failure}</p>}
               <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
                 {r.checks.map((c) => (
-                  <span key={c.label} className={c.status === 'fail' ? 'text-destructive' : 'text-muted-foreground'}>
+                  <span key={c.label} className={c.status === 'fail' ? 'text-destructive-text' : 'text-muted-foreground'}>
                     {c.status === 'pass' ? '✓' : '✗'} {c.label}
                   </span>
                 ))}

@@ -390,7 +390,7 @@ export function CreateDeploymentDialog({
 
       {step === 3 && (
         <div className="flex flex-col gap-4">
-          {submitError && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{submitError}</p>}
+          {submitError && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive-text">{submitError}</p>}
           <div className="rounded-lg border">
             <div className="flex items-center justify-between border-b px-3 py-2">
               <span className="text-sm font-medium">{v.name || 'Deployment'}</span>

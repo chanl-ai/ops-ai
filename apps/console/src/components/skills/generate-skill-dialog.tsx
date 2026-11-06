@@ -286,7 +286,7 @@ export function GenerateSkillDialog({
   }, [opts?.tools]);
 
   const toggle = (list: string[], set: (v: string[]) => void, v: string, on: boolean) => set(on ? [...new Set([...list, v])] : list.filter((x) => x !== v));
-  const err = (m?: string) => (showErrors && m ? <p className="text-sm text-destructive" role="alert">{m}</p> : null);
+  const err = (m?: string) => (showErrors && m ? <p className="text-sm text-destructive-text" role="alert">{m}</p> : null);
 
   const body = () => {
     if (options.isPending) return <Skeleton className="h-64 w-full" />;
@@ -486,7 +486,7 @@ export function GenerateSkillDialog({
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]" data-testid="gen-step-draft">
           <div className="flex min-w-0 flex-col gap-4">
             <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm" aria-live="polite">
-              {gen.phase === 'streaming' ? <Loader2 className="size-4 animate-spin text-primary" /> : gen.phase === 'done' ? <CheckCircle2 className="size-4 text-success-text" /> : gen.phase === 'error' ? <XCircle className="size-4 text-destructive" /> : <Sparkles className="size-4 text-muted-foreground" />}
+              {gen.phase === 'streaming' ? <Loader2 className="size-4 animate-spin text-primary" /> : gen.phase === 'done' ? <CheckCircle2 className="size-4 text-success-text" /> : gen.phase === 'error' ? <XCircle className="size-4 text-destructive-text" /> : <Sparkles className="size-4 text-muted-foreground" />}
               <span className="min-w-0 flex-1 truncate" data-testid="gen-status">
                 {gen.phase === 'streaming' ? gen.status : gen.phase === 'done' ? `Drafted through the AI gateway · ${gen.skill?.model}` : gen.phase === 'stopped' ? 'Stopped. Regenerate to finish the draft.' : gen.phase === 'error' ? gen.error : 'Ready to draft'}
               </span>
@@ -532,7 +532,7 @@ export function GenerateSkillDialog({
                 </div>
               );
             })}
-            {showErrors && draftError && <p className="text-sm text-destructive" role="alert">{draftError}</p>}
+            {showErrors && draftError && <p className="text-sm text-destructive-text" role="alert">{draftError}</p>}
           </div>
           <aside className="flex min-w-0 flex-col gap-4">
             {gen.phase === 'done' && (outTools.length > 0 || outKbs.length > 0 || agentWarnings.length > 0) && (
@@ -726,7 +726,7 @@ export function GenerateSkillDialog({
                     <span className="flex items-center gap-1.5 text-sm font-medium">
                       <Bot className="size-3.5 text-muted-foreground" /> {m.agentName}
                     </span>
-                    {m.attachable ? <span className="text-success-text">Can attach</span> : <span className="text-destructive">Cannot attach yet</span>}
+                    {m.attachable ? <span className="text-success-text">Can attach</span> : <span className="text-destructive-text">Cannot attach yet</span>}
                   </div>
                   <div className="font-mono leading-relaxed">
                     {m.skillsBefore.map((s) => (
@@ -741,7 +741,7 @@ export function GenerateSkillDialog({
                     <span className="text-muted-foreground">Tools held: </span>
                     {m.toolsHeld.join(', ') || 'none needed'}
                   </div>
-                  {(m.toolsMissing.length > 0 || m.kbsMissing.length > 0) && <div className="text-destructive">Missing: {[...m.toolsMissing, ...m.kbsMissing].join(', ')}. Grant them on the agent first.</div>}
+                  {(m.toolsMissing.length > 0 || m.kbsMissing.length > 0) && <div className="text-destructive-text">Missing: {[...m.toolsMissing, ...m.kbsMissing].join(', ')}. Grant them on the agent first.</div>}
                   {m.guardrailsAdded.length > 0 && (
                     <div>
                       <span className="text-muted-foreground">Adds guardrails: </span>
@@ -770,7 +770,7 @@ export function GenerateSkillDialog({
               <ul className="divide-y">
                 {run.results.map((r) => (
                   <li key={r.caseId} className="flex items-start gap-2 px-3 py-2 text-sm">
-                    {r.status === 'pass' ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success-text" /> : <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />}
+                    {r.status === 'pass' ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success-text" /> : <XCircle className="mt-0.5 size-4 shrink-0 text-destructive-text" />}
                     <div className="min-w-0">
                       <div>{r.caseName}</div>
                       {r.failure && <div className="text-xs text-muted-foreground">{r.failure}</div>}
@@ -808,7 +808,7 @@ export function GenerateSkillDialog({
           <div className="flex w-full items-center gap-2">
             <span className="mr-auto text-xs text-muted-foreground">
               Step {step} of {STEPS.length}
-              {saveError && <span className="ml-2 text-destructive">{saveError}</span>}
+              {saveError && <span className="ml-2 text-destructive-text">{saveError}</span>}
             </span>
             {step > 1 && (
               <Button variant="outline" onClick={() => go(step - 1)} disabled={create.isPending}>

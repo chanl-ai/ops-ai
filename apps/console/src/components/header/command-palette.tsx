@@ -138,8 +138,8 @@ export function CommandPalette({
             )}
             {typed && error && (
               <CommandGroup heading="Records">
-                <CommandItem value={`${typed} retry search`} onSelect={onRetry} className="text-destructive">
-                  <AlertCircle className="text-destructive" /> Search failed. Try again
+                <CommandItem value={`${typed} retry search`} onSelect={onRetry} className="text-destructive-text">
+                  <AlertCircle className="text-destructive-text" /> Search failed. Try again
                 </CommandItem>
               </CommandGroup>
             )}

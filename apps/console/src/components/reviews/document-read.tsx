@@ -165,7 +165,7 @@ function RecordTable({
                         </Badge>
                       )}
                       {scored?.conflict && (
-                        <Badge variant="outline" className="w-fit border-destructive/50 text-destructive" data-testid={`read-differs-${index}-${f.key}`}>
+                        <Badge variant="outline" className="w-fit border-destructive/50 text-destructive-text" data-testid={`read-differs-${index}-${f.key}`}>
                           Differs
                         </Badge>
                       )}

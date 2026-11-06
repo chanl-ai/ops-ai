@@ -85,7 +85,7 @@ export function SourceItemsTab({ source, onSync }: { source: SourceDetail; onSyn
               <TooltipTrigger asChild>
                 <span className="flex max-w-48 items-center gap-1.5">
                   {row.original.errorClass && (
-                    <Badge variant="outline" className="shrink-0 border-destructive/40 font-normal text-destructive">
+                    <Badge variant="outline" className="shrink-0 border-destructive/40 font-normal text-destructive-text">
                       {ERROR_CLASS_LABEL[row.original.errorClass]}
                     </Badge>
                   )}

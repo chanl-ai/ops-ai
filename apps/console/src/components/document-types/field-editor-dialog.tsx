@@ -205,7 +205,7 @@ export function VersionFieldsEditor({
                       aria-invalid={!!error}
                     />
                     {error && (
-                      <p className="mt-1 text-xs text-destructive">{error}</p>
+                      <p className="mt-1 text-xs text-destructive-text">{error}</p>
                     )}
                   </TableCell>
                   <TableCell className="min-w-36 align-top">
@@ -305,7 +305,7 @@ export function VersionFieldsEditor({
           </Button>
         </div>
         {errors?.fields ? (
-          <p className="text-xs text-destructive">{errors.fields}</p>
+          <p className="text-xs text-destructive-text">{errors.fields}</p>
         ) : (
           <p className="text-xs text-muted-foreground">
             A read below a field’s confidence goes to a person in Reviews. Leave
@@ -410,7 +410,7 @@ export function FieldEditorDialog({
       onSubmit={submit}
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-destructive">{errors.submit}</p>
+          <p className="text-xs text-destructive-text">{errors.submit}</p>
           <div className="flex gap-2">
             <Button
               type="button"

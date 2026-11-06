@@ -262,7 +262,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton size="lg" onClick={() => void retryLookups()} aria-label="Account unavailable. Try again">
-                <AlertCircle className="size-4 text-destructive" />
+                <AlertCircle className="size-4 text-destructive-text" />
                 <div className="grid flex-1 text-left leading-tight">
                   <span className="truncate text-sm font-medium">Account unavailable</span>
                   <span className="truncate text-xs text-muted-foreground">Try again</span>

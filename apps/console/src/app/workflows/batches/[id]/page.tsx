@@ -243,7 +243,7 @@ function BatchRows({ rows }: { rows: BatchRow[] }) {
           const out = outputLine(r);
           return (
             <div title={[r.error, out].filter(Boolean).join(' · ')}>
-              {r.error ? <span className="text-destructive">{r.error}</span> : out || <span className="text-muted-foreground">{r.status === 'pending' ? 'Not started yet' : '—'}</span>}
+              {r.error ? <span className="text-destructive-text">{r.error}</span> : out || <span className="text-muted-foreground">{r.status === 'pending' ? 'Not started yet' : '—'}</span>}
               {r.error && out ? <span className="text-muted-foreground"> · {out}</span> : null}
             </div>
           );

@@ -33,7 +33,7 @@ export function LiveBadge({ status, className }: { status: keyof typeof LIVE_LAB
 }
 
 const RISK: Record<Risk, string> = {
-  critical: 'border-destructive/40 bg-destructive/10 text-destructive',
+  critical: 'border-destructive/40 bg-destructive/10 text-destructive-text',
   high: 'border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300',
   medium: 'border-warning/40 bg-warning/10 text-warning-text',
   low: 'border-border bg-muted text-muted-foreground',
@@ -47,7 +47,7 @@ const STATUS: Record<ReviewStatus, { label: string; cls: string; dot: string }> 
   pending: { label: 'Pending', cls: 'border-border bg-card', dot: 'bg-warning' },
   in_review: { label: 'In review', cls: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300', dot: 'bg-sky-500' },
   approved: { label: 'Approved', cls: 'border-success/40 bg-success/10 text-success-text', dot: 'bg-success' },
-  rejected: { label: 'Rejected', cls: 'border-destructive/40 bg-destructive/10 text-destructive', dot: 'bg-destructive' },
+  rejected: { label: 'Rejected', cls: 'border-destructive/40 bg-destructive/10 text-destructive-text', dot: 'bg-destructive' },
   returned: { label: 'Returned to agent', cls: 'border-border bg-muted text-muted-foreground', dot: 'bg-muted-foreground' },
 };
 
@@ -89,7 +89,7 @@ export function AccessBadge({ access }: { access: GrantAccess }) {
 /** A field's confidence as a small badge, coloured by the same thresholds as ConfidenceBar; nothing when not scored. */
 export function ConfidenceBadge({ value }: { value: number | null | undefined }) {
   if (value === null || value === undefined) return null;
-  const tone = value >= 0.85 ? 'border-success/40 bg-success/10 text-success-text' : value >= 0.7 ? 'border-warning/50 bg-warning/10 text-warning-text' : 'border-destructive/40 bg-destructive/10 text-destructive';
+  const tone = value >= 0.85 ? 'border-success/40 bg-success/10 text-success-text' : value >= 0.7 ? 'border-warning/50 bg-warning/10 text-warning-text' : 'border-destructive/40 bg-destructive/10 text-destructive-text';
   return <span className={cn('inline-flex w-fit items-center rounded-md border px-1.5 py-0.5 text-xs font-medium tabular-nums', tone)}>{Math.round(value * 100)}%</span>;
 }
 
@@ -128,7 +128,7 @@ export function SlaText({ minutes, open, paused }: { /** Null when nothing has a
     <span
       className={cn(
         'text-xs whitespace-nowrap tabular-nums',
-        minutes < 0 ? 'font-semibold text-destructive' : minutes < 60 ? 'text-warning-text' : 'text-muted-foreground',
+        minutes < 0 ? 'font-semibold text-destructive-text' : minutes < 60 ? 'text-warning-text' : 'text-muted-foreground',
       )}
     >
       {label}
@@ -156,7 +156,7 @@ export function CaseStatusBadge({ status }: { status: CaseStatus }) {
 }
 
 const PRIORITY: Record<CasePriority, string> = {
-  urgent: 'border-destructive/40 bg-destructive/10 text-destructive',
+  urgent: 'border-destructive/40 bg-destructive/10 text-destructive-text',
   high: 'border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300',
   normal: 'border-border bg-card text-foreground',
   low: 'border-border bg-muted text-muted-foreground',
@@ -171,8 +171,8 @@ const ACTION_STATUS: Record<ActionStatus, { label: string; cls: string }> = {
   awaiting_second: { label: 'Needs second reviewer', cls: 'border-warning/40 bg-warning/10 text-warning-text' },
   approved: { label: 'Approved', cls: 'border-success/40 bg-success/10 text-success-text' },
   executed: { label: 'Done', cls: 'border-success/40 bg-success/10 text-success-text' },
-  rejected: { label: 'Rejected', cls: 'border-destructive/40 bg-destructive/10 text-destructive' },
-  failed: { label: 'Failed', cls: 'border-destructive/40 bg-destructive/10 text-destructive' },
+  rejected: { label: 'Rejected', cls: 'border-destructive/40 bg-destructive/10 text-destructive-text' },
+  failed: { label: 'Failed', cls: 'border-destructive/40 bg-destructive/10 text-destructive-text' },
 };
 
 /** A drafted action that needs no approval runs on its own, so it reads as "Ready" rather than "Needs approval". */
@@ -186,7 +186,7 @@ const AGENT_VERSION_STATE: Record<AgentVersionState, { label: string; cls: strin
   in_review: { label: 'In review', cls: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300' },
   published: { label: 'Published', cls: 'border-success/40 bg-success/10 text-success-text' },
   superseded: { label: 'Superseded', cls: 'border-border bg-transparent text-muted-foreground' },
-  rejected: { label: 'Rejected', cls: 'border-destructive/40 bg-destructive/10 text-destructive' },
+  rejected: { label: 'Rejected', cls: 'border-destructive/40 bg-destructive/10 text-destructive-text' },
 };
 
 /** State of an agent version: drafts publish through an `agent_publish` review before workflows can pin them. */

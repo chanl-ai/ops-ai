@@ -1565,6 +1565,17 @@
             ],
             "title": "Lastrefreshedat"
           },
+          "lastSyncAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastsyncat"
+          },
           "metadataProfile": {
             "additionalProperties": true,
             "title": "Metadataprofile",
@@ -1794,6 +1805,17 @@
               }
             ],
             "title": "Lastrefreshedat"
+          },
+          "lastSyncAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastsyncat"
           },
           "metadataKeys": {
             "items": {
@@ -2211,6 +2233,17 @@
               }
             ],
             "title": "Lastrefreshedat"
+          },
+          "lastSyncAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastsyncat"
           },
           "metadataProfile": {
             "additionalProperties": true,

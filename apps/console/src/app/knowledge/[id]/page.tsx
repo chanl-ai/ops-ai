@@ -75,7 +75,7 @@ export default function KnowledgeBasePage() {
       badge={<KbHealthBadge health={kb.health} />}
       description={
         <span>
-          {kb.description} <span className="text-xs">· {kb.collections.length ? `Collections: ${kb.collections.join(', ')}` : 'All collections'} · refreshed {relativeTime(kb.lastRefreshedAt)}</span>
+          {kb.description} <span className="text-xs">· {kb.collections.length ? `Collections: ${kb.collections.join(', ')}` : 'All collections'} · synced {kb.lastSyncAt ? relativeTime(kb.lastSyncAt) : 'never'}</span>
         </span>
       }
       backHref="/knowledge"
@@ -96,7 +96,7 @@ export default function KnowledgeBasePage() {
                 <RefreshCw className="size-4" /> Refresh index
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive" disabled={!canDelete} onClick={() => setDeleteOpen(true)}>
+              <DropdownMenuItem className="text-destructive-text" disabled={!canDelete} onClick={() => setDeleteOpen(true)}>
                 <Trash2 className="size-4" /> Delete
               </DropdownMenuItem>
             </DropdownMenuContent>

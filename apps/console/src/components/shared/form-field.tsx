@@ -30,14 +30,14 @@ export function FormField({
         {label}
         {optional && <span className="font-normal text-muted-foreground">(optional)</span>}
         {required && (
-          <span className="text-destructive" aria-hidden>
+          <span className="text-destructive-text" aria-hidden>
             *
           </span>
         )}
         {required && <span className="sr-only">(required)</span>}
       </Label>
       {children}
-      {error ? <p className="text-xs text-destructive">{error}</p> : hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+      {error ? <p className="text-xs text-destructive-text">{error}</p> : hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
@@ -57,7 +57,7 @@ export function FormFieldGroup({ label, optional, hint, error, children, classNa
       </legend>
       {children}
       {note ? (
-        <p id={noteId} className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>
+        <p id={noteId} className={cn('text-xs', error ? 'text-destructive-text' : 'text-muted-foreground')}>
           {note}
         </p>
       ) : null}

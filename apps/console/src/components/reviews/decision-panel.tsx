@@ -109,7 +109,8 @@ export function DecisionPanel({
             <footer className="sticky bottom-0 flex flex-col gap-2 rounded-b-lg border-t bg-card p-4 [&_[data-layout=footer]]:border-t-0 [&_[data-layout=footer]]:p-0" data-testid="decision-footer">
               {decide}
               <div className="flex flex-wrap gap-2">
-                {open && (
+                {/* Reassigning is the deciders' (the API refuses anyone else), so only they see it. */}
+                {canDecide && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button type="button" variant="outline" size="sm" className="flex-1" data-testid="reassign">

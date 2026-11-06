@@ -190,6 +190,7 @@ class KnowledgeBase(TypedDict, closed=True):
     indexing: NotRequired[dict[str, Any] | None]
     jobs: list[dict[str, Any]]
     lastRefreshedAt: NotRequired[str | None]
+    lastSyncAt: NotRequired[str | None]
     metadataProfile: dict[str, Any]
     name: str
     owner: str
@@ -242,6 +243,7 @@ class KnowledgeBaseRow(TypedDict, closed=True):
     indexing: NotRequired[dict[str, Any] | None]
     jobs: list[dict[str, Any]]
     lastRefreshedAt: NotRequired[str | None]
+    lastSyncAt: NotRequired[str | None]
     metadataProfile: dict[str, Any]
     name: str
     owner: str
@@ -602,6 +604,7 @@ class KnowledgeBaseDetail(TypedDict, closed=True):
     indexing: NotRequired[dict[str, Any] | None]
     jobs: list[dict[str, Any]]
     lastRefreshedAt: NotRequired[str | None]
+    lastSyncAt: NotRequired[str | None]
     metadataKeys: list[str]
     metadataProfile: dict[str, Any]
     name: str

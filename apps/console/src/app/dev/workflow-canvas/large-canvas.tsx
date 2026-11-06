@@ -173,7 +173,7 @@ function StepSheet({
       }
       footerActions={
         node && (
-          <Button type="button" variant="ghost" size="sm" className="text-destructive">
+          <Button type="button" variant="ghost" size="sm" className="text-destructive-text">
             <Trash2 /> Delete step
           </Button>
         )
@@ -265,7 +265,7 @@ function ChecksButton({ validation, checking, def }: { validation: DefinitionVal
   return (
     <Popover defaultOpen={false}>
       <PopoverTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className={cn('bg-card shadow-sm', errors > 0 && 'border-destructive text-destructive')} data-testid="canvas-checks">
+        <Button type="button" variant="outline" size="sm" className={cn('bg-card shadow-sm', errors > 0 && 'border-destructive text-destructive-text')} data-testid="canvas-checks">
           {errors > 0 ? <AlertTriangle /> : <CheckCircle2 className="text-success-text" />}
           {checking ? 'Checking…' : errors > 0 ? (errors === 1 ? '1 error' : `${errors} errors`) : 'No problems'}
         </Button>

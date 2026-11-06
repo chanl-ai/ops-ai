@@ -83,7 +83,7 @@ export function KbDocumentsTab({ kb }: { kb: KnowledgeBaseDetail }) {
               {row.original.error && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="line-clamp-2 text-xs text-destructive">{row.original.error}</span>
+                    <span className="line-clamp-2 text-xs text-destructive-text">{row.original.error}</span>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs">{row.original.error}</TooltipContent>
                 </Tooltip>

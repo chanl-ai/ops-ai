@@ -83,7 +83,7 @@ export default function AccountSecurityPage() {
           {p?.authMethod === 'password' ? (
             <SettingsSection title="Password" description="You confirm your current password (and authenticator code) first. The new one works from your next sign-in.">
               <div className="flex max-w-sm flex-col gap-3" data-testid="change-password">
-                {pwError && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{pwError}</p>}
+                {pwError && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive-text">{pwError}</p>}
                 <FormField id="pw-current" label="Current password">
                   <Input id="pw-current" type="password" autoComplete="current-password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} className="bg-background" />
                 </FormField>

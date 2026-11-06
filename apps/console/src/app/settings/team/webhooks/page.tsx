@@ -31,7 +31,7 @@ type Row = Webhook & { onRowClick: (w: Webhook) => void };
 const STATUS_TONE: Record<Webhook['status'], string> = {
   active: 'text-success-text',
   paused: 'text-muted-foreground',
-  failing: 'text-destructive',
+  failing: 'text-destructive-text',
 };
 
 function columns(showTeam: boolean): ColumnDef<Row>[] {
@@ -64,7 +64,7 @@ function columns(showTeam: boolean): ColumnDef<Row>[] {
         const { successRate7d: rate, deliveries7d: n } = row.original;
         if (rate == null) return <span className="text-sm whitespace-nowrap text-muted-foreground">No deliveries</span>;
         return (
-          <span className={cn('whitespace-nowrap tabular-nums', rate < 0.95 && 'font-medium text-destructive')}>
+          <span className={cn('whitespace-nowrap tabular-nums', rate < 0.95 && 'font-medium text-destructive-text')}>
             {pct(rate)} <span className="text-xs text-muted-foreground">of {count(n)}</span>
           </span>
         );
@@ -188,7 +188,7 @@ export default function WebhooksPage() {
                 {active.status === 'paused' ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
                 {active.status === 'paused' ? 'Resume' : 'Pause'}
               </LoadingButton>
-              <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setDeleting(active)}>
+              <Button size="sm" variant="ghost" className="text-destructive-text" onClick={() => setDeleting(active)}>
                 <Trash2 className="size-3.5" /> Delete
               </Button>
               <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">

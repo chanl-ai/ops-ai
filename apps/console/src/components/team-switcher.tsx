@@ -83,7 +83,7 @@ export function TeamSwitcher({
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton size="lg" onClick={onRetry} aria-label="Teams unavailable. Try again">
-            <div className="flex aspect-square size-8 items-center justify-center rounded-md bg-destructive/10 text-destructive">
+            <div className="flex aspect-square size-8 items-center justify-center rounded-md bg-destructive/10 text-destructive-text">
               <AlertCircle className="size-4" />
             </div>
             <div className="grid flex-1 text-left leading-tight">
@@ -215,7 +215,7 @@ function AddTeamDialog({
           void submit();
         }}
       >
-        {submitError && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{submitError}</p>}
+        {submitError && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive-text">{submitError}</p>}
         <FormField id="team-name" label="Name" error={errors.name}>
           <Input id="team-name" value={values.name} onChange={(e) => (setValues((v) => ({ ...v, name: e.target.value })), setErrors((x) => ({ ...x, name: undefined })))} placeholder="e.g. Collections" aria-invalid={!!errors.name} />
         </FormField>

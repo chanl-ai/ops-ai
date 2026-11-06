@@ -512,7 +512,7 @@ function EditorBody({ definition: initial, types, validate, publish, publishing,
         <Panel position="bottom-left">
           <Popover open={checksOpen} onOpenChange={setChecksOpen}>
             <PopoverTrigger asChild>
-              <Button type="button" variant="outline" size="sm" className={cn('bg-card shadow-sm', errorCount > 0 && 'border-destructive text-destructive')} data-testid="definition-checks-count">
+              <Button type="button" variant="outline" size="sm" className={cn('bg-card shadow-sm', errorCount > 0 && 'border-destructive text-destructive-text')} data-testid="definition-checks-count">
                 {errorCount > 0 ? <AlertTriangle /> : warningCount > 0 ? <AlertTriangle className="text-warning-text" /> : <CheckCircle2 className="text-success-text" />}
                 {checking && !validation ? 'Checking…' : errorCount > 0 ? (errorCount === 1 ? '1 error' : `${errorCount} errors`) : warningCount > 0 ? (warningCount === 1 ? '1 warning' : `${warningCount} warnings`) : 'No problems'}
               </Button>

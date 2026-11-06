@@ -47,7 +47,7 @@ export function WebhookDialog({
       description="Ops AI posts a signed JSON body to this URL for each event you pick, and retries failures three times."
       footer={
         <div className="flex w-full items-center justify-between gap-2">
-          <p className="text-xs text-destructive">{error && !error.field ? error.message : ''}</p>
+          <p className="text-xs text-destructive-text">{error && !error.field ? error.message : ''}</p>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
               Cancel
@@ -91,7 +91,7 @@ export function WebhookDialog({
               </div>
             ))}
           </div>
-          {err('events') && <p className="text-xs text-destructive">{err('events')}</p>}
+          {err('events') && <p className="text-xs text-destructive-text">{err('events')}</p>}
         </fieldset>
       </div>
     </DialogShell>

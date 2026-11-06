@@ -17,14 +17,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAccountProfile, useUpdateProfile } from '@/hooks/account-queries';
 import { useMe, useTeamRole } from '@/hooks/me-queries';
 import { useTeam } from '@/hooks/use-team';
+import { initials } from '@/lib/format';
 
-const initialsOf = (name: string) =>
-  name
-    .split(/[\s@.]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]!.toUpperCase())
-    .join('');
 
 /** The signed-in person's profile: display name (editable), email (from the identity provider or invite), team and role. */
 export default function AccountPage() {
@@ -38,7 +32,7 @@ export default function AccountPage() {
   const update = useUpdateProfile();
   const query = onPlatform ? me : sample;
   const p = onPlatform
-    ? me.data && { name: me.data.user.name, email: me.data.user.email, initials: initialsOf(me.data.user.name || me.data.user.email), team: team?.name ?? me.data.teams[0]?.name ?? '', role: role ?? '', authMethod: undefined, ssoProvider: undefined }
+    ? me.data && { name: me.data.user.name, email: me.data.user.email, initials: initials(me.data.user.name || me.data.user.email), team: team?.name ?? me.data.teams[0]?.name ?? '', role: role ?? '', authMethod: undefined, ssoProvider: undefined }
     : sample.data;
   const Wrap = onPlatform ? React.Fragment : SampleData;
   const [name, setName] = React.useState('');

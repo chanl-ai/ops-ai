@@ -20,7 +20,7 @@ const STATE: Record<BackgroundState, string> = { running: 'Running', late: 'Late
 const TONE: Record<BackgroundState, string> = {
   running: 'border-success/40 bg-success/10 text-success-text',
   late: 'border-warning/40 bg-warning/10 text-warning-text',
-  stopped: 'border-destructive/40 bg-destructive/10 text-destructive',
+  stopped: 'border-destructive/40 bg-destructive/10 text-destructive-text',
   not_reported: 'text-muted-foreground',
 };
 const OUTCOME: Record<BackgroundJob['outcome'], string> = { done: 'Done', retried: 'Retried', failed: 'Failed' };
@@ -77,7 +77,7 @@ const PROCESS_COLUMNS: ColumnDef<BackgroundProcess>[] = [
     header: 'Last error',
     cell: ({ row }) =>
       row.original.lastError ? (
-        <span className="text-sm text-destructive" title={row.original.lastErrorAt ? dateTime(fromSeconds(row.original.lastErrorAt)) : undefined}>
+        <span className="text-sm text-destructive-text" title={row.original.lastErrorAt ? dateTime(fromSeconds(row.original.lastErrorAt)) : undefined}>
           {row.original.lastError}
         </span>
       ) : (

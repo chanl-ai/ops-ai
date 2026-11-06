@@ -41,7 +41,7 @@ export function fileIcon(name: string): LucideIcon {
 const SCAN_TONE: Record<ScanStatus, { icon: LucideIcon; cls: string }> = {
   pending: { icon: Loader2, cls: 'text-muted-foreground' },
   clean: { icon: CheckCircle2, cls: 'text-success-text' },
-  infected: { icon: ShieldX, cls: 'text-destructive' },
+  infected: { icon: ShieldX, cls: 'text-destructive-text' },
   failed: { icon: ShieldAlert, cls: 'text-warning-text' },
 };
 
@@ -58,7 +58,7 @@ const SENS_TONE: Record<FileSensitivity, string> = {
   public: '',
   internal: '',
   confidential: 'border-warning/40 bg-warning/10 text-warning-text',
-  restricted: 'border-destructive/40 bg-destructive/10 text-destructive',
+  restricted: 'border-destructive/40 bg-destructive/10 text-destructive-text',
 };
 
 export function SensitivityBadge({ value, suggested }: { value: FileSensitivity; suggested?: boolean }) {

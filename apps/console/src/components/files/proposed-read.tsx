@@ -87,7 +87,7 @@ export function ProposedRead({ read, proposal, fileName }: { read: Extraction; p
                     className="h-8 font-mono text-xs"
                     data-testid="proposed-field"
                   />
-                  {err && <p className="text-xs text-destructive">{err}</p>}
+                  {err && <p className="text-xs text-destructive-text">{err}</p>}
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <div className="flex flex-wrap items-center gap-2 text-sm">

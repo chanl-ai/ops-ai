@@ -21,7 +21,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useCan } from '@/hooks/me-queries';
 import { type AppState, type SystemCard, useSystems } from '@/hooks/systems-queries';
 import { facetFilterFn } from '@/hooks/use-list-params';
-import { plural } from '@/lib/format';
+import { initials, plural } from '@/lib/format';
 
 import type { ConnectMode } from './connect-system-dialog';
 
@@ -36,7 +36,7 @@ const STATE: Record<AppState, { label: string; className: string; icon?: typeof 
   test_failed: { label: 'Signed in, test failed', className: 'border-warning/40 bg-warning/10 text-warning-text', icon: TriangleAlert },
   needs_sign_in: { label: 'Needs sign-in', className: 'border-warning/40 bg-warning/10 text-warning-text', icon: CircleAlert },
   not_installed: { label: 'Available', className: 'text-muted-foreground' },
-  removed: { label: 'No longer installed', className: 'border-destructive/40 bg-destructive/10 text-destructive', icon: CircleAlert },
+  removed: { label: 'No longer installed', className: 'border-destructive/40 bg-destructive/10 text-destructive-text', icon: CircleAlert },
 };
 
 /** The app's state as a badge, worded the same on its card and its page. */
@@ -52,13 +52,6 @@ export function AppStateBadge({ card, testId }: { card: SystemCard; testId?: str
   );
 }
 
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
 
 /** The app's page, where its accounts, tools, skills, sign-ins, runs and settings are; a built-in app's is the console
  * page that manages it (its knowledge bases, its mailboxes). */
@@ -108,7 +101,7 @@ function AppCard({ system, onConnect }: { system: SystemCard; onConnect: (s: Sys
           </div>
         )}
         {state === 'removed' && (
-          <p className="line-clamp-2 text-xs text-destructive" data-testid={`system-${system.id}-removed`}>
+          <p className="line-clamp-2 text-xs text-destructive-text" data-testid={`system-${system.id}-removed`}>
             {system.appStateReason}
           </p>
         )}

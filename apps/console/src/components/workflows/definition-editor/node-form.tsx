@@ -377,7 +377,7 @@ function JsonInput({ id, value, onChange }: { id: string; value: unknown; onChan
         }}
         data-field={id}
       />
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && <p className="text-xs text-destructive-text">{error}</p>}
     </div>
   );
 }

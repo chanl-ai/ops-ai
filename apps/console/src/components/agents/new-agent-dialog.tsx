@@ -69,7 +69,7 @@ export function NewAgentDialog({
       description={`Starts as a draft owned by ${team || 'your team'}. Write the instructions and grant tools on the next page.`}
       footer={
         <div className="flex w-full items-center justify-end gap-2">
-          {errors.submit && <p className="mr-auto text-xs text-destructive">{errors.submit}</p>}
+          {errors.submit && <p className="mr-auto text-xs text-destructive-text">{errors.submit}</p>}
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
             Cancel
           </Button>

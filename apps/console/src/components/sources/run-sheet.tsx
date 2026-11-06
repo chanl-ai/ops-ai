@@ -101,7 +101,7 @@ export function RunSheet({
               ).map(([k, v]) => (
                 <div key={k} className="bg-card px-3 py-2">
                   <dt className="text-xs text-muted-foreground">{k}</dt>
-                  <dd className={k === 'Failed' && v > 0 ? 'text-lg font-semibold tabular-nums text-destructive' : 'text-lg font-semibold tabular-nums'}>{count(v)}</dd>
+                  <dd className={k === 'Failed' && v > 0 ? 'text-lg font-semibold tabular-nums text-destructive-text' : 'text-lg font-semibold tabular-nums'}>{count(v)}</dd>
                 </div>
               ))}
             </dl>

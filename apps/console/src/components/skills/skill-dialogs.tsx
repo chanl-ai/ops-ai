@@ -79,7 +79,7 @@ export function NewSkillDialog({ open, onOpenChange, teams, defaultTeam, maxUseW
       description="Starts as a draft. Write the instructions, tools and tests on the next page."
       footer={
         <div className="flex w-full items-center justify-end gap-2">
-          {errors.submit && <p className="mr-auto text-xs text-destructive">{errors.submit}</p>}
+          {errors.submit && <p className="mr-auto text-xs text-destructive-text">{errors.submit}</p>}
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
             Cancel
           </Button>
@@ -165,7 +165,7 @@ export function ImportSkillDialog({
       description="A SKILL.md file, or a zip of a skill folder with SKILL.md and its resources. It is created as a draft."
       footer={
         <div className="flex w-full items-center justify-end gap-2">
-          <span className="mr-auto text-xs text-destructive">{error}</span>
+          <span className="mr-auto text-xs text-destructive-text">{error}</span>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
             Cancel
           </Button>
@@ -190,7 +190,7 @@ export function ImportSkillDialog({
       <div className="flex flex-col gap-4">
         <FileUpload id="skill-import" purpose="skill_resource" types={['md', 'zip']} title="Drop SKILL.md or a skill folder zip" hint="Frontmatter needs name (lowercase, hyphens) and description." onChange={setUpload} testId="skill-import-upload" />
         {waiting && <p className="text-xs text-muted-foreground">{waiting}</p>}
-        {fileId && (previewLoading ? <Skeleton className="h-28 w-full" /> : previewError ? <p className="text-sm text-destructive">{previewError}</p> : preview && <ImportPreview preview={preview} />)}
+        {fileId && (previewLoading ? <Skeleton className="h-28 w-full" /> : previewError ? <p className="text-sm text-destructive-text">{previewError}</p> : preview && <ImportPreview preview={preview} />)}
         <TeamSelect id="is-team" teams={teams} value={team} onChange={setTeam} />
       </div>
     </DialogShell>
@@ -217,7 +217,7 @@ function ImportPreview({ preview: p }: { preview: SkillImportPreview }) {
         )}
       </div>
       {p.errors.map((e) => (
-        <p key={e} className="flex items-start gap-1.5 text-xs text-destructive">
+        <p key={e} className="flex items-start gap-1.5 text-xs text-destructive-text">
           <XCircle className="mt-0.5 size-3.5 shrink-0" /> {e}
         </p>
       ))}
@@ -257,7 +257,7 @@ export function RequestReviewDialog({ open, onOpenChange, skill, isPending, onSu
       description={`A publisher in ${skill.ownerTeam} other than you decides it in Reviews. Agents keep their pinned version until someone moves them.`}
       footer={
         <div className="flex w-full items-center justify-end gap-2">
-          <span className="mr-auto text-xs text-destructive">{error}</span>
+          <span className="mr-auto text-xs text-destructive-text">{error}</span>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
             Cancel
           </Button>
@@ -296,7 +296,7 @@ export function RequestReviewDialog({ open, onOpenChange, skill, isPending, onSu
           )}
         </p>
         {!check.canRequest && (
-          <ul className="flex flex-col gap-1 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-destructive" data-testid="request-review-blockers">
+          <ul className="flex flex-col gap-1 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-destructive-text" data-testid="request-review-blockers">
             {check.blockers.map((b) => (
               <li key={b}>{b}</li>
             ))}
@@ -367,7 +367,7 @@ export function VersionDiffDialog({ open, onOpenChange, versions, from, to, onCh
       <div key={label} className="grid grid-cols-[120px_1fr] gap-2 text-sm">
         <span className="text-muted-foreground">{label}</span>
         <span>
-          <span className="bg-destructive/10 text-destructive line-through">{x || 'None'}</span> → <span className="bg-success/10 text-success-text">{y || 'None'}</span>
+          <span className="bg-destructive/10 text-destructive-text line-through">{x || 'None'}</span> → <span className="bg-success/10 text-success-text">{y || 'None'}</span>
         </span>
       </div>
     );
@@ -432,7 +432,7 @@ export function TemplateResourceDialog({ open, onOpenChange, isPending, onSubmit
       description="Saved on the draft version. Use {{field}} for values the steps fill in."
       footer={
         <div className="flex w-full items-center justify-end gap-2">
-          <span className="mr-auto text-xs text-destructive">{error}</span>
+          <span className="mr-auto text-xs text-destructive-text">{error}</span>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
             Cancel
           </Button>

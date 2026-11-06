@@ -52,8 +52,8 @@ export function ApprovalCell({ approval }: { approval: CallApproval }) {
 
 const STATUS: Record<CallStatus, { icon: typeof CheckCircle2; cls: string }> = {
   ok: { icon: CheckCircle2, cls: 'text-success-text' },
-  error: { icon: XCircle, cls: 'text-destructive' },
-  denied: { icon: Ban, cls: 'text-destructive' },
+  error: { icon: XCircle, cls: 'text-destructive-text' },
+  denied: { icon: Ban, cls: 'text-destructive-text' },
   awaiting_approval: { icon: Clock, cls: 'text-warning-text' },
   replayed: { icon: Repeat, cls: 'text-muted-foreground' },
   running: { icon: Loader2, cls: 'text-muted-foreground' },
@@ -120,7 +120,7 @@ export const TARGET_LABEL: Record<AuditTargetType, string> = {
 export function ActionBadge({ action }: { action: AuditAction }) {
   const tone =
     action === 'deleted' || action === 'revoked' || action === 'rejected'
-      ? 'border-destructive/40 bg-destructive/10 text-destructive '
+      ? 'border-destructive/40 bg-destructive/10 text-destructive-text '
       : action === 'published' || action === 'approved' || action === 'granted'
         ? 'border-success/40 bg-success/10 text-success-text '
         : '';

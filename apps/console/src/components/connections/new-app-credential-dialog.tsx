@@ -26,15 +26,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { type SystemCard, useConnectionKinds, useCreateAppCredential, useSystems } from '@/hooks/systems-queries';
 import type { KindField, Kinds } from '@/lib/connect-plan';
 import { configSchema, fieldErrors, schemaForFields } from '@/lib/field-schema';
+import { initials } from '@/lib/format';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
 
 /** The apps a team may bring its own OAuth client for: the plugins that sign in with an account or fetch a token. */
 function signsIn(card: SystemCard, kinds: Kinds | undefined) {
@@ -220,7 +214,7 @@ function OwnClientForm({
             <div key={x.name} className="flex flex-col gap-1">
               <SignInPlace setting={x} value={values[`setting__${x.name}`] ?? ''} onChange={(v) => form.setValue(`setting__${x.name}`, v)} testId={`new-credential-setting-${x.name}`} />
               {form.formState.errors[`setting__${x.name}`] && (
-                <p className="text-sm text-destructive" data-testid={`new-credential-setting-${x.name}-error`}>
+                <p className="text-sm text-destructive-text" data-testid={`new-credential-setting-${x.name}-error`}>
                   {form.formState.errors[`setting__${x.name}`]?.message}
                 </p>
               )}
@@ -230,7 +224,7 @@ function OwnClientForm({
           ),
         )}
         {error && (
-          <p className="text-sm text-destructive" role="alert" data-testid="new-credential-error">
+          <p className="text-sm text-destructive-text" role="alert" data-testid="new-credential-error">
             {error}
           </p>
         )}

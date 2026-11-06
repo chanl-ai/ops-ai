@@ -318,7 +318,7 @@ function AddPreviewDialog({
             <li key={o.item.resource} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
               <span className="min-w-0">
                 {o.item.title}
-                {o.error && <span className="block text-destructive">{o.error.message}</span>}
+                {o.error && <span className="block text-destructive-text">{o.error.message}</span>}
               </span>
               {o.recordId && o.kind !== 'knowledge_source' && (
                 <Button size="sm" variant="ghost" asChild>
@@ -346,7 +346,7 @@ function AddPreviewDialog({
                 )}
                 {i.heldRecordId && <span className="text-muted-foreground">Your team’s copy is used as it is.</span>}
                 {!i.heldRecordId && i.tools.length > 0 && <span className="text-muted-foreground">{`Uses ${i.tools.join(', ')}`}</span>}
-                {i.refusal && i.refusal.code !== 'name_taken' && <span className="text-destructive">{i.refusal.message}</span>}
+                {i.refusal && i.refusal.code !== 'name_taken' && <span className="text-destructive-text">{i.refusal.message}</span>}
                 {i.refusal?.code === 'name_taken' && (
                   <FormField id={`name-${i.resource}`} label="Name" hint={i.refusal.message}>
                     <Input
@@ -452,7 +452,7 @@ function UpdateDialog({ resource, app, onOpenChange }: { resource: AppResource |
             <p>{r.changes.length ? `The update changes: ${r.changes.join(', ')}.` : 'The update changes nothing your copy shows.'}</p>
             {edited && (
               <>
-                <p className="text-destructive">{`Your team changed ${r.edits.join(', ')} since adding it. The new version does not carry those changes.`}</p>
+                <p className="text-destructive-text">{`Your team changed ${r.edits.join(', ')} since adding it. The new version does not carry those changes.`}</p>
                 <label className="flex items-center gap-2">
                   <Checkbox checked={confirmed} onCheckedChange={(on) => setConfirmed(on === true)} data-testid="resource-update-confirm" />
                   Take the update without my team’s changes
@@ -497,7 +497,7 @@ function RemoveDialog({ resource, app, onOpenChange }: { resource: AppResource |
     >
       {users.length > 0 && (
         <div className="flex flex-col gap-2 text-sm" data-testid="resource-remove-used-by">
-          <p className="text-destructive">{remove.error?.message}</p>
+          <p className="text-destructive-text">{remove.error?.message}</p>
           <ul className="flex flex-col gap-1">
             {users.map((u) => (
               <li key={u.id} className="flex items-center justify-between gap-2">

@@ -151,7 +151,7 @@ export function FileSheet({
               </Button>
             )}
             <DisabledReason reason={f.deleteBlockedBy ? `Can’t delete: ${f.deleteBlockedBy.charAt(0).toLowerCase()}${f.deleteBlockedBy.slice(1)}` : f.canDelete === false ? 'Your role does not delete files' : undefined}>
-              <Button size="sm" variant="ghost" className="text-destructive" disabled={!!f.deleteBlockedBy || f.canDelete === false} onClick={() => onDelete(f)} data-testid="file-delete">
+              <Button size="sm" variant="ghost" className="text-destructive-text" disabled={!!f.deleteBlockedBy || f.canDelete === false} onClick={() => onDelete(f)} data-testid="file-delete">
                 <Trash2 className="size-3.5" /> Delete
               </Button>
             </DisabledReason>
@@ -213,7 +213,7 @@ export function FileSheet({
                     href={r.href}
                     leading={<Badge variant="outline" className="font-normal">{REF_LABEL[r.type]}</Badge>}
                     title={r.name}
-                    description={r.blocked ? <span className="text-destructive">Blocked · {r.blocked}</span> : `Since ${relativeTime(r.addedAt)}`}
+                    description={r.blocked ? <span className="text-destructive-text">Blocked · {r.blocked}</span> : `Since ${relativeTime(r.addedAt)}`}
                   />
                 ))}
               </Rows>

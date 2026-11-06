@@ -84,7 +84,7 @@ export function TagInput({
         />
       </div>
       {refused && (
-        <p className="text-xs text-destructive" role="alert" data-testid={id ? `${id}-refused` : 'tag-input-refused'}>
+        <p className="text-xs text-destructive-text" role="alert" data-testid={id ? `${id}-refused` : 'tag-input-refused'}>
           {refused}
         </p>
       )}
