@@ -100,6 +100,24 @@ class SecretResolver:
         await self.credentials.delete(old, context=context)
         return version
 
+    async def rename(
+        self, tenant_id: str, team_id: str, name: str, to: str, *, actor: str, at: datetime
+    ) -> bool | None:
+        """Renames the team's secret, its value kept: a value is sealed under its name (`context_of`), so it is opened
+        under the old name and sealed again under the new before the row moves. None when the team has no such secret
+        (or it was replaced meanwhile), False when the new name is taken; either way nothing changes."""
+        was = await self.store.ref(tenant_id, team_id, name)
+        if was is None:
+            return None
+        value = await self.credentials.get(was, context=context_of(tenant_id, name))
+        ref = await self.credentials.put(value, context=context_of(tenant_id, to))
+        moved = await self.store.rename(tenant_id, team_id, name, to, ref, was=was, actor=actor, at=at)
+        if not moved:
+            await self.credentials.delete(ref, context=context_of(tenant_id, to))
+            return moved
+        await self.credentials.delete(was, context=context_of(tenant_id, name))
+        return True
+
     async def delete(self, tenant_id: str, team_id: str, name: str, *, actor: str, at: datetime) -> bool:
         old = await self.store.delete(tenant_id, team_id, name, actor=actor, at=at)
         if old is None:

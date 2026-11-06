@@ -724,6 +724,10 @@ class RemoveIn(TypedDict, closed=True):
     value: str
 
 
+class RenameIn(TypedDict, closed=True):
+    name: str
+
+
 class ResourceCopy(TypedDict):
     id: str
     kind: str

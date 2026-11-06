@@ -9,6 +9,7 @@ import { CredentialDeleteDialog } from '@/components/connections/credential-dele
 import { CredentialEditDialog } from '@/components/connections/credential-edit-dialog';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { DialogShell } from '@/components/shared/dialog-shell';
+import { RenameDialog } from '@/components/shared/rename-dialog';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { ListEmpty } from '@/components/shared/query-states';
@@ -17,7 +18,6 @@ import { CopyButton } from '@/components/shared/copy-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   type AppPage,
@@ -290,6 +290,8 @@ function AccountRow({
       {dialog === 'rename' && (
         <RenameDialog
           name={a.name}
+          description="Steps and tools pick an account by this name."
+          testId="account-rename"
           busy={change.isPending}
           onClose={() => setDialog(null)}
           onSave={(name) =>
@@ -337,35 +339,6 @@ function AccountRow({
         testIdPrefix={`account-delete-${a.name}`}
       />
     </>
-  );
-}
-
-function RenameDialog({ name, busy, onClose, onSave }: { name: string; busy: boolean; onClose: () => void; onSave: (name: string) => void }) {
-  const [value, setValue] = React.useState(name);
-  const next = value.trim();
-  return (
-    <DialogShell
-      open
-      onOpenChange={(o) => !o && onClose()}
-      size="sm"
-      title={`Rename ${name}`}
-      description="Steps and tools pick an account by this name."
-      data-testid="account-rename"
-      footer={
-        <>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <LoadingButton isLoading={busy} disabled={!next || next === name} onClick={() => onSave(next)} data-testid="account-rename-save">
-            Save
-          </LoadingButton>
-        </>
-      }
-    >
-      <FormField id="account-rename-name" label="Name">
-        <Input id="account-rename-name" value={value} onChange={(e) => setValue(e.target.value)} />
-      </FormField>
-    </DialogShell>
   );
 }
 

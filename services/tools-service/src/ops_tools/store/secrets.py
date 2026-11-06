@@ -1,6 +1,6 @@
 """Tool secrets at rest: only the credential store's reference to each value (`ops_policy.credentials`), never a
-value, and an audit row for every create, rotate, delete and use, written in the same transaction as the change it
-records. Values are put and read through `secrets.SecretResolver`; this store keeps the reference opaque."""
+value, and an audit row for every create, rotate, rename, delete and use, written in the same transaction as the
+change it records. Values are put and read through `secrets.SecretResolver`; this store keeps the reference opaque."""
 
 from __future__ import annotations
 
@@ -220,6 +220,38 @@ class SecretStore:
             change = {"name": name, "action": "rotated", "version": version, "actor": actor, "at": at}
             await self._audit(c, tenant_id, team_id, change)
             return version, str(found.ciphertext)
+
+    async def ref(self, tenant_id: str, team_id: str, name: str) -> str | None:
+        """The reference of the team's secret of that name, or None; reading it is not a use, so it is not audited."""
+        q = sa.select(tool_secrets.c.ciphertext).where(
+            _of(tenant_id, team_id), tool_secrets.c.name == name, team_visible(tool_secrets)
+        )
+        async with self._tx() as c:
+            found = (await c.execute(q)).first()
+        return str(found.ciphertext) if found else None
+
+    async def rename(
+        self, tenant_id: str, team_id: str, name: str, to: str, ref: str, *, was: str, actor: str, at: datetime
+    ) -> bool | None:
+        """Gives the secret the name `to` and the reference `ref` (its value sealed under the new name), only while it
+        still holds `was`. None when it is gone or was replaced meanwhile; False when the team already has `to`."""
+        async with self._tx() as c:
+            try:
+                async with c.begin_nested():
+                    q = (
+                        tool_secrets.update()
+                        .where(_of(tenant_id, team_id), tool_secrets.c.name == name, tool_secrets.c.ciphertext == was)
+                        .values(name=to, ciphertext=ref)
+                        .returning(tool_secrets.c.version)
+                    )
+                    version = (await c.execute(q)).scalar_one_or_none()
+            except IntegrityError:
+                return False
+            if version is None:
+                return None
+            change = {"name": to, "action": "renamed", "version": int(version), "actor": actor, "at": at}
+            await self._audit(c, tenant_id, team_id, change)
+        return True
 
     async def delete(self, tenant_id: str, team_id: str, name: str, *, actor: str, at: datetime) -> str | None:
         """The deleted value's reference, or None when the team has no such secret."""

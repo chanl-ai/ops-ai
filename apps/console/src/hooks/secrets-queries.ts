@@ -19,4 +19,5 @@ function useSecretMutation<I>(fn: (i: I) => Promise<unknown>) {
 
 export const useCreateSecret = () => useSecretMutation((i: { name: string; value: string }) => api.secrets.create(i.name, i.value));
 export const useRotateSecret = () => useSecretMutation((i: { name: string; value: string }) => api.secrets.rotate(i.name, i.value));
+export const useRenameSecret = () => useSecretMutation((i: { name: string; to: string }) => api.secrets.rename(i.name, i.to));
 export const useDeleteSecret = () => useSecretMutation((name: string) => api.secrets.remove(name));

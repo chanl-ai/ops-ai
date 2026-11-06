@@ -113,3 +113,28 @@ async def test_an_operation_shows_its_secret_set_only_once_its_own_team_has_it(k
     await c.post("/v1/secrets", json={"name": "BANK_KEY", "value": VALUE})
     op = (await c.get(BASE)).json()["data"]["operations"][0]
     assert op["secrets"] == [{"name": "BANK_KEY", "set": True, "available": True}], op["secrets"]
+
+
+async def test_a_renamed_secret_keeps_its_value_under_the_new_name(k: Bank) -> None:
+    # The stored value is sealed under its name, so a rename that only changed the row would leave it unreadable.
+    c, tenant = k.api.client, k.api.tenant
+    await c.post("/v1/secrets", json={"name": "SPARE_KEY", "value": VALUE})
+    renamed = await c.post("/v1/secrets/SPARE_KEY/rename", json={"name": "BANK_KEY"})
+    assert renamed.status_code == 200 and renamed.json()["data"]["name"] == "BANK_KEY", renamed.text
+    assert renamed.json()["data"]["ends"] == VALUE[-4:], renamed.text
+    names = [s["name"] for s in (await c.get("/v1/secrets")).json()["data"]]
+    assert "SPARE_KEY" not in names and "BANK_KEY" in names, names
+    await _call(k, f"echo_{tenant}")
+    assert k.received[-1]["headers"]["x-api-key"] == VALUE
+
+
+async def test_a_secret_an_operation_reads_is_not_renamed_and_the_operations_are_named(k: Bank) -> None:
+    c, tenant = k.api.client, k.api.tenant
+    await c.post("/v1/secrets", json={"name": "BANK_KEY", "value": VALUE})
+    await c.post("/v1/secrets", json={"name": "SPARE_KEY", "value": VALUE})
+    refused = await c.post("/v1/secrets/BANK_KEY/rename", json={"name": "BANK_KEY_2"})
+    error = refused.json()["error"]
+    assert refused.status_code == 409 and error["code"] == "secret_in_use", refused.text
+    assert f"echo_{tenant}" in error["message"], error
+    taken = await c.post("/v1/secrets/SPARE_KEY/rename", json={"name": "BANK_KEY"})
+    assert taken.status_code == 409 and "already exists" in taken.json()["error"]["message"], taken.text
