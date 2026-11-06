@@ -33,7 +33,7 @@ import { DocumentReadSection, type ReadChecks, type ReadEdits } from '@/componen
 import { DocumentViewer } from '@/components/shared/document-viewer';
 import { EmailPreview } from '@/components/shared/email-preview';
 import { useFilePreviewUrl } from '@/hooks/extraction-queries';
-import { money } from '@/lib/format';
+import { initials, money } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { Cell, ChartNode, ColumnFormat, KindAction, KindNode, KindStatus, MetricNode, Rows, StepStateKind, TableNode, Tone } from '@/lib/types/widgets';
 
@@ -52,7 +52,7 @@ const TONE_BADGE: Record<Tone, string> = {
   info: 'border-primary/30 bg-primary/10 text-primary',
   success: 'border-success/30 bg-success/10 text-success-text',
   warning: 'border-warning/30 bg-warning/10 text-warning-text',
-  danger: 'border-destructive/30 bg-destructive/10 text-destructive',
+  danger: 'border-destructive/30 bg-destructive/10 text-destructive-text',
 };
 const TONE_DOT: Record<Tone, string> = { neutral: 'bg-muted-foreground', info: 'bg-primary', success: 'bg-success', warning: 'bg-warning', danger: 'bg-destructive' };
 const COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-4)', 'var(--chart-3)', 'var(--chart-5)'];
@@ -94,7 +94,7 @@ function ActionButtons({ actions, onReply, primaryLast = true }: { actions?: Kin
 function StepIcon({ state }: { state: StepStateKind | 'done' | 'active' | 'pending' }) {
   if (state === 'done') return <Check className="size-4 shrink-0 text-success-text" aria-label="Done" />;
   if (state === 'active') return <Loader2 className="size-4 shrink-0 animate-spin text-primary motion-reduce:animate-none" aria-label="In progress" />;
-  if (state === 'failed') return <CircleX className="size-4 shrink-0 text-destructive" aria-label="Failed" />;
+  if (state === 'failed') return <CircleX className="size-4 shrink-0 text-destructive-text" aria-label="Failed" />;
   return <CircleDashed className="size-4 shrink-0 text-muted-foreground" aria-label="Not started" />;
 }
 
@@ -114,7 +114,7 @@ function MetricKind({ node }: { node: MetricNode }) {
         </CardTitle>
         {delta !== 0 && (
           <CardAction>
-            <Badge variant="outline" className={good === undefined ? '' : good ? 'text-success-text' : 'text-destructive'}>
+            <Badge variant="outline" className={good === undefined ? '' : good ? 'text-success-text' : 'text-destructive-text'}>
               {delta > 0 ? <ArrowUpRight /> : <ArrowDownRight />}
               {delta > 0 ? '+' : ''}
               {delta.toLocaleString()}
@@ -353,20 +353,12 @@ function ReasoningKind({ node }: { node: Extract<KindNode, { type: 'reasoning' }
 
 // ── things and people ──
 
-const initialsOf = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]!.toUpperCase())
-    .join('');
-
 function EntityKind({ node, onReply }: { node: Extract<KindNode, { type: 'entity' }>; onReply?: (t: string) => void }) {
   return (
     <Card className={ENTER} data-kind="entity">
       <CardHeader className="flex flex-row items-center gap-3">
         <Avatar className="size-10">
-          <AvatarFallback>{initialsOf(node.title)}</AvatarFallback>
+          <AvatarFallback>{initials(node.title)}</AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">
           {node.category && <p className="text-xs text-muted-foreground">{node.category}</p>}
@@ -428,7 +420,7 @@ function ContactKind({ node, onReply }: { node: Extract<KindNode, { type: 'conta
     <Card className={ENTER} data-kind="contact">
       <CardHeader className="flex flex-row items-center gap-3">
         <Avatar className="size-10">
-          <AvatarFallback>{initialsOf(node.name)}</AvatarFallback>
+          <AvatarFallback>{initials(node.name)}</AvatarFallback>
         </Avatar>
         <div className="min-w-0">
           <CardTitle className="truncate">{node.name}</CardTitle>
@@ -797,7 +789,7 @@ function ConfirmKind({ node, actions }: { node: Extract<KindNode, { type: 'confi
       {!node.actionsOff && (
       <CardFooter className="justify-end gap-2">
         {error && (
-          <p className="mr-auto text-xs text-destructive" role="alert">
+          <p className="mr-auto text-xs text-destructive-text" role="alert">
             {error}
           </p>
         )}
@@ -930,7 +922,7 @@ const IGNORE_EDIT = () => {};
 function ViewerKind({ node }: { node: Extract<KindNode, { type: 'viewer' }> }) {
   const preview = useFilePreviewUrl(node.fileId, true);
   const [selected, setSelected] = React.useState<string | null>(null);
-  if (preview.error) return <p className="rounded-lg border p-4 text-sm text-destructive">{preview.error}</p>;
+  if (preview.error) return <p className="rounded-lg border p-4 text-sm text-destructive-text">{preview.error}</p>;
   if (!preview.url) return <KindLoading label={`Loading ${node.name ?? 'the document'}`} />;
   return <DocumentViewer url={preview.url} mime={node.mime ?? 'application/pdf'} boxes={node.boxes} selected={selected} onSelect={setSelected} className="h-full min-h-[60vh]" />;
 }
@@ -962,7 +954,7 @@ export function KindError({ text, onRetry }: { text: string; onRetry?: () => voi
   return (
     <Card className="border-destructive/40" role="alert" data-state="error">
       <CardContent className="flex flex-col items-start gap-2 pt-6 text-sm">
-        <span className="font-medium text-destructive">{text}</span>
+        <span className="font-medium text-destructive-text">{text}</span>
         <span className="text-muted-foreground">The service did not answer in time.</span>
         {onRetry && (
           <Button size="sm" variant="outline" onClick={onRetry}>
