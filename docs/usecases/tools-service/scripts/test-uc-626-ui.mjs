@@ -111,6 +111,8 @@ try {
         }, viewer);
         await step('3 a viewer opening Auth configs reads who may see them, by name, not an error', async () => {
           await viewer.goto(`${consoleUrl}/integrations/credentials`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          // The names arrive after the sentence (the team's admins are read on their own), so wait for them.
+          await viewer.getByTestId('auth-configs-why').filter({ hasText: 'Priya Shah' }).waitFor({ timeout: 30_000 }).catch(() => {});
           const why = ((await viewer.getByTestId('auth-configs-why').innerText({ timeout: 30_000 }).catch(() => '')) ?? '').replace(/\s+/g, ' ');
           const failed = await viewer.getByRole('button', { name: /Try again|Retrying/ }).count();
           await viewer.screenshot({ path: join(SHOTS, 'viewer-auth-configs.png') });
