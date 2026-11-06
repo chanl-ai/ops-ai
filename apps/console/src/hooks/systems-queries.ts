@@ -86,6 +86,18 @@ export const useChangeAccount = () =>
     sdk((ops) => ops.raw.tools.apps_change_account({ path: path(a), body: a.body })),
   );
 export const useDeleteAccount = () => useSystemsMutation((a: AccountRef) => sdk((ops) => ops.raw.tools.apps_delete_account({ path: path(a) })));
+/** Switches one of an app's tools on or off for the team (PUT /v1/apps/{id}/tools/{tool}). */
+export const useSwitchTool = () =>
+  useSystemsMutation((a: { appId: string; tool: string; on: boolean }) =>
+    sdk((ops) => ops.raw.tools.apps_switch_tool({ path: { app_id: a.appId, tool: a.tool }, body: { on: a.on } })),
+  );
+/** Deletes the app from the team with its accounts and their secrets; refused (409 app_in_use) while a tool uses it. */
+export const useDeleteApp = () => useSystemsMutation((appId: string) => sdk((ops) => ops.raw.tools.apps_delete_app({ path: { app_id: appId } })));
+/** Moves every account of a custom app to another sign-in kind; the answer names the accounts to set up again. */
+export const useChangeAppKind = () =>
+  useSystemsMutation((a: { appId: string; kind: string }) =>
+    sdk((ops) => ops.raw.tools.apps_change_app_kind({ path: { app_id: a.appId }, body: { kind: a.kind } })),
+  );
 /** Tests an account with the team's sign-in or the person's own; the answer is the account with its health. */
 export const useTestAccount = () =>
   useSystemsMutation((a: AccountRef & { account?: 'team' | 'self' }) =>

@@ -6,7 +6,6 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { Activity, ExternalLink, KeyRound, Pencil, Trash2, UserRoundPlus } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { CREDENTIAL_STATUS } from '@/components/connections/app-credentials-panel';
 import { secretShown } from '@/components/connections/credential-display';
 import { CredentialDeleteDialog } from '@/components/connections/credential-delete-dialog';
 import { CredentialEditDialog } from '@/components/connections/credential-edit-dialog';
@@ -218,7 +217,7 @@ export default function AppCredentialPage() {
               {(c.fields ?? []).map((f) => (
                 <FieldRow key={f.name} label={f.label} value={(c.settings ?? {})[f.name] ? String((c.settings ?? {})[f.name]) : 'Not set'} mono={Boolean((c.settings ?? {})[f.name])} wrap testId={`credential-setting-${f.name}`} />
               ))}
-              <FieldRow label="Status" value={CREDENTIAL_STATUS[c.status]} />
+              <FieldRow label="Status" value={{ working: 'Working', not_tested: 'Not tested', failing: 'Failing' }[c.status]} />
               <FieldRow label="Made by" value={c.createdBy ?? undefined} />
               <FieldRow label="Created" value={c.created ? shortDate(c.created) : undefined} />
               {own && c.redirectUri && <FieldRow label="Return address" value={c.redirectUri} mono wrap />}
