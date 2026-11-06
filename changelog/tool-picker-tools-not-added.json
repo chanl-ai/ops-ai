@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "The agent tool picker says which app tools are not added",
+  "description": "When an app has tools your team has not added, the picker says how many under its list and links to that app's Tools tab, where they are added.",
+  "tag": "new"
+}

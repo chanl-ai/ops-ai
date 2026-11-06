@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Switch } from '@/components/ui/switch';
 import { ConfirmActionDialog } from '@/components/shared/confirm-action-dialog';
 import { DangerZone } from '@/components/shared/danger-zone';
@@ -14,13 +15,15 @@ import { LoadingButton } from '@/components/shared/loading-button';
 import { QueryError } from '@/components/shared/query-states';
 import { Row, Rows } from '@/components/shared/surface';
 import { SettingsSection } from '@/components/shared/settings-section';
-import { type AppPage, useAppUsers, useChangeAccount, useDeleteApp, useSetTeamApp } from '@/hooks/systems-queries';
-import type { Kinds } from '@/lib/connect-plan';
+import { type AppPage, useAppUsers, useChangeAccount, useChangeAppKind, useDeleteApp, useSetTeamApp } from '@/hooks/systems-queries';
+import type { Kind, Kinds } from '@/lib/connect-plan';
 import { plural } from '@/lib/format';
+import { cn } from '@/lib/utils';
 
 /**
- * The app's Settings tab: whether people may connect their own account, how the app signs in, and the danger zone
- * (turn it off, or delete it from the team). Auth configs and their callback URL live on the Auth configs tab.
+ * The app's Settings tab: whether people may connect their own account, how the app signs in, whether it is on for the
+ * team, and deleting it. Turning it off keeps its accounts and tools, so it is a setting, not in the danger zone. Auth
+ * configs and their callback URL live on the Auth configs tab.
  */
 export function SettingsTab({ app, kinds, onSetUp, onDeleted }: { app: AppPage; kinds?: Kinds; onSetUp: () => void; onDeleted: () => void }) {
   const conn = app.connection;
@@ -28,6 +31,7 @@ export function SettingsTab({ app, kinds, onSetUp, onDeleted }: { app: AppPage; 
   const kind = kinds?.kinds.find((k) => k.id === conn?.authKind);
   const [off, setOff] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
+  const [changing, setChanging] = React.useState(false);
   if (!conn) return null;
   const may = Boolean(conn.mayManage);
   const personal = conn.signIn !== 'team';
@@ -52,25 +56,44 @@ export function SettingsTab({ app, kinds, onSetUp, onDeleted }: { app: AppPage; 
       )}
       <SettingsSection title="Sign-in">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="min-w-0 flex-1 text-sm">
+          <span className="min-w-0 flex-1 basis-60 text-sm">
             <span className="block font-medium">{kind?.label ?? conn.authKind}</span>
             <span className="block text-xs text-muted-foreground">
               {kind?.signsIn ? `Each account signs in to ${app.card.name} through an auth config.` : `Each account holds its own keys for ${app.card.name}.`}
             </span>
           </span>
           {may && (
-            <Button size="sm" variant="outline" onClick={onSetUp} data-testid="app-edit">
-              Change sign-in
-            </Button>
+            <span className="flex flex-wrap gap-2">
+              {/* A plugin signs in the one way it declares; a custom app may move to another kind. */}
+              {!app.card.pluginId && (kinds?.kinds.length ?? 0) > 1 && (
+                <Button size="sm" variant="outline" onClick={() => setChanging(true)} data-testid="app-change-kind">
+                  Change sign-in
+                </Button>
+              )}
+              <Button size="sm" variant="outline" onClick={onSetUp} data-testid="app-edit">
+                Edit settings
+              </Button>
+            </span>
           )}
         </div>
+        {app.card.pluginId && <p className="text-xs text-muted-foreground">{`${app.card.name}’s plugin sets how it signs in.`}</p>}
       </SettingsSection>
+      {may && app.card.pluginId && (
+        <SettingsSection title="On for this team">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="min-w-0 flex-1 basis-60 text-sm">
+              <span className="block font-medium">{`${app.card.name} is on`}</span>
+              <span className="block text-xs text-muted-foreground">Turned off, its tools stop for this team; its accounts and the tools you added stay.</span>
+            </span>
+            <Button size="sm" variant="outline" onClick={() => setOff(true)} data-testid="app-off">
+              Turn off
+            </Button>
+          </div>
+        </SettingsSection>
+      )}
       {may && (
         <DangerZone
           items={[
-            ...(app.card.pluginId
-              ? [{ title: 'Turn off', description: 'Its tools stop for this team; its accounts and what you added stay.', action: `Turn off ${app.card.name}`, onClick: () => setOff(true), testId: 'app-off' }]
-              : []),
             {
               title: 'Delete app',
               description: `Removes ${app.card.name}, its accounts and its tools from this team. Agents using its tools stop.`,
@@ -82,9 +105,76 @@ export function SettingsTab({ app, kinds, onSetUp, onDeleted }: { app: AppPage; 
           ]}
         />
       )}
+      {changing && kinds && <ChangeKindDialog app={app} kinds={kinds.kinds} current={conn.authKind} onClose={() => setChanging(false)} onChanged={onSetUp} />}
       {off && <TurnOffDialog name={app.card.name} appId={app.card.id} onClose={() => setOff(false)} />}
       {deleting && <DeleteAppDialog app={app} onClose={() => setDeleting(false)} onDeleted={onDeleted} />}
     </div>
+  );
+}
+
+/**
+ * Change sign-in: one of the ways a custom app may sign in. Every account moves to it and drops what it held for the old
+ * way (keys, tokens, each person's sign-in), so the window says so first; the answer names the accounts to set up again,
+ * and the set-up window then opens for the new way's fields.
+ */
+function ChangeKindDialog({ app, kinds, current, onClose, onChanged }: { app: AppPage; kinds: Kind[]; current: string; onClose: () => void; onChanged: () => void }) {
+  const change = useChangeAppKind();
+  const [picked, setPicked] = React.useState(current);
+  const accounts = (app.accounts ?? []).filter((a) => a.kind === 'team').length;
+  return (
+    <DialogShell
+      open
+      onOpenChange={(o) => !o && onClose()}
+      size="md"
+      title={`Change how ${app.card.name} signs in`}
+      description={`Every account of ${app.card.name} moves to the new way and must be set up and signed in again. Its keys, tokens and each person's sign-in for the old way are removed.`}
+      data-testid="app-kind-dialog"
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <LoadingButton
+            isLoading={change.isPending}
+            disabled={picked === current}
+            onClick={() =>
+              change.mutate(
+                { appId: app.card.id, kind: picked },
+                {
+                  onSuccess: (r) => {
+                    toast.success(`${app.card.name} signs in a new way`, { description: r.accounts.length ? `Set up again: ${r.accounts.join(', ')}` : undefined });
+                    onClose();
+                    onChanged();
+                  },
+                  onError: (e) => toast.error('Couldn’t change how it signs in', { description: e.message }),
+                },
+              )
+            }
+            data-testid="app-kind-save"
+          >
+            Change sign-in
+          </LoadingButton>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <RadioGroup value={picked} onValueChange={setPicked} className="grid gap-2" aria-label="Ways to sign in">
+          {kinds.map((k) => (
+            <label key={k.id} htmlFor={`kind-${k.id}`} className={cn('flex cursor-pointer items-start gap-3 rounded-md border p-3', picked === k.id && 'border-primary bg-primary/5')}>
+              <RadioGroupItem value={k.id} id={`kind-${k.id}`} className="mt-0.5" data-testid={`app-kind-${k.id}`} />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">
+                  {k.label}
+                  {k.id === current && <span className="ml-2 text-xs font-normal text-muted-foreground">Now</span>}
+                </span>
+                <span className="block text-xs text-muted-foreground">{k.id === 'none' ? 'Calls send no credentials.' : k.signsIn ? 'Each account signs in once in the browser.' : 'Each account holds its own keys.'}</span>
+              </span>
+            </label>
+          ))}
+        </RadioGroup>
+        {accounts > 0 && <p className="text-xs text-muted-foreground">{`${plural(accounts, 'account')} will need setting up again.`}</p>}
+      </div>
+    </DialogShell>
   );
 }
 

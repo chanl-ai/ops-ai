@@ -1983,6 +1983,12 @@ class ToolUserRef(TypedDict, closed=True):
     name: str
 
 
+class ToolsNotAdded(TypedDict, closed=True):
+    appId: str
+    count: int
+    name: str
+
+
 class TypeRef(TypedDict, closed=True):
     id: str
     version: NotRequired[int | None]
@@ -3263,6 +3269,12 @@ class ToolModuleReviewInput(TypedDict, closed=True):
     teamId: NotRequired[str | None]
 
 
+class ToolOptionsPage(TypedDict, closed=True):
+    data: list[Option]
+    nextCursor: NotRequired[str | None]
+    notAdded: NotRequired[list[ToolsNotAdded]]
+
+
 class ToolUsedBy(TypedDict, closed=True):
     agents: list[ToolUserRef]
     workflows: list[ToolUserRef]
@@ -3518,6 +3530,11 @@ class EnvelopeTaskTypeDetail(TypedDict, closed=True):
 
 class EnvelopeThreadState(TypedDict, closed=True):
     data: ThreadState
+    success: Literal[True]
+
+
+class EnvelopeToolOptionsPage(TypedDict, closed=True):
+    data: ToolOptionsPage
     success: Literal[True]
 
 

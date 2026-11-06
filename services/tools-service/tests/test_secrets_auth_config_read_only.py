@@ -44,6 +44,8 @@ async def test_an_auth_configs_client_secret_is_listed_read_only_and_changed_onl
     owned = rows[sealed[0]]
     assert owned["readOnly"] is True and owned["authConfig"] == {"id": row["id"], "name": row["name"]}, owned
     assert rows["DESK_TOOL_KEY"]["readOnly"] is False and rows["DESK_TOOL_KEY"]["authConfig"] is None
+    # Read first by the config's name, so the generated APP_CRED_ name is not what a person has to decode.
+    assert owned["label"] == f"{row['name']} client secret" and rows["DESK_TOOL_KEY"]["label"] is None, owned
     for method, path, body in (
         ("POST", f"/v1/secrets/{sealed[0]}/rotate", {"value": "y"}),
         ("DELETE", f"/v1/secrets/{sealed[0]}", None),

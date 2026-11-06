@@ -6,7 +6,9 @@ import { cn } from '@/lib/utils';
 // The open control fills its box with an ::after drawn under the content: a click on the content reaches the row's
 // own handler, which opens it, and links inside the content keep their clicks; the control is the row's tab stop and
 // draws the focus ring. Laid over the content instead, it would take every click aimed at the content's own text.
-const STRETCH = "outline-none after:absolute after:inset-0 after:rounded-sm after:content-[''] focus-visible:after:ring-2 focus-visible:after:ring-ring/60";
+// Itself out of the flow too: an empty inline control after the content still opens a line box, which made every
+// clickable row's name cell a line taller than its neighbours and lifted the name off the row's middle.
+const STRETCH = "absolute inset-0 outline-none after:absolute after:inset-0 after:rounded-sm after:content-[''] focus-visible:after:ring-2 focus-visible:after:ring-ring/60";
 
 /**
  * The one tab stop of a table row that opens on click, drawn under the row's name cell's content: a link when the row has an

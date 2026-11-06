@@ -9036,6 +9036,17 @@
             ],
             "title": "Ends"
           },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
           "lastUsedAt": {
             "anyOf": [
               {
@@ -9947,6 +9958,17 @@
               }
             ],
             "title": "Status"
+          },
+          "toolsAdded": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Toolsadded"
           },
           "toolsCount": {
             "title": "Toolscount",

@@ -4334,6 +4334,8 @@ export interface components {
             credentialId?: string | null;
             /** Ends */
             ends?: string | null;
+            /** Label */
+            label?: string | null;
             /** Lastusedat */
             lastUsedAt?: string | null;
             /** Name */
@@ -4628,6 +4630,8 @@ export interface components {
             state?: ("connected" | "not_signed_in" | "expired" | "refused" | "revoked") | null;
             /** Status */
             status?: string | null;
+            /** Toolsadded */
+            toolsAdded?: number | null;
             /** Toolscount */
             toolsCount: number;
         };

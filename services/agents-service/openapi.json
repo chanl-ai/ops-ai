@@ -7623,6 +7623,25 @@
         "title": "Envelope[ToolList]",
         "type": "object"
       },
+      "Envelope_ToolOptionsPage_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ToolOptionsPage"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ToolOptionsPage]",
+        "type": "object"
+      },
       "Envelope_ToolRow_": {
         "additionalProperties": false,
         "properties": {
@@ -19248,6 +19267,41 @@
         "title": "ToolModuleReviewRef",
         "type": "object"
       },
+      "ToolOptionsPage": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Option"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextcursor"
+          },
+          "notAdded": {
+            "items": {
+              "$ref": "#/components/schemas/ToolsNotAdded"
+            },
+            "title": "Notadded",
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ToolOptionsPage",
+        "type": "object"
+      },
       "ToolRow": {
         "additionalProperties": false,
         "description": "One tool on the Tools page, joined here: the app it belongs to, what kind of tool it is, whether the person\nasking can run it now, and the team's agents and workflows that use it.",
@@ -19441,6 +19495,31 @@
           "name"
         ],
         "title": "ToolUserRef",
+        "type": "object"
+      },
+      "ToolsNotAdded": {
+        "additionalProperties": false,
+        "description": "An app whose catalog holds tools the team has not added: the picker cannot offer them, so it says how many wait\non the app's Tools tab.",
+        "properties": {
+          "appId": {
+            "title": "Appid",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "appId",
+          "name",
+          "count"
+        ],
+        "title": "ToolsNotAdded",
         "type": "object"
       },
       "TypeRef": {
@@ -49882,7 +49961,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_OptionsPage_"
+                  "$ref": "#/components/schemas/Envelope_ToolOptionsPage_"
                 }
               }
             },

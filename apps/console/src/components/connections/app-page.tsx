@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Plug } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -59,7 +59,8 @@ export function AppPageView({ appId }: { appId: string }) {
   const [setUp, setSetUp] = React.useState(false);
   // The one Connect: a window that asks the auth config, what it leaves open, test or live and team or mine.
   const [connecting, setConnecting] = React.useState(false);
-  const [tab, setTab] = React.useState<string | null>(null);
+  // ?tab= opens a tab from a link elsewhere (the agent tool picker sends people to Tools).
+  const [tab, setTab] = React.useState<string | null>(useSearchParams().get('tab'));
   // The Accounts tab, filtered to one auth config from that config's account count.
   const [config, setConfig] = React.useState<string | null>(null);
 
@@ -140,7 +141,7 @@ export function AppPageView({ appId }: { appId: string }) {
         </Alert>
       )}
       {card.kind === 'plugin' && card.appState !== 'removed' && <PluginUpdatePanel appId={card.id} name={card.name} />}
-      <Tabs value={tab ?? tabs[0][0]} onValueChange={(v) => (setTab(v), v !== 'accounts' && setConfig(null))} className="min-w-0">
+      <Tabs value={tab && tabs.some(([v]) => v === tab) ? tab : tabs[0][0]} onValueChange={(v) => (setTab(v), v !== 'accounts' && setConfig(null))} className="min-w-0">
         {/* Six tabs are wider than a phone: the row scrolls sideways inside its box instead of clipping the last. */}
         <ScrollTabsList tabs={tabs.map(([value, label]) => ({ value, label }))} testId="app-tabs-row" triggerTestId={(v) => `app-tab-${v}`} />
         {!builtIn && (

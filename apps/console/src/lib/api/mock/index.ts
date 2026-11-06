@@ -832,7 +832,8 @@ export function createMockApi(): OpsApi {
       // The catalogue an agent grants from: tools the module owner exposes, named the way the runtime names them.
       grantableTools: () =>
         respond(() => tools.filter((t) => t.enabled && !t.workflow).map((t) => ({ id: t.id, name: t.name, server: t.module ?? t.system, moduleId: null, description: t.description, access: t.access, inputSchema: {}, requiresApproval: t.access !== 'read' || !!t.requiresReview, approval: t.requiresReview ? 'Review before it runs' : null }))),
-      toolOptions: (p) => respond(() => pageOptions(tools.filter((t) => t.enabled && !t.workflow).map((t) => ({ id: t.id, label: t.name, hint: t.module ?? t.system })), p)),
+      // The mock's apps have no catalog to add from, so nothing waits on a Tools tab.
+      toolOptions: (p) => respond(() => ({ ...pageOptions(tools.filter((t) => t.enabled && !t.workflow).map((t) => ({ id: t.id, label: t.name, hint: t.module ?? t.system })), p), notAdded: [] })),
       modelAliases: () => respond(() => F.MODEL_ALIASES.map((a) => ({ ...a }))),
       bulkUpdate: (ids, patch) =>
         respond(() =>

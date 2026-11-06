@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { type OptionSource, useOptionLabels, useOptionSearch } from '@/hooks/options-queries';
+import type { OptionsPage } from '@/lib/types/query';
 import { cn } from '@/lib/utils';
 
 /**
@@ -15,7 +16,7 @@ import { cn } from '@/lib/utils';
  * scrolls, and chosen values show as chips labelled by id from the service. Every picker of agents, tools, knowledge
  * bases and the like uses this rather than filtering a list the browser loaded, which caps what can be found.
  */
-export function EntityPicker({
+export function EntityPicker<P extends OptionsPage = OptionsPage>({
   source,
   value,
   onChange,
@@ -29,8 +30,9 @@ export function EntityPicker({
   open: openProp,
   onOpenChange,
   showChosen = true,
+  note,
 }: {
-  source: OptionSource;
+  source: OptionSource<P>;
   value: string[];
   onChange: (next: string[]) => void;
   multiple?: boolean;
@@ -45,6 +47,8 @@ export function EntityPicker({
   onOpenChange?: (open: boolean) => void;
   /** Off when the caller lists the chosen items itself (a file field's one list of attached files). */
   showChosen?: boolean;
+  /** One muted line under the list, from the first page's answer (the tools picker: tools an app has not added). */
+  note?: (first: P) => React.ReactNode;
 }) {
   const [openState, setOpenState] = React.useState(false);
   const open = openProp ?? openState;
@@ -131,6 +135,7 @@ export function EntityPicker({
                 </>
               )}
             </CommandList>
+            {note && results.data?.pages[0] && note(results.data.pages[0])}
           </Command>
         </PopoverContent>
       </Popover>
