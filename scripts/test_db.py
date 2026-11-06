@@ -52,16 +52,38 @@ async def create(url: str) -> None:
     await admin.dispose()
 
 
-def migrate(url: str) -> None:
+# Roles are server-wide, and the chains create theirs with `CREATE ROLE ... EXCEPTION WHEN duplicate_object`, which
+# does not catch the unique_violation a second session gets while another session's CREATE ROLE is uncommitted. Two
+# test databases migrating at once on a fresh server (make verify runs its suites in parallel) fail on it, so a server
+# migrates one test database at a time. Advisory locks are scoped to a database, so every caller takes it in `postgres`.
+MIGRATE_LOCK = 0x6F70735F
+
+
+async def migrate(url: str) -> None:
     env = {**os.environ, "OPS_DATABASE_URL": url}
-    for chain in CHAINS:
-        subprocess.run(
-            ["uv", "run", "alembic", "upgrade", "head"], cwd=ROOT / chain, env=env, check=True, capture_output=True
-        )
+    admin = create_async_engine(make_url(url).set(database="postgres"))
+    try:
+        async with admin.connect() as c:
+            await c.execute(text("select pg_advisory_lock(:k)"), {"k": MIGRATE_LOCK})
+            for chain in CHAINS:
+                run = subprocess.run(
+                    ["uv", "run", "alembic", "upgrade", "head"],
+                    cwd=ROOT / chain,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if run.returncode:
+                    sys.stderr.write(run.stderr[-4000:])
+                    raise SystemExit(f"test_db: alembic upgrade head failed in {chain} on {make_url(url).database}")
+    finally:
+        # Closing the session releases the lock, on success or failure.
+        await admin.dispose()
 
 
 if __name__ == "__main__":
     server = make_url(sys.argv[1]).set(drivername="postgresql", database="postgres")
     asyncio.run(sweep(server.render_as_string(hide_password=False), dry_run=False))
     asyncio.run(create(sys.argv[1]))
-    migrate(sys.argv[1])
+    asyncio.run(migrate(sys.argv[1]))
