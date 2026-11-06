@@ -5,7 +5,7 @@ and the three test plugins in services/tools-service/tests/plugin_fields (OPS_PL
 (docs/usecases/lib/fake_multi_auth.py) shows the headers it was sent, takes chat messages only as a form, counts
 transfers, refuses the Zoom-style client unless it comes as basic auth, records each sign-in address and answers the
 sites lookup. Part two: the Salesforce plugin (OPS_SALESFORCE_PLUGIN, else the ops-ai-plugins repository beside
-ops-ai) against the fake Salesforce (docs/usecases/lib/fake_salesforce.py), which answers UserInfo on its sign-in host
+ops-ai) against the fake Salesforce (docs/usecases/lib/fake_salesforce.py), which names its instance in the token answer, counts UserInfo calls
 and records the query options each query-all carried. Each call is a gateway call as agents-service makes it for a
 run. No model call."""
 
@@ -267,12 +267,12 @@ with ExitStack() as stack:
 
 
 manifest = (SALESFORCE / "plugin.yaml").read_text() if (SALESFORCE / "plugin.yaml").exists() else ""
-if "after_sign_in" not in manifest:
+if "from_token" not in manifest:
     check(
-        "12 the sign-in reads the instance from Salesforce's UserInfo, and query-all carries Sforce-Query-Options",
+        "12 the sign-in reads the instance from Salesforce's token answer, and query-all carries Sforce-Query-Options",
         False,
-        f"{SALESFORCE} is a Salesforce plugin without the UserInfo lookup; it is in chanl-ai/ops-ai-plugins#2 "
-        "until merged: set OPS_SALESFORCE_PLUGIN to a checkout of that branch",
+        f"{SALESFORCE} is a Salesforce plugin that does not read instance_url from the token answer; that is in "
+        "chanl-ai/ops-ai-plugins#8: set OPS_SALESFORCE_PLUGIN to a checkout at or after it",
     )
     finish()
 
@@ -301,12 +301,13 @@ with ExitStack() as stack:
     sf_id = str((data(turned) or {}).get("connectionId") or "con_missing")
     _, sf_done = sign_in(gw, sf["sign_in"], priya, at("opsai.salesforce", sf_id), "acme.integration")
 
-    # 12. S4: Salesforce's instance comes from UserInfo after sign-in, and query-all sends its batch size.
+    # 12. S4: Salesforce's instance comes from the token answer, with no UserInfo call, and query-all sends its batch
+    # size.
     found = call(gw, "salesforce_find_cases_with_deleted", {"status": "Escalated"})
     state = sfake.state()
     check(
-        "12 the sign-in reads the instance from Salesforce's UserInfo, and query-all carries Sforce-Query-Options",
-        turned.status_code == 200 and sf_done.status_code == 200 and bool(state["userinfo"])
+        "12 the sign-in reads the instance from Salesforce's token answer, and query-all carries Sforce-Query-Options",
+        turned.status_code == 200 and sf_done.status_code == 200 and not state["userinfo"]
         and found.status_code == 200 and bool(output(found).get("records"))
         and state["query_options"][-1:] == ["batchSize=2000"],
         {"turned": turned.text[:200], "done": sf_done.text[:300], "userinfo": state["userinfo"],

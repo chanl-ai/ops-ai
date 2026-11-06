@@ -21,8 +21,8 @@ forms and sign-in steps.
 | PostgreSQL and OPA | `make db-up` |
 | Plugins on | The api layer starts tools-service with `OPS_PLUGINS=true` and `OPS_PLUGIN_PATHS` naming `services/tools-service/tests/plugin_fields`'s three plugins, then again naming the Salesforce plugin |
 | A fake system | `docs/usecases/lib/fake_multi_auth.py`: shows the non-credential headers it was sent, takes chat messages only as a form, counts transfers, refuses the Zoom-style client unless it comes as basic auth, records each sign-in address, and answers the sites lookup with a site a control switches |
-| The Salesforce plugin | `OPS_SALESFORCE_PLUGIN` naming its folder, else the `ops-ai-plugins` repository beside ops-ai, at the version that reads its instance from UserInfo (chanl-ai/ops-ai-plugins, draft pull request) |
-| A fake Salesforce | `docs/usecases/lib/fake_salesforce.py`: answers UserInfo on its sign-in host in Salesforce's format and records the `Sforce-Query-Options` each query-all carried |
+| The Salesforce plugin | `OPS_SALESFORCE_PLUGIN` naming its folder, else the `ops-ai-plugins` repository beside ops-ai, at the version that reads its instance from the token answer (chanl-ai/ops-ai-plugins#8) |
+| A fake Salesforce | `docs/usecases/lib/fake_salesforce.py`: names its org address as `instance_url` in the token answer, counts UserInfo calls, and records the `Sforce-Query-Options` each query-all carried |
 | People | Sam Adeyemi (Security admin), Priya Shah (team_ops admin), James Richardson (builder); password `northfield-demo` |
 
 ## Steps and expected results
@@ -40,7 +40,7 @@ forms and sign-in steps.
 | 9 | The fake now names `site-other`; James signs in with his own account | Refused, "signed in to another site"; Your connections shows him not connected; the team still points at `site-7f3a` |
 | 10 | The fake names `../admin?x=1`, Priya signs in the team's account; then it names `site-other` and she signs in again | The first fails; the second moves the team's calls to `site-other` |
 | 11 | Every answer in the run is searched for the token and the client secrets | None found |
-| 12 | Priya turns Salesforce on and signs in; a run calls `salesforce_find_cases_with_deleted` | The fake saw a UserInfo call; the cases come back from the instance it named; query-all carried `batchSize=2000` |
+| 12 | Priya turns Salesforce on and signs in; a run calls `salesforce_find_cases_with_deleted` | The fake saw no UserInfo call; the cases come back from the instance the token answer named; query-all carried `batchSize=2000` |
 | 13 | `ops plugin validate` on the fields desk as it is | OK |
 | 14 | On a copy whose plugin header is named `Authorization` | Refused at `headers.Authorization`: "carries the sign-in" |
 | 15 | On a copy whose header reads `{{API_KEY}}` | Refused: "holds {{" |
@@ -56,7 +56,7 @@ forms and sign-in steps.
 | 4 | The fake's call count is read before and after: a call refused after sending fails the step |
 | 6 | The transfer count is read after the refused calls, so a refusal that still sent fails it |
 | 9 | Your connections is read after the refusal: a token stored for James fails it |
-| 12 | The fake records UserInfo calls; a plugin still reading the token's instance makes none |
+| 12 | The fake records UserInfo calls; a plugin still reading the instance from UserInfo makes one |
 
 ## Results
 
