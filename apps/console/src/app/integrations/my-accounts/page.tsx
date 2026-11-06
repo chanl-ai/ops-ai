@@ -176,7 +176,18 @@ function MyAccountsPage() {
       id: 'account',
       accessorFn: (c) => c.account ?? '',
       header: ({ column }) => <DataTableColumnHeader column={column} title="Signed in as" />,
-      cell: ({ row: { original: c } }) => <span className="text-sm">{c.account ?? '—'}</span>,
+      // Who the system says signed in. A connected account whose system has not said yet (no id token, no test since)
+      // reads so, apart from one never connected; its next test names it.
+      cell: ({ row: { original: c } }) =>
+        c.account ? (
+          <span className="text-sm">{c.account}</span>
+        ) : (c.state ?? (c.connected ? 'connected' : 'not_connected')) === 'not_connected' ? (
+          <span className="text-sm text-muted-foreground">—</span>
+        ) : (
+          <span className="text-sm text-muted-foreground" title="Test now asks the app who signed in" data-testid={`my-account-unnamed-${c.connectionId}`}>
+            Not named yet
+          </span>
+        ),
     },
     {
       id: 'state',

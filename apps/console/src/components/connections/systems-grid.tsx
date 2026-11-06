@@ -4,7 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
-import { ArrowRight, CircleCheck, CircleAlert, Plug, Plus, TriangleAlert } from 'lucide-react';
+import { CircleCheck, CircleAlert, Plug, Plus, TriangleAlert } from 'lucide-react';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
@@ -224,10 +224,6 @@ export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, m
       contentClassName="flex flex-col gap-4"
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setView('connected')} data-testid="connected-apps">
-            Connected apps
-            <ArrowRight />
-          </Button>
           {mayAdd && (
             <Button size="sm" onClick={onNew} data-testid="connect-system">
               <Plus />

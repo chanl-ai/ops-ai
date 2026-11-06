@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Only the Security team is offered Add allowed host",
+  "description": "A tool on a host that is not allowed shows Add allowed host only to people who manage egress in the Security team. Everyone else reads that saving asks a Security admin in Human Tasks, which is what then happens.",
+  "tag": "fix"
+}

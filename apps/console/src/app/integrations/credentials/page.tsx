@@ -11,7 +11,7 @@ import { SecretsPanel } from '@/components/secrets/secrets-panel';
  */
 export default function SecretsPage() {
   return (
-    <PageLayout icon={KeyRound} title="Secrets" description="The secret values tools send, such as API keys.">
+    <PageLayout icon={KeyRound} title="Secrets" description="Values the tools send, such as API keys. A value is encrypted, never shown again, and scrubbed from what a system answers.">
       <SecretsPanel />
     </PageLayout>
   );

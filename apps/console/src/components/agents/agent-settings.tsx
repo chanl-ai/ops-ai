@@ -26,7 +26,8 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { guardrailOptions, knowledgeBaseOptions, toolOptions, widgetOptionsFor } from '@/hooks/options-queries';
 import { useGuardrails } from '@/hooks/queries';
 import type { Lookups } from '@/lib/api';
-import { relativeTime } from '@/lib/format';
+import { plural, relativeTime } from '@/lib/format';
+import type { ToolOptionsPage } from '@/lib/types/query';
 import type { WidgetPin, WidgetSettings } from '@/lib/types/widgets';
 import type { Agent, AgentControls, AgentGuardrails, AgentLimits, AgentPublicKeyOverride, AgentRun, AgentVersion, Channel, GrantableTool, Guardrail, MemorySettings, ModelAlias } from '@/lib/types/domain';
 
@@ -172,6 +173,26 @@ export function InstructionsSection({ draft, set, toolbar, footer, textareaRef }
 }
 
 /**
+ * Under the tools picker: an app's tools the team has not added are not offered, so the picker says how many wait on
+ * that app's Tools tab, one line per app, with the way there.
+ */
+function ToolsNotAddedNote({ apps }: { apps: NonNullable<ToolOptionsPage['notAdded']> }) {
+  if (!apps.length) return null;
+  return (
+    <div className="flex flex-col gap-1 border-t px-3 py-2 text-xs text-muted-foreground" data-testid="tools-not-added">
+      {apps.map((a) => (
+        <p key={a.appId}>
+          {`${plural(a.count, `${a.name} tool`)} ${a.count === 1 ? 'isn’t' : 'aren’t'} added. `}
+          <Link href={`/integrations/apps/${encodeURIComponent(a.appId)}?tab=tools`} className="underline underline-offset-2 hover:text-foreground">
+            {`Add ${a.count === 1 ? 'it' : 'them'} from ${a.name}’s Tools tab`}
+          </Link>
+        </p>
+      ))}
+    </div>
+  );
+}
+
+/**
  * The tools the agent may call, picked through the tools options route so any grantable tool can be found.
  * Grants the registry no longer offers (unpublished, hidden or removed from their module) are listed apart with
  * Remove, rather than as a chip the picker cannot label.
@@ -183,7 +204,7 @@ export function ToolsSection({ draft, set, stale = [] }: { draft: AgentDraft; se
     <SettingsSection title={`Tools · ${draft.toolIds.length}`} description="The only systems this agent may call. Tools marked review pause every call for a person.">
       <div className="flex flex-col gap-3">
         {draft.toolIds.length === 0 && <p className="text-sm text-muted-foreground">No tools. The agent can only answer from knowledge.</p>}
-        <EntityPicker source={toolOptions} value={offered} onChange={(ids) => set('toolIds', [...ids, ...gone])} addLabel="Grant tools" searchPlaceholder="Search tools by name or system…" emptyText="No tool matches." icon={Wrench} testId="agent-tools-picker" />
+        <EntityPicker source={toolOptions} value={offered} onChange={(ids) => set('toolIds', [...ids, ...gone])} addLabel="Grant tools" searchPlaceholder="Search tools by name or system…" emptyText="No tool matches." icon={Wrench} testId="agent-tools-picker" note={(first) => <ToolsNotAddedNote apps={first.notAdded ?? []} />} />
         {gone.length > 0 && (
           <div className="flex flex-col gap-1" data-testid="stale-grants">
             <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">No longer offered</p>

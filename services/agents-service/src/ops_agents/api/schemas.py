@@ -22,6 +22,7 @@ from ops_service_kit.http import (
     ErrorBody,  # noqa: F401  # pyright: ignore[reportUnusedImport]
     ErrorEnvelope,  # noqa: F401  # pyright: ignore[reportUnusedImport]
     ListResult,
+    OptionsPage,
     Out,
     Pagination,  # noqa: F401  # pyright: ignore[reportUnusedImport]
     error_responses,
@@ -386,6 +387,20 @@ class ToolRow(Tool):
 class ToolList(ListResult[ToolRow]):
     # The name of each app `facets.app` counts, by its id, so the App filter reads names the API joined.
     app_names: dict[str, str]
+
+
+class ToolsNotAdded(Out):
+    """An app whose catalog holds tools the team has not added: the picker cannot offer them, so it says how many wait
+    on the app's Tools tab."""
+
+    app_id: str
+    name: str
+    count: int
+
+
+class ToolOptionsPage(OptionsPage):
+    # The apps matching the search with tools not added, on a first page only; empty when the tools service is down.
+    not_added: list[ToolsNotAdded] = Field(default_factory=list[ToolsNotAdded])
 
 
 class ModelAlias(Out):

@@ -10,8 +10,9 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
 from ops_service_kit.errors import NotFound
-from ops_service_kit.http import Envelope, OptionsPage, options_page, options_window, page_window, paged
+from ops_service_kit.http import Envelope, options_page, options_window, page_window, paged
 
+from ...activities.tool_directory import ToolsUnavailable
 from ...store.tenancy import current_team
 from ..auth import Principal, principal
 from ..child_runs import (
@@ -24,7 +25,7 @@ from ..child_runs import (
 )
 from ..deps import Runtime, runtime
 from ..envelope import ok
-from ..schemas import ToolList, ToolRow
+from ..schemas import ToolList, ToolOptionsPage, ToolRow
 
 router = APIRouter(prefix="/v1/tools", dependencies=[Depends(principal)])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
@@ -212,7 +213,26 @@ async def list_tools(
     )
 
 
-@router.get("/options", response_model=Envelope[OptionsPage])
+async def not_added(rt: Runtime, team: str | None, search: str) -> list[dict[str, Any]]:
+    """The team's apps whose name matches `search` and whose catalog holds tools the team has not added, with how many.
+    Read from tools-service's app cards; when it cannot be reached the picker still answers, without this line."""
+    if rt.app_states is None:
+        return []
+    try:
+        cards = await rt.app_states.cards(None, team)
+    except ToolsUnavailable:
+        return []
+    q = search.strip().lower()
+    return [
+        {"appId": str(c["id"]), "name": str(c["name"]), "count": int(c["toolsCount"]) - int(c["toolsAdded"])}
+        for c in cards
+        if c.get("toolsAdded") is not None
+        and int(c["toolsCount"]) > int(c["toolsAdded"])
+        and (not q or q in str(c["name"]).lower())
+    ]
+
+
+@router.get("/options", response_model=Envelope[ToolOptionsPage])
 async def tool_options(
     rt: Rt,
     search: str = "",
@@ -248,7 +268,9 @@ async def tool_options(
     options = [
         {"id": t["id"], "label": t.get("title") or t["name"], "hint": t["server"], "disabled": None} for t in page
     ]
-    return ok(options_page(options, offset, limit))
+    # Said once, above the first page of a search; labelling stored grants says nothing about the catalog.
+    waiting = await not_added(rt, team, search) if ids is None and offset == 0 else []
+    return ok({**options_page(options, offset, limit), "notAdded": waiting})
 
 
 @router.get("/{tool_id}", response_model=Envelope[ToolRow])

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Tables read cleaner",
+  "description": "A row you can open now lines its name up with the rest of the row. A filter that offers only one value stays hidden until it is in use, and the rows-per-page control is named for screen readers.",
+  "tag": "improved"
+}

@@ -82,6 +82,7 @@ import type {
   ListParams,
   ListResult,
   OptionsPage,
+  ToolOptionsPage,
   OptionsParams,
   PolicyFilters,
   ReviewListParams,
@@ -128,7 +129,7 @@ export interface OpsApi {
     /** The tools any agent may be granted; a grant names their ids, and an unknown id is refused. */
     grantableTools(): Promise<GrantableTool[]>;
     /** The tools picker: grantable tools searched and paged on the server; `ids` labels stored grants. */
-    toolOptions(p: OptionsParams): Promise<OptionsPage>;
+    toolOptions(p: OptionsParams): Promise<ToolOptionsPage>;
     /** The model aliases an agent may name; a publish naming any other is refused (422 unknown_model_alias). */
     modelAliases(): Promise<ModelAlias[]>;
     /** Absent when the backend has no bulk route (the agents-service registry); the list then offers no bulk actions. */

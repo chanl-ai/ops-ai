@@ -1720,6 +1720,7 @@ class SecretMeta(TypedDict, closed=True):
     createdBy: str
     credentialId: NotRequired[str | None]
     ends: NotRequired[str | None]
+    label: NotRequired[str | None]
     lastUsedAt: NotRequired[str | None]
     name: str
     protection: NotRequired[Literal["system", "managed"] | None]
@@ -1972,6 +1973,7 @@ class SystemCard(TypedDict, closed=True):
     signIn: NotRequired[Literal["team", "person", "person_or_team"] | None]
     state: NotRequired[Literal["connected", "not_signed_in", "expired", "refused", "revoked"] | None]
     status: NotRequired[str | None]
+    toolsAdded: NotRequired[int | None]
     toolsCount: int
 
 
