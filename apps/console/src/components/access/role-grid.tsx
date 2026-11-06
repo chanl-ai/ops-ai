@@ -16,7 +16,17 @@ type GridRow = RoleDetail['grid'][number];
  * `onToggle` each cell is a checkbox: ticking grants it on every record, unticking takes it away, and a cell held on
  * one's own records keeps that scope while ticked.
  */
-export function RoleGrid({ grid, onToggle }: { grid: GridRow[]; onToggle?: (area: string, action: string, on: boolean) => void }) {
+export function RoleGrid({
+  grid,
+  onToggle,
+  notHeld = [],
+}: {
+  grid: GridRow[];
+  onToggle?: (area: string, action: string, on: boolean) => void;
+  /** Cells the role may never hold (area.action), shown unticked and locked. */
+  notHeld?: string[];
+}) {
+  const never = React.useMemo(() => new Set(notHeld), [notHeld]);
   const actions = React.useMemo(() => [...new Set(grid.flatMap((r) => Object.keys(r.actions)))].sort(byActionOrder), [grid]);
   const columns = React.useMemo<ColumnDef<GridRow>[]>(
     () => [
@@ -36,6 +46,8 @@ export function RoleGrid({ grid, onToggle }: { grid: GridRow[]; onToggle?: (area
                 <label className="flex items-center gap-1.5">
                   <Checkbox
                     checked={!!scope}
+                    disabled={never.has(`${row.original.area}.${action}`)}
+                    title={never.has(`${row.original.area}.${action}`) ? 'Only a built-in role holds secrets, egress and Security-team permissions' : undefined}
                     onCheckedChange={(on) => onToggle(row.original.area, action, on === true)}
                     aria-label={`${areaLabel(row.original.area)}: ${actionLabel(action)}`}
                     data-testid={`cell-${row.original.area}-${action}`}
@@ -52,7 +64,7 @@ export function RoleGrid({ grid, onToggle }: { grid: GridRow[]; onToggle?: (area
         }),
       ),
     ],
-    [actions, onToggle],
+    [actions, onToggle, never],
   );
   // Every area on one page: a matrix with areas paged away reads as "not allowed" and hides cells from an edit.
   const onePage = { enabled: true, total: grid.length, page: 1, pageSize: Math.max(grid.length, 1), onPaginationChange: () => undefined };

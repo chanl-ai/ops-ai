@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
-import type { MemberRole, RoleCell } from '@/lib/types/settings';
+import type { MemberRole, RoleCell, RoleInput } from '@/lib/types/settings';
 
 import { useSession } from './auth-queries';
 import { useTeam } from './use-team';
@@ -58,6 +58,30 @@ export function useEditRole(id: string) {
   const reset = useMutation({ mutationFn: () => api.teams.resetRole!(id), onSuccess: settled });
   return { save, reset };
 }
+/** Whether the signed-in person makes and changes the workspace's roles: access.manage, on platform sign-in. */
+export function useManagesRoles(): boolean {
+  return useCan('access', 'manage') === true && !!api.teams.createRole;
+}
+
+/** Makes a custom role; the list refreshes so it shows at once. */
+export function useCreateRole() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (input: RoleInput) => api.teams.createRole!(input), onSuccess: () => qc.invalidateQueries({ queryKey: ['access', 'roles'] }) });
+}
+
+/** Renames or deletes a custom role (`moveTo`: the role its holders move to). */
+export function useRoleChanges(id: string) {
+  const qc = useQueryClient();
+  const settled = () => Promise.all([qc.invalidateQueries({ queryKey: ['access', 'role', id] }), qc.invalidateQueries({ queryKey: ['access', 'roles'] })]);
+  const rename = useMutation({ mutationFn: (input: { name: string; description?: string }) => api.teams.renameRole!(id, input), onSuccess: settled });
+  const remove = useMutation({ mutationFn: (moveTo?: string) => api.teams.deleteRole!(id, moveTo), onSuccess: settled });
+  return { rename, remove };
+}
+
+/** Who holds a role, read while the delete dialog is open. */
+export const useRoleHolders = (id: string, enabled: boolean) =>
+  useTeamQuery({ queryKey: ['access', 'role', id, 'holders'], queryFn: () => api.teams.roleHolders!(id), enabled: enabled && !!api.teams.roleHolders });
+
 export const usePersonPermissions = (id: string) =>
   useTeamQuery({ queryKey: ['access', 'person', id], queryFn: () => api.teams.personPermissions!(id), enabled: !!api.teams.personPermissions && !!id });
 

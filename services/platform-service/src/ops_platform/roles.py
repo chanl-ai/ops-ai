@@ -51,6 +51,10 @@ class Roles:
             "grid": [
                 {"area": area, "actions": {action: held.get((area, action)) for action in ACTIONS}} for area in AREAS
             ],
+            # The cells this role may never hold: a custom role's secrets, egress and Security-team ones (D40).
+            "notHeld": []
+            if role["builtin"]
+            else [f"{a}.{x}" for a in AREAS for x in ACTIONS if custom_role_refuses(a, x)],
         }
 
     async def edit(

@@ -358,6 +358,7 @@ class RoleCreatedOut(TypedDict, closed=True):
     leftOut: NotRequired[list[str]]
     lockedReason: NotRequired[str | None]
     name: str
+    notHeld: NotRequired[list[str]]
     permissionCount: int
     permissions: list[PermissionOut]
 
@@ -371,6 +372,7 @@ class RoleDetail(TypedDict, closed=True):
     id: str
     lockedReason: NotRequired[str | None]
     name: str
+    notHeld: NotRequired[list[str]]
     permissionCount: int
     permissions: list[PermissionOut]
 

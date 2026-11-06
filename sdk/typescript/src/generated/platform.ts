@@ -2572,6 +2572,8 @@ export interface components {
             lockedReason?: string | null;
             /** Name */
             name: string;
+            /** Notheld */
+            notHeld?: string[];
             /** Permissioncount */
             permissionCount: number;
             /** Permissions */
@@ -2598,6 +2600,8 @@ export interface components {
             lockedReason?: string | null;
             /** Name */
             name: string;
+            /** Notheld */
+            notHeld?: string[];
             /** Permissioncount */
             permissionCount: number;
             /** Permissions */

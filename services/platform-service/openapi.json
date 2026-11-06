@@ -3675,6 +3675,13 @@
             "title": "Name",
             "type": "string"
           },
+          "notHeld": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notheld",
+            "type": "array"
+          },
           "permissionCount": {
             "title": "Permissioncount",
             "type": "integer"
@@ -3745,6 +3752,13 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "notHeld": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notheld",
+            "type": "array"
           },
           "permissionCount": {
             "title": "Permissioncount",

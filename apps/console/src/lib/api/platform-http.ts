@@ -1,4 +1,4 @@
-import type { AccessCheck, Holders, Me, MyPermissions, PersonPermissions, RoleDetail, RoleSummary, WhyNot } from '@/lib/types/settings';
+import type { AccessCheck, Holders, Me, MyPermissions, PersonPermissions, RoleCreated, RoleDetail, RoleHolder, RoleSummary, WhyNot } from '@/lib/types/settings';
 import type { Team } from '@/lib/types/team';
 
 import type { OpsApi } from './contract';
@@ -21,6 +21,10 @@ export function createPlatformTeamsHttp(baseUrl: string): OpsApi['teams'] {
     role: (id) => get<RoleDetail>(`/roles/${encodeURIComponent(id)}`),
     editRole: (id, permissions) => send<RoleDetail>('PUT', `/roles/${encodeURIComponent(id)}/permissions`, { permissions }),
     resetRole: (id) => send<RoleDetail>('POST', `/roles/${encodeURIComponent(id)}/reset`),
+    createRole: (input) => send<RoleCreated>('POST', '/roles', input),
+    renameRole: (id, input) => send<RoleDetail>('PATCH', `/roles/${encodeURIComponent(id)}`, input),
+    deleteRole: (id, moveTo) => send<void>('DELETE', `/roles/${encodeURIComponent(id)}${moveTo ? `?moveTo=${encodeURIComponent(moveTo)}` : ''}`),
+    roleHolders: (id) => get<RoleHolder[]>(`/roles/${encodeURIComponent(id)}/holders`),
     personPermissions: (id) => get<PersonPermissions>(`/people/${encodeURIComponent(id)}/permissions`),
     why: (area, action) => get<WhyNot>(`/me/why?area=${encodeURIComponent(area)}&action=${encodeURIComponent(action)}`),
     checkAccess: (input) => send<AccessCheck>('POST', '/access/check', input),

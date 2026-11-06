@@ -466,6 +466,8 @@ class RoleDetail(RoleOut):
     can_edit: bool = False
     # Why the caller may not change it, in words; None when they may.
     locked_reason: str | None = None
+    # Cells this role may never hold, as area.action: a custom role's secrets, egress and Security-team ones.
+    not_held: list[str] = Field(default_factory=list[str])
 
 
 class RoleCreatedOut(RoleDetail):
