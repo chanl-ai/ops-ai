@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Human Tasks names who asked and keeps the sidebar",
+  "description": "A tool publish request names the person who asked, not the service that filed it, and a request with no changes says so in words. Reassign shows only to people who may decide the task, and Human Tasks keeps the sidebar like every other page.",
+  "tag": "fix"
+}

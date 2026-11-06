@@ -67,7 +67,8 @@ export interface paths {
         /**
          * Assign
          * @description Assigns each open review to `assignee`, the caller when left out. Only someone who may decide a review
-         *     assigns it; assigning routes the review and changes nothing about who may decide it. A result per id.
+         *     assigns it; assigning routes the review and changes nothing about who may decide it. Someone whose role decides
+         *     no reviews in the team they act in is refused outright (403); anyone else gets a result per id.
          */
         post: operations["reviews_assign"];
         delete?: never;

@@ -259,7 +259,9 @@ async def bulk_decide(rt: Rt, me: Me, body: BulkDecisionInput) -> JSONResponse:
 @console_router.post("/assign", response_model=Envelope[BulkResult])
 async def assign(rt: Rt, me: Me, body: AssignInput) -> JSONResponse:
     """Assigns each open review to `assignee`, the caller when left out. Only someone who may decide a review
-    assigns it; assigning routes the review and changes nothing about who may decide it. A result per id."""
+    assigns it; assigning routes the review and changes nothing about who may decide it. Someone whose role decides
+    no reviews in the team they act in is refused outright (403); anyone else gets a result per id."""
+    require_reviews_decide(review_teams(me), me.team_id or "", "these tasks")
     to = (body.assignee or me.email).strip()
     updated: list[str] = []
     skipped: list[dict[str, str]] = []

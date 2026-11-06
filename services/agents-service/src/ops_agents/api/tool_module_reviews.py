@@ -81,8 +81,8 @@ async def open_review(rt: Runtime, me: Principal, input_body: dict[str, Any]) ->
 async def open_for(rt: Runtime, svc: Caller, input_body: dict[str, Any]) -> dict[str, Any]:
     """A review a service opens with its own token for a person not on the call: tools-service's seed. Only a
     service holding `tools:publish`, which only tools-service's scope cap allows (Settings.service_scopes), and only a
-    tool module of the team its token is scoped to; who asked is the body's `requestedBy`, and the review records that
-    the service opened it on their behalf, never that the person did. They still count as the asker, so
+    tool module of the team its token is scoped to. Who asked is the body's `requestedBy`, recorded as the requester
+    Human Tasks shows; the service that opened it is the body's `openedBy`. They count as the asker, so
     requesterMayDecide applies to them."""
     named = input_body.get("teamId")
     if not svc.team_id or (named and named != svc.team_id):
@@ -91,14 +91,18 @@ async def open_for(rt: Runtime, svc: Caller, input_body: dict[str, Any]) -> dict
     asked = str(input_body.get("requestedBy") or "")
     if not asked:
         raise ValidationFailed("requestedBy names the person the review is opened for.", code="requested_by_required")
-    body = _body(input_body, team=svc.team_id, saved_by=asked)
+    # The person is who asked; the service that opened it for them is kept beside it for the record.
+    body = {
+        **_body(input_body, team=svc.team_id, saved_by=asked),
+        "openedBy": f"{svc.sub.removeprefix('service:')}-service",
+    }
     major = int(str(body["moduleVersion"]).split(".")[0])
     return await registry(rt).open_request(
         KIND,
         str(body["moduleId"]),
         major,
         note=str(input_body.get("note") or ""),
-        by=f"{svc.sub.removeprefix('service:')}-service on behalf of {asked}",
+        by=asked,
         body=body,
         approved=False,
     )
