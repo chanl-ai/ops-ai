@@ -23,6 +23,7 @@ import {
   useDeleteAccount,
   useSetTeamApp,
   useStartSignIn,
+  useAppCredential,
   useTestAccount,
 } from '@/hooks/systems-queries';
 import {
@@ -77,7 +78,13 @@ export function PluginConnectForm({
   const asksWho = !sandbox && kind.perPerson && offeredWho.length > 1 && !card.connectionId;
   // Editing the default account: its keys are saved, and a blank field keeps its value. A new sandbox has none yet.
   const editing = !sandbox && Boolean(card.connectionId);
-  const groupsFor = (k: Kind) => pluginGroups(k, kinds, plugin, editing);
+  // A setting asked on the auth config is the picked config's when it sets one, edited there; an account on a config
+  // that leaves it unset (Ops AI's app) keeps its own, asked here.
+  const picked = useAppCredential(client ?? '');
+  const onConfig = (picked.data?.settings ?? {}) as Record<string, unknown>;
+  // Until the picked config answers, its fields are not shown: one it sets would otherwise be asked for a moment.
+  const ownSettings = plugin.settings.filter((x) => x.asked !== 'config' || !client || (Boolean(picked.data) && (onConfig[x.name] === undefined || onConfig[x.name] === '')));
+  const groupsFor = (k: Kind) => pluginGroups(k, kinds, { ...plugin, settings: ownSettings }, editing);
   // What the account saved: its own settings and which of the plugin's secrets are set. The plugin's settings it keeps
   // its own (a sign-in address) start blank, and a blank one keeps its value.
   const saved: SavedAccount | null =

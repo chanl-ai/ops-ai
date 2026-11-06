@@ -19,8 +19,9 @@ type Setting = Pick<PluginSetting, 'label'> & {
 // The Select's value for "your company's address", which is no choice of the plugin's.
 const OTHER = '__other__';
 
-/** A setting that asks where an account signs in: one with the plugin's choices or a typed company host. */
-export const isSignInPlace = (s: PluginSetting) => s.perAccount && !s.locked && s.asked !== 'config' && s.asked !== 'settings' && Boolean(s.choices?.length || s.other);
+/** A setting that asks where an account signs in: one with the plugin's choices or a typed company host. One asked on
+ * the auth config is asked of an account only when its config leaves it unset (connect-window.tsx). */
+export const isSignInPlace = (s: PluginSetting) => s.perAccount && !s.locked && s.asked !== 'settings' && Boolean(s.choices?.length || s.other);
 
 /** Whether `value` is a place test accounts sign in at: a choice marked so, or a typed host under a test host. */
 export function isTestPlace(setting: Setting, value: string): boolean {

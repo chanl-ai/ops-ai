@@ -449,9 +449,11 @@ class PluginAccounts:
         # The account's own settings, those given over those it holds. On a team's app credential, the settings that
         # belong to the app's registration are the credential's, read from it, and never copied onto the account.
         mine = {**dict((conn or {}).get("plugin_settings") or {}), **own}
-        if cred is not None:
-            mine = {k: v for k, v in mine.items() if k not in m.config_settings}
-        merged = self.host.settings(plugin, settings, {**mine, **dict(cred.get("settings") or {})} if cred else mine)
+        # What the app credential sets is its own and never copied onto the account; what it leaves unset the account
+        # gives, as an account on Ops AI's app does.
+        held = {k: v for k, v in dict((cred or {}).get("settings") or {}).items() if v not in (None, "")}
+        mine = {k: v for k, v in mine.items() if k not in held}
+        merged = self.host.settings(plugin, settings, {**mine, **held})
         before = cast(dict[str, Any], (conn or {}).get("settings") or {})
         keys: dict[str, Any] = dict(before)
         endpoint = render(m.endpoint, merged)

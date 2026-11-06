@@ -105,7 +105,8 @@ def offered(setting: Setting, value: object) -> bool:
 def own_and_registration(conn: Mapping[str, Any] | None) -> dict[str, Any]:
     """An account's own plugin settings with its app credential's over them (store.connections joins those in as
     `credential_settings`): what PluginHost.settings takes as the account's layer."""
-    return {**dict((conn or {}).get("plugin_settings") or {}), **dict((conn or {}).get("credential_settings") or {})}
+    held = {k: v for k, v in dict((conn or {}).get("credential_settings") or {}).items() if v not in (None, "")}
+    return {**dict((conn or {}).get("plugin_settings") or {}), **held}
 
 
 def readable(manifest: Manifest, settings: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, bool]]:
@@ -165,13 +166,14 @@ _PLACEHOLDER = re.compile(r"\{(\w+)\}")
 
 def per_account(manifest: Manifest) -> set[str]:
     """The settings each account keeps its own: those read from the token (the instance) and those the sign-in
-    addresses name, since a test account signs in elsewhere and lands elsewhere; a setting `asked: config` (Salesforce's
-    login_url) is its auth config's, never an account's."""
+    addresses name, since a test account signs in elsewhere and lands elsewhere. A setting `asked: config` (Salesforce's
+    login_url) is among them: its auth config's value wins when the config sets one, and an account on a config that
+    leaves it unset (Ops AI's app always does) gives its own."""
     c = manifest.connection
     named = {n for t in (c.authorize_url, c.token_url, c.revoke_url) if t for n in _PLACEHOLDER.findall(t)}
     looked = {c.after_sign_in.setting} if c.after_sign_in else set[str]()
     configs = {k for k, s in manifest.settings.items() if s.asked == "config"}
-    return ((set(c.from_token) | named | looked) & set(manifest.settings)) - configs
+    return (set(c.from_token) | named | looked | configs) & set(manifest.settings)
 
 
 def fixed_fields(manifest: Manifest) -> list[str]:

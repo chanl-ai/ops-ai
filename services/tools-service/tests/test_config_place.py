@@ -109,3 +109,25 @@ async def test_the_configs_answer_carries_the_fields_choices_and_host_check(
     card = (await client.get(f"/v1/apps/{APP}", headers=admin(tenant))).json()["data"]["card"]
     asked = {s["name"]: s.get("asked") for s in card["plugin"]["settings"]}
     assert asked["login_url"] == "config", asked
+
+
+async def test_a_config_that_leaves_the_address_unset_lets_each_account_give_its_own(
+    client: httpx.AsyncClient, tenant: str
+) -> None:
+    # Ops AI's app is the install's and sets no address, so each account says where it signs in, as a team's own
+    # config with the field left empty does.
+    sandbox = "https://test.signin.test/oauth2"
+    on = await client.put(
+        f"/v1/apps/{APP}/team", json={"enabled": True, "settings": {"login_url": ACME}}, headers=admin(tenant)
+    )
+    assert on.status_code == 200, on.text
+    first = str(on.json()["data"]["connectionId"])
+    config = await team_credential(client, admin(tenant), APP, "config-empty", "s3cret-value")
+    made = await client.post(
+        f"/v1/apps/{APP}/accounts",
+        json={"name": "Sandbox", "credentialId": config, "settings": {"login_url": sandbox}},
+        headers=admin(tenant),
+    )
+    assert made.status_code == 201, made.text
+    assert await _authorize_url(client, tenant, first) == f"{ACME}/common/authorize"
+    assert await _authorize_url(client, tenant, str(made.json()["data"]["id"])) == f"{sandbox}/common/authorize"
