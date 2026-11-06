@@ -1129,6 +1129,8 @@ export interface components {
             }[];
             /** Lastrefreshedat */
             lastRefreshedAt?: string | null;
+            /** Lastsyncat */
+            lastSyncAt?: string | null;
             /** Metadataprofile */
             metadataProfile: {
                 [key: string]: unknown;
@@ -1212,6 +1214,8 @@ export interface components {
             }[];
             /** Lastrefreshedat */
             lastRefreshedAt?: string | null;
+            /** Lastsyncat */
+            lastSyncAt?: string | null;
             /** Metadatakeys */
             metadataKeys: string[];
             /** Metadataprofile */
@@ -1351,6 +1355,8 @@ export interface components {
             }[];
             /** Lastrefreshedat */
             lastRefreshedAt?: string | null;
+            /** Lastsyncat */
+            lastSyncAt?: string | null;
             /** Metadataprofile */
             metadataProfile: {
                 [key: string]: unknown;

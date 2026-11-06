@@ -13,7 +13,10 @@ import type { KnowledgeBaseDetail } from '@/lib/types/knowledge';
 
 import { KbHealthBadge, RunStatusBadge, SourceTypeIcon } from './knowledge-meta';
 
-/** Why a knowledge base's health badge says what it says, what it reads, and its recent index jobs. */
+/**
+ * Why a knowledge base's health badge says what it says, what it reads, and its recent index jobs. Someone who may not
+ * change the base (`kb.canEdit` false) reads it with no build, refresh or retry actions.
+ */
 export function KbOverview({
   kb,
   busy,
@@ -28,15 +31,17 @@ export function KbOverview({
   tabHref: (tab: string, query?: string) => string;
 }) {
   const never = kb.health === 'never';
+  const may = kb.canEdit !== false;
   const HealthIcon = kb.health === 'healthy' ? CheckCircle2 : kb.health === 'failed' ? XCircle : kb.health === 'indexing' ? Loader2 : AlertTriangle;
-  const iconClass = kb.health === 'healthy' ? 'text-success-text' : kb.health === 'failed' ? 'text-destructive' : kb.health === 'indexing' ? 'animate-spin text-blue-500' : 'text-warning-text';
+  const iconClass = kb.health === 'healthy' ? 'text-success-text' : kb.health === 'failed' ? 'text-destructive-text' : kb.health === 'indexing' ? 'animate-spin text-blue-500' : 'text-warning-text';
 
   return (
     <div className="flex flex-col gap-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile label="Documents" value={count(kb.stats.documents)} hint={plural(kb.sources.length, 'source')} href={tabHref('sources')} />
         <StatTile label="Chunks" value={count(kb.stats.chunks)} hint={kb.stats.documents ? `${(kb.stats.chunks / Math.max(kb.stats.documents, 1)).toFixed(1)} per document` : 'Nothing indexed'} />
-        <StatTile label="Last refreshed" value={never ? 'Never' : relativeTime(kb.lastRefreshedAt)} hint={kb.jobs[0]?.trigger ?? 'No jobs yet'} />
+        {/* One clock, the one each source row shows; when the content last changed is said under it. */}
+        <StatTile label="Last synced" value={kb.lastSyncAt ? relativeTime(kb.lastSyncAt) : 'Never'} hint={kb.lastRefreshedAt ? `Content changed ${relativeTime(kb.lastRefreshedAt)}` : 'Nothing indexed yet'} />
         <StatTile label="Failures" value={count(kb.stats.failures)} tone={kb.stats.failures ? 'bad' : 'default'} hint={kb.stats.failures ? 'View failed documents' : 'None'} href={kb.stats.failures ? tabHref('documents', 'status=failed') : undefined} />
       </div>
 
@@ -47,7 +52,7 @@ export function KbOverview({
           actions={
             <Button asChild variant="ghost" size="sm" className="h-7">
               <Link href={tabHref('sources')}>
-                Manage <ArrowRight className="size-3.5" />
+                {may ? 'Manage' : 'View'} <ArrowRight className="size-3.5" />
               </Link>
             </Button>
           }
@@ -78,10 +83,12 @@ export function KbOverview({
         >
           {never ? (
             <div className="flex flex-col items-start gap-3 text-sm">
-              <p className="text-muted-foreground">Never indexed. Build the index so agents can search it.</p>
-              <LoadingButton size="sm" isLoading={busy} onClick={onRefresh} disabled={!kb.sources.length}>
-                <RefreshCw className="size-4" /> Build index
-              </LoadingButton>
+              <p className="text-muted-foreground">{may ? 'Never indexed. Build the index so agents can search it.' : 'Never indexed. A builder builds the index so agents can search it.'}</p>
+              {may && (
+                <LoadingButton size="sm" isLoading={busy} onClick={onRefresh} disabled={!kb.sources.length}>
+                  <RefreshCw className="size-4" /> Build index
+                </LoadingButton>
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-3">
@@ -110,7 +117,7 @@ export function KbOverview({
                 Healthy: the last refresh succeeded with no failures. Degraded: failures, or more than 10% of documents past their review-by date. Failed: the last refresh failed.
               </p>
               <div className="flex flex-wrap gap-2">
-                {!kb.indexing && (
+                {may && !kb.indexing && (
                   <>
                     {kb.stats.failures > 0 && (
                       <Button size="sm" variant="outline" disabled={busy} onClick={onRetryFailed}>
@@ -141,11 +148,6 @@ export function KbOverview({
           ))}
           {kb.precedence.length === 0 && <li className="px-4 py-4 text-sm text-muted-foreground">No precedence rules; the highest-scoring chunk wins.</li>}
         </ol>
-        <div className="border-t px-4 py-2 text-xs">
-          <Link href={tabHref('retrieval')} className="text-muted-foreground hover:text-foreground">
-            Edit on the Retrieval tab
-          </Link>
-        </div>
       </Section>
 
       <Section title="Recent index jobs" flush>
@@ -170,7 +172,7 @@ export function KbOverview({
                   <TableCell className="text-muted-foreground">{j.trigger}</TableCell>
                   <TableCell className="text-right tabular-nums">{j.status === 'running' ? '—' : duration(j.durationSec)}</TableCell>
                   <TableCell className="text-right tabular-nums">{count(j.processed)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{j.failed ? <span className="text-destructive">{count(j.failed)}</span> : '0'}</TableCell>
+                  <TableCell className="text-right tabular-nums">{j.failed ? <span className="text-destructive-text">{count(j.failed)}</span> : '0'}</TableCell>
                   <TableCell>
                     <RunStatusBadge status={j.status} />
                   </TableCell>

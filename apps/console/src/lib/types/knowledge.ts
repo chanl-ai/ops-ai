@@ -321,7 +321,10 @@ export interface KnowledgeBase {
   };
   health: KbHealth;
   healthReasons: string[];
+  /** When an index last changed what the base holds. */
   lastRefreshedAt?: string;
+  /** When its sources were last read: the newest of their syncs, the time each source row shows. */
+  lastSyncAt?: string;
   indexing?: { done: number; total: number; taskId: string };
   jobs: IndexJob[];
   createdAt: string;

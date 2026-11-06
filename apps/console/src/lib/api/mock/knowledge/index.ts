@@ -144,6 +144,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
   };
   const kbRow = (k: KnowledgeBase): KnowledgeBaseRow => ({
     ...deriveStats(k),
+    lastSyncAt: k.sources.map((l) => sources.find((s) => s.id === l.sourceId)?.lastSyncAt).filter((t): t is string => !!t).sort().at(-1),
     sourceNames: k.sources.map((l) => sources.find((s) => s.id === l.sourceId)?.name ?? l.sourceId),
     agentNames: deps.agentNames(k.name),
   });

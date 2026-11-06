@@ -132,7 +132,7 @@ function columns(actions: { open: (k: KnowledgeBaseRow, tab?: string) => void; r
           <span className="text-muted-foreground">None</span>
         ),
     },
-    { id: 'refreshed', accessorFn: (r) => r.lastRefreshedAt ?? '', header: ({ column }) => <DataTableColumnHeader column={column} title="Last refreshed" />, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{relativeTime(row.original.lastRefreshedAt)}</span> },
+    { id: 'refreshed', accessorFn: (r) => r.lastSyncAt ?? '', header: ({ column }) => <DataTableColumnHeader column={column} title="Last synced" />, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{row.original.lastSyncAt ? relativeTime(row.original.lastSyncAt) : 'Never'}</span> },
     {
       id: 'access',
       accessorFn: (r) => r.access.members.mode,
@@ -260,8 +260,8 @@ export default function KnowledgeBasesPage() {
                   <dd className="tabular-nums">{count(k.stats.chunks)}</dd>
                 </div>
                 <div>
-                  <dt className="text-muted-foreground">Refreshed</dt>
-                  <dd>{relativeTime(k.lastRefreshedAt)}</dd>
+                  <dt className="text-muted-foreground">Synced</dt>
+                  <dd>{k.lastSyncAt ? relativeTime(k.lastSyncAt) : 'Never'}</dd>
                 </div>
               </dl>
             </div>

@@ -228,12 +228,16 @@ class KnowledgeService:
             "createdAt": _iso(s["created_at"]),
         }
 
-    async def _counts(self, tenant: str) -> dict[str, dict[str, int]]:
-        """Each source's documents by status and its indexed chunks, from its items."""
-        return {str(x["id"]): x["item_counts"] for x in await self.store.sources(tenant)}
+    async def _counts(self, tenant: str) -> dict[str, dict[str, Any]]:
+        """Each source's documents by status and its indexed chunks, from its items, and when it last synced."""
+        rows = await self.store.sources(tenant)
+        return {str(x["id"]): {**x["item_counts"], "synced": x.get("last_sync_at")} for x in rows}
 
-    def _base(self, b: dict[str, Any], source_ids: list[str], counts: dict[str, dict[str, int]]) -> dict[str, Any]:
+    def _base(self, b: dict[str, Any], source_ids: list[str], counts: dict[str, dict[str, Any]]) -> dict[str, Any]:
         mine = [counts.get(sid, {}) for sid in source_ids]
+        # When the base was last read: its newest source sync, the same time each source row shows. Content changing
+        # (lastRefreshedAt) is a separate fact, and a sync that changes nothing does not move it.
+        synced = max((c["synced"] for c in mine if c.get("synced")), default=None)
         documents = sum(c.get("indexed", 0) for c in mine)
         failures = sum(c.get("failed", 0) for c in mine)
         if b["last_refreshed_at"] is None:
@@ -288,6 +292,7 @@ class KnowledgeService:
             "health": health,
             "healthReasons": reasons,
             **({"lastRefreshedAt": _iso(b["last_refreshed_at"])} if b["last_refreshed_at"] else {}),
+            **({"lastSyncAt": _iso(synced)} if synced else {}),
             "jobs": [],
             "createdAt": _iso(b["created_at"]),
         }
