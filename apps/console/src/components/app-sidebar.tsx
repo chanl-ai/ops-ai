@@ -208,7 +208,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
           onRetry={() => void retryTeams()}
           teams={teams}
           activeTeam={team}
-          subtitle={`${brand.name ?? identity?.workspace ?? 'Workspace'} · Ops AI`}
+          subtitle={[brand.name ?? identity?.workspace, 'Ops AI'].filter(Boolean).join(' · ')}
           onSelect={switchTeam}
           ownerGroups={lookups?.owners ?? []}
           onCreate={canCreate ? (input) => create.mutateAsync(input) : undefined}

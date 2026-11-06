@@ -76,6 +76,15 @@ async def test_me_names_the_workspace_by_its_own_name(platform: Platform) -> Non
     assert me["tenantName"] == "Northgate Credit Union", me
 
 
+async def test_me_names_no_workspace_rather_than_its_id(platform: Platform) -> None:
+    # A blank name is null, so the header shows nothing instead of the tenant id.
+    p = await platform.person()
+    async with platform.engine.begin() as c:
+        await c.execute(sa.update(tenants).where(tenants.c.id == p.tenant_id).values(name=""))
+    me = (await platform.public.get("/v1/me", headers=await bearer(platform, p))).json()["data"]
+    assert me["tenantName"] is None, me
+
+
 async def test_teams_lists_only_the_callers_teams(platform: Platform) -> None:
     p = await platform.person(roles=("builder",))
     await platform.person(roles=("admin",), tenant_id=p.tenant_id)
