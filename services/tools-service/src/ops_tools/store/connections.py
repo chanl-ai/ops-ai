@@ -295,6 +295,12 @@ def held_of(tenant_id: str, rows: Sequence[Row]) -> list[tuple[str, str]]:
     return held
 
 
+# The account's auth config, when it signs in with one of the team's own (its name, read beside the account).
+_CREDENTIAL_OF = sa.and_(
+    app_credentials.c.tenant_id == connections.c.tenant_id, app_credentials.c.id == connections.c.credential_id
+)
+
+
 class ConnectionStore:
     # A change and its audit row land together (TRANSACTION) against the revision read (CAS); a
     # token is stored against the rotation it replaced (CAS).
@@ -1026,6 +1032,8 @@ class ConnectionStore:
                 k.auth_kind,
                 k.sandbox,
                 k.app_id,
+                k.platform_app,
+                app_credentials.c.name.label("credential_name"),
                 t.account,
                 t.scopes,
                 t.refreshed_at,
@@ -1035,6 +1043,7 @@ class ConnectionStore:
                 t.test,
             )
             .join(connections, sa.and_(k.tenant_id == t.tenant_id, k.id == t.connection_id))
+            .outerjoin(app_credentials, _CREDENTIAL_OF)
             .where(
                 t.tenant_id == tenant_id,
                 k.team_id == team_id,
@@ -1061,6 +1070,8 @@ class ConnectionStore:
                 k.docs_url,
                 k.sandbox,
                 k.app_id,
+                k.platform_app,
+                app_credentials.c.name.label("credential_name"),
                 t.person_id,
                 t.account,
                 t.scopes,
@@ -1071,6 +1082,7 @@ class ConnectionStore:
                 t.test,
             )
             .outerjoin(connection_tokens, own)
+            .outerjoin(app_credentials, _CREDENTIAL_OF)
             .where(
                 k.tenant_id == tenant_id,
                 k.team_id == team_id,

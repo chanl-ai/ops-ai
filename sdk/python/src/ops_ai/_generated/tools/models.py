@@ -615,6 +615,7 @@ class MyAccount(TypedDict, closed=True):
     account: NotRequired[str | None]
     app: str
     appId: str
+    authConfig: NotRequired[str | None]
     authKind: str
     connected: bool
     connection: str
@@ -631,6 +632,7 @@ class MyAccount(TypedDict, closed=True):
     sandbox: bool
     scopes: list[str]
     since: NotRequired[str | None]
+    state: NotRequired[Literal["connected", "expired", "not_connected"]]
     test: NotRequired[AccountTest | None]
 
 

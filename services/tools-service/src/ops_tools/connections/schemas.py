@@ -271,6 +271,11 @@ class MyAccount(Out):
     scopes: list[str]
     since: str | None = None
     expires_at: str | None = None
+    # The auth config the account signs in through: "Ops AI's app", a team app credential's name, or none for a kind
+    # whose person gives their own key.
+    auth_config: str | None = None
+    # The person's own sign-in: connected, expired (the system refused it), or not connected yet.
+    state: Literal["connected", "expired", "not_connected"] = "connected"
 
 
 class AccountRow(Out):

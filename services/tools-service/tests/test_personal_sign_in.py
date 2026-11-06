@@ -414,3 +414,24 @@ async def test_the_team_accounts_sign_in_asks_for_every_scope_its_operations_nee
     assert scope(team) == "openid api cases.write"
     own = await client.post(path, json={}, headers=person(tenant, *JAMES_P))
     assert scope(own) == "openid api"
+
+
+async def test_my_accounts_keeps_an_app_after_disconnect_with_its_state_and_auth_config(
+    client: httpx.AsyncClient, tenant: str
+) -> None:
+    # The page lists every app a person may sign in to: one that dropped off after a disconnect could not be
+    # connected again from it, and a row without its state cannot say Connect or Reconnect.
+    conn = await personal_connection(client, tenant)
+    james = person(tenant, *JAMES_P)
+
+    async def row() -> dict[str, Any]:
+        listed = (await client.get("/v1/me/accounts", params={"every": "true"}, headers=james)).json()["data"]
+        return next(r for r in listed if r["connectionId"] == conn)
+
+    first = await row()
+    assert (first["state"], first["account"]) == ("not_connected", None), first
+    assert "authConfig" in first, first
+    await sign_in(client, tenant, conn, JAMES_P, "james")
+    assert (await row())["state"] == "connected"
+    assert (await client.delete(f"/v1/me/accounts/{conn}", headers=james)).status_code == 204
+    assert (await row())["state"] == "not_connected"

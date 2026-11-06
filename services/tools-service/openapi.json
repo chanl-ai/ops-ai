@@ -7047,6 +7047,17 @@
             "title": "Appid",
             "type": "string"
           },
+          "authConfig": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authconfig"
+          },
           "authKind": {
             "title": "Authkind",
             "type": "string"
@@ -7159,6 +7170,16 @@
               }
             ],
             "title": "Since"
+          },
+          "state": {
+            "default": "connected",
+            "enum": [
+              "connected",
+              "expired",
+              "not_connected"
+            ],
+            "title": "State",
+            "type": "string"
           },
           "test": {
             "anyOf": [

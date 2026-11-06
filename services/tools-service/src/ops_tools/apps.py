@@ -37,7 +37,7 @@ from .connections.records import (
     team_test,
 )
 from .connections.schemas import AccountDetail, AccountIn, AccountTest, ConnectionHealth, NewAppIn
-from .connections.service import ConnectionService, own_key
+from .connections.service import OPS_AI_APP, ConnectionService, own_key
 from .defaults import ensure_defaults
 from .modules.directory import Directory
 from .modules.routes import ERRORS
@@ -291,7 +291,7 @@ class AppCredentialIn(In):
 
     # The app as the Apps page names it: `plugin:<id>` for an app from a plugin, the account's id for a custom app.
     app: str = Field(min_length=1, max_length=200)
-    # What the Credentials page lists it as; left out, "<app> credentials".
+    # What the auth configs list it as; left out, "<team> app", so it never reads as one of the app's accounts.
     name: str | None = Field(default=None, min_length=1, max_length=200)
     client_id: str = Field(min_length=1, max_length=500)
     # Left out for a public client, or one that proves itself with a signed assertion (each account's signing pair).
@@ -945,7 +945,7 @@ async def add_app_credential(apps: Apps, who: Caller, i: AppCredentialIn) -> dic
             "id": made,
             "team_id": who.team.id,
             "app_id": str(card["id"]),
-            "name": (i.name or "").strip() or f"{card['name']} credentials",
+            "name": (i.name or "").strip() or f"{who.team.name} app",
             "client_id": i.client_id.strip(),
             "scopes": " ".join(scopes) if scopes is not None else None,
             "secret_name": secret,
@@ -1375,7 +1375,7 @@ async def _auth_configs(
     configs: list[dict[str, Any]] = []
     if plugin.get("platformApp"):
         configs.append(
-            {"id": f"{OPS_AI}{card['id']}", "name": "Ops AI", "type": "ops_ai", "canEdit": False, "canDelete": False}
+            {"id": f"{OPS_AI}{card['id']}", "name": OPS_AI_APP, "type": "ops_ai", "canEdit": False, "canDelete": False}
         )
     for cred in await store.team_credentials(who.tenant_id, who.team.id, str(card["id"])):
         secret = await _secret_row(apps, who, cred) if may else None

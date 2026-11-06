@@ -3669,6 +3669,8 @@ export interface components {
             app: string;
             /** Appid */
             appId: string;
+            /** Authconfig */
+            authConfig?: string | null;
             /** Authkind */
             authKind: string;
             /** Connected */
@@ -3704,6 +3706,12 @@ export interface components {
             scopes: string[];
             /** Since */
             since?: string | null;
+            /**
+             * State
+             * @default connected
+             * @enum {string}
+             */
+            state: "connected" | "expired" | "not_connected";
             test?: components["schemas"]["AccountTest"] | null;
         };
         /**

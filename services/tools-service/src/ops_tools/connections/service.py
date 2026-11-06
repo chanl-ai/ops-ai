@@ -120,6 +120,8 @@ def _person(who: Caller) -> str:
     return f"{p.sub}|{p.email}"[:200] if p is not None else who.name
 
 
+# How the console names Ops AI's own OAuth app wherever an auth config is named.
+OPS_AI_APP = "Ops AI's app"
 MCP_LIST_TOOLS = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
 
 
@@ -1203,6 +1205,14 @@ class ConnectionService:
                     "refused": r.get("refused_at") is not None,
                     "refusedAt": _iso(r.get("refused_at")),
                     "refusedReason": r.get("refused_reason"),
+                    "authConfig": OPS_AI_APP if r.get("platform_app") else r.get("credential_name"),
+                    "state": (
+                        "not_connected"
+                        if every and r.get("person_id") is None
+                        else "expired"
+                        if r.get("refused_at") is not None
+                        else "connected"
+                    ),
                 }
             )
         return out
