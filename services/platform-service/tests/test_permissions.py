@@ -32,7 +32,7 @@ def claims(headers: dict[str, str]) -> dict[str, Any]:
     return json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
 
 
-async def join(platform: Platform, p: Person, team: str, role: str) -> None:
+async def join(platform: Platform, p: Person, team: str, role: str, *, security_team: str = "team_security") -> None:
     """Makes `p` an active `role` member of `team`, with the assignments the member routes write."""
     async with platform.engine.begin() as c:
         await c.execute(
@@ -54,7 +54,7 @@ async def join(platform: Platform, p: Person, team: str, role: str) -> None:
             team_id=team,
             user_id=p.user_id,
             member_role=role,
-            security_team="team_security",
+            security_team=security_team,
             granted_by="test",
             at=now_iso(),
         )
@@ -174,15 +174,18 @@ async def test_a_security_team_action_is_listed_only_in_the_security_team(platfo
     mine = held(await permissions(platform, await bearer(platform, p)), team)
     assert "agents.create" in mine
     assert not SECURITY_CELLS & set(mine), sorted(SECURITY_CELLS & set(mine))
+    # The tenant's own Security team: a team id is unique across tenants, so the seed's team_security is not reused.
+    security_team = new_id("team")
     async with platform.engine.begin() as c:
         await c.execute(
             teams.insert().values(
-                id="team_security", tenant_id=p.tenant_id, name="Security", owner_groups=[], scope="owned",
+                id=security_team, tenant_id=p.tenant_id, name="Security", owner_groups=[], scope="owned",
                 created_at=now_iso(),
             )
         )  # fmt: skip
-    await join(platform, p, "team_security", "admin")
-    security = held(await permissions(platform, await bearer(platform, p)), "team_security")
+        await c.execute(tenants.update().where(tenants.c.id == p.tenant_id).values(security_team_id=security_team))
+    await join(platform, p, security_team, "admin", security_team=security_team)
+    security = held(await permissions(platform, await bearer(platform, p)), security_team)
     assert security["secrets_egress.manage"]["securityTeamOnly"] is True
     # A workspace that names no Security team: nobody holds them, in any team.
     async with platform.engine.begin() as c:
