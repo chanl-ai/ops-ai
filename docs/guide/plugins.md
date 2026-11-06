@@ -315,7 +315,7 @@ so no plugin needs console code:
 
 | `asked` | Asked in | Held by |
 |---|---|---|
-| `config` | The auth config's New and Edit windows | The auth config, as `connection.credential_settings` are: every account on it reads the same value |
+| `config` | The auth config's New and Edit windows; Connect and Add account when the picked config leaves it unset | The auth config when it sets one, and every account on it reads that value; else each account's own. Ops AI's app sets none, so its accounts are always asked |
 | `connect` | The Connect and Add account windows | The account, or the team when the sign-in addresses do not name it |
 | `settings` | The app's Settings tab only | The team |
 | unset | An account's own when the sign-in addresses name it, else the team's | As asked |
@@ -329,8 +329,8 @@ tools-service checks every value against the same declaration when an auth confi
 setting or one outside its choices is refused with a 400 whose message names the allowed values in a sentence, and the
 console builds the form's checks from the declaration (`configSchema` in `apps/console/src/lib/field-schema.ts`), so
 both refuse the same values. Changing an `asked: config` value or the permissions on an auth config re-renders the
-sign-in addresses of every account on it and marks each to sign in again; the Connect window shows the address as
-"Signs in at" with a link to edit the auth config.
+sign-in addresses of every account on it and marks each to sign in again. The Connect window shows a value the
+picked config sets as "Signs in at" with a link to edit the config, and asks for one it leaves unset.
 
 Salesforce asks where to sign in on the auth config, because one Connected App belongs to one org:
 
@@ -487,6 +487,12 @@ model is needed.
 | Put its folder in the install's plugins folder (`plugins/` in the repo, `OPS_PLUGINS_DIR` in Docker and Kubernetes) | Every plugin an install runs, built-in or brought by a customer |
 | Add it to the environment tools-service runs in (`uv add`) | A packaged plugin on a developer's stack |
 | List its folder in `OPS_PLUGIN_PATHS` (a JSON list) | A plugin under development, without copying it |
+
+A plugin found in two places, such as a copy in the plugins folder and a checkout in `OPS_PLUGIN_PATHS`, loads from
+neither: `GET /v1/plugins` reports each with both places, so a stale copy can never run in place of the checkout. A
+stack that has the plugins repository cloned by `make demo-salesforce` (`.run/plugins/ops-ai-plugins`, or
+`.run/isolated/...` with `ISOLATED=1`, at its pinned ref) loads plugins from that clone only, and does not read the
+repo's `plugins/` folder.
 
 `ops plugin install <folder>` validates the plugin, then copies its package folder into the plugins folder (`--into`
 names it when it is not `./plugins`), replacing an earlier copy whole; a plugin that fails validation is not copied.

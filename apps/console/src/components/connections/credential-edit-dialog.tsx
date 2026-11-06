@@ -58,7 +58,7 @@ function EditForm({ id, onClose }: { id: string; onClose: () => void }) {
     const now = picked(v);
     const held = c.permissions.map((p) => p.id);
     if (now.join(' ') !== held.join(' ')) body.scopes = now;
-    const settings = Object.fromEntries((c.fields ?? []).map((f) => [f.name, (v[`setting__${f.name}`] ?? '').trim()]).filter(([k, val]) => val !== String((c.settings ?? {})[k] ?? '')));
+    const settings = Object.fromEntries((c.fields ?? []).map((f) => [f.name, (v[`setting__${f.name}`] ?? '').trim()]).filter(([k, val]) => val !== String((c.settings ?? {})[k] ?? (c.fields ?? []).find((f) => f.name === k)?.default ?? '')));
     if (Object.keys(settings).length) body.settings = settings;
     return body;
   };

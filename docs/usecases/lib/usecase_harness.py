@@ -172,6 +172,9 @@ def _wait(url: str, proc: subprocess.Popen[bytes], log: Path, timeout: float = 9
     raise SystemExit(f"FAIL {url} not healthy after {timeout}s; log: {log}")
 
 
+_EMPTY_PLUGINS = tempfile.mkdtemp(prefix="usecase-plugins-")
+
+
 def _env() -> dict[str, str]:
     # The root .env, exported by make, routes the shared stack through models-service, and make exports the stack's
     # platform-service URL; a use case stack builds its own routes (or none), so the shared values never reach its
@@ -196,6 +199,9 @@ def _env() -> dict[str, str]:
     )
     env = {k: v for k, v in os.environ.items() if k not in dropped}
     env.pop("VIRTUAL_ENV", None)
+    # A run loads only the plugins its use case names (OPS_PLUGIN_PATHS); the repo's plugins/ folder holds whatever was
+    # installed there last, and a plugin in both places loads from neither.
+    env.setdefault("OPS_PLUGINS_DIR", _EMPTY_PLUGINS)
     return env
 
 
