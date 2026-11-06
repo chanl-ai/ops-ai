@@ -1138,13 +1138,13 @@ class ToolRunResult(TypedDict, closed=True):
     wouldPause: bool
 
 
-class ToolSwitchIn(TypedDict, closed=True):
-    on: bool
-
-
 class ToolUser(TypedDict, closed=True):
     id: str
     name: str
+
+
+class ToolsAddIn(TypedDict, closed=True):
+    tools: list[str]
 
 
 class ValidationError(TypedDict):
@@ -1859,9 +1859,9 @@ class AppCredentialDetail(TypedDict, closed=True):
 
 class AppTool(TypedDict, closed=True):
     access: str
+    added: NotRequired[bool]
     askedAtSignIn: NotRequired[bool]
     name: str
-    on: NotRequired[bool]
     title: str
     usedBy: NotRequired[ToolUsedBy | None]
 
@@ -1928,6 +1928,11 @@ class EnvelopeTestOut(TypedDict, closed=True):
 
 class EnvelopeToolModuleDetail(TypedDict, closed=True):
     data: ToolModuleDetail
+    success: Literal[True]
+
+
+class EnvelopeListAppTool(TypedDict, closed=True):
+    data: list[AppTool]
     success: Literal[True]
 
 

@@ -1,6 +1,6 @@
 {
   "date": "2026-11-05",
-  "title": "Choose which of an app's tools agents use",
-  "description": "Each app's tools can be switched on or off for your team; a new app starts with its read tools on and its write tools off. Agents are offered only switched-on tools, a call to one that is off is refused, and a sign-in asks only for the permissions the switched-on tools need.",
+  "title": "Add an app's tools to your team from its catalog",
+  "description": "An app's Tools tab lists everything it offers, and your team adds the tools it wants; a new app starts with its read tools added. Only added tools show on the Tools page and in the agent picker, a call to one not added is refused, and a sign-in asks only for the permissions added tools need.",
   "tag": "new"
 }

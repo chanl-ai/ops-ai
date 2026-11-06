@@ -86,11 +86,12 @@ export const useChangeAccount = () =>
     sdk((ops) => ops.raw.tools.apps_change_account({ path: path(a), body: a.body })),
   );
 export const useDeleteAccount = () => useSystemsMutation((a: AccountRef) => sdk((ops) => ops.raw.tools.apps_delete_account({ path: path(a) })));
-/** Switches one of an app's tools on or off for the team (PUT /v1/apps/{id}/tools/{tool}). */
-export const useSwitchTool = () =>
-  useSystemsMutation((a: { appId: string; tool: string; on: boolean }) =>
-    sdk((ops) => ops.raw.tools.apps_switch_tool({ path: { app_id: a.appId, tool: a.tool }, body: { on: a.on } })),
-  );
+/** Adds tools from an app's catalog to the team (POST /v1/apps/{id}/tools); agents may then pick them. */
+export const useAddTools = () =>
+  useSystemsMutation((a: { appId: string; tools: string[] }) => sdk((ops) => ops.raw.tools.apps_add_tools({ path: { app_id: a.appId }, body: { tools: a.tools } })));
+/** Removes a tool from the team (DELETE /v1/apps/{id}/tools/{tool}); agents are no longer offered it. */
+export const useRemoveTool = () =>
+  useSystemsMutation((a: { appId: string; tool: string }) => sdk((ops) => ops.raw.tools.apps_remove_tool({ path: { app_id: a.appId, tool: a.tool } })));
 /** Deletes the app from the team with its accounts and their secrets; refused (409 app_in_use) while a tool uses it. */
 export const useDeleteApp = () => useSystemsMutation((appId: string) => sdk((ops) => ops.raw.tools.apps_delete_app({ path: { app_id: appId } })));
 /** Moves every account of a custom app to another sign-in kind; the answer names the accounts to set up again. */

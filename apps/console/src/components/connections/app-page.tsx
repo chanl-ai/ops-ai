@@ -102,10 +102,10 @@ export function AppPageView({ appId }: { appId: string }) {
     run();
   };
 
-  const toolsOn = data.tools.filter((t) => t.on ?? true).length;
+  const toolsAdded = data.tools.filter((t) => t.added ?? true).length;
   const tabs: [string, string][] = [
     ...(builtIn ? [] : ([['accounts', `Accounts · ${accounts.length}`]] as [string, string][])),
-    ['tools', card.kind === 'plugin' ? `Tools · ${toolsOn} of ${data.tools.length} on` : 'Tools'],
+    ['tools', card.kind === 'plugin' ? `Tools · ${toolsAdded} of ${data.tools.length} added` : 'Tools'],
     ...(builtIn || !configs.length ? [] : ([['auth', `Auth configs · ${configs.length}`]] as [string, string][])),
     ['resources', 'Resources'],
     ['logs', 'Logs'],

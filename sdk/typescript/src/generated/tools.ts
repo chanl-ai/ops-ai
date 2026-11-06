@@ -393,6 +393,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/apps/{app_id}/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Tools
+         * @description Adds tools from an app's catalog to the team: agents may then pick them and the gateway runs them.
+         */
+        post: operations["apps_add_tools"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/apps/{app_id}/tools/{tool}": {
         parameters: {
             query?: never;
@@ -401,13 +421,13 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /**
-         * Switch Tool
-         * @description Switches one of an app's tools on or off for the team; off, agents cannot pick it and calls are refused.
-         */
-        put: operations["apps_switch_tool"];
+        put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Remove Tool
+         * @description Removes a tool from the team: agents are no longer offered it and its calls are refused.
+         */
+        delete: operations["apps_remove_tool"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1848,17 +1868,17 @@ export interface components {
             /** Access */
             access: string;
             /**
+             * Added
+             * @default true
+             */
+            added: boolean;
+            /**
              * Askedatsignin
              * @default false
              */
             askedAtSignIn: boolean;
             /** Name */
             name: string;
-            /**
-             * On
-             * @default true
-             */
-            on: boolean;
             /** Title */
             title: string;
             usedBy?: components["schemas"]["ToolUsedBy"] | null;
@@ -2885,6 +2905,16 @@ export interface components {
         Envelope_list_AppResource__: {
             /** Data */
             data: components["schemas"]["AppResource"][];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[list[AppTool]] */
+        Envelope_list_AppTool__: {
+            /** Data */
+            data: components["schemas"]["AppTool"][];
             /**
              * Success
              * @constant
@@ -5157,11 +5187,6 @@ export interface components {
             /** Wouldpause */
             wouldPause: boolean;
         };
-        /** ToolSwitchIn */
-        ToolSwitchIn: {
-            /** On */
-            on: boolean;
-        };
         /** ToolUsedBy */
         ToolUsedBy: {
             /** Agents */
@@ -5175,6 +5200,11 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+        };
+        /** ToolsAddIn */
+        ToolsAddIn: {
+            /** Tools */
+            tools: string[];
         };
         /** ValidationError */
         ValidationError: {
@@ -7953,7 +7983,132 @@ export interface operations {
             };
         };
     };
-    apps_switch_tool: {
+    apps_add_tools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolsAddIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_AppTool__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    apps_remove_tool: {
         parameters: {
             query?: never;
             header?: never;
@@ -7963,11 +8118,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ToolSwitchIn"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

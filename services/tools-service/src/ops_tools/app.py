@@ -329,7 +329,7 @@ def create_gateway_app(
         can(caller, "tools", "view", what="the grantable operations")
         rows = await registry.grantable(caller.tenant_id, team_view(caller))
         if plugins is not None and caller.team_id:
-            # A tool the team switched off on its app's Tools tab is not offered to its agents.
+            # A tool the team has not added from its app's catalog is not offered to its agents.
             off = await plugins.tools_off(caller.tenant_id, caller.team_id)
             rows = [r for r in rows if str(r["name"]) not in off]
         if await all_writes_wait(caller.tenant_id, caller.team_id):

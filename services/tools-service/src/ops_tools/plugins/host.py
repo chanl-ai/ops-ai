@@ -231,21 +231,22 @@ def input_field(name: str, f: InputField, *, paged: bool = False) -> dict[str, A
     return out
 
 
-def tools_on(m: Manifest, binding: Mapping[str, Any] | None) -> set[str] | None:
-    """The operations the team switched on, by operation name; None while the binding keeps every tool on (one made
-    before the switch, or no binding)."""
+def tools_added(m: Manifest, binding: Mapping[str, Any] | None) -> set[str] | None:
+    """The operations the team added, by operation name; None while the binding keeps every tool added (one made
+    before the catalog, or no binding). Stored as the binding's `tools_on`, by tool name."""
     held = (binding or {}).get("tools_on")
     return None if held is None else {m.operation(str(t)) for t in cast(list[Any], held)}
 
 
-def default_tools_on(m: Manifest) -> list[str]:
-    """What a new app starts with: its read tools on, its write tools off until someone chooses them."""
+def default_tools_added(m: Manifest) -> list[str]:
+    """What a new app starts with: its read tools added, its write tools left in the catalog until someone adds them."""
     return sorted(t.name for t in m.tools if t.access == "read")
 
 
-def tools_switched(m: Manifest, binding: Mapping[str, Any] | None) -> dict[str, Any]:
-    """What a call needs to refuse a tool off for the team, in plain words: the operations on and their titles."""
-    on = tools_on(m, binding)
+def tools_added_view(m: Manifest, binding: Mapping[str, Any] | None) -> dict[str, Any]:
+    """What a call needs to refuse a tool the team has not added, in plain words: the operations added and their
+    titles."""
+    on = tools_added(m, binding)
     if on is None:
         return {}
     return {
@@ -631,13 +632,13 @@ class PluginHost:
         )
         if b is None:
             # A new app hands agents its read tools only, as turning it on does.
-            await self.bindings.set_tools(tenant_id, team, plugin.manifest.id, default_tools_on(plugin.manifest))
+            await self.bindings.set_tools(tenant_id, team, plugin.manifest.id, default_tools_added(plugin.manifest))
         if self.versions and not (b or {}).get("version"):
             await self.take_installed(tenant_id, team, plugin)
 
     async def sign_in_scopes(self, tenant_id: str, connection_id: str) -> list[str] | None:
         """The permissions a plugin account's sign-in asks for: the plugin's required ones and those its team's
-        switched-on tools need. None for an account no plugin serves, or an app whose tools were never switched, which
+        added tools need. None for an account no plugin serves, or an app whose catalog was never changed, which
         keeps asking for what its auth config lists."""
         if self.connections is None:
             return None
@@ -647,7 +648,7 @@ class PluginHost:
         if conn is None or plugin is None:
             return None
         m = plugin.manifest
-        on = tools_on(m, await self.bindings.get(tenant_id, str(conn["team_id"]), m.id))
+        on = tools_added(m, await self.bindings.get(tenant_id, str(conn["team_id"]), m.id))
         if on is None:
             return None
         needed = [s.id for s in m.connection.scopes if s.required]
@@ -655,11 +656,11 @@ class PluginHost:
         return list(dict.fromkeys(needed))
 
     async def tools_off(self, tenant_id: str, team_id: str) -> set[str]:
-        """The operations of the team's apps it has switched off, by operation name: what agents are not offered."""
+        """The operations of the team's apps it has not added, by operation name: what agents are not offered."""
         off: set[str] = set()
         for pid, b in (await self.bindings.of_team(tenant_id, team_id)).items():
             plugin = self.plugins.get(pid)
-            on = tools_on(plugin.manifest, b) if plugin is not None else None
+            on = tools_added(plugin.manifest, b) if plugin is not None else None
             if plugin is not None and on is not None:
                 off |= {plugin.manifest.operation(t.name) for t in plugin.manifest.tools} - on
         return off
@@ -719,7 +720,7 @@ class PluginHost:
         if reason is not None or team_id is None:
             return {**module, "plugin_off": reason or "No team.", "connection_id": None, "egress_hosts": []}
         b: dict[str, Any] = await self.bindings.get(tenant_id, team_id, plugin.manifest.id) or {}
-        module = {**module, **tools_switched(plugin.manifest, b)}
+        module = {**module, **tools_added_view(plugin.manifest, b)}
         if account:
             # A call naming an account uses that account of the team's, never another team's; an unknown name
             # is refused rather than falling back to the default, so a step never acts in the wrong org.

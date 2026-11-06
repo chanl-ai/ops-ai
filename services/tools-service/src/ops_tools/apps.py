@@ -45,7 +45,7 @@ from .modules.schemas import In, ToolCallRow
 from .modules.seed import BUILT_IN, TOOL_ORIGIN, template_of, tool_title
 from .modules.service import Caller, ModuleService
 from .modules.tool_users import ToolUsers
-from .plugins.host import PluginHost, fixed_fields, module_id_of, offered, per_account, plugin_id_of, tools_on
+from .plugins.host import PluginHost, fixed_fields, module_id_of, offered, per_account, plugin_id_of, tools_added
 from .plugins.routes import PluginAccounts, TeamPluginIn, not_offered
 from .plugins.templates import view_of
 from .store.connections import plugin_app, plugin_of
@@ -255,8 +255,9 @@ class AppCredentialChange(AppCredentialDetail):
     sign_in_again: int
 
 
-class ToolSwitchIn(In):
-    on: bool
+class ToolsAddIn(In):
+    # The tools to add, by operation name (salesforce_query).
+    tools: list[str] = Field(min_length=1, max_length=200)
 
 
 class AppKindIn(In):
@@ -324,9 +325,10 @@ class AppTool(Out):
     name: str
     title: str
     access: str
-    # Switched on for the team: agents and workflows may pick it and the gateway runs it. Off, calls are refused.
-    on: bool = True
-    # On, and needing a permission the team account has not granted yet: it is asked at the account's next sign-in.
+    # Added to the team from the app's catalog: agents and workflows may pick it and the gateway runs it. Not added,
+    # it is offered nowhere and its calls are refused.
+    added: bool = True
+    # Added, and needing a permission the team account has not granted yet: it is asked at the account's next sign-in.
     asked_at_sign_in: bool = False
     # The team's agents granted it and workflows with a step that calls it, from agents-service; none when this
     # service cannot ask (no agents-service wired) or agents-service did not answer.
@@ -410,7 +412,7 @@ class AppAccount(Out):
 class ConfigPermission(Out):
     id: str
     label: str
-    # Asked at the next sign-in: a switched-on tool needs it and the team account has not granted it yet.
+    # Asked at the next sign-in: an added tool needs it and the team account has not granted it yet.
     asked_at_sign_in: bool = False
 
 
@@ -434,7 +436,7 @@ class AuthConfig(Out):
     account_count: int = 0
     # Where its accounts sign in, when it sets that (a plugin's `asked: config` setting); null when Connect asks.
     sign_in_place: str | None = None
-    # What it asks for at sign-in: a plugin's permissions follow the team's switched-on tools.
+    # What it asks for at sign-in: a plugin's permissions follow the tools the team added.
     permissions: list[ConfigPermission] = Field(default_factory=list[ConfigPermission])
 
 
@@ -765,34 +767,47 @@ class Apps:
             await self.plugin_accounts.switch(who, app_id, TeamPluginIn(enabled=False))
         return {"accounts": names}
 
-    async def switch_tool(self, who: Caller, app_id: str, tool: str, on: bool) -> dict[str, Any]:
-        """Switches one of a plugin app's tools on or off for the team: someone who manages the team's apps. The first
-        switch on an app turned on before switches existed starts from every tool on."""
+    async def add_tools(self, who: Caller, app_id: str, tools: list[str]) -> list[dict[str, Any]]:
+        """Adds some of a plugin app's tools to the team: someone who manages the team's apps. Added tools are the
+        ones agents may pick and the gateway runs; the answer is each added tool, saying when its permission is asked
+        at the next sign-in."""
+        return await self._change_tools(who, app_id, tools, add=True)
+
+    async def remove_tool(self, who: Caller, app_id: str, tool: str) -> dict[str, Any]:
+        """Removes one of a plugin app's tools from the team: agents are no longer offered it and calls are refused."""
+        return (await self._change_tools(who, app_id, [tool], add=False))[0]
+
+    async def _change_tools(self, who: Caller, app_id: str, tools: list[str], *, add: bool) -> list[dict[str, Any]]:
         pid = plugin_of({"app_id": app_id})
         plugin = self.plugins.plugins.get(pid) if self.plugins is not None and pid else None
         if plugin is None or self.plugins is None:
-            raise ValidationFailed("Only a plugin's app has tools to switch; a custom app's tools are its own.")
+            raise ValidationFailed("Only a plugin's app has a catalog of tools; a custom app's tools are its own.")
         self.connections.check(who, "manage")
         m = plugin.manifest
-        named = next((t for t in m.tools if m.operation(t.name) == tool), None)
-        if named is None:
-            raise NotFound(f"Tool {tool}")
+        named = [next((t for t in m.tools if m.operation(t.name) == x), None) for x in tools]
+        missing = [x for x, t in zip(tools, named, strict=True) if t is None]
+        if missing:
+            raise NotFound(f"Tool {missing[0]}")
         b = await self.plugins.bindings.get(who.tenant_id, who.team.id, m.id)
         if b is None:
             raise ValidationFailed(f"Turn {m.title} on for the team first.", code="app_off")
         held = b.get("tools_on")
         now = {t.name for t in m.tools} if held is None else {str(t) for t in cast(list[Any], held)}
-        now = now | {named.name} if on else now - {named.name}
+        picked = {t.name for t in named if t is not None}
+        now = now | picked if add else now - picked
         await self.plugins.bindings.set_tools(who.tenant_id, who.team.id, m.id, sorted(now))
         granted = await self.granted(who, b.get("connection_id"))
-        asked = on and not set(named.scopes) <= granted
-        return {
-            "name": tool,
-            "title": named.title or named.name,
-            "access": named.access,
-            "on": on,
-            "askedAtSignIn": asked,
-        }
+        return [
+            {
+                "name": m.operation(t.name),
+                "title": t.title or t.name,
+                "access": t.access,
+                "added": add,
+                "askedAtSignIn": add and not set(t.scopes) <= granted,
+            }
+            for t in named
+            if t is not None
+        ]
 
     async def granted(self, who: Caller, account: Any) -> set[str]:
         """The permissions the app's default account's team sign-in holds; none while it has not signed in."""
@@ -1295,10 +1310,12 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
     tools: list[dict[str, Any]] = []
     usage: list[dict[str, Any]] = []
     app = next((a for a in BUILT_IN if f"builtin:{a['id']}" == card["id"]), None)
-    # The tools the team switched on, for a plugin's app; every tool of any other app is on.
+    # The tools the team added, for a plugin's app; every tool of any other app is the team's.
     switched = _plugin(apps, card)
     on_ops = (
-        tools_on(switched.manifest, await apps.plugins.bindings.get(who.tenant_id, who.team.id, switched.manifest.id))
+        tools_added(
+            switched.manifest, await apps.plugins.bindings.get(who.tenant_id, who.team.id, switched.manifest.id)
+        )
         if switched is not None and apps.plugins is not None
         else None
     )
@@ -1313,11 +1330,17 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
             if mine_ops is not None and name not in mine_ops:
                 continue
             title = tool_title(module, name, apps.plugins.title_of if apps.plugins else None)
-            on = on_ops is None or name in on_ops
+            added = on_ops is None or name in on_ops
             needs = set(cast(list[str], op.get("scopes") or []))
-            asked = on_ops is not None and on and not needs <= granted
+            asked = on_ops is not None and added and not needs <= granted
             tools.append(
-                {"name": name, "title": title or name, "access": str(op["access"]), "on": on, "askedAtSignIn": asked}
+                {
+                    "name": name,
+                    "title": title or name,
+                    "access": str(op["access"]),
+                    "added": added,
+                    "askedAtSignIn": asked,
+                }
             )
     if apps.users is not None and tools:
         try:
@@ -1541,13 +1564,13 @@ def _place_of(apps: Apps, card: dict[str, Any], cred: dict[str, Any] | None) -> 
 
 
 async def _permissions(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[str, Any]]:
-    """What a plugin app's sign-in asks for: its required permissions and those its team's switched-on tools need,
+    """What a plugin app's sign-in asks for: its required permissions and those of the tools its team added,
     each marked when the team account has not granted it yet. Empty for a custom app."""
     plugin = _plugin(apps, card)
     if plugin is None or apps.plugins is None:
         return []
     m = plugin.manifest
-    on = tools_on(m, await apps.plugins.bindings.get(who.tenant_id, who.team.id, m.id))
+    on = tools_added(m, await apps.plugins.bindings.get(who.tenant_id, who.team.id, m.id))
     wanted = [s.id for s in m.connection.scopes if s.required or on is None]
     if on is not None:
         wanted += [x for t in m.tools if m.operation(t.name) in on for x in t.scopes]
@@ -1646,12 +1669,20 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
         """One app's page: its card, accounts, the caller's own sign-in, tools, skills and latest runs."""
         return ok(AppPage(**await app_page(apps, who, app_id)).model_dump(by_alias=True))
 
-    @r.put("/v1/apps/{app_id}/tools/{tool}", response_model=Envelope[AppTool])
-    async def switch_tool(  # pyright: ignore[reportUnusedFunction]
-        app_id: str, tool: str, body: ToolSwitchIn, who: Annotated[Caller, Depends(caller)]
+    @r.post("/v1/apps/{app_id}/tools", response_model=Envelope[list[AppTool]])
+    async def add_tools(  # pyright: ignore[reportUnusedFunction]
+        app_id: str, body: ToolsAddIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
-        """Switches one of an app's tools on or off for the team; off, agents cannot pick it and calls are refused."""
-        return ok(AppTool(**await apps.switch_tool(who, app_id, tool, body.on)).model_dump(by_alias=True))
+        """Adds tools from an app's catalog to the team: agents may then pick them and the gateway runs them."""
+        added = await apps.add_tools(who, app_id, body.tools)
+        return ok([AppTool(**t).model_dump(by_alias=True) for t in added])
+
+    @r.delete("/v1/apps/{app_id}/tools/{tool}", response_model=Envelope[AppTool])
+    async def remove_tool(  # pyright: ignore[reportUnusedFunction]
+        app_id: str, tool: str, who: Annotated[Caller, Depends(caller)]
+    ) -> JSONResponse:
+        """Removes a tool from the team: agents are no longer offered it and its calls are refused."""
+        return ok(AppTool(**await apps.remove_tool(who, app_id, tool)).model_dump(by_alias=True))
 
     @r.patch("/v1/apps/{app_id}", response_model=Envelope[AppKindChanged])
     async def change_app_kind(  # pyright: ignore[reportUnusedFunction]

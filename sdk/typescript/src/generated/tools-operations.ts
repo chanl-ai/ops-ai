@@ -20,6 +20,17 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "apps_add_tools": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/apps/{app_id}/tools",
+    "pathParams": [
+      "app_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "apps_app_users": {
     "body": null,
     "headers": [],
@@ -285,6 +296,18 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "apps_remove_tool": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/apps/{app_id}/tools/{tool}",
+    "pathParams": [
+      "app_id",
+      "tool"
+    ],
+    "query": [],
+    "stream": false
+  },
   "apps_set_app_credential_secret": {
     "body": "json",
     "headers": [],
@@ -327,18 +350,6 @@ export const toolsOperations = {
     "pathParams": [
       "app_id",
       "account_id"
-    ],
-    "query": [],
-    "stream": false
-  },
-  "apps_switch_tool": {
-    "body": "json",
-    "headers": [],
-    "method": "PUT",
-    "path": "/v1/apps/{app_id}/tools/{tool}",
-    "pathParams": [
-      "app_id",
-      "tool"
     ],
     "query": [],
     "stream": false

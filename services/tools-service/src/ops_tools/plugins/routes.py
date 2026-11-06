@@ -33,7 +33,7 @@ from ..modules.tool_users import ToolUsers
 from ..store.connections import PLUGIN_APP
 from .host import (
     PluginHost,
-    default_tools_on,
+    default_tools_added,
     fixed_fields,
     offered,
     per_account,
@@ -239,7 +239,7 @@ class PluginAccounts:
         )
         if not before:
             # A new app hands agents its read tools only; a write tool waits until someone switches it on.
-            await self.host.bindings.set_tools(who.tenant_id, who.team.id, m.id, default_tools_on(m))
+            await self.host.bindings.set_tools(who.tenant_id, who.team.id, m.id, default_tools_added(m))
         if self.host.versions and not before.get("version"):
             # A team turning a plugin on takes the installed version; a later upgrade waits for its review.
             await self.host.take_installed(who.tenant_id, who.team.id, plugin)
