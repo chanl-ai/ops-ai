@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "One slow service no longer covers a working page",
+  "description": "The Agents list loads the model list only when you open New agent, and a model list that cannot be read is said in that dialog instead of a banner over the page.",
+  "tag": "fix"
+}

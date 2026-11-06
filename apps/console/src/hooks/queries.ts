@@ -108,7 +108,12 @@ export const useAgentPublishPreview = (id: string, version: number, enabled: boo
   useTeamQuery({ queryKey: ['agent', id, 'publish-preview', version], queryFn: () => api.agents.publishPreview(id, version), enabled, staleTime: 0 });
 export const useAgentPaused = (id: string) => useWrite((paused: boolean) => api.agents.setPaused(id, paused), ['agents', 'agent', 'overview']);
 /** The tools an agent may be granted; the catalogue changes only with the runtime. */
-export const useModelAliases = () => useTeamQuery({ queryKey: ['agent-model-aliases'], queryFn: () => api.agents.modelAliases(), staleTime: 5 * 60_000 });
+/**
+ * The models an agent may run on, a side read: asked only where a model is chosen (`enabled`), and a failure shows
+ * there, never as the page-wide "can't reach" banner.
+ */
+export const useModelAliases = (enabled = true) =>
+  useTeamQuery({ queryKey: ['agent-model-aliases'], queryFn: () => api.agents.modelAliases(), staleTime: 5 * 60_000, enabled, meta: { side: true } });
 export const useGuardrails = () => useTeamQuery({ queryKey: ['agent-guardrails'], queryFn: () => api.guardrails.list(), staleTime: 60_000 });
 // Under the same key as the whole list, so the guardrail writes' invalidation refreshes the page too.
 export const useGuardrailsPage = (p: ListParams) => usePagedQuery({ queryKey: ['agent-guardrails', 'page', p], queryFn: () => api.guardrails.page(p) });

@@ -127,13 +127,15 @@ export default function AgentsPage() {
   const router = useRouter();
   const list = useListParams<AgentFilters>('name');
   const query = useAgents(list.params);
-  const models = useModelAliases().data ?? [];
   const { team, teams } = useTeam();
   const canBuild = useCanBuild();
   const remove = useDeleteAgent();
   // Templates have no API yet (docs/console/strategy.md), so `?create` opens the blank one-screen create only.
   const [createOpen, setCreateOpen] = useCreateParam();
   const blankOpen = createOpen && canBuild;
+  // Only the New agent dialog chooses a model, so the list asks for none until it opens.
+  const aliases = useModelAliases(blankOpen);
+  const models = aliases.data ?? [];
   const createBlank = useCreateAgent();
   const newAgent = () => {
     const next = new URLSearchParams(window.location.search);
@@ -223,6 +225,7 @@ export default function AgentsPage() {
         open={blankOpen}
         onOpenChange={(o) => setCreateOpen(o)}
         models={models}
+        modelsUnavailable={aliases.isError}
         team={team?.name ?? ''}
         isPending={createBlank.isPending}
         onSubmit={async (input) => {
