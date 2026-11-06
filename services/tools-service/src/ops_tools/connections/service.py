@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import re
 import secrets as random
 import time
@@ -117,6 +118,37 @@ def _person(who: Caller) -> str:
     so both are kept."""
     p = who.principal
     return f"{p.sub}|{p.email}"[:200] if p is not None else who.name
+
+
+MCP_LIST_TOOLS = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+
+
+def is_mcp_server(settings: dict[str, Any]) -> bool:
+    """An MCP server added by its address: the token it takes is for the server itself (`resource` is its address),
+    as `connect_mcp` sets it."""
+    base, resource = str(settings.get("baseUrl") or ""), str(settings.get("resource") or "")
+    return bool(base) and base.rstrip("/") == resource.rstrip("/")
+
+
+def mcp_error(res: httpx.Response) -> str | None:
+    """The JSON-RPC error a server answered tools/list with, or None when it listed them. A streamed answer
+    (text/event-stream) carries the message on its first `data:` line."""
+    text = res.text
+    if "text/event-stream" in res.headers.get("content-type", ""):
+        text = next((line[5:].strip() for line in text.splitlines() if line.startswith("data:")), "")
+    try:
+        body = json.loads(text)
+    except ValueError:
+        return "its answer was not JSON-RPC"
+    if not isinstance(body, dict):
+        return "its answer was not JSON-RPC"
+    answer = cast(dict[str, Any], body)
+    error: Any = answer.get("error")
+    if isinstance(error, dict):
+        return str(cast(dict[str, Any], error).get("message") or "an error")
+    if error is not None:
+        return str(error)
+    return None if "result" in answer else "its answer had no result"
 
 
 def _names(conn: dict[str, Any] | None) -> dict[str, str]:
@@ -889,7 +921,8 @@ class ConnectionService:
         own = connected_event(conn, token_for) if token_for != SHARED else None
         event = self._event(who, "signed_in", detail)
         await self.store.note(who.tenant_id, connection_id, event, report=own)
-        if str({**settings, **extra}.get("testPath") or "").startswith("/"):
+        now_set = {**settings, **extra}
+        if str(now_set.get("testPath") or "").startswith("/") or is_mcp_server(now_set):
             # The sign-in alone connects the account; its test follows without holding the answer, and its outcome
             # is kept on the account's row.
             account = "self" if token_for != SHARED else "team"
@@ -1270,12 +1303,17 @@ class ConnectionService:
             raise ServiceUnavailable("This service has no egress policy, so it tests no connection.")
         settings: dict[str, Any] = dict(conn["settings"] or {})
         path = str(settings.get("testPath") or "")
-        if not path.startswith("/") and plugin_of(conn):
+        mcp = is_mcp_server(settings)
+        if mcp:
+            # An MCP server is tested as its tools use it: it lists them to the account's token. Its address keeps
+            # its path, so a test address appended to it would read somewhere else.
+            path = ""
+        elif not path.startswith("/") and plugin_of(conn):
             # A plugin's test address comes with its sign-in, which names the instance: nobody types one.
             raise ValidationFailed(
                 f"Sign {conn['name']} in first: its test reads the system its sign-in names.", code="not_signed_in"
             )
-        if not path.startswith("/"):
+        if not mcp and not path.startswith("/"):
             raise ValidationFailed(
                 f"Set {conn['name']}'s test address, a read on the system such as /services/oauth2/userinfo.",
                 code="test_path_missing",
@@ -1307,7 +1345,7 @@ class ConnectionService:
             )
             hosts = await self.tokens.hosts(who.tenant_id, connection_id)
             await self.egress.check_url(who.tenant_id, url, hosts)
-            res = await self._probe(url, prepared, who.tenant_id, hosts)
+            res = await self._probe(url, prepared, who.tenant_id, hosts, mcp=mcp)
             if res.status_code == 401 and prepared is not None and prepared.renewable:
                 # A token the system no longer takes (expired early, or revoked) is fetched again once, as a tool
                 # call's read is (executor.py), so the test reports the sign-in, not a token's age.
@@ -1320,7 +1358,7 @@ class ConnectionService:
                     team_account=not own,
                     stale_rotation=prepared.rotation,
                 )
-                res = await self._probe(url, prepared, who.tenant_id)
+                res = await self._probe(url, prepared, who.tenant_id, mcp=mcp)
         except AuthFailed as e:
             health |= {"status": "failed", "code": e.code, "message": str(e)}
             refused_sign_in = e.side == "upstream"
@@ -1333,7 +1371,14 @@ class ConnectionService:
         else:
             health["latencyMs"] = round((time.perf_counter() - started) * 1000)
             health["httpStatus"] = res.status_code
-            if res.status_code < 400:
+            refusal = mcp_error(res) if mcp and res.status_code < 400 else None
+            if refusal is not None:
+                health |= {
+                    "status": "failed",
+                    "code": "UPSTREAM_STATUS",
+                    "message": f"The server refused to list its tools: {refusal}",
+                }
+            elif res.status_code < 400:
                 health["status"] = "ok"
                 # A test read often names who signed in (GitHub's /user: login), kept when the sign-in did not.
                 try:
@@ -1366,9 +1411,17 @@ class ConnectionService:
         return await self.detail(who, connection_id)
 
     async def _probe(
-        self, url: str, prepared: Prepared | None, tenant_id: str, hosts: list[str] | None = None
+        self, url: str, prepared: Prepared | None, tenant_id: str, hosts: list[str] | None = None, *, mcp: bool = False
     ) -> httpx.Response:
         assert self.http is not None
+        if mcp:
+            return await self.http.post(
+                url,
+                json=MCP_LIST_TOOLS,
+                headers={**(prepared.headers if prepared else {}), "Accept": "application/json, text/event-stream"},
+                timeout=TEST_TIMEOUT_S,
+                extensions=for_tenant(tenant_id, prepared.certificate if prepared else None, hosts or ()),
+            )
         return await self.http.get(
             url,
             params=(prepared.params or None) if prepared else None,
