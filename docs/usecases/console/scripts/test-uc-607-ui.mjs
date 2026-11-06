@@ -354,7 +354,7 @@ try {
         }, page);
 
         const james = await signedIn(browser, consoleUrl, 'j.richardson@harborpine.example', errors);
-        await step('6 James presses Connect my account, allows access as himself, and the page reads Connected as james.person', async () => {
+        await step('6 James presses Connect my account, allows access as himself, and his account reads james.person, Connected', async () => {
           await james.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           // A builder's header says a team admin connects the app only while the team account is not signed in.
           await james.getByTestId('app-connected-as').waitFor({ timeout: 90_000 });
@@ -364,13 +364,13 @@ try {
           await shoot(james, 'app-connect-my-account');
           const [popup] = await Promise.all([james.waitForEvent('popup', { timeout: 60_000 }), button.click()]);
           await allow(popup, 'james.person');
-          // The person's own line is always drawn; it reads Connected as them once the page refetches after the sign-in.
-          await james.getByText(/as james\.person/).first().waitFor({ timeout: 60_000 }).catch(() => {});
+          // The account is named by who signed in on it, once the page refetches after the sign-in.
+          await james.getByTestId('app-auth-configs').getByText(/james\.person/).first().waitFor({ timeout: 60_000 }).catch(() => {});
           const said = ((await james.getByTestId('app-auth-configs').innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ');
           await shoot(james, 'app-connected-as');
           check(
-            '6 James presses Connect my account, allows access as himself, and the page reads Connected as james.person',
-            /as james\.person/.test(said) && /Connected/.test(said) && (await james.getByTestId('account-connect-mine-Person desk').count()) === 0,
+            '6 James presses Connect my account, allows access as himself, and his account reads james.person, Connected',
+            /james\.person/.test(said) && /Connected/.test(said) && (await james.getByTestId('account-connect-mine-Person desk').count()) === 0,
             { said },
           );
         }, james);
@@ -624,7 +624,7 @@ try {
           check(
             '9 the app page has Auth configs and the tabs; Tools by title, Ops AI’s config with no Edit or Delete, Settings with the switch and the default account’s keys',
             tabs.join() === 'Auth configs,Tools,Resources,Logs,Settings' && /team sign-in/.test(head) && !/\bPlugin\b/.test(head) &&
-              /Ticket desk/.test(usedBy) && /Ops AI/.test(credentials) && /Built in/.test(credentials) && /Kept by Ops AI/.test(credentials) && builtInEditable === 0 && everyone === 'true' && /Person desk/.test(keys) && /Working/.test(keys) && !/Production/.test(keys) && !html.includes(fake.info.clients['multi-app']),
+              /Ticket desk/.test(usedBy) && /Ops AI/.test(credentials) && /Built in/.test(credentials) && /Kept by Ops AI/.test(credentials) && builtInEditable === 0 && everyone === 'true' && /Person desk/.test(keys) && /Connected/.test(keys) && /Last test passed/.test(keys) && !/Production/.test(keys) && !html.includes(fake.info.clients['multi-app']),
             { tabs, usedBy, credentials, everyone, keys },
           );
         }, page);

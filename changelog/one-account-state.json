@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "One state per account",
+  "description": "An app's Settings show its account's one state, the same as its Auth configs row and its card, with the last test as a line under it.",
+  "tag": "fix"
+}

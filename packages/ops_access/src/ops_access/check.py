@@ -132,7 +132,7 @@ class Access:
             self.can(p, area, "manage", team=team, owner=owner, what=what, from_any_team=from_any_team)
         except Forbidden as e:
             raise Forbidden(
-                f"{what} is a system record the platform provisions; changing it needs {area}.manage (admins).",
+                f"{what} is a system record the platform provisions; only an admin changes it.",
                 code="system_record",
             ) from e
 
@@ -256,7 +256,7 @@ def _who_can(roles: list[BuiltinRole]) -> str:
 def _same_team(p: Principal, team: str, action: str, what: str) -> None:
     if p.team_id != team:
         raise Forbidden(
-            f"{what} belongs to team {team}; act in that team to {action} it.",
+            f"{what} belongs to another team; switch to that team to {action} it.",
             code="team_forbidden",
             details={"teamId": team},
         )

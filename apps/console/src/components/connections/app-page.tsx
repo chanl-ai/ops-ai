@@ -4,7 +4,7 @@ import * as React from 'react';
 import { AppCredentialPicker } from '@/components/connections/app-credential-picker';
 import { ResourcesTab } from '@/components/connections/app-resources';
 import { AskAnAdmin } from '@/components/connections/ask-an-admin';
-import { AuthConfigsTab, type AuthConfig } from '@/components/connections/app-auth-configs';
+import { AuthConfigsTab, STATE, type AuthConfig } from '@/components/connections/app-auth-configs';
 import { Bot, ChevronDown, CircleCheck, ExternalLink, FlaskConical, KeyRound, Plug, RefreshCw, Workflow } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -77,17 +77,10 @@ function Logo({ name, logo }: { name: string; logo?: string | null }) {
   );
 }
 
-/** The default account's keys, by their last test. */
-function KeysState({ health }: { health: Connection['health'] }) {
-  if (health?.status === 'failed') return <Badge variant="outline" className="border-destructive/40 bg-destructive/10 text-destructive">Failing</Badge>;
-  if (health?.status === 'ok')
-    return (
-      <Badge variant="outline" className={OK}>
-        <CircleCheck />
-        Working
-      </Badge>
-    );
-  return <Badge variant="outline">Not tested</Badge>;
+/** The default account's last test, as a line under its state: what it answered, never a second state. */
+function lastTest(health: NonNullable<Connection['health']>): string {
+  if (health.status === 'ok') return `Last test passed${health.httpStatus ? ` (HTTP ${health.httpStatus})` : ''}`;
+  return `Last test failed${'message' in health && health.message ? `: ${String(health.message)}` : ''}`;
 }
 
 /**
@@ -360,7 +353,8 @@ function ConnectedAs({ account, who }: { account?: string | null; who?: string |
   return (
     <span className="inline-flex items-center gap-1.5 text-sm" data-testid="app-connected-as">
       <CircleCheck className="size-4 text-success-text" />
-      {['Connected', account ? ` · ${account}` : '', who ? ` as ${who}` : ''].join('')}
+      {/* Who signed in names the account; its stored name only when nobody's identity is known. */}
+      {who ? `Connected as ${who}` : account ? `Connected · ${account}` : 'Connected'}
     </span>
   );
 }
@@ -496,6 +490,7 @@ function SettingsTab({ app, kinds, onSetUp }: { app: AppData; kinds?: Kinds; onS
   const setTeamApp = useSetTeamApp();
   const kind = kinds?.kinds.find((k) => k.id === conn?.authKind);
   const [own, setOwn] = React.useState<string | null | undefined>(undefined);
+  const row = (app.authConfigs ?? []).flatMap((c) => c.accounts ?? []).find((a) => a.default);
   if (!conn) return null;
   const account = { appId: app.card.id, accountId: conn.id };
   const teamSigned = Boolean(conn.signedIn);
@@ -572,11 +567,22 @@ function SettingsTab({ app, kinds, onSetUp }: { app: AppData; kinds?: Kinds; onS
             wrap
             leading={<KeyRound className="size-4 text-muted-foreground" />}
             title={
-              <span className="flex flex-wrap items-center gap-2" data-testid="app-keys-state" data-status={keysSet ? (conn.health?.status ?? 'untested') : 'unset'}>
-                {conn.name} {keysSet ? <KeysState health={conn.health} /> : <Badge variant="outline">Not set</Badge>}
+              <span
+                className="flex flex-wrap items-center gap-2"
+                data-testid="app-keys-state"
+                data-status={keysSet ? (conn.health?.status ?? 'untested') : 'unset'}
+                data-state={row?.state}
+              >
+                {conn.name}
+                {/* The account's one state, as its Auth configs row and the app's card read it; the last test is a line. */}
+                {row && (
+                  <Badge variant="outline" className={STATE[row.state].className}>
+                    {STATE[row.state].label}
+                  </Badge>
+                )}
               </span>
             }
-            description={conn.health ? undefined : keysSet ? 'Not tested yet' : 'Not set'}
+            description={!keysSet ? 'No keys yet' : conn.health ? lastTest(conn.health) : 'No test yet'}
             trailing={
               conn.mayManage ? (
                 <span className="flex flex-wrap gap-2">

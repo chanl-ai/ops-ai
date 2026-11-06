@@ -281,3 +281,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-623 | agents-service | A builder validates, applies and test-runs the three-node workflow | sdk, cli | current |
 | uc-624 | agents-service | A builder runs the two composition Examples | sdk | current |
 | uc-625 | tools-service | Connect comes back Connected in any window, for every sign-in app | ui | draft |
+| uc-626 | tools-service | Apps screens offer only what you may do, in plain words | api, ui | draft |

@@ -13,6 +13,7 @@ import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { ListEmpty } from '@/components/shared/query-states';
 import { Row, Rows, Section } from '@/components/shared/surface';
+import { plural } from '@/lib/format';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -35,7 +36,7 @@ export type ConfigAccount = NonNullable<AuthConfig['accounts']>[number];
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 // The Apps design's three account states; a refused or revoked sign-in reads Expired, its reason beside it.
-const STATE: Record<ConfigAccount['state'], { label: string; className: string }> = {
+export const STATE: Record<ConfigAccount['state'], { label: string; className: string }> = {
   connected: { label: 'Connected', className: 'border-success/40 bg-success/10 text-success-text' },
   not_signed_in: { label: 'Not signed in', className: '' },
   expired: { label: 'Expired', className: 'border-warning/40 bg-warning/10 text-warning-text' },
@@ -43,8 +44,8 @@ const STATE: Record<ConfigAccount['state'], { label: string; className: string }
   revoked: { label: 'Expired', className: 'border-warning/40 bg-warning/10 text-warning-text' },
 };
 
-/** Whose sign-in an account is, by name: the team's, or one person's own. */
-const whose = (a: ConfigAccount, team: string) => (a.owner.kind === 'team' ? `${team} team sign-in` : `${a.owner.name}’s own sign-in`);
+/** Whose sign-in an account is: the team's, or each person's own, the reader's when they have signed in. */
+const whose = (a: ConfigAccount, team: string) => (a.owner.kind === 'team' ? `${team} team sign-in` : a.mine ? 'Your own sign-in' : 'Each person signs in with their own account');
 
 /**
  * Auth configs: how the app's accounts sign in, each config with the accounts under it. Ops AI's own app is never
@@ -86,6 +87,12 @@ export function AuthConfigsTab({
               {c.name}
               {c.type === 'ops_ai' && <Badge variant="secondary">Built in</Badge>}
               {c.default && <Badge variant="outline">Default</Badge>}
+              {/* The config's own status, apart from any account's: how many accounts sign in through it. */}
+              {c.type !== 'account' && (
+                <Badge variant="outline" data-testid={`auth-config-use-${c.name}`}>
+                  {c.accounts?.length ? plural(c.accounts.length, 'account') : 'Not used yet'}
+                </Badge>
+              )}
             </span>
           }
           description={
@@ -170,7 +177,7 @@ function AccountRow({
   const [dialog, setDialog] = React.useState<'rename' | 'move' | 'delete' | null>(null);
   const can = (x: NonNullable<ConfigAccount['actions']>[number]) => (a.actions ?? []).includes(x);
   // An account only its owner signs in to is signed in, renewed and ended as that person's own.
-  const as = a.owner.kind === 'person' ? 'self' : 'team';
+  const as = a.owner.kind === 'each' ? 'self' : 'team';
   const failed = a.test?.status === 'failed' ? a.test.message || 'no reason given' : null;
   const disconnect = () =>
     (as === 'self' ? signOutMine.mutateAsync(a.id) : signOutTeam.mutateAsync(ref)).then(
@@ -201,7 +208,8 @@ function AccountRow({
         wrap
         title={
           <span className="flex flex-wrap items-center gap-2" data-testid={`account-${a.name}`}>
-            {a.name}
+            {/* Named by who signed in, so it never reads as the auth config it signs in through. */}
+            {a.account ?? a.name}
             {a.default && <Badge variant="secondary">Default</Badge>}
             {a.sandbox && (
               <Badge variant="outline" data-testid={`account-sandbox-${a.name}`}>
@@ -220,7 +228,7 @@ function AccountRow({
               Signed in, but a test call failed: {failed}
             </span>
           ) : (
-            [whose(a, team), a.account ? `as ${a.account}` : null, a.stateReason].filter(Boolean).join(' · ')
+            [whose(a, team), a.account && a.account !== a.name ? a.name : null, a.stateReason].filter(Boolean).join(' · ')
           )
         }
         trailing={

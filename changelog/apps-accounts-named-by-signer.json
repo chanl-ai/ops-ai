@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Accounts are named by who signed in",
+  "description": "An app's accounts and its header now name who signed in, and each auth config shows how many accounts use it. A viewer no longer sees the Auth configs page in the sidebar, and an account each person signs in to no longer reads as one person's.",
+  "tag": "improved"
+}

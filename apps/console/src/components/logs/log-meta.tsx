@@ -5,7 +5,7 @@ import { money } from '@/lib/format';
 import type { ApprovalKind, AuditAction, AuditTargetType, CallApproval, CallOperation, CallStatus, GatewayKind, ToolCallRow } from '@/lib/types/governance';
 import { cn } from '@/lib/utils';
 
-export const GATEWAY_LABEL: Record<GatewayKind, string> = { data: 'Data gateway', ai: 'AI gateway' };
+export const GATEWAY_LABEL: Record<GatewayKind, string> = { data: 'Tool call', ai: 'Model call' };
 export const OPERATION_LABEL: Record<CallOperation, string> = { read: 'Read', write: 'Write', completion: 'Model call' };
 export const APPROVAL_LABEL: Record<ApprovalKind, string> = { person: 'Person', policy: 'Policy', none: 'None' };
 export const CALL_STATUS_LABEL: Record<CallStatus, string> = { ok: 'Succeeded', error: 'Failed', denied: 'Denied', awaiting_approval: 'Awaiting approval', replayed: 'Replay', running: 'Running' };

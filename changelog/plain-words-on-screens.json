@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Plain words on Tools and Secrets",
+  "description": "Tool calls filter by kind of call (tool or model) instead of by gateway, and Secrets no longer speaks of tool modules.",
+  "tag": "improved"
+}

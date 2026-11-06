@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Refusals in plain words",
+  "description": "When the API refuses something, it names the thing in the words the screens use, such as the team's apps or auth configs, and who may do it, never a permission's or a team's internal name.",
+  "tag": "improved"
+}

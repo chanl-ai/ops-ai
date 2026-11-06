@@ -324,9 +324,9 @@ class AppMe(Out):
 
 
 class AccountOwner(Out):
-    """Whose sign-in an account is: the team's, or one person's own, by name."""
+    """Whose sign-in an account is: the team's (`name` the team), or each person's own (`name` the caller)."""
 
-    kind: Literal["team", "person"]
+    kind: Literal["team", "each"]
     name: str
 
 
@@ -365,7 +365,8 @@ class AppAccount(Out):
     # The auth config it signs in with (`AuthConfig.id`); null for a kind with no OAuth client.
     config_id: str | None = None
     actions: list[AccountAction] = Field(default_factory=list[AccountAction])
-    # Whether the caller has signed in to this account themselves, and as whom.
+    # Whether the caller has signed in to this account themselves; `account` is who signed in: the caller's own
+    # sign-in on it, else the team's.
     mine: bool = False
     account: str | None = None
     # Among the caller's own sign-ins to the app's accounts, whether calls naming none use this one; null while they
@@ -858,7 +859,7 @@ def _signs_in_with_client(conn: dict[str, Any]) -> bool:
 async def add_app_credential(apps: Apps, who: Caller, i: AppCredentialIn) -> dict[str, Any]:
     """The team's own OAuth client for one of its apps, with no account: its secret is sealed as the team's, marked
     as the credential's, and an account picks the credential when it is connected (credentialId)."""
-    apps.connections.check(who, "manage", what="app credentials")
+    apps.connections.check(who, "manage", what="auth configs")
     card = await apps.card(who, i.app)
     if card["kind"] not in ("plugin", "connection"):
         raise ValidationFailed(f"{card['name']} signs in with no OAuth app.", code="no_app_credential")
@@ -975,7 +976,7 @@ async def edit_app_credential(apps: Apps, who: Caller, credential_id: str, i: Ap
     """Edits the team's own app credential. A new client id, other permissions or other settings make every account
     signing in with it sign in again (their sign-ins were issued to the registration as it was): each is marked so,
     and the answer says how many. A plugin account's sign-in addresses are written again from the new settings."""
-    apps.connections.check(who, "manage", what="app credentials")
+    apps.connections.check(who, "manage", what="auth configs")
     if credential_id.startswith(OPS_AI):
         raise ValidationFailed("Ops AI's app is the install's; nothing on it is changed here.", code="ops_ai_app")
     store = apps.connections.store
@@ -1020,7 +1021,7 @@ async def remove_app_credential(
     """Deletes the team's own app credential with its client secret. While accounts sign in with it, the delete is
     refused naming them, unless `move` says where they go: another of the team's credentials of the same app
     (`move_to`), or Ops AI's app (`move_to` none, where the install has one). Moved accounts sign in again."""
-    apps.connections.check(who, "manage", what="app credentials")
+    apps.connections.check(who, "manage", what="auth configs")
     if credential_id.startswith(OPS_AI):
         raise ValidationFailed("Ops AI's app is the install's; it is not deleted here.", code="ops_ai_app")
     store = apps.connections.store
@@ -1073,7 +1074,7 @@ async def replace_credential_secret(apps: Apps, who: Caller, credential_id: str,
     """A new client secret for the team's own app credential, sealed as the team's; the client id, permissions and
     every account on it stay, and the next sign-in of each uses it. Ops AI's app is the install's, never changed
     here."""
-    apps.connections.check(who, "manage", what="app credentials")
+    apps.connections.check(who, "manage", what="auth configs")
     store = apps.connections.store
     cred = await store.credential(who.tenant_id, credential_id)
     if cred is None or cred["team_id"] != who.team.id:
@@ -1095,7 +1096,7 @@ Held = tuple[dict[str, Any] | None, dict[str, Any], list[dict[str, Any]]]
 async def _credentials(apps: Apps, who: Caller) -> list[Held]:
     """Each of the team's credentials with its app's card and its accounts, then Ops AI's app of each app whose
     accounts sign in with it; an app no longer listed is left out."""
-    apps.connections.check(who, "manage", what="app credentials")
+    apps.connections.check(who, "manage", what="auth configs")
     store = apps.connections.store
     cards = {str(c["id"]): c for c in await apps.cards(who)}
     creds = await store.team_credentials(who.tenant_id, who.team.id)
@@ -1292,13 +1293,13 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
                 "status": status,
                 "statusDetail": a.get("status_detail"),
                 "stateReason": why,
-                "owner": {"kind": "person", "name": str(a["created_by"])}
-                if alone
-                else {"kind": "team", "name": who.team.name},
+                # Each person signs in to it with their own account, so it is no one person's, whoever made it.
+                "owner": {"kind": "each", "name": who.name} if alone else {"kind": "team", "name": who.team.name},
                 "configId": config,
                 "actions": actions,
                 "mine": own is not None,
-                "account": (own or {}).get("account"),
+                # Who signed in: the caller's own sign-in on it, else the team's.
+                "account": (own or {}).get("account") or (team_tokens.get(aid) or {}).get("account"),
                 "myDefault": None if pick is None or aid in sandboxes else str(pick["connection_id"]) == aid,
                 # On an account each person signs in to, the caller's own sign-in's test; else the team account's.
                 "test": own.get("test")

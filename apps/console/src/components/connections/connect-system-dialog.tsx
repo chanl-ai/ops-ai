@@ -30,6 +30,7 @@ import {
   useTestAccount,
 } from '@/hooks/systems-queries';
 import { accountBody, complete, draftFor, fieldsFor, initialState, planFor, reduce, type Kind, type Kinds, type SavedAccount } from '@/lib/connect-plan';
+import type { ApiError } from '@/lib/api/contract';
 import type { AccountRef } from '@/lib/types/connections';
 
 /**
@@ -244,8 +245,17 @@ function ConnectForm({
     });
   };
 
+  // The field a refused test or save named, so it is shown where it is, never left hidden under More settings.
+  const [missing, setMissing] = React.useState<{ name: string; message: string } | null>(null);
+  const fieldOf = (e: unknown) => {
+    const err = e as ApiError;
+    const named = typeof err?.details?.field === 'string' ? err.details.field : err?.code === 'test_path_missing' ? 'testPath' : null;
+    return named ? { name: named, message: message(e) } : null;
+  };
+
   const runTest = async () => {
     if (state.busy) return;
+    setMissing(null);
     dispatch({ type: 'start', status: 'testing' });
     try {
       const a = await ensure();
@@ -253,6 +263,7 @@ function ConnectForm({
       const tested = keep(await test.mutateAsync(a));
       dispatch({ type: 'tested', health: tested.health ?? null });
     } catch (e) {
+      setMissing(fieldOf(e));
       dispatch({ type: 'failed', message: message(e) });
     }
   };
@@ -381,6 +392,7 @@ function ConnectForm({
             onSetting={(n, v) => dispatch({ type: 'setting', name: n, value: v })}
             onSecret={(n, v) => dispatch({ type: 'secret', name: n, value: v })}
             onTest={() => void runTest()}
+            missing={missing}
           />
         )}
 

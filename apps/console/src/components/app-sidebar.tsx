@@ -32,7 +32,7 @@ import {
   SidebarRail,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { useTeamRole, useWorkspaceIdentity } from '@/hooks/me-queries';
+import { useCanCheck, useTeamRole, useWorkspaceIdentity } from '@/hooks/me-queries';
 import { useBrand, useLookups, useOverview } from '@/hooks/queries';
 import { usePreviewCheck } from '@/hooks/use-preview';
 import { useTeam } from '@/hooks/use-team';
@@ -140,6 +140,9 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const identity = useWorkspaceIdentity();
   const { team, teams, switchTeam, create, canCreate, isError: teamsFailed, retry: retryTeams } = useTeam();
   const role = useTeamRole();
+  const can = useCanCheck();
+  // A row whose page the API refuses this person is not offered; while their rights load it waits hidden.
+  const offered = (item: (typeof NAV)[number]['items'][number]) => !item.can || can(item.can.area, item.can.action) === true;
   const badges: Record<string, number | undefined> = { '/reviews': waiting };
 
   // One console page as a sidebar row, with its child pages as sub-rows under a fold.
@@ -232,7 +235,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenuButton>
           </SidebarMenuItem>
           {/* The first group's pages (Cases, Human Tasks) sit with New chat and Overview, under no heading. */}
-          {TOP_GROUP.items.filter((item) => !item.top).map(navRow)}
+          {TOP_GROUP.items.filter((item) => !item.top && offered(item)).map(navRow)}
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent className="gap-0 [&>[data-sidebar=group]:not(:first-child)]:pt-1">
@@ -242,7 +245,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
           </FoldingGroup>
         </div>
         {NAV.filter((group) => group !== TOP_GROUP).map((group) => {
-          const items = group.items.filter((item) => !item.top);
+          const items = group.items.filter((item) => !item.top && offered(item));
           if (!items.length) return null;
           // The current page's group opens even if the viewer folded it, so the active row is always in view.
           const here = navMatch(pathname)?.group.label === group.label && !navMatch(pathname)?.item.top;

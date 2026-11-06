@@ -88,7 +88,10 @@ async def test_an_account_only_its_owner_signs_in_to_reads_that_sign_ins_state_a
         assert await world.store.put_token(tenant, account, token, expected_rotations=None, person="usr_priya")
     rows = {a["id"]: a for c in (await _page(world, admin(tenant)))["authConfigs"] for a in c["accounts"]}
     assert rows[account]["state"] == "connected", rows[account]
-    assert rows[account]["owner"] == {"kind": "person", "name": "Priya Shah"}, rows[account]
+    assert rows[account]["owner"] == {"kind": "each", "name": "Priya Shah"}, rows[account]
+    # Each person signs in to it with their own account, so another person never reads it as Priya's.
+    seen = {a["id"]: a for c in (await _page(world, person(tenant, *VIEWER)))["authConfigs"] for a in c["accounts"]}
+    assert seen[account]["owner"]["kind"] == "each" and seen[account]["owner"]["name"] != "Priya Shah", seen[account]
 
     with isolation.scope(tenant, TEAM):
         await world.store.mark_refused(tenant, account, "usr_priya", reason="invalid_grant", at=datetime.now(UTC))

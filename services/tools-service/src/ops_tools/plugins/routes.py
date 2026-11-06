@@ -173,7 +173,7 @@ class PluginAccounts:
     def manages(self, who: Caller) -> None:
         """Refuses a caller who may not manage the team's plugins."""
         if who.principal is not None:
-            connection_rights(who.principal, "manage", what="plugins")
+            connection_rights(who.principal, "manage", what="the team's apps")
 
     def _team_settings(self, plugin: Plugin, held: dict[str, Any], given: dict[str, Any]) -> dict[str, Any]:
         """The binding's settings after a save: the team's only; an account's own are the account's, so a copy

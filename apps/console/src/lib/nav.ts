@@ -16,6 +16,8 @@ export interface NavItem {
   title: string;
   url: string;
   icon: Icon;
+  /** Shown only to a person who may take this action: the page's API refuses everyone else. */
+  can?: { area: string; action: string };
   children?: NavChild[];
   /** Label of the parent's own tab in the section strip when it differs from the sidebar name (Brain's first tab is the knowledge bases list). */
   tabTitle?: string;
@@ -64,7 +66,7 @@ export const NAV: NavGroup[] = [
       // The Apps menu (owner, 11-03): the catalog, the team's app credentials and secrets, a person's own sign-ins and
       // the tools, each its own item rather than tabs repeated on each page.
       { title: 'Apps', url: '/integrations', icon: IconPlugConnected },
-      { title: 'Auth configs', url: '/integrations/credentials', icon: IconKey },
+      { title: 'Auth configs', url: '/integrations/credentials', icon: IconKey, can: { area: 'connections', action: 'manage' } },
       { title: 'My accounts', url: '/integrations/my-accounts', icon: IconUserCheck },
       { title: 'Tools', url: '/tools', icon: IconTool },
       // Every file the platform stores, whatever brought it in (wiki, chat, mail, imports, exports), so it sits beside the Wiki rather than under it.

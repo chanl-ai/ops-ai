@@ -74,5 +74,5 @@ async def security_admin(p: CurrentCaller) -> Person:
     no roles and passes, as it does for module security reviews."""
     # secrets_egress.manage, held in the Security team: Security admin in the grid. A team's own secrets are written
     # in that team instead (secrets/routes.py `_may_write`).
-    Access().can(p, "secrets_egress", "manage", what="the egress list", code="not_security_admin")
+    Access().can(p, "secrets_egress", "manage", what="the allowed hosts", code="not_security_admin")
     return Person(tenant_id=p.tenant_id, name=p.name, principal=p, team_id=p.team_id)

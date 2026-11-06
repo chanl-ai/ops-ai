@@ -176,7 +176,7 @@ export function SecretsPanel() {
           filterResetKey={filterResetKey}
           hideViewSwitcher
           // The page header already carries Add secret; a second one in the empty state doubles it.
-          emptyState={<ListEmpty icon={KeySquare} noun="secrets" filtered={list.isFiltered} onClear={() => setFilterResetKey((k) => k + 1)} description="Add the credential a tool module's header names, such as {{STATEMENTS_KEY}}." />}
+          emptyState={<ListEmpty icon={KeySquare} noun="secrets" filtered={list.isFiltered} onClear={() => setFilterResetKey((k) => k + 1)} description="Add the credential a tool's header names, such as {{STATEMENTS_KEY}}." />}
         />
       )}
 
