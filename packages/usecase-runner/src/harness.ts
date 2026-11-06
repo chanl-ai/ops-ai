@@ -488,12 +488,16 @@ function startBank(app: 'statements' | 'core' = 'statements'): Promise<{ info: {
 /** The install's model endpoint settings models-service reads (ops_models.connection_settings). */
 const MODEL_ENDPOINT_ENV = ['OPENAI_API_TYPE', 'OPENAI_API_BASE', 'OPENAI_BASE_URL', 'OPENAI_API_VERSION', 'OPENAI_API_REGION'];
 
+const EMPTY_PLUGINS = mkdtempSync(join(tmpdir(), 'usecase-plugins-'));
+
 export function stackEnv(base: NodeJS.ProcessEnv, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   const inherited = { ...base };
   // The shared stack's fake bank CA and name map stay with it, as in usecase_harness._env: a use case's bank passes its own.
   // So does the shell's model endpoint (OPENAI_API_BASE and the rest), which would move openai-local off the fake.
   for (const key of ['OPS_MODELS_URL', 'OPS_MODELS_KEY', 'OPS_MODELS_FAKE_OPENAI_URL', 'OPS_PLATFORM_URL', 'OPS_EGRESS_CA_FILE', 'OPS_EGRESS_RESOLVE', ...MODEL_ENDPOINT_ENV]) delete inherited[key];
-  const env = { ...inherited, ...extra };
+  // A run loads only the plugins its use case names (OPS_PLUGIN_PATHS); the repo's plugins/ folder holds whatever was
+  // installed there last, and a plugin in both places loads from neither.
+  const env: NodeJS.ProcessEnv = { OPS_PLUGINS_DIR: EMPTY_PLUGINS, ...inherited, ...extra };
   for (const key of ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'VIRTUAL_ENV']) delete env[key];
   return env;
 }
