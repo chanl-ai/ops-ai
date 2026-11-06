@@ -1,12 +1,12 @@
-"""Points the shared stack's chat alias at a real, cheap OpenAI model for a live demo, or back at the fake (`make
+"""Points the local stack's chat alias at a real, cheap OpenAI model for a live demo, or back at the fake (`make
 demo-model MODEL=<id>`, `make demo-model MODEL=fake`). Dev tooling only: it drives models-service's own admin routes
 with a dev service token, the way an operator would, and changes nothing in any service's code.
 
   MODEL=<id>   rebinds provider connection `openai-local` to https://api.openai.com/v1 with credential name `openai`
                (the key models-service holds from OPS_MODEL_PROVIDER_KEYS) and adds a version of ALIAS on model <id>;
                the id must be one the key can use (GET /v1/models), checked first when OPENAI_API_KEY is set
-  MODEL=fake   rebinds `openai-local` to the fake OpenAI (OPS_MODELS_FAKE_OPENAI_URL, else :8746) and adds a version of
-               ALIAS on the model id the alias is named after, which the fake's rules answer
+  MODEL=fake   rebinds `openai-local` to the fake OpenAI (OPS_MODELS_FAKE_OPENAI_URL, else OPS_FAKE_OPENAI_PORT) and
+               adds a version of ALIAS on the model id the alias is named after, which the fake's rules answer
 
 When OPENAI_API_TYPE or OPENAI_API_BASE (OPENAI_BASE_URL) set `openai-local`, MODEL=<id> names the model, or the
 deployment on Azure, and only adds the alias version; the connection is left as the settings set it, and MODEL=fake is
@@ -33,7 +33,8 @@ from ops_models.connection_settings import ModelConnectionSettings
 from ops_models.seed import install_connection
 
 MODELS = os.environ.get("OPS_MODELS_URL") or f"http://127.0.0.1:{os.environ.get('OPS_MODELS_PORT', '8730')}"
-FAKE = os.environ.get("OPS_MODELS_FAKE_OPENAI_URL") or "http://127.0.0.1:8746/v1"
+FAKE_PORT = os.environ.get("OPS_FAKE_OPENAI_PORT", "8746")
+FAKE = os.environ.get("OPS_MODELS_FAKE_OPENAI_URL") or f"http://127.0.0.1:{FAKE_PORT}/v1"
 OPENAI = "https://api.openai.com/v1"
 PROVIDER = "openai-local"
 KEY_REF = "openai"

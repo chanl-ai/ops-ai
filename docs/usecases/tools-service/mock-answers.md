@@ -28,7 +28,7 @@ port of its own.
 
 | Layer | Script | State |
 |---|---|---|
-| api | `tools-service/scripts/test-uc-397-api.py` | passing, `ISOLATED=1 make usecase-test UC=uc-397 LAYER=api` (2026-10-19) |
+| api | `tools-service/scripts/test-uc-397-api.py` | passing, `make usecase-test UC=uc-397 LAYER=api` (2026-10-19) |
 
 In the console: an operation's page edits one Mock response, which its test panel answers from (uc-055's ui script, step 5). Error, timeout and matching mock answers have no editor yet, so this use case stays at the api layer.
 

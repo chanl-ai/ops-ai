@@ -44,7 +44,7 @@ The ui layer sets its apps up through the API, as the api layer does, and tests 
 
 | Layer | Script | State |
 |---|---|---|
-| api | `tools-service/scripts/test-uc-393-api.py` | passing, `ISOLATED=1 make usecase-test UC=uc-393 LAYER=api` (2026-10-19) |
+| api | `tools-service/scripts/test-uc-393-api.py` | passing, `make usecase-test UC=uc-393 LAYER=api` (2026-10-19) |
 | ui | `tools-service/scripts/test-uc-393-ui.mjs` | passing, `make usecase-test UC=uc-393 LAYER=ui` (2026-11-03) |
 
 ## Non-vacuous check

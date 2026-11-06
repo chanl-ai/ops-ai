@@ -11,7 +11,7 @@ forget it, and a forget is recorded.
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 and OPA :8181 | `make db-up` |
-| Free use-case ports | agents :8790 (ISOLATED=1 adds 1000) |
+| Free use-case ports | agents :8790 |
 
 The agents service runs on the scripted model, which answers the memory extraction: "My <key> is <value>" is a fact.
 

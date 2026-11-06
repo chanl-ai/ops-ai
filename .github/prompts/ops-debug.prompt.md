@@ -19,7 +19,7 @@ Something in the stack answers an error, hangs or is down.
 1. `make health` shows every service, its port, its state and who owns the listener; a DOWN row or a listener owned by
    another process names the problem.
 2. `make logs SVC=<service> FOLLOW=0` prints a service's log (`.logs/<service>.log`); the worker is `SVC=worker`.
-3. `make ports` prints this stack's ports; `ISOLATED=1` adds 1000 to each, so a second stack never fights the first.
+3. `make ports` prints the stack's ports and where its state lives; one stack runs per machine, and `make health` names who holds a busy port.
 4. `make restart SVC=<service>` migrates and restarts one service; `make up` restarts whatever runs code older than the
    checkout.
 5. A model call that fails: `make demo-model MODEL=fake` puts the agents back on the fake model.

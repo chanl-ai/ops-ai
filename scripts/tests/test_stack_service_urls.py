@@ -4,6 +4,7 @@ agents-service, works (OPS_FILES_URL and then OPS_KB_URL went missing from the w
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -27,16 +28,16 @@ def test_the_worker_and_agents_service_reach_the_same_services() -> None:
     }
 
 
-def test_an_isolated_stack_reaches_its_own_models_service_whatever_the_env_file_names(tmp_path: Path) -> None:
-    """A laptop .env naming the shared stack's models-service sent every isolated run's model calls to the shared
-    stack's aliases, real models included, and its fake bank certificate failed the isolated bank's TLS."""
+def test_an_offset_stack_reaches_its_own_models_service_whatever_the_env_file_names(tmp_path: Path) -> None:
+    """A laptop .env naming the default stack's models-service sends an offset stack's model calls to the other
+    stack's aliases, real models included, and its fake bank certificate fails the offset stack's bank TLS."""
     (tmp_path / "scripts").mkdir()
     (tmp_path / "scripts/stack.sh").write_text((ROOT / "scripts/stack.sh").read_text())
     (tmp_path / ".env").write_text(
         "OPS_MODELS_URL=http://127.0.0.1:8730\nOPS_MODELS_FAKE_OPENAI_URL=http://127.0.0.1:8746/v1\n"
         "OPS_EGRESS_CA_FILE=/shared/.run/fake-bank/bank.crt\n"
     )
-    env = {"PATH": os.environ["PATH"], "HOME": os.environ["HOME"], "OPS_STACK": "isolated"}
+    env = {"PATH": os.environ["PATH"], "HOME": os.environ["HOME"], "OPS_PORT_OFFSET": "1000"}
     env |= {"OPS_MODELS_PORT": "9730", "OPS_FAKE_OPENAI_PORT": "9746"}
 
     def cmd(service: str) -> str:
@@ -66,19 +67,47 @@ def test_kb_reaches_tools_service_for_plugin_knowledge_sources() -> None:
     assert urls("kb").get("OPS_TOOLS_URL") == urls("runner")["OPS_TOOLS_URL"]
 
 
+def tools_command(root: Path, **extra: str) -> str:
+    env = {"PATH": os.environ["PATH"], "HOME": os.environ["HOME"], **extra}
+    return subprocess.run(
+        ["bash", "scripts/stack.sh", "cmd", "tools"], cwd=root, env=env, capture_output=True, text=True, check=True
+    ).stdout
+
+
+def test_a_running_fake_salesforce_is_trusted_and_resolved_and_a_stopped_one_is_not(tmp_path: Path) -> None:
+    """tools-service reads one CA file and one host map: the fake Salesforce failed TLS, or its names did not resolve,
+    on every call unless both carry it, and a fake that has stopped must not leave a host mapped to a dead address."""
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts/stack.sh").write_text((ROOT / "scripts/stack.sh").read_text())
+    bank, fake = tmp_path / ".run/fake-bank/bank.crt", tmp_path / ".run/fake-salesforce"
+    bank.parent.mkdir(parents=True)
+    fake.mkdir(parents=True)
+    bank.write_text("BANK\n")
+    (fake / "ca.pem").write_text("SALESFORCE\n")
+    hosts = json.dumps({"login.salesforce.test": "10.0.0.5:4443"})
+    info = {"owner": os.getpid(), "settings": {"OPS_EGRESS_RESOLVE": hosts}}
+    (fake / "info.json").write_text(json.dumps(info) + "\n")
+    out = tools_command(tmp_path)
+    ca = Path(re.findall(r"OPS_EGRESS_CA_FILE=(\S+)", out)[0])
+    assert ca.read_text() == "BANK\nSALESFORCE\n", ca
+    assert json.loads(re.findall(r"OPS_EGRESS_RESOLVE=(\S+)", out)[0])["login.salesforce.test"] == "10.0.0.5:4443"
+    dead = subprocess.Popen(["true"])
+    dead.wait()
+    (fake / "info.json").write_text(json.dumps(info | {"owner": dead.pid}) + "\n")
+    out = tools_command(tmp_path)
+    assert f"OPS_EGRESS_CA_FILE={bank}" in out, out
+    assert "login.salesforce.test" not in out, out
+
+
 def test_a_demos_own_ca_is_trusted_beside_the_fake_banks(tmp_path: Path) -> None:
-    """tools-service reads one CA file: a demo's outside system (the fake Salesforce) with its own CA failed TLS on
-    every call unless that CA is bundled with the fake bank's."""
+    """tools-service reads one CA file: a plugin developer's own fake system (OPS_EGRESS_EXTRA_CA in .env) failed TLS
+    on every call unless its CA is bundled with the fake bank's."""
     (tmp_path / "scripts").mkdir()
     (tmp_path / "scripts/stack.sh").write_text((ROOT / "scripts/stack.sh").read_text())
     bank, extra = tmp_path / ".run/fake-bank/bank.crt", tmp_path / "extra.crt"
     bank.parent.mkdir(parents=True)
     bank.write_text("BANK\n")
     extra.write_text("EXTRA\n")
-    env = {"PATH": os.environ["PATH"], "HOME": os.environ["HOME"], "OPS_STACK": "isolated"}
-    env |= {"OPS_EGRESS_EXTRA_CA": str(extra)}
-    out = subprocess.run(
-        ["bash", "scripts/stack.sh", "cmd", "tools"], cwd=tmp_path, env=env, capture_output=True, text=True, check=True
-    ).stdout
+    out = tools_command(tmp_path, OPS_EGRESS_EXTRA_CA=str(extra))
     ca = Path(re.findall(r"OPS_EGRESS_CA_FILE=(\S+)", out)[0])
     assert ca.parent.parent == tmp_path and ca.read_text() == "BANK\nEXTRA\n", ca

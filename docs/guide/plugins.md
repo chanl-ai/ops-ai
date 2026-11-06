@@ -464,10 +464,10 @@ names are and to trust that certificate. GitHub's `tests/fake_github.py` does th
 
 | Step | How |
 |---|---|
-| 1. Start the stack with sign-in and fakes | `make up AUTH=platform DEMO_MODEL=fake` |
-| 2. Install the plugin | `uv run ops plugin install <plugin folder>`, then `make restart SVC=tools` and `make restart SVC=kb`, each with `AUTH=platform` |
+| 1. Start the stack with the fakes | `make up DEMO_MODEL=fake` |
+| 2. Install the plugin | `uv run ops plugin install <plugin folder>`, then `make restart SVC=tools` and `make restart SVC=kb` |
 | 3. Serve the fake | `uv run --directory services/tools-service python <plugin>/tests/fake_github.py --dir .run/fake-github`; it prints its address, certificate and host map |
-| 4. Point tools-service at it | Write `OPS_EGRESS_EXTRA_CA=<certificate>` and `OPS_EGRESS_RESOLVE='{"github.test":"<address>","api.github.test":"<address>"}'` to `.run/demo-addons.env` (`.run/isolated/demo-addons.env` on an `ISOLATED=1` stack), then `make restart SVC=tools`. The stack reads that file after `.env` on every restart, and the map is used in development only |
+| 4. Point tools-service at it | In `.env`, set `OPS_EGRESS_EXTRA_CA=<certificate>` and add the fake's names to `OPS_EGRESS_RESOLVE`, for example `'{"github.test":"<address>","api.github.test":"<address>"}'`, then `make restart SVC=tools`. The stack bundles that certificate with the fake bank's and merges the map with its own; the map is used in development only |
 | 5. Allow the hosts | As a Security admin, Settings › Security › Egress: Add host for each name, and Add range for `<address>/32` |
 | 6. Turn it on and connect | Turn a plugin on, below, then the App's Connect window (apps.md) with the fake's client id and secret, and the system's settings pointed at the fake's names |
 
@@ -489,10 +489,9 @@ model is needed.
 | List its folder in `OPS_PLUGIN_PATHS` (a JSON list) | A plugin under development, without copying it |
 
 A plugin found in two places, such as a copy in the plugins folder and a checkout in `OPS_PLUGIN_PATHS`, loads from
-neither: `GET /v1/plugins` reports each with both places, so a stale copy can never run in place of the checkout. A
-stack that has the plugins repository cloned by `make demo-salesforce` (`.run/plugins/ops-ai-plugins`, or
-`.run/isolated/...` with `ISOLATED=1`, at its pinned ref) loads plugins from that clone only, and does not read the
-repo's `plugins/` folder.
+neither: `GET /v1/plugins` reports each with both places, so a stale copy can never run in place of the checkout. The
+local stack's plugins folder is the main checkout's `plugins/`, whichever worktree runs the stack;
+`make demo-salesforce` installs the Salesforce plugin there from the plugins repository at its pinned ref.
 
 `ops plugin install <folder>` validates the plugin, then copies its package folder into the plugins folder (`--into`
 names it when it is not `./plugins`), replacing an earlier copy whole; a plugin that fails validation is not copied.

@@ -1,5 +1,5 @@
-# platform-service: the identity issuer on :8710, with API-key introspection on :8711 bound to localhost
-# (ISOLATED=1: :9710, :9711). Tenants, teams, members, sessions, API keys and audit; the only service that mints
+# platform-service: the identity issuer on :8710, with API-key introspection on :8711 bound to localhost.
+# Tenants, teams, members, sessions, API keys and audit; the only service that mints
 # tokens (docs/services/platform-service/overview.md). Its tables have their own migration chain
 # (alembic_version_platform).
 STACK_SVC := platform

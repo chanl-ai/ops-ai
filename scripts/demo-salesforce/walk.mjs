@@ -1,4 +1,4 @@
-// The Salesforce plugin demo, walked in a browser on the shared console (make demo-salesforce-walk), as the sample team
+// The Salesforce plugin demo, walked in a browser on the stack's console (make demo-salesforce-walk), as the sample team
 // Harbor & Pine (DEMO_TEAM, Operations by default): the operator's plugin install, the team admin's Connect dialog, the plugin's
 // agent and workflow added as team copies, a person's chat that signs them in to Salesforce once, and a workflow run
 // whose page shows each Salesforce call. Run `make demo-salesforce RESET=1` first so the team admin's steps start again.

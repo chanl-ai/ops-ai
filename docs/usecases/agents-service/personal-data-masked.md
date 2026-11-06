@@ -35,5 +35,5 @@ tool calls and a workflow Agent step's output. The model still reads the real va
 
 | Layer | Script | State |
 |---|---|---|
-| api | `agents-service/scripts/test-uc-265-api.py` | `ISOLATED=1 make usecase-test UC=uc-265 LAYER=api` |
+| api | `agents-service/scripts/test-uc-265-api.py` | `make usecase-test UC=uc-265 LAYER=api` |
 | ui | `agents-service/scripts/test-uc-265-ui.mjs` | `make usecase-test UC=uc-265 LAYER=ui`: chat, a reload, and the agent page's switch |

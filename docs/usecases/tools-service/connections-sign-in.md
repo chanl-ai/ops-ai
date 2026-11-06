@@ -46,7 +46,7 @@ used (`apps/console/src/app/tools/connections/[id]/page.tsx`).
 
 | Layer | Script | State |
 |---|---|---|
-| api | `tools-service/scripts/test-uc-394-api.py` | passing, `ISOLATED=1 make usecase-test UC=uc-394 LAYER=api` (2026-10-19) |
+| api | `tools-service/scripts/test-uc-394-api.py` | passing, `make usecase-test UC=uc-394 LAYER=api` (2026-10-19) |
 | ui | `tools-service/scripts/test-uc-394-ui.mjs` | passing, `make usecase-test UC=uc-394 LAYER=ui` (2026-11-03) |
 
 ## Non-vacuous check

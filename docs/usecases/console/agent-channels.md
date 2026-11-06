@@ -11,7 +11,7 @@ the workflows that call it, all from agents-service. An embed can be paused, or 
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 and OPA :8181 | `make db-up` |
-| Free use-case ports | agents :8790, platform-service and console for the ui layer (ISOLATED=1 adds 1000) |
+| Free use-case ports | agents :8790, platform-service and console for the ui layer |
 
 The agents service runs on the scripted model with the seeded Wire Fraud Sentinel (`ag_fraud`) published.
 

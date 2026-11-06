@@ -21,8 +21,8 @@ action decided and the decision in its activity. A real worker runs it; no model
 
 | Needs | How |
 |---|---|
-| PostgreSQL for the isolated stack | `make db-up ISOLATED=1` |
-| The run | `make usecase-test UC=uc-251 LAYER=api ISOLATED=1` |
+| PostgreSQL | `make db-up` |
+| The run | `make usecase-test UC=uc-251 LAYER=api` |
 
 The stack is agents-service and tools-service (the tool gateway) with a workflow worker, on the scripted model.
 

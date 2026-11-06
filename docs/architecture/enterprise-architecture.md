@@ -298,8 +298,8 @@ Everything runs from the root `Makefile`. Prerequisites: Python 3.12, [uv](https
 | Follow one service's log | `make logs SVC=agents` |
 | Restart after a change (migrates first) | `make restart SVC=tools` |
 | Open the database | `make db-shell` |
-| Wipe the database and rebuild it empty (asks first on a shared stack) | `make reset-db` |
-| Run a second, separate stack beside the first | `make up ISOLATED=1` (every port +1000, own database) |
+| Wipe the database and rebuild it empty (asks first) | `make reset-db` |
+| Try another branch on the same ports | `make review BRANCH=<name>` (one stack per machine) |
 | Stop | `make down` (`KEEP_DB=1` leaves the database running) |
 
 ### Testing

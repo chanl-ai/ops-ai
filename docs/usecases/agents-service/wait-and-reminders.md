@@ -12,8 +12,8 @@ on bad data. A Human review that a person has not decided yet is reminded every 
 
 | Needs | How |
 |---|---|
-| PostgreSQL for the isolated stack | `make db-up ISOLATED=1` |
-| The run | `make usecase-test UC=uc-403 LAYER=api ISOLATED=1` |
+| PostgreSQL | `make db-up` |
+| The run | `make usecase-test UC=uc-403 LAYER=api` |
 
 The stack is agents-service with a workflow worker polling every 0.2 seconds; no workflow has a tool or model step.
 

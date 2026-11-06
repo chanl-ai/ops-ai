@@ -1,7 +1,7 @@
 # Run status says what happened
 
 Status: built (2026-10-19), a bug fix from the workflows run review (workflows-run-2, workflows-run-5). Proof:
-`make usecase-test UC=uc-249 LAYER=ui ISOLATED=1` (checks 5 to 7).
+`make usecase-test UC=uc-249 LAYER=ui` (checks 5 to 7).
 
 A run read Succeeded when it ended at a step meant for a failure, and a parent read Succeeded while a run it started
 still waited on a person. The status now comes from where the run ended and from the runs it started

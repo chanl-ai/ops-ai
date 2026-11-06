@@ -40,12 +40,12 @@ trap finish EXIT
 # Each bundle comes from its own release's generator: today's generator cannot compile an older ref's models.
 rm -rf "$OUT" && mkdir -p "$OUT"
 git -C "$ROOT" worktree add -q --detach "$SCRATCH/head" "$REF"
-make -s -C "$SCRATCH/head" ISOLATED=1 db-ddl DIALECT=mssql REF=HEAD OUT="$OUT/head"
+make -s -C "$SCRATCH/head" db-ddl DIALECT=mssql REF=HEAD OUT="$OUT/head"
 BUNDLES=(dist/sql-server-run/head)
 if [ -n "$BASE" ]; then
   git -C "$ROOT" worktree add -q --detach "$SCRATCH/base" "$BASE"
-  make -s -C "$SCRATCH/base" ISOLATED=1 db-ddl DIALECT=mssql REF=HEAD OUT="$OUT/base"
-  make -s -C "$SCRATCH/head" ISOLATED=1 db-upgrade-sql DIALECT=mssql FROM="$BASE" TO=HEAD OUT="$OUT/upgrade"
+  make -s -C "$SCRATCH/base" db-ddl DIALECT=mssql REF=HEAD OUT="$OUT/base"
+  make -s -C "$SCRATCH/head" db-upgrade-sql DIALECT=mssql FROM="$BASE" TO=HEAD OUT="$OUT/upgrade"
   BUNDLES+=(dist/sql-server-run/base dist/sql-server-run/upgrade)
 fi
 # No macOS extended attributes: GNU tar on the runner warns about each one.

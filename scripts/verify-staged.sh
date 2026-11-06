@@ -19,9 +19,14 @@ trap 'rm -rf "$tmp"' EXIT
 GIT_INDEX_FILE="$index" git -C "$root" checkout-index -a --prefix="$tmp/"
 # apps/embed/node_modules: console verify type-checks the embed app too, which draws the console's chat components.
 # sdk/typescript/node_modules: the sdk gate runs openapi-typescript from there.
-for dep in node_modules apps/console/node_modules apps/embed/node_modules packages/usecase-runner/node_modules sdk/typescript/node_modules .venv; do
+for dep in node_modules apps/console/node_modules apps/embed/node_modules packages/usecase-runner/node_modules sdk/typescript/node_modules; do
   if [ -e "$root/$dep" ] && [ -d "$(dirname "$tmp/$dep")" ]; then ln -s "$root/$dep" "$tmp/$dep"; fi
 done
+# The Python checks run on the checkout's own environment ($root/.venv/bin/...), which is never linked into the export:
+# the export is a whole uv workspace, so a `uv run` inside it would reinstall every member into a linked .venv pointing
+# at this temporary folder, and the checkout's imports would break once the folder is deleted. UV_NO_SYNC stops any uv
+# call made from here from installing anything at all.
+export UV_NO_SYNC=1
 cd "$tmp"
 # Each check below runs only when a staged path can change its result: a docs-only commit ran all the console's
 # tests and read every tracked file. The thorough per-service tests run before a push (.githooks/pre-push), and the

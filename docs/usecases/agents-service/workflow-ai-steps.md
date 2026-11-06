@@ -30,5 +30,5 @@ below its confidence floor. A team's AI steps are off until someone who may mana
 
 | Layer | Script | State |
 |---|---|---|
-| api | `agents-service/scripts/test-uc-258-api.py` to `test-uc-262-api.py` | `ISOLATED=1 make usecase-test UC=uc-258 LAYER=api` |
+| api | `agents-service/scripts/test-uc-258-api.py` to `test-uc-262-api.py` | `make usecase-test UC=uc-258 LAYER=api` |
 | ui | `agents-service/scripts/test-uc-258-ui.mjs` to `test-uc-262-ui.mjs` | passing (2026-10-28): Priya turns AI steps on in Policies; each run page shows the step's port and its sheet shows what the step returned |

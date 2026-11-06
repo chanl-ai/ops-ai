@@ -144,7 +144,7 @@ The host page never receives message text: the conversation stays inside the ifr
 
 ## 7. Test it locally
 
-1. `make up AUTH=platform` (or `ISOLATED=1` for your own stack) and sign in to the console as an admin.
+1. `make up` and sign in to the console as an admin.
 2. In **Widgets**, create a widget for an agent with origin `http://localhost:5500`, and create its mint key
    (`POST /v1/widget-deployments/{id}/keys`).
 3. Serve a page on `http://localhost:5500` with the script tag above and a session endpoint that calls step 2's route

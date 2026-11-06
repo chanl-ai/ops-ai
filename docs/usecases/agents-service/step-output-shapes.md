@@ -11,8 +11,8 @@ field a step never outputs is warned when the workflow is saved or validated, ne
 
 | Needs | How |
 |---|---|
-| PostgreSQL for the isolated stack | `make db-up ISOLATED=1` |
-| The run | `make usecase-test UC=uc-401 LAYER=api ISOLATED=1` |
+| PostgreSQL | `make db-up` |
+| The run | `make usecase-test UC=uc-401 LAYER=api` |
 
 The stack is agents-service with tools-service; nothing runs, so no worker or model is needed. The AI steps' answer shapes are covered by the engine test, since AI steps are off by default for a team.
 

@@ -1,4 +1,4 @@
-# The console: Next.js on :3016 (ISOLATED=1: :4016), chat on the agents service. Same verbs as every service Makefile.
+# The console: Next.js on :3016, chat on the agents service. Same verbs as every service Makefile.
 STACK_SVC := console
 include ../../make/service-common.mk
 .PHONY: install run test lint typecheck verify migrate clean
@@ -8,7 +8,7 @@ include ../../make/service-common.mk
 install: ## pnpm install at the workspace root
 	cd ../.. && pnpm install
 
-run: ## next dev in the foreground on :3016 (ISOLATED=1: :4016), chat on the agents service
+run: ## next dev in the foreground on :3016, chat on the agents service
 	NODE_OPTIONS=--max-old-space-size=$${OPS_CONSOLE_HEAP_MB:-3072} NEXT_PUBLIC_OPS_CHAT_API_URL=http://localhost:$(OPS_AGENTS_PORT) pnpm exec next dev -p $(OPS_CONSOLE_PORT)
 
 test: ## No console tests yet; typecheck and the standards check are the gate
@@ -27,4 +27,4 @@ migrate: ## Nothing to migrate
 	@echo "console: no migrations"
 
 clean: ## Remove the Next build directories
-	rm -rf .next .next-isolated tsconfig.tsbuildinfo
+	rm -rf .next tsconfig.tsbuildinfo

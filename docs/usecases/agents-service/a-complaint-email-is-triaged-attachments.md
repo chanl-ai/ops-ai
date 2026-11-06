@@ -14,8 +14,8 @@ the run's team approves it. Real mail both ways. Nothing is faked but the bank a
 
 | Needs | How |
 |---|---|
-| PostgreSQL, OPA, GreenMail and Mailpit for the isolated stack | `make db-up ISOLATED=1` |
-| The run | `make usecase-test UC=uc-249 LAYER=ui ISOLATED=1` |
+| PostgreSQL, OPA, GreenMail and Mailpit | `make db-up` |
+| The run | `make usecase-test UC=uc-249 LAYER=ui` |
 
 The stack is the banker demo with the seeded mailboxes (`complaints@harborpine.test` for `complaint_triage`) and
 GreenMail and Mailpit reachable through tools-service (`tools.mail`). The `payment_receipt` document type is

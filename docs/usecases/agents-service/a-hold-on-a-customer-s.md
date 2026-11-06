@@ -13,8 +13,8 @@ system is told by webhook. Nothing is faked but the bank. No model call.
 
 | Needs | How |
 |---|---|
-| PostgreSQL and OPA for the isolated stack | `make db-up ISOLATED=1` |
-| The run | `make usecase-test UC=uc-248 LAYER=ui ISOLATED=1` |
+| PostgreSQL and OPA | `make db-up` |
+| The run | `make usecase-test UC=uc-248 LAYER=ui` |
 
 The stack is the banker demo (`withUiStack({ demo: true })`) with the core fake bank and its webhook stand-in. Placing
 a hold needs two approvers, each re-authenticating first (the operation's approval policy).

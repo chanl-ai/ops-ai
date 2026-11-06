@@ -27,7 +27,7 @@ me and finds it under Assigned to me; the person who started the run may not dec
 
 | Layer | Script | State |
 |---|---|---|
-| ui | `agents-service/scripts/test-uc-225-ui.mjs` | passing, `ISOLATED=1 make usecase-test UC=uc-225 LAYER=ui` (2026-10-18) |
+| ui | `agents-service/scripts/test-uc-225-ui.mjs` | passing, `make usecase-test UC=uc-225 LAYER=ui` (2026-10-18) |
 
 ## Non-vacuous check
 

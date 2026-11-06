@@ -1,4 +1,4 @@
-"""Lists this machine's private address and the dev mail and bank hosts on the shared stack's egress allow-list.
+"""Lists this machine's private address and the dev mail and bank hosts on the local stack's egress allow-list.
 
 tools-service reaches GreenMail (mail.harborpine.test), Mailpit (smtp.harborpine.test) and the fake bank
 (api.bank.test) at this machine's private address (scripts/stack.sh, OPS_EGRESS_RESOLVE). That address changes when

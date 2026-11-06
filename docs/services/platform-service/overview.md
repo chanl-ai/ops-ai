@@ -34,7 +34,7 @@ openapi-check` fails on drift.
 
 | Setting | Default | Notes |
 |---|---|---|
-| `OPS_PLATFORM_PORT`, `OPS_PLATFORM_INTERNAL_PORT` | 8710, 8711 | `make/env.mk`; ISOLATED=1 adds 1000 |
+| `OPS_PLATFORM_PORT`, `OPS_PLATFORM_INTERNAL_PORT` | 8710, 8711 | `make/env.mk` |
 | `OPS_PLATFORM_URL` | `http://127.0.0.1:$(OPS_PLATFORM_PORT)` | Where other services fetch the key set |
 | `OPS_PLATFORM_SIGNING_KEY`, `OPS_PLATFORM_SIGNING_KID` | unset, `platform-1` | Required outside dev; dev derives a key from a public seed under kid `platform-dev` |
 | `OPS_PLATFORM_AUDIENCES` | every user-facing service | The `aud` of a person's token |

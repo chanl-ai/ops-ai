@@ -1,17 +1,17 @@
-"""Sets the shared stack up for the Salesforce plugin demo (`make demo-salesforce`), from scratch or again.
+"""Sets the local stack up for the Salesforce plugin demo (`make demo-salesforce`), from scratch or again.
 
     make demo-salesforce              fake Salesforce (docs/usecases/lib/fake_salesforce.py) on this machine
-    make demo-salesforce SF=real      your own Salesforce org and connected app, from ~/.config/ops-ai/salesforce.env
+    make demo-salesforce SF=real      your own Salesforce org; Ops AI's connected app is install config, so .env names
+                                      it: OPS_PLUGIN_CLIENTS='{"opsai.salesforce":{"id":"...","secret":"..."}}'
     make demo-salesforce RESET=1      also removes the team's Salesforce connection and template copies, so the
                                       Connect dialog and the template install start again from nothing
 
-What it does, each step a no-op when already done: the plugin's folder (.run/plugins/ops-ai-plugins on PLUGIN_REF, the
-one place scripts/stack.sh then loads plugins from);
-the fake Salesforce kept running in the background; the plugin settings every restart reads (.run/demo-addons.env:
-OPS_PLUGINS, the console's address for sign-ins, and the fake's CA and host map), with tools, agents,
-the worker, kb and documents restarted when they changed; the demo's model alias `salesforce-demo` on its own
-connection to the fake model, so the case helper's chat turns never reach a real provider; the plugin's hosts listed
-for egress.
+What it does, each step a no-op when already done: the plugins repo cloned at PLUGIN_REF (.run/plugins/ops-ai-plugins)
+and the Salesforce plugin installed from it into the stack's plugins folder with `ops plugin install`; the fake
+Salesforce kept running in the background, which the stack trusts and resolves while it runs (scripts/stack.sh);
+tools, agents, the worker, kb and documents restarted when the plugin or the fake changed; the demo's model alias
+`salesforce-demo` on its own connection to the fake model, so the case helper's chat turns never reach a real provider;
+the plugin's hosts listed for egress.
 
 The team admin's steps (connect in the dialog, add the templates, publish) are the demo itself and are left to the
 walk (scripts/demo-salesforce/walk.mjs) or a person. No key, secret or password is printed.
@@ -58,8 +58,9 @@ PLUGIN_REPO = "https://github.com/chanl-ai/ops-ai-plugins.git"
 PLUGIN_REF = os.environ.get("PLUGIN_REF") or "feat/salesforce-triage-workflow"
 PLUGIN_CLONE = RUN / "plugins" / "ops-ai-plugins"
 PLUGIN_DIR = PLUGIN_CLONE / "plugins" / "salesforce" / "src" / "ops_plugin_salesforce"
+# The install's one plugins folder, which the stack's services load from (scripts/stack.sh).
+PLUGINS = Path(os.environ.get("OPS_PLUGINS_DIR") or Path(os.environ.get("STACK_HOME") or ROOT) / "plugins")
 FAKE_DIR = RUN / "fake-salesforce"
-ADDONS = RUN / "demo-addons.env"
 REAL_ENV = Path.home() / ".config" / "ops-ai" / "salesforce.env"
 # Every service that reads the plugins switch: tools-service loads plugins, agents-service and documents-service list
 # their templates, kb-service reads their knowledge sources, and the worker runs workflow steps that call their tools.
@@ -107,7 +108,8 @@ def data(r: httpx.Response, what: str, ok: tuple[int, ...] = (200, 201)) -> Any:
 # ── console, plugin folder ──
 
 
-def plugin_folder() -> None:
+def plugin_folder() -> bool:
+    """Clones the plugins repo once and installs the Salesforce plugin from it; True when the installed copy changed."""
     if not PLUGIN_CLONE.exists():
         PLUGIN_CLONE.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "clone", "-q", PLUGIN_REPO, str(PLUGIN_CLONE)], check=True)
@@ -135,6 +137,33 @@ def plugin_folder() -> None:
     if checked.returncode != 0:
         raise SystemExit(f"FAIL  ops plugin validate: {line[0]}")
     say("OK", f"plugin {head.stdout.strip()}; ops plugin validate: {line[0]}")
+    if same_tree(PLUGIN_DIR, PLUGINS / PLUGIN_DIR.name):
+        say("FOUND", f"plugin installed in {PLUGINS}")
+        return False
+    done = subprocess.run(
+        ["uv", "run", "--quiet", "ops", "plugin", "install", str(PLUGIN_DIR.parents[1]), "--into", str(PLUGINS)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if done.returncode != 0:
+        raise SystemExit(f"FAIL  ops plugin install: {(done.stdout + done.stderr).strip()[-300:]}")
+    say("MADE", f"plugin installed in {PLUGINS}")
+    return True
+
+
+def same_tree(a: Path, b: Path) -> bool:
+    """Whether folder `b` holds exactly the files of `a`, caches aside."""
+
+    def files(root: Path) -> dict[str, bytes]:
+        return {
+            str(f.relative_to(root)): f.read_bytes()
+            for f in root.rglob("*")
+            if f.is_file() and "__pycache__" not in f.parts
+        }
+
+    return b.is_dir() and files(a) == files(b)
 
 
 # ── the fake Salesforce ──
@@ -157,10 +186,11 @@ def fake_info() -> dict[str, Any] | None:
     return info
 
 
-def fake_salesforce() -> dict[str, Any]:
+def fake_salesforce() -> tuple[dict[str, Any], bool]:
+    """The running fake, and True when it was started here (tools-service then restarts to trust and resolve it)."""
     if (info := fake_info()) is not None:
         say("FOUND", f"fake Salesforce running (pid {info['owner']})")
-        return info
+        return info, False
     stop_fake()
     FAKE_DIR.mkdir(parents=True, exist_ok=True)
     out, log = FAKE_DIR / "info.json", ROOT / ".logs" / "fake-salesforce.log"
@@ -174,7 +204,7 @@ def fake_salesforce() -> dict[str, Any]:
         if (info := fake_info()) is not None:
             shutil.copyfile(info["ca"], FAKE_DIR / "ca.pem")
             say("MADE", f"fake Salesforce started (pid {info['owner']}, log .logs/fake-salesforce.log)")
-            return info
+            return info, True
         time.sleep(1)
     raise SystemExit("FAIL  the fake Salesforce did not start; see .logs/fake-salesforce.log (is Docker running?)")
 
@@ -187,47 +217,7 @@ def stop_fake() -> None:
             os.kill(owner, signal.SIGTERM)
 
 
-# ── settings every restart reads ──
-
-
-def addons(info: dict[str, Any] | None, client: dict[str, str] | None = None) -> bool:
-    """Writes .run/demo-addons.env; True when it changed, so the plugin services restart to read it. `client` is the
-    install's own Salesforce app (SF=real: your connected app), so a team connects with no fields to type."""
-    lines = [
-        "# Written by make demo-salesforce (scripts/demo_salesforce.py); scripts/stack.sh reads it after .env.",
-        "OPS_PLUGINS=true",
-        f"OPS_CONSOLE_URL={CONSOLE}",
-    ]
-    if info is not None:
-        resolve: dict[str, str] = json.loads(read_env(ROOT / ".env").get("OPS_EGRESS_RESOLVE") or "{}")
-        resolve |= json.loads(info["settings"]["OPS_EGRESS_RESOLVE"])
-        lines += [
-            f"OPS_EGRESS_EXTRA_CA={FAKE_DIR / 'ca.pem'}",
-            f"OPS_EGRESS_RESOLVE='{json.dumps(resolve, separators=(',', ':'))}'",
-        ]
-    if client is not None:
-        clients = {PLUGIN: client}
-        lines.append(f"OPS_PLUGIN_CLIENTS='{json.dumps(clients, separators=(',', ':'))}'")
-    text = "\n".join(lines) + "\n"
-    if ADDONS.exists() and ADDONS.read_text() == text:
-        say("FOUND", "plugin settings in .run/demo-addons.env")
-        return False
-    # It may hold the app's secret: readable by this user only.
-    ADDONS.touch(mode=0o600)
-    ADDONS.chmod(0o600)
-    ADDONS.write_text(text)
-    say("MADE", "plugin settings in .run/demo-addons.env")
-    return True
-
-
-def running_without_plugins(service: str) -> bool:
-    """A plugin service whose process was started before the plugin settings: its env lacks OPS_PLUGINS=true."""
-    pidfile = RUN / f"{service}.pid"
-    if not pidfile.exists():
-        return True
-    pid = pidfile.read_text().strip()
-    env = subprocess.run(["ps", "eww", "-p", pid], capture_output=True, text=True, check=False).stdout
-    return "OPS_PLUGINS=true" not in env
+# ── restarts ──
 
 
 def fake_model_stale() -> bool:
@@ -236,11 +226,11 @@ def fake_model_stale() -> bool:
     return not pidfile.exists() or pidfile.stat().st_mtime < rules.stat().st_mtime
 
 
-def restart(changed: bool) -> None:
-    stale = [s for s in PLUGIN_SERVICES if changed or running_without_plugins(s)]
+def restart(plugin_changed: bool, fake_started: bool) -> None:
+    stale = list(PLUGIN_SERVICES) if plugin_changed else ["tools"] if fake_started else []
     stale += ["fakeai"] if fake_model_stale() else []
     if not stale:
-        say("FOUND", "plugin services running with the plugin settings")
+        say("FOUND", "plugin services running with the installed plugin and the fake")
         return
     for service in stale:
         done = subprocess.run(
@@ -248,7 +238,7 @@ def restart(changed: bool) -> None:
         )
         if done.returncode != 0:
             raise SystemExit(f"FAIL  make restart SVC={service}: {(done.stdout + done.stderr)[-400:]}")
-        say("MADE", f"restarted {service} with the plugin settings")
+        say("MADE", f"restarted {service}")
 
 
 # ── accounts ──
@@ -446,18 +436,22 @@ def main() -> int:
         return add_templates()
     mode = (os.environ.get("SF") or "fake").lower()
     print(f"Salesforce demo setup ({mode}) on {CONSOLE}")
-    plugin_folder()
-    info = fake_salesforce() if mode == "fake" else fake_info()
+    plugin_changed = plugin_folder()
+    info, fake_started = fake_salesforce() if mode == "fake" else (fake_info(), False)
     if mode == "real":
         real = read_env(REAL_ENV)
         missing = [k for k in ("SF_LOGIN", "SF_CLIENT_ID", "SF_CLIENT_SECRET") if not real.get(k)]
         if missing:
             raise SystemExit(f"FAIL  {REAL_ENV} has no value for {', '.join(missing)}")
-    client = None
-    if mode == "real":
-        real = read_env(REAL_ENV)
-        client = {"id": real["SF_CLIENT_ID"], "secret": real["SF_CLIENT_SECRET"]}
-    restart(addons(info, client))
+        # Ops AI's own app for the plugin is install config, read by tools-service from .env at start.
+        clients = os.environ.get("OPS_PLUGIN_CLIENTS") or ""
+        if PLUGIN not in clients:
+            raise SystemExit(
+                f"FAIL  .env names no OPS_PLUGIN_CLIENTS for {PLUGIN}; add "
+                'OPS_PLUGIN_CLIENTS=\'{"opsai.salesforce":{"id":"<SF_CLIENT_ID>","secret":"<SF_CLIENT_SECRET>"}}\' '
+                f"with the values in {REAL_ENV}, then make restart SVC=tools"
+            )
+    restart(plugin_changed, fake_started)
     model_alias()
     admin_env = read_env(RUN / "dev-admin.env")
     admin = sign_in(admin_env["OPS_BOOTSTRAP_ADMIN_EMAIL"], admin_env["OPS_BOOTSTRAP_ADMIN_PASSWORD"])

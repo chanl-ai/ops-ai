@@ -11,7 +11,7 @@ publish, so an admin's change applies to the very next one.
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 and OPA :8181 | `make db-up` |
-| Free use-case ports | agents, tools, platform-service and console (ISOLATED=1 adds 1000) |
+| Free use-case ports | agents, tools, platform-service and console |
 
 Priya is Operations' admin; James builds there. James's module has one published version, set up through the API, and
 each step stages a minor change (a new operation description) before he publishes.

@@ -27,4 +27,4 @@ uv run python examples/plugins/vendor-onboarding/install.py install   # a runnin
 uv run python examples/plugins/vendor-onboarding/install.py run
 ```
 
-The plugin system is proposed, not built: `install.py` reads `plugin.yaml` itself. See the guide for an isolated stack.
+The plugin system is proposed, not built: `install.py` reads `plugin.yaml` itself. The guide runs it on the local stack.
