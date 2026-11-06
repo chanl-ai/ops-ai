@@ -87,11 +87,11 @@ with ExitStack() as stack:
     for h in sf["hosts"]:
         gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-581"}, headers=sam)
     gw.post("/v1/egress/ranges", json={"value": sf["range"], "note": "uc-581"}, headers=sam)
-    # The org's company address, one of the places the Salesforce plugin signs in.
+    # The org's company address, one of the places the Salesforce plugin signs in, held by the auth config.
     login = sf["login_url"]
-    own = {"app": f"plugin:{PLUGIN}", "clientId": "ops-ai-acme", "clientSecret": "s3"}
+    own = {"app": f"plugin:{PLUGIN}", "clientId": "ops-ai-acme", "clientSecret": "s3", "settings": {"login_url": login}}
     credential = (data(gw.post("/v1/app-credentials", json=own, headers=priya)) or {}).get("id")
-    team_on = {"enabled": True, "settings": {"login_url": login}, "credentialId": credential}
+    team_on = {"enabled": True, "credentialId": credential}
     turned = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json=team_on, headers=priya)
     connection_id = str((data(turned) or {}).get("connectionId") or "con_missing")
     started = gw.post(f"/v1/apps/plugin:{PLUGIN}/accounts/{connection_id}/sign-in", json={}, headers=priya)

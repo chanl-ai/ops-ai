@@ -5,9 +5,10 @@
     make demo-salesforce RESET=1      also removes the team's Salesforce connection and template copies, so the
                                       Connect dialog and the template install start again from nothing
 
-What it does, each step a no-op when already done: the plugin's folder (.run/plugins/ops-ai-plugins on PLUGIN_REF);
+What it does, each step a no-op when already done: the plugin's folder (.run/plugins/ops-ai-plugins on PLUGIN_REF, the
+one place scripts/stack.sh then loads plugins from);
 the fake Salesforce kept running in the background; the plugin settings every restart reads (.run/demo-addons.env:
-OPS_PLUGINS, OPS_PLUGIN_PATHS, the console's address for sign-ins, and the fake's CA and host map), with tools, agents,
+OPS_PLUGINS, the console's address for sign-ins, and the fake's CA and host map), with tools, agents,
 the worker, kb and documents restarted when they changed; the demo's model alias `salesforce-demo` on its own
 connection to the fake model, so the case helper's chat turns never reach a real provider; the plugin's hosts listed
 for egress.
@@ -195,8 +196,6 @@ def addons(info: dict[str, Any] | None, client: dict[str, str] | None = None) ->
     lines = [
         "# Written by make demo-salesforce (scripts/demo_salesforce.py); scripts/stack.sh reads it after .env.",
         "OPS_PLUGINS=true",
-        # Single-quoted: the file is sourced by a shell, which would strip JSON's double quotes.
-        f"OPS_PLUGIN_PATHS='{json.dumps([str(PLUGIN_DIR)], separators=(',', ':'))}'",
         f"OPS_CONSOLE_URL={CONSOLE}",
     ]
     if info is not None:

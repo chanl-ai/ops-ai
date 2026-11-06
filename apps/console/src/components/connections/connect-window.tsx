@@ -104,12 +104,19 @@ export function ConnectWindow({
   // The plugin's own settings (Salesforce's sign-in address) when the app is first connected; kept after. A sandbox
   // asks the ones each account keeps its own, as the team's settings stay the app's.
   // Another account is asked where it signs in, as every Salesforce org has its own address; a turn-on again asks nothing.
-  const places = (plugin?.settings ?? []).filter(isSignInPlace);
-  // A setting asked on the auth config (Salesforce's org) or on the Settings tab only is never asked here.
-  const askedHere = (x: { asked?: string | null }) => x.asked !== 'config' && x.asked !== 'settings';
+  // A setting asked on the auth config (Salesforce's org) is the picked config's when it sets one, shown read-only and
+  // edited there; one it leaves unset (Ops AI's app sets none) is asked here, for this account. A setting asked on the
+  // Settings tab only is never asked here. Until the picked config answers, neither is shown.
+  const picked = useAppCredential(client ?? '');
+  const onConfigValue = (name: string) => {
+    const v = (picked.data?.settings as Record<string, unknown> | undefined)?.[name];
+    return v === undefined || v === null || v === '' ? null : String(v);
+  };
+  const askedHere = (x: { name: string; asked?: string | null }) =>
+    x.asked !== 'settings' && (x.asked !== 'config' || (client ? Boolean(picked.data) && onConfigValue(x.name) === null : true));
+  const places = (plugin?.settings ?? []).filter((x) => isSignInPlace(x) && askedHere(x));
   const asked = reusing ? (another ? places : []) : (plugin?.settings ?? []).filter((x) => !x.locked && askedHere(x) && (!sandbox || x.perAccount));
-  // Where the chosen auth config signs in, for each setting it holds: shown read-only, edited on the config.
-  const onConfig = (plugin?.settings ?? []).filter((x) => x.asked === 'config');
+  const onConfig = (plugin?.settings ?? []).filter((x) => x.asked === 'config' && client && onConfigValue(x.name) !== null);
   const fields: KindField[] = asked.filter((x) => !isSignInPlace(x)).map((x) => ({ name: x.name, label: x.label, secret: x.secret, required: !x.default, advanced: Boolean(x.default), default: x.default }));
   const schema = schemaForFields(fields);
   const form = useForm<Record<string, string>>({
@@ -286,7 +293,7 @@ export function ConnectWindow({
       <Form {...form}>
       <div className="flex min-w-0 flex-col gap-4">
         <AppCredentialPicker app={card.id} value={client} onChange={setClient} platform={managed && Boolean(plugin.platformApp)} id="connect-window-app" testId="connect-window-app" />
-        {onConfig.length > 0 && <ConfigPlace config={client} settings={onConfig} />}
+        {onConfig.length > 0 && picked.data && <ConfigPlace href={credentialHref(picked.data)} places={onConfig.map((x) => onConfigValue(x.name) ?? '')} />}
 
         {asked.filter(isSignInPlace).map((x) => (
           <SignInPlace
@@ -357,20 +364,16 @@ export function ConnectWindow({
  * Where the chosen auth config signs in, read-only: each setting the plugin asks on the config (Salesforce's org), with
  * an Edit link to the team's own config. Ops AI's own config signs in at the plugin's default.
  */
-function ConfigPlace({ config, settings }: { config: string | null; settings: { name: string; label: string; default?: string | null }[] }) {
-  const own = useAppCredential(config ?? '');
-  const held = (config ? own.data?.settings : undefined) ?? {};
+function ConfigPlace({ href, places }: { href: string; places: string[] }) {
   return (
     <div className="flex flex-col gap-1 text-sm" data-testid="connect-window-config-place">
-      {settings.map((s) => (
-        <p key={s.name} className="flex flex-wrap items-center gap-2">
+      {places.map((at) => (
+        <p key={at} className="flex flex-wrap items-center gap-2">
           <span className="text-muted-foreground">Signs in at</span>
-          <code className="break-all text-xs">{String(held[s.name] ?? s.default ?? '')}</code>
-          {config && own.data && (
-            <Link href={credentialHref(own.data)} className="text-xs underline-offset-4 hover:underline" data-testid="connect-window-config-edit">
-              Edit
-            </Link>
-          )}
+          <code className="break-all text-xs">{at}</code>
+          <Link href={href} className="text-xs underline-offset-4 hover:underline" data-testid="connect-window-config-edit">
+            Edit
+          </Link>
         </p>
       ))}
     </div>

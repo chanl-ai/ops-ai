@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Ops AI's app asks where each account signs in",
+  "description": "An auth config that leaves where to sign in unset, such as Ops AI's own app, now asks it in Connect and Add account for each account. An auth config that sets it still decides it for every account on it.",
+  "tag": "fix"
+}

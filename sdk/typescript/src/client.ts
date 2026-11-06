@@ -282,10 +282,10 @@ export class OpsAI {
   /** A client acting as a person. A session carries the teams the person was in when it was made. */
   static async signIn(email: string, password: string, options: Partial<Config> = {}): Promise<OpsAI> {
     const session = await new OpsAI(options).raw.platform.auth_sign_in({ body: { email, password } });
-    return new OpsAI({ ...options, accessToken: session.token });
+    return new OpsAI({ ...options, accessToken: session.token, session: { accessToken: session.token, refreshToken: session.refreshToken } });
   }
 
-  /** The same credential and address, acting in another team. */
+  /** The same credential and address, acting in another team; a signed-in session is shared, so a renewal reaches both. */
   withTeam(team: string): OpsAI {
     return new OpsAI({ ...this.config, team });
   }

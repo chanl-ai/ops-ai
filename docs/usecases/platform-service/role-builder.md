@@ -1,4 +1,4 @@
-# A person invited as a builder builds the team's agents and decides nothing
+# A person invited as a builder builds the team's agents and runs no people or policies
 
 Status: current. Id: `uc-217`. Service: `platform-service`, agents-service, console. Layers: api, ui.
 
@@ -19,7 +19,7 @@ password. No model is called.
 |---|---|---|
 | 1 | Priya invites a new address as builder | They join team_ops as builder |
 | 2 | They create and edit an agent and ask to publish it | Created, saved, and the request waits for review |
-| 3 | They decide their own request | 403 |
+| 3 | A viewer of the team decides the request (builders decide their team's reviews since D59) | 403 |
 | 4 | They invite someone, change a policy | 403 each |
 | 5 | ui: they open their agent, the pending review and Access | Editable with no View only; who decides and no Approve; no Invite |
 

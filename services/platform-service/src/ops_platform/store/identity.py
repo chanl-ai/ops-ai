@@ -144,10 +144,13 @@ class IdentityStore:
                 out[a.team_id].append(a.role_id)
         return out
 
-    async def grids(self, tenant_id: str, role_ids: list[str]) -> dict[str, dict[str, str]]:
-        """Each role's cells as stored now, encoded for the token's `grids` claim, which every service decides from."""
+    async def grids(
+        self, tenant_id: str, role_ids: list[str], *, stored_only: bool = False
+    ) -> dict[str, dict[str, str]]:
+        """Each role's cells as stored now, encoded for the token's `grids` claim, which every service decides from. A
+        role with no stored row holds no cell, or with `stored_only` is left out so a reader falls back to its seed."""
         found = await RoleStore(self.db).grids(tenant_id, role_ids) if role_ids else {}
-        return {r: encode_grid(found.get(r, [])) for r in role_ids}
+        return {r: encode_grid(found.get(r, [])) for r in role_ids if r in found or not stored_only}
 
     async def open_session(
         self,

@@ -1069,9 +1069,9 @@ try {
         const SF = 'plugin:opsai.salesforce';
         /** The app's accounts, its default first, each with its last test, as its page reads them. */
         const sfAccounts = async () => ((await call(tools, 'GET', `/v1/apps/${encodeURIComponent(SF)}`, priya)).data?.authConfigs ?? []).flatMap((c) => c.accounts);
-        /** The team's own client, made under Credentials with no account, as the Connect window then offers it. */
-        const credentialFor = async (clientId, clientSecret) =>
-          (await call(tools, 'POST', '/v1/app-credentials', priya, { app: SF, name: `Salesforce ${clientId}`, clientId, clientSecret })).data?.id;
+        /** The team's own client, made under Credentials with no account and the org's sign-in address, as the Connect window then offers it. */
+        const credentialFor = async (clientId, clientSecret, login_url) =>
+          (await call(tools, 'POST', '/v1/app-credentials', priya, { app: SF, name: `Salesforce ${clientId}`, clientId, clientSecret, settings: { login_url } })).data?.id;
         /**
          * The team's own app picked in the Connect window, its sign-in address and Authorize, allowed as `user`. The
          * first connect also checks that Authorize with no app credential picked says so and opens no sign-in window;
@@ -1100,10 +1100,10 @@ try {
           }
           await picker.click();
           await page.getByTestId(`connect-window-app-option-${values.credential}`).click();
-          // Where the account signs in: the org's own address, picked as the company's and typed as its host.
-          await window_.getByTestId('connect-window-place-login_url').click();
-          await page.getByTestId('connect-window-place-login_url-other').click();
-          await window_.getByTestId('connect-window-place-login_url-host').fill(new URL(values.login_url).host);
+          // Where the account signs in is the auth config's: the window shows it, with no field to change it here.
+          const shown = ((await window_.getByTestId('connect-window-config-place').innerText({ timeout: 10_000 }).catch(() => '')) ?? '').replace(/\s+/g, ' ');
+          const asked = await window_.getByTestId('connect-window-place-login_url').count();
+          check(`19 the Connect window shows where ${user} signs in, read from the auth config, and asks nothing about it`, shown.includes(`Signs in at ${values.login_url}`) && asked === 0, { shown, asked });
           if (sandbox) await shoot(page, 'connect-sandbox');
           const [popup] = await Promise.all([page.waitForEvent('popup', { timeout: 60_000 }), window_.getByTestId('connect-window-authorize').click()]);
           const name = popup.locator('input[name=username]');
@@ -1124,8 +1124,8 @@ try {
         const loginUrl = sf.login_url;
         await step("19 Salesforce's own app on each account: the live one in the Connect window, a sandbox account from the app page, each on its own instance", async () => {
           // Both clients are made under Credentials first, so the window's list has them when it opens.
-          const liveCredential = await credentialFor('ops-ai-acme', 'acme-connected-app-secret');
-          const sandboxCredential = await credentialFor('acme-sandbox-app', 'acme-sandbox-secret');
+          const liveCredential = await credentialFor('ops-ai-acme', 'acme-connected-app-secret', loginUrl);
+          const sandboxCredential = await credentialFor('acme-sandbox-app', 'acme-sandbox-secret', sf.sandbox_login_url);
           await page.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await page.getByTestId('connect-plugin:opsai.salesforce').click();
           const live = await ownWindow({ credential: liveCredential, login_url: loginUrl }, 'priya.live');
@@ -1152,14 +1152,15 @@ try {
             { live, sandbox, suggested, rows: rows.slice(0, 300), badge, addAgain, bases, authorizeUrl: liveOne.settings?.authorizeUrl },
           );
         }, page);
-        await step('41 Settings › Edit starts its saved fields blank, and saving without typing keeps every saved value', async () => {
+        await step("41 Settings › Edit asks nothing the auth config holds, and saving without typing keeps every saved value", async () => {
           const card = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.pluginId === 'opsai.salesforce');
           const before = await accountOf(priya, SF, card?.connectionId);
           await openSettings(page, consoleUrl, SF);
           await page.getByTestId('app-edit').click();
           const dialog = page.getByTestId('connect-dialog');
           await dialog.waitFor({ timeout: 30_000 });
-          const field = await dialog.locator('#account-login_url').inputValue().catch(() => 'missing');
+          await dialog.getByTestId('connect-submit').waitFor({ timeout: 30_000 });
+          const field = (await dialog.locator('#account-login_url').count()) ? await dialog.locator('#account-login_url').inputValue() : 'missing';
           const said = ((await dialog.innerText()) ?? '').replace(/\s+/g, ' ');
           await shoot(page, 'app-settings-edit-kept');
           await dialog.getByTestId('connect-submit').click();
@@ -1167,9 +1168,10 @@ try {
           const after = await accountOf(priya, SF, card?.connectionId);
           const kept = (e) => JSON.stringify(Object.fromEntries(Object.entries({ ...(e?.settings ?? {}), ...(e?.pluginSettings ?? {}) }).filter(([k]) => k !== 'scopes')));
           check(
-            '41 Settings › Edit starts its saved fields blank, and saving without typing keeps every saved value',
-            field === '' && /Blank keeps the saved value/.test(said) && closed && kept(after) === kept(before),
-            { field, closed, before: kept(before), after: kept(after) },
+            "41 Settings › Edit asks nothing the auth config holds, and saving without typing keeps every saved value",
+            // Where the account signs in is its auth config's, edited there, so this window has no field for it.
+            field === 'missing' && closed && kept(after) === kept(before),
+            { field, said: said.slice(0, 200), closed, before: kept(before), after: kept(after) },
           );
         }, page);
         await step("21 when Salesforce refuses the team account's refresh, its account reads Expired with Reconnect, and signing in again makes it work", async () => {

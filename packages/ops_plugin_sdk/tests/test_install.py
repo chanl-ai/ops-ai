@@ -56,3 +56,17 @@ def test_remove_takes_out_only_the_named_plugin(tmp_path: Path) -> None:
     assert main(["plugin", "remove", "demo.desk", "--into", str(folder)]) == 0
     assert [p.name for p in folder.iterdir()] == ["other_desk"]
     assert main(["plugin", "remove", "demo.desk", "--into", str(folder)]) == 1
+
+
+def test_a_plugin_found_in_two_places_loads_from_neither_and_names_both(tmp_path: Path) -> None:
+    # A stale copy in the plugins folder beside a developer's checkout: loading the first found would run whichever
+    # copy happens to sort first, so neither runs and the failure says where each is.
+    root = plugin(tmp_path)
+    folder = into(tmp_path)
+    assert main(["plugin", "install", str(root), "--into", str(folder)]) == 0
+    loaded = discover(found=[], folders=[str(folder / "demo_desk"), str(root)])
+    assert [x.ok for x in loaded] == [False, False]
+    for x in loaded:
+        assert x.error is not None
+        assert "demo.desk is in two places" in x.error
+        assert str((folder / "demo_desk").resolve()) in x.error and str(root.resolve()) in x.error
