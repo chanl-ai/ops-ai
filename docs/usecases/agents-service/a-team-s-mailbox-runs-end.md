@@ -12,8 +12,8 @@ reply read back from Mailpit.
 
 | Needs | How |
 |---|---|
-| PostgreSQL, OPA, GreenMail and Mailpit for the isolated stack | `make db-up ISOLATED=1` |
-| The run | `make usecase-test UC=uc-245 LAYER=ui ISOLATED=1` |
+| PostgreSQL, OPA, GreenMail and Mailpit | `make db-up` |
+| The run | `make usecase-test UC=uc-245 LAYER=ui` |
 
 The stack is the banker demo (`withUiStack({ demo: true, tools: { mail: true } })`): platform sign-in, models on the
 fake OpenAI with the demo's rules, tools-service with the core fake bank, and `mail.harborpine.test` /

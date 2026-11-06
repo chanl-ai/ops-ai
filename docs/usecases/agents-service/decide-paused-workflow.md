@@ -7,7 +7,7 @@ Status: current. Id: `uc-008`. Service: `agents-service`. Layers: api, ui.
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 and OPA :8181 | `make db-up` |
-| Free use-case ports | agents :8790, console :3018 (ISOLATED=1 adds 1000) |
+| Free use-case ports | agents :8790, console :3018 |
 
 The scripts start the agents service on the scripted model. The ui script also starts the console with
 `NEXT_PUBLIC_OPS_CASES_API_URL` pointing Cases runs and Reviews at it; every other area stays on the mock.

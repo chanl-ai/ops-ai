@@ -15,7 +15,7 @@ this repo yet.
 | Is it up | `make health` |
 | Follow one service | `make logs SVC=agents` (or `tools`, `console`) |
 | Stop | `make down` (`KEEP_DB=1` keeps PostgreSQL and OPA) |
-| Second stack beside the first | `ISOLATED=1` on any target: every port +1000, own compose project and data volume |
+| Try another branch on the same ports | `make review BRANCH=<name>` (one stack per machine; `make up` in your checkout moves it back) |
 | Before committing | `make verify` (runs with model keys unset) |
 
 Ports for the shared, isolated and use case stacks are in [make.md](make.md#ports).

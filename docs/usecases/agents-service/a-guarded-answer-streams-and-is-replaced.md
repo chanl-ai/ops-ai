@@ -31,7 +31,7 @@ blocked topic, the stream replaces what was shown with the corrected answer or t
 
 | Layer | Script | State |
 |---|---|---|
-| ui | `agents-service/scripts/test-uc-229-ui.mjs` | passing, `ISOLATED=1 make usecase-test UC=uc-229 LAYER=ui` (2026-10-18) |
+| ui | `agents-service/scripts/test-uc-229-ui.mjs` | passing, `make usecase-test UC=uc-229 LAYER=ui` (2026-10-18) |
 
 ## Non-vacuous check
 

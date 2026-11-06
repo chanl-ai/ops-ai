@@ -10,7 +10,7 @@ The page is `/tools/[id]` in the console. Tool modules come from the console moc
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 and OPA :8181 | `make db-up` (the ui harness starts the scripted agents service too) |
-| Free use-case ports | agents :8790, console :3018 (ISOLATED=1 adds 1000) |
+| Free use-case ports | agents :8790, console :3018 |
 
 ## Steps and expected results
 

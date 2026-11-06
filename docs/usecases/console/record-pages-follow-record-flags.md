@@ -11,7 +11,7 @@ and canDelete from the write routes' own check, and the pages follow them.
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 and OPA :8181 | `make db-up` |
-| Free use-case ports | agents, kb, files, platform-service and console (ISOLATED=1 adds 1000) |
+| Free use-case ports | agents, kb, files, platform-service and console |
 
 Priya is Operations' admin and Ravi its viewer. The script uses Operations' first seeded knowledge base and source, and
 uploads one file as Priya.

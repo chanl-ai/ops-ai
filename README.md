@@ -261,8 +261,11 @@ No model key is needed: `DEMO_MODEL=fake` puts every model alias on the fake mod
 git clone <this repository> ops-ai && cd ops-ai
 make setup                               # optional: answer what you have; each answer is tested before it is written
 make install                             # pnpm install and uv sync, once per clone
-make up DEMO_MODEL=fake AUTH=platform    # PostgreSQL, OPA, every service and the console
+make up DEMO_MODEL=fake                  # PostgreSQL, OPA, every service and the console
 make health                              # each service, its port and whether it answers
+make review BRANCH=main                  # optional: run a branch from the review worktree, same ports
+make up                                  # back to your own checkout
+make test PKG=packages/ops_access        # one package's tests, on a throwaway database
 ```
 
 Open http://localhost:3016 and sign in as the workspace admin `w.kamau@harborpine.example` with the development
@@ -272,16 +275,23 @@ service that is not running shows its committed spec). These steps were run from
 `ok`, the console signed in, and a chat turn on the fake model answered with a citation.
 
 To answer with a real model instead, put `OPENAI_API_KEY` in a `.env` file at the root (git ignores it) and run
-`make up AUTH=platform`.
+`make up`.
+
+One stack runs per machine, on these ports, from one checkout at a time. `make review BRANCH=<name>` checks a branch
+out in a second worktree beside your clone (`../ops-ai-review`) and moves the stack there, restarting only what
+differs; your own checkout and branch stay as they are, and `make up` in your checkout moves the stack back. Tests
+and use cases make their own throwaway databases and never touch the stack's.
 
 | Command | What it does |
 |---|---|
 | `make up` | Migrates the database in place, then starts or restarts whatever is out of date |
+| `make review BRANCH=feat/x` | Runs that branch from the review worktree on the same ports |
+| `make test PKG=services/tools-service` | One package's or service's tests; `make test` alone runs what changed since `origin/main` |
 | `make health` | Each service's port, whether it answers and who started it |
 | `make logs SVC=agents` | Follows one service's log |
 | `make down KEEP_DB=1` | Stops the services and keeps the database |
 | `make verify` | Everything a commit must pass, on the scripted model |
-| `make usecase-test UC=uc-010` | Runs one end-to-end use case on its own stack |
+| `make usecase-test UC=uc-010` | Runs one end-to-end use case on its own database and free ports |
 
 ## Run with Docker
 

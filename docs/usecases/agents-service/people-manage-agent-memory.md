@@ -11,7 +11,7 @@ what the agent keeps about the person, with correct, forget and export.
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 and OPA :8181 | `make db-up` |
-| Free use-case ports | agents, platform-service and console (ISOLATED=1 adds 1000) |
+| Free use-case ports | agents, platform-service and console |
 
 The agents service runs on the scripted model, which saves "timezone: Eastern" from "My timezone is Eastern". The
 seeded Branch Concierge (`ag_branch`) has memory on.

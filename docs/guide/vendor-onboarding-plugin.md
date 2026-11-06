@@ -76,20 +76,16 @@ does by hand what the install process will do: it reads `plugin.yaml`, makes eac
 routes `scripts/sample_team.py` uses, replaces each `@kind/id` reference with the id the team got, and publishes each
 record through its review. Nothing is written to a database directly. A second run prints FOUND for everything.
 
-An isolated stack (ports +1000) with the fake model, the worker and the sample team's people:
+The local stack (<http://localhost:3016>) with the fake model, the worker and the sample team's people:
 
 ```bash
-OPS_STACK_FAKES=1 make up ISOLATED=1 AUTH=platform DEMO_MODEL=fake
-OPS_STACK_FAKES=1 make sample-team ISOLATED=1 DEMO_MODEL=fake
-
-export OPS_CONSOLE_PORT=4016 OPS_PLATFORM_PORT=9710 OPS_AGENTS_PORT=9700 OPS_TOOLS_PORT=9720 \
-  OPS_KB_PORT=9740 OPS_FILES_PORT=9750 OPS_DOCUMENTS_PORT=9760 OPS_RUN_DIR=$PWD/.run/isolated
+make up DEMO_MODEL=fake
+make sample-team DEMO_MODEL=fake
 uv run python examples/plugins/vendor-onboarding/install.py install
 uv run python examples/plugins/vendor-onboarding/install.py run
 ```
 
-On the shared stack (<http://localhost:3016>) with the sample team, leave the exports out. Pass `--model` an alias that
-stack runs on the fake model; the default, `bank-assist`, is the sample team's.
+Pass `--model` an alias that the stack runs on the fake model; the default, `bank-assist`, is the sample team's.
 
 What `install` does, in order:
 
@@ -131,8 +127,7 @@ Found while building and running this example on 2026-10-29. None was worked aro
 |---|---|
 | Nothing reads `plugin.yaml`: no pack, acceptance, install plan or provenance | `install.py` interprets the manifest by hand |
 | tools-service imports an OpenAPI document only from a URL; an uploaded or bundled one answers "not available yet" (`services/tools-service/src/ops_tools/modules/service.py`, `_discover`) | The registry is described as hand-built HTTP operations in YAML, not as the OpenAPI document a plugin would carry |
-| A plugin's fake API is reached only over https on port 443, at a listed host; `fake_api/` here serves plain http | Runs are test runs answered by the module's mocks. plugins.md, Try a plugin on a local stack, shows how a fake served over https is reached through `.run/demo-addons.env` |
+| A plugin's fake API is reached only over https on port 443, at a listed host; `fake_api/` here serves plain http | Runs are test runs answered by the module's mocks. plugins.md, Try a plugin on a local stack, shows how a fake served over https is reached through `.env` |
 | On the fake model, an AI step with an answer schema (`ops.ai.summarise`, `classify`, `extractText`, `draft`, or an agent step with `outputSchema`) takes its error port unless the stack's fake script has a rule for that prompt, and a plugin cannot bring rules | The workflow uses an agent step with no answer schema; its notes on the fake model are the fake's echo of the prompt |
 | A hand-built HTTP operation's inputs are all inferred as required strings from its URL and body placeholders | `screen_vendor` takes `legal_name` and `country` as strings; typing them needs a later `PATCH` of the operation |
 | Workflow ids are unique in the workspace and belong to the first team that saves one (`scripts/sample_team.py` at the repo root, `prefixed`) | A second team installing this plugin would collide on `vendor_onboarding`; `install.py` does not prefix ids |
-| `make up ISOLATED=1` starts neither the worker nor the fakes, and services stay on dev sign-in, which refuses the sample installer's tokens | The isolated stack needs `OPS_STACK_FAKES=1` and `AUTH=platform`, which the sample-team guide does not say |

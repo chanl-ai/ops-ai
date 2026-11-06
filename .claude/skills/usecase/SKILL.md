@@ -51,7 +51,7 @@ broken, with the step that failed; the detailed checks stay underneath as the ev
 3. Watch it fail once: break the behaviour (or point the script at a case that must fail), see the story go broken at
    the right step, restore it, and say what was broken.
 4. The registry's status column is not evidence; only a run in this session is.
-5. Never kill a process you did not start; a busy port means `ISOLATED=1` or stopping your own leftover.
+5. Never kill a process you did not start; a use case picks free ports itself, so a busy stack port is a leftover of yours to stop or another program's to leave.
 
 ## Proof
 

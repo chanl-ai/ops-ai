@@ -10,8 +10,8 @@ Restoring it brings back the version that served it, live or paused. Who may del
 
 | Needs | How |
 |---|---|
-| PostgreSQL for the isolated stack | `make db-up ISOLATED=1` |
-| The run | `make usecase-test UC=uc-252 LAYER=api ISOLATED=1` |
+| PostgreSQL | `make db-up` |
+| The run | `make usecase-test UC=uc-252 LAYER=api` |
 
 The stack is agents-service with a workflow worker, on the scripted model.
 

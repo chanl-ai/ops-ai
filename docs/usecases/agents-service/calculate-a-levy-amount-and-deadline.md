@@ -41,5 +41,5 @@ value from the run can never become part of one (`packages/ops_engine/tests/test
 
 | Layer | Script | State |
 |---|---|---|
-| api | `agents-service/scripts/test-uc-231-api.py` | passing, `ISOLATED=1 make usecase-test UC=uc-231 LAYER=api` (2026-10-18) |
+| api | `agents-service/scripts/test-uc-231-api.py` | passing, `make usecase-test UC=uc-231 LAYER=api` (2026-10-18) |
 | ui | `agents-service/scripts/test-uc-231-ui.mjs` | passing: the run page's result and the Calculate step's sheet |
