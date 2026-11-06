@@ -1,5 +1,5 @@
 /**
- * Whether a failed call means the services could not answer (no response at all, or a 5xx with no error of its own),
+ * Whether a failed call means the services could not answer (no response at all, or a 5xx other than a 503 naming its cause),
  * rather than an answer such as 401, 403 or 404. The shell and sign-in say the same thing for it, so an outage reads as
  * one state.
  */
@@ -12,12 +12,13 @@ export function isUnreachable(e: unknown): boolean {
 }
 
 /**
- * A 5xx the service answered with its own error code (`models_unavailable`): it is up and says a part behind it is
+ * A 503 the service answered with its own error code (`models_unavailable`): it is up and says a part behind it is
  * down. Asking again at once or on a timer only repeats that answer, so such a read is asked once and its place says so.
+ * Only a 503: an unhandled failure answers 500 with the code `internal`, and that stays an outage.
  */
 export function answeredOutage(e: unknown): boolean {
   const { status, code } = (e ?? {}) as { status?: number; code?: unknown };
-  return (status ?? 0) >= 500 && typeof code === 'string' && code.length > 0;
+  return status === 503 && typeof code === 'string' && code.length > 0;
 }
 
 /**

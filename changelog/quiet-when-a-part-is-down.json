@@ -1,6 +1,6 @@
 {
   "date": "2026-11-06",
   "title": "A part that is down is asked once",
-  "description": "When a service says something behind it is down, such as the model list, the page asks once and says so instead of asking again every few seconds. The Model field says in plain words when a saved model is no longer offered.",
+  "description": "When a service says something behind it is down, such as the model list, the page asks once and says so, while a server error is still retried. The Model field says in plain words when a saved model is no longer offered.",
   "tag": "improved"
 }

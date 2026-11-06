@@ -25,6 +25,10 @@ test('a part a service says is down is asked once: no retry, no banner', () => {
   assert.equal(retryRead(3, down), true);
   assert.equal(retryRead(4, down), false);
   assert.equal(isUnreachable({ status: 502 }), true);
+  // A server's own unhandled failure carries the code `internal`, yet is an outage, retried and bannered.
+  const internal = { status: 500, code: 'internal' };
+  assert.equal(isUnreachable(internal), true);
+  assert.equal(retryRead(0, internal), true);
 });
 
 test('a read that just failed is shared by the parts that mount after it, and asked again after the hold', () => {
