@@ -7,7 +7,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlparse
 
 from ops_ai import OpsAI
@@ -65,18 +65,34 @@ def dev_client(ns: argparse.Namespace) -> OpsAI:
     """`--as`: a dev seed person signed in through the password sign-in, the way `make api AS=<role>` signs in, acting
     in `--team` or the team their sign-in names. Only against a local stack: the dev seed's password opens nothing
     else."""
+    base, services, session, team = dev_sign_in(ns)
+    return OpsAI(base_url=base, services=services, access_token=session["token"], team=team)
+
+
+def dev_sign_in(ns: argparse.Namespace) -> tuple[str, dict[str, str], dict[str, Any], str | None]:
+    """The address, per-service addresses, session and team of a `--as` sign-in."""
     services = {s: f"http://127.0.0.1:{os.environ[v]}" for s, v in SERVICE_PORTS.items() if os.environ.get(v)}
     base = ns.base_url or os.environ.get("OPS_BASE_URL") or services.get("platform") or "http://127.0.0.1:8710"
     if (urlparse(services.get("platform") or base).hostname or "") not in ("127.0.0.1", "localhost"):
         raise ValueError("--as signs in dev seed people on a local stack only")
-    email = _dev_email(ns.as_role)
     password = os.environ.get("OPS_PLATFORM_DEMO_PASSWORD") or "northfield-demo"
+    session = sign_in(base, services, _dev_email(ns.as_role), password)
+    return base, services, session, team_of(ns.team, session)
+
+
+def sign_in(base: str, services: dict[str, str], email: str, password: str) -> dict[str, Any]:
+    """The password sign-in: the session platform-service answers (token, refresh token, principal)."""
     anonymous = OpsAI(base_url=base, services=services, access_token="", api_key="", team="")
-    session = anonymous.raw.platform.auth_sign_in({"email": email, "password": password})
-    anonymous.close()
-    principal = session.get("principal") or {}
-    team = ns.team or principal.get("teamId") or next(iter(principal.get("teamIds") or []), None)
-    return OpsAI(base_url=base, services=services, access_token=session["token"], team=team)
+    try:
+        return cast(dict[str, Any], anonymous.raw.platform.auth_sign_in({"email": email, "password": password}))
+    finally:
+        anonymous.close()
+
+
+def team_of(chosen: str | None, session: dict[str, Any]) -> str | None:
+    """`chosen`, else the team the sign-in names as the person's own, else their first."""
+    principal = cast(dict[str, Any], session.get("principal") or {})
+    return chosen or principal.get("teamId") or next(iter(principal.get("teamIds") or []), None)
 
 
 def _dev_email(role: str) -> str:

@@ -30,7 +30,7 @@ def _profile_name(name: str | None) -> str:
     return name or str(_saved().get("current") or "default")
 
 
-def _profile(name: str | None) -> dict[str, Any]:
+def profile_values(name: str | None) -> dict[str, Any]:
     path = config_path()
     if not path.exists():
         return {}
@@ -38,17 +38,26 @@ def _profile(name: str | None) -> dict[str, Any]:
     return profiles.get(_profile_name(name)) or {}
 
 
+def save_profile(name: str, fields: dict[str, Any], *, current: bool = False) -> Path:
+    """Sets `fields` on a profile, leaving the rest of the file as it is; `current` makes it the one used by default.
+    The file holds tokens, so only its owner reads it (mode 600)."""
+    path = config_path()
+    saved = _saved()
+    profiles = cast(dict[str, Any], saved.setdefault("profiles", {}))
+    cast(dict[str, Any], profiles.setdefault(name, {})).update(fields)
+    if current:
+        saved["current"] = name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(saved, indent=2))
+    path.chmod(0o600)
+    return path
+
+
 def _keep_tokens(name: str) -> Callable[[str, str], None]:
-    """Writes a renewed pair into the profile it came from, leaving the rest of the file as it is (mode 600)."""
+    """Writes a renewed pair into the profile it came from."""
 
     def keep(access_token: str, refresh_token: str) -> None:
-        path = config_path()
-        saved = _saved()
-        profiles = cast(dict[str, Any], saved.setdefault("profiles", {}))
-        profile = cast(dict[str, Any], profiles.setdefault(name, {}))
-        profile.update(accessToken=access_token, refreshToken=refresh_token)
-        path.write_text(json.dumps(saved, indent=2))
-        path.chmod(0o600)
+        save_profile(name, {"accessToken": access_token, "refreshToken": refresh_token})
 
     return keep
 
@@ -96,7 +105,7 @@ class Config:
         max_retries: int | None = None,
         session: Session | None = None,
     ) -> Config:
-        saved = _profile(profile or os.environ.get("OPS_PROFILE"))
+        saved = profile_values(profile or os.environ.get("OPS_PROFILE"))
         url = base_url or os.environ.get("OPS_BASE_URL") or saved.get("baseUrl")
         if not url:
             raise ValueError("No Ops AI address: pass base_url, set OPS_BASE_URL, or save one in the profile file")
