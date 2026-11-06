@@ -271,8 +271,10 @@ make test PKG=packages/ops_access        # one package's tests, on a throwaway d
 Open http://localhost:3016 and sign in as the workspace admin `w.kamau@harborpine.example` with the development
 password `northfield-demo`. The development seed adds a few teams, agents and tools of its own; `make down KEEP_DB=1`
 stops the stack and keeps the data. Every service's API reference is on one page at http://localhost:8799 (a
-service that is not running shows its committed spec). These steps were run from a fresh clone on 2026-10-20: every service answered
-`ok`, the console signed in, and a chat turn on the fake model answered with a citation.
+service that is not running shows its committed spec). These steps were run from a fresh clone on 2026-11-06, with
+`OPS_PORT_OFFSET=30000` because another stack held the default ports: every service answered `ok`, the admin signed in,
+`make review` moved the stack to the review worktree and `make up` moved it back, a commit touching kb-service restarted
+kb-service alone, and `make test PKG=packages/ops_access` passed 24 tests.
 
 To answer with a real model instead, put `OPENAI_API_KEY` in a `.env` file at the root (git ignores it) and run
 `make up`.
