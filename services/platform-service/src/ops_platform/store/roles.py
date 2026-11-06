@@ -26,14 +26,27 @@ from ops_access import (
     effective,
 )
 from ops_access.catalogue import ADMIN
-from ops_service_kit.ids import new_id
+from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
+from ops_store.dialect import lock_key
 
 from .audit import record
-from .tables import members, role_assignments, role_permissions, roles, teams, tenants
+from .tables import members, role_assignments, role_permissions, roles, teams, tenants, users
 from .tenancy import TenantDb
 
 MEMBERSHIP = "membership"
+
+
+class RoleNameTakenError(Exception):
+    """Another role of the workspace has that name."""
+
+
+class RoleInUseError(Exception):
+    """People or teams hold the role; `holders` names them."""
+
+    def __init__(self, holders: list[dict[str, Any]]) -> None:
+        super().__init__("role in use")
+        self.holders = holders
 
 
 @dataclass(frozen=True)
@@ -251,6 +264,134 @@ class RoleStore:
         async with self.db.tenant_tx(tenant_id) as c:
             return await _grids(c, role_ids)
 
+    async def create(
+        self, tenant_id: str, *, name: str, description: str, grants: list[Grant], by: str, request_id: str
+    ) -> str:
+        """A custom role with `grants`, audited as `role.create`; RoleNameTakenError when the name is used."""
+        role_id = new_id("role")
+        async with self.db.tenant_tx(tenant_id) as c:
+            await _name_free(c, tenant_id, name, None)
+            await c.execute(
+                roles.insert().values(
+                    tenant_id=tenant_id,
+                    id=role_id,
+                    name=name,
+                    builtin=False,
+                    description=description,
+                    created_at=now_iso(),
+                )
+            )
+            if grants:
+                await c.execute(
+                    role_permissions.insert(),
+                    [
+                        {"tenant_id": tenant_id, "role_id": role_id, "area": a, "action": x, "scope": sc}
+                        for a, x, sc in grants
+                    ],
+                )
+            await record(
+                c,
+                tenant_id=tenant_id,
+                team_id=None,
+                actor=by,
+                action="role.create",
+                target_kind="role",
+                target_id=role_id,
+                request_id=request_id,
+                detail={"name": name, "cells": len(grants)},
+            )
+        return role_id
+
+    async def rename(
+        self, tenant_id: str, role_id: str, *, name: str, description: str | None, by: str, request_id: str
+    ) -> None:
+        """A custom role's name and description, audited as `role.rename`; RoleNameTakenError when the name is used."""
+        async with self.db.tenant_tx(tenant_id) as c:
+            before = (
+                await c.execute(sa.select(roles.c.name, roles.c.description).where(roles.c.id == role_id))
+            ).first()
+            await _name_free(c, tenant_id, name, role_id)
+            values: dict[str, Any] = {"name": name} | ({"description": description} if description is not None else {})
+            await c.execute(roles.update().where(roles.c.id == role_id).values(**values))
+            await record(
+                c,
+                tenant_id=tenant_id,
+                team_id=None,
+                actor=by,
+                action="role.rename",
+                target_kind="role",
+                target_id=role_id,
+                request_id=request_id,
+                detail={"from": before.name if before else None, "to": name},
+            )
+
+    async def holders(self, tenant_id: str, role_id: str) -> list[dict[str, Any]]:
+        """Who holds the role and in which team, each person by name and address."""
+        async with self.db.tenant_tx(tenant_id) as c:
+            return await self._holders_in(c, role_id)
+
+    async def delete(self, tenant_id: str, role_id: str, *, move_to: str | None, by: str, request_id: str) -> int:
+        """Deletes a custom role. While people or teams hold it, RoleInUseError names them, unless `move_to` names the
+        role their assignments move to (one that a holder already has in that team is kept once). Audited as
+        `role.delete`; returns how many assignments moved."""
+        async with self.db.tenant_tx(tenant_id) as c:
+            held = (
+                await c.execute(
+                    sa.select(role_assignments.c.id, role_assignments.c.subject_kind, role_assignments.c.subject_id,
+                              role_assignments.c.team_id).where(role_assignments.c.role_id == role_id)
+                )
+            ).all()  # fmt: skip
+            if held and move_to is None:
+                raise RoleInUseError(await self._holders_in(c, role_id))
+            moved = 0
+            for row_id, kind, subject, team in held:
+                taken = (
+                    await c.execute(
+                        sa.select(role_assignments.c.id).where(
+                            role_assignments.c.subject_kind == kind,
+                            role_assignments.c.subject_id == subject,
+                            role_assignments.c.team_id == team,
+                            role_assignments.c.role_id == move_to,
+                        )
+                    )
+                ).first()
+                if taken is not None:
+                    await c.execute(role_assignments.delete().where(role_assignments.c.id == row_id))
+                else:
+                    await c.execute(
+                        role_assignments.update().where(role_assignments.c.id == row_id).values(role_id=move_to)
+                    )
+                moved += 1
+            await c.execute(role_permissions.delete().where(role_permissions.c.role_id == role_id))
+            await c.execute(roles.delete().where(roles.c.id == role_id))
+            await bump_version(c, tenant_id)
+            await record(
+                c,
+                tenant_id=tenant_id,
+                team_id=None,
+                actor=by,
+                action="role.delete",
+                target_kind="role",
+                target_id=role_id,
+                request_id=request_id,
+                detail={"movedTo": move_to, "moved": moved},
+            )
+        return moved
+
+    async def _holders_in(self, c: AsyncConnection, role_id: str) -> list[dict[str, Any]]:
+        q = (
+            sa.select(role_assignments.c.subject_kind, role_assignments.c.subject_id, role_assignments.c.team_id,
+                      users.c.name, users.c.email)
+            .outerjoin(users, sa.and_(users.c.id == role_assignments.c.subject_id,
+                                      role_assignments.c.subject_kind == "person"))
+            .where(role_assignments.c.role_id == role_id)
+            .order_by(users.c.name, role_assignments.c.team_id)
+        )  # fmt: skip
+        return [
+            {"kind": r[0], "id": r[1], "teamId": r[2], "name": r[3] or r[1], "email": r[4]}
+            for r in (await c.execute(q)).all()
+        ]
+
     async def version(self, tenant_id: str) -> int:
         async with self.db.tenant_tx(tenant_id) as c:
             return await version_in(c, tenant_id)
@@ -268,6 +409,17 @@ async def _grids(c: AsyncConnection, role_ids: list[str]) -> dict[str, list[Gran
     for role_id, area, action, scope in (await c.execute(q)).all():
         out.setdefault(str(role_id), []).append((str(area), str(action), "own" if scope == "own" else "all"))
     return out
+
+
+async def _name_free(c: AsyncConnection, tenant_id: str, name: str, role_id: str | None) -> None:
+    """No two roles of a workspace share a name, case aside: a role is chosen by name on every role picker. The lock
+    makes two creates of one name wait for each other, so the second sees the first."""
+    await lock_key(c, f"roles:{tenant_id}")
+    q = sa.select(roles.c.id).where(sa.func.lower(roles.c.name) == name.lower())
+    if role_id is not None:
+        q = q.where(roles.c.id != role_id)
+    if (await c.execute(q)).first() is not None:
+        raise RoleNameTakenError
 
 
 async def version_in(c: AsyncConnection, tenant_id: str) -> int:

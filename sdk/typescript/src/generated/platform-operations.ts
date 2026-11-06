@@ -400,6 +400,28 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "roles_create_role": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/roles",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "roles_delete_role": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/roles/{role_id}",
+    "pathParams": [
+      "role_id"
+    ],
+    "query": [
+      "moveTo"
+    ],
+    "stream": false
+  },
   "roles_edit_role": {
     "body": "json",
     "headers": [],
@@ -431,11 +453,33 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "roles_rename_role": {
+    "body": "json",
+    "headers": [],
+    "method": "PATCH",
+    "path": "/v1/roles/{role_id}",
+    "pathParams": [
+      "role_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "roles_reset_role": {
     "body": null,
     "headers": [],
     "method": "POST",
     "path": "/v1/roles/{role_id}/reset",
+    "pathParams": [
+      "role_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "roles_role_holders": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/roles/{role_id}/holders",
     "pathParams": [
       "role_id"
     ],

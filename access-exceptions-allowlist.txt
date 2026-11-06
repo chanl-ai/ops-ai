@@ -76,6 +76,7 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict already_resumed 0 state
 * conflict archived_too_recently 0 state
 * conflict budget_paused 0 state
+* conflict builtin_role 0 state
 * conflict channel_managed_elsewhere 0 state
 * conflict channel_retired 0 state
 * conflict conflict 0 state
@@ -127,6 +128,7 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict resume_via_review 0 state
 * conflict review_open 0 state
 * conflict review_required 0 state
+* conflict role_in_use 0 state
 * conflict run_active 0 state
 * conflict run_finished 0 state
 * conflict run_not_stuck 0 state

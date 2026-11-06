@@ -108,9 +108,13 @@ from .schemas import (
     Refresh,
     ResetIn,
     RoleCellsIn,
+    RoleCreatedOut,
+    RoleCreateIn,
     RoleDetail,
+    RoleHolderOut,
     RoleIn,
     RoleOut,
+    RolePatchIn,
     SessionOut,
     SignIn,
     SignInSecretIn,
@@ -814,6 +818,67 @@ def create_public_app(
         cells: list[Grant] = [(c.area, c.action, c.scope) for c in body.permissions]
         edited = await roles.edit(actor.tenant_id, role_id, cells, by=actor.user_id, request_id=actor.request_id)
         return ok(edited | {"canEdit": True})
+
+    @app.post("/v1/roles", tags=["roles"], status_code=201, response_model=Envelope[RoleCreatedOut], responses=ERRORS)
+    async def create_role(body: RoleCreateIn, actor: Annotated[Actor, Depends(on_workspace)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """A custom role, from scratch (`permissions`) or as a copy of another (`copyOf`), less the cells a custom role
+        may not hold: secrets, egress and Security-team ones (400 `not_for_custom_roles` when given; named in
+        `leftOut` when copied). A workspace admin's (access.manage); audited; 409 `name_taken`."""
+        await people.require_admin(actor, "access", "manage")
+        cells: list[Grant] | None = (
+            [(c.area, c.action, c.scope) for c in body.permissions] if body.permissions is not None else None
+        )
+        made = await roles.create(
+            actor.tenant_id,
+            name=body.name.strip(),
+            description=body.description.strip(),
+            copy_of=body.copy_of,
+            cells=cells,
+            by=actor.user_id,
+            request_id=actor.request_id,
+        )
+        return ok(made | {"canEdit": True}, status=201)
+
+    @app.patch("/v1/roles/{role_id}", tags=["roles"], response_model=Envelope[RoleDetail], responses=ERRORS)
+    async def rename_role(  # pyright: ignore[reportUnusedFunction]
+        role_id: Annotated[str, Path(pattern=RECORD_ID)],
+        body: RolePatchIn,
+        actor: Annotated[Actor, Depends(on_workspace)],
+    ) -> Any:
+        """A custom role's name and description; a built-in role keeps its own (409 `builtin_role`). Audited."""
+        await people.require_admin(actor, "access", "manage")
+        description = body.description.strip() if body.description is not None else None
+        renamed = await roles.rename(
+            actor.tenant_id,
+            role_id,
+            name=body.name.strip(),
+            description=description,
+            by=actor.user_id,
+            request_id=actor.request_id,
+        )
+        return ok(renamed | {"canEdit": True})
+
+    @app.get(
+        "/v1/roles/{role_id}/holders", tags=["roles"], response_model=Envelope[list[RoleHolderOut]], responses=ERRORS
+    )
+    async def role_holders(  # pyright: ignore[reportUnusedFunction]
+        role_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
+    ) -> Any:
+        """Who holds the role and in which team: what deleting it would take from them. A workspace admin's."""
+        await people.require_admin(actor, "access", "view")
+        return ok(await roles.store.holders(actor.tenant_id, role_id))
+
+    @app.delete("/v1/roles/{role_id}", tags=["roles"], status_code=204, responses=ERRORS)
+    async def delete_role(  # pyright: ignore[reportUnusedFunction]
+        role_id: Annotated[str, Path(pattern=RECORD_ID)],
+        actor: Annotated[Actor, Depends(on_workspace)],
+        move_to: Annotated[str | None, Query(alias="moveTo", pattern=RECORD_ID)] = None,
+    ) -> Response:
+        """Deletes a custom role. While anyone holds it, 409 `role_in_use` names them, unless `moveTo` names the role
+        their assignments move to. A built-in role is not deleted (409 `builtin_role`). Audited."""
+        await people.require_admin(actor, "access", "manage")
+        await roles.delete(actor.tenant_id, role_id, move_to=move_to, by=actor.user_id, request_id=actor.request_id)
+        return Response(status_code=204)
 
     @app.post("/v1/roles/{role_id}/reset", tags=["roles"], response_model=Envelope[RoleDetail], responses=ERRORS)
     async def reset_role(  # pyright: ignore[reportUnusedFunction]

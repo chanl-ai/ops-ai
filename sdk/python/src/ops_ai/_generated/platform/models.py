@@ -341,6 +341,27 @@ class RoleCellsIn(TypedDict, closed=True):
     permissions: list[CellIn]
 
 
+class RoleCreateIn(TypedDict, closed=True):
+    copyOf: NotRequired[str | None]
+    description: NotRequired[str]
+    name: str
+    permissions: NotRequired[list[CellIn] | None]
+
+
+class RoleCreatedOut(TypedDict, closed=True):
+    assignmentCount: int
+    builtin: bool
+    canEdit: NotRequired[bool]
+    description: str
+    grid: list[GridRow]
+    id: str
+    leftOut: NotRequired[list[str]]
+    lockedReason: NotRequired[str | None]
+    name: str
+    permissionCount: int
+    permissions: list[PermissionOut]
+
+
 class RoleDetail(TypedDict, closed=True):
     assignmentCount: int
     builtin: bool
@@ -352,6 +373,14 @@ class RoleDetail(TypedDict, closed=True):
     name: str
     permissionCount: int
     permissions: list[PermissionOut]
+
+
+class RoleHolderOut(TypedDict, closed=True):
+    email: NotRequired[str | None]
+    id: str
+    kind: Literal["person", "team"]
+    name: str
+    teamId: str
 
 
 class RoleIn(TypedDict, closed=True):
@@ -366,6 +395,11 @@ class RoleOut(TypedDict, closed=True):
     id: str
     name: str
     permissionCount: int
+
+
+class RolePatchIn(TypedDict, closed=True):
+    description: NotRequired[str | None]
+    name: str
 
 
 class RoleRef(TypedDict, closed=True):
@@ -659,6 +693,11 @@ class EnvelopePolicyOut(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeRoleCreatedOut(TypedDict, closed=True):
+    data: RoleCreatedOut
+    success: Literal[True]
+
+
 class EnvelopeRoleDetail(TypedDict, closed=True):
     data: RoleDetail
     success: Literal[True]
@@ -726,6 +765,11 @@ class EnvelopeListPersonName(TypedDict, closed=True):
 
 class EnvelopeListPolicyOut(TypedDict, closed=True):
     data: list[PolicyOut]
+    success: Literal[True]
+
+
+class EnvelopeListRoleHolderOut(TypedDict, closed=True):
+    data: list[RoleHolderOut]
     success: Literal[True]
 
 
