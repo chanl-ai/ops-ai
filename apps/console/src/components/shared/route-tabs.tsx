@@ -25,8 +25,10 @@ export function RouteTabs({ tabs }: { tabs: { href: string; label: React.ReactNo
     <Tabs value={active}>
       <TabsList>
         {tabs.map((t) => (
-          <TabsTrigger key={t.href} value={t.href} asChild>
-            <Link href={t.href} data-testid={t.testId}>
+          // Each tab is a page, not a panel on this one: no aria-controls naming a panel that does not exist, and the
+          // current page marked as such.
+          <TabsTrigger key={t.href} value={t.href} asChild aria-controls={undefined}>
+            <Link href={t.href} data-testid={t.testId} aria-current={t.href === active ? 'page' : undefined}>
               <TabLabel label={t.label} />
             </Link>
           </TabsTrigger>
