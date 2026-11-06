@@ -47,6 +47,11 @@ KIND = {
     "access.check": "checked",
     "role.edit": "edited",
     "role.reset": "edited",
+    "role.create": "created",
+    "role.rename": "edited",
+    "role.delete": "deleted",
+    "role.grant": "role_changed",
+    "role.ungrant": "role_changed",
     "signin_secret.save": "edited",
     "signin_secret.delete": "deleted",
 }
@@ -72,6 +77,11 @@ ROUTE_ACTIONS: dict[tuple[str, str], str] = {
     ("DELETE", "/v1/settings/teams/{team_id}"): "team.delete",
     ("PUT", "/v1/roles/{role_id}/permissions"): "role.edit",
     ("POST", "/v1/roles/{role_id}/reset"): "role.reset",
+    ("POST", "/v1/roles"): "role.create",
+    ("PATCH", "/v1/roles/{role_id}"): "role.rename",
+    ("DELETE", "/v1/roles/{role_id}"): "role.delete",
+    ("POST", "/v1/people/{person_id}/role-grants"): "role.grant",
+    ("DELETE", "/v1/people/{person_id}/role-grants/{grant_id}"): "role.ungrant",
     ("PUT", "/v1/settings/sign-in/secrets/{name}"): "signin_secret.save",
     ("DELETE", "/v1/settings/sign-in/secrets/{name}"): "signin_secret.delete",
 }
@@ -80,7 +90,15 @@ ROUTE_ACTIONS: dict[tuple[str, str], str] = {
 VIEWS: dict[str, frozenset[str]] = {
     "access": frozenset(a for a in KIND if a.startswith(("member.", "key.", "role."))),
     "deletions": frozenset(
-        {"member.remove", "key.revoke", "team.delete", "workspace.close", "workspace.purge", "workspace.leave"}
+        {
+            "member.remove",
+            "key.revoke",
+            "team.delete",
+            "workspace.close",
+            "workspace.purge",
+            "workspace.leave",
+            "role.delete",
+        }
     ),
     "publishes": frozenset(),
 }

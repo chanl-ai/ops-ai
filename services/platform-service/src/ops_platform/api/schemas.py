@@ -305,6 +305,19 @@ class RoleCellsIn(In):
     permissions: list[CellIn] = Field(max_length=400)
 
 
+class RoleCreateIn(In):
+    name: str = Field(min_length=1, max_length=80)
+    description: str = Field(default="", max_length=500)
+    # Start from another role's cells (less those a custom role may not hold), or from `permissions`, or from none.
+    copy_of: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    permissions: list[CellIn] | None = Field(default=None, max_length=400)
+
+
+class RolePatchIn(In):
+    name: str = Field(min_length=1, max_length=80)
+    description: str | None = Field(default=None, max_length=500)
+
+
 class DeleteIn(In):
     ids: list[Annotated[str, StringConstraints(pattern=MEMBER_ID)]] = Field(min_length=1, max_length=100)
 
@@ -453,6 +466,36 @@ class RoleDetail(RoleOut):
     can_edit: bool = False
     # Why the caller may not change it, in words; None when they may.
     locked_reason: str | None = None
+    # Cells this role may never hold, as area.action: a custom role's secrets, egress and Security-team ones.
+    not_held: list[str] = Field(default_factory=list[str])
+
+
+class RoleCreatedOut(RoleDetail):
+    # Cells of the copied role a custom role may not hold (secrets, egress, Security team), left out of the copy.
+    left_out: list[str] = Field(default_factory=list[str])
+
+
+class RoleGrantIn(In):
+    # Given in the team the request acts in (X-Team-Id), never one a body names.
+    role_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
+
+
+class RoleGrantOut(Out):
+    id: str
+    role_id: str
+    role_name: str
+    team_id: str
+    expires_at: str | None = None
+    granted_by: str
+    created_at: str
+
+
+class RoleHolderOut(Out):
+    kind: Literal["person", "team"]
+    id: str
+    team_id: str
+    name: str
+    email: str | None = None
 
 
 class GrantingRole(Out):

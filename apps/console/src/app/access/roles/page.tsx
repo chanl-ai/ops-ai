@@ -3,15 +3,18 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
-import { ShieldCheck } from 'lucide-react';
+import { Plus, ShieldCheck } from 'lucide-react';
+import { toast } from 'sonner';
 
+import { RoleDialog } from '@/components/access/role-dialog';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { PageLayout } from '@/components/page-layout';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { Badge } from '@/components/ui/badge';
-import { useRoles } from '@/hooks/me-queries';
+import { Button } from '@/components/ui/button';
+import { useCreateRole, useManagesRoles, useRoles } from '@/hooks/me-queries';
 import type { RoleSummary } from '@/lib/types/settings';
 
 type Row = RoleSummary & { onRowClick: () => void; rowTestId: string };
@@ -34,13 +37,32 @@ const COLUMNS: ColumnDef<Row>[] = [
   { accessorKey: 'assignmentCount', header: ({ column }) => <DataTableColumnHeader column={column} title="People" />, meta: { kind: 'number' } },
 ];
 
-/** Access › Roles: every role of the workspace, what it is for and how many hold it; a row opens its grid. */
+/**
+ * Access › Roles: every role of the workspace, what it is for and how many hold it; a row opens its grid. A workspace
+ * admin creates a custom role here, empty or as a copy of another.
+ */
 export default function RolesPage() {
   const router = useRouter();
   const roles = useRoles();
+  const manages = useManagesRoles();
+  const create = useCreateRole();
+  const [creating, setCreating] = React.useState(false);
   const rows = React.useMemo(() => (roles.data ?? []).map((r) => ({ ...r, onRowClick: () => router.push(`/access/roles/${encodeURIComponent(r.id)}`), rowTestId: `role-row-${r.id}` })), [roles.data, router]);
   return (
-    <PageLayout icon={ShieldCheck} title="Roles" switcher description="What each role allows; a workspace admin changes any role but Admin">
+    <PageLayout
+      icon={ShieldCheck}
+      title="Roles"
+      switcher
+      description="What each role allows; a workspace admin changes any role but Admin and makes the workspace's own"
+      actions={
+        manages ? (
+          <Button size="sm" onClick={() => setCreating(true)} data-testid="role-create">
+            <Plus className="size-4" />
+            Create role
+          </Button>
+        ) : undefined
+      }
+    >
       {roles.isPending ? (
         <PageSkeleton statCards={0} tableRows={6} />
       ) : roles.isError ? (
@@ -56,6 +78,18 @@ export default function RolesPage() {
           emptyState={<ListEmpty icon={ShieldCheck} noun="roles" filtered={false} description="Roles come with the workspace; none were found." />}
         />
       )}
+      <RoleDialog
+        open={creating}
+        onOpenChange={setCreating}
+        roles={roles.data ?? []}
+        pending={create.isPending}
+        onSubmit={(input) =>
+          create.mutateAsync(input).then((made) => {
+            toast.success(`Created ${made.name}`, made.leftOut.length ? { description: `Left out ${made.leftOut.length} secrets, egress and Security-team permissions: only a built-in role holds them.` } : undefined);
+            router.push(`/access/roles/${encodeURIComponent(made.id)}`);
+          })
+        }
+      />
     </PageLayout>
   );
 }
