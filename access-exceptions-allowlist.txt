@@ -85,6 +85,7 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict copy_edited 0 state
 * conflict credential_secret 0 state
 * conflict admin_holds_every_cell 0 state
+* conflict app_in_use 0 state
 * conflict credential_in_use 0 state
 * conflict daily_cap 0 state
 * conflict decided_in_reviews 0 state

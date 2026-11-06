@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Delete a custom app or change its sign-in",
+  "description": "The API now deletes a custom app with its accounts and their secrets, refusing while a tool still uses it and naming those tools. It also moves every account to another sign-in kind, naming the accounts that must be set up again.",
+  "tag": "new"
+}

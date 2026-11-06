@@ -1023,6 +1023,40 @@ class ConnectionService:
                 return str(found["name"])
         return "Ops AI's app" if conn.get("platform_app") else "the app credential"
 
+    async def change_kind(self, who: Caller, connection_id: str, kind_id: str) -> bool:
+        """Moves a custom app's account to another sign-in kind. What it held for the old kind goes: its secret parts,
+        its token and each person's sign-in, its app credential and the old kind's fields, so no old key is sent or
+        left unseen; the address and test path stay. The account then reads as needing its new sign-in. False when it
+        already signs in that way."""
+        self._can(who, "manage")
+        conn = await self._get(who, connection_id)
+        if plugin_of(conn):
+            raise ValidationFailed(f"{conn['name']}'s sign-in is its plugin's; it is chosen once.", code="kind_fixed")
+        if kind_id not in BY_ID:
+            raise ValidationFailed(f"{kind_id} is not a way to sign in. Pick one of {', '.join(BY_ID)}.")
+        if conn["auth_kind"] == kind_id:
+            return False
+        kind = BY_ID[kind_id]
+        kept = {k: v for k, v in dict(conn.get("settings") or {}).items() if k in ("baseUrl", "testPath")}
+        sign_in = str(conn.get("sign_in") or "team") if kind.per_person else "team"
+        values: dict[str, Any] = {
+            "auth_kind": kind_id,
+            "settings": kept,
+            "secrets": {},
+            "credential_id": None,
+            "platform_app": None,
+            "sign_in": sign_in,
+            "team_backup": bool(conn.get("team_backup")) and sign_in == "person_or_team",
+        }
+        await self._write(who, conn, int(conn["revision"]), values, action="changed", detail={"kind": kind_id})
+        now = self.clock()
+        # A credential's client secret is the credential's, which other accounts may still sign in with.
+        for field, name in _names(conn).items():
+            if not (field == "clientSecret" and conn.get("credential_id")):
+                await self.secrets.delete(who.tenant_id, str(conn["team_id"]), name, actor=who.name, at=now)
+        await self.sign_in_again(who, connection_id, f"It signs in with {kind.label} now: set it up and sign in again.")
+        return True
+
     async def sign_in_again(self, who: Caller, connection_id: str, why: str) -> None:
         """Marks an account to sign in again (the app registration it signs in with changed): the team's sign-in is
         dropped and the account reads as needing a reconnect, with `why`; each person's own sign-in is marked refused,

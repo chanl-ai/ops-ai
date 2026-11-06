@@ -255,6 +255,21 @@ class AppCredentialChange(AppCredentialDetail):
     sign_in_again: int
 
 
+class AppKindIn(In):
+    # The sign-in kind every account of the custom app moves to (GET /v1/connection-kinds lists them).
+    kind: str = Field(min_length=1, max_length=64)
+
+
+class AppKindChanged(Out):
+    # The accounts that must be set up and signed in again, by name.
+    accounts: list[str]
+
+
+class AppDeleted(Out):
+    # The accounts deleted with it, by name; their secrets went with them.
+    accounts: list[str]
+
+
 class CredentialDeleted(Out):
     # How many accounts were moved off it, each to sign in again.
     moved: int
@@ -695,6 +710,43 @@ class Apps:
         if i.server_url is not None:
             return await self.connections.connect_mcp(who, i.model_dump())
         return await self.connections.create(who, i.model_dump())
+
+    async def delete_app(self, who: Caller, app_id: str) -> dict[str, Any]:
+        """Deletes a custom app: every account of it and their secrets. While a tool points at any of its accounts the
+        delete is refused, naming the tools (with their ids, so each is linked) and the accounts it would take, since
+        the tool's next call would fail; nothing is deleted. A plugin's app is turned off instead."""
+        if plugin_of({"app_id": app_id}) is not None:
+            raise ValidationFailed("A plugin's app is turned off, not deleted.", code="plugin_app")
+        self.connections.check(who, "manage")
+        accounts = await self.connections.store.accounts(who.tenant_id, who.team.id, app_id)
+        if not accounts:
+            raise NotFound(f"App {app_id}")
+        names = [str(a.get("account_name") or a["name"]) for a in accounts]
+        users = [u for a in accounts for u in cast(list[dict[str, Any]], a.get("used_by") or [])]
+        tools = list({str(u["id"]): u for u in users}.values())
+        if tools:
+            listed = ", ".join(str(t["name"]) for t in tools)
+            raise Conflict(
+                f"{names[0]} is used by {listed}. Remove those tools first, then delete the app.",
+                code="app_in_use",
+                details={"tools": [{"id": str(t["id"]), "name": str(t["name"])} for t in tools], "accounts": names},
+            )
+        # The first account is the app's own row: it goes last, so a failure part way leaves the app listed.
+        for a in reversed(accounts):
+            await self.connections.delete(who, str(a["id"]))
+        return {"accounts": names}
+
+    async def change_kind(self, who: Caller, app_id: str, kind: str) -> dict[str, Any]:
+        """Moves every account of a custom app to another sign-in kind (`ConnectionService.change_kind`), naming the
+        accounts that must be set up and signed in again."""
+        if plugin_of({"app_id": app_id}) is not None:
+            raise ValidationFailed("A plugin's app signs in the way its plugin says.", code="kind_fixed")
+        self.connections.check(who, "manage")
+        accounts = await self.connections.store.accounts(who.tenant_id, who.team.id, app_id)
+        if not accounts:
+            raise NotFound(f"App {app_id}")
+        moved = [a for a in accounts if await self.connections.change_kind(who, str(a["id"]), kind)]
+        return {"accounts": [str(a.get("account_name") or a["name"]) for a in moved]}
 
     async def make_team_default(self, who: Caller, app_id: str, account_id: str) -> dict[str, Any]:
         """Makes an account the team's default of a plugin's app; a custom app's default is its first account."""
@@ -1443,6 +1495,22 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
     async def get_app(app_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """One app's page: its card, accounts, the caller's own sign-in, tools, skills and latest runs."""
         return ok(AppPage(**await app_page(apps, who, app_id)).model_dump(by_alias=True))
+
+    @r.patch("/v1/apps/{app_id}", response_model=Envelope[AppKindChanged])
+    async def change_app_kind(  # pyright: ignore[reportUnusedFunction]
+        app_id: str, body: AppKindIn, who: Annotated[Caller, Depends(caller)]
+    ) -> JSONResponse:
+        """A custom app's sign-in kind: every account moves to it, drops what it held for the old one, and is named
+        in the answer as needing its new sign-in."""
+        return ok(AppKindChanged(**await apps.change_kind(who, app_id, body.kind)).model_dump(by_alias=True))
+
+    @r.delete("/v1/apps/{app_id}", response_model=Envelope[AppDeleted])
+    async def delete_app(  # pyright: ignore[reportUnusedFunction]
+        app_id: str, who: Annotated[Caller, Depends(caller)]
+    ) -> JSONResponse:
+        """Deletes a custom app with its accounts and their secrets; 409 app_in_use naming the tools and accounts
+        while a tool still uses it."""
+        return ok(AppDeleted(**await apps.delete_app(who, app_id)).model_dump(by_alias=True))
 
     @r.put("/v1/apps/{app_id}/team", response_model=Envelope[SystemCard])
     async def set_team_app(  # pyright: ignore[reportUnusedFunction]

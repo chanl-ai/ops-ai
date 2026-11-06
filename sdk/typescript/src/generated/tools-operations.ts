@@ -54,6 +54,17 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "apps_change_app_kind": {
+    "body": "json",
+    "headers": [],
+    "method": "PATCH",
+    "path": "/v1/apps/{app_id}",
+    "pathParams": [
+      "app_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "apps_check_credential": {
     "body": null,
     "headers": [],
@@ -92,6 +103,17 @@ export const toolsOperations = {
     "pathParams": [
       "app_id",
       "account_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "apps_delete_app": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/apps/{app_id}",
+    "pathParams": [
+      "app_id"
     ],
     "query": [],
     "stream": false

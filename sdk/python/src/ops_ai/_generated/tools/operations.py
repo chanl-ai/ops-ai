@@ -55,6 +55,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "apps_change_app_kind": {
+        "body": "json",
+        "headers": [],
+        "method": "PATCH",
+        "path": "/v1/apps/{app_id}",
+        "pathParams": ["app_id"],
+        "query": [],
+        "stream": False,
+    },
     "apps_check_credential": {
         "body": None,
         "headers": [],
@@ -88,6 +97,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "DELETE",
         "path": "/v1/apps/{app_id}/accounts/{account_id}",
         "pathParams": ["app_id", "account_id"],
+        "query": [],
+        "stream": False,
+    },
+    "apps_delete_app": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/apps/{app_id}",
+        "pathParams": ["app_id"],
         "query": [],
         "stream": False,
     },
@@ -784,6 +802,14 @@ class Operations:
         "Get App"
         return self._t.call(SERVICE, OPERATIONS["apps_get_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def apps_change_app_kind(self, app_id: str, body: AppKindIn) -> AppKindChanged:
+        "Change App Kind"
+        return self._t.call(SERVICE, OPERATIONS["apps_change_app_kind"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def apps_delete_app(self, app_id: str) -> AppDeleted:
+        "Delete App"
+        return self._t.call(SERVICE, OPERATIONS["apps_delete_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     def apps_add_account(self, app_id: str, body: AccountIn) -> AccountDetail:
         "Add Account"
         return self._t.call(SERVICE, OPERATIONS["apps_add_account"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
@@ -1281,6 +1307,14 @@ class AsyncOperations:
     async def apps_get_app(self, app_id: str) -> AppPage:
         "Get App"
         return await self._t.call(SERVICE, OPERATIONS["apps_get_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def apps_change_app_kind(self, app_id: str, body: AppKindIn) -> AppKindChanged:
+        "Change App Kind"
+        return await self._t.call(SERVICE, OPERATIONS["apps_change_app_kind"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def apps_delete_app(self, app_id: str) -> AppDeleted:
+        "Delete App"
+        return await self._t.call(SERVICE, OPERATIONS["apps_delete_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def apps_add_account(self, app_id: str, body: AccountIn) -> AccountDetail:
         "Add Account"

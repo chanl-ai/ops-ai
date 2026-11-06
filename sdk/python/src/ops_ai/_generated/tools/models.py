@@ -95,6 +95,18 @@ class AppCredentialPatchIn(TypedDict, closed=True):
     settings: NotRequired[dict[str, str | None] | None]
 
 
+class AppDeleted(TypedDict, closed=True):
+    accounts: list[str]
+
+
+class AppKindChanged(TypedDict, closed=True):
+    accounts: list[str]
+
+
+class AppKindIn(TypedDict, closed=True):
+    kind: str
+
+
 class AppMe(TypedDict, closed=True):
     account: NotRequired[str | None]
     connected: bool
@@ -314,6 +326,16 @@ class EntryIn(TypedDict, closed=True):
     protection: NotRequired[Literal["system", "managed"] | None]
     templateId: NotRequired[str | None]
     value: str
+
+
+class EnvelopeAppDeleted(TypedDict, closed=True):
+    data: AppDeleted
+    success: Literal[True]
+
+
+class EnvelopeAppKindChanged(TypedDict, closed=True):
+    data: AppKindChanged
+    success: Literal[True]
 
 
 class EnvelopeAppUsers(TypedDict, closed=True):
