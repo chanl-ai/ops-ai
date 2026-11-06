@@ -83,6 +83,7 @@ class AppCredentialIn(TypedDict, closed=True):
     app: str
     clientId: str
     clientSecret: NotRequired[str | None]
+    modes: NotRequired[dict[str, Literal["default", "fixed"]] | None]
     name: NotRequired[str | None]
     scopes: NotRequired[list[Scope] | None]
     settings: NotRequired[dict[str, str | None] | None]
@@ -90,6 +91,7 @@ class AppCredentialIn(TypedDict, closed=True):
 
 class AppCredentialPatchIn(TypedDict, closed=True):
     clientId: NotRequired[str | None]
+    modes: NotRequired[dict[str, Literal["default", "fixed"]] | None]
     name: NotRequired[str | None]
     scopes: NotRequired[list[Scope] | None]
     settings: NotRequired[dict[str, str | None] | None]
@@ -904,6 +906,14 @@ class SignInStart(TypedDict, closed=True):
     redirectUri: str
 
 
+class SignInValue(TypedDict, closed=True):
+    kind: Literal["place", "found"]
+    label: str
+    name: str
+    shown: str
+    value: str
+
+
 class SignedIn(TypedDict, closed=True):
     account: NotRequired[str | None]
     expiresAt: NotRequired[str | None]
@@ -1245,6 +1255,7 @@ class AppAccount(TypedDict, closed=True):
     revision: int
     rowId: str
     sandbox: bool
+    signInValues: NotRequired[list[SignInValue]]
     state: Literal["connected", "not_signed_in", "expired", "refused", "revoked"]
     stateReason: NotRequired[str | None]
     status: str
@@ -1286,20 +1297,6 @@ class AppResource(TypedDict):
     version: int
 
 
-class AuthConfig(TypedDict, closed=True):
-    accountCount: NotRequired[int]
-    canDelete: bool
-    canEdit: bool
-    clientId: NotRequired[str | None]
-    default: bool
-    id: str
-    name: str
-    permissions: NotRequired[list[ConfigPermission]]
-    secretEnds: NotRequired[str | None]
-    signInPlace: NotRequired[str | None]
-    type: Literal["ops_ai", "own", "account"]
-
-
 class AuthKind(TypedDict, closed=True):
     fields: list[KindField]
     holdsToken: bool
@@ -1333,6 +1330,20 @@ class CodeOperationIn(TypedDict, closed=True):
     description: str
     input: NotRequired[list[SchemaFieldIn]]
     name: str
+
+
+class ConfigField(TypedDict, closed=True):
+    choices: NotRequired[list[SettingChoice] | None]
+    default: NotRequired[str | None]
+    help: NotRequired[str | None]
+    label: str
+    mode: NotRequired[Literal["default", "fixed"] | None]
+    name: str
+    other: NotRequired[SettingOther | None]
+    pem: NotRequired[bool]
+    required: NotRequired[bool]
+    shown: NotRequired[str | None]
+    value: NotRequired[str | None]
 
 
 class ConnectionKinds(TypedDict, closed=True):
@@ -1824,6 +1835,7 @@ class AppCredentialChange(TypedDict, closed=True):
     fields: NotRequired[list[CredentialField]]
     holdsSecret: NotRequired[bool]
     id: str
+    modes: NotRequired[dict[str, Literal["default", "fixed"]]]
     name: str
     permissions: list[Permission]
     redirectUri: NotRequired[str | None]
@@ -1847,6 +1859,7 @@ class AppCredentialDetail(TypedDict, closed=True):
     fields: NotRequired[list[CredentialField]]
     holdsSecret: NotRequired[bool]
     id: str
+    modes: NotRequired[dict[str, Literal["default", "fixed"]]]
     name: str
     permissions: list[Permission]
     redirectUri: NotRequired[str | None]
@@ -1865,6 +1878,21 @@ class AppTool(TypedDict, closed=True):
     name: str
     title: str
     usedBy: NotRequired[ToolUsedBy | None]
+
+
+class AuthConfig(TypedDict, closed=True):
+    accountCount: NotRequired[int]
+    canDelete: bool
+    canEdit: bool
+    clientId: NotRequired[str | None]
+    default: bool
+    fields: NotRequired[list[ConfigField]]
+    id: str
+    name: str
+    permissions: NotRequired[list[ConfigPermission]]
+    secretEnds: NotRequired[str | None]
+    signInPlace: NotRequired[str | None]
+    type: Literal["ops_ai", "own", "account"]
 
 
 class EnvelopeAppCredentialChange(TypedDict, closed=True):

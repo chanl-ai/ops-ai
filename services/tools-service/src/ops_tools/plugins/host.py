@@ -91,6 +91,44 @@ def typed_host(other: Other, value: object) -> str | None:
     return host if any(host.endswith(s.lower()) and len(host) > len(s) for s in other.hosts) else None
 
 
+def filled_at_sign_in(manifest: Manifest) -> set[str]:
+    """The settings the sign-in fills: those read from the token, and the lookup after sign-in's."""
+    c = manifest.connection
+    return set(c.from_token) | ({c.after_sign_in.setting} if c.after_sign_in else set[str]())
+
+
+def shown_value(setting: Setting, value: object) -> str:
+    """A setting's value as a person reads it: its choice's label, the company host typed for it, or an address's
+    host."""
+    choice = next((c for c in setting.choices or [] if c.value == value), None)
+    if choice is not None:
+        return choice.label
+    typed = typed_host(setting.other, value) if setting.other is not None else None
+    if typed is not None:
+        return typed
+    text = str(value)
+    return (urlsplit(text).hostname or text) if "://" in text else text
+
+
+def sign_in_values(manifest: Manifest, held: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Where an account signs in (`place`: a setting each account keeps with choices or a typed host, such as
+    Salesforce's sign-in address) and what its sign-in found (`found`: its org's address), from the account's settings
+    `held`, in the manifest's order. A secret is never among them."""
+    found = filled_at_sign_in(manifest)
+    own = per_account(manifest)
+    out: list[dict[str, Any]] = []
+    for k, s in manifest.settings.items():
+        value = held.get(k)
+        if s.secret or value in (None, ""):
+            continue
+        kind = "found" if k in found else "place" if k in own and (s.choices or s.other) else None
+        if kind is not None:
+            out.append(
+                {"name": k, "label": s.title or k, "kind": kind, "value": str(value), "shown": shown_value(s, value)}
+            )
+    return out
+
+
 def offered(setting: Setting, value: object) -> bool:
     """Whether a team's value is one the setting offers: one of its choices, or a host typed for its `other`. A setting
     that declares neither takes any value."""

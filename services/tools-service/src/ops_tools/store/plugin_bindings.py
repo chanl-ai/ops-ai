@@ -39,6 +39,10 @@ plugin_bindings = sa.Table(
     # The tools the team switched on, by their name in the plugin; null keeps every tool on (bindings made before the
     # switch). A call to a tool off for the team is refused at the gateway.
     sa.Column("tools_on", sa.JSON),
+    # The `asked: config` values the team set on Ops AI's own app (the install's OAuth client), and each one's mode as
+    # app_credentials.setting_modes holds it; null for none.
+    sa.Column("config_settings", sa.JSON),
+    sa.Column("setting_modes", sa.JSON),
     # One team's row, never read across teams: the gateway reads the calling team's only.
     info=TEAM_OWNED,
 )
@@ -106,6 +110,22 @@ class PluginBindings:
                 t.update()
                 .where(t.c.tenant_id == tenant_id, team_visible(t), t.c.plugin_id == plugin_id)
                 .values(tools_on=sorted(set(tools_on)), updated_at=now_iso())
+            )
+        async with self.engine.begin() as c:
+            return (await c.execute(q)).rowcount > 0
+
+    async def set_config(
+        self, tenant_id: str, team_id: str, plugin_id: str, values: dict[str, Any], modes: dict[str, str], *, by: str
+    ) -> bool:
+        """Records the team's values on Ops AI's app and their modes; False when the team has no binding."""
+        t = plugin_bindings
+        with acting_as(team_id):
+            q = (
+                t.update()
+                .where(t.c.tenant_id == tenant_id, team_visible(t), t.c.plugin_id == plugin_id)
+                .values(
+                    config_settings=values or None, setting_modes=modes or None, updated_by=by, updated_at=now_iso()
+                )
             )
         async with self.engine.begin() as c:
             return (await c.execute(q)).rowcount > 0

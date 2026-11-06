@@ -30,7 +30,7 @@ from ..modules.directory import Directory
 from ..modules.routes import ERRORS
 from ..modules.service import Caller
 from ..modules.tool_users import ToolUsers
-from ..store.connections import PLUGIN_APP
+from ..store.connections import PLUGIN_APP, split_config
 from .host import (
     PluginHost,
     default_tools_added,
@@ -238,10 +238,8 @@ class PluginAccounts:
             by=who.name,
         )
         if not before:
-            # A new app hands agents its read tools only; a write tool waits until someone switches it on.
-            await self.host.bindings.set_tools(who.tenant_id, who.team.id, m.id, default_tools_added(m))
-        if self.host.versions and not before.get("version"):
-            # A team turning a plugin on takes the installed version; a later upgrade waits for its review.
+            await self._first_binding(who, plugin)
+        elif self.host.versions and not before.get("version"):
             await self.host.take_installed(who.tenant_id, who.team.id, plugin)
 
     async def make_team_default(self, who: Caller, app_id: str, account_id: str) -> None:
@@ -461,14 +459,16 @@ class PluginAccounts:
         held = (conn or {}).get("credential_id") if not (conn or {}).get("platform_app") else None
         chosen = body.credential_id if "credential_id" in body.model_fields_set else held
         cred = await self.connections.store.credential(who.tenant_id, chosen) if chosen and kind.holds_token else None
-        # The account's own settings, those given over those it holds. On a team's app credential, the settings that
-        # belong to the app's registration are the credential's, read from it, and never copied onto the account.
-        mine = {**dict((conn or {}).get("plugin_settings") or {}), **own}
-        # What the app credential sets is its own and never copied onto the account; what it leaves unset the account
-        # gives, as an account on Ops AI's app does.
-        held = {k: v for k, v in dict((cred or {}).get("settings") or {}).items() if v not in (None, "")}
-        mine = {k: v for k, v in mine.items() if k not in held}
-        merged = self.host.settings(plugin, settings, {**mine, **held})
+        # The account's own settings, those given over those it holds, over the auth config's defaults. A fixed value
+        # of the config is every account's: a team credential's is read from it and never copied onto the account;
+        # the team's on Ops AI's app (the install's client, with nowhere else to read it from) is written onto each.
+        fixed, defaults = await self.config_values(who, plugin, cred)
+        mine = {**defaults, **dict((conn or {}).get("plugin_settings") or {}), **own}
+        if cred is not None:
+            mine = {k: v for k, v in mine.items() if k not in fixed}
+        else:
+            mine |= fixed
+        merged = self.host.settings(plugin, settings, {**mine, **fixed})
         before = cast(dict[str, Any], (conn or {}).get("settings") or {})
         keys: dict[str, Any] = dict(before)
         endpoint = render(m.endpoint, merged)
@@ -536,6 +536,37 @@ class PluginAccounts:
             {"revision": int(conn["revision"]) if conn else 1, "settings": keys, "secret_values": secret, **client},
             plugin_settings=mine,
         )
+
+    async def config_values(
+        self, who: Caller, plugin: Plugin, cred: dict[str, Any] | None
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """An auth config's (fixed, default) values: the team's app credential's, or with none the team's on Ops AI's
+        app, which its binding of the plugin holds."""
+        if cred is not None:
+            return split_config(cred.get("settings"), cred.get("setting_modes"))
+        b = await self.host.bindings.get(who.tenant_id, who.team.id, plugin.manifest.id) or {}
+        return split_config(b.get("config_settings"), b.get("setting_modes"))
+
+    async def start_binding(self, who: Caller, plugin: Plugin) -> dict[str, Any]:
+        """The team's binding of the plugin, made off when it has none, as a first turn-on makes it: its read tools
+        added, and the installed version taken."""
+        m = plugin.manifest
+        found = await self.host.bindings.get(who.tenant_id, who.team.id, m.id)
+        if found is not None:
+            return found
+        await self.host.bindings.put(
+            who.tenant_id, who.team.id, m.id, enabled=False, connection_id=None, settings={}, by=who.name
+        )
+        await self._first_binding(who, plugin)
+        return await self.host.bindings.get(who.tenant_id, who.team.id, m.id) or {}
+
+    async def _first_binding(self, who: Caller, plugin: Plugin) -> None:
+        m = plugin.manifest
+        # A new app hands agents its read tools only; a write tool waits until someone switches it on.
+        await self.host.bindings.set_tools(who.tenant_id, who.team.id, m.id, default_tools_added(m))
+        if self.host.versions:
+            # A team turning a plugin on takes the installed version; a later upgrade waits for its review.
+            await self.host.take_installed(who.tenant_id, who.team.id, plugin)
 
     async def move_to_credential(
         self, who: Caller, plugin: Plugin, connection_id: str, credential_id: str | None

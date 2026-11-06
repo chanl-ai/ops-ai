@@ -875,6 +875,13 @@
             "title": "Sandbox",
             "type": "boolean"
           },
+          "signInValues": {
+            "items": {
+              "$ref": "#/components/schemas/SignInValue"
+            },
+            "title": "Signinvalues",
+            "type": "array"
+          },
           "state": {
             "enum": [
               "connected",
@@ -1124,6 +1131,17 @@
             "title": "Id",
             "type": "string"
           },
+          "modes": {
+            "additionalProperties": {
+              "enum": [
+                "default",
+                "fixed"
+              ],
+              "type": "string"
+            },
+            "title": "Modes",
+            "type": "object"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -1286,6 +1304,17 @@
             "title": "Id",
             "type": "string"
           },
+          "modes": {
+            "additionalProperties": {
+              "enum": [
+                "default",
+                "fixed"
+              ],
+              "type": "string"
+            },
+            "title": "Modes",
+            "type": "object"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -1401,6 +1430,25 @@
             ],
             "title": "Clientsecret"
           },
+          "modes": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "enum": [
+                    "default",
+                    "fixed"
+                  ],
+                  "type": "string"
+                },
+                "maxProperties": 20,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modes"
+          },
           "name": {
             "anyOf": [
               {
@@ -1478,6 +1526,25 @@
               }
             ],
             "title": "Clientid"
+          },
+          "modes": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "enum": [
+                    "default",
+                    "fixed"
+                  ],
+                  "type": "string"
+                },
+                "maxProperties": 20,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modes"
           },
           "name": {
             "anyOf": [
@@ -1983,6 +2050,13 @@
           "default": {
             "title": "Default",
             "type": "boolean"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigField"
+            },
+            "title": "Fields",
+            "type": "array"
           },
           "id": {
             "title": "Id",
@@ -2856,6 +2930,119 @@
           "source"
         ],
         "title": "CodeSettingsIn",
+        "type": "object"
+      },
+      "ConfigField": {
+        "additionalProperties": false,
+        "description": "One sign-in value an auth config holds (a plugin's `asked: config` setting, such as Salesforce's sign-in\naddress), as its row and details show it.",
+        "properties": {
+          "choices": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SettingChoice"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choices"
+          },
+          "default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default"
+          },
+          "help": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Help"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "default",
+                  "fixed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "other": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SettingOther"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pem": {
+            "default": false,
+            "title": "Pem",
+            "type": "boolean"
+          },
+          "required": {
+            "default": false,
+            "title": "Required",
+            "type": "boolean"
+          },
+          "shown": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shown"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "name",
+          "label"
+        ],
+        "title": "ConfigField",
         "type": "object"
       },
       "ConfigPermission": {
@@ -9540,6 +9727,45 @@
           "redirectUri"
         ],
         "title": "SignInStart",
+        "type": "object"
+      },
+      "SignInValue": {
+        "additionalProperties": false,
+        "description": "Where an account signs in and what its sign-in found, in the plugin's words: its sign-in address (`place`) and\neach value filled at sign-in (`found`), such as Salesforce's org address.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "place",
+              "found"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "shown": {
+            "title": "Shown",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "kind",
+          "value",
+          "shown"
+        ],
+        "title": "SignInValue",
         "type": "object"
       },
       "SignedIn": {
