@@ -9,11 +9,17 @@ makes the same admin again from the same file.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import secrets
 import subprocess
 import sys
 from pathlib import Path
+
+from ops_platform.store.identity import IdentityStore
+from ops_platform.store.tenancy import TenantDb
+from ops_platform.store.workspace import WorkspaceStore
+from ops_service_kit.settings import Settings
 
 ROOT = Path(__file__).resolve().parents[1]
 RUN_DIR = Path(os.environ.get("OPS_RUN_DIR") or ROOT / ".run")
@@ -38,6 +44,19 @@ def read(path: Path) -> dict[str, str]:
     return out
 
 
+async def keep_seed_name(env: dict[str, str]) -> None:
+    """The bootstrap writes only until the admin has a password, so a database made under an earlier name keeps that
+    name in the header. The dev workspace is renamed to the seed's through the audited rename, only when it differs."""
+    tenant = env.get("OPS_BOOTSTRAP_TENANT_ID", DEFAULTS["OPS_BOOTSTRAP_TENANT_ID"])
+    name = env["OPS_BOOTSTRAP_TENANT_NAME"]
+    db = TenantDb.open(Settings().database_url)
+    try:
+        if await IdentityStore(db).tenant_name(tenant) != name:
+            await WorkspaceStore(db).rename(tenant, name, by="dev_admin", request_id="dev_admin")
+    finally:
+        await db.engine.dispose()
+
+
 def main() -> int:
     values = read(ENV_FILE) if ENV_FILE.exists() else {}
     if not values.get("OPS_BOOTSTRAP_ADMIN_PASSWORD"):
@@ -50,6 +69,8 @@ def main() -> int:
     values |= {k: DEFAULTS[k] for k in ("OPS_BOOTSTRAP_TENANT_NAME", "OPS_BOOTSTRAP_TEAM_NAME")}
     env = os.environ | {k: v for k, v in values.items() if k.startswith("OPS_BOOTSTRAP_")}
     done = subprocess.run([sys.executable, "-m", "ops_platform.bootstrap"], env=env, check=False)
+    if done.returncode == 0:
+        asyncio.run(keep_seed_name(env))
     return done.returncode
 
 

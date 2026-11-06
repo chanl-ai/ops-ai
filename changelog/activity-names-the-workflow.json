@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Activity names the workflow behind a tool call",
+  "description": "A tool call a workflow made shows the workflow's name as its source, not its short id.",
+  "tag": "fix"
+}

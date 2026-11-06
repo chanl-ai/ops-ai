@@ -40,10 +40,8 @@ export function SiteHeader({ actions }: { actions?: React.ReactNode }) {
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {identity && (
             <span className="hidden text-sm text-muted-foreground xl:inline" data-testid="header-workspace">
-              {/* The workspace alone ("Local tenant" until it is named) does not say where the person is; the team does. */}
-              {brand.name ?? identity.workspace}
-              {team?.name ? ` · ${team.name}` : ''}
-              {identity.environment ? ` · ${identity.environment}` : ''}
+              {/* The workspace's own name when it has one, then the team, which says where the person is. */}
+              {[brand.name ?? identity.workspace, team?.name, identity.environment].filter(Boolean).join(' · ')}
             </span>
           )}
           {actions}

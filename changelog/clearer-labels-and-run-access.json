@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Clearer labels, Start run only for people who can run",
+  "description": "Each member shows one role, and a run's result reads \"Result: Not found\" beside its status. Workflow triggers wrap instead of being cut off, and viewers no longer see Start run.",
+  "tag": "improved"
+}

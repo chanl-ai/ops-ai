@@ -2302,7 +2302,7 @@ export interface components {
             /** Tenantid */
             tenantId: string;
             /** Tenantname */
-            tenantName: string;
+            tenantName: string | null;
             user: components["schemas"]["MeUser"];
             workspace: components["schemas"]["WorkspaceStateOut"];
         };

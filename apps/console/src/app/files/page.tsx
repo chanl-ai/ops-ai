@@ -46,7 +46,7 @@ const VIEW_EMPTY: Record<FileView, string> = {
   expiring: 'No file reaches its delete-after date in the next 30 days.',
 };
 
-function columns(showTeam: boolean, onHold: ((f: FileRecord) => void) | undefined, onDelete: (f: FileRecord) => void, onStart: (f: FileRecord) => void): ColumnDef<Row>[] {
+function columns(showTeam: boolean, onHold: ((f: FileRecord) => void) | undefined, onDelete: (f: FileRecord) => void, onStart: ((f: FileRecord) => void) | undefined): ColumnDef<Row>[] {
   return [
     selectColumn<Row>((f) => f.name),
     idColumn<Row>((f) => f.id),
@@ -106,7 +106,7 @@ function columns(showTeam: boolean, onHold: ((f: FileRecord) => void) | undefine
             row={row}
             actions={[
               { label: 'Open', icon: ArrowRight, onClick: (r) => r.original.onRowClick(r.original) },
-              { label: 'Start a workflow with this file', icon: Play, onClick: (r) => onStart(r.original), disabledReason: row.original.scan.status === 'clean' ? undefined : 'Only a file scanned clean can start a workflow' },
+              ...(onStart ? [{ label: 'Start a workflow with this file', icon: Play, onClick: (r: { original: FileRecord }) => onStart(r.original), disabledReason: row.original.scan.status === 'clean' ? undefined : 'Only a file scanned clean can start a workflow' }] : []),
               ...(onHold ? [{ label: row.original.legalHold ? 'Release legal hold' : 'Place legal hold', icon: Scale, onClick: (r: { original: FileRecord }) => onHold(r.original) }] : []),
               { label: 'Delete', icon: Trash2, variant: 'destructive', onClick: (r) => onDelete(r.original) },
             ]}
@@ -145,6 +145,8 @@ export default function FilesPage() {
   // Legal holds are for admins of the team; files-service refuses anyone else, so the actions are not offered.
   const canHold = useCan('files', 'manage') === true;
   const canUpload = useCan('files', 'create') === true;
+  // Starting a run is workflows.run; the API refuses everyone else, so the action is not offered.
+  const canStartRun = useCan('workflows', 'run') === true;
   const [uploadOpen, setUploadOpen] = React.useState(false);
   const [retaining, setRetaining] = React.useState<FileRecord[] | null>(null);
   const [holding, setHolding] = React.useState<{ rows: FileRecord[]; hold: boolean } | null>(null);
@@ -168,12 +170,14 @@ export default function FilesPage() {
         !onService,
         canHold ? (f) => setHolding({ rows: [f], hold: !f.legalHold }) : undefined,
         (f) => setDeleting([f]),
-        (f) => {
-          setStartFile({ fileId: f.id, name: f.name });
-          setStartPicking(true);
-        },
+        canStartRun
+          ? (f) => {
+              setStartFile({ fileId: f.id, name: f.name });
+              setStartPicking(true);
+            }
+          : undefined,
       ),
-    [onService, canHold],
+    [onService, canHold, canStartRun],
   );
   const rows: Row[] = React.useMemo(() => rows0.map((f) => ({ ...f, onRowClick: (x: FileRecord) => setActiveId(x.id) })), [rows0, setActiveId]);
   const optionsOf = <K extends string>(key: string, label: (k: K) => string) => Object.keys(facets[key] ?? {}).map((k) => ({ label: label(k as K), value: k, count: facets[key]?.[k] ?? 0 }));
