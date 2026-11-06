@@ -353,7 +353,8 @@ function ConnectedAs({ account, who }: { account?: string | null; who?: string |
   return (
     <span className="inline-flex items-center gap-1.5 text-sm" data-testid="app-connected-as">
       <CircleCheck className="size-4 text-success-text" />
-      {['Connected', account ? ` · ${account}` : '', who ? ` as ${who}` : ''].join('')}
+      {/* Who signed in names the account; its stored name only when nobody's identity is known. */}
+      {who ? `Connected as ${who}` : account ? `Connected · ${account}` : 'Connected'}
     </span>
   );
 }

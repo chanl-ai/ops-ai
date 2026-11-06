@@ -41,7 +41,7 @@ class AccountIn(TypedDict, closed=True):
 
 
 class AccountOwner(TypedDict, closed=True):
-    kind: Literal["team", "person"]
+    kind: Literal["team", "each"]
     name: str
 
 

@@ -78,20 +78,27 @@ export function useRenameWorkspace() {
 }
 
 export function useCan(area: string, action: string): boolean | undefined {
+  return useCanCheck()(area, action);
+}
+
+/** useCan as a function, for a list whose checks are known only as data (the sidebar's rows). */
+export function useCanCheck(): (area: string, action: string) => boolean | undefined {
   // The team the console acts in: the stored id when it is one of the person's teams, else their first, as useTeam does.
   const { teamId, team } = useTeam();
   const current = team?.id ?? teamId;
   const perms = useMyPermissions();
   const role = useTeamRole();
-  if (!api.teams.permissions) return role === undefined ? undefined : role === 'builder' || role === 'admin';
-  if (!perms.data) return undefined;
-  const held = (list: { area: string; action: string }[]) => list.some((p) => p.area === area && p.action === action);
-  const mine = perms.data.teams.find((t) => t.teamId === current);
-  // The Security team's actions are held in that team whatever team the console acts in.
-  const security = perms.data.teams.some((t) =>
-    t.permissions.some((p) => p.area === area && p.action === action && p.securityTeamOnly),
-  );
-  return held(perms.data.workspace ?? []) || (mine ? held(mine.permissions) : false) || security;
+  return (area, action) => {
+    if (!api.teams.permissions) return role === undefined ? undefined : role === 'builder' || role === 'admin';
+    if (!perms.data) return undefined;
+    const held = (list: { area: string; action: string }[]) => list.some((p) => p.area === area && p.action === action);
+    const mine = perms.data.teams.find((t) => t.teamId === current);
+    // The Security team's actions are held in that team whatever team the console acts in.
+    const security = perms.data.teams.some((t) =>
+      t.permissions.some((p) => p.area === area && p.action === action && p.securityTeamOnly),
+    );
+    return held(perms.data.workspace ?? []) || (mine ? held(mine.permissions) : false) || security;
+  };
 }
 
 /** Who may take `area.action` in the current team, asked only while `enabled` (a "View only" notice is showing). */

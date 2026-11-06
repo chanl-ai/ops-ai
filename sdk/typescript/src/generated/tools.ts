@@ -1379,14 +1379,14 @@ export interface components {
         };
         /**
          * AccountOwner
-         * @description Whose sign-in an account is: the team's, or one person's own, by name.
+         * @description Whose sign-in an account is: the team's (`name` the team), or each person's own (`name` the caller).
          */
         AccountOwner: {
             /**
              * Kind
              * @enum {string}
              */
-            kind: "team" | "person";
+            kind: "team" | "each";
             /** Name */
             name: string;
         };

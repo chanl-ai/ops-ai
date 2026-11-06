@@ -324,9 +324,9 @@ class AppMe(Out):
 
 
 class AccountOwner(Out):
-    """Whose sign-in an account is: the team's, or one person's own, by name."""
+    """Whose sign-in an account is: the team's (`name` the team), or each person's own (`name` the caller)."""
 
-    kind: Literal["team", "person"]
+    kind: Literal["team", "each"]
     name: str
 
 
@@ -365,7 +365,8 @@ class AppAccount(Out):
     # The auth config it signs in with (`AuthConfig.id`); null for a kind with no OAuth client.
     config_id: str | None = None
     actions: list[AccountAction] = Field(default_factory=list[AccountAction])
-    # Whether the caller has signed in to this account themselves, and as whom.
+    # Whether the caller has signed in to this account themselves; `account` is who signed in: the caller's own
+    # sign-in on it, else the team's.
     mine: bool = False
     account: str | None = None
     # Among the caller's own sign-ins to the app's accounts, whether calls naming none use this one; null while they
@@ -1292,13 +1293,13 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
                 "status": status,
                 "statusDetail": a.get("status_detail"),
                 "stateReason": why,
-                "owner": {"kind": "person", "name": str(a["created_by"])}
-                if alone
-                else {"kind": "team", "name": who.team.name},
+                # Each person signs in to it with their own account, so it is no one person's, whoever made it.
+                "owner": {"kind": "each", "name": who.name} if alone else {"kind": "team", "name": who.team.name},
                 "configId": config,
                 "actions": actions,
                 "mine": own is not None,
-                "account": (own or {}).get("account"),
+                # Who signed in: the caller's own sign-in on it, else the team's.
+                "account": (own or {}).get("account") or (team_tokens.get(aid) or {}).get("account"),
                 "myDefault": None if pick is None or aid in sandboxes else str(pick["connection_id"]) == aid,
                 # On an account each person signs in to, the caller's own sign-in's test; else the team account's.
                 "test": own.get("test")

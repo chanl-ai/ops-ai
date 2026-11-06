@@ -102,6 +102,12 @@ try {
           await viewer.getByTestId('systems-grid').waitFor({ timeout: 60_000 });
           const offered = await viewer.getByTestId('connect-system').count();
           check('2 a viewer is offered no Add custom app', offered === 0, { offered });
+          // The sidebar offers no page whose API refuses the viewer: Auth configs needs managing the team's apps.
+          const sidebar = viewer.locator('[data-sidebar="sidebar"]').first();
+          await sidebar.getByRole('link', { name: 'Apps', exact: true }).waitFor({ timeout: 30_000 });
+          const row = await sidebar.getByRole('link', { name: 'Auth configs', exact: true }).count();
+          const adminRow = await admin.locator('[data-sidebar="sidebar"]').first().getByRole('link', { name: 'Auth configs', exact: true }).count();
+          check('2b the sidebar offers Auth configs to an admin and not to a viewer', row === 0 && adminRow === 1, { row, adminRow });
         }, viewer);
         await step('3 a viewer opening Auth configs reads who may see them, by name, not an error', async () => {
           await viewer.goto(`${consoleUrl}/integrations/credentials`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
