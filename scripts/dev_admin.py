@@ -22,7 +22,7 @@ ENV_FILE = RUN_DIR / "dev-admin.env"
 # bootstrap's insert-if-missing leaves both as they are on a stack that still seeds them.
 DEFAULTS = {
     "OPS_BOOTSTRAP_TENANT_ID": "local",
-    "OPS_BOOTSTRAP_TENANT_NAME": "Local tenant",
+    "OPS_BOOTSTRAP_TENANT_NAME": "Harbor & Pine Bank",
     "OPS_BOOTSTRAP_TEAM_NAME": "Security",
     "OPS_BOOTSTRAP_ADMIN_EMAIL": "dev-admin@harborpine.example",
     "OPS_BOOTSTRAP_ADMIN_NAME": "Dev Admin",
@@ -46,6 +46,8 @@ def main() -> int:
         ENV_FILE.touch(mode=0o600)
         ENV_FILE.write_text("".join(f"{k}={v}\n" for k, v in values.items()))
         print(f"first admin: {values['OPS_BOOTSTRAP_ADMIN_EMAIL']}, password kept in {ENV_FILE}")
+    # The names always follow the seed's, so a file written before a rename never names the dev workspace back.
+    values |= {k: DEFAULTS[k] for k in ("OPS_BOOTSTRAP_TENANT_NAME", "OPS_BOOTSTRAP_TEAM_NAME")}
     env = os.environ | {k: v for k, v in values.items() if k.startswith("OPS_BOOTSTRAP_")}
     done = subprocess.run([sys.executable, "-m", "ops_platform.bootstrap"], env=env, check=False)
     return done.returncode

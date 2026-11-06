@@ -22,7 +22,7 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { useSession, useSignInPolicy, useSignOut } from '@/hooks/auth-queries';
 import { useTeam, useTeamReady } from '@/hooks/use-team';
 import { currentTeamId, ownTeamId, setCurrentTeamId } from '@/lib/api';
-import { isUnreachable } from '@/lib/api/unreachable';
+import { isUnreachable, servicesDown } from '@/lib/api/unreachable';
 import { authProvider } from '@/lib/auth';
 import { isAuthPath } from '@/lib/auth/next-path';
 import { teamToUse } from '@/lib/session-gate';
@@ -149,15 +149,22 @@ function Guarded({ children }: { children: React.ReactNode }) {
 }
 
 /** Shown in place of the console when the session lifetime has passed; nothing behind it renders. */
-/**
- * True while a read on screen failed because the services did not answer, from its first failed try (a failed read is
- * still retrying) until a try succeeds.
- */
+/** True while a page read on screen failed because the services did not answer (lib/api/unreachable.ts `servicesDown`). */
 function useServicesDown(): boolean {
   const cache = useQueryClient().getQueryCache();
   return React.useSyncExternalStore(
     (changed) => cache.subscribe(changed),
-    () => cache.getAll().some((q) => q.getObserversCount() > 0 && ((q.state.status === 'error' && isUnreachable(q.state.error)) || (q.state.fetchFailureCount > 0 && isUnreachable(q.state.fetchFailureReason)))),
+    () =>
+      servicesDown(
+        cache.getAll().map((q) => ({
+          observers: q.getObserversCount(),
+          status: q.state.status,
+          error: q.state.error,
+          failures: q.state.fetchFailureCount,
+          failureReason: q.state.fetchFailureReason,
+          side: q.meta?.side === true,
+        })),
+      ),
     () => false,
   );
 }
