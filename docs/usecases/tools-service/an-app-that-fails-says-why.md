@@ -41,6 +41,7 @@ wrong client secret with `invalid_client`, with agents-service and its workflow 
 | 6a | Sam opens the task in Human Tasks and refuses it with a reason | The task shows the host, the app and who asked, with Approve and Refuse and no Return; the task keeps the reason |
 | 6b | James saves the same tool again | The dialog shows Security's refusal with Sam's reason |
 | 6c | James saves a tool on `allowed.uc617.example`; Sam approves its task; James saves again | The host is listed and the save opens the new tool's page |
+| 8 | Priya turns the Pager plugin (`test.pager`) on, takes three of its five read tools out again, then on its app page's Tools tab ticks Select all and presses Add | Only the tools not added are picked: the bar reads "3 selected" and "Add (3)", each added tool's box is off and disabled; after Add every Pager tool is added (`GET /v1/apps/plugin:test.pager`) |
 | 5 | The console steps: Expired with Reconnect on the app page, and the waiting run's Human Task with Connect my account and Run as the team account | Walked by uc-607 ui: step 21 (Expired, Reconnect) and step 13c (the task, Run as the team account, the run goes on); the run's reason and the Security task are not walked yet |
 
 ## Acceptance layers
@@ -48,7 +49,7 @@ wrong client secret with `invalid_client`, with agents-service and its workflow 
 | Layer | Script | State |
 |---|---|---|
 | api | `tools-service/scripts/test-uc-617-api.py` | steps 1-4c pass |
-| ui | `tools-service/scripts/test-uc-617-ui.mjs` | steps 6-6c |
+| ui | `tools-service/scripts/test-uc-617-ui.mjs` | steps 6-6c and 8 |
 
 ## Non-vacuous check
 

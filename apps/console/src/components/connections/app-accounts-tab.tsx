@@ -233,14 +233,20 @@ function AccountActions({
       (e: unknown) => toast.error('Couldn’t disconnect', { description: message(e) }),
     );
   const menu = [
-    a.state === 'connected' &&
+    a.state !== 'not_signed_in' &&
       (can('reconnect') || can('disconnect')) && {
         label: 'Test now',
         onClick: () =>
           test.mutate(
             { ...ref, account: own ? 'self' : 'team' },
             {
-              onSuccess: (r) => (r.health?.status === 'ok' ? toast.success(`${shownAs(a)} works`) : toast.error(`${shownAs(a)}’s test failed`, { description: r.health?.message ?? undefined })),
+              onSuccess: (r) => {
+                // What the test read, as one line: the status it answered, what it said, and whose sign-in it used.
+                const h = r.health;
+                const said = [h?.httpStatus ? `HTTP ${h.httpStatus}` : null, h?.status === 'ok' ? null : h?.message, `with ${own ? 'your own account' : 'the team account'}`].filter(Boolean).join(' · ');
+                if (h?.status === 'ok') toast.success(`${shownAs(a)} works`, { description: said });
+                else toast.error(`${shownAs(a)}’s test failed`, { description: said });
+              },
               onError: (e) => toast.error('Couldn’t test it', { description: e.message }),
             },
           ),
@@ -268,7 +274,14 @@ function AccountActions({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" aria-label={`${shownAs(a)} actions`} data-testid={`account-menu-${a.name}`}>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={`${shownAs(a)} actions`}
+            data-testid={`account-menu-${a.name}`}
+            data-default={a.default && a.kind === 'team' ? 'true' : undefined}
+            data-mine={a.mine && (a.kind === 'person' || a.owner.kind === 'each') ? 'true' : undefined}
+          >
             <MoreVertical />
           </Button>
         </DropdownMenuTrigger>

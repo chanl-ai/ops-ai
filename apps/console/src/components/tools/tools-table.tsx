@@ -33,7 +33,8 @@ export function toolColumns<T extends ToolTableRow>({ app = false, kind = false,
       id: 'name',
       accessorFn: (t) => `${t.title ?? ''} ${t.name} ${t.app?.name ?? ''}`,
       header: ({ column }) => <DataTableColumnHeader column={column} title="Tool" />,
-      meta: { kind: 'name' },
+      // About half the table: the name reads in full without pushing the short columns to the edge.
+      meta: { kind: 'name', className: 'w-1/2' },
       cell: ({ row }) => (
         <div className="flex max-w-72 min-w-44 flex-col" data-testid={`tool-row-${row.original.name}`}>
           <span className="truncate font-medium">{row.original.title ?? row.original.name}</span>
@@ -48,6 +49,7 @@ export function toolColumns<T extends ToolTableRow>({ app = false, kind = false,
       // Filtered by the app's id, as the server filters and its facet counts; the column shows the name.
       filterFn: (row, _id, value: string[]) => !value?.length || value.includes(row.original.app?.id ?? ''),
       header: ({ column }) => <DataTableColumnHeader column={column} title="App" />,
+      meta: { kind: 'status' },
       cell: ({ row }) =>
         row.original.app ? (
           <StopRowClick align="start">
@@ -62,6 +64,7 @@ export function toolColumns<T extends ToolTableRow>({ app = false, kind = false,
     kind && {
       accessorKey: 'kind',
       header: ({ column }) => <DataTableColumnHeader column={column} title="Kind" />,
+      meta: { kind: 'status' },
       cell: ({ row }) => <span className="text-sm whitespace-nowrap">{row.original.kind ? TOOL_KIND[row.original.kind] : ''}</span>,
       filterFn: facetFilterFn,
     },
@@ -69,12 +72,14 @@ export function toolColumns<T extends ToolTableRow>({ app = false, kind = false,
       id: 'access',
       accessorFn: (t) => (t.access === 'write' ? 'Write' : t.access === 'read' ? 'Read' : t.access),
       header: ({ column }) => <DataTableColumnHeader column={column} title="Access" />,
+      meta: { kind: 'status' },
       cell: ({ row }) => <AccessBadge access={row.original.access} />,
       filterFn: facetFilterFn,
     },
     status && {
       accessorKey: 'status',
       header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+      meta: { kind: 'status' },
       cell: ({ row }) =>
         row.original.status ? (
           <Badge variant="outline" className={TOOL_STATUS[row.original.status].className}>
@@ -87,6 +92,7 @@ export function toolColumns<T extends ToolTableRow>({ app = false, kind = false,
       id: 'usedBy',
       accessorFn: (t) => (t.usedBy ? t.usedBy.agents.length + t.usedBy.workflows.length : 0),
       header: ({ column }) => <DataTableColumnHeader column={column} title="Used by" />,
+      meta: { className: 'w-56 min-w-40' },
       cell: ({ row }) =>
         row.original.usedBy ? (
           <StopRowClick align="start">

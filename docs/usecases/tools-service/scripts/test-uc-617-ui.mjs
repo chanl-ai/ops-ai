@@ -2,14 +2,18 @@
 // (steps 6-6c). James (builder, no Security role) saves a REST tool on a host nobody listed: the import dialog says it
 // waits for Security, and nothing is saved. Sam (Security admin) decides it in Human Tasks, where the task shows the
 // host, the app and who asked, with Approve and Refuse. A refusal's reason reaches James's next save; an approval lets
-// it through. A private stack: platform sign-in, tools-service and agents-service.
+// it through. Step 8: Priya picks every tool on the Pager app's Tools tab and adds them; only tools not yet added can be
+// picked, so the pick and the add match. A private stack: platform sign-in, tools-service with the Pager plugin
+// (services/tools-service/tests/plugin_pager), and agents-service.
 import { join } from 'node:path';
 
-import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, consoleSignIn, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, consoleSignIn, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const PASSWORD = 'northfield-demo';
 const JAMES = 'j.richardson@harborpine.example';
 const SAM = 's.adeyemi@harborpine.example';
+const PRIYA = 'p.shah@harborpine.example';
+const PAGER = 'plugin:test.pager';
 const REFUSED = 'held.uc617.example';
 const ALLOWED = 'allowed.uc617.example';
 const WHY = 'not a system the bank uses';
@@ -131,11 +135,51 @@ await withUiStack(
         await james.context().close();
         await sam.context().close();
       });
+      await step('8 Priya picks every tool on the Tools tab: only the tools not added are picked, and Add adds them all', async () => {
+        const priya = { ...(await as(PRIYA, 'team_ops')), 'Content-Type': 'application/json' };
+        const app = `http://127.0.0.1:${TOOLS_PORT}/v1/apps/${encodeURIComponent(PAGER)}`;
+        const on = await fetch(`${app}/team`, { method: 'PUT', headers: priya, body: JSON.stringify({ enabled: true }) });
+        if (on.status !== 200) throw new Error(`setup: turning Pager on answered ${on.status} ${(await on.text()).slice(0, 200)}`);
+        const toolsOf = async () => (await (await fetch(app, { headers: priya })).json()).data?.tools ?? [];
+        // Three read tools taken out again, so the tab holds added and not-added tools side by side.
+        const reads = (await toolsOf()).filter((t) => t.added).slice(0, 3);
+        for (const t of reads) await fetch(`${app}/tools/${encodeURIComponent(t.name)}`, { method: 'DELETE', headers: priya });
+        const before = await toolsOf();
+        const notAdded = before.filter((t) => !t.added).map((t) => t.name);
+        if (notAdded.length < 3 || notAdded.length === before.length) throw new Error(`setup: expected a mix of added and not added, got ${JSON.stringify(before.map((t) => [t.name, t.added]))}`);
+        const page = await consoleSignIn(browser, consoleUrl, PRIYA, PASSWORD, errors);
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(PAGER)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await page.getByTestId('app-tab-tools').click({ timeout: 120_000 });
+        await page.getByTestId('app-tools').getByRole('checkbox', { name: 'Select all on this page' }).click({ timeout: 60_000 });
+        const badge = (await page.getByTestId('selected-count-badge').innerText()).trim();
+        const addButton = page.getByRole('button', { name: /^Add \(\d+\)$/ });
+        const label = (await addButton.innerText()).trim();
+        const addedPicked = [];
+        for (const t of before.filter((x) => x.added)) {
+          const box = page.locator('tbody tr', { has: page.getByTestId(`tool-row-${t.name}`) }).getByRole('checkbox');
+          if ((await box.isChecked()) || (await box.isEnabled())) addedPicked.push(t.name);
+        }
+        await page.screenshot({ path: join(SHOTS, 'tools-bulk-picked-1280.png') });
+        await addButton.click();
+        let after = [];
+        for (let i = 0; i < 20; i++) {
+          await page.waitForTimeout(500);
+          after = await toolsOf();
+          if (after.every((t) => t.added)) break;
+        }
+        check(
+          '8 Priya picks every tool on the Tools tab: only the tools not added are picked, and Add adds them all',
+          badge === `${notAdded.length} selected` && label === `Add (${notAdded.length})` && addedPicked.length === 0 && after.length === before.length && after.every((t) => t.added),
+          { badge, label, notAdded, addedPicked, after: after.map((t) => [t.name, t.added]) },
+        );
+        await page.context().close();
+      });
       check('7 no page errors', errors.length === 0, errors.slice(0, 3));
     } finally {
       await browser.close();
     }
   },
-  { platform: true, tools: {} },
+  { platform: true, tools: { env: { OPS_PLUGINS: 'true', OPS_PLUGIN_PATHS: JSON.stringify([join(ROOT, 'services/tools-service/tests/plugin_pager')]) } } },
 );
 finish();

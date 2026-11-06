@@ -3,7 +3,8 @@
 import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
-import { ArrowRight, Wrench } from 'lucide-react';
+import { ArrowRight, Minus, Wrench } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { DataTableRowActions } from '@/components/data-table-row-actions';
 import { DataTableWithViews } from '@/components/data-table-with-views';
@@ -17,10 +18,12 @@ import { ToolsTabs } from '@/components/tools/tools-tabs';
 import { toolColumns, TOOL_STATUS } from '@/components/tools/tools-table';
 import { toolHref } from '@/components/tools/used-by';
 import { useToolDirectory } from '@/hooks/queries';
+import { useCan } from '@/hooks/me-queries';
+import { useRemoveTool } from '@/hooks/systems-queries';
 import { useListParams } from '@/hooks/use-list-params';
 import type { ToolKind, ToolRow, ToolRowFilters, ToolStatus } from '@/lib/types/tool-directory';
 
-type Row = ToolRow & { onRowClick: (t: ToolRow) => void; href?: string };
+type Row = ToolRow & { onRowClick: (t: ToolRow) => void; href?: string; onRemove?: () => void };
 
 const columns: ColumnDef<Row>[] = [
   ...toolColumns<Row>({ app: true, kind: true, status: true }),
@@ -28,9 +31,16 @@ const columns: ColumnDef<Row>[] = [
     id: 'actions',
     meta: { className: 'sticky right-0 z-[1] w-10 bg-card shadow-[-8px_0_8px_-8px_rgb(0_0_0/0.12)]' },
     cell: ({ row }) =>
-      row.original.href ? (
+      row.original.href || row.original.onRemove ? (
         <StopRowClick>
-          <DataTableRowActions row={row} actions={[{ label: 'Open', icon: ArrowRight, onClick: (r) => r.original.onRowClick(r.original) }]} />
+          <DataTableRowActions
+            row={row}
+            actions={[
+              ...(row.original.href ? [{ label: 'Open', icon: ArrowRight, onClick: (r: typeof row) => r.original.onRowClick(r.original) }] : []),
+              // An app's tool leaves the team as it is removed from the app's catalog, with the same word.
+              ...(row.original.onRemove ? [{ label: 'Remove', icon: Minus, onClick: (r: typeof row) => r.original.onRemove?.() }] : []),
+            ]}
+          />
         </StopRowClick>
       ) : null,
     enableHiding: false,
@@ -50,6 +60,8 @@ function ToolsList({ kind }: { kind: ToolKind | null }) {
   const router = useRouter();
   const list = useListParams<ToolRowFilters>('name');
   // The tab's kind is the URL's, kept beside the table's own filters, which never hold it.
+  const remove = useRemoveTool();
+  const mayManage = useCan('connections', 'manage') === true;
   const query = useToolDirectory({ ...list.params, filters: { ...list.params.filters, kind: kind ? [kind] : undefined } });
   const [filterResetKey, setFilterResetKey] = React.useState(0);
   const tools = query.data?.data ?? [];
@@ -58,9 +70,18 @@ function ToolsList({ kind }: { kind: ToolKind | null }) {
     () =>
       tools.map((t) => {
         const href = toolHref(t) ?? undefined;
-        return { ...t, href, onRowClick: () => href && router.push(href) };
+        // A plugin app's tool is removed from the team by someone who manages the team's apps.
+        const removable = mayManage && t.kind === 'app' && t.app?.id.startsWith('plugin:');
+        const onRemove = removable
+          ? () =>
+              remove.mutate(
+                { appId: t.app!.id, tool: t.name },
+                { onSuccess: () => (toast.success(`${t.title ?? t.name} is removed from the team`), void query.refetch()), onError: (e) => toast.error('Couldn’t remove it', { description: e.message }) },
+              )
+          : undefined;
+        return { ...t, href, onRowClick: () => href && router.push(href), onRemove };
       }),
-    [tools, router],
+    [tools, router, mayManage, remove, query],
   );
   const withCounts = <K extends string>(column: string, labels: Record<K, string>) =>
     (Object.keys(labels) as K[]).map((value) => ({ label: labels[value], value, count: facets[column]?.[value] ?? 0 }));
