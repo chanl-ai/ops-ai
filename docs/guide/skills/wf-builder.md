@@ -19,9 +19,9 @@ every way out of each step. Nothing is created until the developer says so. The 
 
 1. Ask which profile to use (`--profile`, from `~/.config/ops-ai/config.json` or `OPS_CONFIG`), unless they named
    one. Read the node types that profile serves: `python3 scripts/wf_builder.py catalog --profile <name>`. Use only
-   those types; never write one from memory. Creating a workflow needs a person: the profile's `accessToken` (their
-   session token) or `OPS_TOKEN`. With the session's `refreshToken` beside it in the profile, a refused token (a role
-   change, or expiry) is renewed once and the new pair written back. An API key reads and validates, and is refused a
+   those types; never write one from memory. Creating a workflow needs a person: `ops login` signs them in and keeps
+   their session in the profile (`accessToken` and `refreshToken`), or `OPS_TOKEN` names a session token. A refused
+   profile token (a role change, or expiry) is renewed once and the new pair written back. An API key reads and validates, and is refused a
    create.
 2. Prefer a folder under `examples/workflows/` and the generic `ops workflows validate|apply|run` commands.
    `docs/guide/skills/wf-builder/examples.md` is generated seed topology for the local demo, not the developer catalog.

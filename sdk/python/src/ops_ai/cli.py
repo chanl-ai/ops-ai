@@ -9,6 +9,7 @@ import sys
 from collections.abc import Callable, Sequence
 
 from ._cli.agents import main as agents_main
+from ._cli.login import main as login_main
 from ._cli.resources import main as resources_main
 from ._cli.workflows import main as workflows_main
 
@@ -29,6 +30,7 @@ def _plugin(argv: list[str]) -> int:
 
 
 AREAS: dict[str, tuple[Area, str]] = {
+    "login": (login_main, "sign in and keep the session in a profile"),
     "plugin": (_plugin, "build and check a plugin: validate, test"),
     "workflows": (workflows_main, "author and run workflows: validate, apply, publish, run"),
     "agents": (agents_main, "author and chat with agents: apply, publish, chat, test"),
