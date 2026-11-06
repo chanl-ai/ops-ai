@@ -42,7 +42,7 @@ openapi-check` fails on drift.
 | `OPS_PLATFORM_DEMO_PASSWORD` | `northfield-demo` | Dev only, for a person with no stored password; unset outside dev |
 | `OPS_PLATFORM_PUBLIC_URL`, `OPS_CONSOLE_URL` | unset | platform-service's public origin (the OIDC redirect URI `/v1/auth/oidc/callback`, the SAML consumer URL `/v1/auth/saml/acs`, the SAML entity id `/v1/auth/saml`) and the console's origin (`/sso/callback`, `/reset-password/<token>`); unset, SSO and reset answer 503 |
 | `OPS_SAML_SP_KEY`, `OPS_SAML_SP_CERTIFICATE` | unset | The SAML service provider's key pair, PEM: signs requests for a provider with `signRequests`, decrypts assertions encrypted to the certificate, and the certificate is published at `/v1/auth/saml/metadata`; unset, a provider cannot ask for either (400 `sp_key_missing`) |
-| `OPS_SIGNIN_SECRETS` | `{}` | JSON name to secret; an OIDC provider's `clientSecretRef` names one |
+| `OPS_SECRETS_KEY` | dev key | Seals each workspace's sign-in secrets (an OIDC provider's `clientSecretRef` names one, saved by a Security admin through `PUT /v1/settings/sign-in/secrets/{name}`); required outside dev |
 | `OPS_PASSWORD_HASH_ITERATIONS`, `OPS_PASSWORD_MIN_LENGTH` | 600000, 12 | PBKDF2-SHA256 work factor (a lower stored count is rehashed at the next sign-in) and the shortest password a reset or invite accepts |
 | `OPS_SIGNIN_FLOW_SECONDS`, `OPS_PASSWORD_RESET_SECONDS` | 600, 3600 | How long an SSO round trip and a reset link live |
 | `OPS_MAIL_PROVIDER` and its settings | `none` | Reset links go out through `packages/ops_email`; `none` makes forgot answer 503 `mail_not_configured` |

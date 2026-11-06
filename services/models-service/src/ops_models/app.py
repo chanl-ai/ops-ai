@@ -238,14 +238,11 @@ def create_models_app(
     overlap_seconds: int = 900,
     upstream: httpx.AsyncClient | None = None,
     credentials: CredentialStore | None = None,
-    keys_tenant: str | None = None,
-    security_team: str | None = None,
 ) -> FastAPI:
     """Tests inject `upstream`, the client provider calls go out on; otherwise one is opened and closed with the app.
     `auth` resolves callers (ops_identity's shared dependency); by default it is built from Settings for "models".
     Provider keys are the accounts' own (`provider_keys`), kept in `credentials` (the store the settings choose by
-    default); `provider_secrets` are the dev stack's keys from settings, behind them. `keys_tenant` is the deployment's
-    tenant, whose key a call naming no tenant uses; `security_team` is where an account admin holds settings.manage."""
+    default); `provider_secrets` are the dev stack's keys from settings, behind them."""
     http = upstream or httpx.AsyncClient(timeout=60)
 
     @asynccontextmanager
@@ -273,8 +270,8 @@ def create_models_app(
         )
     install_auth(app, auth or Auth.from_settings(settings, audience="models"))
     key_vault = ProviderKeyStore(db, credentials or credential_store(settings))
-    keys = ProviderKeys(key_vault, provider_secrets, tenant=keys_tenant or settings.model_keys_tenant)
-    access = Access(security_team=security_team or settings.security_team_id)
+    keys = ProviderKeys(key_vault, provider_secrets)
+    access = Access()
     providers, aliases, key_store, call_log = Providers(db), Aliases(db), ModelKeys(db), CallLog(db)
 
     # TODO(auth): every /v1/models/* route below takes a calling service's Ed25519 token (CurrentService), the same
@@ -664,7 +661,15 @@ def create_models_app(
             await log("ok", mismatch[:64] if mismatch else None, **values, **version)
 
         ref = alias_row.get("key_ref")
-        provider_key = await keys.get(str(ref), x_tenant_id) if ref else None
+        if ref and not x_tenant_id:
+            # A provider key is an account's own: a call that names no account signs in with none.
+            await log("denied", "tenant_required", **version)
+            return refused(
+                400,
+                "tenant_required",
+                f"Alias {alias_name} signs in with an account's model provider key {ref}; send X-Tenant-Id.",
+            )
+        provider_key = await keys.get(str(ref), str(x_tenant_id)) if ref else None
         if ref and provider_key is None:
             # Calling the provider without its key would only come back as its own 401, after a network round trip.
             await log("error", "provider_key_missing", **version)

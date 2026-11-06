@@ -98,16 +98,15 @@ class Settings(BaseSettings):
     # Dev only: channel deployments to seed at start (a graph on a channel), e.g. services/agents-service/seed/
     # deployments.json. Rows that exist are updated to the file.
     deployments_seed_file: Path | None = None
-    # Mail in (packages/ops_email): the source a process-wide mailbox is read from. "none": nothing is read. "graph":
-    # Microsoft Graph's delta query with the app credentials below. A team's own mailboxes are records (Channels >
-    # Email) read by their provider; a dev stack's are on GreenMail.
-    mailbox_source: Literal["none", "graph"] = "none"
+    # Mail in is a team's own mailbox records (Channels > Email), each read by its provider; a dev stack's are on
+    # GreenMail. No setting names a mailbox.
     # The IMAP server a mailbox of provider gmail signs in to.
     gmail_imap_host: str = "imap.gmail.com"
     # The SMTP server a Gmail mailbox's replies go through when its sender names none.
     gmail_smtp_host: str = "smtp.gmail.com"
     graph_url: str = "https://graph.microsoft.com"
     graph_login_url: str = "https://login.microsoftonline.com"
+    # The install's own Microsoft 365 app, for mail_provider "graph" only: the platform's sender, not a team's mailbox.
     graph_tenant_id: str | None = None
     graph_client_id: str | None = None
     graph_client_secret: SecretStr | None = None
@@ -124,11 +123,9 @@ class Settings(BaseSettings):
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_username: str | None = None
+    # The install's own SMTP account: system-wide. A team sends from its own mailbox records, each with its secret.
     smtp_password: SecretStr | None = None
     smtp_starttls: bool = True
-    # A secret on the Secrets page holding the SMTP password, read by tools-service at each send; used in place of
-    # smtp_password when set.
-    smtp_password_secret: str | None = None
     # How long one IDLE on an IMAP mailbox waits before the listener asks again.
     email_idle_seconds: float = 25.0
     resend_url: str = "https://api.resend.com"
@@ -202,8 +199,8 @@ class Settings(BaseSettings):
     credential_store: Literal["sealed", "memory"] = "sealed"
     # A CA bundle tools-service trusts for its outbound https, for systems whose certificates an internal CA issued.
     egress_ca_file: Path | None = None
-    # tools-service: the team whose approvers and admins decide a module's security review. Matches the id in
-    # platform-service's directory (its dev seed, seed/people.json).
+    # The id a new workspace's Security team is given: the first workspace's (`python -m ops_platform.bootstrap`) and
+    # the dev seed's (seed/people.json). A running service reads each workspace's own record, never this.
     security_team_id: str = "team_security"
     # Dev only: host names tools-service resolves to these addresses instead of asking DNS, so a use case can reach a
     # local fake as if it were a bank system. Refused outside dev.
@@ -263,9 +260,6 @@ class Settings(BaseSettings):
     # OPS_MODEL_PROVIDER_KEYS, behind the keys an account admin saves on Settings > Model providers. Outside dev a key
     # here stops models-service's start-up.
     model_provider_keys: dict[str, SecretStr] = Field(default_factory=dict[str, SecretStr])
-    # The tenant whose provider keys a model call naming no tenant (no X-Tenant-Id) uses: one bank per deployment.
-    # "local" is the dev seed's tenant.
-    model_keys_tenant: str = "local"
     # models-service dev seed: with this set (the fake OpenAI's /v1 URL, services/models-service/scripts/fake_openai),
     # it seeds connection openai-local at that URL and binds alias default to it. The row is the switch afterwards:
     # PUT the connection's baseUrl to https://api.openai.com/v1 to make the same alias real.
@@ -301,9 +295,6 @@ class Settings(BaseSettings):
     # and a reset link land. Unset, SSO and reset refuse with `sso_not_configured`.
     platform_public_url: str | None = None
     console_url: str | None = None
-    # Secrets a workspace's sign-in provider names (an OIDC client secret's `clientSecretRef`), as JSON name -> value.
-    # The provider row stores the name only, so the value never reaches the database.
-    signin_secrets: dict[str, SecretStr] = Field(default_factory=dict[str, SecretStr])
     # The DNS servers that prove a workspace's email domain by its TXT record, as `host:port`; empty asks the
     # system's resolvers. A bank that resolves through its own servers names them here.
     signin_dns_servers: list[str] = Field(default_factory=list[str])
@@ -534,7 +525,7 @@ _PUBLIC_DEFAULTS = {"review_key": _DEV_REVIEW_KEY, "secrets_key": _DEV_SECRETS_K
 def require_keys(settings: Settings, *names: str) -> None:
     """Refuses to start a service outside dev while a key it uses still holds its public default. Called by each
     service that uses the key, so a service that does not use one is never handed it (`review_key`: agents-service and
-    its worker, tools-service; `secrets_key`: tools-service, files-service, models-service)."""
+    its worker, tools-service; `secrets_key`: tools-service, files-service, models-service, platform-service)."""
     if settings.environment == "dev":
         return
     for name in names:

@@ -43,8 +43,8 @@ tenants = sa.Table(
     sa.Column("allowed_domains", sa.JSON, nullable=False),
     sa.Column("created_at", sa.String(40), nullable=False),
     sa.Column("permission_version", sa.Integer, nullable=False, server_default="1"),
-    # Migration 0014: the workspace's security team (null: Settings.security_team_id) and the team new people
-    # join when nothing else names one (null: none).
+    # Migration 0014: the workspace's security team (null: none, so nobody holds its actions; 0029 wrote the
+    # install default into each workspace that had it) and the team new people join when nothing else names one.
     sa.Column("security_team_id", sa.String(64)),
     sa.Column("default_team_id", sa.String(64)),
     # Migration 0026: when and by whom the workspace was closed; a restore clears both.
@@ -243,7 +243,7 @@ signin_providers = sa.Table(
     sa.Column("kind", sa.String(16), nullable=False),  # password | oidc | saml
     sa.Column("label", sa.String(200), nullable=False),
     sa.Column("enabled", sa.Boolean, nullable=False),
-    # Non-secret settings; a client secret is named here (clientSecretRef) and read from settings, never stored.
+    # Non-secret settings; a client secret is named here (clientSecretRef) and kept sealed in signin_secrets.
     sa.Column("config", sa.JSON, nullable=False),
     # A person new to the workspace joins this team with this role on their first sign-in; null team: no new people.
     sa.Column("jit_team_id", sa.String(64)),
@@ -251,6 +251,21 @@ signin_providers = sa.Table(
     sa.Column("created_at", sa.String(40), nullable=False),
     sa.Column("updated_at", sa.String(40), nullable=False),
     sa.ForeignKeyConstraint(["tenant_id", "jit_team_id"], ["teams.tenant_id", "teams.id"], name="fk_signin_jit_team"),
+    info=TENANT_SCOPED,
+)
+
+# Migration 0030: the secrets a workspace's sign-in providers name (an OIDC client secret), sealed under the
+# install's secrets key with the tenant and name as context; a value is never read back through the API.
+signin_secrets = sa.Table(
+    "signin_secrets",
+    metadata,
+    sa.Column("tenant_id", sa.String(64), sa.ForeignKey("tenants.id"), primary_key=True),
+    sa.Column("name", sa.String(100), primary_key=True),
+    sa.Column("ciphertext", sa.Text, nullable=False),
+    sa.Column("version", sa.Integer, nullable=False),
+    sa.Column("created_by", sa.String(64), nullable=False),
+    sa.Column("created_at", sa.String(40), nullable=False),
+    sa.Column("rotated_at", sa.String(40)),
     info=TENANT_SCOPED,
 )
 

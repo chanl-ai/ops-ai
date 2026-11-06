@@ -398,6 +398,18 @@ class SignIn(TypedDict, closed=True):
     password: str
 
 
+class SignInSecretIn(TypedDict, closed=True):
+    value: str
+
+
+class SignInSecretOut(TypedDict, closed=True):
+    createdAt: str
+    createdBy: str
+    name: str
+    rotatedAt: str | None
+    version: int
+
+
 class Skip(TypedDict, closed=True):
     id: str
     reason: str
@@ -530,7 +542,7 @@ class WorkspaceTeamsIn(TypedDict, closed=True):
 
 class WorkspaceTeamsOut(TypedDict, closed=True):
     defaultTeam: str | None
-    securityTeam: str
+    securityTeam: str | None
 
 
 class AccessCheckOut(TypedDict, closed=True):
@@ -652,6 +664,11 @@ class EnvelopeRoleDetail(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeSignInSecretOut(TypedDict, closed=True):
+    data: SignInSecretOut
+    success: Literal[True]
+
+
 class EnvelopeSsoStarted(TypedDict, closed=True):
     data: SsoStarted
     success: Literal[True]
@@ -717,6 +734,11 @@ class EnvelopeListRoleOut(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeListSignInSecretOut(TypedDict, closed=True):
+    data: list[SignInSecretOut]
+    success: Literal[True]
+
+
 class EnvelopeListTeamName(TypedDict, closed=True):
     data: list[TeamName]
     success: Literal[True]
@@ -759,7 +781,7 @@ class ListResultWorkspaceTeamOut(TypedDict, closed=True):
 class Me(TypedDict, closed=True):
     flags: list[FlagOut]
     policies: dict[str, Any]
-    securityTeamId: str
+    securityTeamId: str | None
     teams: list[MeTeam]
     tenantId: str
     tenantName: str

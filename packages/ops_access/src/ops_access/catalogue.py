@@ -53,10 +53,10 @@ SCOPES: tuple[Scope, ...] = ("all", "own")
 # An assignment whose team is this applies in every team its subject belongs to.
 ANY_TEAM = "*"
 
-# These are held in the Security team (settings `security_team_id`) whichever team the request acts in: the egress
-# list and workspace-wide secrets (`manage`), a module's security review and storage settings decide what every team's
-# tools may reach, so a role in any other team grants none of them (tools-service `security_admin`, files-service
-# `storage_admin`). A team's own secrets are created, edited and deleted in that team; the
+# These are held in the workspace's Security team (its record, named in the token) whichever team the request acts
+# in: the egress list and workspace-wide secrets (`manage`), a module's security review and storage settings decide
+# what every team's tools may reach, so a role in any other team grants none of them (tools-service `security_admin`,
+# files-service `storage_admin`). A team's own secrets are created, edited and deleted in that team; the
 # `securityTeamAddsSecrets` policy moves those writes back here.
 SECURITY_TEAM_ACTIONS = frozenset(
     {

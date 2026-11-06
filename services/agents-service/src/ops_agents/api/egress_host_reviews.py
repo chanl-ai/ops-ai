@@ -19,6 +19,7 @@ from .agent_registry import registry, review_view
 from .auth import Principal, caller_of
 from .deps import Runtime
 from .review_sla import sla_hours
+from .team_names import security_team
 
 KIND = "egress_host"
 
@@ -40,9 +41,9 @@ async def open_review(rt: Runtime, me: Principal, host: str, app: str) -> tuple[
     return made, True
 
 
-def team(rt: Runtime) -> str:
-    """The Security team decides every host, as it keeps the tenant's allow-list."""
-    return rt.settings.security_team_id
+async def team(rt: Runtime) -> str | None:
+    """The workspace's Security team decides every host, as it keeps the tenant's allow-list."""
+    return await security_team(rt)
 
 
 async def view(rt: Runtime, req: dict[str, Any]) -> dict[str, Any]:

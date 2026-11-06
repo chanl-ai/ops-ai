@@ -165,11 +165,13 @@ _PLACEHOLDER = re.compile(r"\{(\w+)\}")
 
 def per_account(manifest: Manifest) -> set[str]:
     """The settings each account keeps its own: those read from the token (the instance) and those the sign-in
-    addresses name (Salesforce's login_url), since a sandbox signs in elsewhere and lands elsewhere."""
+    addresses name, since a test account signs in elsewhere and lands elsewhere; a setting `asked: config` (Salesforce's
+    login_url) is its auth config's, never an account's."""
     c = manifest.connection
     named = {n for t in (c.authorize_url, c.token_url, c.revoke_url) if t for n in _PLACEHOLDER.findall(t)}
     looked = {c.after_sign_in.setting} if c.after_sign_in else set[str]()
-    return (set(c.from_token) | named | looked) & set(manifest.settings)
+    configs = {k for k, s in manifest.settings.items() if s.asked == "config"}
+    return ((set(c.from_token) | named | looked) & set(manifest.settings)) - configs
 
 
 def fixed_fields(manifest: Manifest) -> list[str]:
@@ -506,7 +508,7 @@ class PluginHost:
         merged: dict[str, Any] = {k: s.default for k, s in m.settings.items() if s.default is not None}
         merged |= {k: v for k, v in team_settings.items() if k in m.settings and k not in own}
         # The account's own, and the registration's its app credential holds (own_and_registration).
-        mine = own | set(m.connection.credential_settings)
+        mine = own | set(m.config_settings)
         merged |= {k: v for k, v in (own_values or {}).items() if k in mine}
         merged |= self.locked_settings(m.id)
         return merged

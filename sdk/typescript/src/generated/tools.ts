@@ -2258,20 +2258,32 @@ export interface components {
         };
         /**
          * CredentialField
-         * @description A setting an app credential may hold: one of a plugin's credential_settings, or a custom app's client field.
+         * @description A setting an auth config holds, as its New and Edit windows draw and check it: a plugin's setting `asked:
+         *     config` (or one of its credential_settings), or a custom app's client field. The console builds its form schema
+         *     from these, and the API checks a saved value against the same.
          */
         CredentialField: {
+            /** Choices */
+            choices?: components["schemas"]["SettingChoice"][] | null;
+            /** Default */
+            default?: string | null;
             /** Help */
             help?: string | null;
             /** Label */
             label: string;
             /** Name */
             name: string;
+            other?: components["schemas"]["SettingOther"] | null;
             /**
              * Pem
              * @default false
              */
             pem: boolean;
+            /**
+             * Required
+             * @default false
+             */
+            required: boolean;
         };
         /** CredentialSecretIn */
         CredentialSecretIn: {
@@ -3856,6 +3868,8 @@ export interface components {
         };
         /** PluginSetting */
         PluginSetting: {
+            /** Asked */
+            asked?: ("config" | "connect" | "settings") | null;
             /** Choices */
             choices?: components["schemas"]["SettingChoice"][] | null;
             /**

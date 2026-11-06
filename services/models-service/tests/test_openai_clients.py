@@ -25,7 +25,14 @@ def _openai(models: Models, secret: str) -> AsyncOpenAI:
     # No retries: a refused call must reach the caller once, not be repeated behind its back.
     # The OpenAI SDK is typed against httpx2, so its client reaches the app over httpx2's own ASGI transport.
     http = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=models.app))
-    return AsyncOpenAI(base_url="http://models/v1/models", api_key=secret, max_retries=0, http_client=http)
+    # As a calling service sends it: the tenant whose provider keys the call uses.
+    return AsyncOpenAI(
+        base_url="http://models/v1/models",
+        api_key=secret,
+        max_retries=0,
+        http_client=http,
+        default_headers={"X-Tenant-Id": "local"},
+    )
 
 
 def _agent(models: Models, secret: str, alias: str = "bank-standard") -> Agent[None, str]:
@@ -185,7 +192,7 @@ async def test_an_alias_version_sets_the_reasoning_effort_a_request_leaves_unset
             listed = (await client.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).json()["data"]
             assert listed[0]["reasoningEffort"] == effort, listed
         _, secret = await models.key(budget="5")
-        auth = {"Authorization": f"Bearer {secret}"}
+        auth = {"Authorization": f"Bearer {secret}", "X-Tenant-Id": "local"}
         ask = {"messages": [{"role": "tool", "content": "x"}], "stream": stream}
         for body in ({"model": fast}, {"model": fast, "reasoning_effort": "high"}, {"model": plain}):
             r = await client.post("/v1/models/chat/completions", json=ask | body, headers=auth)

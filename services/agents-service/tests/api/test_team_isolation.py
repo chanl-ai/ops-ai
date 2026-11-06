@@ -145,6 +145,7 @@ def _two_teams(sub: str, acting: str, roles: dict[str, str]) -> dict[str, str]:
         "email": f"{sub}@harborpine.example",
         "name": sub,
         "kind": "person",
+        "security_team": "team_security",
         "aud": ["agents"],
         "tenant_id": TENANT,
         "team_ids": list(roles),

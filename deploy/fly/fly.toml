@@ -47,7 +47,6 @@ kill_timeout = 30
   OPS_FILES_PUBLIC_URL = "https://<your-app>.fly.dev/api/files"
   # No scanner runs here: the inline test engine marks clean files clean; `hook` would leave every upload pending.
   OPS_FILES_SCANNING = "eicar"
-  OPS_MAILBOX_SOURCE = "none"
   OPS_MAIL_PROVIDER = "none"
   # The features this install turns on, separated by commas (docs/deploy/install.md, Feature flags); unset turns none on.
   # OPS_FLAGS = "mcp_gateway"

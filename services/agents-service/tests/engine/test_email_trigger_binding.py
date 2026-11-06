@@ -49,6 +49,7 @@ def editor() -> dict[str, str]:
         "email": "erin@harborpine.example",
         "name": "erin",
         "kind": "person",
+        "security_team": "team_security",
         "aud": ["agents"],
         "tenant_id": TENANT,
         "team_ids": ["team_ops"],

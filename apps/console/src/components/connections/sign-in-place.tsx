@@ -7,13 +7,20 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { SystemCard } from '@/hooks/systems-queries';
 
-type Setting = NonNullable<NonNullable<SystemCard['plugin']>['settings']>[number];
+type PluginSetting = NonNullable<NonNullable<SystemCard['plugin']>['settings']>[number];
+// A plugin's setting, or the same field as an auth config's answer describes it: what the control reads of either.
+type Setting = Pick<PluginSetting, 'label'> & {
+  perAccount?: boolean;
+  locked?: boolean;
+  choices?: { value: string | number | boolean; label: string; hint?: string | null; testAccount?: boolean | null }[] | null;
+  other?: { label: string; value: string; hosts: string[]; hint?: string | null; placeholder?: string | null; testAccountHosts?: string[] | null } | null;
+};
 
 // The Select's value for "your company's address", which is no choice of the plugin's.
 const OTHER = '__other__';
 
 /** A setting that asks where an account signs in: one with the plugin's choices or a typed company host. */
-export const isSignInPlace = (s: Setting) => s.perAccount && !s.locked && Boolean(s.choices?.length || s.other);
+export const isSignInPlace = (s: PluginSetting) => s.perAccount && !s.locked && s.asked !== 'config' && s.asked !== 'settings' && Boolean(s.choices?.length || s.other);
 
 /** Whether `value` is a place test accounts sign in at: a choice marked so, or a typed host under a test host. */
 export function isTestPlace(setting: Setting, value: string): boolean {

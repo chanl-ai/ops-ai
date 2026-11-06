@@ -24,6 +24,7 @@ def reader(policies: dict[str, Any] | None) -> dict[str, str]:
         "email": "rita@harborpine.example",
         "name": "rita",
         "kind": "person",
+        "security_team": "team_security",
         "aud": ["agents"],
         "tenant_id": TENANT,
         "team_ids": ["team_ops"],

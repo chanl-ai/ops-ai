@@ -300,13 +300,6 @@ class CredentialDeleted(TypedDict, closed=True):
     moved: int
 
 
-class CredentialField(TypedDict, closed=True):
-    help: NotRequired[str | None]
-    label: str
-    name: str
-    pem: NotRequired[bool]
-
-
 class CredentialSecretIn(TypedDict, closed=True):
     clientSecret: str
 
@@ -1235,51 +1228,6 @@ class AppCredential(TypedDict, closed=True):
     type: Literal["ops_ai", "own"]
 
 
-class AppCredentialChange(TypedDict, closed=True):
-    accounts: int
-    accountsList: list[CredentialAccount]
-    app: str
-    appName: str
-    clientId: NotRequired[str | None]
-    created: NotRequired[str | None]
-    createdBy: NotRequired[str | None]
-    fields: NotRequired[list[CredentialField]]
-    holdsSecret: NotRequired[bool]
-    id: str
-    name: str
-    permissions: list[Permission]
-    redirectUri: NotRequired[str | None]
-    secretEnds: NotRequired[str | None]
-    settings: NotRequired[dict[str, Any]]
-    signInAgain: int
-    status: Literal["working", "not_tested", "failing"]
-    teamId: str
-    type: Literal["ops_ai", "own"]
-    updated: NotRequired[str | None]
-
-
-class AppCredentialDetail(TypedDict, closed=True):
-    accounts: int
-    accountsList: list[CredentialAccount]
-    app: str
-    appName: str
-    clientId: NotRequired[str | None]
-    created: NotRequired[str | None]
-    createdBy: NotRequired[str | None]
-    fields: NotRequired[list[CredentialField]]
-    holdsSecret: NotRequired[bool]
-    id: str
-    name: str
-    permissions: list[Permission]
-    redirectUri: NotRequired[str | None]
-    secretEnds: NotRequired[str | None]
-    settings: NotRequired[dict[str, Any]]
-    status: Literal["working", "not_tested", "failing"]
-    teamId: str
-    type: Literal["ops_ai", "own"]
-    updated: NotRequired[str | None]
-
-
 class AppResource(TypedDict):
     canAdd: bool
     canRemove: NotRequired[bool]
@@ -1351,6 +1299,17 @@ class ConnectionKinds(TypedDict, closed=True):
     redirectUri: NotRequired[str | None]
 
 
+class CredentialField(TypedDict, closed=True):
+    choices: NotRequired[list[SettingChoice] | None]
+    default: NotRequired[str | None]
+    help: NotRequired[str | None]
+    label: str
+    name: str
+    other: NotRequired[SettingOther | None]
+    pem: NotRequired[bool]
+    required: NotRequired[bool]
+
+
 class DiscoveredOperation(TypedDict, closed=True):
     access: Literal["read", "write"]
     description: str
@@ -1394,16 +1353,6 @@ class EnvelopeAccountDetail(TypedDict, closed=True):
 
 class EnvelopeAllowList(TypedDict, closed=True):
     data: AllowList
-    success: Literal[True]
-
-
-class EnvelopeAppCredentialChange(TypedDict, closed=True):
-    data: AppCredentialChange
-    success: Literal[True]
-
-
-class EnvelopeAppCredentialDetail(TypedDict, closed=True):
-    data: AppCredentialDetail
     success: Literal[True]
 
 
@@ -1688,6 +1637,7 @@ class OperationPatchIn(TypedDict, closed=True):
 
 
 class PluginSetting(TypedDict, closed=True):
+    asked: NotRequired[Literal["config", "connect", "settings"] | None]
     choices: NotRequired[list[SettingChoice] | None]
     credential: NotRequired[bool]
     default: NotRequired[str | None]
@@ -1819,11 +1769,66 @@ class ToolUsedBy(TypedDict, closed=True):
     workflows: list[ToolUser]
 
 
+class AppCredentialChange(TypedDict, closed=True):
+    accounts: int
+    accountsList: list[CredentialAccount]
+    app: str
+    appName: str
+    clientId: NotRequired[str | None]
+    created: NotRequired[str | None]
+    createdBy: NotRequired[str | None]
+    fields: NotRequired[list[CredentialField]]
+    holdsSecret: NotRequired[bool]
+    id: str
+    name: str
+    permissions: list[Permission]
+    redirectUri: NotRequired[str | None]
+    secretEnds: NotRequired[str | None]
+    settings: NotRequired[dict[str, Any]]
+    signInAgain: int
+    status: Literal["working", "not_tested", "failing"]
+    teamId: str
+    type: Literal["ops_ai", "own"]
+    updated: NotRequired[str | None]
+
+
+class AppCredentialDetail(TypedDict, closed=True):
+    accounts: int
+    accountsList: list[CredentialAccount]
+    app: str
+    appName: str
+    clientId: NotRequired[str | None]
+    created: NotRequired[str | None]
+    createdBy: NotRequired[str | None]
+    fields: NotRequired[list[CredentialField]]
+    holdsSecret: NotRequired[bool]
+    id: str
+    name: str
+    permissions: list[Permission]
+    redirectUri: NotRequired[str | None]
+    secretEnds: NotRequired[str | None]
+    settings: NotRequired[dict[str, Any]]
+    status: Literal["working", "not_tested", "failing"]
+    teamId: str
+    type: Literal["ops_ai", "own"]
+    updated: NotRequired[str | None]
+
+
 class AppTool(TypedDict, closed=True):
     access: str
     name: str
     title: str
     usedBy: NotRequired[ToolUsedBy | None]
+
+
+class EnvelopeAppCredentialChange(TypedDict, closed=True):
+    data: AppCredentialChange
+    success: Literal[True]
+
+
+class EnvelopeAppCredentialDetail(TypedDict, closed=True):
+    data: AppCredentialDetail
+    success: Literal[True]
 
 
 class EnvelopeExecutionList(TypedDict, closed=True):

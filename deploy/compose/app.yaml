@@ -42,7 +42,6 @@ x-settings: &settings
   OPS_FILES_SCANNING: ${OPS_FILES_SCANNING:-eicar}
   # The features this install turns on (docs/deploy/install.md, Feature flags); empty turns none on.
   OPS_FLAGS: ${OPS_FLAGS:-}
-  OPS_MAILBOX_SOURCE: none
   OPS_MAIL_PROVIDER: ${OPS_MAIL_PROVIDER:-none}
   OPS_MAIL_FROM: ${OPS_MAIL_FROM:-}
   OPS_SMTP_HOST: ${OPS_SMTP_HOST:-}
@@ -84,6 +83,7 @@ services:
       OPS_PLATFORM_SIGNING_KEY: ${OPS_PLATFORM_SIGNING_KEY:?}
       OPS_SERVICE_SIGNING_KEY: ${OPS_SVC_KEY_PLATFORM:?}
       OPS_SERVICE_SIGNING_KID: svc-platform-1
+      OPS_SECRETS_KEY: ${OPS_SECRETS_KEY:?}
 
   # agents-service's /health answers 503 until a model is connected (docs/deploy/compose.md, "Connect a model"), so
   # nothing waits on it being healthy.

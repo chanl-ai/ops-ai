@@ -31,7 +31,6 @@ from typing import Any
 
 from ops_identity import Principal
 from ops_service_kit.errors import Forbidden
-from ops_service_kit.settings import Settings
 
 from .catalogue import (
     ACTIONS,
@@ -95,14 +94,15 @@ class Grids:
 
 @dataclass
 class Access:
-    """`can` with this deployment's Security team and grid source. Services build one at startup."""
+    """`can` with a grid source. Services build one at startup."""
 
-    # The deployment's security team (settings `security_team_id`), for a token that does not name its workspace's.
-    security_team: str = field(default_factory=lambda: Settings().security_team_id)
+    # The workspace's Security team for a principal whose token names none: platform-service's own checks, which
+    # read the workspace record. A service takes it from the token only.
+    security_team: str | None = None
     grids: Grids = field(default_factory=Grids)
 
-    def security_team_of(self, p: Principal) -> str:
-        """The caller's workspace security team, from their token; the deployment's when the token has none."""
+    def security_team_of(self, p: Principal) -> str | None:
+        """The caller's workspace Security team, from their token (the workspace's record); None when it names none."""
         return p.security_team or self.security_team
 
     def roles_in(self, p: Principal, team: str) -> list[str]:
@@ -182,6 +182,11 @@ class Access:
         if p.kind == "api_key":
             return _key(p, area, action, team=team, owner=owner, what=what)
         held_in = self.security_team_of(p) if (area, action) in SECURITY_TEAM_ACTIONS else team or p.team_id
+        if held_in is None and (area, action) in SECURITY_TEAM_ACTIONS:
+            raise Forbidden(
+                f"This workspace names no Security team, so nobody may {action} {what}. A workspace admin names it.",
+                code="no_security_team",
+            )
         if held_in is None:
             raise Forbidden("Choose a team with the X-Team-Id header.", code="team_required")
         if (area, action) not in SECURITY_TEAM_ACTIONS and not from_any_team:
@@ -305,7 +310,7 @@ def can(
     code: str = "role_required",
     protection: str | None = None,
 ) -> Scope:
-    """`Access.can` with the default Security team; services with another call their own `Access`."""
+    """`Access.can` with built-in grids and the Security team the token names."""
     return DEFAULT.can(
         p,
         area,

@@ -151,7 +151,7 @@ paging, knowledge sources and templates.
 | `connection.health_check` | The path Test connection calls |
 | `connection.sign_in_errors` | What a refused sign-in says, by the system's error code: `{error, description_contains?, say, who}`; see Where a team signs in |
 | `connection.credential_settings` | Settings that belong to the OAuth app's registration (a Microsoft tenant, an Okta domain): the team's app credential holds them, and every account signing in with it reads them from there |
-| `settings` | Values a team sets. `default`, `lockable` (the install can fix it for every team, `OPS_PLUGIN_LOCKED`), `from_token` or `after_sign_in` (only the sign-in sets it), and `choices` and `other` (the only values it takes; see Where a team signs in) |
+| `settings` | Values a team sets. `default`, `lockable` (the install can fix it for every team, `OPS_PLUGIN_LOCKED`), `from_token` or `after_sign_in` (only the sign-in sets it), and `choices` and `other` (the only values it takes; see Where a team signs in), and `asked` (which window asks for it; see Where a setting is asked) |
 | `headers` | Headers on every request the plugin makes, a Python tool's too; a tool's own `headers` add to them |
 | `egress` | The hosts a tool may reach, usually a setting such as `{instance_url}` |
 | `endpoint` | The base address every request template is relative to |
@@ -307,6 +307,53 @@ settings:
 `ops plugin validate` refuses a choice whose value is not of the setting's type, an `other` with no `hosts`, a value
 without `{host}` or a suffix without its leading dot, a `sign_in_errors` entry with no `say` or no `who`, and a
 `credential_settings` name that is not a setting.
+
+## Where a setting is asked
+
+`asked` names the one window that asks for a setting, and the console draws that window's fields from the manifest,
+so no plugin needs console code:
+
+| `asked` | Asked in | Held by |
+|---|---|---|
+| `config` | The auth config's New and Edit windows | The auth config, as `connection.credential_settings` are: every account on it reads the same value |
+| `connect` | The Connect and Add account windows | The account, or the team when the sign-in addresses do not name it |
+| `settings` | The app's Settings tab only | The team |
+| unset | An account's own when the sign-in addresses name it, else the team's | As asked |
+
+Each field's type comes from the setting: `type` (`string`, `number`, `integer`, `boolean`), `title` as its label,
+`default`, and `choices` with `other` for a value that must be one of a list or a host under allowed suffixes. A field
+with no `default` must be filled. The auth config's permissions are a field too: one box per `connection.scopes`
+entry, with `required: true` ones ticked and locked.
+
+tools-service checks every value against the same declaration when an auth config is created or edited: an unknown
+setting or one outside its choices is refused with a 400 whose message names the allowed values in a sentence, and the
+console builds the form's checks from the declaration (`configSchema` in `apps/console/src/lib/field-schema.ts`), so
+both refuse the same values. Changing an `asked: config` value or the permissions on an auth config re-renders the
+sign-in addresses of every account on it and marks each to sign in again; the Connect window shows the address as
+"Signs in at" with a link to edit the auth config.
+
+Salesforce asks where to sign in on the auth config, because one Connected App belongs to one org:
+
+```yaml
+connection:
+  authorize_url: "{login_url}/authorize"
+  token_url: "{login_url}/token"
+  scopes:
+    - { id: openid, label: "Know which account signed in", required: true }
+    - { id: api, label: "Records, with the signed-in user's permissions", required: true }
+settings:
+  login_url:
+    type: string
+    title: Where do you sign in to Salesforce?
+    asked: config
+    default: "https://login.salesforce.com/services/oauth2"
+    choices:
+      - { value: "https://login.salesforce.com/services/oauth2", label: login.salesforce.com }
+      - { value: "https://test.salesforce.com/services/oauth2", label: test.salesforce.com, test_account: true }
+    other: { label: Your company's address, value: "https://{host}/services/oauth2", hosts: [.my.salesforce.com] }
+```
+
+`ops plugin validate` refuses `asked` on a setting the sign-in fills (`from_token` or `after_sign_in`).
 
 ## Writing a Python tool
 

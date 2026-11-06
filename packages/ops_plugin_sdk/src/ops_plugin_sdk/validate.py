@@ -332,6 +332,9 @@ def _offered(manifest: Manifest) -> list[Problem]:
             out.append(Problem("connection.credential_settings", f"{name} names no setting"))
         elif setting.at_sign_in:
             out.append(Problem("connection.credential_settings", f"{name} is filled at sign-in, not by an app"))
+    for name, setting in manifest.settings.items():
+        if setting.asked is not None and setting.at_sign_in:
+            out.append(Problem(f"settings.{name}", f"{name} is filled at sign-in, so no window asks for it"))
     return out
 
 

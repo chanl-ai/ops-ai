@@ -6,7 +6,7 @@ outside Security approving a security change, and an approval that never reaches
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -37,6 +37,19 @@ BODY = {
 def service(name: str, team: str | None = None) -> str:
     token = mint_service_token(dev_service_signer(), service=name, audience="agents", tenant_id=TENANT, team_id=team)
     return f"Bearer {token}"
+
+
+class WorkspaceTeams:
+    """platform-service's record of the workspace's Security team, as agents-service reads it (team_names.py)."""
+
+    def __init__(self, security: str | None = "team_security") -> None:
+        self.security = security
+
+    async def security_team(self) -> str | None:
+        return self.security
+
+    async def name(self, team_id: str) -> str | None:
+        return None
 
 
 class FakeTools:
@@ -81,6 +94,7 @@ async def stack() -> AsyncIterator[tuple[AsyncClient, FakeTools]]:
         AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c,
     ):
         app.state.runtime.tool_reviews = tools
+        app.state.runtime.team_names = WorkspaceTeams()
         yield c, tools
 
 
@@ -188,3 +202,19 @@ async def test_the_review_keeps_and_shows_what_tools_service_said_it_approves(
     review = await c.get(f"/reviews/{opened.json()['data']['id']}", headers=SECURITY)
     assert review.status_code == 200, review.text
     assert review.json()["data"]["toolModule"]["diff"] == diff
+
+
+async def test_the_workspaces_own_security_team_decides_a_security_change(
+    stack: tuple[AsyncClient, FakeTools],
+) -> None:
+    """The deciding team is the workspace's record, read from platform-service, not a team the install names."""
+    c, _ = stack
+    c_app = cast(Any, c._transport).app  # pyright: ignore[reportPrivateUsage]
+    c_app.state.runtime.team_names = WorkspaceTeams("team_sec2")
+    rid = (await _open(c)).json()["data"]["id"]
+    decision = f"/v1/publish-requests/{rid}/decision"
+    old_team = await c.post(decision, json={"decision": "approved"}, headers=SECURITY)
+    assert old_team.status_code == 403, old_team.text
+    sec2 = person("noor", "team_sec2", "approver")
+    approved = await c.post(decision, json={"decision": "approved"}, headers=sec2)
+    assert approved.status_code == 200, approved.text

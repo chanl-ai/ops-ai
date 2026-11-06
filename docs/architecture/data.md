@@ -85,7 +85,8 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | platform-service | `ops_platform.store.policies` | `PolicyStore` | TRANSACTION | none |
 | platform-service | `ops_platform.store.roles` | `RoleStore` | RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.signin` | `SignInStore` | CAS, RLS, TRANSACTION | none |
-| platform-service | `ops_platform.store.tables` | none: no repository class | | `api_keys`, `audit_entries`, `members`, `password_credentials`, `password_resets`, `platform_outbox`, `policies`, `role_assignments`, `role_permissions`, `roles`, `sessions`, `signin_domains`, `signin_email_failures`, `signin_flows`, `signin_identities`, `signin_lockouts`, `signin_providers`, `teams`, `tenants`, `users` |
+| platform-service | `ops_platform.store.signin_secrets` | `SignInSecretStore` | LOCK, RLS, TRANSACTION | none |
+| platform-service | `ops_platform.store.tables` | none: no repository class | | `api_keys`, `audit_entries`, `members`, `password_credentials`, `password_resets`, `platform_outbox`, `policies`, `role_assignments`, `role_permissions`, `roles`, `sessions`, `signin_domains`, `signin_email_failures`, `signin_flows`, `signin_identities`, `signin_lockouts`, `signin_providers`, `signin_secrets`, `teams`, `tenants`, `users` |
 | platform-service | `ops_platform.store.teams` | `TeamAdminStore` | RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.workspace` | `WorkspaceStore` | RLS, TRANSACTION | none |
 | tools-service | `ops_tools.store.calls` | `CallLog` | CAS, TRANSACTION | `gateway_calls`, `gateway_fences` |

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -16,7 +15,7 @@ import uvicorn
 from ops_access.platform_events import platform_events_router
 from ops_agents.activities.catalog import load_catalog
 from ops_documents_client import DocumentsClient
-from ops_email import EmailProviders, MailSender
+from ops_email import EmailProviders
 from ops_files_client import FilesClient
 from ops_identity import Auth, ServiceClient
 from ops_identity.fastapi import DEV_TENANT
@@ -76,33 +75,12 @@ from .store.review_handoffs import ReviewHandoffs
 from .store.secrets import SecretStore
 from .store.send_policies import SendPolicies
 from .store.team_defaults import TeamDefaults
-from .tools import LocalToolRunner, ToolCaller
+from .tools import LocalToolRunner
 
 # This service's own migration chain: it starts only on a database that records the chain's head.
 MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 
 log = get_logger("ops_tools")
-
-
-async def secret_value(secrets: SecretResolver, tenant_id: str, team_id: str | None, name: str) -> str:
-    """The platform sender's secret (the SMTP password) in the team the call acts in."""
-    return (await secrets.lookup(tenant_id, team_id, [name], tool="send_reply", actor="tools:send_reply"))[name]
-
-
-def mail_senders(settings: Settings, secrets: SecretResolver) -> Callable[[ToolCaller], MailSender]:
-    """One sender per tenant and team, made at its first send and kept: each reads its own team's SMTP password, and
-    its provider clients and token are reused rather than opened per message."""
-    senders: dict[tuple[str, str | None], MailSender] = {}
-
-    def sender(caller: ToolCaller) -> MailSender:
-        tenant, team = caller.tenant_id, caller.team_id
-        if (tenant, team) not in senders:
-            senders[tenant, team] = EmailProviders.from_settings(
-                settings, secret=lambda name: secret_value(secrets, tenant, team, name)
-            ).sender()
-        return senders[tenant, team]
-
-    return sender
 
 
 async def _seed(settings: Settings, seed: dict[str, Any], catalog: list[dict[str, Any]] | None) -> None:
@@ -170,7 +148,6 @@ def main() -> None:
         egress=policy,
         http=egress_client(policy, ca_file=ca),
         secrets=secrets,
-        security_team=settings.security_team_id,
         workflows=AgentsWorkflows(client("agents", agents_url, ["workflows:view"])),
         reviews=Reviews(client("agents", agents_url)),
         # The team's publish-review mode, read from platform-service on each publish so a change applies at once.
@@ -211,7 +188,6 @@ def main() -> None:
         egress=policy,
         # A sign-in returns to the console's page, which hands the code to this service.
         console_url=settings.console_url,
-        security_team=settings.security_team_id,
         # An MCP server's sign-in is found from the server, through the egress client.
         discovery=Discovery(egress_client(policy, ca_file=ca), policy),
         # Test connection signs its read in as a call is, through the same egress client.
@@ -245,11 +221,11 @@ def main() -> None:
         # /mcp is served only with the mcp_gateway flag on in the install config.
         flags=settings.feature_flags,
         log=calls,
-        # The mail provider settings pick (OPS_MAIL_PROVIDER); a missing secret stops start-up here. An SMTP password
-        # named by OPS_SMTP_PASSWORD_SECRET is read from the Secrets page at each send, as send_reply.
+        # send_reply naming no mailbox sends from the install's own sender (OPS_MAIL_PROVIDER); a missing secret
+        # stops start-up here.
         runner=LocalToolRunner(
             catalog,
-            mail_for=mail_senders(settings, secrets),
+            EmailProviders.from_settings(settings).sender(),
             mailbox_sender=mailbox_senders.sender,
             cases=client("agents", agents_url, ["cases:view", "cases:create"]),
             decisions=modules,
@@ -318,7 +294,7 @@ def main() -> None:
             expressions_router(),
             secrets_router(secrets, modules=store, credentials=connection_store),
             send_policy_router(SendPolicies(engine), directory),
-            mocks_router(MockStore(engine), store, directory, security_team=settings.security_team_id),
+            mocks_router(MockStore(engine), store, directory),
             *(
                 [
                     plugins_router(

@@ -1,19 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""The providers a process uses, picked from its settings: `Settings.mailbox_source` for mail in and
-`Settings.mail_provider` for mail out. Code names no provider; a deployment changes provider by changing a setting and
-its secrets. Built once per process; a missing secret raises here, at start-up, never at the first message."""
+"""The install's own sender, picked from its settings (`Settings.mail_provider`): the mail the platform sends itself,
+such as a password reset. Code names no provider; a deployment changes provider by changing a setting and its secrets.
+Built once per process; a missing secret raises here, at start-up, never at the first message. Mail in is a team's
+mailbox records, each read by its own provider, never a setting."""
 
 from __future__ import annotations
-
-from collections.abc import Awaitable, Callable
 
 import httpx
 
 from ops_service_kit.settings import Settings
 
-from .graph import GraphMailSource, GraphSender, GraphToken
-from .inbound import MailboxNotConfiguredError, MailSource
+from .graph import GraphSender, GraphToken
 from .outbound import (
     FolderSender,
     MailNotConfiguredError,
@@ -23,8 +21,6 @@ from .outbound import (
     UnconfiguredSender,
 )
 
-SecretRead = Callable[[str], Awaitable[str]]
-
 
 class EmailProviders:
     def __init__(
@@ -32,31 +28,24 @@ class EmailProviders:
         settings: Settings,
         *,
         transport: httpx.AsyncBaseTransport | None = None,
-        secret: SecretRead | None = None,
     ) -> None:
-        """`secret` reads a Secrets-page secret by name; only tools-service, which holds them, passes one."""
         self.settings = settings
-        self._secret = secret
         self._clients: list[httpx.AsyncClient] = []
         self._transport = transport
         self._graph: tuple[httpx.AsyncClient, GraphToken] | None = None
-        uses_graph = settings.mailbox_source == "graph" or settings.mail_provider == "graph"
-        if uses_graph:
+        if settings.mail_provider == "graph":
             missing = [
                 n for n in ("graph_tenant_id", "graph_client_id", "graph_client_secret") if not getattr(settings, n)
             ]
             if missing:
-                error = MailboxNotConfiguredError if settings.mailbox_source == "graph" else MailNotConfiguredError
-                raise error(f"Microsoft Graph needs {', '.join('OPS_' + n.upper() for n in missing)}.")
+                raise MailNotConfiguredError(f"Microsoft Graph needs {', '.join('OPS_' + n.upper() for n in missing)}.")
         if settings.environment != "dev" and settings.mail_provider == "fake":
             raise MailNotConfiguredError("mail_provider 'fake' is for dev only; it writes mail to a folder.")
         self._sender = self._build_sender()
 
     @classmethod
-    def from_settings(
-        cls, settings: Settings, *, transport: httpx.AsyncBaseTransport | None = None, secret: SecretRead | None = None
-    ) -> EmailProviders:
-        return cls(settings, transport=transport, secret=secret)
+    def from_settings(cls, settings: Settings, *, transport: httpx.AsyncBaseTransport | None = None) -> EmailProviders:
+        return cls(settings, transport=transport)
 
     def _client(self, base_url: str) -> httpx.AsyncClient:
         client = httpx.AsyncClient(base_url=base_url, timeout=30, transport=self._transport)
@@ -79,14 +68,6 @@ class EmailProviders:
             self._graph = (http, token)
         return self._graph
 
-    def source(self, mailbox: str, folder: str = "inbox") -> MailSource:
-        """The mail source for one folder of one mailbox."""
-        s = self.settings
-        if s.mailbox_source == "graph":
-            http, token = self._graph_parts()
-            return GraphMailSource(http, token, mailbox, folder)
-        raise MailboxNotConfiguredError("No mail source is configured: set OPS_MAILBOX_SOURCE=graph.")
-
     def _build_sender(self) -> MailSender:
         s = self.settings
         if s.mail_provider == "none":
@@ -98,17 +79,6 @@ class EmailProviders:
         if s.mail_provider == "smtp":
             if not s.smtp_host:
                 raise MailNotConfiguredError("mail_provider 'smtp' needs OPS_SMTP_HOST.")
-            source: Callable[[], Awaitable[str]] | None = None
-            if s.smtp_password_secret:
-                if self._secret is None:
-                    raise MailNotConfiguredError("smtp_password_secret is read by tools-service, which holds secrets.")
-                name, read = s.smtp_password_secret, self._secret
-
-                async def from_secret() -> str:
-                    return await read(name)
-
-                source = from_secret
-
             return SmtpSender(
                 s.smtp_host,
                 s.smtp_port,
@@ -116,7 +86,6 @@ class EmailProviders:
                 username=s.smtp_username,
                 password=s.smtp_password.get_secret_value() if s.smtp_password else None,
                 starttls=s.smtp_starttls,
-                password_source=source,
             )
         if s.mail_provider == "resend":
             if not s.resend_api_key:

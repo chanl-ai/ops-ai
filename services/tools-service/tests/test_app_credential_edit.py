@@ -128,7 +128,8 @@ async def test_a_credentials_page_says_what_it_holds_and_may_hold(client: httpx.
     )
     page = (await client.get(f"/v1/app-credentials/{credential}", headers=admin(tenant))).json()["data"]
     assert page["settings"] == {"tenant": "contoso"}, page
-    assert page["fields"] == [{"name": "tenant", "label": "Directory tenant", "help": None, "pem": False}], page
+    held = {"name": "tenant", "label": "Directory tenant", "help": None, "pem": False, "required": False}
+    assert page["fields"] == [{**held, "default": "common", "choices": None, "other": None}], page
     custom = (
         await client.post("/v1/apps", json={"name": "Ledger", "authKind": "oauth2_auth_code"}, headers=admin(tenant))
     ).json()["data"]

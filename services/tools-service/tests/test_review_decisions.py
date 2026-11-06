@@ -35,6 +35,7 @@ def person(tenant: str, name: str, roles: dict[str, str]) -> dict[str, str]:
         "email": f"{name.split(maxsplit=1)[0].lower()}@bank.example",
         "name": name,
         "kind": "person",
+        "security_team": "team_security",
         "aud": ["tools"],
         "tenant_id": tenant,
         "team_ids": list(roles),

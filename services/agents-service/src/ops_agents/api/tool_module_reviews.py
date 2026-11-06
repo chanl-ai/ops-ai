@@ -26,6 +26,7 @@ from .agent_registry import registry, review_view
 from .auth import Principal, caller_of
 from .deps import Runtime
 from .review_sla import sla_hours
+from .team_names import security_team
 
 KIND = "tool_module"
 TOOLS = "service:tools"
@@ -103,10 +104,10 @@ async def open_for(rt: Runtime, svc: Caller, input_body: dict[str, Any]) -> dict
     )
 
 
-def team(rt: Runtime, req: dict[str, Any]) -> str | None:
-    """Security decides a security change; the module's team decides any other."""
+async def team(rt: Runtime, req: dict[str, Any]) -> str | None:
+    """The workspace's Security team decides a security change; the module's team decides any other."""
     body = req["body"]
-    return rt.settings.security_team_id if body.get("security", True) else (body.get("teamId") or None)
+    return await security_team(rt) if body.get("security", True) else (body.get("teamId") or None)
 
 
 async def view(rt: Runtime, req: dict[str, Any]) -> dict[str, Any]:
