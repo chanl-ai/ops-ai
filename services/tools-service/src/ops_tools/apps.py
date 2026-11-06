@@ -720,11 +720,10 @@ class Apps:
         return await self.connections.create(who, i.model_dump())
 
     async def delete_app(self, who: Caller, app_id: str) -> dict[str, Any]:
-        """Deletes a custom app: every account of it and their secrets. While a tool points at any of its accounts the
-        delete is refused, naming the tools (with their ids, so each is linked) and the accounts it would take, since
-        the tool's next call would fail; nothing is deleted. A plugin's app is turned off instead."""
-        if plugin_of({"app_id": app_id}) is not None:
-            raise ValidationFailed("A plugin's app is turned off, not deleted.", code="plugin_app")
+        """Deletes an app from the team: every account of it and their secrets, and a plugin's app is turned off (the
+        plugin stays installed for other teams). While a tool points at any of its accounts the delete is refused,
+        naming the tools (with their ids, so each is linked) and the accounts it would take, since the tool's next call
+        would fail; nothing is deleted."""
         self.connections.check(who, "manage")
         accounts = await self.connections.store.accounts(who.tenant_id, who.team.id, app_id)
         if not accounts:
@@ -742,6 +741,8 @@ class Apps:
         # The first account is the app's own row: it goes last, so a failure part way leaves the app listed.
         for a in reversed(accounts):
             await self.connections.delete(who, str(a["id"]))
+        if plugin_of({"app_id": app_id}) is not None and self.plugin_accounts is not None:
+            await self.plugin_accounts.switch(who, app_id, TeamPluginIn(enabled=False))
         return {"accounts": names}
 
     async def switch_tool(self, who: Caller, app_id: str, tool: str, on: bool) -> dict[str, Any]:

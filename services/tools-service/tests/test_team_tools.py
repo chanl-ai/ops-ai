@@ -112,3 +112,20 @@ async def test_an_auth_configs_permissions_follow_the_switched_on_tools(
     turned = await c.put(f"/v1/apps/{sites}/tools/fields_sites_update_record", json={"on": True}, headers=admin(tenant))
     assert turned.status_code == 200 and turned.json()["data"]["askedAtSignIn"] is True, turned.text
     assert "records:write" in await asked()
+
+
+async def test_deleting_a_plugins_app_turns_it_off_and_takes_its_accounts(
+    desk_rig: tuple[Any, TokenDesk],  # noqa: F811
+    tenant: str,
+) -> None:
+    # The plugin stays installed for other teams; this team's accounts and their secrets go, and the app reads off.
+    (c, _, store, _), _ = desk_rig
+    on = await c.put(
+        f"/v1/apps/{APP}/team", json={"enabled": True, "credentials": {"token": "tok-1"}}, headers=admin(tenant)
+    )
+    account = str(on.json()["data"]["connectionId"])
+    gone = await c.delete(f"/v1/apps/{APP}", headers=admin(tenant))
+    assert gone.status_code == 200 and gone.json()["data"]["accounts"], gone.text
+    assert await store.get(tenant, account) is None
+    card = next(a for a in (await c.get("/v1/apps", headers=admin(tenant))).json()["data"] if a["id"] == APP)
+    assert not card.get("connectionId") and card["appState"] != "connected", card
