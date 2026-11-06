@@ -2,14 +2,13 @@
 # Local stack process manager: platform service, agents service, tools service, kb service, files service and the
 # console with chat on the agents service.
 # Each runs in the background with its log in $OPS_LOG_DIR/<svc>.log and its pid in $OPS_RUN_DIR/<svc>.pid. Ports and
-# directories come from make/env.mk (ISOLATED=1 shifts them); run through make, under your secrets manager.
+# directories come from make/env.mk; run through make, under your secrets manager.
 # Usage: scripts/stack.sh up|down|restart|health|start <svc>|stop <svc>|logs <svc>|stop-stale|check-fresh|note-migrations|stop-for-reset
 set -euo pipefail
 # Job control puts each background service in its own process group, so `down` stops its children (uv, node) too.
 set -m
 cd "$(dirname "$0")/.."
 
-STACK=${OPS_STACK:-shared}
 # files before kb: kb-service stores uploads in files-service and its dev seed uploads on start.
 SERVICES=(platform agents runner tools files documents kb console embed apidocs)
 # The workflow runner's worker serves no port; v2 runs (POST /v1/runs) and every mailbox trigger wait until it runs.
@@ -18,22 +17,12 @@ WORKERS=(worker)
 # it (the committed demo rules, so no turn reaches a real provider) and the fake bank the levy cases look customers up
 # in. Ahead of the services: tools-service trusts the fake bank's certificate, which the bank writes on its first start.
 FAKES=(fakeai models fakebank)
-# The shared stack starts all of it, so `make up` after a reboot is enough for `make demo-mailbox` and `make seed-walk`.
-# An isolated stack (use cases) brings its own fakes; it starts the worker only with OPS_STACK_WORKER=1, and its fakes
-# and the worker with OPS_STACK_FAKES=1 (a fresh-database demo: make sample-team and make demo-walk need both).
+# `make up` starts all of it, so after a reboot it is enough for `make demo-mailbox` and `make seed-walk`.
 # OPS_INFRA=external: the fake bank is the compose sidecar aliased as api.bank.test, not a process in this container.
-if [[ "$STACK" == shared ]]; then
-  if [[ "${OPS_INFRA:-}" == external ]]; then
-    UP_SERVICES=(fakeai models "${SERVICES[@]}" worker)
-  else
-    UP_SERVICES=("${FAKES[@]}" "${SERVICES[@]}" worker)
-  fi
-elif [[ "${OPS_STACK_FAKES:-0}" == 1 ]]; then
-  UP_SERVICES=("${FAKES[@]}" "${SERVICES[@]}" worker)
-elif [[ "${OPS_STACK_WORKER:-0}" == 1 ]]; then
-  UP_SERVICES=("${SERVICES[@]}" worker)
+if [[ "${OPS_INFRA:-}" == external ]]; then
+  UP_SERVICES=(fakeai models "${SERVICES[@]}" worker)
 else
-  UP_SERVICES=("${SERVICES[@]}")
+  UP_SERVICES=("${FAKES[@]}" "${SERVICES[@]}" worker)
 fi
 # The Python services and fakes do not reload code; the console does (next dev), so only these can run code older than HEAD.
 PY_SERVICES=(platform agents runner tools files documents kb models worker fakeai fakebank)
@@ -58,24 +47,25 @@ API_DOCS_PORT=${OPS_API_DOCS_PORT:-8799}
 # Fixed in services/tools-service/scripts/fake_bank, which serves on this machine's private address, not loopback.
 FAKE_BANK_PORT=${OPS_FAKE_BANK_PORT:-8745}
 # A restart must start a service the way the stack is already running: the dev .env (model and provider settings) is
-# loaded, and the sign-in mode defaults to the one recorded for the shared stack, not to dev.
+# loaded, and the sign-in mode defaults to the one recorded when the stack started.
 if [ -f ".env" ]; then set -a; . ".env" >/dev/null 2>&1 || true; set +a; fi
 if [ -f ".devcontainer/.env.local" ]; then set -a; . ".devcontainer/.env.local" >/dev/null 2>&1 || true; set +a; fi
-# A demo's settings on top (make demo-salesforce writes the plugin switch, its folder and a fake system's CA and host map),
-# so every restart keeps them; removing the file drops them at the next restart.
-if [ -f "$RUN_DIR/demo-addons.env" ]; then set -a; . "$RUN_DIR/demo-addons.env" >/dev/null 2>&1 || true; set +a; fi
-# A stack with the plugins repo cloned (make demo-salesforce, at the pinned ref) loads every plugin from that clone and
-# nothing else: a copy left in the repo's plugins/ folder is never read beside it.
-if [ -d "$RUN_DIR/plugins/ops-ai-plugins/plugins" ]; then export OPS_PLUGINS_DIR="$(cd "$RUN_DIR/plugins/ops-ai-plugins/plugins" && pwd)"; unset OPS_PLUGIN_PATHS; fi
-# An isolated stack's services reach its own models-service, fake model and fake bank: a laptop .env that names the
-# shared stack's sent an isolated run's model calls to the shared stack's aliases, real models included, and had its
-# tools-service trust the shared fake bank's certificate.
-if [[ "$STACK" == isolated ]]; then unset OPS_MODELS_URL OPS_MODELS_FAKE_OPENAI_URL OPS_EGRESS_CA_FILE; fi
+# A stack on OPS_PORT_OFFSET reaches its own models-service, fake model and fake bank: a laptop .env names the default
+# stack's, which would take its model calls and have its tools-service trust the other fake bank's certificate.
+if [[ "${OPS_PORT_OFFSET:-0}" != 0 ]]; then unset OPS_MODELS_URL OPS_MODELS_FAKE_OPENAI_URL OPS_EGRESS_CA_FILE; fi
 # Side containers: a laptop .env names a CA file and resolve map that are not in this filesystem.
 if [[ "${OPS_INFRA:-}" == external ]]; then
   [[ -n "${OPS_EGRESS_CA_FILE:-}" && -f "${OPS_EGRESS_CA_FILE}" ]] || unset OPS_EGRESS_CA_FILE
   unset OPS_EGRESS_RESOLVE
 fi
+# What the stack stores lives in the main checkout (STACK_HOME, make/env.mk) like its pids and logs, whichever checkout
+# runs the code: uploaded files, knowledge files, sent dev mail, the runner's Python build and the installed plugins
+# stay put when make review moves the stack to the review worktree. A value .env sets wins.
+STATE_HOME=${STACK_HOME:-$PWD}
+DATA_DIR=${OPS_DATA_DIR:-$STATE_HOME/.data}
+export OPS_FILES_DIR=${OPS_FILES_DIR:-$DATA_DIR/files} OPS_KB_FILES_DIR=${OPS_KB_FILES_DIR:-$DATA_DIR/kb-files} \
+  OPS_RUNNER_CACHE_DIR=${OPS_RUNNER_CACHE_DIR:-$DATA_DIR/runner} OPS_PLUGINS_DIR=${OPS_PLUGINS_DIR:-$STATE_HOME/plugins} \
+  OPS_MAIL_FAKE_OUT_DIR=${OPS_MAIL_FAKE_OUT_DIR:-$RUN_DIR/fake-mail-out}
 AUTH=${OPS_STACK_AUTH:-$(cat ".run/stack.auth" 2>/dev/null || echo dev)}
 # Dev-only exception: models-service reads a connection's key from the account's provider keys
 # (Settings > Model providers) first and falls back to these settings in dev; outside dev it refuses them.
@@ -136,22 +126,35 @@ MAILBOX_ENV="OPS_MAILBOXES_SEED_FILE=seed/mailboxes.json"
 # The embed app's origin is configuration: without it agents-service refuses every widget send from the console's
 # Preview and the sample intranet page with 403 origin_not_allowed. JSON, no spaces, so the command's word split keeps it.
 AGENTS_URLS="OPS_MODELS_URL=${OPS_MODELS_URL:-http://127.0.0.1:$MODELS_PORT} OPS_MODELS_KEY=${OPS_MODELS_KEY:-mk_dev_agents} OPS_GATEWAY_URL=http://127.0.0.1:$TOOLS_PORT OPS_KB_URL=http://127.0.0.1:$KB_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_DOCUMENTS_URL=http://127.0.0.1:$DOCUMENTS_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT OPS_EMBED_ORIGINS=[\"http://localhost:$EMBED_PORT\"]"
-# The CA tools-service trusts: the fake bank's, plus OPS_EGRESS_EXTRA_CA when a demo brings its own outside system
-# (the fake Salesforce), bundled into one file since tools-service reads one.
+# The fake Salesforce (make demo-salesforce) runs in the background outside the stack and writes how to reach it to
+# $RUN_DIR/fake-salesforce/info.json: its certificate and the address its hosts answer at. While its process lives,
+# tools-service trusts and resolves it as it does the fake bank; once it has stopped, neither is passed.
+FAKE_SF_DIR=$RUN_ABS/fake-salesforce
+fake_salesforce_up() {
+  local owner
+  owner=$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).readline())["owner"])' "$FAKE_SF_DIR/info.json" 2>/dev/null) || return 1
+  [[ -n "$owner" && -f "$FAKE_SF_DIR/ca.pem" ]] && kill -0 "$owner" 2>/dev/null
+}
+# The CA tools-service trusts: the fake bank's, plus OPS_EGRESS_EXTRA_CA (a plugin developer's own fake system, set in
+# .env) and the fake Salesforce's while it runs, bundled into one file since tools-service reads one.
 egress_ca() {
-  local bank=${OPS_EGRESS_CA_FILE:-$RUN_ABS/fake-bank/bank.crt}
-  if [[ -n "${OPS_EGRESS_EXTRA_CA:-}" && -f "$OPS_EGRESS_EXTRA_CA" ]]; then
-    cat "$bank" "$OPS_EGRESS_EXTRA_CA" >"$RUN_ABS/egress-ca.pem" 2>/dev/null
+  local bank=${OPS_EGRESS_CA_FILE:-$RUN_ABS/fake-bank/bank.crt} extra=()
+  [[ -n "${OPS_EGRESS_EXTRA_CA:-}" && -f "$OPS_EGRESS_EXTRA_CA" ]] && extra+=("$OPS_EGRESS_EXTRA_CA")
+  fake_salesforce_up && extra+=("$FAKE_SF_DIR/ca.pem")
+  if ((${#extra[@]})); then
+    cat "$bank" "${extra[@]}" >"$RUN_ABS/egress-ca.pem" 2>/dev/null
     echo "$RUN_ABS/egress-ca.pem"
   elif [[ -f "$bank" ]]; then
     echo "$bank"
   fi
 }
-# A stack without its fake bank (an isolated one started without OPS_STACK_FAKES=1) has no certificate to trust, and
-# tools-service refuses to start on a CA file that does not exist.
+# Before the fake bank's first start there is no certificate to trust, and tools-service refuses to start on a CA file
+# that does not exist.
 egress_ca_env() { local ca; ca=$(egress_ca); if [[ -n "$ca" ]]; then echo "OPS_EGRESS_CA_FILE=$ca"; fi; }
 dev_egress_resolve() {
-  IP=$(private_address) GM_HOST=$GREENMAIL_HOST MP_HOST=$MAILPIT_HOST python3 -c 'import json,os,socket
+  local sf=""
+  fake_salesforce_up && sf=$FAKE_SF_DIR/info.json
+  SF_INFO=$sf IP=$(private_address) GM_HOST=$GREENMAIL_HOST MP_HOST=$MAILPIT_HOST python3 -c 'import json,os,socket
 def host_ip(name, fallback):
     if name in ("127.0.0.1", "localhost", ""):
         return fallback
@@ -163,6 +166,8 @@ ip=os.environ["IP"]
 m=json.loads(os.environ.get("OPS_EGRESS_RESOLVE") or "{}"); m["mail.harborpine.test"]=host_ip(os.environ.get("GM_HOST",""), ip)+":"+os.environ["GM"]; m["smtp.harborpine.test"]=host_ip(os.environ.get("MP_HOST",""), ip)+":"+os.environ["MP"]
 bank=host_ip("api.bank.test", "")
 m["api.bank.test"]=(bank or ip)+":"+os.environ["FB"]
+if os.environ.get("SF_INFO"):
+    m.update(json.loads(json.loads(open(os.environ["SF_INFO"]).readline())["settings"]["OPS_EGRESS_RESOLVE"]))
 print(json.dumps(m,separators=(",",":")))' 2>/dev/null
 }
 MAIL_OUT_ENV="OPS_MAIL_PROVIDER=smtp OPS_MAIL_FROM=ops@harborpine.example OPS_SMTP_HOST=$SMTP_HOST OPS_SMTP_PORT=$MAILPIT_SMTP OPS_SMTP_STARTTLS=false"
@@ -198,17 +203,12 @@ cmd_of() {
     files) echo "$(auth_env)env OPS_FILES_PORT=$FILES_PORT OPS_FILES_SCANNING=off OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT uv run --directory services/files-service python -m ops_files" ;;
     # documents-service extracts on its own models-service key, whatever key the root .env hands agents.
     documents) echo "$(auth_env)env OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_extract uv run --directory services/documents-service python -m ops_documents" ;;
-    # A second Next dev server in the same folder needs its own build directory: Next locks the one it uses.
     console)
-      local dist=.next
-      [[ "$STACK" == isolated ]] && dist=.next-isolated
-      echo "env $(console_auth)NEXT_PUBLIC_UI_FEEDBACK=$(ui_feedback) NEXT_PUBLIC_OPS_CHAT_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_CASES_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_REGISTRY_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_TOOLS_API_URL=http://localhost:$TOOLS_PORT NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL=http://localhost:$KB_PORT NEXT_PUBLIC_OPS_FILES_API_URL=http://localhost:$FILES_PORT NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=http://localhost:$DOCUMENTS_PORT NEXT_PUBLIC_OPS_MODELS_API_URL=http://localhost:$MODELS_PORT NEXT_PUBLIC_OPS_EMBED_URL=http://localhost:$EMBED_PORT OPS_CONSOLE_DIST_DIR=$dist NODE_OPTIONS=--max-old-space-size=${OPS_CONSOLE_HEAP_MB:-3072} pnpm --filter @ops-ai/console exec next dev -p $CONSOLE_PORT"
+      echo "env $(console_auth)NEXT_PUBLIC_UI_FEEDBACK=$(ui_feedback) NEXT_PUBLIC_OPS_CHAT_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_CASES_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_REGISTRY_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_TOOLS_API_URL=http://localhost:$TOOLS_PORT NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL=http://localhost:$KB_PORT NEXT_PUBLIC_OPS_FILES_API_URL=http://localhost:$FILES_PORT NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=http://localhost:$DOCUMENTS_PORT NEXT_PUBLIC_OPS_MODELS_API_URL=http://localhost:$MODELS_PORT NEXT_PUBLIC_OPS_EMBED_URL=http://localhost:$EMBED_PORT NODE_OPTIONS=--max-old-space-size=${OPS_CONSOLE_HEAP_MB:-3072} pnpm --filter @ops-ai/console exec next dev -p $CONSOLE_PORT"
       ;;
     # The console's preview frame is the only page it allows to frame it besides a deployment's own sites.
     embed)
-      local dist=.next
-      [[ "$STACK" == isolated ]] && dist=.next-isolated
-      echo "env OPS_EMBED_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT OPS_EMBED_DIST_DIR=$dist pnpm --filter @ops-ai/embed exec next dev -p $EMBED_PORT"
+      echo "env OPS_EMBED_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT pnpm --filter @ops-ai/embed exec next dev -p $EMBED_PORT"
       ;;
   esac
 }
@@ -236,7 +236,7 @@ started_auth() { cat "$(authfile "$1")" 2>/dev/null || echo dev; }
 # `start worker` stopped this way whenever two old workers were alive (scripts/tests/test_stack_pipes.py).
 listener() { local out; out=$(lsof -nP -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null) || return; echo "${out%%$'\n'*}"; }
 
-# Env of a pid: Linux /proc, else ps eww (macOS). Used to tell this stack's leftovers from an isolated stack's.
+# Env of a pid: Linux /proc, else ps eww (macOS). Used to tell this stack's leftovers from another stack's.
 pid_env() {
   local pid=$1
   if [[ -r "/proc/$pid/environ" ]]; then
@@ -246,7 +246,7 @@ pid_env() {
   fi
 }
 
-# Pids whose command matches $1 and whose env names this stack's files-service, so an isolated worker is left alone.
+# Pids whose command matches $1 and whose env names this stack's files-service, so another stack's worker is left alone.
 stack_cmd_pids() {
   local needle=$1 pid seen
   for pid in $(pgrep -f "$needle" || true); do
@@ -351,6 +351,7 @@ start() {
   nohup $(cmd_of "$svc") >"$LOG_DIR/$svc.log" 2>&1 &
   echo $! >"$(pidfile "$svc")"
   echo "$AUTH" >"$(authfile "$svc")"
+  stamp "$svc"
   # The address tools-service dials for the dev mail and bank hosts is fixed when it starts (OPS_EGRESS_RESOLVE);
   # health compares it with the address now, since a network change leaves it dialling one that no longer answers.
   [[ "$svc" == tools ]] && private_address >"$RUN_DIR/tools.pinned"
@@ -371,12 +372,7 @@ stop() {
   elif [[ "$svc" == fakebank ]]; then
     stop_pids $(pgrep -f "fake_bank $RUN_ABS/fake-bank" || true)
   fi
-  rm -f "$(pidfile "$svc")" "$(authfile "$svc")"
-}
-
-# The pid serving a service: the one this script started, else whoever listens on its port.
-serving_pid() {
-  if alive "$1"; then cat "$(pidfile "$1")"; else listener "$(port_of "$1")"; fi
+  rm -f "$(pidfile "$svc")" "$(authfile "$svc")" "$(stampfile "$svc")"
 }
 
 # Seconds since a process started, from ps's etime ([[dd-]hh:]mm:ss), which macOS and Linux both print.
@@ -390,35 +386,38 @@ age_of() {
   echo $((10#$days * 86400 + 10#$h * 3600 + 10#$m * 60 + 10#$s))
 }
 
-# The last commit that changed what a Python service runs: its own directory (code and migrations) or packages/.
-code_dirs() { case "$1" in platform) echo services/platform-service packages ;; agents | worker) echo services/agents-service packages ;; models) echo services/models-service packages ;; tools) echo services/tools-service packages ;; kb) echo services/kb-service packages ;; files) echo services/files-service packages ;; documents) echo services/documents-service packages ;; runner) echo services/runner-service packages ;; fakeai) echo services/models-service/scripts/fake_openai services/models-service/seed/demo-fake-openai ;; fakebank) echo services/tools-service/scripts/fake_bank ;; esac; }
-# shellcheck disable=SC2046 # code_dirs prints space-separated paths on purpose
-code_commit() { git log -1 --format="$2" -- $(code_dirs "$1"); }
+# What a service's process has loaded and does not reload: a Python service's own folder (code and migrations),
+# packages/ and the lock; for the Next apps only their package.json and config and the lock (next dev reloads sources).
+code_dirs() { case "$1" in platform) echo services/platform-service packages uv.lock ;; agents | worker) echo services/agents-service packages uv.lock ;; models) echo services/models-service packages uv.lock ;; tools) echo services/tools-service packages uv.lock ;; kb) echo services/kb-service packages uv.lock ;; files) echo services/files-service packages uv.lock ;; documents) echo services/documents-service packages uv.lock ;; runner) echo services/runner-service packages uv.lock ;; fakeai) echo services/models-service/scripts/fake_openai services/models-service/seed/demo-fake-openai ;; fakebank) echo services/tools-service/scripts/fake_bank ;; console) echo apps/console/package.json apps/console/next.config.ts pnpm-lock.yaml ;; embed) echo apps/embed/package.json apps/embed/next.config.ts pnpm-lock.yaml ;; apidocs) echo scripts/api_docs.py ;; esac; }
+# Every service `make up` checks before it starts the rest: the Python ones and the fakes, and the Next apps and the
+# API docs page, which run from whichever checkout started them.
+CHECKED=("${PY_SERVICES[@]}" console embed apidocs)
+# Written at each start: the checkout the process runs from and the commit it started on.
+stampfile() { echo "$RUN_DIR/$1.rev"; }
+stamp() { printf '%s %s\n' "$PWD" "$(git rev-parse HEAD 2>/dev/null || echo none)" >"$(stampfile "$1")"; }
 
-# A service is stale when its process started before the last commit to its code, or before the last migration
-# landed on the database: it runs older code, or code that met the tables before they changed (forced RLS on the run
-# tables broke chat this way, and a worker up since before the team policies failed a run's first event, fb-16aa519c).
-stale() {
-  local pid age started
-  pid=$(serving_pid "$1") || return 1
-  [[ -n "$pid" ]] || return 1
-  age=$(age_of "$pid") || return 1
-  started=$(($(date +%s) - age))
-  ((started < $(code_commit "$1" %ct))) && return 0
-  case "$1" in fakeai | fakebank) return 1 ;; esac  # the fakes hold no tables
-  [[ -f "$RUN_DIR/migrated-at" ]] && ((started < $(mtime_of "$RUN_DIR/migrated-at")))
-}
-
-# Why a stale service is stale, for the messages below.
+# Why a running service does not run this checkout's code, or nothing when it does: it started from another checkout
+# (make review moves the stack to the review worktree, make up back), on a commit whose code differs from HEAD's (a
+# branch switch either way, a pull), or before the last migration landed, so its code met the tables before they
+# changed (forced RLS on the run tables broke chat this way). Start times alone miss a switch to an older branch.
 stale_why() {
-  local pid age
-  pid=$(serving_pid "$1") && age=$(age_of "$pid") || return 0
-  if (($(date +%s) - age < $(code_commit "$1" %ct))); then
-    echo "older than $(code_commit "$1" %h), which changed its code"
-  else
+  local root rev age
+  alive "$1" || return 0
+  read -r root rev <"$(stampfile "$1")" 2>/dev/null || { echo "started with no record of its checkout"; return 0; }
+  if [[ "$root" != "$PWD" ]]; then echo "runs from $root"; return 0; fi
+  # shellcheck disable=SC2046 # code_dirs prints space-separated paths on purpose
+  if ! git diff --quiet "$rev" HEAD -- $(code_dirs "$1") 2>/dev/null; then
+    echo "runs ${rev:0:8}, and its code differs at $(git rev-parse --short HEAD)"
+    return 0
+  fi
+  case "$1" in fakeai | fakebank | console | embed | apidocs) return 0 ;; esac # these hold no tables
+  [[ -f "$RUN_DIR/migrated-at" ]] || return 0
+  age=$(age_of "$(cat "$(pidfile "$1")")") || return 0
+  if (($(date +%s) - age < $(mtime_of "$RUN_DIR/migrated-at"))); then
     echo "older than the last migration (make migrate, $(date -r "$(mtime_of "$RUN_DIR/migrated-at")" +%H:%M 2>/dev/null || date -d "@$(mtime_of "$RUN_DIR/migrated-at")" +%H:%M))"
   fi
 }
+stale() { [[ -n "$(stale_why "$1")" ]]; }
 
 # Run after every migrate: each chain's recorded revision, kept in $RUN_DIR/db-heads. When any differs from the last
 # record, migrations landed, and $RUN_DIR/migrated-at marks when; every process started before it is stale.
@@ -460,27 +459,25 @@ stop_moved() {
 }
 
 stop_stale() {
-  local extras pid svc
-  [[ "$STACK" == shared ]] && stop_moved
+  local extras pid svc why
+  stop_moved
   # uv + its python child are two pids; more than that is a leftover worker still claiming work.
-  if [[ "$STACK" == shared ]]; then
-    extras=$(stack_cmd_pids "ops_agents.api.worker" | wc -l | tr -d ' ')
-    if (( extras > 2 )); then
-      echo "worker: $extras processes still running; stopping them so one worker remains"
-      stop worker
-    fi
+  extras=$(stack_cmd_pids "ops_agents.api.worker" | wc -l | tr -d ' ')
+  if (( extras > 2 )); then
+    echo "worker: $extras processes still running; stopping them so one worker remains"
+    stop worker
   fi
-  for svc in "${PY_SERVICES[@]}"; do
-    stale "$svc" || continue
+  for svc in "${CHECKED[@]}"; do
     if alive "$svc"; then
-      echo "$svc: $(stale_why "$svc"); restarting"
+      why=$(stale_why "$svc")
+      [[ -n "$why" ]] || continue
+      echo "$svc: $why; restarting"
       stop "$svc"
     elif pid=$(ours_listener "$svc"); then
-      # Pidfile lost after a crash or a start that skipped; the process is still this stack's module on this port.
-      echo "$svc: leftover pid $pid $(stale_why "$svc"); stopping it"
+      # Pidfile lost after a crash or a start that skipped; the process is still this stack's module on this port, and
+      # what code it runs is unknown.
+      echo "$svc: leftover pid $pid with no record of what it runs; stopping it"
       stop_pids "$pid"
-    else
-      echo "$svc: :$(port_of "$svc") is served by pid $(serving_pid "$svc"), $(stale_why "$svc"), and not started by make up; stop it" >&2
     fi
   done
 }
@@ -489,7 +486,7 @@ check_fresh() {
   local failed=0
   for svc in "${PY_SERVICES[@]}"; do
     if stale "$svc"; then
-      echo "$svc (pid $(serving_pid "$svc"), :$(port_of "$svc")) is $(stale_why "$svc")" >&2
+      echo "$svc (pid $(cat "$(pidfile "$svc")"), :$(port_of "$svc")) $(stale_why "$svc")" >&2
       failed=1
     fi
   done
@@ -581,7 +578,7 @@ PY
 
 health() {
   local failed=0 only=${1:-} code state pid
-  echo "  stack: $STACK"
+  echo "  stack: from $PWD at $(git rev-parse --short HEAD 2>/dev/null), ports offset ${OPS_PORT_OFFSET:-0}"
   printf '  %-8s %-6s %-34s %-12s %s\n' SERVICE PORT URL STATE OWNER
   for svc in "${SERVICES[@]}"; do
     [[ -n "$only" && "$only" != "$svc" ]] && continue
@@ -595,7 +592,7 @@ health() {
   done
   if alive worker; then
     row worker - - "running" "$(owner_of worker "")"
-    if [[ "$STACK" == shared && -z "$only" ]]; then
+    if [[ -z "$only" ]]; then
       local extras
       extras=$(stack_cmd_pids "ops_agents.api.worker" | wc -l | tr -d ' ')
       if (( extras > 2 )); then
@@ -603,9 +600,9 @@ health() {
         failed=1
       fi
     fi
-  elif [[ "$STACK" == shared && -z "$only" ]]; then row worker - - DOWN -; failed=1; fi
+  elif [[ -z "$only" ]]; then row worker - - DOWN -; failed=1; fi
   [[ -z "$only" ]] && { background_rows || failed=1; }
-  if [[ "$STACK" == shared && -z "$only" ]]; then
+  if [[ -z "$only" ]]; then
     for svc in "${FAKES[@]}"; do
       if [[ -n "$(url_of "$svc")" ]]; then
         code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$(url_of "$svc")" || true)
@@ -632,7 +629,7 @@ health() {
       fi
     done
   fi
-  if [[ "$STACK" == shared && ( -z "$only" || "$only" == tools ) ]] && alive tools && [[ -f "$RUN_DIR/tools.pinned" ]]; then
+  if [[ -z "$only" || "$only" == tools ]] && alive tools && [[ -f "$RUN_DIR/tools.pinned" ]]; then
     local pinned now
     pinned=$(cat "$RUN_DIR/tools.pinned") now=$(private_address)
     if [[ "$pinned" == "$now" ]]; then

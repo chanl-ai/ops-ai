@@ -22,7 +22,7 @@ include make/git.mk
 
 ##@ General
 
-help: ## List targets (add ISOLATED=1 to any stack target for a second stack on ports +1000)
+help: ## List targets
 	@awk "$$HELP_AWK" $(MAKEFILE_LIST)
 	@printf '\nPer service (generated; SERVICES=%s)\n' "$(SERVICES)"
 	@printf '  %-20s %s\n' "<verb>-<svc>" "make -C <svc dir> <verb>; verbs: $(SERVICE_VERBS)"

@@ -4,7 +4,7 @@
 
 /* Streamdown (the chat's markdown renderer) styles with Tailwind classes inside its bundle. */
 @source '../../node_modules/streamdown/dist/*.js';
-/* Build output is never a source: a second dev server's dist dir (OPS_CONSOLE_DIST_DIR) holds garbled class-like bytes. */
+/* Build output is never a source: a use-case run's dist dir (OPS_CONSOLE_DIST_DIR) holds garbled class-like bytes. */
 @source not '../../.next*';
 
 @custom-variant dark (&:is(.dark *));

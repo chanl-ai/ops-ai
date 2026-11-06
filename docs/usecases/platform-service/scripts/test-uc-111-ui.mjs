@@ -1,6 +1,6 @@
 // uc-111 a person stays signed in across make up, ui layer: docs/usecases/platform-service/signed-in-across-make-up.md.
-// Drives the real `make up` on the isolated stack (ISOLATED=1, ports +1000; never the shared one) with platform
-// sign-in. The database is left one migration behind the code, as pulling a commit with a newer migration leaves it;
+// Drives the real `make up` on a stack of its own (OPS_PORT_OFFSET=1000: ports +1000, its own compose project and state;
+// never the developer's), and stops it at the end. The database is left one migration behind the code, as pulling a commit with a newer migration leaves it;
 // `make up` must migrate it in place, so the session and the data written before are still there. Each step alone.
 import { execSync } from 'node:child_process';
 import { ROOT, check, chromium, finish } from '@ops-ai/usecase-runner/harness';
@@ -12,10 +12,10 @@ const DB = 'postgresql+asyncpg://ops:ops@localhost:6477/ops_runtime';
 const KEY = 'ops-platform-session';
 const TAG = Math.random().toString(36).slice(2, 7);
 const AGENT = `Restart check ${TAG}`;
-// The runner is itself started by make, which exports the shared stack's OPS_* ports and database URL; a nested make
-// would take those over ISOLATED=1's own (env.mk assigns with ?=) and act on the shared stack. They are removed here.
+// The runner is itself started by make, which exports the developer's stack's OPS_* ports and database URL; a nested
+// make would keep those over the offset's own (env.mk assigns with ?=) and act on that stack. They are removed here.
 const isolatedEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('OPS_') && !k.startsWith('MAKE') && k !== 'MFLAGS'));
-const make = (args) => execSync(`make -C ${ROOT} ${args} ISOLATED=1 AUTH=platform`, { encoding: 'utf8', env: isolatedEnv, stdio: ['ignore', 'pipe', 'pipe'], timeout: 900_000 });
+const make = (args) => execSync(`make -C ${ROOT} ${args} OPS_PORT_OFFSET=1000`, { encoding: 'utf8', env: isolatedEnv, stdio: ['ignore', 'pipe', 'pipe'], timeout: 900_000 });
 const stored = (page) => page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? 'null'), KEY);
 
 async function step(name, body) {
@@ -91,5 +91,6 @@ try {
   check('no page errors', errors.length === 0, errors);
 } finally {
   await browser.close();
+  make('down');
 }
 finish();

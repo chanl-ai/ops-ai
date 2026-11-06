@@ -1,7 +1,7 @@
 // uc-245 a team's mailbox runs end to end, ui layer: docs/usecases/agents-service/a-team-s-mailbox-runs-end.md.
 // withUiStack on the banker demo (platform sign-in, models on the fake OpenAI with the demo's committed
 // rules, tools-service with the core fake bank), GreenMail and Mailpit reachable through tools-service (tools.mail),
-// publish reviews kept pending, and a worker. Run isolated (ISOLATED=1). Real mail both ways: the script sends SMTP to
+// publish reviews kept pending, and a worker. Real mail both ways: the script sends SMTP to
 // GreenMail and reads the reply in Mailpit's API; nothing else is faked but the bank and the model.
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';

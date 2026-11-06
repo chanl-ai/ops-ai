@@ -1,6 +1,6 @@
 node_modules
 .next
-# Every console build folder: a second dev server's (OPS_CONSOLE_DIST_DIR) output scanned by Tailwind broke the shared console's CSS.
+# Every console build folder: a use-case run's (OPS_CONSOLE_DIST_DIR) output scanned by Tailwind broke the stack console's CSS.
 .next-*
 next-env.d.ts
 *.tsbuildinfo

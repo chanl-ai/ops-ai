@@ -1,6 +1,6 @@
 // uc-248 a hold on a customer's account, ui layer: docs/usecases/agents-service/a-hold-on-a-customer-s.md. The seeded
 // customer_hold workflow on the banker demo stack (platform sign-in, tools-service with the core fake bank and its
-// webhook stand-in, a worker). Run isolated (ISOLATED=1). No model call. Each check names the steps the run passed.
+// webhook stand-in, a worker). No model call. Each check names the steps the run passed.
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { AGENTS_PORT, PLATFORM_PORT, ROOT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';

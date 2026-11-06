@@ -2,7 +2,7 @@
 # background. scripts/stack.sh is the process manager: logs in .logs/<svc>.log, pids in .run/<svc>.pid.
 .PHONY: up down restart reset-db health logs ports demo-model sample-team demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
 
-##@ Stack (ISOLATED=1 for a second stack)
+##@ Stack (one per machine)
 
 DEMO_MODEL ?= gpt-5-mini
 # The guardrail checks and memory extraction: a non-reasoning model, so a check takes about a second rather than five
@@ -28,24 +28,21 @@ up: db-up ## Compose, migrate every chain in place, then the services, the worke
 	@$(STACK) stop-stale
 	@$(STACK) up
 	@# The dev mail and bank fakes answer at this machine's private address, which moves with the network; the
-	@# shared stack's egress list is brought up to date with it so mail and bank calls are not refused after a move.
-	@if [ "$(OPS_STACK)" = shared ]; then uv run --quiet --project $(ROOT) python $(ROOT)/scripts/dev_egress.py; fi
-	@# The shared stack's agents and workflow reads run on a real OpenAI model (DEMO_MODEL picks it,
-	@# DEMO_MODEL=fake keeps the fake). Use cases and tests run on their own stacks and keep the fake.
-	@if [ "$(OPS_STACK)" = shared ]; then \
+	@# egress list is brought up to date with it so mail and bank calls are not refused after a move.
+	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/dev_egress.py
+	@# The stack's agents and workflow reads run on a real OpenAI model (DEMO_MODEL picks it, DEMO_MODEL=fake keeps
+	@# the fake). Use cases and tests start their own services and keep the fake.
+	@{ \
 		MODEL=$(DEMO_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py && \
 		ALIAS=guardrail-check MODEL=$(DEMO_FAST_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py && \
 		ALIAS=gpt-5.5 MODEL=$(DEMO_CHAT_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py && \
 		ALIAS=memory-extract MODEL=$(DEMO_FAST_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py && \
-		ALIAS=extract MODEL=$(DEMO_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py; fi
+		ALIAS=extract MODEL=$(DEMO_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_model.py; }
 	@$(STACK) health
 
-reset-db: ## Wipe the stack's database and rebuild it empty from the chains; asks first on the shared stack (CONFIRM=yes skips)
-	@# Refused while the recipe is expanded, so before anything runs and even under make -n: an isolated stack that
-	@# would drop the shared database has taken the shared stack's address from somewhere.
-	$(if $(and $(filter isolated,$(OPS_STACK)),$(or $(findstring $(SHARED_DATABASE),$(OPS_DATABASE_URL)),$(findstring 127.0.0.1:5477/ops_runtime,$(OPS_DATABASE_URL)))),$(error reset-db refused: ISOLATED=1 would drop the shared stack's database ($(OPS_DATABASE_URL))))
-	@if [ "$(OPS_STACK)" = shared ] && [ "$(CONFIRM)" != yes ]; then \
-		printf 'Wipe %s for every session on the shared stack? Type yes: ' "$(OPS_DATABASE_URL)"; read answer; \
+reset-db: ## Wipe the stack's database and rebuild it empty from the chains; asks first (CONFIRM=yes skips)
+	@if [ "$(CONFIRM)" != yes ]; then \
+		printf 'Wipe %s, which every checkout of this machine shares? Type yes: ' "$(OPS_DATABASE_URL)"; read answer; \
 		[ "$$answer" = yes ] || { echo "reset-db: nothing changed"; exit 1; }; \
 	fi
 	@$(STACK) stop-for-reset
@@ -88,21 +85,21 @@ demo-walk: ## Walk the sample team: chat, guardrail, bank reads, a write a perso
 
 demo: sample-team demo-walk ## Install the sample team, then walk it
 
-demo-salesforce: ## The Salesforce plugin demo on the shared stack: switches, plugin, fake Salesforce (SF=real: the owner's org), model alias, account switch; RESET=1 starts the team admin's steps again
+demo-salesforce: ## The Salesforce plugin demo on the stack: plugin installed, fake Salesforce (SF=real: the owner's org), model alias, account switch; RESET=1 starts the team admin's steps again
 	@SF=$(SF) RESET=$(RESET) PLUGIN_REF=$(PLUGIN_REF) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/demo_salesforce.py
 
 demo-salesforce-templates: ## Story 3 of the Salesforce demo: the team admin adds the plugin's case helper and triage workflow as team copies through the Python SDK, and publishes them
 	@# The SDK is its own project (sdk/python), as a developer installs it.
 	@uv run --quiet --project $(ROOT)/sdk/python python $(ROOT)/scripts/demo_salesforce.py templates
 
-demo-salesforce-walk: ## Walk the Salesforce demo's five stories in a browser on the shared console; screenshots in .logs/demo-salesforce (SF=real stops at the owner's Allow)
+demo-salesforce-walk: ## Walk the Salesforce demo's five stories in a browser on the stack's console; screenshots in .logs/demo-salesforce (SF=real stops at the owner's Allow)
 	@SF=$(SF) node $(ROOT)/scripts/demo-salesforce/walk.mjs
 
 demo-model: ## Point the agents' chat alias at a cheap real OpenAI model (MODEL=gpt-5-nano), or back at the fake (MODEL=fake)
 	@MODEL=$(MODEL) uv run python scripts/demo_model.py
 
 ports: ## Print the ports this stack uses
-	@printf '  stack %s, compose project %s\n' "$(OPS_STACK)" "$(OPS_COMPOSE_PROJECT)"
+	@printf '  offset %s, compose project %s, state in %s\n' "$(OPS_PORT_OFFSET)" "$(OPS_COMPOSE_PROJECT)" "$(OPS_RUN_DIR)"
 	@printf '  console %s (runtime %s), agents %s, tools %s, opa %s, postgres %s\n' $(OPS_CONSOLE_PORT) \
 		$(OPS_CONSOLE_RUNTIME_PORT) $(OPS_AGENTS_PORT) $(OPS_TOOLS_PORT) $(OPS_OPA_PORT) $(OPS_PG_PORT)
 

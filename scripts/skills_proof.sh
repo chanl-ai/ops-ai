@@ -4,7 +4,7 @@
 # own block (`make up`), and every skill's stack comes down (`make down`) before the next starts, so the skills that only
 # run use cases (which bring their own stacks) never run beside a full one. One PASS or FAIL line per skill; the exit
 # status is the number of FAIL lines. Each block runs on the fake model inside the workspace container, so a skill
-# that changes state never touches the shared stack.
+# that changes state never touches the machine's own stack.
 #
 #   scripts/skills_proof.sh            build and start the devcontainer project ops-ai-skills-proof from empty volumes
 #   KEEP=1 scripts/skills_proof.sh     leave it running afterwards (it is removed with its volumes otherwise)
