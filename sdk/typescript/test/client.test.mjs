@@ -65,3 +65,25 @@ test('wait returns at a human task with its id, and decide then finishes the run
   assert.equal((await c.runs.wait('run_1', { intervalMs: 0 })).status, 'succeeded');
   await assert.rejects(c.raw.agents.reviews_bulk_decide({ body: { ids: [], decision: 'approve' } }), Conflict);
 });
+
+test('a signed-in client renews once when its roles changed, and a client for another team shares the renewal', async () => {
+  const seen = [];
+  const fetch = async (url, init = {}) => {
+    const u = new URL(url);
+    seen.push({ path: u.pathname, auth: init.headers?.Authorization });
+    if (u.pathname.endsWith('/v1/auth/sign-in')) return ok({ token: 't1', refreshToken: 'r1', expiresAt: 'x', principal: {} });
+    if (u.pathname.endsWith('/v1/auth/refresh')) {
+      if (JSON.parse(init.body).refreshToken !== 'r1') return new Response(JSON.stringify({ success: false, error: { code: 'unauthorized' } }), { status: 401 });
+      return ok({ token: 't2', refreshToken: 'r2', expiresAt: 'x', principal: {} });
+    }
+    if (init.headers?.Authorization === 'Bearer t1') {
+      return new Response(JSON.stringify({ success: false, error: { code: 'permissions_changed', message: 'Your roles changed.' } }), { status: 401 });
+    }
+    return ok({ id: 'ag_1' });
+  };
+  const ops = await OpsAI.signIn('james@bank.example', 'pw', { baseUrl: 'https://ops.test', team: 'team_a', fetch });
+  assert.deepEqual(await ops.agents.get('ag_1'), { id: 'ag_1' });
+  assert.deepEqual(await ops.withTeam('team_b').agents.get('ag_1'), { id: 'ag_1' });
+  assert.equal(seen.filter((s) => s.path.endsWith('/v1/auth/refresh')).length, 1);
+  assert.equal(seen.at(-1).auth, 'Bearer t2');
+});

@@ -19,7 +19,7 @@ identity provider and no model is called.
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Priya, a team admin outside the Security team, sets a provider | 403 |
+| 1 | A team admin outside the Security team (Priya invites one to team_ops; she herself holds Security admin in every team) sets a provider | 403 |
 | 2 | Sam makes the workspace SAML-only for a new domain | 200 |
 | 3 | James signs in with the demo password | 401 |
 | 4 | An answer to the workspace's SAML request signed by another provider's key | `error=sign_in_refused` |

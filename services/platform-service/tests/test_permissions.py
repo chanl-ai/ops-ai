@@ -296,3 +296,21 @@ async def test_a_token_from_before_a_role_edit_is_refused_by_a_service_on_its_ne
     assert refused.value.code == "permissions_changed"
     who = await _principal(platform, await bearer(platform, viewer), team, live=True)
     assert can(who, "agents", "publish", team=team) == "all"
+
+
+async def test_a_services_refusal_names_who_holds_the_cell_after_an_edit(platform: Platform) -> None:
+    """The real seam: an admin unticks Builder's secrets_egress.create; a viewer's next token carries every built-in
+    role's cells as the workspace holds them, so a service's refusal no longer names Builder."""
+    viewer = await platform.person(roles=("viewer",))
+    team = next(iter(viewer.teams))
+    owner = await platform.person(roles=("admin",), tenant_id=viewer.tenant_id)
+    await grant(platform, owner, "*", "admin")
+    ah = await bearer(platform, owner)
+    seed = next(r for r in BUILTIN_ROLES if r.id == "builder").grants
+    cells = [{"area": a, "action": x, "scope": s} for a, x, s in seed if (a, x) != ("secrets_egress", "create")]
+    r = await platform.public.put("/v1/roles/builder/permissions", headers=ah, json={"permissions": cells})
+    assert r.status_code == 200, r.text
+    who = await _principal(platform, await bearer(platform, viewer), team)
+    with pytest.raises(Forbidden) as refused:
+        can(who, "secrets_egress", "create", team=team)
+    assert "Builder" not in refused.value.message, refused.value.message

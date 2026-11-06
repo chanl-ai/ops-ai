@@ -15,6 +15,7 @@ import pytest
 from ops_access import (
     ACTIONS,
     AREAS,
+    BUILTIN_ROLES,
     Access,
     Grant,
     Grids,
@@ -357,3 +358,15 @@ def test_a_grid_encodes_into_a_short_claim_and_back() -> None:
     claim = encode_grid(grants)
     assert sorted(decode_grid(claim)) == sorted(grants)
     assert len(str(encode_grid([(a, x, "all") for a in AREAS for x in ACTIONS]))) < 600
+
+
+async def test_a_refusal_names_the_roles_the_workspaces_edited_grid_gives_the_cell() -> None:
+    """An admin unticked Builder's secrets_egress.create: a refusal names who holds it in this workspace now, never the
+    seed grid's roles."""
+    builder = next(r for r in BUILTIN_ROLES if r.id == "builder")
+    edited = [g for g in builder.grants if (g[0], g[1]) != ("secrets_egress", "create")]
+    viewer = await person(access={"team_a": ["viewer"]}, grids={"builder": encode_grid(edited)})
+    with pytest.raises(Forbidden) as refused:
+        ACCESS.can(viewer, "secrets_egress", "create", team="team_a")
+    assert "Builder" not in refused.value.message, refused.value.message
+    assert "builder" not in (refused.value.details or {})["grantedBy"]

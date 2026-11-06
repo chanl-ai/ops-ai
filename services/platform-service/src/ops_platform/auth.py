@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from ops_access import BUILTIN_ROLES
 from ops_policy import STEP_UP_TTL_S, Ed25519Signer, TokenError, mint, verify
 from ops_service_kit.errors import Forbidden, Unauthorized
 from ops_service_kit.ids import new_id
@@ -196,8 +197,12 @@ class Auth:
         version = await self.store.permission_version(user.tenant_id)
         access = await self.store.access(user.tenant_id, user.id, now=_iso(now))
         policies = await PolicyStore(self.store.db).token_values(user.tenant_id)
-        # The stored cells of every role the person holds, so an admin's edit of a role decides in every service.
-        grids = await self.store.grids(user.tenant_id, sorted({r for held in access.values() for r in held}))
+        # The stored cells of every role the person holds, so an admin's edit of a role decides in every service, and of
+        # every built-in role, so a refusal names who holds a cell in this workspace.
+        held = {r for roles in access.values() for r in roles}
+        builtin = sorted({r.id for r in BUILTIN_ROLES} - held)
+        grids = await self.store.grids(user.tenant_id, builtin, stored_only=True)
+        grids |= await self.store.grids(user.tenant_id, sorted(held))
         security = await self.workspace.security_team(user.tenant_id) if self.workspace else None
         claims = {
             "sub": user.id,

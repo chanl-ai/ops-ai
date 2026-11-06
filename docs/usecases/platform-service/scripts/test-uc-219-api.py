@@ -51,11 +51,20 @@ with people_stack() as (api, _):
     )
     check("the admin cannot invite into a team they are not in (403)", r.status_code == 403, r.text[:200])
 
-    # Priya leaves the team; the new admin is then its only admin and cannot step down.
+    # Priya owns the workspace, so a team admin never removes her: she transfers it first (E42).
     r = api.post("/v1/settings/members/delete", json={"ids": [member(api, admin, PRIYA)]}, headers=admin)
     check(
-        "the admin removes Priya, the other admin", r.status_code == 200 and len(data(r)["updated"]) == 1, r.text[:200]
+        "the admin cannot remove Priya, the workspace's owner (409)",
+        r.status_code == 409 and r.json()["error"]["code"] == "owner_must_transfer",
+        r.text[:200],
     )
+    # A team Priya makes with the new admin as its only admin: there they cannot step down.
+    desk = api.post(
+        "/v1/settings/teams", json={"name": f"Desk {secrets.token_hex(2)}", "admin": admin_email}, headers=priya
+    )
+    check("Priya makes a team with the new admin as its admin (201)", desk.status_code == 201, desk.text[:200])
+    desk_id = str((data(desk) or {}).get("id", "team_x"))
+    admin = bearer(signed_in(api, admin_email, INVITED_PASSWORD), desk_id)
     me = member(api, admin, admin_email)
     r = api.post("/v1/settings/members/role", json={"ids": [me], "role": "viewer"}, headers=admin)
     check(

@@ -10,9 +10,11 @@ import secrets
 import httpx
 from usecase_harness import (
     as_role,
+    bearer,
     check,
     data,
     finish,
+    invited,
     security_admin_on_ops,
     set_provider,
     signin_stack,
@@ -22,7 +24,9 @@ from usecase_harness import (
 with signin_stack() as (api, idp, _):
     zone = f"{secrets.token_hex(4)}.harborpine.test"
     base = str(idp.base_url).rstrip("/")
-    admin = as_role(api, "admin")
+    # An admin of team_ops only. Priya is a workspace admin with Security admin in every team, so she may set one.
+    ops_admin = invited(api, as_role(api, "admin"), f"ops.admin.{secrets.token_hex(3)}@harborpine.example", "admin")
+    admin = bearer(ops_admin, "team_ops")
     saml = {
         "kind": "saml",
         "label": "Harbor & Pine SAML",

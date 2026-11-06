@@ -24,7 +24,7 @@ from typing import Any
 import httpx
 
 from ._agents import Agents, AsyncAgents
-from ._config import Config
+from ._config import Config, Session
 from ._generated.agents.operations import AsyncOperations as AsyncAgentsOps
 from ._generated.agents.operations import Operations as AgentsOps
 from ._generated.documents.operations import AsyncOperations as AsyncDocumentsOps
@@ -311,7 +311,8 @@ class OpsAI:
         anonymous = cls(**{**config, "access_token": "", "team": config.get("team") or ""})
         session = anonymous.raw.platform.auth_sign_in({"email": email, "password": password})
         anonymous.close()
-        return cls(**{**config, "access_token": session["token"], "team": config.get("team") or ""})
+        tokens = Session(session["token"], session["refreshToken"])
+        return cls(**{**config, "access_token": session["token"], "team": config.get("team") or "", "session": tokens})
 
     def upload(self, name: str, content: bytes, *, mime: str, purpose: str) -> Any:
         return self.files.upload(name, content, mime=mime, purpose=purpose, transport=self._t)
@@ -319,8 +320,15 @@ class OpsAI:
     def with_team(self, team: str) -> OpsAI:
         """The same credential and address, acting in another team."""
         c = self.config
+        # The same session and connections: a renewed token reaches both clients, and closing this one keeps them.
         return OpsAI(
-            api_key=c.api_key, access_token=c.access_token, base_url=c.base_url, team=team, services=c.services
+            http=self._t.http,
+            api_key=c.api_key,
+            access_token=c.access_token,
+            base_url=c.base_url,
+            team=team,
+            services=c.services,
+            session=c.session,
         )
 
     def close(self) -> None:
@@ -361,15 +369,23 @@ class AsyncOpsAI:
         anonymous = cls(**config)
         session = await anonymous.raw.platform.auth_sign_in({"email": email, "password": password})
         await anonymous.close()
-        return cls(**{**config, "access_token": session["token"]})
+        tokens = Session(session["token"], session["refreshToken"])
+        return cls(**{**config, "access_token": session["token"], "session": tokens})
 
     async def upload(self, name: str, content: bytes, *, mime: str, purpose: str) -> Any:
         return await self.files.upload(name, content, mime=mime, purpose=purpose, transport=self._t)
 
     def with_team(self, team: str) -> AsyncOpsAI:
         c = self.config
+        # The same session and connections: a renewed token reaches both clients, and closing this one keeps them.
         return AsyncOpsAI(
-            api_key=c.api_key, access_token=c.access_token, base_url=c.base_url, team=team, services=c.services
+            http=self._t.http,
+            api_key=c.api_key,
+            access_token=c.access_token,
+            base_url=c.base_url,
+            team=team,
+            services=c.services,
+            session=c.session,
         )
 
     async def close(self) -> None:
