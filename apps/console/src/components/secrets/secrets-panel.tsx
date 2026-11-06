@@ -3,7 +3,7 @@
 import * as React from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import Link from 'next/link';
-import { HardDrive, KeySquare, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { HardDrive, KeySquare, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
@@ -12,6 +12,7 @@ import { DataTableWithViews } from '@/components/data-table-with-views';
 import { CREDENTIAL_KIND_LABEL } from '@/components/files/file-meta';
 import { SecretDialog, USED_BY_SHOWN } from '@/components/settings/secret-dialog';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
+import { RenameDialog } from '@/components/shared/rename-dialog';
 import { selectColumn } from '@/components/shared/select-column';
 import { StopRowClick } from '@/components/shared/form-field';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
@@ -22,7 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useStorageCredentials } from '@/hooks/file-queries';
-import { useDeleteSecret, useSecretsPage } from '@/hooks/secrets-queries';
+import { useDeleteSecret, useRenameSecret, useSecretsPage } from '@/hooks/secrets-queries';
 import { useTeam } from '@/hooks/use-team';
 import { useListParams } from '@/hooks/use-list-params';
 import { relativeTime, shortDate } from '@/lib/format';
@@ -30,7 +31,7 @@ import type { SecretMeta } from '@/lib/types/secrets';
 import { useCan } from '@/hooks/me-queries';
 import { serverPagination } from '@/components/shared/server-pagination';
 
-function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onDelete: (s: SecretMeta) => void): ColumnDef<SecretMeta>[] {
+function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onRename: (s: SecretMeta) => void, onDelete: (s: SecretMeta) => void): ColumnDef<SecretMeta>[] {
   const cols: ColumnDef<SecretMeta>[] = [
     // The name is the secret's id, so there is no separate Id column.
     selectColumn<SecretMeta>((s) => s.name),
@@ -40,6 +41,11 @@ function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onDelete: 
       cell: ({ row }) => (
         <div className="min-w-48">
           <code className="font-mono text-sm">{row.original.name}</code>
+          {row.original.ends && (
+            <span className="ml-2 font-mono text-[11px] text-muted-foreground" data-testid={`secret-ends-${row.original.name}`}>
+              ending {row.original.ends}
+            </span>
+          )}
           {row.original.authConfig ? (
             <StopRowClick align="start">
               <div className="text-[11px] text-muted-foreground" data-testid={`secret-auth-config-${row.original.name}`}>
@@ -113,12 +119,19 @@ function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onDelete: 
             actions={[
               { label: 'Rotate', icon: RefreshCw, onClick: (r) => onRotate(r.original) },
               {
+                label: 'Rename',
+                icon: Pencil,
+                onClick: (r) => onRename(r.original),
+                // Operations name it as {{NAME}}, so tools-service refuses renaming one they read (409), as a delete.
+                disabledReason: row.original.usedBy.length ? `Read by ${row.original.usedBy.map((u) => u.operation).join(', ')}` : undefined,
+              },
+              {
                 label: 'Delete',
                 icon: Trash2,
                 variant: 'destructive',
                 onClick: (r) => onDelete(r.original),
                 // tools-service refuses it too (409); saying why here saves the round trip.
-                disabledReason: row.original.usedBy.length ? `Read by ${row.original.usedBy.length} ${row.original.usedBy.length === 1 ? 'operation' : 'operations'}` : undefined,
+                disabledReason: row.original.usedBy.length ? `Read by ${row.original.usedBy.map((u) => u.operation).join(', ')}` : undefined,
               },
             ]}
           />
@@ -132,7 +145,7 @@ function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onDelete: 
 }
 
 /**
- * The team's secrets: the values tool calls send, such as API keys, with Add, Rotate and Delete for the Security
+ * The team's secrets: the values tool calls send, such as API keys, with Add, Rotate, Rename and Delete for the Security
  * team's admins. Shown on Apps › Credentials; storage credentials are on the Storage settings page.
  */
 export function SecretsPanel() {
@@ -142,10 +155,13 @@ export function SecretsPanel() {
   const remove = useDeleteSecret();
   const [dialog, setDialog] = React.useState<{ rotating: SecretMeta | null } | null>(null);
   const [deleting, setDeleting] = React.useState<SecretMeta | null>(null);
+  const [renaming, setRenaming] = React.useState<SecretMeta | null>(null);
+  const [renameError, setRenameError] = React.useState<string | null>(null);
+  const rename = useRenameSecret();
   const { team } = useTeam();
   // A secret is a credential every tool call may send, so only the Security team's admins add, rotate or delete one.
   const canEdit = useCan('secrets_egress', 'create') === true;
-  const cols = React.useMemo(() => columns(canEdit, (s) => setDialog({ rotating: s }), setDeleting), [canEdit]);
+  const cols = React.useMemo(() => columns(canEdit, (s) => setDialog({ rotating: s }), (s) => (setRenameError(null), setRenaming(s)), setDeleting), [canEdit]);
 
   return (
     <div className="flex flex-col gap-4" data-testid="secrets-panel">
@@ -180,6 +196,25 @@ export function SecretsPanel() {
         />
       )}
 
+      {renaming && (
+        <RenameDialog
+          name={renaming.name}
+          description={`Headers name it as {{${renaming.name}}}; a new name is upper case letters, digits and underscores.`}
+          busy={rename.isPending}
+          error={renameError}
+          testId="secret-rename"
+          onClose={() => setRenaming(null)}
+          onSave={async (to) => {
+            try {
+              await rename.mutateAsync({ name: renaming.name, to });
+              toast.success(`Renamed ${renaming.name} to ${to}`);
+              setRenaming(null);
+            } catch (e) {
+              setRenameError((e as Error).message);
+            }
+          }}
+        />
+      )}
       <SecretDialog open={!!dialog} rotating={dialog?.rotating ?? null} onOpenChange={(o) => !o && setDialog(null)} />
       <DeleteDialog
         open={!!deleting}

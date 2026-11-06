@@ -106,6 +106,8 @@ async def test_the_configs_answer_carries_the_fields_choices_and_host_check(
     field = next(f for f in page["fields"] if f["name"] == "login_url")
     assert [c["label"] for c in field["choices"]] == ["login.signin.test", "test.signin.test"], field
     assert field["other"]["hosts"] == [".my.signin.test"] and page["settings"]["login_url"] == ACME, field
+    configs = (await client.get(f"/v1/apps/{APP}", headers=admin(tenant))).json()["data"]["authConfigs"]
+    assert next(c for c in configs if c["id"] == config)["signInPlace"] == ACME, configs
     card = (await client.get(f"/v1/apps/{APP}", headers=admin(tenant))).json()["data"]["card"]
     asked = {s["name"]: s.get("asked") for s in card["plugin"]["settings"]}
     assert asked["login_url"] == "config", asked

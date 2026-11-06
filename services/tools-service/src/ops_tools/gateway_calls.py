@@ -124,6 +124,13 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
     if resolved is None or resolved.operation is None or resolved.module is None:
         return None
     op, module = resolved.operation, resolved.module
+    if module.get("tools_on") is not None and op["name"] not in module["tools_on"]:
+        # The team has not added this tool from its app's catalog: refused before any sign-in is asked for.
+        app = str(module.get("app_title") or module["display_name"])
+        title = str(cast(dict[str, Any], module.get("tool_titles") or {}).get(op["name"]) or op["name"])
+        who = "someone who manages the team's apps"
+        said = f"{app}'s {title} is not added to this team; {who} adds it from {app}'s Tools tab."
+        return 403, "TOOL_NOT_ADDED", said, []
     if module.get("sign_in_needed"):
         # Each person signs in, and the account has no instance yet: the plugin is on. Refused as a
         # missing sign-in, not as the plugin being off, so the tool page does not say the team admin must sign in.

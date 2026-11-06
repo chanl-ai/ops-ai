@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { Separator } from '@/components/ui/separator';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useWorkspaceIdentity } from '@/hooks/me-queries';
+import { useTeam } from '@/hooks/use-team';
 import { useBrand } from '@/hooks/queries';
 import { crumbsFor } from '@/lib/nav';
 
@@ -14,6 +15,7 @@ export function SiteHeader({ actions }: { actions?: React.ReactNode }) {
   const pathname = usePathname();
   const crumbs = crumbsFor(pathname);
   const identity = useWorkspaceIdentity();
+  const { team } = useTeam();
   const brand = useBrand();
   return (
     <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b">
@@ -38,7 +40,9 @@ export function SiteHeader({ actions }: { actions?: React.ReactNode }) {
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {identity && (
             <span className="hidden text-sm text-muted-foreground xl:inline" data-testid="header-workspace">
+              {/* The workspace alone ("Local tenant" until it is named) does not say where the person is; the team does. */}
               {brand.name ?? identity.workspace}
+              {team?.name ? ` · ${team.name}` : ''}
               {identity.environment ? ` · ${identity.environment}` : ''}
             </span>
           )}

@@ -68,7 +68,7 @@ async def test_another_teams_workflow_is_not_offered(
     async def published(_rt: Any) -> list[dict[str, Any]]:
         return flows
 
-    async def known(_rt: Any) -> list[dict[str, Any]]:
+    async def known(_rt: Any, *, fresh: bool = False) -> list[dict[str, Any]]:
         return [
             {"id": f"workflow:{w['id']}", "name": w["name"], "server": "Workflows", "description": ""} for w in flows
         ]

@@ -71,7 +71,8 @@ await withUiStack(
       const rowText = await row.innerText();
       const mineBefore = await page.getByRole('tab', { name: /^Assigned to me/ }).innerText();
       // The row names the task by its question, as its page does, never by its run id.
-      const requestCell = (await row.locator('td').nth(2).innerText()).trim();
+      // Select box, then the question: the record id sits last in every list.
+      const requestCell = (await row.locator('td').nth(1).innerText()).trim();
       // The task's page words the question from what it shows ("Check 1 field read from …"); the row uses the same words.
       const pageView = await page.context().newPage();
       await pageView.goto(`${consoleUrl}/reviews?review=${encodeURIComponent(review.id)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });

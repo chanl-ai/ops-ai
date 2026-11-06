@@ -47,12 +47,15 @@ async def test_accounts_sit_under_the_config_they_sign_in_with_and_only_an_admin
 
     page = await _page(world, admin(tenant))
     assert "people" not in page, sorted(page)
-    held = {c["id"]: [a["id"] for a in c["accounts"]] for c in page["authConfigs"]}
-    assert held[eu] == [second] and first in next(v for k, v in held.items() if k != eu and v), held
+    by_row = {a["id"]: a for a in page["accounts"] if a["kind"] == "team"}
+    assert by_row[second]["configId"] == eu and by_row[first]["configId"] != eu, by_row
+    assert by_row[second]["configName"] == "eu-app" or by_row[second]["configName"], by_row[second]
     ours = next(c for c in page["authConfigs"] if c["id"] == eu)
     assert ours["canEdit"] and ours["canDelete"] and ours["clientId"] == "eu-app", ours
-    assert next(c for c in page["authConfigs"] if first in [a["id"] for a in c["accounts"]])["default"], page
-    rows = {a["id"]: a for c in page["authConfigs"] for a in c["accounts"]}
+    # A config counts the accounts signing in through it; the accounts themselves are listed once, on the page.
+    assert ours["accountCount"] == 1 and "accounts" not in ours, ours
+    assert next(c for c in page["authConfigs"] if c["id"] == by_row[first]["configId"])["default"], page
+    rows = {a["id"]: a for a in page["accounts"] if a["kind"] == "team"}
     # Make my default picks among the caller's own sign-ins; with none, no account offers it.
     assert not any("make_default" in a["actions"] for a in rows.values()), rows
     assert {"rename", "delete", "move", "sign_in"} <= set(rows[second]["actions"]), rows[second]
@@ -61,11 +64,9 @@ async def test_accounts_sit_under_the_config_they_sign_in_with_and_only_an_admin
     seen = await _page(world, person(tenant, *VIEWER))
     mine = next(c for c in seen["authConfigs"] if c["id"] == eu)
     assert not mine["canEdit"] and not mine["canDelete"] and mine["clientId"] is None, mine
-    assert all(
-        not {"rename", "delete", "move", "make_default"} & set(a["actions"])
-        for c in seen["authConfigs"]
-        for a in c["accounts"]
-    ), seen["authConfigs"]
+    assert all(not {"rename", "delete", "move", "make_default"} & set(a["actions"]) for a in seen["accounts"]), seen[
+        "accounts"
+    ]
 
 
 async def test_an_account_only_its_owner_signs_in_to_reads_that_sign_ins_state_and_names_them(
@@ -86,16 +87,16 @@ async def test_an_account_only_its_owner_signs_in_to_reads_that_sign_ins_state_a
     token: dict[str, Any] = {"access_ct": "sealed", "scopes": [], "rotations": 0, "refreshed_at": datetime.now(UTC)}
     with isolation.scope(tenant, TEAM):
         assert await world.store.put_token(tenant, account, token, expected_rotations=None, person="usr_priya")
-    rows = {a["id"]: a for c in (await _page(world, admin(tenant)))["authConfigs"] for a in c["accounts"]}
+    rows = {a["id"]: a for a in (await _page(world, admin(tenant)))["accounts"] if a["kind"] == "team"}
     assert rows[account]["state"] == "connected", rows[account]
     assert rows[account]["owner"] == {"kind": "each", "name": "Priya Shah"}, rows[account]
     # Each person signs in to it with their own account, so another person never reads it as Priya's.
-    seen = {a["id"]: a for c in (await _page(world, person(tenant, *VIEWER)))["authConfigs"] for a in c["accounts"]}
+    seen = {a["id"]: a for a in (await _page(world, person(tenant, *VIEWER)))["accounts"] if a["kind"] == "team"}
     assert seen[account]["owner"]["kind"] == "each" and seen[account]["owner"]["name"] != "Priya Shah", seen[account]
 
     with isolation.scope(tenant, TEAM):
         await world.store.mark_refused(tenant, account, "usr_priya", reason="invalid_grant", at=datetime.now(UTC))
-    rows = {a["id"]: a for c in (await _page(world, admin(tenant)))["authConfigs"] for a in c["accounts"]}
+    rows = {a["id"]: a for a in (await _page(world, admin(tenant)))["accounts"] if a["kind"] == "team"}
     assert rows[account]["state"] == "refused", rows[account]
 
 
@@ -110,12 +111,33 @@ async def test_an_admin_makes_another_account_the_teams_default_and_a_viewer_may
     path = f"/v1/apps/{APP}/accounts/{second}/team-default"
     refused = await world.client.put(path, headers=person(tenant, *VIEWER))
     assert refused.status_code == 403, refused.text
-    rows = {a["id"]: a for c in (await _page(world, admin(tenant)))["authConfigs"] for a in c["accounts"]}
+    rows = {a["id"]: a for a in (await _page(world, admin(tenant)))["accounts"] if a["kind"] == "team"}
     assert "make_team_default" in rows[second]["actions"] and "make_team_default" not in rows[first]["actions"], rows
 
     done = await world.client.put(path, headers=admin(tenant))
     assert done.status_code == 200, done.text
     page = await _page(world, admin(tenant))
-    rows = {a["id"]: a for c in page["authConfigs"] for a in c["accounts"]}
+    rows = {a["id"]: a for a in page["accounts"] if a["kind"] == "team"}
     assert rows[second]["default"] and not rows[first]["default"], rows
     assert page["card"]["connectionId"] == second, page["card"]
+
+
+async def test_each_persons_own_sign_in_is_its_own_row_seen_by_admins_and_by_that_person_only(
+    world: World,  # noqa: F811
+    tenant: str,
+) -> None:
+    # A person's own account nested inside the team's row was not listable or filterable, and named nobody.
+    account = await connected(world, tenant)
+    token: dict[str, Any] = {"access_ct": "sealed", "scopes": [], "rotations": 0, "refreshed_at": datetime.now(UTC)}
+    with isolation.scope(tenant, TEAM):
+        assert await world.store.put_token(tenant, account, token, expected_rotations=None, person="usr_marco")
+        await world.store.name_person(tenant, account, "usr_marco", "Marco Ruiz")
+    rows = (await _page(world, admin(tenant)))["accounts"]
+    own = [a for a in rows if a["kind"] == "person"]
+    assert [(a["id"], a["name"], a["owner"]) for a in own] == [
+        (account, "Marco Ruiz", {"kind": "person", "name": "Marco Ruiz"})
+    ], own
+    assert own[0]["rowId"] != account and own[0]["configName"], own[0]
+    assert not own[0]["actions"], own[0]
+    seen = (await _page(world, person(tenant, *VIEWER)))["accounts"]
+    assert not [a for a in seen if a["kind"] == "person"], seen

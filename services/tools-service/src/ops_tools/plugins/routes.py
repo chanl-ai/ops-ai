@@ -31,7 +31,16 @@ from ..modules.routes import ERRORS
 from ..modules.service import Caller
 from ..modules.tool_users import ToolUsers
 from ..store.connections import PLUGIN_APP
-from .host import PluginHost, fixed_fields, offered, per_account, readable, render, sign_in_fixed
+from .host import (
+    PluginHost,
+    default_tools_added,
+    fixed_fields,
+    offered,
+    per_account,
+    readable,
+    render,
+    sign_in_fixed,
+)
 
 # The OAuth app's own fields: an app credential's, made under Credentials, never typed into an account.
 CLIENT_FIELDS = ("clientId", "clientSecret")
@@ -228,6 +237,9 @@ class PluginAccounts:
             settings=settings,
             by=who.name,
         )
+        if not before:
+            # A new app hands agents its read tools only; a write tool waits until someone switches it on.
+            await self.host.bindings.set_tools(who.tenant_id, who.team.id, m.id, default_tools_added(m))
         if self.host.versions and not before.get("version"):
             # A team turning a plugin on takes the installed version; a later upgrade waits for its review.
             await self.host.take_installed(who.tenant_id, who.team.id, plugin)
@@ -371,7 +383,10 @@ class PluginAccounts:
         m = plugin.manifest
         c = m.connection
         kind = self._kind(plugin, body)
-        sign_in = body.sign_in or c.sign_in[0]
+        # Personal sign-in is on by default where the plugin offers it with the team as backup: people may add their
+        # own account, and calls for those who have not use the team's sign-in.
+        backed = "person_or_team" in c.sign_in and kind.per_person
+        sign_in = body.sign_in or ("person_or_team" if backed else c.sign_in[0])
         if sign_in not in c.sign_in:
             raise ValidationFailed(f"{m.title} signs in with {', '.join(c.sign_in)}.", code="sign_in_not_offered")
         plain, secret = self._credentials(plugin, kind, body.credentials)

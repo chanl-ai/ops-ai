@@ -202,6 +202,7 @@ def main() -> None:
         on_signed_in=plugins.on_signed_in if plugins else None,
     )
     connection_service.app_display = plugins.display_of if plugins else None
+    connection_service.sign_in_scopes = plugins.sign_in_scopes if plugins else None
     tool_users = AgentsToolUsers(client("agents", agents_url, ["agents:view"]))
     # An app's Resources tab joins the copies agents-service and documents-service keep, read as the caller's team.
     documents_url = settings.documents_url or f"http://127.0.0.1:{settings.documents_port}"

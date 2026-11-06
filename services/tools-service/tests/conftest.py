@@ -348,6 +348,7 @@ def build_app(
     )
     tokens.plugin_hosts = plugins.connection_hosts if plugins else None
     accounts.app_display = plugins.display_of if plugins else None
+    accounts.sign_in_scopes = plugins.sign_in_scopes if plugins else None
     # As the service wires them (__main__): a plugin tool's title, its team's account and whether its address waits.
     service.titles = plugins.title_of if plugins else None
     service.team_connections = plugins.team_connection if plugins else None

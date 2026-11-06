@@ -23,7 +23,7 @@ with (
     account = w.turn_on("admin", "test.client", credentialId=wrong)
     failed = w.call("client_get_record", args={"id": "rec-1042"})
     page = data(w.kept(w.gw.get(app_path(APP), headers=w.who["admin"]))) or {}
-    team = next((a for c in page.get("authConfigs") or [] for a in c["accounts"] if a.get("id") == account), {})
+    team = next((a for a in page.get("accounts") or [] if a.get("kind") == "team" and a.get("id") == account), {})
     check(
         "1 the client desk's team account reads refused, with the sign-in server's reason",
         team.get("state") == "refused" and "invalid_client" in str(team.get("stateReason")),
@@ -96,7 +96,8 @@ with (
         and task.get("dueAt") is None,
         {k: task.get(k) for k in ("id", "kind", "title", "connect", "dueAt")},
     )
-    # 3c. Run as the team account: refused to James by his role, and to Priya because the desk has no team account.
+    # 3c. Run as the team account: a Builder may (roles-and-permissions.md), so James and Priya both get the desk's
+    # answer, which has no team account to run as.
     as_team = f"/reviews/{task.get('id') or run_id}/team-account"
     by_james = api.post(as_team, headers=w.who["builder"])
     by_priya = api.post(as_team, headers=w.who["admin"])
@@ -104,8 +105,9 @@ with (
         f"/reviews/{task.get('id') or run_id}/decision", json={"decision": "approve"}, headers=w.who["admin"]
     )
     check(
-        "3c Run as the team account is refused to James (connections.run) and on a desk with no team account",
-        by_james.status_code == 403
+        "3c Run as the team account is refused on a desk with no team account, to a builder and an admin alike",
+        by_james.status_code == 409
+        and "no team account" in by_james.text
         and by_priya.status_code == 409
         and "no team account" in by_priya.text
         and decided.status_code == 409
@@ -127,8 +129,8 @@ with (
         (given.status_code, given.text[:200], went_on.get("status"), went_on.get("error")),
     )
 
-    # 3d. On a desk whose team account backs its people, Priya (connections.run) runs her own waiting run as the team
-    # account, and it reads the record with the team's token.
+    # 3d. On a desk whose team account backs its people, Priya's run does not wait for her own account: with none of
+    # her own, it reads the record with the team's token at once.
     own = w.credential("admin", "test.person", "multi-app", w.m["clients"]["multi-app"])
     backed = w.turn_on("admin", "test.person", signIn="person_or_team", credentialId=own)
     backed_path = account_path("plugin:test.person", backed)
@@ -169,20 +171,11 @@ with (
     def run_of(rid: str) -> dict[str, Any]:
         return data(api.get(f"/v1/runs/{rid}", headers=w.who["admin"])) or {}
 
-    waited = (
-        until(lambda: (r := run_of(team_run)).get("status") in ("waiting", "succeeded", "failed") and r, timeout=60)
-        or {}
-    )
-    as_team_ok = api.post(f"/reviews/{team_run}/team-account", headers=w.who["admin"])
     finished = until(lambda: (r := run_of(team_run)).get("status") in ("succeeded", "failed") and r, timeout=60) or {}
     check(
-        "3d Priya runs her waiting run as the desk's team account and it reads the record with the team's token",
-        signed.status_code == 200
-        and waited.get("status") == "waiting"
-        and as_team_ok.status_code == 200
-        and finished.get("status") == "succeeded"
-        and finished.get("outcome") == "read",
-        (signed.text[:300], team.text[:200], waited.get("status"), finished.get("status"), finished.get("error")),
+        "3d with the team account as backup, Priya's run uses the team's sign-in at once and reads the record",
+        signed.status_code == 200 and finished.get("status") == "succeeded" and finished.get("outcome") == "read",
+        (signed.text[:300], team.text[:200], finished.get("status"), finished.get("error")),
     )
 
     # 4. An app's first address on a host nobody listed is held for a Security admin, nothing saved.

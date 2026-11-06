@@ -55,7 +55,7 @@ await withUiStack(
         .then(async () => (await mine.innerText()).replace(/\s+/g, ' '), async () => (await mine.innerText().catch(() => '')).replace(/\s+/g, ' '));
       check('7 she signs in once through the pop-up, and her row says whom she is connected as', closed && /Connected\b.* as /.test(state), { closed, state });
 
-      const t = await testTeamAccount(page, consoleUrl, { appId: app });
+      const t = await testTeamAccount(page, consoleUrl, { appId: app }, { own: true });
       check('8 Test works with her own account, answered 200', t.status === 'ok' && /\b200\b/.test(t.said) && /your own account/.test(t.said), t.said);
       check('no page errors', errors.length === 0, errors);
     } finally {

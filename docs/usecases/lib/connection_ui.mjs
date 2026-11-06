@@ -51,20 +51,26 @@ export async function connection(headers, name, kind, accounts, at) {
   return { ...first, sandboxAccount: await keys(headers, added.data, accounts.sandbox, at, `${name} sandbox`) };
 }
 
-/** Opens the app's page, presses Test on its Keys row (its default account) and returns what the row says. */
-export async function testTeamAccount(page, consoleUrl, account) {
+/**
+ * Opens the app's page and runs Test now from the Accounts tab's row menu: the team's default account, or with
+ * `{ own: true }` the caller's own sign-in. Answers the test's status from the service's answer and what the page said
+ * of it (the toast: whether it works, the HTTP status, the reason and whose sign-in it used).
+ */
+export async function testTeamAccount(page, consoleUrl, account, { own = false } = {}) {
   await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(account.appId)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-  await page.getByTestId('app-tab-settings').click({ timeout: 90_000 });
-  const button = page.getByTestId('app-test');
-  await button.waitFor({ timeout: 60_000 });
+  const menu = page.locator(own ? '[data-testid^="account-menu-"][data-mine="true"]' : '[data-testid^="account-menu-"][data-default="true"]').first();
+  await menu.waitFor({ timeout: 90_000 });
+  await menu.click();
   const answered = page.waitForResponse((r) => r.request().method() === 'POST' && /\/accounts\/[^/]+\/test$/.test(r.url()), { timeout: 60_000 }).catch(() => undefined);
-  await button.click();
-  await answered;
-  const health = page.getByTestId('health');
-  await health.waitFor({ timeout: 60_000 });
+  await page.getByRole('menuitem', { name: 'Test now' }).click();
+  const res = await answered;
+  const health = res ? ((await res.json().catch(() => ({}))).data?.health ?? {}) : {};
+  const toast = page.locator('[data-sonner-toast]').last();
+  await toast.waitFor({ timeout: 30_000 }).catch(() => {});
+  const said = ((await toast.innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ');
   return {
-    status: await health.getAttribute('data-status'),
-    said: ((await health.innerText()) ?? '').replace(/\s+/g, ' '),
+    status: health.status ?? null,
+    said: health.status === 'ok' ? said : `Failed ${said}`,
     page: ((await page.locator('main').innerText().catch(() => '')) ?? '').replace(/\s+/g, ' '),
   };
 }

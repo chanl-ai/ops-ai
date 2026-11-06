@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "An app's page leads with its accounts",
+  "description": "An app's page opens on one list of its accounts, with one Connect that asks the auth config, where to sign in when the config leaves it open, and test or team. Tools is the app's catalog to add from, Auth configs keeps each config's details in a sheet, Settings holds personal accounts, Change sign-in and Delete app, and the page of your own accounts moves to the top of the sidebar.",
+  "tag": "improved"
+}

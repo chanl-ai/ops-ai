@@ -104,3 +104,23 @@ async def test_one_tool_reads_as_its_row_does(tmp_path: Path) -> None:
         listed = {r["id"]: r for r in _data(await c.get("/v1/tools", params={"pageSize": 200}))["data"]}
         assert _data(await c.get("/v1/tools/crm_read_case")) == listed["crm_read_case"]
         assert (await c.get("/v1/tools/nope")).status_code == 404
+
+
+class Kept(Directory):
+    """A directory that keeps its list, as agents-service's does for 30 seconds, and counts each time it is dropped."""
+
+    def __init__(self) -> None:
+        self.dropped = 0
+
+    def forget(self) -> None:
+        self.dropped += 1
+
+
+async def test_the_tools_list_reads_tools_fresh(tmp_path: Path) -> None:
+    # A tool added to the team a moment ago must show on the Tools page and in the agent picker at once, not after the
+    # kept list runs out.
+    async with _app(tmp_path) as (c, app):
+        kept = Kept()
+        app.state.runtime.tool_directory, app.state.runtime.app_states = kept, Apps()
+        _data(await c.get("/v1/tools", params={"pageSize": 200}))
+        assert kept.dropped == 1, "the Tools page's list was read from the kept list"

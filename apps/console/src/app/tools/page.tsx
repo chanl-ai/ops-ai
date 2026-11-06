@@ -1,12 +1,11 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
-import { ArrowRight, Wrench } from 'lucide-react';
+import { ArrowRight, Minus, Wrench } from 'lucide-react';
+import { toast } from 'sonner';
 
-import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableRowActions } from '@/components/data-table-row-actions';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { PageLayout } from '@/components/page-layout';
@@ -14,85 +13,34 @@ import { StopRowClick } from '@/components/shared/form-field';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { serverPagination } from '@/components/shared/server-pagination';
-import { AccessBadge } from '@/components/status-badges';
 import { ToolSetActions } from '@/components/tools/tool-set-actions';
 import { ToolsTabs } from '@/components/tools/tools-tabs';
-import { toolHref, UsedByCell } from '@/components/tools/used-by';
-import { Badge } from '@/components/ui/badge';
+import { toolColumns, TOOL_STATUS } from '@/components/tools/tools-table';
+import { toolHref } from '@/components/tools/used-by';
 import { useToolDirectory } from '@/hooks/queries';
-import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
+import { useCan } from '@/hooks/me-queries';
+import { useRemoveTool } from '@/hooks/systems-queries';
+import { useListParams } from '@/hooks/use-list-params';
 import type { ToolKind, ToolRow, ToolRowFilters, ToolStatus } from '@/lib/types/tool-directory';
 
-const KIND: Record<ToolKind, string> = { app: 'App tool', custom: 'Custom tool', workflow: 'Workflow', agent: 'Agent' };
-const STATUS: Record<ToolStatus, { label: string; className: string }> = {
-  ready: { label: 'Ready', className: 'border-success/40 bg-success/10 text-success-text' },
-  needs_approval: { label: 'Needs approval', className: 'border-warning/40 bg-warning/10 text-warning-text' },
-  app_not_connected: { label: 'App not connected', className: 'border-warning/40 bg-warning/10 text-warning-text' },
-  needs_your_sign_in: { label: 'Needs your sign-in', className: 'border-warning/40 bg-warning/10 text-warning-text' },
-};
-
-type Row = ToolRow & { onRowClick: (t: ToolRow) => void; href?: string };
+type Row = ToolRow & { onRowClick: (t: ToolRow) => void; href?: string; onRemove?: () => void };
 
 const columns: ColumnDef<Row>[] = [
-  {
-    // Holds every searched field so the table's own filter keeps the rows the server matched.
-    id: 'name',
-    accessorFn: (t) => `${t.title ?? ''} ${t.name} ${t.app?.name ?? ''}`,
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Tool" />,
-    cell: ({ row }) => (
-      <div className="flex max-w-72 min-w-44 flex-col" data-testid={`tool-row-${row.original.name}`}>
-        <span className="truncate font-medium">{row.original.title ?? row.original.name}</span>
-        {row.original.title && row.original.title !== row.original.name && <code className="truncate font-mono text-xs text-muted-foreground">{row.original.name}</code>}
-      </div>
-    ),
-    enableHiding: false,
-  },
-  {
-    id: 'app',
-    accessorFn: (t) => t.app?.name ?? '',
-    // Filtered by the app's id, as the server filters and its facet counts; the column shows the name.
-    filterFn: (row, _id, value: string[]) => !value?.length || value.includes(row.original.app?.id ?? ''),
-    header: ({ column }) => <DataTableColumnHeader column={column} title="App" />,
-    cell: ({ row }) =>
-      row.original.app ? (
-        <StopRowClick align="start">
-          <Link href={`/integrations/apps/${encodeURIComponent(row.original.app.id)}`} className="text-sm underline-offset-4 hover:underline">
-            {row.original.app.name}
-          </Link>
-        </StopRowClick>
-      ) : (
-        <span className="text-xs text-muted-foreground">Built in</span>
-      ),
-  },
-  { accessorKey: 'kind', header: ({ column }) => <DataTableColumnHeader column={column} title="Kind" />, cell: ({ row }) => <span className="text-sm whitespace-nowrap">{KIND[row.original.kind]}</span>, filterFn: facetFilterFn },
-  { accessorKey: 'access', header: ({ column }) => <DataTableColumnHeader column={column} title="Access" />, cell: ({ row }) => <AccessBadge access={row.original.access} /> },
-  {
-    accessorKey: 'status',
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
-    cell: ({ row }) => (
-      <Badge variant="outline" className={STATUS[row.original.status].className}>
-        {STATUS[row.original.status].label}
-      </Badge>
-    ),
-    filterFn: facetFilterFn,
-  },
-  {
-    id: 'usedBy',
-    accessorFn: (t) => t.usedBy.agents.length + t.usedBy.workflows.length,
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Used by" />,
-    cell: ({ row }) => (
-      <StopRowClick align="start">
-        <UsedByCell usedBy={row.original.usedBy} testId={`used-by-${row.original.name}`} />
-      </StopRowClick>
-    ),
-  },
+  ...toolColumns<Row>({ app: true, kind: true, status: true }),
   {
     id: 'actions',
     meta: { className: 'sticky right-0 z-[1] w-10 bg-card shadow-[-8px_0_8px_-8px_rgb(0_0_0/0.12)]' },
     cell: ({ row }) =>
-      row.original.href ? (
+      row.original.href || row.original.onRemove ? (
         <StopRowClick>
-          <DataTableRowActions row={row} actions={[{ label: 'Open', icon: ArrowRight, onClick: (r) => r.original.onRowClick(r.original) }]} />
+          <DataTableRowActions
+            row={row}
+            actions={[
+              ...(row.original.href ? [{ label: 'Open', icon: ArrowRight, onClick: (r: typeof row) => r.original.onRowClick(r.original) }] : []),
+              // An app's tool leaves the team as it is removed from the app's catalog, with the same word.
+              ...(row.original.onRemove ? [{ label: 'Remove', icon: Minus, onClick: (r: typeof row) => r.original.onRemove?.() }] : []),
+            ]}
+          />
         </StopRowClick>
       ) : null,
     enableHiding: false,
@@ -112,6 +60,8 @@ function ToolsList({ kind }: { kind: ToolKind | null }) {
   const router = useRouter();
   const list = useListParams<ToolRowFilters>('name');
   // The tab's kind is the URL's, kept beside the table's own filters, which never hold it.
+  const remove = useRemoveTool();
+  const mayManage = useCan('connections', 'manage') === true;
   const query = useToolDirectory({ ...list.params, filters: { ...list.params.filters, kind: kind ? [kind] : undefined } });
   const [filterResetKey, setFilterResetKey] = React.useState(0);
   const tools = query.data?.data ?? [];
@@ -120,9 +70,18 @@ function ToolsList({ kind }: { kind: ToolKind | null }) {
     () =>
       tools.map((t) => {
         const href = toolHref(t) ?? undefined;
-        return { ...t, href, onRowClick: () => href && router.push(href) };
+        // A plugin app's tool is removed from the team by someone who manages the team's apps.
+        const removable = mayManage && t.kind === 'app' && t.app?.id.startsWith('plugin:');
+        const onRemove = removable
+          ? () =>
+              remove.mutate(
+                { appId: t.app!.id, tool: t.name },
+                { onSuccess: () => (toast.success(`${t.title ?? t.name} is removed from the team`), void query.refetch()), onError: (e) => toast.error('Couldn’t remove it', { description: e.message }) },
+              )
+          : undefined;
+        return { ...t, href, onRowClick: () => href && router.push(href), onRemove };
       }),
-    [tools, router],
+    [tools, router, mayManage, remove, query],
   );
   const withCounts = <K extends string>(column: string, labels: Record<K, string>) =>
     (Object.keys(labels) as K[]).map((value) => ({ label: labels[value], value, count: facets[column]?.[value] ?? 0 }));
@@ -157,7 +116,7 @@ function ToolsList({ kind }: { kind: ToolKind | null }) {
             searchPlaceholder="Search tools or apps…"
             filters={[
               { column: 'app', title: 'App', options: withCounts('app', appNames) },
-              { column: 'status', title: 'Status', options: withCounts('status', Object.fromEntries(Object.entries(STATUS).map(([k, v]) => [k, v.label])) as Record<ToolStatus, string>) },
+              { column: 'status', title: 'Status', options: withCounts('status', Object.fromEntries(Object.entries(TOOL_STATUS).map(([k, v]) => [k, v.label])) as Record<ToolStatus, string>) },
             ]}
             onColumnFiltersChange={list.onColumnFiltersChange}
             filterResetKey={filterResetKey}

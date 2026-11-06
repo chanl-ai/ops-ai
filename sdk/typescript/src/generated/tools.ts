@@ -163,10 +163,20 @@ export interface paths {
         get: operations["apps_get_app"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete App
+         * @description Deletes a custom app with its accounts and their secrets; 409 app_in_use naming the tools and accounts
+         *     while a tool still uses it.
+         */
+        delete: operations["apps_delete_app"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Change App Kind
+         * @description A custom app's sign-in kind: every account moves to it, drops what it held for the old one, and is named
+         *     in the answer as needing its new sign-in.
+         */
+        patch: operations["apps_change_app_kind"];
         trace?: never;
     };
     "/v1/apps/{app_id}/accounts": {
@@ -378,6 +388,46 @@ export interface paths {
         put: operations["apps_set_team_app"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/apps/{app_id}/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Tools
+         * @description Adds tools from an app's catalog to the team: agents may then pick them and the gateway runs them.
+         */
+        post: operations["apps_add_tools"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/apps/{app_id}/tools/{tool}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Tool
+         * @description Removes a tool from the team: agents are no longer offered it and its calls are refused.
+         */
+        delete: operations["apps_remove_tool"];
         options?: never;
         head?: never;
         patch?: never;
@@ -753,6 +803,27 @@ export interface paths {
         post?: never;
         /** Delete Secret */
         delete: operations["secrets_delete_secret"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/secrets/{name}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rename Secret
+         * @description A new name, the value kept. Operations name a secret by `{{name}}`, so one an operation reads is not
+         *     renamed: the answer names those operations, as a delete does.
+         */
+        post: operations["secrets_rename_secret"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1379,14 +1450,15 @@ export interface components {
         };
         /**
          * AccountOwner
-         * @description Whose sign-in an account is: the team's (`name` the team), or each person's own (`name` the caller).
+         * @description Whose sign-in a row is: the team's (`name` the team), an account each person signs in to (`each`, `name` the
+         *     caller), or one person's own sign-in on a team account (`person`, `name` that person).
          */
         AccountOwner: {
             /**
              * Kind
              * @enum {string}
              */
-            kind: "team" | "each";
+            kind: "team" | "each" | "person";
             /** Name */
             name: string;
         };
@@ -1436,12 +1508,8 @@ export interface components {
         };
         /** AccountTestIn */
         AccountTestIn: {
-            /**
-             * Account
-             * @default self
-             * @enum {string}
-             */
-            account: "self" | "team";
+            /** Account */
+            account?: ("self" | "team") | null;
         };
         /** ActivityDay */
         ActivityDay: {
@@ -1463,8 +1531,8 @@ export interface components {
         };
         /**
          * AppAccount
-         * @description One of the team's accounts of the app: the default is the one live calls use unless they name another,
-         *     and a sandbox one is what test runs use.
+         * @description One row of the app's Accounts list: one of the team's accounts (the default is the one live calls use unless
+         *     they name another, and a sandbox one is what test runs use), or one person's own sign-in on it (`kind` person).
          */
         AppAccount: {
             /** Account */
@@ -1473,11 +1541,19 @@ export interface components {
             actions?: ("rename" | "sign_in" | "reconnect" | "make_default" | "make_team_default" | "disconnect" | "delete" | "move" | "connect_mine")[];
             /** Configid */
             configId?: string | null;
+            /** Configname */
+            configName?: string | null;
             /** Default */
             default: boolean;
             health?: components["schemas"]["ConnectionHealth"] | null;
             /** Id */
             id: string;
+            /**
+             * Kind
+             * @default team
+             * @enum {string}
+             */
+            kind: "team" | "person";
             /**
              * Mine
              * @default false
@@ -1490,6 +1566,8 @@ export interface components {
             owner: components["schemas"]["AccountOwner"];
             /** Revision */
             revision: number;
+            /** Rowid */
+            rowId: string;
             /** Sandbox */
             sandbox: boolean;
             /**
@@ -1692,6 +1770,21 @@ export interface components {
                 [key: string]: string | null;
             } | null;
         };
+        /** AppDeleted */
+        AppDeleted: {
+            /** Accounts */
+            accounts: string[];
+        };
+        /** AppKindChanged */
+        AppKindChanged: {
+            /** Accounts */
+            accounts: string[];
+        };
+        /** AppKindIn */
+        AppKindIn: {
+            /** Kind */
+            kind: string;
+        };
         /**
          * AppMe
          * @description The caller's own sign-in on the app's account: Connect my account, or Connected as.
@@ -1709,6 +1802,8 @@ export interface components {
          *     of its tools.
          */
         AppPage: {
+            /** Accounts */
+            accounts?: components["schemas"]["AppAccount"][];
             /** Authconfigs */
             authConfigs?: components["schemas"]["AuthConfig"][];
             card: components["schemas"]["SystemCard"];
@@ -1772,6 +1867,16 @@ export interface components {
         AppTool: {
             /** Access */
             access: string;
+            /**
+             * Added
+             * @default true
+             */
+            added: boolean;
+            /**
+             * Askedatsignin
+             * @default false
+             */
+            askedAtSignIn: boolean;
             /** Name */
             name: string;
             /** Title */
@@ -1820,8 +1925,11 @@ export interface components {
          *     edited or deleted.
          */
         AuthConfig: {
-            /** Accounts */
-            accounts?: components["schemas"]["AppAccount"][];
+            /**
+             * Accountcount
+             * @default 0
+             */
+            accountCount: number;
             /** Candelete */
             canDelete: boolean;
             /** Canedit */
@@ -1834,8 +1942,12 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+            /** Permissions */
+            permissions?: components["schemas"]["ConfigPermission"][];
             /** Secretends */
             secretEnds?: string | null;
+            /** Signinplace */
+            signInPlace?: string | null;
             /**
              * Type
              * @enum {string}
@@ -2119,6 +2231,18 @@ export interface components {
             secrets?: string[];
             /** Source */
             source: string;
+        };
+        /** ConfigPermission */
+        ConfigPermission: {
+            /**
+             * Askedatsignin
+             * @default false
+             */
+            askedAtSignIn: boolean;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
         };
         /**
          * ConnectLinkIn
@@ -2424,9 +2548,36 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[AppDeleted] */
+        Envelope_AppDeleted_: {
+            data: components["schemas"]["AppDeleted"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[AppKindChanged] */
+        Envelope_AppKindChanged_: {
+            data: components["schemas"]["AppKindChanged"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[AppPage] */
         Envelope_AppPage_: {
             data: components["schemas"]["AppPage"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[AppTool] */
+        Envelope_AppTool_: {
+            data: components["schemas"]["AppTool"];
             /**
              * Success
              * @constant
@@ -2754,6 +2905,16 @@ export interface components {
         Envelope_list_AppResource__: {
             /** Data */
             data: components["schemas"]["AppResource"][];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[list[AppTool]] */
+        Envelope_list_AppTool__: {
+            /** Data */
+            data: components["schemas"]["AppTool"][];
             /**
              * Success
              * @constant
@@ -3605,6 +3766,8 @@ export interface components {
             app: string;
             /** Appid */
             appId: string;
+            /** Authconfig */
+            authConfig?: string | null;
             /** Authkind */
             authKind: string;
             /** Connected */
@@ -3640,6 +3803,12 @@ export interface components {
             scopes: string[];
             /** Since */
             since?: string | null;
+            /**
+             * State
+             * @default connected
+             * @enum {string}
+             */
+            state: "connected" | "expired" | "not_connected";
             test?: components["schemas"]["AccountTest"] | null;
         };
         /**
@@ -3973,6 +4142,11 @@ export interface components {
         RemoveIn: {
             /** Value */
             value: string;
+        };
+        /** RenameIn */
+        RenameIn: {
+            /** Name */
+            name: string;
         };
         /** ResourceCopy */
         ResourceCopy: {
@@ -4315,12 +4489,8 @@ export interface components {
         };
         /** SignInIn */
         SignInIn: {
-            /**
-             * Account
-             * @default self
-             * @enum {string}
-             */
-            account: "self" | "team";
+            /** Account */
+            account?: ("self" | "team") | null;
         };
         /** SignInStart */
         SignInStart: {
@@ -5030,6 +5200,11 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+        };
+        /** ToolsAddIn */
+        ToolsAddIn: {
+            /** Tools */
+            tools: string[];
         };
         /** ValidationError */
         ValidationError: {
@@ -6124,6 +6299,252 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_AppPage_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    apps_delete_app: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AppDeleted_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    apps_change_app_kind: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppKindIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AppKindChanged_"];
                 };
             };
             /** @description Invalid request */
@@ -7459,6 +7880,253 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_SystemCard_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    apps_add_tools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolsAddIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_AppTool__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    apps_remove_tool: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: string;
+                tool: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AppTool_"];
                 };
             };
             /** @description Invalid request */
@@ -9897,6 +10565,115 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    secrets_rename_secret: {
+        parameters: {
+            query?: {
+                teamId?: string | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SecretMeta_"];
+                };
             };
             /** @description Invalid request */
             400: {

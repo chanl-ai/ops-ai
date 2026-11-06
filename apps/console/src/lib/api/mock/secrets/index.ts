@@ -34,6 +34,14 @@ export function createSecretsMock(deps: { me: string; users?: () => Record<strin
         Object.assign(row, { version: row.version + 1, rotatedAt: new Date().toISOString() });
         return withUsers(row);
       }),
+    rename: (name, to) =>
+      respond(() => {
+        const users = withUsers(find(name)).usedBy;
+        if (users.length) throw new ApiError(`${name} is read by ${users.map((u) => u.operation).join(', ')}, which name it. Remove it from those operations first, or add a new secret under the new name.`, 409);
+        if (rows.some((r) => r.name === to)) throw new ApiError(`A secret named ${to} already exists. Pick another name.`, 409);
+        Object.assign(find(name), { name: to });
+        return withUsers(find(to));
+      }),
     remove: (name) =>
       respond(() => {
         const users = withUsers(find(name)).usedBy;

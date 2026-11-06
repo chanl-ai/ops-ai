@@ -29,11 +29,11 @@ await withUiStack(
         return page;
       };
       const page = await signIn(1280);
-      // Column order on the Workflows table: select, id, Workflow (a name), then counts and stages.
+      // Column order on the Workflows table: select, Workflow (a name), then counts and stages, the id last.
       const cells = (col) => page.locator(`tbody tr td:nth-child(${col})`);
 
       await step('1 a name takes the free space on one line, trimmed, with the whole name on hover', async () => {
-        const name = cells(3).first();
+        const name = cells(2).first();
         const title = await name.getAttribute('title');
         const text = (await name.locator('div').first().innerText()).split('\n')[0];
         // Every line inside the cell is one line high: nothing wraps.
@@ -51,7 +51,7 @@ await withUiStack(
 
       await step('3 a column cell that draws nothing shows a dash', async () => {
         // The rule is on every kind cell: an empty cell of the same column, as the table draws it, shows the dash.
-        const dash = await cells(3).first().evaluate((td) => {
+        const dash = await cells(2).first().evaluate((td) => {
           const empty = document.createElement('td');
           empty.className = td.className;
           td.parentElement.appendChild(empty);
@@ -64,7 +64,7 @@ await withUiStack(
 
       await step('4 at 400px the name stays pinned beside the select box while the counts scroll, and the page never scrolls sideways', async () => {
         const narrow = await signIn(400);
-        const name = narrow.locator('tbody tr td:nth-child(3)').first();
+        const name = narrow.locator('tbody tr td:nth-child(2)').first();
         const pinned = await name.evaluate((td) => [getComputedStyle(td).position, getComputedStyle(td).left]);
         const box = narrow.locator('table').first().locator('xpath=..');
         await box.evaluate((el) => el.scrollTo(300, 0));

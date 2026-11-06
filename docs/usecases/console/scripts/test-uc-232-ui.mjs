@@ -26,7 +26,8 @@ await withUiStack(
       const header = page.getByTestId('header-workspace');
       await header.waitFor();
       const said = (await header.innerText()).trim();
-      check('1 the header names the workspace as platform-service does, with no sample environment', !!me?.tenantName && said === me.tenantName, { said, tenantName: me?.tenantName });
+      // The header reads "<workspace> · <team>": the workspace as platform-service names it, then the team acted in.
+      check('1 the header names the workspace as platform-service does, then the team, with no sample environment', !!me?.tenantName && said === `${me.tenantName} · Operations`, { said, tenantName: me?.tenantName });
 
       await page.goto(`${consoleUrl}/tools/custom`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const tab = page.getByRole('tab', { name: /^Workflows/ }).or(page.getByRole('button', { name: /^Workflows ·/ })).first();

@@ -89,9 +89,10 @@ class AccountPatchIn(_In):
 
 
 class SignInIn(_In):
-    # On an account each person signs in to: `self` (the default) signs in the caller's own account, `team` the
-    # team's backup account, which needs connections.manage.
-    account: Literal["self", "team"] = "self"
+    # On an account each person signs in to: `self` signs in the caller's own account, `team` the team's backup
+    # account, which needs connections.manage. Left out: the team's while the account has no team sign-in and the
+    # caller manages the team's apps (the first sign-in of an app), else the caller's own.
+    account: Literal["self", "team"] | None = None
 
 
 class PersonCredentialsIn(_In):
@@ -103,8 +104,8 @@ class PersonCredentialsIn(_In):
 
 class AccountTestIn(_In):
     # `self` tests with the caller's own sign-in on an account each person signs in to; `team` with the team's,
-    # which needs connections.manage.
-    account: Literal["self", "team"] = "self"
+    # which needs connections.manage. Left out: the caller's own when they hold one, else the team's.
+    account: Literal["self", "team"] | None = None
 
 
 class ConnectLinkIn(_In):
@@ -271,6 +272,11 @@ class MyAccount(Out):
     scopes: list[str]
     since: str | None = None
     expires_at: str | None = None
+    # The auth config the account signs in through: "Ops AI's app", a team app credential's name, or none for a kind
+    # whose person gives their own key.
+    auth_config: str | None = None
+    # The person's own sign-in: connected, expired (the system refused it), or not connected yet.
+    state: Literal["connected", "expired", "not_connected"] = "connected"
 
 
 class AccountRow(Out):

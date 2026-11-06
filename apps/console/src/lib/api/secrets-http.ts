@@ -13,6 +13,7 @@ export function createSecretsHttp(get: Get, send: Send, qs: Qs): SecretsApi {
     page: (p) => get(`/secrets?${qs(p)}`),
     create: (name, value) => send('POST', '/secrets', { name, value }),
     rotate: (name, value) => send('POST', `/secrets/${encodeURIComponent(name)}/rotate`, { value }),
+    rename: (name, to) => send('POST', `/secrets/${encodeURIComponent(name)}/rename`, { name: to }),
     remove: (name) => send('DELETE', `/secrets/${encodeURIComponent(name)}`),
   };
 }

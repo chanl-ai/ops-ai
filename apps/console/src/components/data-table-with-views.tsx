@@ -17,7 +17,7 @@ import {
   useReactTable,
   PaginationState as TanStackPaginationState,
 } from '@tanstack/react-table';
-import { LayoutGrid, Table as TableIcon } from 'lucide-react';
+import { ChevronRight, LayoutGrid, Table as TableIcon } from 'lucide-react';
 
 import {
   Table,
@@ -434,6 +434,20 @@ export function DataTableWithViews<TData, TValue>({
           {/* The fade tells a phone that more columns sit past the edge; it goes once the table is scrolled to its end. */}
           <div className="relative flex-1 min-h-0" ref={tableBox}>
             <EdgeFade show={moreColumns} className="z-[2]" data-testid="table-edge-fade" />
+            {moreColumns && (
+              // A fade alone reads as the end of the row on a phone; the arrow says more columns are there and goes to them.
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon"
+                className="absolute right-1 top-1.5 z-[11] size-7 rounded-full shadow-sm"
+                aria-label="More columns"
+                onClick={() => tableBox.current?.querySelector('[data-slot=table-container]')?.scrollBy({ left: 240, behavior: 'smooth' })}
+                data-testid="table-more-columns"
+              >
+                <ChevronRight className="size-4" />
+              </Button>
+            )}
             <Table>
               {/* The first name column is pinned on a phone, and so is the select box before it. */}
               <TableHeader className="sticky top-0 z-10 bg-background">

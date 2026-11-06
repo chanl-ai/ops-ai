@@ -41,7 +41,7 @@ class AccountIn(TypedDict, closed=True):
 
 
 class AccountOwner(TypedDict, closed=True):
-    kind: Literal["team", "each"]
+    kind: Literal["team", "each", "person"]
     name: str
 
 
@@ -66,7 +66,7 @@ class AccountTest(TypedDict, closed=True):
 
 
 class AccountTestIn(TypedDict, closed=True):
-    account: NotRequired[Literal["self", "team"]]
+    account: NotRequired[Literal["self", "team"] | None]
 
 
 class ActivityDay(TypedDict, closed=True):
@@ -93,6 +93,18 @@ class AppCredentialPatchIn(TypedDict, closed=True):
     name: NotRequired[str | None]
     scopes: NotRequired[list[Scope] | None]
     settings: NotRequired[dict[str, str | None] | None]
+
+
+class AppDeleted(TypedDict, closed=True):
+    accounts: list[str]
+
+
+class AppKindChanged(TypedDict, closed=True):
+    accounts: list[str]
+
+
+class AppKindIn(TypedDict, closed=True):
+    kind: str
 
 
 class AppMe(TypedDict, closed=True):
@@ -245,6 +257,12 @@ class CodeSettingsIn(TypedDict, closed=True):
     source: str
 
 
+class ConfigPermission(TypedDict, closed=True):
+    askedAtSignIn: NotRequired[bool]
+    id: str
+    label: str
+
+
 class ConnectLinkIn(TypedDict, closed=True):
     link: str
 
@@ -314,6 +332,16 @@ class EntryIn(TypedDict, closed=True):
     protection: NotRequired[Literal["system", "managed"] | None]
     templateId: NotRequired[str | None]
     value: str
+
+
+class EnvelopeAppDeleted(TypedDict, closed=True):
+    data: AppDeleted
+    success: Literal[True]
+
+
+class EnvelopeAppKindChanged(TypedDict, closed=True):
+    data: AppKindChanged
+    success: Literal[True]
 
 
 class EnvelopeAppUsers(TypedDict, closed=True):
@@ -593,6 +621,7 @@ class MyAccount(TypedDict, closed=True):
     account: NotRequired[str | None]
     app: str
     appId: str
+    authConfig: NotRequired[str | None]
     authKind: str
     connected: bool
     connection: str
@@ -609,6 +638,7 @@ class MyAccount(TypedDict, closed=True):
     sandbox: bool
     scopes: list[str]
     since: NotRequired[str | None]
+    state: NotRequired[Literal["connected", "expired", "not_connected"]]
     test: NotRequired[AccountTest | None]
 
 
@@ -722,6 +752,10 @@ class ReadIn(TypedDict, closed=True):
 
 class RemoveIn(TypedDict, closed=True):
     value: str
+
+
+class RenameIn(TypedDict, closed=True):
+    name: str
 
 
 class ResourceCopy(TypedDict):
@@ -859,7 +893,7 @@ class SignInCompleteIn(TypedDict, closed=True):
 
 
 class SignInIn(TypedDict, closed=True):
-    account: NotRequired[Literal["self", "team"]]
+    account: NotRequired[Literal["self", "team"] | None]
 
 
 class SignInStart(TypedDict, closed=True):
@@ -1109,6 +1143,10 @@ class ToolUser(TypedDict, closed=True):
     name: str
 
 
+class ToolsAddIn(TypedDict, closed=True):
+    tools: list[str]
+
+
 class ValidationError(TypedDict):
     ctx: NotRequired[dict[str, Any]]
     input: NotRequired[Any]
@@ -1195,14 +1233,17 @@ class AppAccount(TypedDict, closed=True):
         ]
     ]
     configId: NotRequired[str | None]
+    configName: NotRequired[str | None]
     default: bool
     health: NotRequired[ConnectionHealth | None]
     id: str
+    kind: NotRequired[Literal["team", "person"]]
     mine: NotRequired[bool]
     myDefault: NotRequired[bool | None]
     name: str
     owner: AccountOwner
     revision: int
+    rowId: str
     sandbox: bool
     state: Literal["connected", "not_signed_in", "expired", "refused", "revoked"]
     stateReason: NotRequired[str | None]
@@ -1246,14 +1287,16 @@ class AppResource(TypedDict):
 
 
 class AuthConfig(TypedDict, closed=True):
-    accounts: NotRequired[list[AppAccount]]
+    accountCount: NotRequired[int]
     canDelete: bool
     canEdit: bool
     clientId: NotRequired[str | None]
     default: bool
     id: str
     name: str
+    permissions: NotRequired[list[ConfigPermission]]
     secretEnds: NotRequired[str | None]
+    signInPlace: NotRequired[str | None]
     type: Literal["ops_ai", "own", "account"]
 
 
@@ -1816,6 +1859,8 @@ class AppCredentialDetail(TypedDict, closed=True):
 
 class AppTool(TypedDict, closed=True):
     access: str
+    added: NotRequired[bool]
+    askedAtSignIn: NotRequired[bool]
     name: str
     title: str
     usedBy: NotRequired[ToolUsedBy | None]
@@ -1828,6 +1873,11 @@ class EnvelopeAppCredentialChange(TypedDict, closed=True):
 
 class EnvelopeAppCredentialDetail(TypedDict, closed=True):
     data: AppCredentialDetail
+    success: Literal[True]
+
+
+class EnvelopeAppTool(TypedDict, closed=True):
+    data: AppTool
     success: Literal[True]
 
 
@@ -1881,6 +1931,11 @@ class EnvelopeToolModuleDetail(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeListAppTool(TypedDict, closed=True):
+    data: list[AppTool]
+    success: Literal[True]
+
+
 class EnvelopeListPluginTemplate(TypedDict, closed=True):
     data: list[PluginTemplate]
     success: Literal[True]
@@ -1921,6 +1976,7 @@ class SystemCard(TypedDict, closed=True):
 
 
 class AppPage(TypedDict, closed=True):
+    accounts: NotRequired[list[AppAccount]]
     authConfigs: NotRequired[list[AuthConfig]]
     card: SystemCard
     connection: NotRequired[AccountDetail | None]

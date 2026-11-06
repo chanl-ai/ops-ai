@@ -12,6 +12,8 @@ export interface SecretsApi {
   /** Saved in the current team, the only team whose tool modules read it. */
   create(name: string, value: string): Promise<SecretMeta>;
   rotate(name: string, value: string): Promise<SecretMeta>;
+  /** A new name, the value kept; refused with 409 `secret_in_use` while an operation names it, as a delete is. */
+  rename(name: string, to: string): Promise<SecretMeta>;
   /** Refused with 409 `secret_in_use` while an operation names it. */
   remove(name: string): Promise<void>;
 }

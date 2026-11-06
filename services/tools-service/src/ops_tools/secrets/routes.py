@@ -58,6 +58,11 @@ class RotateIn(_In):
     value: str = Field(min_length=1, max_length=8192)
 
 
+class RenameIn(_In):
+    # The same rule as a new secret's name.
+    name: str = Field(pattern=r"^[A-Z][A-Z0-9_]*$", max_length=64)
+
+
 class SecretUser(Out):
     module_id: str
     module_name: str
@@ -322,6 +327,32 @@ def secrets_router(
             ):
                 raise NotFound(f"Secret {name}")
             return ok(await _one(who, owner, name))
+
+    @r.post("/{name}/rename", response_model=Envelope[SecretMeta])
+    async def rename_secret(  # pyright: ignore[reportUnusedFunction]
+        name: str, body: RenameIn, who: Annotated[Person, Depends(caller)], team_id: TeamQuery = None
+    ) -> JSONResponse:
+        """A new name, the value kept. Operations name a secret by `{{name}}`, so one an operation reads is not
+        renamed: the answer names those operations, as a delete does."""
+        owner = _team(who, team_id)
+        with _in(who, owner):
+            row = await _row(who, owner, name)
+            await _not_a_connection_part(who, owner, row)
+            _may_write(who, "edit", owner, row.get("protection"))
+            if users := (await _users(who.tenant_id, owner)).get(name):
+                ops = ", ".join(u["operation"] for u in users)
+                raise Conflict(
+                    f"{name} is read by {ops}, which name it. Remove it from those operations first, or add a new "
+                    "secret under the new name.",
+                    code="secret_in_use",
+                    details={"operations": [u["operation"] for u in users]},
+                )
+            moved = await secrets.rename(who.tenant_id, owner, name, body.name, actor=who.name, at=datetime.now(UTC))
+            if moved is False:
+                raise Conflict(f"A secret named {body.name} already exists. Pick another name.")
+            if moved is None:
+                raise NotFound(f"Secret {name}")
+            return ok(await _one(who, owner, body.name))
 
     @r.delete("/{name}", status_code=204, response_class=Response)
     async def delete_secret(  # pyright: ignore[reportUnusedFunction]

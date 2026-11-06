@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Test an MCP server by listing its tools",
+  "description": "Test on an MCP server's app now asks the server to list its tools with the account's sign-in, the same call its tools make, so it no longer needs a test address. A server that refuses says why.",
+  "tag": "fix"
+}

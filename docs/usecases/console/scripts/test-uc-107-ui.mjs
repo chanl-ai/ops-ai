@@ -67,13 +67,13 @@ await withUiStack(
       const sam = await signIn(browser, consoleUrl, SAM, errors);
       const james = await signIn(browser, consoleUrl, JAMES, errors);
       // Settings > Secrets as `who`, searched for the key; the row, which is absent when `who`'s team holds no such key.
-      const search = async (who) => {
+      const search = async (who, name = KEY) => {
         await who.goto(`${consoleUrl}/settings/secrets`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         // The search is the server's; its answer re-renders the rows, which would close a row menu opened before it.
-        const searched = armed(who.waitForResponse((r) => r.url().includes(`/v1/secrets?`) && r.url().includes(`search=${KEY}`), { timeout: 60_000 }));
-        await who.getByPlaceholder('Search secrets…').fill(KEY);
+        const searched = armed(who.waitForResponse((r) => r.url().includes(`/v1/secrets?`) && r.url().includes(`search=${name}`), { timeout: 60_000 }));
+        await who.getByPlaceholder('Search secrets…').fill(name);
         await searched;
-        return who.getByRole('row', { name: new RegExp(KEY) });
+        return who.getByRole('row', { name: new RegExp(name) });
       };
       const secretsPage = async () => {
         const row = await search(james);
@@ -136,7 +136,35 @@ await withUiStack(
         const reason = await del.innerText();
         await james.keyboard.press('Escape');
         const api = await fetch(`${tools}/v1/secrets/${KEY}`, { method: 'DELETE', headers: J });
-        check('2 delete is off while operations read it', disabled && reason.includes('Read by 5 operations') && api.status === 409, { disabled, reason, api: api.status });
+        check('2 delete is off while operations read it, naming them', disabled && reason.includes('Read by') && reason.includes(OPS[0]) && api.status === 409, { disabled, reason, api: api.status });
+      });
+
+      // 2b. Rename is off for the same reason: the operations name it, so a new name would break them.
+      await step('2b rename is off while operations read it, naming them', async () => {
+        const row = await secretsPage();
+        const item = await menu(row, /Rename/);
+        const disabled = (await item.getAttribute('aria-disabled')) === 'true' || (await item.getAttribute('data-disabled')) !== null;
+        const reason = await item.innerText();
+        await james.keyboard.press('Escape');
+        const api = await fetch(`${tools}/v1/secrets/${KEY}/rename`, { method: 'POST', headers: { ...J, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: `${KEY}_NEW` }) });
+        check('2b rename is off while operations read it, naming them', disabled && reason.includes(OPS[0]) && api.status === 409, { disabled, reason, api: api.status });
+      });
+
+      // 2c. A secret no operation reads is renamed from its row; its last four characters stay with it.
+      await step('2c a secret no operation reads is renamed from its row, its value kept', async () => {
+        const spare = `SPARE_${TAG.toUpperCase()}`;
+        const made = await fetch(`${tools}/v1/secrets`, { method: 'POST', headers: { ...J, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: spare, value: 'spare-value-9z7q' }) });
+        const row = await search(james, spare);
+        await row.waitFor({ timeout: 60_000 });
+        const ends = (await row.innerText()).includes('ending 9z7q');
+        await (await menu(row, /Rename/)).click();
+        const dialog = james.getByTestId('secret-rename');
+        await dialog.locator('#secret-rename-name').fill(`${spare}_OLD`);
+        const renamed = armed(james.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/v1/secrets/${spare}/rename`), { timeout: 60_000 }));
+        await james.getByTestId('secret-rename-save').click();
+        const res = await renamed;
+        const moved = await (await search(james, `${spare}_OLD`)).filter({ hasText: 'ending 9z7q' }).waitFor({ timeout: 30_000 }).then(() => true, () => false);
+        check('2c a secret no operation reads is renamed from its row, its value kept', made.status === 201 && ends && res?.status() === 200 && moved, { made: made.status, ends, rename: res?.status(), moved });
       });
 
       // 3. With the wrong value both runs fail; after James rotates it in the console, both send the new value.

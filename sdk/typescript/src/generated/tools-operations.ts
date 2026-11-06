@@ -20,6 +20,17 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "apps_add_tools": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/apps/{app_id}/tools",
+    "pathParams": [
+      "app_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "apps_app_users": {
     "body": null,
     "headers": [],
@@ -50,6 +61,17 @@ export const toolsOperations = {
     "path": "/v1/app-credentials/{credential_id}",
     "pathParams": [
       "credential_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "apps_change_app_kind": {
+    "body": "json",
+    "headers": [],
+    "method": "PATCH",
+    "path": "/v1/apps/{app_id}",
+    "pathParams": [
+      "app_id"
     ],
     "query": [],
     "stream": false
@@ -92,6 +114,17 @@ export const toolsOperations = {
     "pathParams": [
       "app_id",
       "account_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "apps_delete_app": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/apps/{app_id}",
+    "pathParams": [
+      "app_id"
     ],
     "query": [],
     "stream": false
@@ -259,6 +292,18 @@ export const toolsOperations = {
     "path": "/v1/apps/{app_id}/update",
     "pathParams": [
       "app_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "apps_remove_tool": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/apps/{app_id}/tools/{tool}",
+    "pathParams": [
+      "app_id",
+      "tool"
     ],
     "query": [],
     "stream": false
@@ -501,6 +546,19 @@ export const toolsOperations = {
       "pageSize",
       "search",
       "templateId",
+      "teamId"
+    ],
+    "stream": false
+  },
+  "secrets_rename_secret": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/secrets/{name}/rename",
+    "pathParams": [
+      "name"
+    ],
+    "query": [
       "teamId"
     ],
     "stream": false
