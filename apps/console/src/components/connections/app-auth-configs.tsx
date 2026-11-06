@@ -8,6 +8,7 @@ import { CallbackUrl } from '@/components/connections/callback-url';
 import { CredentialDeleteDialog } from '@/components/connections/credential-delete-dialog';
 import { CredentialEditDialog } from '@/components/connections/credential-edit-dialog';
 import { NewAppCredentialDialog } from '@/components/connections/new-app-credential-dialog';
+import { type ConfigMode, MODE_LABEL } from '@/components/connections/sign-in-place';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { CopyButton } from '@/components/shared/copy-button';
@@ -63,7 +64,7 @@ export function AuthConfigsTab({ app, onShowAccounts }: { app: AppPage; onShowAc
       id: 'place',
       accessorFn: (c) => c.signInPlace ?? '',
       header: ({ column }) => <DataTableColumnHeader column={column} title="Sign-in place" />,
-      cell: ({ row: { original: c } }) => <span className="text-sm text-muted-foreground">{placeOf(c)}</span>,
+      cell: ({ row: { original: c } }) => <PlaceOf config={c} />,
     },
     {
       id: 'accounts',
@@ -126,8 +127,17 @@ export function AuthConfigsTab({ app, onShowAccounts }: { app: AppPage; onShowAc
   );
 }
 
-/** Where a config's accounts sign in: its own place, or Connect asks (always so for Ops AI's app). */
-const placeOf = (c: AuthConfig) => c.signInPlace ?? 'Asked in Connect';
+/** Where a config's accounts sign in, as a person reads it, with Fixed or Default; Connect asks when it holds none. */
+function PlaceOf({ config: c }: { config: AuthConfig }) {
+  const held = (c.fields ?? []).find((f) => f.value);
+  if (!held) return <span className="text-sm text-muted-foreground">Asked in Connect</span>;
+  return (
+    <span className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-muted-foreground" data-testid={`auth-config-place-${c.name}`}>
+      <span className="truncate">{held.shown ?? held.value}</span>
+      {held.mode && <Badge variant="outline">{MODE_LABEL[held.mode as ConfigMode]}</Badge>}
+    </span>
+  );
+}
 
 /** A config's read-once details: its client, callback URL, sign-in place, permissions and how many accounts use it. */
 function ConfigDetails({ app, config: c, onShowAccounts }: { app: AppPage; config: AuthConfig; onShowAccounts: (id: string) => void }) {
@@ -139,7 +149,10 @@ function ConfigDetails({ app, config: c, onShowAccounts }: { app: AppPage; confi
       )}
       {c.secretEnds && <FieldRow label="Client secret" value={`Ends in ${c.secretEnds}`} testId={`auth-config-secret-${c.name}`} />}
       {c.type === 'own' && <CallbackUrl app={app.card.name} id={`auth-config-callback-${c.id}`} testId={`auth-config-callback-${c.name}`} />}
-      <FieldRow label="Sign-in place" value={placeOf(c)} />
+      <div className="flex flex-col gap-1">
+        <span className="text-sm font-medium">Sign-in place</span>
+        <PlaceOf config={c} />
+      </div>
       {(c.permissions ?? []).length > 0 && (
         <div className="flex flex-col gap-2">
           <span className="text-sm font-medium">Permissions</span>

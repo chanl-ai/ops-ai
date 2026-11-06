@@ -96,3 +96,29 @@ export function SignInPlace({ setting, value, onChange, testId }: { setting: Set
     </FormField>
   );
 }
+
+/** How an auth config holds a sign-in value: every account's (fixed), or where each Connect starts (default). */
+export type ConfigMode = 'default' | 'fixed';
+
+export const MODE_LABEL: Record<ConfigMode, string> = { fixed: 'Fixed', default: 'Default' };
+
+/** Whether accounts on the config all sign in at its value, or start there and may pick another in Connect. */
+export function ConfigModeSelect({ value, onChange, testId }: { value: ConfigMode; onChange: (mode: ConfigMode) => void; testId: string }) {
+  return (
+    <FormField id={testId} label="Accounts on this config" hint={value === 'fixed' ? 'Every account signs in here.' : 'Connect starts here, and an account may sign in elsewhere.'}>
+      <Select value={value} onValueChange={(v) => onChange(v as ConfigMode)}>
+        <SelectTrigger id={testId} className="w-full" data-testid={testId}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="fixed" data-testid={`${testId}-fixed`}>
+            Always sign in here
+          </SelectItem>
+          <SelectItem value="default" data-testid={`${testId}-default`}>
+            Start here, may change
+          </SelectItem>
+        </SelectContent>
+      </Select>
+    </FormField>
+  );
+}

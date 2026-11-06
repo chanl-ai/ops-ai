@@ -42,6 +42,9 @@ const shownAs = (a: ConfigAccount) => a.account ?? a.name;
  * the state and only the actions the API offers per row. Connect, in the page header, is the one way to add one.
  * `config` opens it filtered to one auth config (from that config's account count).
  */
+// What the account's sign-in found (Salesforce's org address), shown under its name.
+const orgOf = (a: ConfigAccount) => (a.signInValues ?? []).find((v) => v.kind === 'found');
+
 export function AccountsTab({
   app,
   config,
@@ -80,6 +83,11 @@ export function AccountsTab({
                 )}
               </span>
               {shownAs(a) !== a.name && <span className="truncate text-xs text-muted-foreground">{a.name}</span>}
+              {orgOf(a) && (
+                <span className="truncate text-xs text-muted-foreground" title={orgOf(a)?.value} data-testid={`account-org-${a.name}`}>
+                  {`${orgOf(a)?.label}: ${orgOf(a)?.shown}`}
+                </span>
+              )}
             </span>
           </span>
         ),
