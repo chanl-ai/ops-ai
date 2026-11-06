@@ -49,15 +49,28 @@ git-rules: ## Print the git rules for the shared tree and check them
 	@python3 -c "import importlib.util as u; s=u.spec_from_file_location('r','scripts/git-rules.py'); m=u.module_from_spec(s); s.loader.exec_module(m); [print('-', w, '\n  instead:', i) for _, w, i in m.RULES]"
 	@python3 scripts/git-rules.py --self-test
 
-# One checkout, one stack: a branch is reviewed by checking it out here and restarting on it, so what runs on the
-# usual ports (console :3016) is always the branch checked out.
+# One stack per machine: a branch is reviewed in one reusable worktree beside the main checkout, and the stack runs from
+# there on the usual ports (console :3016), so the branch you build on never moves. `make up` in your checkout moves
+# the stack back. The review worktree is detached at origin/BRANCH, so any branch can be reviewed, including one that is
+# checked out somewhere else.
 #   make review BRANCH=feat/apps-salesforce
 .PHONY: review
+REVIEW_DIR ?= $(STACK_HOME)-review
 
-review: ## Check out BRANCH from origin and restart the stack on it, migrating each service first; refuses with uncommitted work
+review: ## Check BRANCH out from origin into the review worktree and run the stack from it, restarting only what changed
 	@[ -n "$(BRANCH)" ] || { echo "make review: name the branch, e.g. BRANCH=feat/apps-salesforce"; exit 2; }
-	@[ -z "$$(git status --porcelain --untracked-files=no)" ] || { echo "make review: commit or move your changes first; a branch switch would carry them onto $(BRANCH)"; exit 1; }
-	git fetch origin "$(BRANCH)"
-	git switch "$(BRANCH)" 2>/dev/null || git switch --track "origin/$(BRANCH)"
-	git merge --ff-only "origin/$(BRANCH)"
-	$(MAKE) restart
+	git -C "$(STACK_HOME)" fetch -q origin "+refs/heads/$(BRANCH):refs/remotes/origin/$(BRANCH)"
+	@if [ ! -e "$(REVIEW_DIR)/.git" ]; then \
+	  git -C "$(STACK_HOME)" worktree add -q --detach "$(REVIEW_DIR)" "origin/$(BRANCH)"; \
+	elif [ -n "$$(git -C "$(REVIEW_DIR)" status --porcelain --untracked-files=no)" ]; then \
+	  echo "make review: $(REVIEW_DIR) has uncommitted changes, which a checkout would carry onto $(BRANCH); commit or remove them there"; exit 1; \
+	else \
+	  git -C "$(REVIEW_DIR)" checkout -q --detach "origin/$(BRANCH)"; \
+	fi
+	@# The worktree reads its own .env, as every checkout does; it starts as a copy of the main checkout's.
+	@for f in .env .devcontainer/.env.local; do \
+	  if [ -f "$(STACK_HOME)/$$f" ] && [ ! -e "$(REVIEW_DIR)/$$f" ]; then cp -p "$(STACK_HOME)/$$f" "$(REVIEW_DIR)/$$f"; fi; \
+	done
+	@$(MAKE) -s -C "$(REVIEW_DIR)" install
+	@$(MAKE) -C "$(REVIEW_DIR)" up
+	@echo "review: $(BRANCH) at $$(git -C "$(REVIEW_DIR)" rev-parse --short HEAD) on http://localhost:$(OPS_CONSOLE_PORT), run from $(REVIEW_DIR)"

@@ -1,4 +1,4 @@
-# Tools service: the tool gateway and the tool-module registry on :8720 (ISOLATED=1: :9720), deciding with OPA on :8181.
+# Tools service: the tool gateway and the tool-module registry on :8720, deciding with OPA on :8181.
 # PostgreSQL and OPA come from the shared compose stack. Its tables have their own migration chain
 # (alembic_version_tools). Registry tests live in tests/; the gateway's still live in ../agents-service/tests/gateway
 # while ops_tools reads the agents catalogue (docs/architecture/service-map.md).
@@ -13,7 +13,7 @@ PY_DIRS := src tests migrations scripts
 install: ## uv sync for the workspace
 	uv sync --frozen
 
-run: ## Serve in the foreground on :8720 (ISOLATED=1: :9720)
+run: ## Serve in the foreground on :8720
 	uv run python -m ops_tools
 
 lint: ## ruff format check and lint

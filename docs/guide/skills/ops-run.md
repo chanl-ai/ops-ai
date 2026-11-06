@@ -25,9 +25,11 @@ fake model and OpenAI.
    tests.
 4. `make health` shows each service, its port and who started it; the console is at <http://localhost:3016>.
 5. `make down` stops it (`KEEP_DB=1` keeps the database).
+6. `make review BRANCH=<name>` runs another branch on the same ports from the review worktree beside the clone;
+   `make up` in the clone moves the stack back. One stack runs per machine.
 
 Inside the devcontainer (`OPS_INFRA=external`) the database and mail servers are side containers; the same targets
-apply. `ISOLATED=1` on any target runs a second stack on ports +1000 with its own database.
+apply.
 
 ## Call an API as a dev user
 

@@ -29,5 +29,5 @@ is decided in Human Tasks like any other, and the caller reads the decision from
 
 | Layer | Script | State |
 |---|---|---|
-| api | `agents-service/scripts/test-uc-254-api.py` | `ISOLATED=1 make usecase-test UC=uc-254 LAYER=api` |
+| api | `agents-service/scripts/test-uc-254-api.py` | `make usecase-test UC=uc-254 LAYER=api` |
 | ui | `agents-service/scripts/test-uc-254-ui.mjs` | passing (2026-10-28): Human Tasks asks the pinned version's question with its facts and actions; Priya declines it and the caller reads it back |

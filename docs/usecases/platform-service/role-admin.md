@@ -7,7 +7,7 @@ Status: current. Id: `uc-219`. Service: `platform-service`, agents-service, cons
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 | `make db-up` |
-| Free use-case ports | the runner picks free ports and its own database; run the ui layer with `ISOLATED=1` |
+| Free use-case ports | the runner picks free ports and its own database |
 
 platform-service runs with the dev seed's own roles (`OPS_SEED_EVERYONE_ADMIN` off) and agents-service verifies its
 tokens. The person checked is never a seeded one: an admin invites them through the product and they accept with a

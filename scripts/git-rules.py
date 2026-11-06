@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Git rules for ops-ai checkouts, enforced as a Claude Code PreToolUse hook on Bash.
 
-Each person and each agent works in their own checkout: the main one (ops-ai/) or a lane worktree beside it
-(ops-ai-lane-<name>/), on their own branch, and main changes only through a pull request. Branches, commits, merges
+Work happens in the main checkout (ops-ai/), on a branch, and main changes only through a pull request; `make review`
+keeps one more worktree beside it (ops-ai-review/) for trying a branch. Branches, commits, merges
 and rebases inside your own checkout are normal git. This hook refuses only what loses work or skips review: a stash
 (work nobody else can see), a hard reset or clean (unpushed work gone), skipped hooks, a force push, and a push
 straight to main. Exit 2 blocks the call; stderr is the reason and what to do instead.
 
-Applies to commands that run in ops-ai or a lane (the hook's cwd, or a `cd`/`-C` into one), not in another repository
-nested inside one, which follows its own rules. `python3 scripts/git-rules.py --self-test` checks every rule.
+Applies to commands that run in ops-ai or its review worktree (the hook's cwd, or a `cd`/`-C` into one), not in
+another repository nested inside one, which follows its own rules. `python3 scripts/git-rules.py --self-test` checks
+every rule.
 """
 
 from __future__ import annotations
@@ -18,9 +19,9 @@ import os
 import re
 import sys
 
-# The checkout this script lives in; its lane worktrees sit beside it as <name>-lane-<lane>.
+# The checkout this script lives in, and the review worktree `make review` keeps beside it (make/git.mk).
 TREE = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-LANES = os.path.join(os.path.dirname(TREE), os.path.basename(TREE) + "-lane-")
+REVIEW = TREE + "-review"
 # Where a command starts: the line start, after a separator or `$(`, then any VAR=value prefixes.
 GIT = r"(?:^|[;&|(\n]|\$\()\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*git\s+"
 
@@ -59,10 +60,11 @@ RULES: list[tuple[str, str, str]] = [
 
 
 def in_tree(path: str) -> bool:
-    if not (path == TREE or path.startswith(TREE + "/") or path.startswith(LANES)):
+    roots = [r for r in (TREE, REVIEW) if path == r or path.startswith(r + "/")]
+    if not roots:
         return False
     # A repository nested inside the checkout (its own .git below the checkout's root) follows its own rules.
-    root = TREE if path == TREE or path.startswith(TREE + "/") else LANES + path[len(LANES) :].split("/", maxsplit=1)[0]
+    root = roots[0]
     here = path
     while len(here) > len(root):
         if os.path.exists(os.path.join(here, ".git")):
@@ -109,7 +111,7 @@ def self_test() -> int:
         ("git add -A", False),
         ("git switch -c feat/x", False),
         ("git checkout main", False),
-        ("git worktree add ../ops-ai-lane-x", False),
+        ("git worktree add --detach ../ops-ai-review origin/main", False),
         ("git rebase origin/main", False),
         ("git merge origin/main", False),
         ("git log --oneline", False),
@@ -123,7 +125,7 @@ def self_test() -> int:
     elsewhere = [
         ("git stash", hub, False),
         (f"cd {TREE} && git stash", hub, True),
-        ("git stash", LANES + "backend", True),
+        ("git stash", REVIEW, True),
         ("git stash", os.path.join(TREE, "node_modules"), True),
     ]
     for c, where, want in elsewhere:

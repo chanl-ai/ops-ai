@@ -7,7 +7,7 @@ Status: current. Id: `uc-020`. Service: `agents-service`. Layers: api, ui.
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 and OPA :8181 | `make db-up` |
-| Free use-case ports | agents :8790 (ISOLATED=1 adds 1000) |
+| Free use-case ports | agents :8790 |
 
 The script starts the agents service on the scripted model. `ag_dispute` holds the grant `workflow:dispute_email`,
 and the registry seeds `dispute_email` published.

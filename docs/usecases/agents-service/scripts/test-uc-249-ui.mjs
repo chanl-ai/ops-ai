@@ -1,7 +1,7 @@
 // uc-249 a complaint email is triaged, ui layer: docs/usecases/agents-service/a-complaint-email-is-triaged-attachments.md.
 // The seeded complaint_triage workflow on the banker demo stack: platform sign-in, models on the fake OpenAI with the
 // demo's rules, tools-service with the core fake bank, GreenMail and Mailpit reachable (tools.mail), the seeded
-// mailboxes, and a worker. Run isolated (ISOLATED=1). Real mail both ways; nothing else faked but the bank and the model.
+// mailboxes, and a worker. Real mail both ways; nothing else faked but the bank and the model.
 // The receipt's document type is configuration made here through the documents API, as a team would on its page.
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';

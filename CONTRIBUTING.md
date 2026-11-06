@@ -32,11 +32,12 @@ pnpm verify
 ```
 
 `pnpm verify` type-checks the console and runs `apps/console/scripts/check-standards.mjs`, which
-enforces the grep-provable rules in `apps/console/CLAUDE.md`. `pnpm install` copies
+enforces the grep-provable rules in `apps/console/CLAUDE.md`. `pnpm install` in the main checkout copies
 `.githooks/pre-commit` into `.git/hooks/`, and the hook runs `pnpm verify` on every commit. It runs on
 what is being committed, not on the working tree: `scripts/verify-staged.sh` exports the commit's index
-to a temporary directory, links `node_modules` and `.venv`, and runs the gates there, so another
-builder's unfinished file in a shared tree does not block your commit. Fix the code rather than
+to a temporary directory, links `node_modules`, and runs the gates there with the checkout's own `.venv`,
+which is never linked into the copy, so another builder's unfinished file in a shared tree does not block
+your commit and nothing the hook runs reinstalls your Python packages. Fix the code rather than
 bypassing the hook. `scripts/tests/test-verify-staged.sh` checks the hook end to end in a throwaway
 clone.
 
@@ -58,12 +59,22 @@ promotes a release.
 One branch is one concern. A name says what changed, never who asked or which ticket. `git stash`, `git push --force`
 and pushes straight to `main` are refused by the hooks.
 
-### Reviewing a branch
+### One stack, and reviewing a branch
 
-There is one checkout and one stack (console :3016). To try someone's branch, run `make review BRANCH=<name>`: it
-checks the branch out from `origin`, then restarts every service on it, migrating each database first. It refuses
-while you have uncommitted changes. Use cases run on a stack of their own (`ISOLATED=1`, every port +1000), so they
-never touch the one you are reviewing on.
+A machine runs one stack, on the usual ports (console :3016), from one checkout of this repository. Work on your
+branch in your checkout, and test with `make up`.
+
+| Task | Command |
+|---|---|
+| Run your branch | `make up`: migrates, then restarts only the services whose code changed since they started |
+| Try someone's branch | `make review BRANCH=<name>`: checks it out in the review worktree beside your checkout (`../ops-ai-review`, made on first use), installs, and runs the stack from there on the same ports. Your checkout and branch stay as they are; it refuses when the review worktree has uncommitted changes |
+| Go back to your branch | `make up` in your checkout |
+| Run tests | `make test PKG=packages/<name>` or `PKG=services/<name>` for one, `make test` for what changed since `origin/main`; `make usecase-test UC=<id>` for a use case |
+
+Tests and use cases never run on the stack's database: each run makes its own throwaway database on the stack's
+PostgreSQL, and a use case starts the services it needs on free ports, so neither needs a second stack. A branch made
+before one stack per machine has make files that refuse to run from a worktree; merge `main` into it before
+`make review`.
 
 ## Commit messages
 

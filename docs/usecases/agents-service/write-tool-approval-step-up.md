@@ -7,7 +7,7 @@ Status: current. Id: `uc-002`. Service: `agents-service`. Layers: api, ui.
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 and OPA :8181 | `make db-up` |
-| Free use-case ports | agents :8790, tools :8791, console :3018 (ISOLATED=1 adds 1000) |
+| Free use-case ports | agents :8790, tools :8791, console :3018 |
 
 The script starts its own services on the scripted model; no model key is needed.
 

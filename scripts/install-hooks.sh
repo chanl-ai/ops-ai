@@ -2,6 +2,9 @@
 # Installs the repo's git hooks (package.json prepare) into the common git dir, which every worktree shares.
 # A hook already there that is not ours is kept as <hook>.local, which ours runs first, so it is never lost.
 d=$(git rev-parse --git-common-dir 2>/dev/null) || exit 0
+# Only the main checkout installs them: `make review` runs `pnpm install` in its worktree on whatever branch is under
+# review, whose hooks would otherwise replace the ones every checkout of the repository runs.
+[ "$(cd "$d" && pwd -P)" = "$(cd "$(git rev-parse --git-dir)" && pwd -P)" ] || exit 0
 mkdir -p "$d/hooks"
 for hook in pre-commit commit-msg pre-push; do
   if [ -f "$d/hooks/$hook" ] && ! grep -qE 'ops-ai (hook|changelog gate|push check)|scripts/verify-staged' "$d/hooks/$hook" && [ ! -e "$d/hooks/$hook.local" ]; then

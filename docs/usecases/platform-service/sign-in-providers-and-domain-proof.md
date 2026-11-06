@@ -7,7 +7,7 @@ Status: current. Id: `uc-213`. Service: `platform-service`, console. Layers: api
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 | `make db-up` |
-| Free use-case ports | the runner picks free ports and its own database; run the ui layer with `ISOLATED=1` |
+| Free use-case ports | the runner picks free ports and its own database |
 
 The scripts start platform-service in dev on the run's database with the dev seed (Wanjiru Kamau, workspace admin
 and Security admin in every team; James Richardson, builder), sign-in URLs, an OIDC client secret named `uc-oidc`, and

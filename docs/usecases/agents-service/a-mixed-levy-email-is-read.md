@@ -12,8 +12,8 @@ answers for these files replay the shared stack's real run of 2026-10-19 (`docs/
 
 | Needs | How |
 |---|---|
-| PostgreSQL, OPA, GreenMail and Mailpit for the isolated stack | `make db-up ISOLATED=1` |
-| The run | `make usecase-test UC=uc-246 LAYER=ui ISOLATED=1` |
+| PostgreSQL, OPA, GreenMail and Mailpit | `make db-up` |
+| The run | `make usecase-test UC=uc-246 LAYER=ui` |
 
 The stack is the banker demo with the seeded mailboxes (`levies@harborpine.test` for `levy_mail`), GreenMail and
 Mailpit reachable through tools-service (`tools.mail`), and the bank stand-in that records webhooks

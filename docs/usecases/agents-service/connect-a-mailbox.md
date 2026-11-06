@@ -11,7 +11,7 @@ trigger, with no restart. tools-service reads Gmail and IMAP mailboxes with the 
 | Needs | How |
 |---|---|
 | api: the shared stack with platform sign-in, GreenMail and Mailpit | `OPS_STACK_AUTH=platform make up` |
-| ui: an isolated stack | `ISOLATED=1 make usecase-test UC=uc-199 LAYER=ui` starts its own |
+| ui: its own services | `make usecase-test UC=uc-199 LAYER=ui` starts them on free ports |
 
 ## Steps and expected results
 

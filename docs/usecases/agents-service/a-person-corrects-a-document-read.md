@@ -36,7 +36,7 @@ it will leave and the case run it follows.
 
 | Layer | Script | State |
 |---|---|---|
-| ui | `agents-service/scripts/test-uc-224-ui.mjs` | passing, `ISOLATED=1 make usecase-test UC=uc-224 LAYER=ui` (2026-10-18) |
+| ui | `agents-service/scripts/test-uc-224-ui.mjs` | passing, `make usecase-test UC=uc-224 LAYER=ui` (2026-10-18) |
 
 The row shapes (`read`, `reply`) are covered without a stack by `services/agents-service/tests/unit/test_review_document_read.py`.
 

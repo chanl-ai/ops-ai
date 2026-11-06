@@ -14,9 +14,9 @@ export function pgUrl(db: string, driver = 'postgresql+asyncpg', env: NodeJS.Pro
   if (env.OPS_INFRA === 'external') return `${driver}://ops:ops@postgres:5432/${db}`;
   return `${driver}://ops:ops@localhost:${env.OPS_PG_PORT ?? 5477}/${db}`;
 }
-// The local stack's ports (make/env.mk), shared and ISOLATED=1. A run never takes one, even when the OS offers it.
+// The local stack's default ports (make/env.mk). A run never takes one, even when the OS offers it.
 const STACK_VARS = ['OPS_CONSOLE_PORT', 'OPS_CONSOLE_RUNTIME_PORT', 'OPS_AGENTS_PORT', 'OPS_TOOLS_PORT', 'OPS_KB_PORT', 'OPS_OPA_PORT', 'OPS_PG_PORT', 'OPS_PLATFORM_PORT', 'OPS_PLATFORM_INTERNAL_PORT', 'OPS_FILES_PORT', 'OPS_DOCUMENTS_PORT'];
-const STACK_DEFAULTS = [3016, 3017, 8700, 8720, 8740, 8181, 5477, 8710, 8711, 8750, 8760].flatMap((p) => [p, p + 1000]);
+const STACK_DEFAULTS = [3016, 3017, 8700, 8720, 8740, 8181, 5477, 8710, 8711, 8750, 8760];
 
 function freePort(): Promise<number> {
   return new Promise((done, fail) => {

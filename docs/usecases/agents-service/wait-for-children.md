@@ -11,8 +11,8 @@ outcome; it never fails the parent.
 
 | Needs | How |
 |---|---|
-| PostgreSQL for the isolated stack | `make db-up ISOLATED=1` |
-| The run | `make usecase-test UC=uc-402 LAYER=api ISOLATED=1` |
+| PostgreSQL | `make db-up` |
+| The run | `make usecase-test UC=uc-402 LAYER=api` |
 
 The stack is agents-service with a workflow worker; neither workflow has a tool or model step.
 

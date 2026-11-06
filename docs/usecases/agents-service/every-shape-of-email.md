@@ -50,4 +50,4 @@ Both scripts take the workflows and notices from `agents-service/scripts/uc226_m
 
 ## Run
 
-`ISOLATED=1 make usecase-test UC=uc-226 LAYER=api` or `LAYER=ui`. Every extraction is the fake model; no real model call.
+`make usecase-test UC=uc-226 LAYER=api` or `LAYER=ui`. Every extraction is the fake model; no real model call.

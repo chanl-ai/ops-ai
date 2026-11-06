@@ -27,7 +27,7 @@ decides nothing itself; the module's team decides it in Human Tasks, and the dec
 
 | Layer | Script | State |
 |---|---|---|
-| ui | `console/scripts/test-uc-053-ui.mjs` | passing, `ISOLATED=1 make usecase-test UC=uc-053 LAYER=ui` (2026-10-18) |
+| ui | `console/scripts/test-uc-053-ui.mjs` | passing, `make usecase-test UC=uc-053 LAYER=ui` (2026-10-18) |
 
 ## Non-vacuous check
 

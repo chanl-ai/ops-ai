@@ -7,7 +7,7 @@ Status: current. Id: `uc-028`. Service: `agents-service`. Layers: api.
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 | `make db-up` |
-| Free use-case ports | agents :8790, models :8792 (ISOLATED=1 adds 1000; or set the OPS_USECASE_* ports and OPS_USECASE_DB) |
+| Free use-case ports | agents :8790, models :8792 (or set the OPS_USECASE_* ports and OPS_USECASE_DB) |
 
 The script starts models-service on its dev seed, where every alias answers with the scripted provider, and issues a
 key for this run with a limit of two calls a minute. It starts the agents service with `OPS_MODELS_URL`,

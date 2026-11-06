@@ -38,5 +38,5 @@ not offer is dropped. With task assist off (the default) no call is made.
 
 | Layer | Script | State |
 |---|---|---|
-| api | `agents-service/scripts/test-uc-263-api.py` | `ISOLATED=1 make usecase-test UC=uc-263 LAYER=api` |
+| api | `agents-service/scripts/test-uc-263-api.py` | `make usecase-test UC=uc-263 LAYER=api` |
 | ui | `agents-service/scripts/test-uc-263-ui.mjs` | `make usecase-test UC=uc-263 LAYER=ui`: Maya reads the tasks, since James asked for them |

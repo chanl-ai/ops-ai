@@ -42,5 +42,5 @@ a model that answers from its instructions, so they are in `services/agents-serv
 
 | Layer | Script | State |
 |---|---|---|
-| api | `agents-service/scripts/test-uc-247-api.py` | passing, `ISOLATED=1 make usecase-test UC=uc-247 LAYER=api` (2026-10-18) |
+| api | `agents-service/scripts/test-uc-247-api.py` | passing, `make usecase-test UC=uc-247 LAYER=api` (2026-10-18) |
 | ui | `agents-service/scripts/test-uc-247-ui.mjs` | passing: the agent page's test panel, Conversations, and a viewer refused |

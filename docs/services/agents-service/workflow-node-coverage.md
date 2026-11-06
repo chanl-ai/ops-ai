@@ -8,9 +8,9 @@ left by the expected port. Two ordinary bank workflows cover every node type a p
 Run both with the fake model:
 
 ```
-make db-up ISOLATED=1
-make usecase-test UC=uc-248 LAYER=ui ISOLATED=1
-make usecase-test UC=uc-249 LAYER=ui ISOLATED=1
+make db-up
+make usecase-test UC=uc-248 LAYER=ui
+make usecase-test UC=uc-249 LAYER=ui
 ```
 
 ## Coverage
