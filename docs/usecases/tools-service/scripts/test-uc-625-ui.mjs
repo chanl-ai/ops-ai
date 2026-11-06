@@ -222,12 +222,29 @@ try {
           const viewer = await signedIn(browser, consoleUrl, 'r.menon@harborpine.example');
           await viewer.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded' });
           const why = viewer.getByTestId(`connect-${APPS[0].id}-why`);
+          // The names arrive after the sentence (the team's admins are read on their own), so wait for them.
+          await why.filter({ hasText: 'Priya Shah' }).waitFor({ timeout: 30_000 }).catch(() => {});
           const card = ((await why.innerText({ timeout: 60_000 }).catch(() => '')) ?? '').replace(/\s+/g, ' ');
           await viewer.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APPS[0].id)}`, { waitUntil: 'domcontentloaded' });
+          await viewer.getByTestId('app-admin-connects').filter({ hasText: 'Priya Shah' }).waitFor({ timeout: 30_000 }).catch(() => {});
           const header = ((await viewer.getByTestId('app-admin-connects').innerText({ timeout: 60_000 }).catch(() => '')) ?? '').replace(/\s+/g, ' ');
           await viewer.screenshot({ path: join(SHOTS, 'ask-an-admin.png') });
           await viewer.context().close();
           check('51 a member who may not connect is told to ask an admin, by name, on the card and on the app page', [card, header].every((t) => /Ask an admin/.test(t) && /Priya Shah/.test(t)), { card, header });
+        }, page);
+        await step("54 Salesforce turned on with no sign-in yet: Connect on Ops AI's app asks where to sign in", async () => {
+          // Turned on and never signed in, the team account exists, so Connect is connecting it again; Ops AI's app
+          // sets no sign-in place, so the window still asks where it signs in.
+          const sf = APPS.find((a) => a.place);
+          const on = await call('PUT', `/v1/apps/${encodeURIComponent(sf.id)}/team`, priya, { enabled: true });
+          await page.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await page.getByTestId(`connect-${sf.id}`).click({ timeout: 90_000 });
+          const win = page.getByTestId('connect-window');
+          await win.waitFor({ timeout: 30_000 });
+          const asked = await win.getByTestId(`connect-window-place-${sf.place}`).isVisible({ timeout: 30_000 }).catch(() => false);
+          await page.screenshot({ path: join(SHOTS, 'salesforce-connect-unsigned.png') });
+          check("54 Salesforce turned on with no sign-in yet: Connect on Ops AI's app asks where to sign in", on.status === 200 && asked, { on: on.status, asked });
+          await page.getByTestId('connect-window-cancel').click().catch(() => {});
         }, page);
         for (const [n, app] of APPS.entries()) {
           const at = (k) => `${(n + 1) * 10 + k}`;
@@ -278,9 +295,9 @@ try {
             const seen = await connectedOnPage(page, consoleUrl, app, priya);
             await page.screenshot({ path: join(SHOTS, `${app.name.toLowerCase().replace(/\s+/g, '-')}-connected.png`) });
             check(`${at(4)} ${app.name}: Try again opens a new window, the fake system allows it, the window closes, and the app's page reads Connected`, seen.badge === 'Connected' && seen.state === 'connected' && again.isClosed(), seen);
-            const name = ((await call('GET', `/v1/apps/${encodeURIComponent(app.id)}`, priya)).data?.authConfigs ?? []).flatMap((c) => c.accounts).find((a) => a.default)?.name;
+            const who = ((await call('GET', `/v1/apps/${encodeURIComponent(app.id)}`, priya)).data?.authConfigs ?? []).flatMap((c) => c.accounts).find((a) => a.default)?.account;
             const header = ((await page.getByTestId('app-connected-as').innerText().catch(() => '')) ?? '').trim();
-            check(`${at(7)} ${app.name}: the app's header says Connected with the default account's name`, Boolean(name) && header.startsWith(`Connected · ${name}`), { header, name });
+            check(`${at(7)} ${app.name}: the app's header says Connected as who signed in on the default account`, Boolean(who) && header === `Connected as ${who}`, { header, who });
           }, page);
 
           await step(`${at(5)} ${app.name}: a sign-in finished in a fresh browser with no storage still reads Connected in the window that started it`, async () => {

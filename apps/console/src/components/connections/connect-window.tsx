@@ -115,15 +115,17 @@ export function ConnectWindow({
   const askedHere = (x: { name: string; asked?: string | null }) =>
     x.asked !== 'settings' && (x.asked !== 'config' || (client ? Boolean(picked.data) && onConfigValue(x.name) === null : true));
   const places = (plugin?.settings ?? []).filter((x) => isSignInPlace(x) && askedHere(x));
-  const asked = reusing ? (another ? places : []) : (plugin?.settings ?? []).filter((x) => !x.locked && askedHere(x) && (!sandbox || x.perAccount));
+  // Connecting again asks only where the account signs in, when its auth config leaves that to the account, starting
+  // from where it signs in now; the rest stays as saved.
+  const asked = reusing ? places : (plugin?.settings ?? []).filter((x) => !x.locked && askedHere(x) && (!sandbox || x.perAccount));
   const onConfig = (plugin?.settings ?? []).filter((x) => x.asked === 'config' && client && onConfigValue(x.name) !== null);
   const fields: KindField[] = asked.filter((x) => !isSignInPlace(x)).map((x) => ({ name: x.name, label: x.label, secret: x.secret, required: !x.default, advanced: Boolean(x.default), default: x.default }));
   const schema = schemaForFields(fields);
   const form = useForm<Record<string, string>>({
     defaultValues: { accountName: '', ...Object.fromEntries((plugin?.settings ?? []).map((x) => [x.name, x.default ?? ''])) },
   });
-  // Another account starts from where the app's default account signs in.
-  const first = useAccountDetail(another && card.connectionId ? { appId: card.id, accountId: card.connectionId } : null);
+  // Another account, or the default connected again, starts from where the app's default account signs in.
+  const first = useAccountDetail(reusing && card.connectionId ? { appId: card.id, accountId: card.connectionId } : null);
   React.useEffect(() => {
     const held = (first.data?.pluginSettings ?? {}) as Record<string, unknown>;
     for (const x of places) if (typeof held[x.name] === 'string' && held[x.name]) form.setValue(x.name, String(held[x.name]));

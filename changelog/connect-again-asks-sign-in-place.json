@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Connect again asks where to sign in",
+  "description": "Connecting an app again on Ops AI's own app, such as Salesforce after it was turned on without signing in, now asks where to sign in, starting from where the account signs in now.",
+  "tag": "fix"
+}
