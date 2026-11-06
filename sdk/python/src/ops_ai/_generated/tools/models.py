@@ -41,7 +41,7 @@ class AccountIn(TypedDict, closed=True):
 
 
 class AccountOwner(TypedDict, closed=True):
-    kind: Literal["team", "each"]
+    kind: Literal["team", "each", "person"]
     name: str
 
 
@@ -66,7 +66,7 @@ class AccountTest(TypedDict, closed=True):
 
 
 class AccountTestIn(TypedDict, closed=True):
-    account: NotRequired[Literal["self", "team"]]
+    account: NotRequired[Literal["self", "team"] | None]
 
 
 class ActivityDay(TypedDict, closed=True):
@@ -255,6 +255,12 @@ class CodeSettingsIn(TypedDict, closed=True):
     limits: NotRequired[CodeLimitsIn]
     secrets: NotRequired[list[Secret]]
     source: str
+
+
+class ConfigPermission(TypedDict, closed=True):
+    askedAtSignIn: NotRequired[bool]
+    id: str
+    label: str
 
 
 class ConnectLinkIn(TypedDict, closed=True):
@@ -887,7 +893,7 @@ class SignInCompleteIn(TypedDict, closed=True):
 
 
 class SignInIn(TypedDict, closed=True):
-    account: NotRequired[Literal["self", "team"]]
+    account: NotRequired[Literal["self", "team"] | None]
 
 
 class SignInStart(TypedDict, closed=True):
@@ -1227,14 +1233,17 @@ class AppAccount(TypedDict, closed=True):
         ]
     ]
     configId: NotRequired[str | None]
+    configName: NotRequired[str | None]
     default: bool
     health: NotRequired[ConnectionHealth | None]
     id: str
+    kind: NotRequired[Literal["team", "person"]]
     mine: NotRequired[bool]
     myDefault: NotRequired[bool | None]
     name: str
     owner: AccountOwner
     revision: int
+    rowId: str
     sandbox: bool
     state: Literal["connected", "not_signed_in", "expired", "refused", "revoked"]
     stateReason: NotRequired[str | None]
@@ -1278,14 +1287,16 @@ class AppResource(TypedDict):
 
 
 class AuthConfig(TypedDict, closed=True):
-    accounts: NotRequired[list[AppAccount]]
+    accountCount: NotRequired[int]
     canDelete: bool
     canEdit: bool
     clientId: NotRequired[str | None]
     default: bool
     id: str
     name: str
+    permissions: NotRequired[list[ConfigPermission]]
     secretEnds: NotRequired[str | None]
+    signInPlace: NotRequired[str | None]
     type: Literal["ops_ai", "own", "account"]
 
 
@@ -1960,6 +1971,7 @@ class SystemCard(TypedDict, closed=True):
 
 
 class AppPage(TypedDict, closed=True):
+    accounts: NotRequired[list[AppAccount]]
     authConfigs: NotRequired[list[AuthConfig]]
     card: SystemCard
     connection: NotRequired[AccountDetail | None]

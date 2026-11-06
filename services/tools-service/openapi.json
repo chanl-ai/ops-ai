@@ -490,12 +490,13 @@
       },
       "AccountOwner": {
         "additionalProperties": false,
-        "description": "Whose sign-in an account is: the team's (`name` the team), or each person's own (`name` the caller).",
+        "description": "Whose sign-in a row is: the team's (`name` the team), an account each person signs in to (`each`, `name` the\ncaller), or one person's own sign-in on a team account (`person`, `name` that person).",
         "properties": {
           "kind": {
             "enum": [
               "team",
-              "each"
+              "each",
+              "person"
             ],
             "title": "Kind",
             "type": "string"
@@ -685,13 +686,19 @@
         "additionalProperties": false,
         "properties": {
           "account": {
-            "default": "self",
-            "enum": [
-              "self",
-              "team"
+            "anyOf": [
+              {
+                "enum": [
+                  "self",
+                  "team"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Account",
-            "type": "string"
+            "title": "Account"
           }
         },
         "title": "AccountTestIn",
@@ -753,7 +760,7 @@
       },
       "AppAccount": {
         "additionalProperties": false,
-        "description": "One of the team's accounts of the app: the default is the one live calls use unless they name another,\nand a sandbox one is what test runs use.",
+        "description": "One row of the app's Accounts list: one of the team's accounts (the default is the one live calls use unless\nthey name another, and a sandbox one is what test runs use), or one person's own sign-in on it (`kind` person).",
         "properties": {
           "account": {
             "anyOf": [
@@ -795,6 +802,17 @@
             ],
             "title": "Configid"
           },
+          "configName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Configname"
+          },
           "default": {
             "title": "Default",
             "type": "boolean"
@@ -811,6 +829,15 @@
           },
           "id": {
             "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "default": "team",
+            "enum": [
+              "team",
+              "person"
+            ],
+            "title": "Kind",
             "type": "string"
           },
           "mine": {
@@ -839,6 +866,10 @@
           "revision": {
             "title": "Revision",
             "type": "integer"
+          },
+          "rowId": {
+            "title": "Rowid",
+            "type": "string"
           },
           "sandbox": {
             "title": "Sandbox",
@@ -893,6 +924,7 @@
           }
         },
         "required": [
+          "rowId",
           "id",
           "name",
           "revision",
@@ -1584,6 +1616,13 @@
         "additionalProperties": false,
         "description": "One app's page, joined here: its card, its default account, the caller's own sign-in, how many people\nsigned in, its auth configs with their accounts, its tools, the plugin's skills and the latest runs\nof its tools.",
         "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/AppAccount"
+            },
+            "title": "Accounts",
+            "type": "array"
+          },
           "authConfigs": {
             "items": {
               "$ref": "#/components/schemas/AuthConfig"
@@ -1917,12 +1956,10 @@
         "additionalProperties": false,
         "description": "How the app's accounts sign in: Ops AI's own OAuth app, one the team made (an app credential), or, for a kind\nwith no OAuth client, each account's own key; with the accounts signing in through it. Only the team's own is\nedited or deleted.",
         "properties": {
-          "accounts": {
-            "items": {
-              "$ref": "#/components/schemas/AppAccount"
-            },
-            "title": "Accounts",
-            "type": "array"
+          "accountCount": {
+            "default": 0,
+            "title": "Accountcount",
+            "type": "integer"
           },
           "canDelete": {
             "title": "Candelete",
@@ -1955,6 +1992,13 @@
             "title": "Name",
             "type": "string"
           },
+          "permissions": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigPermission"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
           "secretEnds": {
             "anyOf": [
               {
@@ -1965,6 +2009,17 @@
               }
             ],
             "title": "Secretends"
+          },
+          "signInPlace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signinplace"
           },
           "type": {
             "enum": [
@@ -2801,6 +2856,30 @@
           "source"
         ],
         "title": "CodeSettingsIn",
+        "type": "object"
+      },
+      "ConfigPermission": {
+        "additionalProperties": false,
+        "properties": {
+          "askedAtSignIn": {
+            "default": false,
+            "title": "Askedatsignin",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "ConfigPermission",
         "type": "object"
       },
       "ConnectLinkIn": {
@@ -9359,13 +9438,19 @@
         "additionalProperties": false,
         "properties": {
           "account": {
-            "default": "self",
-            "enum": [
-              "self",
-              "team"
+            "anyOf": [
+              {
+                "enum": [
+                  "self",
+                  "team"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Account",
-            "type": "string"
+            "title": "Account"
           }
         },
         "title": "SignInIn",

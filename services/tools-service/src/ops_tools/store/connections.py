@@ -158,6 +158,8 @@ connection_tokens = sa.Table(
     sa.Column("pinned", sa.Boolean, nullable=False, server_default=sa.false()),
     # The account's last test, {status, message, at}: it runs right after a sign-in and never blocks it.
     sa.Column("test", sa.JSON),
+    # The person whose own sign-in it is, by name, as the app's accounts list names it; null on the team's row.
+    sa.Column("person_name", sa.String(200)),
     sa.ForeignKeyConstraint(
         ["tenant_id", "connection_id"], ["connections.tenant_id", "connections.id"], ondelete="CASCADE"
     ),
@@ -873,6 +875,12 @@ class ConnectionStore:
         async with self._tx() as c:
             return (await c.execute(q.values(account=account))).rowcount > 0
 
+    async def name_person(self, tenant_id: str, connection_id: str, person: str, name: str) -> bool:
+        """The name of the person whose own sign-in the row is, kept each time they sign in; False when no row."""
+        q = connection_tokens.update().where(*self._token_key(tenant_id, connection_id, person))
+        async with self._tx() as c:
+            return (await c.execute(q.values(person_name=name[:200]))).rowcount > 0
+
     async def set_token_test(self, tenant_id: str, connection_id: str, person: str, test: Row) -> bool:
         """The account's last test on its own row, the team's (SHARED) or a person's; False when it holds none."""
         q = connection_tokens.update().where(*self._token_key(tenant_id, connection_id, person))
@@ -988,6 +996,7 @@ class ConnectionStore:
             sa.select(
                 t.connection_id,
                 t.person_id,
+                t.person_name,
                 t.account,
                 t.pinned,
                 t.refreshed_at,

@@ -198,7 +198,7 @@ with ExitStack() as stack:
     def team_row() -> dict[str, Any]:
         page = data(gw.get(f"/v1/apps/plugin:{PLUGIN}", headers=priya)) or {}
         return next(
-            (a for c in page.get("authConfigs") or [] for a in c["accounts"] if a.get("id") == connection_id), {}
+            (a for a in page.get("accounts") or [] if a.get("kind") == "team" and a.get("id") == connection_id), {}
         )
 
     first_row = team_row()
@@ -486,7 +486,7 @@ with ExitStack() as stack:
         headers=security,
     )
     page_mine = data(gw.get(f"/v1/apps/plugin:{PLUGIN}", headers=security)) or {}
-    accounts_mine = [a for c in page_mine.get("authConfigs") or [] for a in c["accounts"]]
+    accounts_mine = list(page_mine.get("accounts") or [])
     check(
         "48 a person signs in with their own account before any team account exists",
         own_done.status_code == 200 and any(a.get("id") == mine_id and a.get("mine") for a in accounts_mine),

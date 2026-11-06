@@ -109,9 +109,16 @@ async def test_an_auth_configs_permissions_follow_the_switched_on_tools(
         return parse_qs(urlsplit(str(started.json()["data"]["authorizeUrl"])).query)["scope"][0].split()
 
     assert "records:write" not in await asked()
+
+    async def listed() -> list[str]:
+        page = (await c.get(f"/v1/apps/{sites}", headers=admin(tenant))).json()["data"]
+        return [p["id"] for cfg in page["authConfigs"] for p in cfg["permissions"]]
+
+    assert "openid" in await listed() and "records:write" not in await listed()
     turned = await c.put(f"/v1/apps/{sites}/tools/fields_sites_update_record", json={"on": True}, headers=admin(tenant))
     assert turned.status_code == 200 and turned.json()["data"]["askedAtSignIn"] is True, turned.text
     assert "records:write" in await asked()
+    assert "records:write" in await listed()
 
 
 async def test_deleting_a_plugins_app_turns_it_off_and_takes_its_accounts(

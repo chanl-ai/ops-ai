@@ -1430,14 +1430,15 @@ export interface components {
         };
         /**
          * AccountOwner
-         * @description Whose sign-in an account is: the team's (`name` the team), or each person's own (`name` the caller).
+         * @description Whose sign-in a row is: the team's (`name` the team), an account each person signs in to (`each`, `name` the
+         *     caller), or one person's own sign-in on a team account (`person`, `name` that person).
          */
         AccountOwner: {
             /**
              * Kind
              * @enum {string}
              */
-            kind: "team" | "each";
+            kind: "team" | "each" | "person";
             /** Name */
             name: string;
         };
@@ -1487,12 +1488,8 @@ export interface components {
         };
         /** AccountTestIn */
         AccountTestIn: {
-            /**
-             * Account
-             * @default self
-             * @enum {string}
-             */
-            account: "self" | "team";
+            /** Account */
+            account?: ("self" | "team") | null;
         };
         /** ActivityDay */
         ActivityDay: {
@@ -1514,8 +1511,8 @@ export interface components {
         };
         /**
          * AppAccount
-         * @description One of the team's accounts of the app: the default is the one live calls use unless they name another,
-         *     and a sandbox one is what test runs use.
+         * @description One row of the app's Accounts list: one of the team's accounts (the default is the one live calls use unless
+         *     they name another, and a sandbox one is what test runs use), or one person's own sign-in on it (`kind` person).
          */
         AppAccount: {
             /** Account */
@@ -1524,11 +1521,19 @@ export interface components {
             actions?: ("rename" | "sign_in" | "reconnect" | "make_default" | "make_team_default" | "disconnect" | "delete" | "move" | "connect_mine")[];
             /** Configid */
             configId?: string | null;
+            /** Configname */
+            configName?: string | null;
             /** Default */
             default: boolean;
             health?: components["schemas"]["ConnectionHealth"] | null;
             /** Id */
             id: string;
+            /**
+             * Kind
+             * @default team
+             * @enum {string}
+             */
+            kind: "team" | "person";
             /**
              * Mine
              * @default false
@@ -1541,6 +1546,8 @@ export interface components {
             owner: components["schemas"]["AccountOwner"];
             /** Revision */
             revision: number;
+            /** Rowid */
+            rowId: string;
             /** Sandbox */
             sandbox: boolean;
             /**
@@ -1775,6 +1782,8 @@ export interface components {
          *     of its tools.
          */
         AppPage: {
+            /** Accounts */
+            accounts?: components["schemas"]["AppAccount"][];
             /** Authconfigs */
             authConfigs?: components["schemas"]["AuthConfig"][];
             card: components["schemas"]["SystemCard"];
@@ -1896,8 +1905,11 @@ export interface components {
          *     edited or deleted.
          */
         AuthConfig: {
-            /** Accounts */
-            accounts?: components["schemas"]["AppAccount"][];
+            /**
+             * Accountcount
+             * @default 0
+             */
+            accountCount: number;
             /** Candelete */
             canDelete: boolean;
             /** Canedit */
@@ -1910,8 +1922,12 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+            /** Permissions */
+            permissions?: components["schemas"]["ConfigPermission"][];
             /** Secretends */
             secretEnds?: string | null;
+            /** Signinplace */
+            signInPlace?: string | null;
             /**
              * Type
              * @enum {string}
@@ -2195,6 +2211,18 @@ export interface components {
             secrets?: string[];
             /** Source */
             source: string;
+        };
+        /** ConfigPermission */
+        ConfigPermission: {
+            /**
+             * Askedatsignin
+             * @default false
+             */
+            askedAtSignIn: boolean;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
         };
         /**
          * ConnectLinkIn
@@ -4431,12 +4459,8 @@ export interface components {
         };
         /** SignInIn */
         SignInIn: {
-            /**
-             * Account
-             * @default self
-             * @enum {string}
-             */
-            account: "self" | "team";
+            /** Account */
+            account?: ("self" | "team") | null;
         };
         /** SignInStart */
         SignInStart: {

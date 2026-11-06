@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "One list of an app's accounts",
+  "description": "An app's accounts, and each person's own sign-in on one, now come as one list naming the person and the auth config, while each auth config gives its account count, where it signs in and the permissions its tools need. Signing in an app for the first time signs in the team's account.",
+  "tag": "improved"
+}

@@ -127,7 +127,7 @@ export function AppPageView({ appId }: { appId: string }) {
   // People connect their own account only where the connection lets them; a team-only one shows its accounts alone.
   const signsIn = Boolean(kind?.signsIn) && conn?.signIn !== 'team';
   const configs = data.authConfigs ?? [];
-  const accounts = configs.flatMap((c) => c.accounts ?? []);
+  const accounts = (data.accounts ?? []).filter((a) => a.kind === 'team');
   // Connect opens on the default account's config; Ops AI's own app is no credential.
   const credentialOf = (c?: AuthConfig) => (c && c.type === 'own' ? c.id : null);
   const defaultConfig = configs.find((c) => c.default);
@@ -273,7 +273,7 @@ export function AppPageView({ appId }: { appId: string }) {
   );
 }
 
-type Account = NonNullable<NonNullable<AppData['authConfigs']>[number]['accounts']>[number];
+type Account = NonNullable<AppData['accounts']>[number];
 const BROKEN = new Set(['expired', 'refused', 'revoked']);
 
 /**
@@ -298,7 +298,7 @@ function HeaderAction({
   starting: boolean;
 }) {
   const { card, connection: conn, me } = app;
-  const team = (app.authConfigs ?? []).flatMap((c) => c.accounts ?? []).find((a) => a.default);
+  const team = (app.accounts ?? []).find((a) => a.kind === 'team' && a.default);
   const installed = Boolean(card.appState) && card.appState !== 'not_installed';
   const teamTestFailed = team?.test?.status === 'failed' || (card.appState === 'test_failed' && conn?.signIn === 'team');
   const broken = Boolean(team && (BROKEN.has(team.state) || teamTestFailed));
@@ -490,7 +490,7 @@ function SettingsTab({ app, kinds, onSetUp }: { app: AppData; kinds?: Kinds; onS
   const setTeamApp = useSetTeamApp();
   const kind = kinds?.kinds.find((k) => k.id === conn?.authKind);
   const [own, setOwn] = React.useState<string | null | undefined>(undefined);
-  const row = (app.authConfigs ?? []).flatMap((c) => c.accounts ?? []).find((a) => a.default);
+  const row = (app.accounts ?? []).find((a) => a.kind === 'team' && a.default);
   if (!conn) return null;
   const account = { appId: app.card.id, accountId: conn.id };
   const teamSigned = Boolean(conn.signedIn);

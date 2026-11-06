@@ -32,7 +32,7 @@ import {
 import { plural } from '@/lib/format';
 
 export type AuthConfig = NonNullable<AppPage['authConfigs']>[number];
-export type ConfigAccount = NonNullable<AuthConfig['accounts']>[number];
+export type ConfigAccount = NonNullable<AppPage['accounts']>[number];
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -70,6 +70,7 @@ export function AuthConfigsTab({
   const [editing, setEditing] = React.useState<string | null>(null);
   const [deleting, setDeleting] = React.useState<string | null>(null);
   const others = (a: ConfigAccount) => configs.filter((c) => c.id !== a.configId && c.type !== 'account');
+  const rowsOf = (c: AuthConfig) => (app.accounts ?? []).filter((a) => (a.configId ?? '') === c.id);
   if (!configs.length)
     return (
       <Section title="Auth configs" flush>
@@ -91,7 +92,7 @@ export function AuthConfigsTab({
               {/* The config's own status, apart from any account's: how many accounts sign in through it. */}
               {c.type !== 'account' && (
                 <Badge variant="outline" data-testid={`auth-config-use-${c.name}`}>
-                  {c.accounts?.length ? plural(c.accounts.length, 'account') : 'Not used yet'}
+                  {c.accountCount ? plural(c.accountCount, 'account') : 'Not used yet'}
                 </Badge>
               )}
             </span>
@@ -147,10 +148,10 @@ export function AuthConfigsTab({
               <CallbackUrl app={app.card.name} id={`auth-config-callback-${c.id}`} testId={`auth-config-callback-${c.name}`} />
             </div>
           )}
-          {c.accounts?.length ? (
+          {rowsOf(c).length ? (
             <Rows testId={`auth-config-accounts-${c.name}`}>
-              {c.accounts.map((a) => (
-                <AccountRow key={a.id} app={app} account={a} team={team} moveTo={others(a)} onSignIn={onSignIn} />
+              {rowsOf(c).map((a) => (
+                <AccountRow key={a.rowId} app={app} account={a} team={team} moveTo={others(a)} onSignIn={onSignIn} />
               ))}
             </Rows>
           ) : (

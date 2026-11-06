@@ -750,7 +750,7 @@ class ConnectionService:
         self,
         who: Caller,
         connection_id: str,
-        account: str = "self",
+        account: str | None = None,
         *,
         scopes: list[str] | None = None,
         hint: str | None = None,
@@ -762,6 +762,7 @@ class ConnectionService:
         `scopes` are asked for beside the connection's, and `hint` is the email the system's sign-in starts with.
         `check`: an admin's Test with my account of the app credential, which keeps no token."""
         found = await self._get(who, connection_id)
+        account = await self._which(who, found, account, first=True)
         personal = (found.get("sign_in") or "team") != "team" and account == "self" and not check
         conn = await self._signs_in(who, connection_id, right=OWN if personal else "manage")
         settings: dict[str, Any] = dict(conn["settings"])
@@ -910,6 +911,8 @@ class ConnectionService:
         token = await self.tokens.store_answer(who.tenant_id, connection_id, answer, token_for, requested=requested)
         if isinstance(named, str):
             await self.store.name_token(who.tenant_id, connection_id, token_for, named)
+        if token_for != SHARED:
+            await self.store.name_person(who.tenant_id, connection_id, token_for, who.name)
         if token_for == SHARED:
             await self.store.set_status(who.tenant_id, connection_id, "healthy", None)
         if self.on_signed_in is not None:
@@ -1097,6 +1100,20 @@ class ConnectionService:
                 await self.secrets.delete(who.tenant_id, str(conn["team_id"]), name, actor=who.name, at=now)
         await self.sign_in_again(who, connection_id, f"It signs in with {kind.label} now: set it up and sign in again.")
         return True
+
+    async def _which(self, who: Caller, conn: dict[str, Any], account: str | None, *, first: bool) -> str:
+        """Whose sign-in a request that names none means, on an account each person may sign in to with the team as
+        backup. A sign-in (`first`): the team's while it has none and the caller manages the team's apps, so an app's
+        first sign-in is the team's; a test: the caller's own when they hold one. Else the caller's own."""
+        if account is not None:
+            return account
+        if str(conn.get("sign_in") or "team") != "person_or_team":
+            return "self"
+        held = await self.store.token(who.tenant_id, str(conn["id"]), SHARED)
+        if first:
+            return "team" if held is None and self.may_manage(who) else "self"
+        own = await self.store.token(who.tenant_id, str(conn["id"]), own_key(who))
+        return "self" if own is not None else "team"
 
     async def sign_in_again(self, who: Caller, connection_id: str, why: str) -> None:
         """Marks an account to sign in again (the app registration it signs in with changed): the team's sign-in is
@@ -1307,12 +1324,13 @@ class ConnectionService:
             hint=str(found["email"]) or None,
         )
 
-    async def test(self, who: Caller, connection_id: str, account: str = "self") -> dict[str, Any]:
+    async def test(self, who: Caller, connection_id: str, account: str | None = None) -> dict[str, Any]:
         """Test connection: reads the account's `testPath` signed in as a call would be, with the caller's
         own sign-in (OWN) on a connection each person signs in to, else the team's (connections.manage), and stores
         the result on the connection. Only the team's sign-in decides the connection's status: one person's missing
         or refused sign-in is theirs alone."""
         conn = await self._get(who, connection_id)
+        account = await self._which(who, conn, account, first=False)
         own = (conn.get("sign_in") or "team") != "team" and account == "self"
         self._can(who, OWN if own else "manage")
         if self.auth is None or self.http is None or self.egress is None:
