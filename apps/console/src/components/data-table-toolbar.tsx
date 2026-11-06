@@ -145,6 +145,12 @@ export function DataTableToolbar<TData>({
         {/* Column filters (client-side TanStack filtering) */}
         {filters.map((filter) => {
           const column = table.getColumn(filter.column);
+          // A filter whose one value every row holds narrows nothing, so it is left off until it is in use (a link may
+          // set it). One value that some rows lack (an app with no category) still narrows, so it stays.
+          const inUse = ((column?.getFilterValue() as unknown[] | undefined) ?? []).length > 0;
+          const held = column ? [...column.getFacetedUniqueValues().keys()] : [];
+          const allHoldIt = filter.options.length <= 1 && held.length <= 1 && held.every((v) => String(v) === filter.options[0]?.value);
+          if (allHoldIt && !inUse) return null;
           return column ? (
             <DataTableFacetedFilter
               key={filter.column}

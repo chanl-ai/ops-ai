@@ -1,7 +1,8 @@
 """Which of an app's tools a team adds from the app's catalog, by failure mode: a new app hands every write tool to
 agents before anyone chose it; a tool not added still runs when called by name or is offered to agents; an app turned
 on before the catalog existed loses tools its agents hold; a person who may not manage the team's apps adds or removes
-a tool; and the app's catalog does not say which tools are added."""
+a tool; the app's catalog does not say which tools are added; and the app's card does not count them, so the agent
+picker cannot say how many wait in the catalog."""
 
 from __future__ import annotations
 
@@ -90,6 +91,19 @@ async def test_agents_are_not_offered_tools_the_team_has_not_added(
     await c.post(f"/v1/apps/{APP}/tools", json={"tools": ["fields_transfer"]}, headers=admin(tenant))
     assert await host.tools_off(tenant, TEAM) == {"fields_post_message"}
     assert await host.tools_off(tenant, "team_other") == set()
+
+
+async def test_the_apps_card_counts_the_tools_added_of_its_catalog(
+    desk_rig: tuple[Any, TokenDesk],  # noqa: F811
+    tenant: str,
+) -> None:
+    (c, _, _, _), _ = desk_rig
+    await _on(c, tenant)
+    card = next(x for x in (await c.get("/v1/apps", headers=admin(tenant))).json()["data"] if x["id"] == APP)
+    assert (card["toolsCount"], card["toolsAdded"]) == (5, 3), card
+    await c.post(f"/v1/apps/{APP}/tools", json={"tools": ["fields_transfer"]}, headers=admin(tenant))
+    card = next(x for x in (await c.get("/v1/apps", headers=admin(tenant))).json()["data"] if x["id"] == APP)
+    assert card["toolsAdded"] == 4, card
 
 
 async def test_an_auth_configs_permissions_follow_the_added_tools(

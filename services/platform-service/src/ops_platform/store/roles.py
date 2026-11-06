@@ -515,6 +515,11 @@ class RoleStore:
         async with self.db.tenant_tx(tenant_id) as c:
             return await version_in(c, tenant_id)
 
+    async def security_team(self, tenant_id: str) -> str | None:
+        """The workspace's Security team, from its record; None when it names none."""
+        async with self.db.tenant_tx(tenant_id) as c:
+            return (await c.execute(sa.select(tenants.c.security_team_id).where(tenants.c.id == tenant_id))).scalar()
+
 
 async def _grids(c: AsyncConnection, role_ids: list[str]) -> dict[str, list[Grant]]:
     q = (

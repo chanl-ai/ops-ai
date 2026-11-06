@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Change how a custom app signs in from its Settings",
+  "description": "Change sign-in lists the ways the app may sign in and says what moving removes, then opens the set-up for the new way. Turning an app off now sits with its settings, apart from deleting it, since it keeps the app's accounts and tools.",
+  "tag": "new"
+}

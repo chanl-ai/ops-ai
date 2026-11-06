@@ -208,6 +208,14 @@ class Roles:
         per_team = effective(assignments, grids, teams if teams is not None else list(h.teams), now_iso())
         if teams is not None:
             per_team = {t: v for t, v in per_team.items() if t in teams}
+        # A Security-team action is decided in the workspace's Security team whatever team a request acts in, so a
+        # grid cell for it in any other team grants nothing and is not listed there; with no Security team named,
+        # nobody holds it.
+        security = await self.store.security_team(tenant_id)
+        per_team = {
+            t: {cell: g for cell, g in held.items() if t == security or cell not in SECURITY_TEAM_ACTIONS}
+            for t, held in per_team.items()
+        }
         order = {(a, x): (AREAS.index(a), ACTIONS.index(x)) for a in AREAS for x in ACTIONS}
         # What the person may do in every team at once: their `*` assignments only (a workspace admin).
         every = [a for a in assignments if a.team_id == ANY_TEAM]

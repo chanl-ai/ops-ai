@@ -146,6 +146,9 @@ class SystemCard(Out):
     description: str | None = None
     docs_url: str | None = None
     tools_count: int
+    # How many of a plugin's tools the team added, the ones agents may pick; the rest wait on the app's Tools tab.
+    # None for an app without a catalog to add from (its tools are all its own).
+    tools_added: int | None = None
     # The team's accounts of the app (its team account, sandbox and named ones), counted here for the card.
     accounts_count: int = 0
     auth_kind: str | None = None
@@ -574,6 +577,9 @@ class Apps:
                         "description": m.display.description,
                         "docsUrl": m.display.docs_url,
                         "toolsCount": len(m.tools),
+                        "toolsAdded": len(m.tools)
+                        if (on := tools_added(m, b)) is None
+                        else sum(m.operation(t.name) in on for t in m.tools),
                         "accountsCount": accounts[plugin_app(pid)],
                         "authKind": m.connection.kinds[0],
                         "kindLabel": BY_ID[m.connection.kinds[0]].label if m.connection.kinds[0] in BY_ID else None,

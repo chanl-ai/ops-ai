@@ -24,7 +24,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useStorageCredentials } from '@/hooks/file-queries';
 import { useDeleteSecret, useRenameSecret, useSecretsPage } from '@/hooks/secrets-queries';
-import { useTeam } from '@/hooks/use-team';
 import { useListParams } from '@/hooks/use-list-params';
 import { relativeTime, shortDate } from '@/lib/format';
 import type { SecretMeta } from '@/lib/types/secrets';
@@ -40,32 +39,25 @@ function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onRename: 
       header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
       cell: ({ row }) => (
         <div className="min-w-48">
-          <code className="font-mono text-sm">{row.original.name}</code>
-          {row.original.ends && (
-            <span className="ml-2 font-mono text-[11px] text-muted-foreground" data-testid={`secret-ends-${row.original.name}`}>
-              ending {row.original.ends}
-            </span>
-          )}
-          {row.original.authConfig ? (
-            <StopRowClick align="start">
-              <div className="text-[11px] text-muted-foreground" data-testid={`secret-auth-config-${row.original.name}`}>
-                Client secret of{' '}
-                <Link href={`/integrations/credentials/${encodeURIComponent(row.original.authConfig.id)}`} className="underline underline-offset-2">
-                  {row.original.authConfig.name}
-                </Link>
-                ; change it there
-              </div>
-            </StopRowClick>
+          {/* A config's client secret reads by its config; its generated name follows, muted, for whoever greps it. */}
+          {row.original.label ? (
+            <div className="text-sm" data-testid={`secret-label-${row.original.name}`}>
+              {row.original.label}
+            </div>
           ) : (
-            <div className="font-mono text-[11px] text-muted-foreground">{`{{${row.original.name}}}`} in a header</div>
+            <code className="font-mono text-sm">{row.original.name}</code>
           )}
+          <div className="flex flex-wrap items-baseline gap-x-2 font-mono text-[11px] text-muted-foreground">
+            {row.original.label ? <span>{row.original.name}</span> : <span>{`{{${row.original.name}}}`} in a header</span>}
+            {row.original.ends && <span data-testid={`secret-ends-${row.original.name}`}>ending {row.original.ends}</span>}
+          </div>
         </div>
       ),
       enableHiding: false,
     },
     {
       id: 'usedBy',
-      accessorFn: (s) => s.usedBy.length,
+      accessorFn: (s) => s.usedBy.length + (s.authConfig ? 1 : 0),
       header: ({ column }) => <DataTableColumnHeader column={column} title="Used by" />,
       cell: ({ row }) =>
         row.original.usedBy.length ? (
@@ -91,8 +83,17 @@ function columns(canEdit: boolean, onRotate: (s: SecretMeta) => void, onRename: 
               )}
             </div>
           </StopRowClick>
+        ) : row.original.authConfig ? (
+          // Held by its auth config, which signs in with it: changed there, never here.
+          <StopRowClick align="start">
+            <Badge variant="outline" asChild className="font-normal" data-testid={`secret-auth-config-${row.original.name}`}>
+              <Link href={`/integrations/credentials/${encodeURIComponent(row.original.authConfig.id)}`} title="Change it on this auth config">
+                Auth config · {row.original.authConfig.name}
+              </Link>
+            </Badge>
+          </StopRowClick>
         ) : (
-          <span className="text-sm text-muted-foreground">No operation</span>
+          <span className="text-sm text-muted-foreground">Not used</span>
         ),
     },
     { accessorKey: 'version', header: ({ column }) => <DataTableColumnHeader column={column} title="Version" />, cell: ({ row }) => <span className="text-sm tabular-nums">v{row.original.version}</span> },
@@ -158,23 +159,19 @@ export function SecretsPanel() {
   const [renaming, setRenaming] = React.useState<SecretMeta | null>(null);
   const [renameError, setRenameError] = React.useState<string | null>(null);
   const rename = useRenameSecret();
-  const { team } = useTeam();
   // A secret is a credential every tool call may send, so only the Security team's admins add, rotate or delete one.
   const canEdit = useCan('secrets_egress', 'create') === true;
   const cols = React.useMemo(() => columns(canEdit, (s) => setDialog({ rotating: s }), (s) => (setRenameError(null), setRenaming(s)), setDeleting), [canEdit]);
 
   return (
     <div className="flex flex-col gap-4" data-testid="secrets-panel">
-      <div className="flex flex-wrap items-center gap-3">
-        <p className="min-w-0 flex-1 text-sm text-muted-foreground">
-          {`Values the tools in ${team?.name ?? 'this team'} send, such as API keys. A value is encrypted, never shown again, and scrubbed from whatever a system answers.`}
-        </p>
-        {canEdit && (
+      {canEdit && (
+        <div className="flex justify-end">
           <Button size="sm" onClick={() => setDialog({ rotating: null })} data-testid="secrets-add">
             <Plus className="size-4" /> Add secret
           </Button>
-        )}
-      </div>
+        </div>
+      )}
       {/* A first answer that failed shows the error with Retry at once, not a skeleton while the retries run. */}
       {!query.data && (query.isError || query.failureCount > 0) ? (
         <QueryError what="secrets" onRetry={() => query.refetch()} error={query.error ?? query.failureReason} retrying={query.isFetching} />

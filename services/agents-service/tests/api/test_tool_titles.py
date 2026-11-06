@@ -42,10 +42,12 @@ class Directory:
 
 
 class Rt:
-    """The runtime parts describe_call and the tools catalog read: the catalogue and the tool directory."""
+    """The runtime parts describe_call and the tools catalog read: the catalogue, the tool directory, and no app cards
+    (a runtime without tools-service's apps, as Runtime defaults)."""
 
     def __init__(self) -> None:
         self.catalog = load_catalog(SEED)
+        self.app_states = None
 
     def directory(self) -> Directory:
         return Directory()
