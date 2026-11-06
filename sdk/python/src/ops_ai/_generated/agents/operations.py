@@ -2600,7 +2600,7 @@ class Operations:
         cursor: str | None = None,
         limit: int | None = None,
         ids: list[str] | None = None,
-    ) -> OptionsPage:
+    ) -> ToolOptionsPage:
         "Tool Options"
         return self._t.call(
             SERVICE,
@@ -3847,7 +3847,7 @@ class AsyncOperations:
         cursor: str | None = None,
         limit: int | None = None,
         ids: list[str] | None = None,
-    ) -> OptionsPage:
+    ) -> ToolOptionsPage:
         "Tool Options"
         return await self._t.call(
             SERVICE,

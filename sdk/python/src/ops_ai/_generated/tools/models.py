@@ -1973,6 +1973,7 @@ class SystemCard(TypedDict, closed=True):
     signIn: NotRequired[Literal["team", "person", "person_or_team"] | None]
     state: NotRequired[Literal["connected", "not_signed_in", "expired", "refused", "revoked"] | None]
     status: NotRequired[str | None]
+    toolsAdded: NotRequired[int | None]
     toolsCount: int
 
 

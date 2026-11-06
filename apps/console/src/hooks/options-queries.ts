@@ -5,18 +5,18 @@ import { keepPreviousData } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import { sdk } from '@/lib/api/ops-sdk';
-import type { OptionsPage, OptionsParams, WorkflowFilters } from '@/lib/types/query';
+import type { OptionsPage, OptionsParams, ToolOptionsPage, WorkflowFilters } from '@/lib/types/query';
 import type { SkillLoading } from '@/lib/types/skills';
 import { useTeamInfiniteQuery, useTeamQuery } from './team-query';
 
-/** One picker's source: a cache key and the `/options` call behind it. */
-export interface OptionSource {
+/** One picker's source: a cache key and the `/options` call behind it; `P` is a page that carries more than options. */
+export interface OptionSource<P extends OptionsPage = OptionsPage> {
   key: string;
-  fetch: (p: OptionsParams) => Promise<OptionsPage>;
+  fetch: (p: OptionsParams) => Promise<P>;
 }
 
 export const knowledgeBaseOptions: OptionSource = { key: 'kb-options', fetch: (p) => api.knowledge.kbs.options(p) };
-export const toolOptions: OptionSource = { key: 'tool-options', fetch: (p) => api.agents.toolOptions(p) };
+export const toolOptions: OptionSource<ToolOptionsPage> = { key: 'tool-options', fetch: (p) => api.agents.toolOptions(p) };
 /** The team's files in Files; one not scanned clean is shown disabled with the reason. */
 export const fileOptions: OptionSource = { key: 'file-options', fetch: (p) => api.files.options(p) };
 /** The team's active people, by email: who a task is sent to. */
@@ -71,7 +71,7 @@ export const widgetOptionsFor = (granted: string[]): OptionSource => ({ key: `wi
 export const skillOptionsFor = (agentId: string, loading?: SkillLoading): OptionSource => ({ key: `skill-options:${agentId}:${loading ?? 'all'}`, fetch: (p) => api.skills.agents.options(agentId, p, loading) });
 
 /** Pages of a source's options for a search, one page at a time as the list scrolls; the search runs on the server. */
-export function useOptionSearch(source: OptionSource, search: string, enabled: boolean, limit = 25) {
+export function useOptionSearch<P extends OptionsPage>(source: OptionSource<P>, search: string, enabled: boolean, limit = 25) {
   const [debounced, setDebounced] = React.useState(search);
   React.useEffect(() => {
     const t = setTimeout(() => setDebounced(search), 200);

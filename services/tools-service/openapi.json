@@ -9959,6 +9959,17 @@
             ],
             "title": "Status"
           },
+          "toolsAdded": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Toolsadded"
+          },
           "toolsCount": {
             "title": "Toolscount",
             "type": "integer"

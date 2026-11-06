@@ -30,6 +30,11 @@ export interface OptionsPage {
   nextCursor: string | null;
 }
 
+/** The tools picker's page: also the apps whose catalog holds tools the team has not added, and how many. */
+export interface ToolOptionsPage extends OptionsPage {
+  notAdded?: { appId: string; name: string; count: number }[];
+}
+
 /** What every `/options` route takes: a search, the cursor of the page, a limit, or the stored ids to label. */
 export interface OptionsParams {
   search?: string;

@@ -5711,6 +5711,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ToolOptionsPage] */
+        Envelope_ToolOptionsPage_: {
+            data: components["schemas"]["ToolOptionsPage"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ToolRow] */
         Envelope_ToolRow_: {
             data: components["schemas"]["ToolRow"];
@@ -9558,6 +9567,15 @@ export interface components {
             /** Version */
             version: string;
         };
+        /** ToolOptionsPage */
+        ToolOptionsPage: {
+            /** Data */
+            data: components["schemas"]["Option"][];
+            /** Nextcursor */
+            nextCursor?: string | null;
+            /** Notadded */
+            notAdded?: components["schemas"]["ToolsNotAdded"][];
+        };
         /**
          * ToolRow
          * @description One tool on the Tools page, joined here: the app it belongs to, what kind of tool it is, whether the person
@@ -9625,6 +9643,19 @@ export interface components {
         ToolUserRef: {
             /** Id */
             id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * ToolsNotAdded
+         * @description An app whose catalog holds tools the team has not added: the picker cannot offer them, so it says how many wait
+         *     on the app's Tools tab.
+         */
+        ToolsNotAdded: {
+            /** Appid */
+            appId: string;
+            /** Count */
+            count: number;
             /** Name */
             name: string;
         };
@@ -25349,7 +25380,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_OptionsPage_"];
+                    "application/json": components["schemas"]["Envelope_ToolOptionsPage_"];
                 };
             };
             /** @description Invalid request */
