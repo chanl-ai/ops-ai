@@ -2578,8 +2578,15 @@
             "type": "string"
           },
           "tenantName": {
-            "title": "Tenantname",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenantname"
           },
           "user": {
             "$ref": "#/components/schemas/MeUser"

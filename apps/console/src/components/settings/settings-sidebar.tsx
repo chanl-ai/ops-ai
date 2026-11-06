@@ -8,7 +8,8 @@ import { ArrowLeft, ChevronRight, Search } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 import { Kbd } from '@/components/ui/kbd';
-import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuAction, SidebarMenuButton, SidebarInput, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem, SidebarSeparator } from '@/components/ui/sidebar';
+import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarInput, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem, SidebarSeparator } from '@/components/ui/sidebar';
+import { SidebarRowAction } from '@/components/shared/sidebar-row-action';
 import type { SidebarTree } from '@/lib/settings-tree';
 
 /**
@@ -112,9 +113,9 @@ export function SettingsSidebar({ tree, ...props }: React.ComponentProps<typeof 
                             </SidebarMenuButton>
                           </CollapsibleTrigger>
                           <CollapsibleTrigger asChild>
-                            <SidebarMenuAction className="data-[state=open]:rotate-90" aria-label={`Show or hide ${s.label}`}>
+                            <SidebarRowAction className="data-[state=open]:rotate-90" aria-label={`Show or hide ${s.label}`}>
                               <ChevronRight />
-                            </SidebarMenuAction>
+                            </SidebarRowAction>
                           </CollapsibleTrigger>
                           <CollapsibleContent>
                             <SidebarMenuSub>

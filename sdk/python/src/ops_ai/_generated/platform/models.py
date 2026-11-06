@@ -854,7 +854,7 @@ class Me(TypedDict, closed=True):
     securityTeamId: str | None
     teams: list[MeTeam]
     tenantId: str
-    tenantName: str
+    tenantName: str | None
     user: MeUser
     workspace: WorkspaceStateOut
 

@@ -148,8 +148,8 @@ class FlagOut(Out):
 class Me(Out):
     user: MeUser
     tenant_id: str
-    # The workspace's name, for the console's header.
-    tenant_name: str
+    # The workspace's name, for the console's header; null when it has none, so no id is shown in its place.
+    tenant_name: str | None
     teams: list[MeTeam]
     # The tenant's access policies now, every key with its value.
     policies: dict[str, Any]

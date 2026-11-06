@@ -30,18 +30,23 @@ import { initials, relativeTime } from '@/lib/format';
 import type { Member, MemberFilters } from '@/lib/types/settings';
 import { serverPagination } from '@/components/shared/server-pagination';
 
-/** A member's team role, and any role they hold in every team (access beyond the team role, and where it comes from). */
+/**
+ * One role label per person: their role in this team. A role they hold in every team that adds to it (the same role
+ * again adds nothing) reads as one muted sentence under the label, so the label never stacks chips.
+ */
 function MemberRoles({ member }: { member: Member }) {
+  const label = roleLabel(member.role);
+  const extra = (member.workspaceRoles ?? []).filter((r) => r.toLowerCase() !== label.toLowerCase());
   return (
-    <span className="flex flex-wrap items-center gap-1.5">
+    <span className="flex flex-col items-start gap-1">
       <Badge variant={member.role === 'admin' ? 'secondary' : 'outline'} className="font-normal">
-        {roleLabel(member.role)}
+        {label}
       </Badge>
-      {member.workspaceRoles?.map((r) => (
-        <Badge key={r} variant="secondary" className="font-normal" data-testid={`member-workspace-role-${member.id}`}>
-          {r} · every team
-        </Badge>
-      ))}
+      {extra.length > 0 && (
+        <span className="text-xs text-muted-foreground" data-testid={`member-workspace-role-${member.id}`}>
+          Also {extra.join(', ')} in every team
+        </span>
+      )}
     </span>
   );
 }

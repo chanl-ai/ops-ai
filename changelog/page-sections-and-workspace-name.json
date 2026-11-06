@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Section links for screen readers, real workspace name",
+  "description": "The section links at the top of Tools, a tool, a file and Channels are announced as links to other pages, with the current one marked, instead of as tabs that open nothing. The header and sidebar show the workspace's own name, or nothing when it has none.",
+  "tag": "improved"
+}

@@ -158,11 +158,12 @@ export function useCanBuild(area = 'agents'): boolean {
 /**
  * The workspace's name and the signed-in person for the header and sidebar: platform-service's own answer (GET
  * /v1/me) under platform sign-in, and the mock's sample workspace only when the console runs on the mock. The
- * environment is known only on the mock. Undefined while loading.
+ * environment is known only on the mock. `workspace` is unset when the workspace has no name, so nothing stands in for
+ * it. Undefined while loading.
  */
-export function useWorkspaceIdentity(): { workspace: string; environment?: string; user: { name: string; email: string } } | undefined {
+export function useWorkspaceIdentity(): { workspace?: string; environment?: string; user: { name: string; email: string } } | undefined {
   const me = useMe();
   const lookups = useTeamQuery({ queryKey: ['lookups'], queryFn: api.lookups.get, staleTime: 5 * 60_000, enabled: !api.teams.me });
-  if (api.teams.me) return me.data ? { workspace: me.data.tenantName ?? me.data.tenantId, user: { name: me.data.user.name, email: me.data.user.email } } : undefined;
+  if (api.teams.me) return me.data ? { workspace: me.data.tenantName ?? undefined, user: { name: me.data.user.name, email: me.data.user.email } } : undefined;
   return lookups.data ? { workspace: lookups.data.workspace.name, environment: lookups.data.workspace.environment, user: lookups.data.currentUser } : undefined;
 }

@@ -85,6 +85,10 @@ def test_a_type_id_another_team_holds_is_copied_under_the_team_prefix() -> None:
     assert "customer_operations_legal_notice" in mapped["documentTypes"].values()
 
 
+async def _no_database(_env: dict[str, str]) -> None:
+    return None
+
+
 def test_the_first_admins_password_is_made_once_kept_private_and_never_printed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -97,6 +101,7 @@ def test_the_first_admins_password_is_made_once_kept_private_and_never_printed(
     monkeypatch.setattr(dev_admin, "ENV_FILE", tmp_path / "dev-admin.env")
     monkeypatch.setattr(dev_admin, "RUN_DIR", tmp_path)
     monkeypatch.setattr(dev_admin.subprocess, "run", bootstrap)
+    monkeypatch.setattr(dev_admin, "keep_seed_name", _no_database)
     assert dev_admin.main() == 0
     assert dev_admin.main() == 0
     assert len(seen) == 2 and seen[0] == seen[1] and len(seen[0]) >= 12

@@ -20,7 +20,7 @@ import { StartWorkflowRunDialog } from '@/components/workflows/start-run-dialog'
 import { starterDefinition } from '@/components/workflows/definition-editor/starter';
 import { WorkflowDialog } from '@/components/workflows/workflow-dialog';
 import { useDeleteDefinitions, usePublishDefinition } from '@/hooks/engine-queries';
-import { useCanBuild } from '@/hooks/me-queries';
+import { useCan, useCanBuild } from '@/hooks/me-queries';
 import { useWorkflows } from '@/hooks/queries';
 import { useCreateParam } from '@/hooks/use-create-param';
 import { useSticky } from '@/hooks/use-sticky';
@@ -46,7 +46,10 @@ const columns: ColumnDef<Row>[] = [
         <div className="flex items-center gap-2">
           <span className="font-medium">{row.original.name}</span>
         </div>
-        <div className="text-xs text-muted-foreground">Starts when: {row.original.trigger}</div>
+        {/* A span, not a div: the name column truncates descendant divs to one line, and a trigger is a sentence. */}
+        <span className="line-clamp-2 whitespace-normal text-xs text-muted-foreground" title={row.original.trigger}>
+          Starts when: {row.original.trigger}
+        </span>
       </div>
     ),
     enableHiding: false,
@@ -138,6 +141,8 @@ export default function WorkflowsPage() {
   const [startOpen, setStartOpen] = React.useState(false);
   const [createOpen, setCreateOpen] = useCreateParam();
   const canBuild = useCanBuild();
+  // A viewer reads runs and does not start them (workflows.run); the API refuses a start with 403.
+  const canRun = useCan('workflows', 'run') === true;
   const [bulk, setBulk] = React.useState<{ kind: 'delete'; rows: Workflow[] } | null>(null);
   const shown = useSticky(bulk);
   const [resetKey, setResetKey] = React.useState(0);
@@ -154,9 +159,11 @@ export default function WorkflowsPage() {
       description="Agents, tools and review gates wired into one run"
       actions={
         <>
-          <Button variant="outline" onClick={() => setStartOpen(true)}>
-            <PlayCircle className="size-4" /> Start run
-          </Button>
+          {canRun && (
+            <Button variant="outline" onClick={() => setStartOpen(true)}>
+              <PlayCircle className="size-4" /> Start run
+            </Button>
+          )}
           {canBuild && (
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" /> New workflow

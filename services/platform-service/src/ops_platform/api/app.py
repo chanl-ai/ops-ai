@@ -442,7 +442,7 @@ def create_public_app(
             {
                 "user": {"id": found.id, "email": found.email, "name": found.name},
                 "tenantId": tenant,
-                "tenantName": await store.tenant_name(tenant) or tenant,
+                "tenantName": await store.tenant_name(tenant) or None,
                 "teams": [{"id": t["id"], "name": t["name"], "role": t["role"]} for t in teams],
                 "policies": await policy_store.values(tenant),
                 "securityTeamId": await team_store.security_team_of(tenant),
