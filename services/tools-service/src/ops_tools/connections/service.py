@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import re
 import secrets as random
 import time
@@ -119,6 +120,39 @@ def _person(who: Caller) -> str:
     return f"{p.sub}|{p.email}"[:200] if p is not None else who.name
 
 
+# How the console names Ops AI's own OAuth app wherever an auth config is named.
+OPS_AI_APP = "Ops AI's app"
+MCP_LIST_TOOLS = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+
+
+def is_mcp_server(settings: dict[str, Any]) -> bool:
+    """An MCP server added by its address: the token it takes is for the server itself (`resource` is its address),
+    as `connect_mcp` sets it."""
+    base, resource = str(settings.get("baseUrl") or ""), str(settings.get("resource") or "")
+    return bool(base) and base.rstrip("/") == resource.rstrip("/")
+
+
+def mcp_error(res: httpx.Response) -> str | None:
+    """The JSON-RPC error a server answered tools/list with, or None when it listed them. A streamed answer
+    (text/event-stream) carries the message on its first `data:` line."""
+    text = res.text
+    if "text/event-stream" in res.headers.get("content-type", ""):
+        text = next((line[5:].strip() for line in text.splitlines() if line.startswith("data:")), "")
+    try:
+        body = json.loads(text)
+    except ValueError:
+        return "its answer was not JSON-RPC"
+    if not isinstance(body, dict):
+        return "its answer was not JSON-RPC"
+    answer = cast(dict[str, Any], body)
+    error: Any = answer.get("error")
+    if isinstance(error, dict):
+        return str(cast(dict[str, Any], error).get("message") or "an error")
+    if error is not None:
+        return str(error)
+    return None if "result" in answer else "its answer had no result"
+
+
 def _names(conn: dict[str, Any] | None) -> dict[str, str]:
     """An account's secret field to secret name map."""
     return {str(k): str(v) for k, v in cast(dict[Any, Any], (conn or {}).get("secrets") or {}).items()}
@@ -196,6 +230,9 @@ class ConnectionService:
         # A plugin app's title and logo by its app id (PluginHost.display_of), for My accounts; set once the plugin
         # host is up.
         self.app_display: Callable[[str], tuple[str, str | None] | None] | None = None
+        # The permissions a plugin account's sign-in asks for, from the tools its team added
+        # (PluginHost.sign_in_scopes); set once the plugin host is up.
+        self.sign_in_scopes: Callable[[str, str], Awaitable[list[str] | None]] | None = None
         # Tests that run after a sign-in, held so the event loop keeps them until they finish.
         self._after_sign_in: set[asyncio.Task[None]] = set()
 
@@ -713,7 +750,7 @@ class ConnectionService:
         self,
         who: Caller,
         connection_id: str,
-        account: str = "self",
+        account: str | None = None,
         *,
         scopes: list[str] | None = None,
         hint: str | None = None,
@@ -725,6 +762,7 @@ class ConnectionService:
         `scopes` are asked for beside the connection's, and `hint` is the email the system's sign-in starts with.
         `check`: an admin's Test with my account of the app credential, which keeps no token."""
         found = await self._get(who, connection_id)
+        account = await self._which(who, found, account, first=True)
         personal = (found.get("sign_in") or "team") != "team" and account == "self" and not check
         conn = await self._signs_in(who, connection_id, right=OWN if personal else "manage")
         settings: dict[str, Any] = dict(conn["settings"])
@@ -743,7 +781,10 @@ class ConnectionService:
         # The team's account signs calls nobody can be asked for, so it asks up front for every scope its operations
         # need; a person's own sign-in asks for the connection's and is asked again when an operation needs more.
         needed = [] if personal else await self.store.operation_scopes(who.tenant_id, str(conn["id"]))
-        wanted: list[str] = [*str(settings.get("scopes") or "").split(), *(scopes or []), *needed]
+        # A plugin's permissions follow the tools its team added; any other account asks what its settings list.
+        derived = await self.sign_in_scopes(who.tenant_id, str(conn["id"])) if self.sign_in_scopes else None
+        listed = derived if derived is not None else str(settings.get("scopes") or "").split()
+        wanted: list[str] = [*listed, *(scopes or []), *needed]
         asked = list(dict.fromkeys(wanted))
         expired = await self.store.add_state(
             {
@@ -870,6 +911,8 @@ class ConnectionService:
         token = await self.tokens.store_answer(who.tenant_id, connection_id, answer, token_for, requested=requested)
         if isinstance(named, str):
             await self.store.name_token(who.tenant_id, connection_id, token_for, named)
+        if token_for != SHARED:
+            await self.store.name_person(who.tenant_id, connection_id, token_for, who.name)
         if token_for == SHARED:
             await self.store.set_status(who.tenant_id, connection_id, "healthy", None)
         if self.on_signed_in is not None:
@@ -889,7 +932,8 @@ class ConnectionService:
         own = connected_event(conn, token_for) if token_for != SHARED else None
         event = self._event(who, "signed_in", detail)
         await self.store.note(who.tenant_id, connection_id, event, report=own)
-        if str({**settings, **extra}.get("testPath") or "").startswith("/"):
+        now_set = {**settings, **extra}
+        if str(now_set.get("testPath") or "").startswith("/") or is_mcp_server(now_set):
             # The sign-in alone connects the account; its test follows without holding the answer, and its outcome
             # is kept on the account's row.
             account = "self" if token_for != SHARED else "team"
@@ -1023,6 +1067,54 @@ class ConnectionService:
                 return str(found["name"])
         return "Ops AI's app" if conn.get("platform_app") else "the app credential"
 
+    async def change_kind(self, who: Caller, connection_id: str, kind_id: str) -> bool:
+        """Moves a custom app's account to another sign-in kind. What it held for the old kind goes: its secret parts,
+        its token and each person's sign-in, its app credential and the old kind's fields, so no old key is sent or
+        left unseen; the address and test path stay. The account then reads as needing its new sign-in. False when it
+        already signs in that way."""
+        self._can(who, "manage")
+        conn = await self._get(who, connection_id)
+        if plugin_of(conn):
+            raise ValidationFailed(f"{conn['name']}'s sign-in is its plugin's; it is chosen once.", code="kind_fixed")
+        if kind_id not in BY_ID:
+            raise ValidationFailed(f"{kind_id} is not a way to sign in. Pick one of {', '.join(BY_ID)}.")
+        if conn["auth_kind"] == kind_id:
+            return False
+        kind = BY_ID[kind_id]
+        kept = {k: v for k, v in dict(conn.get("settings") or {}).items() if k in ("baseUrl", "testPath")}
+        sign_in = str(conn.get("sign_in") or "team") if kind.per_person else "team"
+        values: dict[str, Any] = {
+            "auth_kind": kind_id,
+            "settings": kept,
+            "secrets": {},
+            "credential_id": None,
+            "platform_app": None,
+            "sign_in": sign_in,
+            "team_backup": bool(conn.get("team_backup")) and sign_in == "person_or_team",
+        }
+        await self._write(who, conn, int(conn["revision"]), values, action="changed", detail={"kind": kind_id})
+        now = self.clock()
+        # A credential's client secret is the credential's, which other accounts may still sign in with.
+        for field, name in _names(conn).items():
+            if not (field == "clientSecret" and conn.get("credential_id")):
+                await self.secrets.delete(who.tenant_id, str(conn["team_id"]), name, actor=who.name, at=now)
+        await self.sign_in_again(who, connection_id, f"It signs in with {kind.label} now: set it up and sign in again.")
+        return True
+
+    async def _which(self, who: Caller, conn: dict[str, Any], account: str | None, *, first: bool) -> str:
+        """Whose sign-in a request that names none means, on an account each person may sign in to with the team as
+        backup. A sign-in (`first`): the team's while it has none and the caller manages the team's apps, so an app's
+        first sign-in is the team's; a test: the caller's own when they hold one. Else the caller's own."""
+        if account is not None:
+            return account
+        if str(conn.get("sign_in") or "team") != "person_or_team":
+            return "self"
+        held = await self.store.token(who.tenant_id, str(conn["id"]), SHARED)
+        if first:
+            return "team" if held is None and self.may_manage(who) else "self"
+        own = await self.store.token(who.tenant_id, str(conn["id"]), own_key(who))
+        return "self" if own is not None else "team"
+
     async def sign_in_again(self, who: Caller, connection_id: str, why: str) -> None:
         """Marks an account to sign in again (the app registration it signs in with changed): the team's sign-in is
         dropped and the account reads as needing a reconnect, with `why`; each person's own sign-in is marked refused,
@@ -1136,6 +1228,14 @@ class ConnectionService:
                     "refused": r.get("refused_at") is not None,
                     "refusedAt": _iso(r.get("refused_at")),
                     "refusedReason": r.get("refused_reason"),
+                    "authConfig": OPS_AI_APP if r.get("platform_app") else r.get("credential_name"),
+                    "state": (
+                        "not_connected"
+                        if every and r.get("person_id") is None
+                        else "expired"
+                        if r.get("refused_at") is not None
+                        else "connected"
+                    ),
                 }
             )
         return out
@@ -1224,24 +1324,30 @@ class ConnectionService:
             hint=str(found["email"]) or None,
         )
 
-    async def test(self, who: Caller, connection_id: str, account: str = "self") -> dict[str, Any]:
+    async def test(self, who: Caller, connection_id: str, account: str | None = None) -> dict[str, Any]:
         """Test connection: reads the account's `testPath` signed in as a call would be, with the caller's
         own sign-in (OWN) on a connection each person signs in to, else the team's (connections.manage), and stores
         the result on the connection. Only the team's sign-in decides the connection's status: one person's missing
         or refused sign-in is theirs alone."""
         conn = await self._get(who, connection_id)
+        account = await self._which(who, conn, account, first=False)
         own = (conn.get("sign_in") or "team") != "team" and account == "self"
         self._can(who, OWN if own else "manage")
         if self.auth is None or self.http is None or self.egress is None:
             raise ServiceUnavailable("This service has no egress policy, so it tests no connection.")
         settings: dict[str, Any] = dict(conn["settings"] or {})
         path = str(settings.get("testPath") or "")
-        if not path.startswith("/") and plugin_of(conn):
+        mcp = is_mcp_server(settings)
+        if mcp:
+            # An MCP server is tested as its tools use it: it lists them to the account's token. Its address keeps
+            # its path, so a test address appended to it would read somewhere else.
+            path = ""
+        elif not path.startswith("/") and plugin_of(conn):
             # A plugin's test address comes with its sign-in, which names the instance: nobody types one.
             raise ValidationFailed(
                 f"Sign {conn['name']} in first: its test reads the system its sign-in names.", code="not_signed_in"
             )
-        if not path.startswith("/"):
+        if not mcp and not path.startswith("/"):
             raise ValidationFailed(
                 f"Set {conn['name']}'s test address, a read on the system such as /services/oauth2/userinfo.",
                 code="test_path_missing",
@@ -1273,7 +1379,7 @@ class ConnectionService:
             )
             hosts = await self.tokens.hosts(who.tenant_id, connection_id)
             await self.egress.check_url(who.tenant_id, url, hosts)
-            res = await self._probe(url, prepared, who.tenant_id, hosts)
+            res = await self._probe(url, prepared, who.tenant_id, hosts, mcp=mcp)
             if res.status_code == 401 and prepared is not None and prepared.renewable:
                 # A token the system no longer takes (expired early, or revoked) is fetched again once, as a tool
                 # call's read is (executor.py), so the test reports the sign-in, not a token's age.
@@ -1286,7 +1392,7 @@ class ConnectionService:
                     team_account=not own,
                     stale_rotation=prepared.rotation,
                 )
-                res = await self._probe(url, prepared, who.tenant_id)
+                res = await self._probe(url, prepared, who.tenant_id, mcp=mcp)
         except AuthFailed as e:
             health |= {"status": "failed", "code": e.code, "message": str(e)}
             refused_sign_in = e.side == "upstream"
@@ -1299,7 +1405,14 @@ class ConnectionService:
         else:
             health["latencyMs"] = round((time.perf_counter() - started) * 1000)
             health["httpStatus"] = res.status_code
-            if res.status_code < 400:
+            refusal = mcp_error(res) if mcp and res.status_code < 400 else None
+            if refusal is not None:
+                health |= {
+                    "status": "failed",
+                    "code": "UPSTREAM_STATUS",
+                    "message": f"The server refused to list its tools: {refusal}",
+                }
+            elif res.status_code < 400:
                 health["status"] = "ok"
                 # A test read often names who signed in (GitHub's /user: login), kept when the sign-in did not.
                 try:
@@ -1332,9 +1445,17 @@ class ConnectionService:
         return await self.detail(who, connection_id)
 
     async def _probe(
-        self, url: str, prepared: Prepared | None, tenant_id: str, hosts: list[str] | None = None
+        self, url: str, prepared: Prepared | None, tenant_id: str, hosts: list[str] | None = None, *, mcp: bool = False
     ) -> httpx.Response:
         assert self.http is not None
+        if mcp:
+            return await self.http.post(
+                url,
+                json=MCP_LIST_TOOLS,
+                headers={**(prepared.headers if prepared else {}), "Accept": "application/json, text/event-stream"},
+                timeout=TEST_TIMEOUT_S,
+                extensions=for_tenant(tenant_id, prepared.certificate if prepared else None, hosts or ()),
+            )
         return await self.http.get(
             url,
             params=(prepared.params or None) if prepared else None,

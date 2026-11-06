@@ -28,6 +28,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "apps_add_tools": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/apps/{app_id}/tools",
+        "pathParams": ["app_id"],
+        "query": [],
+        "stream": False,
+    },
     "apps_app_users": {
         "body": None,
         "headers": [],
@@ -52,6 +61,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "PATCH",
         "path": "/v1/app-credentials/{credential_id}",
         "pathParams": ["credential_id"],
+        "query": [],
+        "stream": False,
+    },
+    "apps_change_app_kind": {
+        "body": "json",
+        "headers": [],
+        "method": "PATCH",
+        "path": "/v1/apps/{app_id}",
+        "pathParams": ["app_id"],
         "query": [],
         "stream": False,
     },
@@ -88,6 +106,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "DELETE",
         "path": "/v1/apps/{app_id}/accounts/{account_id}",
         "pathParams": ["app_id", "account_id"],
+        "query": [],
+        "stream": False,
+    },
+    "apps_delete_app": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/apps/{app_id}",
+        "pathParams": ["app_id"],
         "query": [],
         "stream": False,
     },
@@ -223,6 +250,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/apps/{app_id}/update",
         "pathParams": ["app_id"],
+        "query": [],
+        "stream": False,
+    },
+    "apps_remove_tool": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/apps/{app_id}/tools/{tool}",
+        "pathParams": ["app_id", "tool"],
         "query": [],
         "stream": False,
     },
@@ -422,6 +458,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/secrets",
         "pathParams": [],
         "query": ["page", "pageSize", "search", "templateId", "teamId"],
+        "stream": False,
+    },
+    "secrets_rename_secret": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/secrets/{name}/rename",
+        "pathParams": ["name"],
+        "query": ["teamId"],
         "stream": False,
     },
     "secrets_rotate_secret": {
@@ -775,6 +820,14 @@ class Operations:
         "Get App"
         return self._t.call(SERVICE, OPERATIONS["apps_get_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def apps_change_app_kind(self, app_id: str, body: AppKindIn) -> AppKindChanged:
+        "Change App Kind"
+        return self._t.call(SERVICE, OPERATIONS["apps_change_app_kind"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def apps_delete_app(self, app_id: str) -> AppDeleted:
+        "Delete App"
+        return self._t.call(SERVICE, OPERATIONS["apps_delete_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     def apps_add_account(self, app_id: str, body: AccountIn) -> AccountDetail:
         "Add Account"
         return self._t.call(SERVICE, OPERATIONS["apps_add_account"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
@@ -840,6 +893,14 @@ class Operations:
     def apps_set_team_app(self, app_id: str, body: TeamPluginIn) -> SystemCard:
         "Set Team App"
         return self._t.call(SERVICE, OPERATIONS["apps_set_team_app"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def apps_add_tools(self, app_id: str, body: ToolsAddIn) -> list[AppTool]:
+        "Add Tools"
+        return self._t.call(SERVICE, OPERATIONS["apps_add_tools"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def apps_remove_tool(self, app_id: str, tool: str) -> AppTool:
+        "Remove Tool"
+        return self._t.call(SERVICE, OPERATIONS["apps_remove_tool"], {"app_id": app_id, "tool": tool}, {}, {}, None)  # type: ignore[no-any-return]
 
     def apps_plugin_update(self, app_id: str) -> PluginUpdateView:
         "Plugin Update"
@@ -982,6 +1043,10 @@ class Operations:
     def secrets_delete_secret(self, name: str, *, team_id: str | None = None) -> Any:
         "Delete Secret"
         return self._t.call(SERVICE, OPERATIONS["secrets_delete_secret"], {"name": name}, {"teamId": team_id}, {}, None)  # type: ignore[no-any-return]
+
+    def secrets_rename_secret(self, name: str, body: RenameIn, *, team_id: str | None = None) -> SecretMeta:
+        "Rename Secret"
+        return self._t.call(SERVICE, OPERATIONS["secrets_rename_secret"], {"name": name}, {"teamId": team_id}, {}, body)  # type: ignore[no-any-return]
 
     def secrets_rotate_secret(self, name: str, body: RotateIn, *, team_id: str | None = None) -> SecretMeta:
         "Rotate Secret"
@@ -1269,6 +1334,14 @@ class AsyncOperations:
         "Get App"
         return await self._t.call(SERVICE, OPERATIONS["apps_get_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    async def apps_change_app_kind(self, app_id: str, body: AppKindIn) -> AppKindChanged:
+        "Change App Kind"
+        return await self._t.call(SERVICE, OPERATIONS["apps_change_app_kind"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def apps_delete_app(self, app_id: str) -> AppDeleted:
+        "Delete App"
+        return await self._t.call(SERVICE, OPERATIONS["apps_delete_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     async def apps_add_account(self, app_id: str, body: AccountIn) -> AccountDetail:
         "Add Account"
         return await self._t.call(SERVICE, OPERATIONS["apps_add_account"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
@@ -1334,6 +1407,16 @@ class AsyncOperations:
     async def apps_set_team_app(self, app_id: str, body: TeamPluginIn) -> SystemCard:
         "Set Team App"
         return await self._t.call(SERVICE, OPERATIONS["apps_set_team_app"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def apps_add_tools(self, app_id: str, body: ToolsAddIn) -> list[AppTool]:
+        "Add Tools"
+        return await self._t.call(SERVICE, OPERATIONS["apps_add_tools"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def apps_remove_tool(self, app_id: str, tool: str) -> AppTool:
+        "Remove Tool"
+        return await self._t.call(
+            SERVICE, OPERATIONS["apps_remove_tool"], {"app_id": app_id, "tool": tool}, {}, {}, None
+        )  # type: ignore[no-any-return]
 
     async def apps_plugin_update(self, app_id: str) -> PluginUpdateView:
         "Plugin Update"
@@ -1479,6 +1562,12 @@ class AsyncOperations:
         "Delete Secret"
         return await self._t.call(
             SERVICE, OPERATIONS["secrets_delete_secret"], {"name": name}, {"teamId": team_id}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def secrets_rename_secret(self, name: str, body: RenameIn, *, team_id: str | None = None) -> SecretMeta:
+        "Rename Secret"
+        return await self._t.call(
+            SERVICE, OPERATIONS["secrets_rename_secret"], {"name": name}, {"teamId": team_id}, {}, body
         )  # type: ignore[no-any-return]
 
     async def secrets_rotate_secret(self, name: str, body: RotateIn, *, team_id: str | None = None) -> SecretMeta:

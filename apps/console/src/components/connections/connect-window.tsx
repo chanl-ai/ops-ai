@@ -69,6 +69,7 @@ export function ConnectWindow({
   sandbox = false,
   credential,
   taken = [],
+  personal = false,
   open,
   onOpenChange,
 }: {
@@ -77,6 +78,9 @@ export function ConnectWindow({
   another?: boolean;
   sandbox?: boolean;
   credential?: string | null;
+  /** Connects the caller's own account only (My accounts, or someone who may not add team accounts): Team account
+   * is off and not shown. */
+  personal?: boolean;
   /** The app's account names already used, so the name it suggests is free. */
   taken?: string[];
   open: boolean;
@@ -91,8 +95,15 @@ export function ConnectWindow({
   const { team: current } = useTeam();
   const plugin = card.plugin;
   const kind = kinds.kinds.find((k) => k.id === (card.authKind ?? plugin?.kinds[0]));
-  // Another account of the app: added beside the default one, never through the app's turn-on.
-  const adding = another || sandbox;
+  // Team account: anyone in the team runs tools as it. Off, the caller signs in their own account on the app's default
+  // one; ticked and locked while the app lets nobody bring their own, and off and hidden when only their own is asked.
+  const ownAllowed = !card.connectionId || card.signIn !== 'team';
+  const ownOnly = personal || !card.mayManage;
+  const [team, setTeam] = React.useState(!ownOnly);
+  const asTeam = (team || !ownAllowed) && !ownOnly;
+  // Another account of the app: a second team account beside the default, never through the app's turn-on. The
+  // caller's own account is a sign-in on the default account instead.
+  const adding = sandbox || (another && asTeam);
 
   // The app credential the team's connection already signs in with, as the app's card names it; a sandbox signs in
   // elsewhere, so it picks its own.
@@ -138,7 +149,6 @@ export function ConnectWindow({
   const [more, setMore] = React.useState(another || sandbox);
   // A test account is the one test runs use and live runs never do; a test sign-in place turns it on.
   const [testAccount, setTestAccount] = React.useState(sandbox);
-  const [team, setTeam] = React.useState(true);
   const suggested = freeName(testAccount ? `${card.name} test account` : another ? `${card.name} · second account` : `${card.name} · ${current?.name ?? 'Team'}`, taken);
 
   const [waiting, setWaiting] = React.useState(false);
@@ -225,13 +235,17 @@ export function ConnectWindow({
       for (const x of asked.filter((a) => a.perAccount)) draft.settings[x.name] = values[x.name] ?? '';
       const teamSettings = Object.fromEntries(asked.filter((a) => !a.perAccount).map((a) => [a.name, values[a.name] ?? '']));
       const accountName = (values.accountName ?? '').trim() || suggested;
-      const offered = team ? (plugin.signIn.includes('person_or_team') ? 'person_or_team' : undefined) : plugin.signIn.includes('person') ? 'person' : undefined;
+      const offered = plugin.signIn.includes('person_or_team') ? 'person_or_team' : asTeam ? undefined : plugin.signIn.includes('person') ? 'person' : undefined;
       let id: string;
       if (adding) {
         const body = newAccountBody(kind, plugin, client, draft, accountName, testAccount, offered) as AccountBody;
         const account = await addAccount.mutateAsync({ appId: card.id, body });
         id = account.id;
         made.current = { id, turnedOn: false };
+      } else if (!asTeam && card.connectionId) {
+        // The caller's own account: a sign-in of theirs on the app's default account, which nothing else changes.
+        id = card.connectionId;
+        made.current = { id: null, turnedOn: false };
       } else {
         const body = { ...turnOnBody(kind, plugin, client, draft, teamSettings, !card.connectionId, offered), accountName, sandbox: testAccount } as TeamAppBody;
         const view = await setTeamApp.mutateAsync({ appId: card.id, body });
@@ -239,7 +253,7 @@ export function ConnectWindow({
         made.current = { id: card.connectionId ? null : id, turnedOn: true };
       }
       signingIn.current = id;
-      const s = await start.mutateAsync({ appId: card.id, accountId: id, account: team ? 'team' : 'self' });
+      const s = await start.mutateAsync({ appId: card.id, accountId: id, account: asTeam ? 'team' : 'self' });
       w.go(s, { appId: card.id, accountId: id });
     } catch (e) {
       w.fail(message(e));
@@ -257,7 +271,7 @@ export function ConnectWindow({
     setWaiting(true);
     try {
       signingIn.current = id;
-      const s = await start.mutateAsync({ appId: card.id, accountId: id, account: team ? 'team' : 'self' });
+      const s = await start.mutateAsync({ appId: card.id, accountId: id, account: asTeam ? 'team' : 'self' });
       w.go(s, { appId: card.id, accountId: id });
     } catch (e) {
       w.fail(message(e));
@@ -277,8 +291,8 @@ export function ConnectWindow({
       open={open}
       onOpenChange={(o) => (o ? onOpenChange(o) : void cancel())}
       size="md"
-      title={sandbox ? `Add a ${card.name} test account` : another ? `Connect another ${card.name} account` : `Connect ${card.name}`}
-      description={`Choose how Ops AI signs in to ${card.name}, then allow access.`}
+      title={ownOnly ? `Connect your ${card.name} account` : `Connect a ${card.name} account`}
+      description={`Pick how Ops AI signs in, then sign in to ${card.name}.`}
       data-testid="connect-window"
       footer={
         <>
@@ -315,20 +329,19 @@ export function ConnectWindow({
           </span>
         </label>
 
-        {needed.map(setting)}
-
-        {plugin.scopes.length > 0 && (
-          <div className="flex flex-col gap-1.5" data-testid="connect-window-scopes">
-            <p className="text-sm text-muted-foreground">{client ? `Your ${card.name} app asks for:` : `Ops AI’s ${card.name} app gets access to:`}</p>
-            <div className="flex flex-wrap gap-1.5">
-              {plugin.scopes.map((s) => (
-                <Badge key={s.id} variant="outline" title={s.id}>
-                  {s.label}
-                </Badge>
-              ))}
-            </div>
-          </div>
+        {!ownOnly && (
+          <label className="flex items-start gap-2" data-testid="connect-window-team">
+            <Checkbox checked={team || !ownAllowed} disabled={!ownAllowed} onCheckedChange={(v) => setTeam(v === true)} className="mt-0.5" data-testid="connect-window-team-account" />
+            <span className="grid gap-1">
+              <span className="text-sm">Team account</span>
+              <span className="text-xs text-muted-foreground">
+                {ownAllowed ? `Anyone in ${current?.name ?? 'the team'} can run tools as this account. Off, it is yours alone.` : `Anyone in ${current?.name ?? 'the team'} can run tools as this account. Personal accounts are off for ${card.name} in its Settings.`}
+              </span>
+            </span>
+          </label>
         )}
+
+        {needed.map(setting)}
 
         <Collapsible open={more} onOpenChange={setMore}>
           <CollapsibleTrigger asChild>
@@ -340,13 +353,6 @@ export function ConnectWindow({
           <CollapsibleContent className="flex flex-col gap-4 pt-3">
             {tuned.map(setting)}
             <FormTextField control={form.control} name="accountName" label="Account name" optional placeholder={suggested} hint="Steps and tools pick an account by this name." testId="connect-window-name" />
-            <label className="flex items-start gap-2" data-testid="connect-window-team">
-              <Checkbox checked={team} onCheckedChange={(v) => setTeam(v === true)} className="mt-0.5" />
-              <span className="grid gap-1">
-                <span className="text-sm">Team account</span>
-                <span className="text-xs text-muted-foreground">Anyone in {current?.name ?? 'the team'} can run tools as this account. Off, it is yours alone.</span>
-              </span>
-            </label>
           </CollapsibleContent>
         </Collapsible>
 

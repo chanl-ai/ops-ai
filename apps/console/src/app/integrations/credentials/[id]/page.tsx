@@ -6,7 +6,6 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { Activity, ExternalLink, KeyRound, Pencil, Trash2, UserRoundPlus } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { CREDENTIAL_STATUS } from '@/components/connections/app-credentials-panel';
 import { secretShown } from '@/components/connections/credential-display';
 import { CredentialDeleteDialog } from '@/components/connections/credential-delete-dialog';
 import { CredentialEditDialog } from '@/components/connections/credential-edit-dialog';
@@ -16,6 +15,7 @@ import { appHref } from '@/components/connections/systems-grid';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { PageLayout } from '@/components/page-layout';
+import { CopyButton } from '@/components/shared/copy-button';
 import { FieldRow } from '@/components/shared/field-row';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
@@ -212,12 +212,12 @@ export default function AppCredentialPage() {
             >
               <FieldRow label="App" value={c.appName} href={card ? appHref(card) : undefined} />
               <FieldRow label="Type" value={own ? 'Your own app' : 'Ops AI’s app'} />
-              <FieldRow label="Client ID" value={c.clientId ?? (own ? undefined : 'Kept by the install')} mono={Boolean(c.clientId)} testId="credential-client-id" />
+              <FieldRow label="Client ID" value={c.clientId ?? (own ? undefined : 'Kept by the install')} mono={Boolean(c.clientId)} adornment={c.clientId ? <CopyButton text={c.clientId} size="icon" className="size-6" /> : undefined} testId="credential-client-id" />
               {own && <FieldRow label="Client secret" value={secretShown(c)} mono={Boolean(c.secretEnds)} testId="credential-secret" />}
               {(c.fields ?? []).map((f) => (
                 <FieldRow key={f.name} label={f.label} value={(c.settings ?? {})[f.name] ? String((c.settings ?? {})[f.name]) : 'Not set'} mono={Boolean((c.settings ?? {})[f.name])} wrap testId={`credential-setting-${f.name}`} />
               ))}
-              <FieldRow label="Status" value={CREDENTIAL_STATUS[c.status]} />
+              <FieldRow label="Status" value={{ working: 'Working', not_tested: 'Not tested', failing: 'Failing' }[c.status]} />
               <FieldRow label="Made by" value={c.createdBy ?? undefined} />
               <FieldRow label="Created" value={c.created ? shortDate(c.created) : undefined} />
               {own && c.redirectUri && <FieldRow label="Return address" value={c.redirectUri} mono wrap />}

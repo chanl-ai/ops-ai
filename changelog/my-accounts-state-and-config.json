@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Your own accounts keep apps after a disconnect",
+  "description": "The list of apps you can sign in to with your own account now carries each one's state (connected, expired or not connected) and the auth config it signs in through, so an app stays listed after you disconnect it. New auth configs are named after your team, and Ops AI's built-in one reads Ops AI's app.",
+  "tag": "fix"
+}

@@ -64,9 +64,13 @@ async def test_an_oauth_sign_in_of_your_own_reports_that_you_connected(
     assert [e["event_key"] for e in await connected(engine, tenant)] == [f"{conn}:usr_james"]
 
 
-async def test_a_connection_the_team_backs_says_its_team_account_may_stand_in(engine: AsyncEngine, tenant: str) -> None:
+async def test_a_connection_the_team_backs_serves_a_person_with_none_of_their_own(
+    engine: AsyncEngine, tenant: str
+) -> None:
+    # James has no account of his own, so the team's sign-in serves him; with the team not signed in either, the
+    # refusal is the team's, and no run waits on James to connect.
     store, _, auth = oauth.rig(engine)
     conn = await oauth.connection(store, tenant, "person_or_team", backup=True)
     with pytest.raises(AuthFailed) as e:
         await oauth.bearer(auth, tenant, conn, oauth.JAMES)
-    assert e.value.details["teamAccount"] is True, e.value.details
+    assert e.value.code == "NOT_SIGNED_IN" and "connectedEvent" not in e.value.details, (e.value.code, e.value.details)

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Tab counts read quieter than tab names",
+  "description": "On every tabbed page, the count or status after a tab's name, such as the 6 of 15 on in Tools, is shown muted so the name stands out.",
+  "tag": "improved"
+}

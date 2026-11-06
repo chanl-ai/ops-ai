@@ -273,18 +273,22 @@ class Authenticator:
         # Whose sign-in is chosen before the team's parts are checked: a person who gives their own key needs none of
         # the team's.
         person = SHARED if team_account else self._whose(conn, kind, acting_for, needs_person)
+        held_own: dict[str, Any] | None = None
+        if person != SHARED and acting_for is not None:
+            held_own = await self.connections.token(tenant_id, str(connection_id), person)
+            if held_own is None and self._backed(conn) and not needs_person:
+                # Each person may add their own account, with the team as backup: one who has not is served by the
+                # team's sign-in rather than stopped.
+                person = SHARED
         missing = [
             f.label for f in kind.requires(plain, each_person=person != SHARED) if f.secret and f.name not in values
         ]
         if missing:
             raise AuthFailed("CONNECTION_NOT_SET", f"{name} has no {', '.join(missing)}.")
         settings = plain
-        held_own: dict[str, Any] | None = None
-        if person != SHARED and acting_for is not None:
-            held_own = await self.connections.token(tenant_id, str(connection_id), person)
-            if held_own is not None and held_own.get("refused_at") is not None:
-                # The system refused this key or sign-in before: ask for a new one rather than send it again.
-                raise await self._not_linked(conn, acting_for, settings, scopes=list(scopes), reason="refused")
+        if person != SHARED and acting_for is not None and held_own is not None and held_own.get("refused_at"):
+            # The system refused this key or sign-in before: ask for a new one rather than send it again.
+            raise await self._not_linked(conn, acting_for, settings, scopes=list(scopes), reason="refused")
         if person != SHARED and kind.person_fields:
             own = await self.tokens.own(tenant_id, str(connection_id), person, row=held_own)
             if own is None:
@@ -393,16 +397,21 @@ class Authenticator:
         return AuthFailed(e.code, message, side=e.side, status=e.status, details=details)
 
     @staticmethod
+    def _backed(conn: dict[str, Any]) -> bool:
+        """Each person may sign in with their own account, and the team's sign-in serves calls with no own one."""
+        return str(conn.get("sign_in") or "team") == "person_or_team" and bool(conn.get("team_backup"))
+
+    @staticmethod
     def _whose(conn: dict[str, Any], kind: Kind, acting_for: ActingForPerson | None, needs_person: bool) -> str:
         """The token row a call uses: the team's on a team connection; on one each person signs in to, the person's
-        the call acts for, or the team's for a call with nobody behind it while the backup is on and the operation
-        does not need a person."""
+        the call acts for (`prepare` falls back to the team's while the backup is on and they have none), or the
+        team's for a call with nobody behind it while the backup is on and the operation does not need a person."""
         sign_in = str(conn.get("sign_in") or "team")
         if sign_in == "team" or not kind.per_person:
             return SHARED
         if acting_for is not None:
             return acting_for.sub
-        backed = sign_in == "person_or_team" and conn.get("team_backup")
+        backed = Authenticator._backed(conn)
         if backed and not needs_person:
             return SHARED
         name = conn["name"]

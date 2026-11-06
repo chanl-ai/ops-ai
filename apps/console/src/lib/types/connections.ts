@@ -91,6 +91,10 @@ export interface MyConnection {
   scopes: string[];
   since?: string | null;
   expiresAt?: string | null;
+  /** The auth config it signs in through: "Ops AI's app", the team's own app's name, or none for a key kind. */
+  authConfig?: string | null;
+  /** The person's own sign-in: connected, expired (refused), or not connected yet. */
+  state?: 'connected' | 'expired' | 'not_connected';
 }
 
 /** Where to send the person to sign in; the system returns them to `redirectUri` with a code and state. */

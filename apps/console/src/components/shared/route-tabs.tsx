@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TabLabel } from '@/components/shared/tab-label';
 
 /**
  * Page-level tabs where each tab is its own route, rendered in PageLayout's `tabs` slot. A tab may carry a query
@@ -26,7 +27,7 @@ export function RouteTabs({ tabs }: { tabs: { href: string; label: React.ReactNo
         {tabs.map((t) => (
           <TabsTrigger key={t.href} value={t.href} asChild>
             <Link href={t.href} data-testid={t.testId}>
-              {t.label}
+              <TabLabel label={t.label} />
             </Link>
           </TabsTrigger>
         ))}

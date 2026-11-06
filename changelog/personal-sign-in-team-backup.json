@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Add your own account without blocking anyone",
+  "description": "Apps whose plugin allows it now let each person add their own account by default, with the team's sign-in as backup. A call for someone who has not added their own account uses the team's sign-in instead of asking them to connect.",
+  "tag": "improved"
+}

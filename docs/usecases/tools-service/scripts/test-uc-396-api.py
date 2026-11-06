@@ -57,6 +57,16 @@ with ExitStack() as stack:
     back = {k: v[0] for k, v in parse_qs(urlsplit(consent.headers.get("location", "")).query).items()}
     done = gw.post("/v1/sign-ins/complete", json={"state": back.get("state", ""), "code": back.get("code", "")})
     check("3 the sign-in finishes (200)", done.status_code == 200, done.text[:300])
+    # 3b. Test reads what the app's tools read: the server lists its tools to the account's token.
+    tested = data(gw.post(f"{path}/test", json={})) or {}
+    health = tested.get("health") or {}
+    check(
+        "3b Test lists the server's tools with the account's token and reads ok, with no test address set",
+        health.get("status") == "ok"
+        and health.get("httpStatus") == 200
+        and "testPath" not in (tested.get("settings") or {}),
+        health,
+    )
 
     # 4. With the account, the tools are listed with their inputs.
     source = {"kind": "mcp", "url": server, "connectionId": conn.get("id")}

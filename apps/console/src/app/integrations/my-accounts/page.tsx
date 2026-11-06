@@ -1,22 +1,28 @@
 'use client';
 
 import * as React from 'react';
-import { Plug, UserRound } from 'lucide-react';
+import type { ColumnDef } from '@tanstack/react-table';
+import { MoreVertical, Plug, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { PageLayout } from '@/components/page-layout';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { EmptyState } from '@/components/shared/empty-state';
 import { QueryError } from '@/components/shared/query-states';
-import { Row, Rows, Section } from '@/components/shared/surface';
+import { StopRowClick } from '@/components/shared/form-field';
+import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DataTableColumnHeader } from '@/components/data-table-column-header';
+import { DataTableWithViews } from '@/components/data-table-with-views';
 import { OwnCredentialsForm } from '@/components/connections/own-credentials-form';
 import { useSignInWindow } from '@/components/connections/sign-in';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { useConnectionKinds, useDisconnect, useMyConnections, useRefreshMine, useStartSignIn } from '@/hooks/connections-queries';
+import { useTestAccount } from '@/hooks/systems-queries';
+import { facetFilterFn } from '@/hooks/use-list-params';
 import { useTeam } from '@/hooks/use-team';
 import { shortDate } from '@/lib/format';
 import type { MyConnection } from '@/lib/types/connections';
@@ -59,11 +65,27 @@ function ConnectButton({ c, label = 'Connect' }: { c: MyConnection; label?: stri
   );
 }
 
-/** The row's controls by method and state: a sign-in connects or disconnects; a key adds, replaces or goes. */
-function Controls({ c, onEnd, onGive }: { c: MyConnection; onEnd: () => void; onGive: () => void }) {
+/** One row's line under its state: whom it is connected as and since when, or why it ended; never part of a secret. */
+function describe(c: MyConnection): string {
+  if (c.refused) {
+    const when = c.refusedAt ? ` ${shortDate(c.refusedAt)}` : '';
+    return [c.personFields.length ? `Refused${when}` : `Sign-in expired${when}`, c.refusedReason].filter(Boolean).join(' · ');
+  }
+  // Signed in, but the test call after it failed: the account stays connected and says why.
+  if (c.test?.status === 'failed') return `Signed in, but a test call failed: ${c.test.message || 'no reason given'}`;
+  const since = c.since ? `since ${shortDate(c.since)}` : null;
+  return [c.authConfig ? `Through ${c.authConfig}` : c.method, since].filter(Boolean).join(' · ');
+}
+
+/** The row's state, in the words the Accounts tab uses. */
+const STATE_LABEL = { connected: 'Connected', expired: 'Expired', not_connected: 'Not connected' } as const;
+
+/** The row's one action by its state: Connect or Add key while not connected, Reconnect once expired. */
+function MainAction({ c, onGive }: { c: MyConnection; onGive: () => void }) {
   const noun = useNoun(c);
   const keyed = c.personFields.length > 0;
-  if (!c.connected) {
+  const state = c.state ?? (c.connected ? 'connected' : 'not_connected');
+  if (state === 'not_connected')
     return keyed ? (
       <Button size="sm" onClick={onGive} data-testid={`add-own-${c.connectionId}`}>
         Add {noun}
@@ -71,108 +93,151 @@ function Controls({ c, onEnd, onGive }: { c: MyConnection; onEnd: () => void; on
     ) : (
       <ConnectButton c={c} />
     );
-  }
-  return (
-    <div className="flex items-center gap-2">
-      {c.refused ? (
-        <Badge variant="destructive">{keyed ? 'Refused' : 'Sign-in expired'}</Badge>
-      ) : c.connectionStatus === 'needs_reconnect' || c.connectionStatus === 'revoked' ? (
-        <Badge variant="destructive">Needs reconnect</Badge>
-      ) : (
-        <Badge variant="secondary">Connected</Badge>
-      )}
-      {(c.refused || c.test?.status === 'failed') && !keyed && <ConnectButton c={c} label="Reconnect" />}
-      {keyed && (
-        <Button variant="outline" size="sm" onClick={onGive} data-testid={`replace-own-${c.connectionId}`}>
-          Replace {noun}
-        </Button>
-      )}
-      <Button variant="outline" size="sm" onClick={onEnd} data-testid={`disconnect-${c.connectionId}`}>
-        Disconnect
+  if (state === 'expired' || c.test?.status === 'failed')
+    return keyed ? (
+      <Button size="sm" onClick={onGive} data-testid={`replace-own-${c.connectionId}`}>
+        Replace {noun}
       </Button>
-    </div>
+    ) : (
+      <ConnectButton c={c} label="Reconnect" />
+    );
+  return null;
+}
+
+/** A connected row's menu: Test now, Replace the key, Disconnect. */
+function RowMenu({ c, onEnd, onGive }: { c: MyConnection; onEnd: () => void; onGive: () => void }) {
+  const noun = useNoun(c);
+  const test = useTestAccount();
+  if ((c.state ?? (c.connected ? 'connected' : 'not_connected')) === 'not_connected' || !c.appId) return null;
+  const appId = c.appId;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" aria-label={`${c.app} actions`} data-testid={`my-account-menu-${c.connectionId}`}>
+          <MoreVertical />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem
+          onClick={() =>
+            test.mutate(
+              { appId, accountId: c.connectionId, account: 'self' },
+              {
+                onSuccess: (r) => (r.health?.status === 'ok' ? toast.success(`${c.app} works`) : toast.error(`${c.app}’s test failed`, { description: r.health?.message ?? undefined })),
+                onError: (e) => toast.error('Couldn’t test it', { description: e.message }),
+              },
+            )
+          }
+        >
+          Test now
+        </DropdownMenuItem>
+        {c.personFields.length > 0 && <DropdownMenuItem onClick={onGive}>Replace {noun}</DropdownMenuItem>}
+        <DropdownMenuItem onClick={onEnd} className="text-destructive" data-testid={`disconnect-${c.connectionId}`}>
+          Disconnect
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
-/** One row's line under its name: the method, then the account or when the key was set, never any part of a secret. */
-function describe(c: MyConnection): string {
-  if (!c.connected) return [c.method, c.personFields.length ? 'not set' : 'not connected'].join(' · ');
-  if (c.refused) {
-    const when = c.refusedAt ? ` ${shortDate(c.refusedAt)}` : '';
-    const what = c.personFields.length ? `refused${when}` : `sign-in expired${when}`;
-    return [c.method, what, c.refusedReason].filter(Boolean).join(' · ');
-  }
-  // Signed in, but the test call after it failed: the account stays connected and says why.
-  if (c.test?.status === 'failed') return `Signed in, but a test call failed: ${c.test.message || 'no reason given'}`;
-  // A sign-in reads as the My accounts frame: whom it is connected as and since when; a key keeps its method first.
-  if (!c.personFields.length) return `Connected as ${c.account ?? 'an unnamed account'}${c.since ? ` on ${shortDate(c.since)}` : ''}`;
-  const when = c.since ? `set ${shortDate(c.since)}` : null;
-  return [c.method, c.account, when].filter(Boolean).join(' · ');
-}
-
 /**
- * My accounts (in the Apps menu): the apps this person connected with their own login, each
- * with its logo, when, its state and the control its method takes; the list and each state come from the service.
- * An app they have not connected is connected from its page or from a chat that asks for it.
+ * My accounts (in the sidebar's top rows): every app in the team the person may sign in to with their own account,
+ * one row each with whom they are signed in as and its state, and Connect or Reconnect. The list, each state and the
+ * auth config come joined from the service.
  */
 function MyAccountsPage() {
   const { team } = useTeam();
-  const mine = useMyConnections();
+  const mine = useMyConnections(true);
   const disconnect = useDisconnect();
   const [ending, setEnding] = React.useState<MyConnection | null>(null);
   const [giving, setGiving] = React.useState<MyConnection | null>(null);
+  const columns: ColumnDef<MyConnection>[] = [
+    {
+      accessorKey: 'app',
+      header: ({ column }) => <DataTableColumnHeader column={column} title="App" />,
+      meta: { kind: 'name' },
+      cell: ({ row: { original: c } }) => (
+        <span className="flex min-w-0 items-center gap-3" data-testid={`my-account-${c.connectionId}`}>
+          <Avatar className="size-8 rounded-md">
+            {c.logo && <AvatarImage src={c.logo} alt="" />}
+            <AvatarFallback className="rounded-md text-xs font-semibold">{c.app.slice(0, 2).toUpperCase()}</AvatarFallback>
+          </Avatar>
+          <span className="flex min-w-0 flex-col">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="truncate">{c.app}</span>
+              {c.sandbox && <Badge variant="outline">Test</Badge>}
+            </span>
+            {c.app !== c.connection && <span className="truncate text-xs text-muted-foreground">{c.connection}</span>}
+          </span>
+        </span>
+      ),
+    },
+    {
+      id: 'account',
+      accessorFn: (c) => c.account ?? '',
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Signed in as" />,
+      cell: ({ row: { original: c } }) => <span className="text-sm">{c.account ?? '—'}</span>,
+    },
+    {
+      id: 'state',
+      accessorFn: (c) => STATE_LABEL[c.state ?? (c.connected ? 'connected' : 'not_connected')],
+      header: ({ column }) => <DataTableColumnHeader column={column} title="State" />,
+      meta: { kind: 'status' },
+      cell: ({ row: { original: c } }) => {
+        const state = c.state ?? (c.connected ? 'connected' : 'not_connected');
+        return (
+          <span className="flex flex-col gap-1">
+            <span className="flex flex-wrap items-center gap-2">
+              <Badge variant={state === 'connected' ? 'secondary' : state === 'expired' ? 'destructive' : 'outline'} data-testid={`my-account-state-${c.connectionId}`}>
+                {STATE_LABEL[state]}
+              </Badge>
+              <MainAction c={c} onGive={() => setGiving(c)} />
+            </span>
+            {state !== 'not_connected' && <span className="text-xs text-muted-foreground">{describe(c)}</span>}
+          </span>
+        );
+      },
+      filterFn: facetFilterFn,
+    },
+    {
+      id: 'actions',
+      enableHiding: false,
+      cell: ({ row: { original: c } }) => (
+        <StopRowClick>
+          <RowMenu c={c} onEnd={() => setEnding(c)} onGive={() => setGiving(c)} />
+        </StopRowClick>
+      ),
+    },
+  ];
 
   const body = mine.isPending ? (
-    <Rows>
-      {[0, 1].map((i) => (
-        <li key={i} className="px-4 py-3">
-          <Skeleton className="h-4 w-48" />
-          <Skeleton className="mt-2 h-3 w-64" />
-        </li>
-      ))}
-    </Rows>
+    <PageSkeleton statCards={0} tableRows={4} />
   ) : mine.isError ? (
     <QueryError what="your accounts" onRetry={() => void mine.refetch()} retrying={mine.isFetching} error={mine.error} testId="my-connections-error" />
-  ) : !mine.data.length ? (
-    <EmptyState
-      icon={Plug}
-      title="None yet"
-      description="Connect my account on an app’s page, or from a chat that asks for it."
-      action={{ label: 'Go to Apps', href: '/integrations' }}
-      testId="my-connections-empty"
-    />
   ) : (
-    <Rows testId="my-connections">
-      {mine.data.map((c) => (
-        <Row
-          key={c.connectionId}
-          wrap
-          leading={
-            <Avatar className="size-8 rounded-md">
-              {c.logo && <AvatarImage src={c.logo} alt="" />}
-              <AvatarFallback className="rounded-md text-xs font-semibold">{c.app.slice(0, 2).toUpperCase()}</AvatarFallback>
-            </Avatar>
-          }
-          title={
-            <span className="flex flex-wrap items-center gap-2">
-              {c.app}
-              {c.sandbox && <Badge variant="outline">Sandbox</Badge>}
-            </span>
-          }
-          description={describe(c)}
-          trailing={<Controls c={c} onEnd={() => setEnding(c)} onGive={() => setGiving(c)} />}
-        />
-      ))}
-    </Rows>
+    <div data-testid="my-connections">
+      <DataTableWithViews
+        columns={columns}
+        data={mine.data ?? []}
+        getRowId={(c) => c.connectionId}
+        searchColumn="app"
+        searchPlaceholder="Search apps…"
+        hideViewSwitcher
+        filters={[{ column: 'state', title: 'State', options: Object.values(STATE_LABEL).map((v) => ({ label: v, value: v })) }]}
+        emptyState={
+          <EmptyState icon={Plug} title="No app to sign in to yet" description="Apps your team adds that allow personal accounts show here." testId="my-connections-empty" />
+        }
+      />
+    </div>
   );
 
   return (
     <PageLayout
       icon={UserRound}
       title="My accounts"
-      description={`The apps you connected with your own account in ${team?.name ?? 'this team'}. Tools you run, and agents acting for you, use them.`}
+      description={`Apps in ${team?.name ?? 'this team'} you can sign in to with your own account. Tools you run, and agents acting for you, use them.`}
     >
-      <Section flush>{body}</Section>
+      {body}
       <DialogShell
         open={giving !== null}
         onOpenChange={(open) => !open && setGiving(null)}

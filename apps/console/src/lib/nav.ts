@@ -16,8 +16,6 @@ export interface NavItem {
   title: string;
   url: string;
   icon: Icon;
-  /** Shown only to a person who may take this action: the page's API refuses everyone else. */
-  can?: { area: string; action: string };
   children?: NavChild[];
   /** Label of the parent's own tab in the section strip when it differs from the sidebar name (Brain's first tab is the knowledge bases list). */
   tabTitle?: string;
@@ -41,6 +39,8 @@ export const NAV: NavGroup[] = [
       { title: 'Cases', url: '/cases', icon: IconMail },
       // Reviews is daily work for reviewers, so it sits with Cases and Chat rather than with configuration.
       { title: 'Human Tasks', url: '/reviews', icon: IconUserCheck },
+      // A person's own sign-ins: about the person, not the team's data, and visited whenever one expires.
+      { title: 'My accounts', url: '/integrations/my-accounts', icon: IconUserCheck },
       // Every conversation the person has had, searchable, beside the chat itself.
       { title: 'Chat', url: '/chat', icon: IconMessages, tabIcon: IconMessage, top: true, children: [{ title: 'Conversations', url: '/chat/conversations', icon: IconHistory }] },
     ],
@@ -63,11 +63,10 @@ export const NAV: NavGroup[] = [
       // Wiki is hidden from the sidebar; its pages still answer at /wiki.
       // Knowledge bases decide what an agent searches and how; each KB page has its own tabs, so the row is flat.
       { title: 'Knowledge bases', url: '/knowledge', icon: IconDatabase },
-      // The Apps menu (owner, 11-03): the catalog, the team's app credentials and secrets, a person's own sign-ins and
-      // the tools, each its own item rather than tabs repeated on each page.
+      // The Apps menu: the catalog, the secret values tools send and the tools, each its own item; an app's auth configs
+      // are on its own page.
       { title: 'Apps', url: '/integrations', icon: IconPlugConnected },
-      { title: 'Auth configs', url: '/integrations/credentials', icon: IconKey, can: { area: 'connections', action: 'manage' } },
-      { title: 'My accounts', url: '/integrations/my-accounts', icon: IconUserCheck },
+      { title: 'Secrets', url: '/integrations/credentials', icon: IconKey },
       { title: 'Tools', url: '/tools', icon: IconTool },
       // Every file the platform stores, whatever brought it in (wiki, chat, mail, imports, exports), so it sits beside the Wiki rather than under it.
       { title: 'Files', url: '/files', icon: IconFolder },

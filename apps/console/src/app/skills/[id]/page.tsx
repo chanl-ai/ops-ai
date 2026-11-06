@@ -37,6 +37,7 @@ import { ResourcesTab } from './_parts/resources-tab';
 import { TestsTab } from './_parts/tests-tab';
 import { UsedByTab } from './_parts/used-by-tab';
 import { VersionsTab } from './_parts/versions-tab';
+import { TabLabel } from '@/components/shared/tab-label';
 
 const TABS = ['instructions', 'resources', 'tests', 'used_by', 'versions', 'activity'] as const;
 type Tab = (typeof TABS)[number];
@@ -97,7 +98,9 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
         <Tabs value={tab} onValueChange={(t) => setTab(t as Tab)}>
           <TabsList>
             <TabsTrigger value="instructions">Instructions</TabsTrigger>
-            <TabsTrigger value="resources">Resources · {newest.content.resources.length}</TabsTrigger>
+            <TabsTrigger value="resources">
+              <TabLabel label={`Resources · ${newest.content.resources.length}`} />
+            </TabsTrigger>
             <TabsTrigger value="tests" data-testid="skill-tab-tests">
               Tests · {s.tests.length}
             </TabsTrigger>

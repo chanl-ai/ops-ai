@@ -186,7 +186,7 @@ export default function FilesPage() {
   const done = () => setResetKey((k) => k + 1);
 
   return (
-    <PageLayout switcher icon={FolderOpen} title="Files" description="Every document in the Wiki and every file the platform stores: uploads, mail attachments, imports, exports and sealed evidence, with scan, retention and what uses each"
+    <PageLayout switcher icon={FolderOpen} title="Files" description="Every file the platform stores, with its scan, retention and what uses it."
       actions={
         canUpload ? (
           <Button onClick={() => setUploadOpen(true)} data-testid="files-upload">

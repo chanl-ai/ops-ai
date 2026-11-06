@@ -10,6 +10,8 @@ export interface SecretUser {
 export interface SecretMeta {
   name: string;
   version: number;
+  /** The value's last four characters, so a person can tell which value is held; none for a short value. */
+  ends?: string | null;
   createdBy: string;
   createdAt: string;
   rotatedAt?: string | null;

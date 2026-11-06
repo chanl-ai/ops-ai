@@ -6,6 +6,7 @@ import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EdgeFade, useMoreToTheRight } from '@/components/shared/edge-fade';
 import { Button } from '@/components/ui/button';
+import { TabLabel } from '@/components/shared/tab-label';
 
 export interface SavedViewTabPreset {
   id: string;
@@ -90,7 +91,7 @@ export function SavedViewTabs({
               className={cn(triggerBase, active && triggerActive)}
             >
               {Icon && <Icon />}
-              {p.label}
+              <TabLabel label={p.label} />
             </button>
           );
         })}
