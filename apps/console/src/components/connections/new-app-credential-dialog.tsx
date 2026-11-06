@@ -9,7 +9,7 @@ import { Search } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { credentialHref } from '@/components/connections/credential-display';
-import { SignInPlace } from '@/components/connections/sign-in-place';
+import { type ConfigMode, ConfigModeSelect, SignInPlace } from '@/components/connections/sign-in-place';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
 import { FormTextField } from '@/components/shared/form-text-field';
@@ -151,6 +151,8 @@ function OwnClientForm({
   const config = configSchema(registration.map((x) => ({ ...x, default: x.default == null ? null : String(x.default), required: x.default == null })));
   const form = useForm<Record<string, string>>({ defaultValues: { name: '', clientId: '', clientSecret: '', ...Object.fromEntries(registration.map((x) => [`setting__${x.name}`, x.default ?? ''])) } });
   const [scopes, setScopes] = React.useState<string[]>(plugin.scopes.map((s) => s.id));
+  // Each sign-in place's mode; fixed unless the admin lets accounts start there and pick another.
+  const [modes, setModes] = React.useState<Record<string, ConfigMode>>({});
   const [error, setError] = React.useState<string | null>(null);
   const create = useCreateAppCredential();
   const values = form.watch();
@@ -173,6 +175,7 @@ function OwnClientForm({
         ...(v.clientSecret ? { clientSecret: v.clientSecret } : {}),
         scopes,
         ...(Object.keys(settings).length ? { settings } : {}),
+        ...(Object.keys(settings).length ? { modes: Object.fromEntries(Object.keys(settings).map((k) => [k, modes[k] ?? 'fixed'])) } : {}),
       });
       toast.success(`Saved your own ${card.name} app`, { description: onCreated ? undefined : 'Connect an account with it, or test it with yours.' });
       onDone();
@@ -213,6 +216,9 @@ function OwnClientForm({
           x.choices?.length || x.other ? (
             <div key={x.name} className="flex flex-col gap-1">
               <SignInPlace setting={x} value={values[`setting__${x.name}`] ?? ''} onChange={(v) => form.setValue(`setting__${x.name}`, v)} testId={`new-credential-setting-${x.name}`} />
+              {(values[`setting__${x.name}`] ?? '') !== '' && (
+                <ConfigModeSelect value={modes[x.name] ?? 'fixed'} onChange={(m) => setModes((cur) => ({ ...cur, [x.name]: m }))} testId={`new-credential-mode-${x.name}`} />
+              )}
               {form.formState.errors[`setting__${x.name}`] && (
                 <p className="text-sm text-destructive-text" data-testid={`new-credential-setting-${x.name}-error`}>
                   {form.formState.errors[`setting__${x.name}`]?.message}

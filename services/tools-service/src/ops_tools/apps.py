@@ -45,10 +45,21 @@ from .modules.schemas import In, ToolCallRow
 from .modules.seed import BUILT_IN, TOOL_ORIGIN, template_of, tool_title
 from .modules.service import Caller, ModuleService
 from .modules.tool_users import ToolUsers
-from .plugins.host import PluginHost, fixed_fields, module_id_of, offered, per_account, plugin_id_of, tools_added
+from .plugins.host import (
+    PluginHost,
+    fixed_fields,
+    module_id_of,
+    offered,
+    own_and_registration,
+    per_account,
+    plugin_id_of,
+    shown_value,
+    sign_in_values,
+    tools_added,
+)
 from .plugins.routes import PluginAccounts, TeamPluginIn, not_offered
 from .plugins.templates import view_of
-from .store.connections import plugin_app, plugin_of
+from .store.connections import DEFAULT_VALUE, FIXED_VALUE, plugin_app, plugin_of, split_config
 from .store.modules import ModuleStore
 from .store.team_defaults import TeamDefaults
 
@@ -243,6 +254,22 @@ class CredentialField(Out):
     other: SettingOther | None = None
 
 
+ConfigMode = Literal["default", "fixed"]
+
+
+class ConfigField(CredentialField):
+    """One sign-in value an auth config holds (a plugin's `asked: config` setting, such as Salesforce's sign-in
+    address), as its row and details show it."""
+
+    # What it holds; null when it leaves the value to each account, so Connect asks.
+    value: str | None = None
+    # default: Connect starts from it and a person may pick another; fixed: every account on the config signs in with
+    # it. Null while it holds no value.
+    mode: ConfigMode | None = None
+    # The value as a person reads it: a choice's label, or the company host typed for it.
+    shown: str | None = None
+
+
 class AppCredentialDetail(AppCredential):
     accounts_list: list[CredentialAccount]
     # The address to register with the app's sign-in.
@@ -250,6 +277,8 @@ class AppCredentialDetail(AppCredential):
     updated: str | None = None
     # The registration's settings the credential holds, and every one it may hold, with its label.
     settings: dict[str, Any] = Field(default_factory=dict[str, Any])
+    # Each setting's mode, by name (ConfigField.mode); a value with no mode is fixed.
+    modes: dict[str, ConfigMode] = Field(default_factory=dict[str, ConfigMode])
     fields: list[CredentialField] = Field(default_factory=list[CredentialField])
 
 
@@ -292,6 +321,9 @@ class AppCredentialPatchIn(In):
     scopes: list[Annotated[str, Field(min_length=1, max_length=200)]] | None = Field(default=None, max_length=100)
     # One of `fields` each; an empty or null value removes it.
     settings: dict[str, Annotated[str, Field(max_length=16_000)] | None] | None = Field(default=None, max_length=20)
+    # Each setting's mode, by name: default (Connect starts from it) or fixed (every account's). Left out, a value keeps
+    # its mode, and a new one is fixed.
+    modes: dict[str, ConfigMode] | None = Field(default=None, max_length=20)
 
 
 class AppCredentialIn(In):
@@ -308,6 +340,8 @@ class AppCredentialIn(In):
     scopes: list[Annotated[str, Field(min_length=1, max_length=200)]] | None = Field(default=None, max_length=100)
     # The settings its app registration holds (`fields` on its page): a Microsoft tenant, a custom app's addresses.
     settings: dict[str, Annotated[str, Field(max_length=16_000)] | None] | None = Field(default=None, max_length=20)
+    # Each setting's mode, by name: default (Connect starts from it) or fixed (every account's), fixed when left out.
+    modes: dict[str, ConfigMode] | None = Field(default=None, max_length=20)
 
 
 class CredentialSecretIn(In):
@@ -374,6 +408,18 @@ AccountAction = Literal[
 ]
 
 
+class SignInValue(Out):
+    """Where an account signs in and what its sign-in found, in the plugin's words: its sign-in address (`place`) and
+    each value filled at sign-in (`found`), such as Salesforce's org address."""
+
+    name: str
+    label: str
+    kind: Literal["place", "found"]
+    value: str
+    # As a person reads it: a choice's label, or the host of an address.
+    shown: str
+
+
 class AppAccount(Out):
     """One row of the app's Accounts list: one of the team's accounts (the default is the one live calls use unless
     they name another, and a sandbox one is what test runs use), or one person's own sign-in on it (`kind` person)."""
@@ -410,6 +456,8 @@ class AppAccount(Out):
     # team account's. A failed one warns on the row; the account stays connected.
     test: AccountTest | None = None
     health: ConnectionHealth | None = None
+    # Where it signs in and the org its sign-in landed in; empty for an app whose plugin names neither.
+    sign_in_values: list[SignInValue] = Field(default_factory=list[SignInValue])
 
 
 class ConfigPermission(Out):
@@ -428,16 +476,22 @@ class AuthConfig(Out):
     name: str
     # ops_ai: Ops AI's own OAuth app; own: the team's app credential; account: each account holds its own key or token.
     type: Literal["ops_ai", "own", "account"]
+    # The client id, to a person who manages the team's apps: on Ops AI's app the install's, which only the install
+    # changes.
     client_id: str | None = None
     # A team admin reads the client secret's last four characters, never the secret.
     secret_ends: str | None = None
     # The config of the app's default account, which Connect opens on.
     default: bool
+    # On Ops AI's app, only its sign-in values are edited; its client is the install's.
     can_edit: bool
     can_delete: bool
     # How many rows of the Accounts list sign in through it; the list itself is the page's `accounts`.
     account_count: int = 0
-    # Where its accounts sign in, when it sets that (a plugin's `asked: config` setting); null when Connect asks.
+    # The sign-in values it holds (a plugin's `asked: config` settings): each with its value and mode, or none when it
+    # leaves the value to Connect. On Ops AI's app, the team's own values.
+    fields: list[ConfigField] = Field(default_factory=list[ConfigField])
+    # Where its accounts sign in, when it holds that (the first of `fields` with a value); null when Connect asks.
     sign_in_place: str | None = None
     # What it asks for at sign-in: a plugin's permissions follow the tools the team added.
     permissions: list[ConfigPermission] = Field(default_factory=list[ConfigPermission])
@@ -958,7 +1012,7 @@ async def _row(
         "app": str(card["id"]),
         "appName": str(card["name"]),
         "type": "own" if own else "ops_ai",
-        "clientId": cred["client_id"] if own else None,
+        "clientId": cred["client_id"] if own else _install_client(apps, card),
         "permissions": [
             {
                 "id": sc,
@@ -984,6 +1038,38 @@ async def _secret_row(apps: Apps, who: Caller, cred: dict[str, Any] | None) -> d
     if row is not None and row.get("ends") is None:
         row = {**row, "ends": await apps.connections.secrets.ends_of(who.tenant_id, team, name)}
     return row
+
+
+def _install_client(apps: Apps, card: dict[str, Any]) -> str | None:
+    """The client id of Ops AI's own app for a plugin's app, as the install set it; None for any other app."""
+    found = apps.connections.store.install_client(str(card["pluginId"])) if card.get("pluginId") else None
+    return found.id if found else None
+
+
+def config_fields(
+    apps: Apps, card: dict[str, Any], values: dict[str, Any] | None, modes: dict[str, Any] | None
+) -> list[dict[str, Any]]:
+    """Each sign-in value a plugin's auth config may hold, with what this config holds: its value and mode, and how a
+    person reads it. Empty for an app no plugin serves."""
+    plugin = _plugin(apps, card)
+    if plugin is None:
+        return []
+    m = plugin.manifest
+    fixed, defaults = split_config(values, modes)
+    out: list[dict[str, Any]] = []
+    for k in m.config_settings:
+        s = m.settings[k]
+        value = fixed.get(k, defaults.get(k))
+        held = value not in (None, "")
+        out.append(
+            {
+                **config_field(s, k),
+                "value": str(value) if held else None,
+                "mode": (FIXED_VALUE if k in fixed else DEFAULT_VALUE) if held else None,
+                "shown": shown_value(s, value) if held else None,
+            }
+        )
+    return out
 
 
 def _plugin(apps: Apps, card: dict[str, Any]) -> Plugin | None:
@@ -1018,6 +1104,7 @@ async def add_app_credential(apps: Apps, who: Caller, i: AppCredentialIn) -> dic
             raise ValidationFailed(f"{card['name']} signs in with no OAuth app.", code="no_app_credential")
     given = _checked_registration(apps, card, credential_fields(apps, card, app), dict(i.settings or {}))
     registration = {k: v for k, v in given.items() if v not in (None, "")}
+    modes = _checked_modes(card, registration, dict(i.modes or {}))
     now = apps.connections.clock()
     made = f"cred_{uuid.uuid4().hex[:12]}"
     secret = credential_secret(made) if i.client_secret else None
@@ -1036,6 +1123,7 @@ async def add_app_credential(apps: Apps, who: Caller, i: AppCredentialIn) -> dic
             "scopes": " ".join(scopes) if scopes is not None else None,
             "secret_name": secret,
             "settings": registration or None,
+            "setting_modes": modes or None,
             "created_by": who.name,
             "created_at": now,
             "updated_by": who.name,
@@ -1099,6 +1187,18 @@ def _checked_registration(
     return given
 
 
+def _checked_modes(card: dict[str, Any], values: dict[str, Any], modes: dict[str, Any]) -> dict[str, str]:
+    """A config's modes after a save, one for each value it holds; a mode for a value it does not hold is refused."""
+    unset = sorted(set(modes) - set(values))
+    if unset:
+        raise ValidationFailed(
+            f"{unset[0]} has no value on this auth config, so it cannot be a default or fixed.",
+            code="mode_without_value",
+            details={"field": f"modes.{unset[0]}"},
+        )
+    return {k: str(v) for k, v in modes.items()}
+
+
 def _offered_scopes(card: dict[str, Any], plugin: Plugin | None, scopes: list[str]) -> list[str]:
     """The permissions to ask for, among a plugin's own with its required ones always in; a custom app's as given."""
     if plugin is None:
@@ -1116,7 +1216,7 @@ async def edit_app_credential(apps: Apps, who: Caller, credential_id: str, i: Ap
     and the answer says how many. A plugin account's sign-in addresses are written again from the new settings."""
     apps.connections.check(who, "manage", what="auth configs")
     if credential_id.startswith(OPS_AI):
-        raise ValidationFailed("Ops AI's app is the install's; nothing on it is changed here.", code="ops_ai_app")
+        return await _edit_ops_ai_config(apps, who, credential_id, i)
     store = apps.connections.store
     cred = await store.credential(who.tenant_id, credential_id)
     if cred is None or cred["team_id"] != who.team.id:
@@ -1124,6 +1224,7 @@ async def edit_app_credential(apps: Apps, who: Caller, credential_id: str, i: Ap
     card = await apps.card(who, str(cred["app_id"]))
     plugin = _plugin(apps, card)
     values: dict[str, Any] = {}
+    before = (dict(cred.get("settings") or {}), dict(cred.get("setting_modes") or {}))
     if i.name is not None:
         if not i.name.strip():
             raise ValidationFailed("Name the app credential.", details={"field": "name"})
@@ -1134,21 +1235,93 @@ async def edit_app_credential(apps: Apps, who: Caller, credential_id: str, i: Ap
         scopes = " ".join(_offered_scopes(card, plugin, i.scopes))
         if scopes != str(cred.get("scopes") or ""):
             values["scopes"] = scopes
-    if i.settings is not None:
+    if i.settings is not None or i.modes is not None:
         fields = credential_fields(apps, card, await _custom_app(apps, who, card))
-        given = _checked_registration(apps, card, fields, i.settings)
-        held = dict(cred.get("settings") or {})
-        after = {k: v for k, v in {**held, **given}.items() if v not in (None, "")}
-        if after != held:
-            values["settings"] = after or None
+        after = _config_after(apps, card, fields, before, i)
+        if after[0] != before[0]:
+            values["settings"] = after[0] or None
+        if after[1] != before[1]:
+            values["setting_modes"] = after[1] or None
     if values:
         await store.change_credential(who.tenant_id, credential_id, values, actor=who.name, at=apps.connections.clock())
-    changed = bool({"client_id", "scopes", "settings"} & values.keys())
-    accounts = await store.credential_accounts(who.tenant_id, [credential_id]) if changed else []
+    # A new client or permissions, or another fixed value, was not what the accounts' sign-ins were issued for; a
+    # default changes only where the next account starts.
+    was, now = (
+        split_config(*before)[0],
+        split_config(values.get("settings", before[0]), values.get("setting_modes", before[1]))[0],
+    )
+    changed = bool({"client_id", "scopes"} & values.keys()) or was != now
+    accounts = await store.credential_accounts(who.tenant_id, [credential_id]) if changed or values else []
+    for account in accounts:
+        # A value that stops being fixed stays where the account signs in until the account picks another.
+        kept = {k: v for k, v in was.items() if k not in now and k not in dict(account.get("plugin_settings") or {})}
+        if kept:
+            await store.set_plugin_settings(who.tenant_id, str(account["id"]), kept)
+    accounts = accounts if changed else []
     why = f"{values.get('name') or cred['name']} changed, so this account signs in again."
     for account in accounts:
-        if plugin is not None and "settings" in values and apps.plugin_accounts is not None:
+        if plugin is not None and was != now and apps.plugin_accounts is not None:
             await apps.plugin_accounts.rewrite_addresses(who, plugin, str(account["id"]))
+        await apps.connections.sign_in_again(who, str(account["id"]), why)
+    return {**await app_credential(apps, who, credential_id), "signInAgain": len(accounts)}
+
+
+def _config_after(
+    apps: Apps,
+    card: dict[str, Any],
+    fields: list[dict[str, Any]],
+    held: tuple[dict[str, Any], dict[str, Any]],
+    i: AppCredentialPatchIn,
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """A config's values and modes after an edit: the given values over those held (an empty one removes it), and the
+    given modes over those held, for the values it still holds."""
+    values, modes = held
+    given = _checked_registration(apps, card, fields, i.settings or {})
+    after = {k: v for k, v in {**values, **given}.items() if v not in (None, "")}
+    names = {f["name"] for f in fields}
+    unknown = sorted(set(i.modes or {}) - names)
+    if unknown:
+        raise ValidationFailed(
+            f"{unknown[0]} is not a setting {card['name']}'s auth config holds.",
+            code="credential_setting_unknown",
+            details={"field": f"modes.{unknown[0]}"},
+        )
+    wanted = {k: v for k, v in {**modes, **(i.modes or {})}.items() if k in after}
+    _checked_modes(card, after, dict(i.modes or {}))
+    return after, {k: str(v) for k, v in wanted.items()}
+
+
+async def _edit_ops_ai_config(apps: Apps, who: Caller, credential_id: str, i: AppCredentialPatchIn) -> dict[str, Any]:
+    """Saves the team's sign-in values on Ops AI's app of a plugin (its `asked: config` settings) and their modes, on
+    the team's binding of the plugin. The client, its secret and permissions are the install's and never change here.
+    Every account of the team on Ops AI's app takes a new fixed value and signs in again; a default changes only where
+    the next Connect starts."""
+    card = await apps.card(who, credential_id.removeprefix(OPS_AI))
+    plugin = _plugin(apps, card)
+    if plugin is None or apps.plugin_accounts is None or not _install_client(apps, card):
+        raise NotFound(f"App credential {credential_id}")
+    if i.name is not None or i.client_id is not None or i.scopes is not None:
+        raise ValidationFailed(
+            "Ops AI's app is the install's: its name, client and permissions are not changed here, only where it signs "
+            "in.",
+            code="ops_ai_app",
+        )
+    b = await apps.plugin_accounts.start_binding(who, plugin)
+    before = (dict(b.get("config_settings") or {}), dict(b.get("setting_modes") or {}))
+    after = _config_after(apps, card, credential_fields(apps, card, None), before, i)
+    if after != before:
+        await apps.plugin_accounts.host.bindings.set_config(
+            who.tenant_id, who.team.id, plugin.manifest.id, after[0], after[1], by=who.name
+        )
+    was, now = split_config(*before)[0], split_config(*after)[0]
+    accounts = (
+        [a for a in await apps.connections.team_rows(who) if a["app_id"] == card["id"] and a.get("platform_app")]
+        if was != now
+        else []
+    )
+    why = f"Where {OPS_AI_APP} signs in to {card['name']} changed, so this account signs in again."
+    for account in accounts:
+        await apps.plugin_accounts.rewrite_addresses(who, plugin, str(account["id"]))
         await apps.connections.sign_in_again(who, str(account["id"]), why)
     return {**await app_credential(apps, who, credential_id), "signInAgain": len(accounts)}
 
@@ -1269,6 +1442,11 @@ async def app_credential(apps: Apps, who: Caller, credential_id: str) -> dict[st
         ),
         None,
     )
+    if found is None and credential_id.startswith(OPS_AI):
+        # Ops AI's app of a plugin no account signs in with yet: the team may still set where it signs in.
+        card = await apps.card(who, credential_id.removeprefix(OPS_AI))
+        if _install_client(apps, card):
+            found = (None, card, list[dict[str, Any]]())
     if found is None:
         raise NotFound(f"App credential {credential_id}")
     cred, card, accounts = found
@@ -1291,15 +1469,36 @@ async def app_credential(apps: Apps, who: Caller, credential_id: str) -> dict[st
             }
         )
     kinds = apps.connections.kinds()
-    fields = credential_fields(apps, card, await _custom_app(apps, who, card)) if cred else []
+    fields = credential_fields(apps, card, await _custom_app(apps, who, card))
+    values, modes = await _config_of(apps, who, card, cred)
     return {
         **await _row(apps, who, cred, card, accounts),
         "accountsList": listed,
         "redirectUri": kinds.get("redirectUri"),
         "updated": cred["updated_at"].isoformat() if cred else None,
-        "settings": dict((cred or {}).get("settings") or {}),
+        "settings": values,
+        "modes": _modes_of(values, modes),
         "fields": fields,
     }
+
+
+async def _config_of(
+    apps: Apps, who: Caller, card: dict[str, Any], cred: dict[str, Any] | None
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """A config's values and modes as held: the team credential's, or the team's on Ops AI's app (its binding)."""
+    if cred is not None:
+        return dict(cred.get("settings") or {}), dict(cred.get("setting_modes") or {})
+    plugin = _plugin(apps, card)
+    if plugin is None or apps.plugins is None:
+        return {}, {}
+    b = await apps.plugins.bindings.get(who.tenant_id, who.team.id, plugin.manifest.id) or {}
+    return dict(b.get("config_settings") or {}), dict(b.get("setting_modes") or {})
+
+
+def _modes_of(values: dict[str, Any], modes: dict[str, Any]) -> dict[str, str]:
+    """Each held value's mode; a value with none is fixed."""
+    fixed, defaults = split_config(values, modes)
+    return {**dict.fromkeys(fixed, FIXED_VALUE), **dict.fromkeys(defaults, DEFAULT_VALUE)}
 
 
 async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
@@ -1410,6 +1609,7 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
     platform = bool(cast(dict[str, Any], card.get("plugin") or {}).get("platformApp"))
     creds = await store.team_credentials(who.tenant_id, who.team.id, str(card["id"]))
     configs = len(creds) + int(platform)
+    plugin = _plugin(apps, card)
     config_names = {str(c["id"]): str(c["name"]) for c in creds} | {f"{OPS_AI}{card['id']}": OPS_AI_APP}
     out: list[dict[str, Any]] = []
     for a in stored:
@@ -1470,6 +1670,7 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
                 # On an account each person signs in to, the caller's own sign-in's test; else the team account's.
                 "test": own.get("test") if own is not None and alone else team_test(a, team_tokens.get(aid)),
                 "health": a.get("health"),
+                "signInValues": sign_in_values(plugin.manifest, own_and_registration(a)) if plugin else [],
             }
         )
     # Each person's own sign-in on a team account is a row of its own, under that account's auth config. A person who
@@ -1515,8 +1716,19 @@ async def _auth_configs(
     may = apps.connections.may_manage(who)
     configs: list[dict[str, Any]] = []
     if plugin.get("platformApp"):
+        values, modes = await _config_of(apps, who, card, None)
+        fields = config_fields(apps, card, values, modes)
         configs.append(
-            {"id": f"{OPS_AI}{card['id']}", "name": OPS_AI_APP, "type": "ops_ai", "canEdit": False, "canDelete": False}
+            {
+                "id": f"{OPS_AI}{card['id']}",
+                "name": OPS_AI_APP,
+                "type": "ops_ai",
+                "clientId": _install_client(apps, card) if may else None,
+                # Only its sign-in values are the team's to change.
+                "canEdit": may and bool(fields),
+                "canDelete": False,
+                "fields": fields,
+            }
         )
     for cred in await store.team_credentials(who.tenant_id, who.team.id, str(card["id"])):
         secret = await _secret_row(apps, who, cred) if may else None
@@ -1529,6 +1741,7 @@ async def _auth_configs(
                 "secretEnds": (secret or {}).get("ends"),
                 "canEdit": may,
                 "canDelete": may,
+                "fields": config_fields(apps, card, cred.get("settings"), cred.get("setting_modes")),
             }
         )
     if any(not a.get("configId") for a in accounts):
@@ -1545,28 +1758,23 @@ async def _auth_configs(
     default = next((a.get("configId") or "" for a in accounts if a["default"]), None)
     if default is None:
         default = configs[0]["id"] if configs else None
-    places = {str(c["id"]): c for c in await store.team_credentials(who.tenant_id, who.team.id, str(card["id"]))}
     asked = await _permissions(apps, who, card)
     return [
         {
             **c,
             "default": c["id"] == default,
             "accountCount": sum(1 for a in accounts if (a.get("configId") or "") == c["id"]),
-            "signInPlace": _place_of(apps, card, places.get(c["id"])),
+            "signInPlace": _place_of(c),
             "permissions": asked if c["type"] != "account" else [],
         }
         for c in configs
     ]
 
 
-def _place_of(apps: Apps, card: dict[str, Any], cred: dict[str, Any] | None) -> str | None:
-    """Where a config's accounts sign in, when the config sets it: the value of the plugin's `asked: config`
-    setting it holds. None for Ops AI's app or a config leaving it to Connect."""
-    plugin = _plugin(apps, card)
-    if plugin is None or cred is None:
-        return None
-    held = cast(dict[str, Any], cred.get("settings") or {})
-    return next((str(held[k]) for k in plugin.manifest.config_settings if held.get(k)), None)
+def _place_of(config: dict[str, Any]) -> str | None:
+    """Where a config's accounts sign in: its first sign-in value, or None when it leaves that to Connect."""
+    fields = cast(list[dict[str, Any]], config.get("fields") or [])
+    return next((str(f["value"]) for f in fields if f.get("value")), None)
 
 
 async def _permissions(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[str, Any]]:

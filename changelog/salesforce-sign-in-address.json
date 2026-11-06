@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Set where an app signs in on its auth config",
+  "description": "An auth config can hold where its accounts sign in, such as your company's Salesforce address, either as a default each Connect starts from or fixed for every account; its row shows which. A team can set it on Ops AI's built-in app too, and each account shows the org address its sign-in landed in.",
+  "tag": "new"
+}

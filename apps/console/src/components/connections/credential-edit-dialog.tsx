@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 
 import { CallbackUrl } from '@/components/connections/callback-url';
 import { secretShown } from '@/components/connections/credential-display';
-import { SignInPlace } from '@/components/connections/sign-in-place';
+import { type ConfigMode, ConfigModeSelect, SignInPlace } from '@/components/connections/sign-in-place';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormTextField } from '@/components/shared/form-text-field';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -43,8 +43,10 @@ function EditForm({ id, onClose }: { id: string; onClose: () => void }) {
   const form = useForm<Record<string, string>>();
   const [scopes, setScopes] = React.useState<string[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [modes, setModes] = React.useState<Record<string, ConfigMode>>({});
   React.useEffect(() => {
     if (!c) return;
+    setModes({ ...((c.modes ?? {}) as Record<string, ConfigMode>) });
     form.reset({ name: c.name, clientId: c.clientId ?? '', scopesText: c.permissions.map((p) => p.id).join(' '), clientSecret: '', ...Object.fromEntries((c.fields ?? []).map((f) => [`setting__${f.name}`, String((c.settings ?? {})[f.name] ?? f.default ?? '')])) });
     setScopes(c.permissions.map((p) => p.id));
   }, [c, form]);
@@ -60,6 +62,11 @@ function EditForm({ id, onClose }: { id: string; onClose: () => void }) {
     if (now.join(' ') !== held.join(' ')) body.scopes = now;
     const settings = Object.fromEntries((c.fields ?? []).map((f) => [f.name, (v[`setting__${f.name}`] ?? '').trim()]).filter(([k, val]) => val !== String((c.settings ?? {})[k] ?? (c.fields ?? []).find((f) => f.name === k)?.default ?? '')));
     if (Object.keys(settings).length) body.settings = settings;
+    // A mode goes with each value the config holds after the save, when it differs from the one held.
+    const heldModes = (c.modes ?? {}) as Record<string, ConfigMode>;
+    const kept = (c.fields ?? []).filter((f) => (v[`setting__${f.name}`] ?? '').trim() !== '').map((f) => f.name);
+    const moved = Object.fromEntries(kept.filter((k) => (modes[k] ?? 'fixed') !== (heldModes[k] ?? 'fixed')).map((k) => [k, modes[k] ?? 'fixed']));
+    if (Object.keys(moved).length) body.modes = moved;
     return body;
   };
   const values = form.watch();
@@ -149,13 +156,12 @@ function EditForm({ id, onClose }: { id: string; onClose: () => void }) {
             )}
             {(c.fields ?? []).map((f) =>
               f.choices?.length || f.other ? (
-                <SignInPlace
-                  key={f.name}
-                  setting={f}
-                  value={values[`setting__${f.name}`] ?? ''}
-                  onChange={(v) => form.setValue(`setting__${f.name}`, v)}
-                  testId={`credential-edit-setting-${f.name}`}
-                />
+                <div key={f.name} className="flex flex-col gap-3">
+                  <SignInPlace setting={f} value={values[`setting__${f.name}`] ?? ''} onChange={(v) => form.setValue(`setting__${f.name}`, v)} testId={`credential-edit-setting-${f.name}`} />
+                  {(values[`setting__${f.name}`] ?? '') !== '' && (
+                    <ConfigModeSelect value={modes[f.name] ?? 'fixed'} onChange={(m) => setModes((cur) => ({ ...cur, [f.name]: m }))} testId={`credential-edit-mode-${f.name}`} />
+                  )}
+                </div>
               ) : (
               <FormTextField key={f.name} control={form.control} name={`setting__${f.name}`} label={f.label} optional hint={f.help ?? undefined} multiline={f.pem} testId={`credential-edit-setting-${f.name}`} />
               ),

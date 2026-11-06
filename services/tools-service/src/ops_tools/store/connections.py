@@ -125,6 +125,9 @@ app_credentials = sa.Table(
     # The registration's own settings (a plugin's credential_settings, or a custom app's sign-in and token addresses),
     # which every account signing in with it reads; null for none.
     sa.Column("settings", sa.JSON),
+    # Each setting's mode, by name: "default" (Connect pre-selects it and a person may change it) or "fixed" (every
+    # account signs in with it). A value with no mode is fixed.
+    sa.Column("setting_modes", sa.JSON),
     sa.Column("created_by", sa.String(200), nullable=False),
     sa.Column("created_at", _TS, nullable=False),
     sa.Column("updated_by", sa.String(200), nullable=False),
@@ -248,6 +251,23 @@ def plugin_of(conn: Mapping[str, Any]) -> str | None:
     """The plugin whose account this is; None for a custom app's."""
     app = str(conn.get("app_id") or "")
     return app.removeprefix(PLUGIN_APP) if app.startswith(PLUGIN_APP) else None
+
+
+# An auth config's mode for one of its values: Connect pre-selects a default and a person may change it; every account
+# on the config signs in with a fixed one.
+DEFAULT_VALUE = "default"
+FIXED_VALUE = "fixed"
+
+
+def split_config(
+    values: Mapping[str, Any] | None, modes: Mapping[str, Any] | None
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """An auth config's set values as (fixed, default). A value with no mode is fixed, as every value was before modes
+    existed; an empty one is not set."""
+    held = {k: v for k, v in dict(values or {}).items() if v not in (None, "")}
+    said = dict(modes or {})
+    fixed = {k: v for k, v in held.items() if said.get(k) != DEFAULT_VALUE}
+    return fixed, {k: v for k, v in held.items() if k not in fixed}
 
 
 class StaleConnection(RuntimeError):
@@ -421,8 +441,9 @@ class ConnectionStore:
         if cred is not None:
             held = dict(cred.get("settings") or {})
             if str(row.get("app_id") or "").startswith(PLUGIN_APP):
-                # A plugin's: merged by the plugin host over the account's own (PluginHost.settings).
-                row = {**row, "credential_settings": held}
+                # A plugin's fixed values, merged by the plugin host over the account's own (PluginHost.settings); a
+                # default one was the account's starting value and the account keeps its own.
+                row = {**row, "credential_settings": split_config(held, cred.get("setting_modes"))[0]}
             else:
                 # A custom app's: the registration's addresses and certificate, over any the account was given.
                 settings |= held

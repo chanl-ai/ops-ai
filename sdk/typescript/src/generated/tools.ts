@@ -1570,6 +1570,8 @@ export interface components {
             rowId: string;
             /** Sandbox */
             sandbox: boolean;
+            /** Signinvalues */
+            signInValues?: components["schemas"]["SignInValue"][];
             /**
              * State
              * @enum {string}
@@ -1652,6 +1654,10 @@ export interface components {
             holdsSecret: boolean;
             /** Id */
             id: string;
+            /** Modes */
+            modes?: {
+                [key: string]: "default" | "fixed";
+            };
             /** Name */
             name: string;
             /** Permissions */
@@ -1706,6 +1712,10 @@ export interface components {
             holdsSecret: boolean;
             /** Id */
             id: string;
+            /** Modes */
+            modes?: {
+                [key: string]: "default" | "fixed";
+            };
             /** Name */
             name: string;
             /** Permissions */
@@ -1744,6 +1754,10 @@ export interface components {
             clientId: string;
             /** Clientsecret */
             clientSecret?: string | null;
+            /** Modes */
+            modes?: {
+                [key: string]: "default" | "fixed";
+            } | null;
             /** Name */
             name?: string | null;
             /** Scopes */
@@ -1761,6 +1775,10 @@ export interface components {
         AppCredentialPatchIn: {
             /** Clientid */
             clientId?: string | null;
+            /** Modes */
+            modes?: {
+                [key: string]: "default" | "fixed";
+            } | null;
             /** Name */
             name?: string | null;
             /** Scopes */
@@ -1938,6 +1956,8 @@ export interface components {
             clientId?: string | null;
             /** Default */
             default: boolean;
+            /** Fields */
+            fields?: components["schemas"]["ConfigField"][];
             /** Id */
             id: string;
             /** Name */
@@ -2231,6 +2251,40 @@ export interface components {
             secrets?: string[];
             /** Source */
             source: string;
+        };
+        /**
+         * ConfigField
+         * @description One sign-in value an auth config holds (a plugin's `asked: config` setting, such as Salesforce's sign-in
+         *     address), as its row and details show it.
+         */
+        ConfigField: {
+            /** Choices */
+            choices?: components["schemas"]["SettingChoice"][] | null;
+            /** Default */
+            default?: string | null;
+            /** Help */
+            help?: string | null;
+            /** Label */
+            label: string;
+            /** Mode */
+            mode?: ("default" | "fixed") | null;
+            /** Name */
+            name: string;
+            other?: components["schemas"]["SettingOther"] | null;
+            /**
+             * Pem
+             * @default false
+             */
+            pem: boolean;
+            /**
+             * Required
+             * @default false
+             */
+            required: boolean;
+            /** Shown */
+            shown?: string | null;
+            /** Value */
+            value?: string | null;
         };
         /** ConfigPermission */
         ConfigPermission: {
@@ -4506,6 +4560,26 @@ export interface components {
             expiresAt?: string | null;
             /** Redirecturi */
             redirectUri: string;
+        };
+        /**
+         * SignInValue
+         * @description Where an account signs in and what its sign-in found, in the plugin's words: its sign-in address (`place`) and
+         *     each value filled at sign-in (`found`), such as Salesforce's org address.
+         */
+        SignInValue: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "place" | "found";
+            /** Label */
+            label: string;
+            /** Name */
+            name: string;
+            /** Shown */
+            shown: string;
+            /** Value */
+            value: string;
         };
         /** SignedIn */
         SignedIn: {

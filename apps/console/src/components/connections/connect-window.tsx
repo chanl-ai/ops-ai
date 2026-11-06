@@ -119,10 +119,13 @@ export function ConnectWindow({
   // edited there; one it leaves unset (Ops AI's app sets none) is asked here, for this account. A setting asked on the
   // Settings tab only is never asked here. Until the picked config answers, neither is shown.
   const picked = useAppCredential(client ?? '');
-  const onConfigValue = (name: string) => {
+  // A value the config holds as a default is where this account starts, and is asked; a fixed one is not.
+  const heldOnConfig = (name: string) => {
     const v = (picked.data?.settings as Record<string, unknown> | undefined)?.[name];
     return v === undefined || v === null || v === '' ? null : String(v);
   };
+  const isDefault = (name: string) => (picked.data?.modes as Record<string, string> | undefined)?.[name] === 'default';
+  const onConfigValue = (name: string) => (isDefault(name) ? null : heldOnConfig(name));
   const askedHere = (x: { name: string; asked?: string | null }) =>
     x.asked !== 'settings' && (x.asked !== 'config' || (client ? Boolean(picked.data) && onConfigValue(x.name) === null : true));
   const places = (plugin?.settings ?? []).filter((x) => isSignInPlace(x) && askedHere(x));
@@ -139,8 +142,11 @@ export function ConnectWindow({
   const first = useAccountDetail(reusing && card.connectionId ? { appId: card.id, accountId: card.connectionId } : null);
   React.useEffect(() => {
     const held = (first.data?.pluginSettings ?? {}) as Record<string, unknown>;
-    for (const x of places) if (typeof held[x.name] === 'string' && held[x.name]) form.setValue(x.name, String(held[x.name]));
-  }, [first.data]);
+    for (const x of places) {
+      const start = (isDefault(x.name) && heldOnConfig(x.name)) || (typeof held[x.name] === 'string' ? String(held[x.name]) : '');
+      if (start) form.setValue(x.name, start);
+    }
+  }, [first.data, picked.data]);
   // Settings with a default wait under More options, so the default path stays the app credential and Authorize.
   const needed = fields.filter((f) => !f.advanced);
   const tuned = fields.filter((f) => f.advanced);
