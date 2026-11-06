@@ -9,10 +9,11 @@ import sys
 from collections.abc import Callable, Sequence
 
 from ._cli.agents import main as agents_main
+from ._cli.resources import main as resources_main
 from ._cli.workflows import main as workflows_main
 
-# Each area's handler takes the arguments after the area's name; areas over the SDK (apps, accounts, tools, resources)
-# join this table one by one.
+# Each area's handler takes the arguments after the area's name; areas over the SDK (apps, accounts, tools) join this
+# table one by one.
 Area = Callable[[list[str]], int]
 
 
@@ -31,6 +32,10 @@ AREAS: dict[str, tuple[Area, str]] = {
     "plugin": (_plugin, "build and check a plugin: validate, test"),
     "workflows": (workflows_main, "author and run workflows: validate, apply, publish, run"),
     "agents": (agents_main, "author and chat with agents: apply, publish, chat, test"),
+    "resources": (
+        resources_main,
+        "an app's agents, skills, workflows and document types: list, plan, add, update, remove",
+    ),
 }
 
 

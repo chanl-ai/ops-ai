@@ -1,14 +1,17 @@
 """uc-590, cli layer: docs/usecases/agents-service/plugin-templates.md, story S7 (step 23).
-The sdk layer's stack: platform-service, tools-service with the test plugin, agents-service reading tools-service.
+The sdk layer's stack: platform-service, tools-service with the test plugin, documents-service (beside kb-service) whose
+document type copies the resource list joins, agents-service reading tools-service.
 A team admin lists the app's resources and adds the agent with `ops resources`, signed in as their dev role the way
-`make api` signs in (task L2). No model call."""
+`make api` signs in (`ops --as`). No model call."""
 
 from __future__ import annotations
 
 import json
+import tempfile
+from pathlib import Path
 
-from apps_walk import AUTH, ops_cli, target
-from usecase_harness import ROOT, agents, as_role, check, finish, platform, tools
+from apps_walk import AUTH, ops_cli
+from usecase_harness import ROOT, agents, as_role, check, finish, kb, platform, tools
 
 PLUGIN = "test.templates"
 FOLDER = ROOT / "services/tools-service/tests/plugin_templates/templates_desk"
@@ -19,7 +22,11 @@ def main() -> None:
     with (
         platform() as (accounts, _),
         tools({**AUTH, **PLUGINS}) as gw,
-        agents(gateway_url=str(gw.base_url).rstrip("/"), env=AUTH),
+        kb(
+            Path(tempfile.mkdtemp(prefix="uc590-cli-")),
+            documents_env={**AUTH, "OPS_TOOLS_URL": str(gw.base_url).rstrip("/")},
+        ) as knowledge,
+        agents(gateway_url=str(gw.base_url).rstrip("/"), kb_url=str(knowledge.base_url).rstrip("/"), env=AUTH),
     ):
         admin = as_role(accounts, "admin", "team_ops")
         on = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json={"enabled": True}, headers=admin)
@@ -36,7 +43,7 @@ def main() -> None:
             and added_code == 0
             and isinstance(added, dict)
             and bool((added.get("copy") or {}).get("recordId")),
-            (target("L2, P1 and S8"), {"list": (listed_code, listed), "add": (added_code, added)}),
+            {"list": (listed_code, listed), "add": (added_code, added)},
         )
     finish()
 
