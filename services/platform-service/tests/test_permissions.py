@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from ops_access import ACTIONS, AREAS, BUILTIN_ROLES, can
 from ops_identity import Identity, http_current_version, mint_service_token
 from ops_platform.store.roles import mirror_membership
-from ops_platform.store.tables import members, role_assignments
+from ops_platform.store.tables import members, role_assignments, teams, tenants
 from ops_service_kit.errors import Forbidden, Unauthorized
 from ops_service_kit.ids import new_id, now_iso
 
@@ -161,6 +161,34 @@ async def test_a_role_change_moves_the_assignment_and_the_version(platform: Plat
             .where(role_assignments.c.subject_id == other.user_id, role_assignments.c.team_id == team)
         )
         assert left.scalar_one() == 0
+
+
+SECURITY_CELLS = {"secrets_egress.manage", "secrets_egress.decide", "settings.view", "settings.manage"}
+
+
+async def test_a_security_team_action_is_listed_only_in_the_security_team(platform: Platform) -> None:
+    """A builder's grid holds every cell of their team, egress included, but a service decides those cells in the
+    Security team only. Listed under the builder's own team, the console offered him edits every service refuses."""
+    p = await platform.person(roles=("builder",))
+    team = next(iter(p.teams))
+    mine = held(await permissions(platform, await bearer(platform, p)), team)
+    assert "agents.create" in mine
+    assert not SECURITY_CELLS & set(mine), sorted(SECURITY_CELLS & set(mine))
+    async with platform.engine.begin() as c:
+        await c.execute(
+            teams.insert().values(
+                id="team_security", tenant_id=p.tenant_id, name="Security", owner_groups=[], scope="owned",
+                created_at=now_iso(),
+            )
+        )  # fmt: skip
+    await join(platform, p, "team_security", "admin")
+    security = held(await permissions(platform, await bearer(platform, p)), "team_security")
+    assert security["secrets_egress.manage"]["securityTeamOnly"] is True
+    # A workspace that names no Security team: nobody holds them, in any team.
+    async with platform.engine.begin() as c:
+        await c.execute(tenants.update().where(tenants.c.id == p.tenant_id).values(security_team_id=None))
+    view = await permissions(platform, await bearer(platform, p))
+    assert not any(SECURITY_CELLS & set(held(view, t["teamId"])) for t in view["teams"])
 
 
 async def test_another_persons_permissions_show_only_shared_teams(platform: Platform) -> None:
