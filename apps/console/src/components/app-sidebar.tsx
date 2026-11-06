@@ -23,7 +23,6 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -32,6 +31,7 @@ import {
   SidebarRail,
   useSidebar,
 } from '@/components/ui/sidebar';
+import { SidebarRowAction } from '@/components/shared/sidebar-row-action';
 import { useTeamRole, useWorkspaceIdentity } from '@/hooks/me-queries';
 import { useBrand, useLookups, useOverview } from '@/hooks/queries';
 import { usePreviewCheck } from '@/hooks/use-preview';
@@ -177,9 +177,9 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenuItem>
           {row}
           <CollapsibleTrigger asChild>
-            <SidebarMenuAction className="data-[state=open]:rotate-90" aria-label={`${open ? 'Hide' : 'Show'} ${item.title} pages`}>
+            <SidebarRowAction className="data-[state=open]:rotate-90" aria-label={`${open ? 'Hide' : 'Show'} ${item.title} pages`}>
               <ChevronRight />
-            </SidebarMenuAction>
+            </SidebarRowAction>
           </CollapsibleTrigger>
           <CollapsibleContent>
             <SidebarMenuSub>

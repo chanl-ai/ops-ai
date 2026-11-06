@@ -8,7 +8,8 @@ import { toast } from 'sonner';
 
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { SidebarGroupLabel, SidebarInput, SidebarMenu, SidebarMenuAction, SidebarMenuButton, SidebarMenuItem, SidebarMenuSkeleton } from '@/components/ui/sidebar';
+import { SidebarGroupLabel, SidebarInput, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarMenuSkeleton } from '@/components/ui/sidebar';
+import { SidebarRowAction } from '@/components/shared/sidebar-row-action';
 import { useChatThreadPages, useDeleteThread, useStreamingThreadIds, useUpdateThread } from '@/hooks/chat-queries';
 import { useSticky } from '@/hooks/use-sticky';
 import type { ChatThreadPatch, ChatThreadRow } from '@/lib/types/chat';
@@ -119,9 +120,9 @@ export function SidebarChats({ onNavigate }: { onNavigate?: () => void }) {
                     )}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <SidebarMenuAction showOnHover aria-label={`Actions for ${t.title}`}>
+                        <SidebarRowAction showOnHover aria-label={`Actions for ${t.title}`}>
                           <MoreHorizontal />
-                        </SidebarMenuAction>
+                        </SidebarRowAction>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="start" side="right">
                         <DropdownMenuItem
