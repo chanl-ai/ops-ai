@@ -29,4 +29,4 @@ Screenshots at 1280 and 400 px go to `.logs/usecases/uc-253/`, or under `OPS_EVI
 
 | Layer | Script | State |
 |---|---|---|
-| ui | `agents-service/scripts/test-uc-253-ui.mjs` | passing, `ISOLATED=1 make usecase-test UC=uc-253 LAYER=ui` (2026-10-18) |
+| ui | `agents-service/scripts/test-uc-253-ui.mjs` | passing, `make usecase-test UC=uc-253 LAYER=ui` (2026-10-18) |

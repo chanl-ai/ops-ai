@@ -1,4 +1,4 @@
-# Agents service on :8700 (ISOLATED=1: :9700). Model keys come from the environment (OPENAI_API_KEY, or
+# Agents service on :8700. Model keys come from the environment (OPENAI_API_KEY, or
 # ANTHROPIC_API_KEY for a claude-* alias); never commit a .env, run under your secrets manager. Run from this folder or
 # with `make -C services/agents-service <target>`; the root `make up` runs it in the background.
 STACK_SVC := agents
@@ -16,7 +16,7 @@ TYPED_DIRS := src tests scripts experiments
 install: ## uv sync for the workspace
 	uv sync --frozen
 
-run: ## Serve in the foreground on :8700 (ISOLATED=1: :9700)
+run: ## Serve in the foreground on :8700
 	uv run python -m ops_agents.api
 
 worker: ## Workflow runner worker in the foreground: claims engine_work and runs v2 workflows (no port, no model)

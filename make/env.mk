@@ -1,5 +1,5 @@
 # Ports, compose project and runtime env for the local stack. Included first by the root Makefile and by every service
-# Makefile, so `make -C services/<x> <verb> ISOLATED=1` sees the same values as the root. Secrets come from the
+# Makefile, so `make -C services/<x> <verb>` sees the same values as the root. Secrets come from the
 # environment or from a gitignored .env at the root (contract: .env.example); a secrets-manager wrapper works the same
 # way. Every name here is listed in docs/architecture/make.md.
 
@@ -13,50 +13,37 @@ export $(shell sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' $(ROOT)/.env 2>/dev/null
 -include $(ROOT)/.devcontainer/.env.local
 export $(shell sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' $(ROOT)/.devcontainer/.env.local 2>/dev/null)
 
-# ISOLATED=1 runs a second stack beside the first: every port +1000, its own compose project and data volume, its own
-# logs and pids, so two checkouts or two sessions do not fight over :8700 or one database. The project name carries a
-# checksum of this checkout's path: with one name for every checkout, `make db-down ISOLATED=1` in one removed the
-# stack a run in another was using. Two checkouts' isolated stacks still use the same ports, so a second one's `up`
-# fails on a taken port rather than joining the first.
-ifeq ($(ISOLATED),1)
-  OPS_PORT_OFFSET := 1000
-  OPS_STACK := isolated
-  OPS_COMPOSE_PROJECT := ops-runtime-isolated-$(shell printf '%s' '$(ROOT)' | cksum | cut -d' ' -f1)
-else
-  OPS_PORT_OFFSET := 0
-  OPS_STACK := shared
+# One stack per machine, on the fixed ports below, run from whichever checkout of this repository last ran `make up`
+# (`make review` runs it from the review worktree). Its pids, logs and state (the first admin, the fake bank's
+# certificate, the database heads) live in the main checkout, which every worktree of the repository shares, so moving
+# the stack between checkouts restarts what runs from the other one instead of starting a second stack beside it.
+STACK_HOME := $(or $(shell cd '$(ROOT)' && git worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p'),$(ROOT))
+# OPS_PORT_OFFSET adds a number to every default port, for a machine whose default ports are held by something this
+# stack did not start. The compose project and the state folder follow it, so the offset stack never binds to or
+# recreates the default stack's containers.
+OPS_PORT_OFFSET ?= 0
+ifeq ($(OPS_PORT_OFFSET),0)
   OPS_COMPOSE_PROJECT := ops-runtime
+  OPS_LOG_DIR := $(STACK_HOME)/.logs
+  OPS_RUN_DIR := $(STACK_HOME)/.run
+  OPS_DATA_DIR := $(STACK_HOME)/.data
+else
+  OPS_COMPOSE_PROJECT := ops-runtime-$(OPS_PORT_OFFSET)
+  OPS_LOG_DIR := $(STACK_HOME)/.logs/offset-$(OPS_PORT_OFFSET)
+  OPS_RUN_DIR := $(STACK_HOME)/.run/offset-$(OPS_PORT_OFFSET)
+  OPS_DATA_DIR := $(STACK_HOME)/.data/offset-$(OPS_PORT_OFFSET)
 endif
 
-# One checkout runs the shared stack; its path is recorded in OPS_SHARED_ROOT_FILE by its first `make up`. A target
-# that starts the services, stops, migrates or seeds the stack refuses to run from any other checkout unless ISOLATED=1
-# (db-up is allowed: it only starts the shared Postgres and OPA under the fixed project, --no-recreate): a worktree
-# whose ISOLATED=1 was lost (a zsh word list that did not split) migrated the shared database to its branch and stopped
-# the shared tools-service. To move the shared stack to another checkout, delete the file and run `make up` there.
-OPS_SHARED_ROOT_FILE ?= $(HOME)/.config/ops-ai/shared-root
-STACK_GOALS := up down restart migrate reset-db db-down db-reset sample-team demo demo-walk demo-model
-ifeq ($(OPS_STACK),shared)
-  ifneq ($(filter $(STACK_GOALS),$(MAKECMDGOALS)),)
-    # A test, or a worktree, must never stop, migrate or reset the shared stack.
-    ifdef PYTEST_CURRENT_TEST
-      $(error refused: a test may not run $(filter $(STACK_GOALS),$(MAKECMDGOALS)) on the shared stack; add ISOLATED=1)
-    endif
-    ifeq ($(shell cd '$(ROOT)' && d=$$(git rev-parse --absolute-git-dir 2>/dev/null) && c=$$(cd "$$(git rev-parse --git-common-dir)" && pwd -P) && [ "$$d" != "$$c" ] && echo worktree),worktree)
-      $(error refused: $(ROOT) is a git worktree, so it would act on the shared stack; add ISOLATED=1, or review a branch with make review BRANCH=<name> in the main checkout)
-    endif
-    SHARED_ROOT := $(shell cat '$(OPS_SHARED_ROOT_FILE)' 2>/dev/null)
-    ifeq ($(SHARED_ROOT),)
-      ifneq ($(filter up,$(MAKECMDGOALS)),)
-        $(shell mkdir -p '$(dir $(OPS_SHARED_ROOT_FILE))' && printf '%s\n' '$(ROOT)' > '$(OPS_SHARED_ROOT_FILE)')
-      endif
-    else ifneq ($(SHARED_ROOT),$(ROOT))
-      $(error refused: the shared stack runs from $(SHARED_ROOT), and this checkout is $(ROOT). Add ISOLATED=1 for a stack of its own; to move the shared stack here, delete $(OPS_SHARED_ROOT_FILE) and run make up)
-    endif
+# A test never stops, migrates or resets the stack: it runs on its own database (OPS_TEST_DATABASE_URL below).
+STACK_GOALS := up down restart migrate reset-db db-down db-reset review sample-team demo demo-walk demo-model
+ifneq ($(filter $(STACK_GOALS),$(MAKECMDGOALS)),)
+  ifdef PYTEST_CURRENT_TEST
+    $(error refused: a test may not run $(filter $(STACK_GOALS),$(MAKECMDGOALS)) on the stack; tests run on their own database)
   endif
 endif
 
 # Every port is overridable from the environment or the make command line (`make up OPS_AGENTS_PORT=8750`); the
-# defaults below plus the ISOLATED offset apply only when the caller set nothing.
+# defaults below plus OPS_PORT_OFFSET apply only when the caller set nothing.
 comma := ,
 port = $(shell echo $$(( $(1) + $(OPS_PORT_OFFSET) )))
 OPS_CONSOLE_PORT ?= $(call port,3016)
@@ -68,8 +55,7 @@ OPS_TOOLS_PORT ?= $(call port,8720)
 OPS_KB_PORT ?= $(call port,8740)
 OPS_FILES_PORT ?= $(call port,8750)
 OPS_DOCUMENTS_PORT ?= $(call port,8760)
-# The code runner (services/runner-service) and the API docs site. Without the offset an isolated stack's runner
-# took the shared stack's :8770, and the shared `make up` found that port healthy and called back the other stack.
+# The code runner (services/runner-service) and the API docs site.
 OPS_RUNNER_PORT ?= $(call port,8770)
 OPS_API_DOCS_PORT ?= $(call port,8799)
 OPS_MODELS_PORT ?= $(call port,8730)
@@ -81,41 +67,14 @@ OPS_PLATFORM_INTERNAL_PORT ?= $(call port,8711)
 OPS_OPA_PORT ?= $(call port,8181)
 OPS_PG_PORT ?= $(call port,5477)
 # The test mail servers in compose: GreenMail takes mail in (SMTP) and serves it (IMAP); Mailpit catches sent mail.
-# Their bases differ by multiples of 1000, so they step by 100 per stack; by 1000, the isolated stack's would take others'.
+# Their bases differ by multiples of 1000, so they move by a tenth of the offset; the whole offset would land on another's.
 mail_port = $(shell echo $$(( $(1) + $(OPS_PORT_OFFSET) / 10 )))
 OPS_GREENMAIL_SMTP_PORT ?= $(call mail_port,3025)
 OPS_GREENMAIL_IMAP_PORT ?= $(call mail_port,3143)
 OPS_MAILPIT_SMTP_PORT ?= $(call mail_port,1025)
 OPS_MAILPIT_HTTP_PORT ?= $(call mail_port,8025)
-# A make run started inside another (a use case's runner, a recipe) inherits the outer stack's exported addresses, and
-# `?=` keeps them, so an ISOLATED=1 run from inside a shared one would act on the shared stack. With
-# ISOLATED=1 every address that came from the environment is recomputed; one given on the make command line still wins.
-# GNU Make 3.81 (macOS) has no undefine, hence the reassignment.
-reset_inherited = $(if $(filter 1,$(ISOLATED)),$(foreach v,$(1),$(if $(filter environment,$(origin $(v))),$(eval $(v) := $(2)))))
-$(call reset_inherited,OPS_CONSOLE_PORT,$(call port,3016))
-$(call reset_inherited,OPS_EMBED_PORT,$(call port,3020))
-$(call reset_inherited,OPS_CONSOLE_RUNTIME_PORT,$(call port,3017))
-$(call reset_inherited,OPS_AGENTS_PORT,$(call port,8700))
-$(call reset_inherited,OPS_TOOLS_PORT,$(call port,8720))
-$(call reset_inherited,OPS_KB_PORT,$(call port,8740))
-$(call reset_inherited,OPS_FILES_PORT,$(call port,8750))
-$(call reset_inherited,OPS_DOCUMENTS_PORT,$(call port,8760))
-$(call reset_inherited,OPS_RUNNER_PORT,$(call port,8770))
-$(call reset_inherited,OPS_API_DOCS_PORT,$(call port,8799))
-$(call reset_inherited,OPS_MODELS_PORT,$(call port,8730))
-$(call reset_inherited,OPS_FAKE_OPENAI_PORT,$(call port,8746))
-$(call reset_inherited,OPS_FAKE_BANK_PORT,$(call port,8745))
-$(call reset_inherited,OPS_PLATFORM_PORT,$(call port,8710))
-$(call reset_inherited,OPS_PLATFORM_INTERNAL_PORT,$(call port,8711))
-$(call reset_inherited,OPS_OPA_PORT,$(call port,8181))
-$(call reset_inherited,OPS_PG_PORT,$(call port,5477))
-$(call reset_inherited,OPS_GREENMAIL_SMTP_PORT,$(call mail_port,3025))
-$(call reset_inherited,OPS_GREENMAIL_IMAP_PORT,$(call mail_port,3143))
-$(call reset_inherited,OPS_MAILPIT_SMTP_PORT,$(call mail_port,1025))
-$(call reset_inherited,OPS_MAILPIT_HTTP_PORT,$(call mail_port,8025))
-# .env is copied from the main checkout and names the shared stack's models-service and fake model; an isolated stack's
-# targets (make demo-model) use its own, never the shared one's.
-ifeq ($(ISOLATED),1)
+# A .env that names the default stack's models-service or fake model would send an offset stack's model calls there.
+ifneq ($(OPS_PORT_OFFSET),0)
   ifneq ($(filter file environment,$(origin OPS_MODELS_URL)),)
     OPS_MODELS_URL := http://127.0.0.1:$(OPS_MODELS_PORT)
   endif
@@ -123,14 +82,12 @@ ifeq ($(ISOLATED),1)
     OPS_MODELS_FAKE_OPENAI_URL := http://127.0.0.1:$(OPS_FAKE_OPENAI_PORT)/v1
   endif
 endif
-OPS_LOG_DIR := $(ROOT)/.logs$(if $(filter 1,$(ISOLATED)),/isolated)
-OPS_RUN_DIR := $(ROOT)/.run$(if $(filter 1,$(ISOLATED)),/isolated)
 
-export OPS_STACK OPS_COMPOSE_PROJECT OPS_CONSOLE_PORT OPS_EMBED_PORT OPS_CONSOLE_RUNTIME_PORT OPS_AGENTS_PORT OPS_TOOLS_PORT OPS_KB_PORT OPS_FILES_PORT \
+export OPS_PORT_OFFSET OPS_COMPOSE_PROJECT OPS_CONSOLE_PORT OPS_EMBED_PORT OPS_CONSOLE_RUNTIME_PORT OPS_AGENTS_PORT OPS_TOOLS_PORT OPS_KB_PORT OPS_FILES_PORT \
   OPS_DOCUMENTS_PORT OPS_RUNNER_PORT OPS_API_DOCS_PORT OPS_MODELS_PORT OPS_FAKE_OPENAI_PORT OPS_FAKE_BANK_PORT \
   OPS_PLATFORM_PORT OPS_PLATFORM_INTERNAL_PORT \
   OPS_OPA_PORT OPS_PG_PORT OPS_GREENMAIL_SMTP_PORT OPS_GREENMAIL_IMAP_PORT OPS_MAILPIT_SMTP_PORT OPS_MAILPIT_HTTP_PORT \
-  OPS_LOG_DIR OPS_RUN_DIR
+  OPS_LOG_DIR OPS_RUN_DIR OPS_DATA_DIR STACK_HOME
 
 # The services read OPS_* (packages/ops_service_kit settings). These derive from the ports above so an overridden or
 # offset port reaches the service; with the defaults they equal the settings defaults. A value already in the caller's
@@ -151,13 +108,13 @@ TEST_RUN := r$(shell echo $$PPID)_$(shell od -An -N3 -tx1 /dev/urandom | tr -d '
 ifeq ($(OPS_INFRA),external)
   export OPS_OPA_URL ?= http://opa:8181
   export OPS_DATABASE_URL ?= postgresql+asyncpg://ops:ops@postgres:5432/ops_runtime
-  export OPS_TEST_DATABASE_URL ?= $(if $(filter environment command line,$(origin OPS_DATABASE_URL)),$(OPS_DATABASE_URL),postgresql+asyncpg://ops:ops@postgres:5432/ops_test$(if $(filter 1,$(ISOLATED)),_isolated)_$(TEST_RUN))
+  export OPS_TEST_DATABASE_URL ?= $(if $(filter environment command line,$(origin OPS_DATABASE_URL)),$(OPS_DATABASE_URL),postgresql+asyncpg://ops:ops@postgres:5432/ops_test_$(TEST_RUN))
   export OPS_SMTP_HOST ?= mailpit
   export OPS_GREENMAIL_HOST ?= greenmail
   export OPS_MAILPIT_HOST ?= mailpit
 else
   export OPS_OPA_URL ?= http://127.0.0.1:$(OPS_OPA_PORT)
-  export OPS_TEST_DATABASE_URL ?= $(if $(filter environment command line,$(origin OPS_DATABASE_URL)),$(OPS_DATABASE_URL),postgresql+asyncpg://ops:ops@localhost:$(OPS_PG_PORT)/ops_test$(if $(filter 1,$(ISOLATED)),_isolated)_$(TEST_RUN))
+  export OPS_TEST_DATABASE_URL ?= $(if $(filter environment command line,$(origin OPS_DATABASE_URL)),$(OPS_DATABASE_URL),postgresql+asyncpg://ops:ops@localhost:$(OPS_PG_PORT)/ops_test_$(TEST_RUN))
   export OPS_DATABASE_URL ?= postgresql+asyncpg://ops:ops@localhost:$(OPS_PG_PORT)/ops_runtime
   export OPS_SMTP_HOST ?= 127.0.0.1
   export OPS_GREENMAIL_HOST ?= 127.0.0.1
@@ -166,23 +123,13 @@ endif
 # Prefix for a test recipe: creates and migrates the test database, then runs the command against it.
 TEST_DB = uv run --project $(ROOT) python $(ROOT)/scripts/test_db.py $(OPS_TEST_DATABASE_URL) && OPS_DATABASE_URL=$(OPS_TEST_DATABASE_URL)
 export OPS_INFRA
-$(call reset_inherited,OPS_PORT,$(OPS_AGENTS_PORT))
-$(call reset_inherited,OPS_GATEWAY_PORT,$(OPS_TOOLS_PORT))
-$(call reset_inherited,OPS_PLATFORM_URL,http://127.0.0.1:$(OPS_PLATFORM_PORT))
-$(call reset_inherited,OPS_OPA_URL,http://127.0.0.1:$(OPS_OPA_PORT))
-$(call reset_inherited,OPS_DATABASE_URL,postgresql+asyncpg://ops:ops@localhost:$(OPS_PG_PORT)/ops_runtime)
-$(call reset_inherited,OPS_TEST_DATABASE_URL,postgresql+asyncpg://ops:ops@localhost:$(OPS_PG_PORT)/ops_test_isolated_$(TEST_RUN))
-# The shared stack's live database, which only a shared-stack reset may drop (see reset-db in dev.mk).
-SHARED_DATABASE := localhost:5477/ops_runtime
-# AUTH=platform: agents and tools verify platform-service tokens and the console signs people in through it (James,
-# Maya, Nadia from platform's dev seed) instead of the mock; AUTH=dev runs dev auth and the mock sign-in. The shared
-# stack defaults to platform, the one the demos run on; an isolated stack defaults to dev. A stack already running keeps
-# the mode it was started in, so `make restart SVC=x` without AUTH= never brings one service back in the other mode.
+# AUTH=platform (the default): agents and tools verify platform-service tokens and the console signs people in through
+# it (James, Maya, Nadia from platform's dev seed); AUTH=dev runs dev auth and the mock sign-in. A stack already running
+# keeps the mode it was started in, so `make restart SVC=x` without AUTH= never brings one service back in the other mode.
 STARTED_AUTH := $(shell cat $(OPS_RUN_DIR)/console.auth $(OPS_RUN_DIR)/platform.auth 2>/dev/null | head -1)
-AUTH ?= $(or $(STARTED_AUTH),$(if $(filter shared,$(OPS_STACK)),platform,dev))
+AUTH ?= $(or $(STARTED_AUTH),platform)
 export OPS_STACK_AUTH := $(if $(filter platform,$(AUTH)),platform,dev)
 export OPS_CORS_ORIGINS ?= ["http://localhost:$(OPS_CONSOLE_PORT)","http://localhost:$(OPS_CONSOLE_RUNTIME_PORT)"]
-$(call reset_inherited,OPS_CORS_ORIGINS,["http://localhost:$(OPS_CONSOLE_PORT)"$(comma)"http://localhost:$(OPS_CONSOLE_RUNTIME_PORT)"])
 
 COMPOSE := docker compose -p $(OPS_COMPOSE_PROJECT) -f $(ROOT)/deploy/compose/compose.yaml
 STACK := $(ROOT)/scripts/stack.sh

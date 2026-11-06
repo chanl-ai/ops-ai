@@ -46,7 +46,7 @@ The ui layer adds the server through the API, as the api layer does, and signs i
 
 | Layer | Script | State |
 |---|---|---|
-| api | `tools-service/scripts/test-uc-396-api.py` | passing, `ISOLATED=1 make usecase-test UC=uc-396 LAYER=api` (2026-10-19) |
+| api | `tools-service/scripts/test-uc-396-api.py` | passing, `make usecase-test UC=uc-396 LAYER=api` (2026-10-19) |
 | ui | `tools-service/scripts/test-uc-396-ui.mjs` | failing at step 8 (2026-11-03): an MCP app's base address is the server's own, path included (`connections/service.py:619`), so the test path `/auth/oauth` is read at `/mcp/screening/auth/oauth` and the stand-in answers 404; steps 7 pass |
 
 ## Non-vacuous check

@@ -12,7 +12,7 @@ embed button follows what the person may do with the agent.
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 and OPA :8181 | `make db-up` |
-| Free use-case ports | agents, platform-service and console (ISOLATED=1 adds 1000) |
+| Free use-case ports | agents, platform-service and console |
 
 The seeded Branch Concierge (`ag_branch`) is Operations' published agent. James builds in Operations, Ravi is its
 viewer, Sam is an admin of Security only: he may change Security's records and not this one.

@@ -7,7 +7,7 @@ Status: current. Id: `uc-009`. Service: `agents-service`. Layers: api.
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 and OPA :8181 | `make db-up` |
-| Free use-case ports | agents :8790 (ISOLATED=1 adds 1000) |
+| Free use-case ports | agents :8790 |
 
 The script starts the agents service on the scripted model with `OPS_DEV_POLICIES='{"requesterMayDecide": false}'`,
 the dev stand-in for a workspace whose admin switched the policy off. The policy is open by default, so a

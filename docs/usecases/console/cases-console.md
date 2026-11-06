@@ -11,7 +11,7 @@ to Workflows › Runs.
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 and OPA :8181 | `make db-up` |
-| Free use-case ports | agents, platform-service and console (ISOLATED=1 adds 1000) |
+| Free use-case ports | agents, platform-service and console |
 
 James works Operations' cases. The script opens three for Alex Martin: one due, one past both deadlines, one waiting on
 the customer.

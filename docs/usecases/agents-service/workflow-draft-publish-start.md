@@ -7,7 +7,7 @@ Status: current. Id: `uc-019`. Service: `agents-service`. Layers: api.
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 and OPA :8181 | `make db-up` |
-| Free use-case ports | agents :8790 (ISOLATED=1 adds 1000) |
+| Free use-case ports | agents :8790 |
 
 The script starts its own agents service on the scripted model; no model key is needed. It turns dev's
 `registry_auto_approve` off, so each publish is decided by a second person as it would be outside dev.

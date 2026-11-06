@@ -38,15 +38,15 @@ const nextConfig: NextConfig = {
   // The console image ships Next's traced server alone (deploy/fly/Dockerfile, target console). Traced from the
   // workspace root, so packages pnpm links from there are found.
   ...(process.env.OPS_CONSOLE_STANDALONE === '1' ? { output: 'standalone', outputFileTracingRoot: resolve(process.cwd(), '../..') } : {}),
-  // `make up ISOLATED=1` runs a second dev server from this folder; Next locks its build directory, so the second
-  // server gets its own.
+  // A use-case run serves its own build beside `make up`'s dev server; Next locks the build directory it uses, so the
+  // run names its own.
   distDir: process.env.OPS_CONSOLE_DIST_DIR || '.next',
   // A use-case run hands Next its own tsconfig (extending this folder's), because Next writes the build directory's
   // type globs into whichever tsconfig it reads; the committed file then never changes during a run.
   typescript: {
     tsconfigPath: process.env.OPS_CONSOLE_TSCONFIG || 'tsconfig.json',
     // The cached production build a use case runs on is made once per source hash; `pnpm verify` is the type check,
-    // so the build does not repeat it (and another lane's unfinished types do not stop the run).
+    // so the build does not repeat it (and another branch's unfinished types do not stop the run).
     ignoreBuildErrors: process.env.OPS_CONSOLE_SKIP_TYPECHECK === '1',
   },
   experimental: {

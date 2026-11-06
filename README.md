@@ -255,33 +255,45 @@ Runs every service, the console and the fake model on your machine. Needs:
 - Node 20 or newer and pnpm 10 (`corepack enable` provides it)
 - Docker, for PostgreSQL, OPA and the test mail servers
 
-No model key is needed: `DEMO_MODEL=fake` puts every model alias on the fake model.
+No model key is needed: with no `OPENAI_API_KEY`, every model alias runs on the fake model.
 
 ```bash
 git clone <this repository> ops-ai && cd ops-ai
 make setup                               # optional: answer what you have; each answer is tested before it is written
 make install                             # pnpm install and uv sync, once per clone
-make up DEMO_MODEL=fake AUTH=platform    # PostgreSQL, OPA, every service and the console
+make up                                  # PostgreSQL, OPA, every service and the console
 make health                              # each service, its port and whether it answers
+make review BRANCH=main                  # optional: run a branch from the review worktree, same ports
+make up                                  # back to your own checkout
+make test PKG=packages/ops_access        # one package's tests, on a throwaway database
 ```
 
 Open http://localhost:3016 and sign in as the workspace admin `w.kamau@harborpine.example` with the development
 password `northfield-demo`. The development seed adds a few teams, agents and tools of its own; `make down KEEP_DB=1`
 stops the stack and keeps the data. Every service's API reference is on one page at http://localhost:8799 (a
-service that is not running shows its committed spec). These steps were run from a fresh clone on 2026-10-20: every service answered
-`ok`, the console signed in, and a chat turn on the fake model answered with a citation.
+service that is not running shows its committed spec). These steps were run from a fresh clone on 2026-11-06, with
+`OPS_PORT_OFFSET=30000` because another stack held the default ports: every service answered `ok`, the admin signed in,
+`make review` moved the stack to the review worktree and `make up` moved it back, a commit touching kb-service restarted
+kb-service alone, and `make test PKG=packages/ops_access` passed 24 tests.
 
 To answer with a real model instead, put `OPENAI_API_KEY` in a `.env` file at the root (git ignores it) and run
-`make up AUTH=platform`.
+`make up`.
+
+One stack runs per machine, on these ports, from one checkout at a time. `make review BRANCH=<name>` checks a branch
+out in a second worktree beside your clone (`../ops-ai-review`) and moves the stack there, restarting only what
+differs; your own checkout and branch stay as they are, and `make up` in your checkout moves the stack back. Tests
+and use cases make their own throwaway databases and never touch the stack's.
 
 | Command | What it does |
 |---|---|
 | `make up` | Migrates the database in place, then starts or restarts whatever is out of date |
+| `make review BRANCH=feat/x` | Runs that branch from the review worktree on the same ports |
+| `make test PKG=services/tools-service` | One package's or service's tests; `make test` alone runs what changed since `origin/main` |
 | `make health` | Each service's port, whether it answers and who started it |
 | `make logs SVC=agents` | Follows one service's log |
 | `make down KEEP_DB=1` | Stops the services and keeps the database |
 | `make verify` | Everything a commit must pass, on the scripted model |
-| `make usecase-test UC=uc-010` | Runs one end-to-end use case on its own stack |
+| `make usecase-test UC=uc-010` | Runs one end-to-end use case on its own database and free ports |
 
 ## Run with Docker
 

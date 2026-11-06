@@ -13,7 +13,7 @@ thread paused on an approval takes no new message.
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 and OPA :8181 | `make db-up` |
-| Free use-case ports | agents, platform-service and console (ISOLATED=1 adds 1000) |
+| Free use-case ports | agents, platform-service and console |
 
 The agents service runs on the scripted model with the seeded Wire Fraud Sentinel (`ag_fraud`): it holds
 `lookup_account` (read) and `place_wire_hold` (a write that pauses), and searches kb_people and kb_eng.

@@ -32,7 +32,7 @@ executor and call log all apply. Writes, other teams' tools, other teams' URLs, 
 
 | Layer | Script | State |
 |---|---|---|
-| api | `tools-service/scripts/test-uc-410-api.py` | passing, `ISOLATED=1 make usecase-test UC=uc-410 LAYER=api` (2026-10-19) |
+| api | `tools-service/scripts/test-uc-410-api.py` | passing, `make usecase-test UC=uc-410 LAYER=api` (2026-10-19) |
 
 In the console: none; an assistant reaches these tools over MCP with an API key, so the use case stays at the api layer.
 

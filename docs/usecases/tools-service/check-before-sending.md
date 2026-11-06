@@ -40,7 +40,7 @@ team turns it on.
 
 | Layer | Script | State |
 |---|---|---|
-| api | `tools-service/scripts/test-uc-266-api.py` | `ISOLATED=1 make usecase-test UC=uc-266 LAYER=api` |
+| api | `tools-service/scripts/test-uc-266-api.py` | `make usecase-test UC=uc-266 LAYER=api` |
 | ui | `tools-service/scripts/test-uc-266-ui.mjs` | `make usecase-test UC=uc-266 LAYER=ui`: Policies and each run's page |
 
 The console has no page for writing the sending policy's text yet, so the ui script saves it through tools-service

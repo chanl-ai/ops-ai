@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- tools-service, stamped at tools_0067_run_kind_live
+-- tools-service, stamped at tools_0069_token_person_name
 CREATE TABLE gateway_calls (
 	id VARCHAR(64) NOT NULL, 
 	tool VARCHAR(64) NOT NULL, 
@@ -306,6 +306,7 @@ CREATE TABLE plugin_bindings (
 	version VARCHAR(40) NULL, 
 	digest VARCHAR(64) NULL, 
 	declarations NVARCHAR(max) NULL, 
+	tools_on NVARCHAR(max) NULL, 
 	CONSTRAINT plugin_bindings_pkey PRIMARY KEY (tenant_id, team_id, plugin_id)
 );
 GO
@@ -460,6 +461,7 @@ CREATE TABLE connection_tokens (
 	refused_reason VARCHAR(300) NULL, 
 	pinned BIT NOT NULL DEFAULT 0, 
 	test NVARCHAR(max) NULL, 
+	person_name VARCHAR(200) NULL, 
 	CONSTRAINT connection_tokens_pkey PRIMARY KEY (tenant_id, connection_id, person_id), 
 	CONSTRAINT connection_tokens_tenant_id_connection_id_fkey FOREIGN KEY(tenant_id, connection_id) REFERENCES connections (tenant_id, id) ON DELETE CASCADE
 );
@@ -543,5 +545,5 @@ CREATE TABLE alembic_version_tools (
     CONSTRAINT alembic_version_tools_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0067_run_kind_live');
+INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0069_token_person_name');
 GO

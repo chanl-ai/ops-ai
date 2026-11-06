@@ -1,6 +1,6 @@
 // uc-199 a builder connects a team mailbox in the console and binds a workflow to it, ui layer:
-// docs/usecases/agents-service/connect-a-mailbox.md. withUiStack with platform sign-in and tools-service, run
-// isolated (ISOLATED=1). Sam puts the mailbox password on the Secrets page through the API; James connects an IMAP
+// docs/usecases/agents-service/connect-a-mailbox.md. withUiStack with platform sign-in and tools-service.
+// Sam puts the mailbox password on the Secrets page through the API; James connects an IMAP
 // mailbox on Channels > Email, tests it, opens its page, then connects a second mailbox from a workflow's Email
 // received trigger and saves the version, which names the new mailbox.
 import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';

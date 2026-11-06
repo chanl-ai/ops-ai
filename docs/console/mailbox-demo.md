@@ -49,8 +49,8 @@ Proven on the shared stack with the real model on 2026-10-19: parent `wfrun_3cc2
 
 ## From your own inbox
 
-This is the same path with a real mailbox instead of GreenMail. Each step below is proven on an isolated stack by
-uc-245 (`make usecase-test UC=uc-245 LAYER=ui ISOLATED=1`, 10 checks passing); what is new here is the mailbox.
+This is the same path with a real mailbox instead of GreenMail. Each step below is proven on its own services by
+uc-245 (`make usecase-test UC=uc-245 LAYER=ui`, 10 checks passing); what is new here is the mailbox.
 
 Before you start: a Gmail address with 2-step verification and an app password
 (<https://myaccount.google.com/apppasswords>), or a Microsoft 365 mailbox with an app registration that has Mail.Read

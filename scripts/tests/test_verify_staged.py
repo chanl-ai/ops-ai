@@ -7,16 +7,19 @@ over HEAD and runs scripts/verify-staged.sh on it, as the pre-commit hook does; 
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 CONSOLE_RAN = "\N{INFORMATION SOURCE} tests"  # node --test's summary line, printed by the console's verify
 
 
-def gate(tmp_path: Path, changes: dict[str, str]) -> subprocess.CompletedProcess[str]:
+def gate(tmp_path: Path, changes: dict[str, str], search_path: str | None = None) -> subprocess.CompletedProcess[str]:
     """verify-staged.sh on HEAD plus `changes` (path to full content), each written as a blob into a private index."""
-    env = {**os.environ, "GIT_INDEX_FILE": str(tmp_path / "index")}
+    env = {**os.environ, "GIT_INDEX_FILE": str(tmp_path / "index")} | ({"PATH": search_path} if search_path else {})
     subprocess.run(["git", "read-tree", "HEAD"], cwd=ROOT, env=env, check=True)
     for path, content in changes.items():
         blob = subprocess.run(
@@ -102,3 +105,30 @@ def test_a_new_shared_setting_without_its_k8s_files_is_refused(tmp_path: Path) -
     done = gate(tmp_path, {compose: changed})
     out = done.stdout + done.stderr
     assert done.returncode != 0 and "verify-staged: k8s" in out, out[-2000:]
+
+
+def test_a_uv_call_inside_the_hooks_copy_never_repoints_the_checkouts_packages(tmp_path: Path) -> None:
+    """The hook checks a copy of the staged tree, which is a whole uv workspace: with the checkout's .venv linked into
+    it, any uv call made there reinstalled every member into that .venv pointing at the copy, and the checkout's
+    imports broke once the hook deleted it. A `node` that calls uv first stands in for any check that does."""
+    found = sorted((ROOT / ".venv/lib").glob("python*/site-packages/_editable_impl_ops_access.pth"))
+    if not found:
+        pytest.skip("no editable install of ops_access in this checkout's .venv")
+    pth = found[0]
+    shim = tmp_path / "bin"
+    shim.mkdir()
+    (shim / "node").write_text(
+        f'#!/bin/sh\nuv run --quiet python -c pass >/dev/null 2>&1\nexec {shutil.which("node")} "$@"\n'
+    )
+    (shim / "node").chmod(0o755)
+    try:
+        done = gate(
+            tmp_path,
+            {"docs/README.md": at_head("docs/README.md") + "\nA probe line.\n"},
+            f"{shim}:{os.environ['PATH']}",
+        )
+        assert done.returncode == 0, (done.stdout + done.stderr)[-2000:]
+        assert pth.read_text().startswith(str(ROOT)), pth.read_text()
+    finally:
+        if not pth.read_text().startswith(str(ROOT)):
+            subprocess.run(["uv", "run", "--quiet", "python", "-c", "pass"], cwd=ROOT, check=False)

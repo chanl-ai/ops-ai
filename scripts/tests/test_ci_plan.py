@@ -5,17 +5,26 @@ job meant for a full plan."""
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+# Run under `make python-verify VERIFY_POOL=...` (ci.yml's repo job), the inner make would inherit that override
+# through MAKEFLAGS and print the job's pool, not the full one the plan is built from.
+CLEAN_MAKE_ENV = {k: v for k, v in os.environ.items() if k not in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL")}
 
 
 def plan(tmp_path: Path, *changed: str) -> dict[str, str]:
     listed = tmp_path / "changed.txt"
     listed.write_text("\n".join(changed) + "\n", encoding="utf-8")
     out = subprocess.run(
-        ["bash", "scripts/ci-plan.sh", str(listed)], cwd=ROOT, capture_output=True, text=True, check=True
+        ["bash", "scripts/ci-plan.sh", str(listed)],
+        cwd=ROOT,
+        env=CLEAN_MAKE_ENV,
+        capture_output=True,
+        text=True,
+        check=True,
     )
     return dict(line.split("=", 1) for line in out.stdout.splitlines() if "=" in line)
 
@@ -24,6 +33,7 @@ def verify_pool() -> set[str]:
     out = subprocess.run(
         ["make", "-s", "-f", "make/python.mk", "-f", "/dev/stdin", "print-pool"],
         cwd=ROOT,
+        env=CLEAN_MAKE_ENV,
         input="print-pool: ; @echo $(VERIFY_POOL)\n",
         capture_output=True,
         text=True,

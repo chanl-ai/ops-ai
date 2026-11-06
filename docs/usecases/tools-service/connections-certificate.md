@@ -40,7 +40,7 @@ Until it does, the ui layer fails at step 5 before it opens the page.
 
 | Layer | Script | State |
 |---|---|---|
-| api | `tools-service/scripts/test-uc-395-api.py` | passing, `ISOLATED=1 make usecase-test UC=uc-395 LAYER=api` (2026-10-19) |
+| api | `tools-service/scripts/test-uc-395-api.py` | passing, `make usecase-test UC=uc-395 LAYER=api` (2026-10-19) |
 | ui | `tools-service/scripts/test-uc-395-ui.mjs` | passing, `make usecase-test UC=uc-395 LAYER=ui` (2026-11-03) |
 
 ## Non-vacuous check

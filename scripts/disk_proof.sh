@@ -36,9 +36,9 @@ docker rm -fv "$cid" >/dev/null
 docker volume inspect "$vol" >/dev/null 2>&1
 check "3 removing a proof's container with -v removes its anonymous volume ($vol)" $(( $? == 0 ))
 
-# 4 An isolated stack's down removes its own volume; the shared stack's keeps its.
-make -s -C "$ROOT" -n db-down ISOLATED=1 | grep -q -- "--volumes" && ! make -s -C "$ROOT" -n db-down | grep -q -- "--volumes"
-check "4 make db-down ISOLATED=1 removes the isolated volume, make db-down keeps the shared one" $?
+# 4 The stack's down keeps its data volume.
+! make -s -C "$ROOT" -n db-down | grep -q -- "--volumes"
+check "4 make db-down keeps the stack's data volume" $?
 
 # 5 The build cache is pruned down to the cap: a throwaway image's cache, private once the image is gone, goes.
 work=$(mktemp -d)

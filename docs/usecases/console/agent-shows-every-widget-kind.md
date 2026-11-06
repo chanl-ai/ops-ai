@@ -12,7 +12,7 @@ kind's JSON schema and fills it through the template binder, and the chat draws 
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 and OPA :8181 | `make db-up` |
-| Free use-case ports | agents, platform-service and console (ISOLATED=1 adds 1000) |
+| Free use-case ports | agents, platform-service and console |
 
 The agents service runs on the scripted model: "call present {json}" makes it call `present` with that JSON. Each
 kind's data is the first sample in `apps/console/src/lib/widgets/kind-samples.json`, the gallery's own samples.

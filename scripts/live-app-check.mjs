@@ -11,7 +11,7 @@
 // GitHub reads GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET from ~/.config/ops-ai/github.env; Salesforce reads SF_LOGIN
 // (the org's sign-in address, ending /services/oauth2), SF_CLIENT_ID and SF_CLIENT_SECRET from
 // ~/.config/ops-ai/salesforce.env. Secrets go only to the provider and the stack's credential API, never to output.
-// Ports follow OPS_PORT_OFFSET as the stack's do, and the admin signs in with the stack's own dev-admin.env.
+// Ports are the stack's (OPS_PLATFORM_PORT, OPS_TOOLS_PORT), and the admin signs in with the stack's own dev-admin.env.
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
@@ -85,9 +85,8 @@ const APP = `plugin:opsai.${appName}`;
 const envFile = arg('env', P.env).replace(/^~/, homedir());
 const repo = arg('repo', 'chanl-ai/ops-ai').split('/');
 const team = arg('team', 'team_ops');
-const offset = Number(process.env.OPS_PORT_OFFSET ?? 0);
-const PLATFORM = `http://127.0.0.1:${8710 + offset}`;
-const TOOLS = `http://127.0.0.1:${8720 + offset}`;
+const PLATFORM = `http://127.0.0.1:${process.env.OPS_PLATFORM_PORT ?? 8710}`;
+const TOOLS = `http://127.0.0.1:${process.env.OPS_TOOLS_PORT ?? 8720}`;
 
 const results = [];
 const step = (name, ok, said) => {
@@ -118,8 +117,7 @@ const probe = await P.probe(client);
 if (!step(probe.what, probe.ok, probe.said)) stop();
 
 // The stack's admin.
-const stackDir = existsSync(join(ROOT, '.run/isolated/dev-admin.env')) && offset ? '.run/isolated' : '.run';
-const admin = readEnv(join(ROOT, stackDir, 'dev-admin.env'));
+const admin = readEnv(join(process.env.OPS_RUN_DIR ?? join(ROOT, '.run'), 'dev-admin.env'));
 const signedIn = await fetch(`${PLATFORM}/v1/auth/sign-in`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },

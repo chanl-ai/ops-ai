@@ -12,8 +12,8 @@ so saving that shape is warned.
 
 | Needs | How |
 |---|---|
-| PostgreSQL for the isolated stack | `make db-up ISOLATED=1` |
-| The run | `make usecase-test UC=uc-400 LAYER=api ISOLATED=1` (or `LAYER=ui`, which also signs in through platform-service) |
+| PostgreSQL | `make db-up` |
+| The run | `make usecase-test UC=uc-400 LAYER=api` (or `LAYER=ui`, which also signs in through platform-service) |
 
 The stack is agents-service with a workflow worker; the workflow has no tool or model steps.
 

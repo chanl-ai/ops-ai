@@ -2,7 +2,7 @@
 // levy demo, 2026-10-18 plan). withUiStack on the banker demo: platform sign-in, models on the fake OpenAI with the
 // demo's committed rules (which replay the shared stack's real classifications and reads of these files), tools-service
 // with the core fake bank and its webhook stand-in, GreenMail and Mailpit reachable (tools.mail), the seeded mailboxes,
-// and a worker. Run isolated (ISOLATED=1). Real mail both ways; nothing else faked but the bank and the model.
+// and a worker. Real mail both ways; nothing else faked but the bank and the model.
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';

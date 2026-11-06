@@ -7,7 +7,7 @@ Status: current. Id: `uc-164`. Service: `platform-service`. Layers: api, ui.
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 | `make db-up` |
-| Free use-case ports | the runner picks free ports and its own database; the ui layer runs with `ISOLATED=1` |
+| Free use-case ports | the runner picks free ports and its own database |
 
 The script starts platform-service in dev on the run's database with the dev seed: Wanjiru Kamau, the workspace admin
 (Admin in every team, `*`), team `team_ops` (Priya Shah admin, Ravi Menon viewer) and `team_security` (Sam Adeyemi

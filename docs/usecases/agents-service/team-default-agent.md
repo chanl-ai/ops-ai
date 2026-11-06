@@ -11,7 +11,7 @@ specialist with @ and come back.
 | Needs | How |
 |---|---|
 | PostgreSQL :5477 and OPA :8181 | `make db-up` |
-| Free use-case ports | agents :8790, platform-service and console for the ui layer (ISOLATED=1 adds 1000) |
+| Free use-case ports | agents :8790, platform-service and console for the ui layer |
 
 The agents service runs on the scripted model, seeded with Branch Concierge (`ag_branch`), Card Dispute Resolver
 (`ag_dispute`) and Wire Fraud Sentinel (`ag_fraud`). "call agent__<id> {json}" makes the scripted model call that tool.

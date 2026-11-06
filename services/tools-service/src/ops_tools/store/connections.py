@@ -1052,7 +1052,7 @@ class ConnectionStore:
                 t.test,
             )
             .join(connections, sa.and_(k.tenant_id == t.tenant_id, k.id == t.connection_id))
-            .outerjoin(app_credentials, _CREDENTIAL_OF)
+            .outerjoin(app_credentials, sa.and_(_CREDENTIAL_OF, team_visible(app_credentials)))
             .where(
                 t.tenant_id == tenant_id,
                 k.team_id == team_id,
@@ -1091,7 +1091,7 @@ class ConnectionStore:
                 t.test,
             )
             .outerjoin(connection_tokens, own)
-            .outerjoin(app_credentials, _CREDENTIAL_OF)
+            .outerjoin(app_credentials, sa.and_(_CREDENTIAL_OF, team_visible(app_credentials)))
             .where(
                 k.tenant_id == tenant_id,
                 k.team_id == team_id,
