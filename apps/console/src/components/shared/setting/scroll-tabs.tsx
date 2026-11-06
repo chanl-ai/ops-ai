@@ -4,6 +4,7 @@ import * as React from 'react';
 
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TabLabel } from '@/components/shared/tab-label';
 
 /** A tab list that scrolls sideways instead of spilling its labels; use inside `Tabs`. */
 export function ScrollTabsList({
@@ -20,7 +21,7 @@ export function ScrollTabsList({
       <TabsList className="w-max">
         {tabs.map((t) => (
           <TabsTrigger key={t.value} value={t.value} data-testid={triggerTestId?.(t.value)}>
-            {t.label}
+            <TabLabel label={t.label} />
           </TabsTrigger>
         ))}
       </TabsList>
