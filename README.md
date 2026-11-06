@@ -255,13 +255,13 @@ Runs every service, the console and the fake model on your machine. Needs:
 - Node 20 or newer and pnpm 10 (`corepack enable` provides it)
 - Docker, for PostgreSQL, OPA and the test mail servers
 
-No model key is needed: `DEMO_MODEL=fake` puts every model alias on the fake model.
+No model key is needed: with no `OPENAI_API_KEY`, every model alias runs on the fake model.
 
 ```bash
 git clone <this repository> ops-ai && cd ops-ai
 make setup                               # optional: answer what you have; each answer is tested before it is written
 make install                             # pnpm install and uv sync, once per clone
-make up DEMO_MODEL=fake                  # PostgreSQL, OPA, every service and the console
+make up                                  # PostgreSQL, OPA, every service and the console
 make health                              # each service, its port and whether it answers
 make review BRANCH=main                  # optional: run a branch from the review worktree, same ports
 make up                                  # back to your own checkout

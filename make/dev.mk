@@ -4,7 +4,8 @@
 
 ##@ Stack (one per machine)
 
-DEMO_MODEL ?= gpt-5-mini
+# With no OPENAI_API_KEY there is no real model to reach, so the stack stays on the fake one.
+DEMO_MODEL ?= $(if $(OPENAI_API_KEY),gpt-5-mini,fake)
 # The guardrail checks and memory extraction: a non-reasoning model, so a check takes about a second rather than five
 # and a reply's end does not wait on a slow extraction.
 # The chat alias the agents name stays on gpt-5-nano: gpt-4.1-mini answered without calling load_skill, so an agent's
