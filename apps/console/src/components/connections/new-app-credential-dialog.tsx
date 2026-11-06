@@ -9,6 +9,7 @@ import { Search } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { credentialHref } from '@/components/connections/credential-display';
+import { SignInPlace } from '@/components/connections/sign-in-place';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
 import { FormTextField } from '@/components/shared/form-text-field';
@@ -24,7 +25,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { type SystemCard, useConnectionKinds, useCreateAppCredential, useSystems } from '@/hooks/systems-queries';
 import type { KindField, Kinds } from '@/lib/connect-plan';
-import { fieldErrors, schemaForFields } from '@/lib/field-schema';
+import { configSchema, fieldErrors, schemaForFields } from '@/lib/field-schema';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const initials = (name: string) =>
@@ -153,14 +154,17 @@ function OwnClientForm({
   // The settings the app's registration keeps (a tenant), held by the credential rather than each account.
   const registration = plugin.settings.filter((x) => x.credential);
   const schema = schemaForFields(CLIENT);
+  const config = configSchema(registration.map((x) => ({ ...x, default: x.default == null ? null : String(x.default), required: x.default == null })));
   const form = useForm<Record<string, string>>({ defaultValues: { name: '', clientId: '', clientSecret: '', ...Object.fromEntries(registration.map((x) => [`setting__${x.name}`, x.default ?? ''])) } });
   const [scopes, setScopes] = React.useState<string[]>(plugin.scopes.map((s) => s.id));
   const [error, setError] = React.useState<string | null>(null);
   const create = useCreateAppCredential();
+  const values = form.watch();
 
   const createOne = async () => {
     setError(null);
-    const errors = fieldErrors(schema.safeParse(form.getValues()));
+    const held = Object.fromEntries(registration.map((x) => [x.name, form.getValues(`setting__${x.name}`) ?? '']));
+    const errors = { ...fieldErrors(schema.safeParse(form.getValues())), ...Object.fromEntries(Object.entries(fieldErrors(config.safeParse(held))).map(([k, m]) => [`setting__${k}`, m])) };
     form.clearErrors();
     for (const [name, msg] of Object.entries(errors)) form.setError(name, { type: 'schema', message: msg });
     if (!scopes.length) setError(`Pick at least one permission for ${card.name} to ask for.`);
@@ -211,9 +215,20 @@ function OwnClientForm({
             ))}
           </fieldset>
         )}
-        {registration.map((x) => (
+        {registration.map((x) =>
+          x.choices?.length || x.other ? (
+            <div key={x.name} className="flex flex-col gap-1">
+              <SignInPlace setting={x} value={values[`setting__${x.name}`] ?? ''} onChange={(v) => form.setValue(`setting__${x.name}`, v)} testId={`new-credential-setting-${x.name}`} />
+              {form.formState.errors[`setting__${x.name}`] && (
+                <p className="text-sm text-destructive" data-testid={`new-credential-setting-${x.name}-error`}>
+                  {form.formState.errors[`setting__${x.name}`]?.message}
+                </p>
+              )}
+            </div>
+          ) : (
           <FormTextField key={x.name} control={form.control} name={`setting__${x.name}`} label={x.label} optional={Boolean(x.default)} testId={`new-credential-setting-${x.name}`} />
-        ))}
+          ),
+        )}
         {error && (
           <p className="text-sm text-destructive" role="alert" data-testid="new-credential-error">
             {error}

@@ -27,6 +27,7 @@ def builder(sub: str, team: str) -> dict[str, str]:
         "email": f"{sub}@harborpine.example",
         "name": sub,
         "kind": "person",
+        "security_team": "team_security",
         "aud": ["agents"],
         "tenant_id": "acme",
         "team_ids": [team],

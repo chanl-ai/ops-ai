@@ -38,7 +38,7 @@ These hold whatever the grid and policies say. A 403 with one of these codes nee
 
 | Control | Codes | Where |
 |---|---|---|
-| Token identity: every caller is a verified token, key or service token; dev headers only in dev | 401, `api_key_refused`, `not_the_invitee`, `key_not_registered` | `packages/ops_identity/src/ops_identity/resolve.py`, `fastapi.py:13` |
+| Token identity: every caller is a verified token, key or service token; dev headers only in dev | 401, `permissions_changed`, `api_key_refused`, `not_the_invitee`, `key_not_registered` | `packages/ops_identity/src/ops_identity/resolve.py`, `fastapi.py:13` |
 | Tenant isolation: another tenant's record is not found | 404, `tenant_required` | store tenant filter and PostgreSQL row-level security (data model) |
 | Team isolation: another team's record is refused naming the owning team | `team_forbidden` (`details.teamId`), `team_required`, `team_mismatch` | `resolve.py:49`, `check.py:203` |
 | Scoped service tokens and API keys: a token does only what its scopes or key target say | `scope_required`, `event_not_owned`, `key_target`, `widget_key_other_deployment` | `check.py:212-247`, `services/agents-service/src/ops_agents/api/auth.py:272` |
@@ -52,7 +52,11 @@ assignment in the same transaction) or a grant, in one team or in every team (`*
 (`services/platform-service/src/ops_platform/store/tables.py`, migration `0006_roles`). What they may do in a team is
 the union of their unexpired assignments there, `all` over `own`. The token carries team → role ids as the `access`
 claim, each of those roles' stored cells as the `grids` claim (`ops_access.encode_grid`), and the tenant's
-`perm_version`; every service reads them locally, so a change applies at the next token refresh.
+`perm_version`; every service reads them locally. A service also asks platform-service for the tenant's current
+version (internal `GET /v1/permission-version`, for the tenant its service token names, cached for one second) and refuses an older token with
+401 `permissions_changed`; the console renews the token and retries, so a role, grid, assignment or policy change
+decides on the person's next request (`packages/ops_identity/src/ops_identity/resolve.py`, D62). When platform-service
+does not answer, the last version seen, else the token, decides.
 
 | Built-in role | Stored membership value | Meaning | Who holds it |
 |---|---|---|---|
@@ -273,7 +277,7 @@ fails the commit until it is classified.
 | A record no team owns | None remain among a team's work: account records and the background processes, each named in `scripts/tests/test_team_boundary.py` | `scripts/tests/test_team_boundary.py` |
 | A workspace admin | Admin in team `*`, acts in any team without joining it | — |
 | Workspace settings | Policies are per tenant unless marked per team; a per-team value is changed in that team only | `policies.py` `per_team` |
-| The Security team | A setting per workspace, carried in the token as `security_team`; `SECURITY_TEAM_ACTIONS` are held there whatever team the request acts in | `catalogue.py:55`, `check.py:95` |
+| The Security team | The workspace's record (`tenants.security_team_id`, set on Settings > Workspace), carried in the token as `security_team`; `SECURITY_TEAM_ACTIONS` are held there whatever team the request acts in. A workspace that names none has no Security team: those actions are refused with 403 `no_security_team`. The install setting `security_team_id` only names a new workspace's team at bootstrap and in the dev seed | `catalogue.py:55`, `check.py:97`, migration `0029_tenant_security_team` |
 | The default team for new people | A setting, read at first sign-in | — |
 | Last admin | A team cannot lose its last admin | `services/platform-service/src/ops_platform/store/members.py:241` |
 
@@ -392,7 +396,7 @@ when a question comes up again.
 | D36 | Are chats private? | Yes by default (`chatThreadsOwnerOnly`); off lets the team's admins read them | 2026-10-17 |
 | D37 | Who edits what agents remember about a person? | That person only | 2026-10-17 |
 | D38 | Where is a Security-team rule held? | In the Security team, a per-workspace setting; Admin elsewhere holds none of `SECURITY_TEAM_ACTIONS` | 2026-10-17 |
-| D39 | What does an assignment look like, and when does a change apply? | Person or team subject, a role, a team or `*`, an optional expiry; the permission version rises on every change and applies at the next token refresh | 2026-10-17 |
+| D39 | What does an assignment look like, and when does a change apply? | Person or team subject, a role, a team or `*`, an optional expiry; the permission version rises on every change, which applies on the next request (D62) | 2026-10-17 |
 | D40 | Custom roles: when, how narrow, which cells? | Later; may be narrower than any built-in; may not hold secrets, egress or Security-team cells. The first answer is narrowed by D22 | 2026-10-17 |
 | D41 | How does a service pass `can()`? | Its token lists `area:action` scopes; 403 `scope_required` otherwise | 2026-10-17 |
 | D42 | Do people call service routes? | Yes: each with the cell it needs, answering their team's records only | 2026-10-18 |
@@ -415,6 +419,11 @@ when a question comes up again.
 | D59 | What does Builder hold by default? | Every cell in the team except people and access (members, roles, assignments) and the workspace's settings: connections, secrets, auth configs and testing a connection included. Admin keeps every cell | 2026-11-05 |
 | D60 | Where do role permissions live, and who changes them? | In the database, managed centrally and defined from the UI: a workspace admin edits any role's cells on Access › Roles, built-in or custom, each change audited; the code grid is seed data only, with Reset to default per built-in role | 2026-11-05 |
 | D61 | Where is an auth config's client secret changed? | On its auth config only. The Secrets page lists it read only with a link to the config, and the secrets API refuses a rotate or delete of it (409 `credential_secret`) naming the config | 2026-11-05 |
+| D62 | When does a change to roles, cells, assignments or policies reach the services? | On the person's next request: each service compares the token's `perm_version` with platform-service's current one and refuses an older token (401 `permissions_changed`), so the client renews it. The database stays the one source; the token is a copy checked by version | 2026-11-05 |
+| D63 | Where does each workspace's Security team come from? | Its own record, edited by a workspace admin through `can()` on Settings > Workspace and read by every service from the token, or from platform-service for a review a service opened. The install setting names only a new workspace's team; migration 0029 wrote its old default into each workspace that relied on it | 2026-11-05 |
+| D64 | Where do the install's own mail settings stop? | The install sends its own mail (password resets, a send_reply that names no mailbox) with its own provider and password from the environment; a team reads and sends mail only through its mailbox records, each with its own secret. No setting names a mailbox or a team's secret | 2026-11-05 |
+| D65 | Whose provider key does a model call use? | The account the call names (`X-Tenant-Id`, which every calling service sends); a call that uses an account's key without naming one is refused, 400 `tenant_required` | 2026-11-05 |
+| D66 | Where are a workspace's sign-in secrets kept? | In the workspace, sealed under the install's secrets key: a Security team admin saves or deletes one through `can()` (`settings.manage`), each change audited, and a provider names it as `clientSecretRef`; no value is read back, and one a provider names is not deleted (409 `secret_in_use`) | 2026-11-05 |
 
 ## Open questions
 
@@ -435,7 +444,7 @@ Still open. A recommendation is not an answer; nothing here may be quoted as dec
 | O11 | May an agent open a case without approval, and do test runs open real cases? | Unanswered; built that way | E23 |
 | O12 | Should a person with a cell read every team's API key summaries? | E21 | `app.py:699` |
 | O13 | Should tools-service's bulk delete skip system modules for admins? | E05 | `modules/service.py:1109` |
-| O14 | Five install settings still hold a value one team or workspace owns, which the rule "env is system-wide; team configs live in the database" would move to records: `security_team_id` (a team id, the fallback for each workspace's Security team), `mailbox_source=graph` with `graph_tenant_id`, `graph_client_id`, `graph_client_secret` (one mailbox read for the process, not a team's Email record), `smtp_password_secret` (names a team's secret on the Secrets page), `model_keys_tenant` (the tenant a model call naming none bills) and `signin_secrets` (each workspace's sign-in provider secrets) | 2026-11-05 env audit | `packages/ops_service_kit/src/ops_service_kit/settings.py` |
+| O14 | Resolved 2026-11-05: the five install settings that held one team's or workspace's value moved to records or went away, D63 (Security team), D64 (mailbox, SMTP secret), D65 (model keys tenant), D66 (sign-in secrets) | 2026-11-05 env audit | `packages/ops_service_kit/src/ops_service_kit/settings.py` |
 
 ## Errors
 

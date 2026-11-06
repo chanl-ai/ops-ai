@@ -50,6 +50,7 @@ def person(tenant: str, email: str, role: str, *, unticked: tuple[tuple[str, str
         "email": email,
         "name": email,
         "kind": "person",
+        "security_team": "team_security",
         "aud": ["kb"],
         "tenant_id": tenant,
         "team_ids": ["team_ops"],

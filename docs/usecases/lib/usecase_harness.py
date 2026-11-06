@@ -591,13 +591,12 @@ SAML_SP_KEY, SAML_SP_CERT = self_signed("uc-sp")
 @contextmanager
 def signin_stack() -> Generator[tuple[httpx.Client, httpx.Client, Path]]:
     """platform-service ready for sign-in providers: its public and console URLs, one OIDC client secret named
-    `uc-oidc`, reset mail written to a folder; and the fake identity provider beside it. Yields the platform client,
+    `uc-oidc` saved as the workspace's, reset mail written to a folder; and the fake identity provider beside it. Yields the platform client,
     a client for the identity provider and the mail folder."""
     mail = Path(tempfile.mkdtemp(prefix="uc-mail-"))
     env = {
         "OPS_PLATFORM_PUBLIC_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
         "OPS_CONSOLE_URL": f"http://localhost:{CONSOLE_PORT}",
-        "OPS_SIGNIN_SECRETS": json.dumps({SIGNIN_SECRET: "uc-oidc-secret"}),
         # Domains are proven against the fake identity provider's DNS.
         "OPS_SIGNIN_DNS_SERVERS": json.dumps([f"127.0.0.1:{IDP_PORT}"]),
         "OPS_SAML_SP_KEY": SAML_SP_KEY,
@@ -607,6 +606,10 @@ def signin_stack() -> Generator[tuple[httpx.Client, httpx.Client, Path]]:
         "OPS_MAIL_FAKE_OUT_DIR": str(mail),
     }
     with fake_idp() as idp_base, platform(env=env) as (api, _), httpx.Client(base_url=idp_base, timeout=30) as idp:
+        # The workspace's own client secret, saved by the seed's Security admin.
+        sam = bearer(signed_in(api, "s.adeyemi@harborpine.example"), "team_security")
+        r = api.put(f"/v1/settings/sign-in/secrets/{SIGNIN_SECRET}", json={"value": "uc-oidc-secret"}, headers=sam)
+        check(f"the Security admin saves the {SIGNIN_SECRET} sign-in secret (200)", r.status_code == 200, r.text[:200])
         yield api, idp, mail
 
 

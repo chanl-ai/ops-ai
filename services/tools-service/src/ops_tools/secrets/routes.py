@@ -20,7 +20,6 @@ from ops_access import Access, policy, require_provisioner
 from ops_identity import Principal
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.http import Envelope, ListResult, Out, error_responses, ok, page_window, paged
-from ops_service_kit.settings import Settings
 from ops_store import isolation
 from ops_store.team_scope import acting_as
 
@@ -151,14 +150,12 @@ def _meta(
     return out
 
 
-def may_write_secret(
-    p: Principal, action: str, owner: str, *, security_team: str, protection: str | None = None
-) -> None:
+def may_write_secret(p: Principal, action: str, owner: str, *, protection: str | None = None) -> None:
     """Who may add, change or remove a secret, or Forbidden. The Security team's admins (`manage`) write any.
     A team's secret is that team's: its builders write it, acting in that team, unless the tenant's
     `securityTeamAddsSecrets` policy keeps writes in the Security team. A `system` secret's slot is the
     provisioner's."""
-    access = Access(security_team=security_team)
+    access = Access()
     if access.may(p, "secrets_egress", "manage", protection=protection):
         return
     security_writes = bool(policy(p, "securityTeamAddsSecrets"))
@@ -166,7 +163,7 @@ def may_write_secret(
         p,
         "secrets_egress",
         action,
-        team=security_team if security_writes else owner,
+        team=access.security_team_of(p) if security_writes else owner,
         from_any_team=security_writes,
         what="this team's secrets" if owner == p.team_id else "another team's secrets",
         code="not_security_admin",
@@ -177,7 +174,6 @@ def may_write_secret(
 def secrets_router(
     secrets: SecretResolver,
     *,
-    security_team: str | None = None,
     modules: ModuleStore | None = None,
     credentials: ConnectionStore | None = None,
 ) -> APIRouter:
@@ -186,7 +182,6 @@ def secrets_router(
     auth config each client secret belongs to; without it a config is named by its id."""
     store = secrets.store
     caller = person
-    team = security_team or Settings().security_team_id
 
     r = APIRouter(prefix="/v1/secrets", tags=["secrets"], responses=error_responses())
 
@@ -198,7 +193,7 @@ def secrets_router(
             if who.team_id is None:
                 raise ValidationFailed("Name the team whose secrets these are (teamId).", code="team_required")
             return who.team_id
-        if who.principal is not None and not Access(security_team=team).may(who.principal, "secrets_egress", "manage"):
+        if who.principal is not None and not Access().may(who.principal, "secrets_egress", "manage"):
             raise NotFound(f"Team {requested}")
         return requested
 
@@ -255,7 +250,7 @@ def secrets_router(
 
     def _may_write(who: Person, action: str, owner: str, protection: str | None = None) -> None:
         if who.principal is not None:
-            may_write_secret(who.principal, action, owner, security_team=team, protection=protection)
+            may_write_secret(who.principal, action, owner, protection=protection)
 
     @r.get("", response_model=Envelope[list[SecretMeta] | SecretList])
     async def list_secrets(  # pyright: ignore[reportUnusedFunction]

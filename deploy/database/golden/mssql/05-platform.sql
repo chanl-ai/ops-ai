@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- platform-service, stamped at 0028_builder_every_team_cell
+-- platform-service, stamped at 0030_signin_secrets
 CREATE TABLE tenants (
 	id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
@@ -85,6 +85,18 @@ CREATE TABLE roles (
 	created_at VARCHAR(40) NOT NULL, 
 	CONSTRAINT roles_pkey PRIMARY KEY (tenant_id, id), 
 	CONSTRAINT roles_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id)
+);
+GO
+CREATE TABLE signin_secrets (
+	tenant_id VARCHAR(64) NOT NULL, 
+	name VARCHAR(100) NOT NULL, 
+	ciphertext VARCHAR(max) NOT NULL, 
+	version INTEGER NOT NULL, 
+	created_by VARCHAR(64) NOT NULL, 
+	created_at VARCHAR(40) NOT NULL, 
+	rotated_at VARCHAR(40) NULL, 
+	CONSTRAINT signin_secrets_pkey PRIMARY KEY (tenant_id, name), 
+	CONSTRAINT signin_secrets_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id)
 );
 GO
 CREATE TABLE policies (
@@ -373,6 +385,12 @@ CREATE SECURITY POLICY ops_security.roles_tenant
     ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.roles AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.signin_secrets_tenant
+    ADD FILTER PREDICATE ops_security.platform_tenant_read(tenant_id) ON dbo.signin_secrets,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_secrets AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_secrets AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.policies_tenant
     ADD FILTER PREDICATE ops_security.platform_tenant_read(tenant_id) ON dbo.policies,
     ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.policies AFTER INSERT,
@@ -462,5 +480,5 @@ CREATE TABLE alembic_version_platform (
     CONSTRAINT alembic_version_platform_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_platform (version_num) VALUES ('0028_builder_every_team_cell');
+INSERT INTO alembic_version_platform (version_num) VALUES ('0030_signin_secrets');
 GO

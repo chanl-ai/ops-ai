@@ -294,6 +294,10 @@ class PermissionOut(TypedDict, closed=True):
     scope: Literal["all", "own"]
 
 
+class PermissionVersionOut(TypedDict, closed=True):
+    permissionVersion: int
+
+
 class PersonName(TypedDict, closed=True):
     email: str
     name: str
@@ -392,6 +396,18 @@ class SamlSettingsOut(TypedDict, closed=True):
 class SignIn(TypedDict, closed=True):
     email: str
     password: str
+
+
+class SignInSecretIn(TypedDict, closed=True):
+    value: str
+
+
+class SignInSecretOut(TypedDict, closed=True):
+    createdAt: str
+    createdBy: str
+    name: str
+    rotatedAt: str | None
+    version: int
 
 
 class Skip(TypedDict, closed=True):
@@ -526,7 +542,7 @@ class WorkspaceTeamsIn(TypedDict, closed=True):
 
 class WorkspaceTeamsOut(TypedDict, closed=True):
     defaultTeam: str | None
-    securityTeam: str
+    securityTeam: str | None
 
 
 class AccessCheckOut(TypedDict, closed=True):
@@ -633,6 +649,11 @@ class EnvelopeOptionsPage(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopePermissionVersionOut(TypedDict, closed=True):
+    data: PermissionVersionOut
+    success: Literal[True]
+
+
 class EnvelopePolicyOut(TypedDict, closed=True):
     data: PolicyOut
     success: Literal[True]
@@ -640,6 +661,11 @@ class EnvelopePolicyOut(TypedDict, closed=True):
 
 class EnvelopeRoleDetail(TypedDict, closed=True):
     data: RoleDetail
+    success: Literal[True]
+
+
+class EnvelopeSignInSecretOut(TypedDict, closed=True):
+    data: SignInSecretOut
     success: Literal[True]
 
 
@@ -708,6 +734,11 @@ class EnvelopeListRoleOut(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeListSignInSecretOut(TypedDict, closed=True):
+    data: list[SignInSecretOut]
+    success: Literal[True]
+
+
 class EnvelopeListTeamName(TypedDict, closed=True):
     data: list[TeamName]
     success: Literal[True]
@@ -750,7 +781,7 @@ class ListResultWorkspaceTeamOut(TypedDict, closed=True):
 class Me(TypedDict, closed=True):
     flags: list[FlagOut]
     policies: dict[str, Any]
-    securityTeamId: str
+    securityTeamId: str | None
     teams: list[MeTeam]
     tenantId: str
     tenantName: str

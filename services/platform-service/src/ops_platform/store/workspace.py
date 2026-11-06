@@ -1,5 +1,6 @@
 """A workspace's own teams: which team is its security team and which one people join when nothing else names
-one. Null columns keep the deployment's defaults: the security team from settings and no default team.
+one. A null security team means the workspace names none, and nobody holds the Security team's actions; a null
+default team means none.
 
 Every reader calls `security_team_in` on the connection of the transaction it decides in, so a change of security team
 is seen at once. A change re-mirrors the admins of the old and the new security team in its own transaction, so
@@ -22,9 +23,10 @@ from .tables import members, teams, tenants
 from .tenancy import TenantDb
 
 
-async def security_team_in(c: AsyncConnection, tenant_id: str, fallback: str) -> str:
+async def security_team_in(c: AsyncConnection, tenant_id: str) -> str | None:
+    """The workspace's Security team, from its record only."""
     q = sa.select(tenants.c.security_team_id).where(tenants.c.id == tenant_id)
-    return (await c.execute(q)).scalar() or fallback
+    return (await c.execute(q)).scalar()
 
 
 async def default_team_in(c: AsyncConnection, tenant_id: str) -> str | None:
@@ -39,7 +41,7 @@ async def default_team_in(c: AsyncConnection, tenant_id: str) -> str | None:
 
 @dataclass(frozen=True)
 class WorkspaceTeams:
-    security_team: str
+    security_team: str | None
     default_team: str | None
 
 
@@ -50,13 +52,12 @@ class TeamNotUsableError(Exception):
 class WorkspaceStore:
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.RLS})
 
-    def __init__(self, db: TenantDb, *, fallback_security_team: str) -> None:
+    def __init__(self, db: TenantDb) -> None:
         self.db = db
-        self.fallback = fallback_security_team
 
-    async def security_team(self, tenant_id: str) -> str:
+    async def security_team(self, tenant_id: str) -> str | None:
         async with self.db.tenant_tx(tenant_id) as c:
-            return await security_team_in(c, tenant_id, self.fallback)
+            return await security_team_in(c, tenant_id)
 
     async def rename(self, tenant_id: str, name: str, *, by: str, request_id: str) -> str:
         """The workspace's display name, as the console's header and team switcher show it; the change is audited."""
@@ -78,9 +79,7 @@ class WorkspaceStore:
 
     async def read(self, tenant_id: str) -> WorkspaceTeams:
         async with self.db.tenant_tx(tenant_id) as c:
-            return WorkspaceTeams(
-                await security_team_in(c, tenant_id, self.fallback), await default_team_in(c, tenant_id)
-            )
+            return WorkspaceTeams(await security_team_in(c, tenant_id), await default_team_in(c, tenant_id))
 
     async def set(
         self, tenant_id: str, *, security_team: str, default_team: str | None, by: str, at: str, request_id: str
@@ -92,7 +91,7 @@ class WorkspaceStore:
             )
             if {str(t) for t in found.scalars()} != wanted:
                 raise TeamNotUsableError
-            before = await security_team_in(c, tenant_id, self.fallback)
+            before = await security_team_in(c, tenant_id)
             await c.execute(
                 tenants.update()
                 .where(tenants.c.id == tenant_id)
@@ -102,7 +101,7 @@ class WorkspaceStore:
                 admins = (
                     await c.execute(
                         sa.select(members.c.team_id, members.c.user_id).where(
-                            members.c.team_id.in_([before, security_team]),
+                            members.c.team_id.in_([t for t in (before, security_team) if t]),
                             members.c.status == "active",
                             members.c.role == "admin",
                         )

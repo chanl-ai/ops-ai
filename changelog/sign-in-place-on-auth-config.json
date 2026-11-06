@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Where an app signs in is set on its auth config",
+  "description": "An app's auth config now holds where its accounts sign in, such as your Salesforce org's address, and its New and Edit windows offer the app's own choices or your company's address. Changing it asks every account on that auth config to sign in again, and the Connect window shows where it signs in with a link to edit it.",
+  "tag": "improved"
+}

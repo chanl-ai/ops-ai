@@ -68,17 +68,11 @@ async def person(p: CurrentCaller) -> Person:
     return Person(tenant_id=p.tenant_id, name=p.name, principal=p, team_id=p.team_id)
 
 
-def security_admin(security_team: str) -> Callable[..., Awaitable[Person]]:
-    """A person who may change the tenant's egress list: an admin on the Security team. It decides what every tool
-    module may reach, so a role in any other team grants nothing here. The dev-header
-    principal carries no roles and passes, as it does for module security reviews."""
-
-    async def admin(p: CurrentCaller) -> Person:
-        # secrets_egress.manage, held in the Security team: Security admin in the grid. A team's own secrets
-        # are written in that team instead (secrets/routes.py `_may_write`).
-        Access(security_team=security_team).can(
-            p, "secrets_egress", "manage", what="the allowed hosts", code="not_security_admin"
-        )
-        return Person(tenant_id=p.tenant_id, name=p.name, principal=p, team_id=p.team_id)
-
-    return admin
+async def security_admin(p: CurrentCaller) -> Person:
+    """A person who may change the tenant's egress list: an admin on the workspace's Security team. It decides what
+    every tool module may reach, so a role in any other team grants nothing here. The dev-header principal carries
+    no roles and passes, as it does for module security reviews."""
+    # secrets_egress.manage, held in the Security team: Security admin in the grid. A team's own secrets are written
+    # in that team instead (secrets/routes.py `_may_write`).
+    Access().can(p, "secrets_egress", "manage", what="the allowed hosts", code="not_security_admin")
+    return Person(tenant_id=p.tenant_id, name=p.name, principal=p, team_id=p.team_id)

@@ -140,7 +140,7 @@ def _split(plugin: Plugin, given: dict[str, Any]) -> tuple[dict[str, Any], dict[
     return {k: v for k, v in given.items() if k not in own}, {k: v for k, v in given.items() if k in own}
 
 
-def _not_offered(title: str, setting: Setting, value: Any) -> str:
+def not_offered(title: str, setting: Setting, value: Any) -> str:
     """The plain refusal of a value outside a setting's choices: what was given, and what may be."""
     places = [c.label for c in setting.choices or []]
     other = setting.other
@@ -173,9 +173,7 @@ class PluginAccounts:
     def manages(self, who: Caller) -> None:
         """Refuses a caller who may not manage the team's plugins."""
         if who.principal is not None:
-            connection_rights(
-                who.principal, "manage", security_team=self.connections.security_team, what="the team's apps"
-            )
+            connection_rights(who.principal, "manage", what="the team's apps")
 
     def _team_settings(self, plugin: Plugin, held: dict[str, Any], given: dict[str, Any]) -> dict[str, Any]:
         """The binding's settings after a save: the team's only; an account's own are the account's, so a copy
@@ -197,7 +195,7 @@ class PluginAccounts:
             # An empty value unsets it, so the plugin's default (one of its choices) applies.
             if value not in (None, "") and not offered(setting, value):
                 raise ValidationFailed(
-                    _not_offered(m.title, setting, value), code="setting_not_offered", details={"field": k}
+                    not_offered(m.title, setting, value), code="setting_not_offered", details={"field": k}
                 )
 
     async def switch(self, who: Caller, app_id: str, body: TeamPluginIn) -> None:
@@ -452,7 +450,7 @@ class PluginAccounts:
         # belong to the app's registration are the credential's, read from it, and never copied onto the account.
         mine = {**dict((conn or {}).get("plugin_settings") or {}), **own}
         if cred is not None:
-            mine = {k: v for k, v in mine.items() if k not in c.credential_settings}
+            mine = {k: v for k, v in mine.items() if k not in m.config_settings}
         merged = self.host.settings(plugin, settings, {**mine, **dict(cred.get("settings") or {})} if cred else mine)
         before = cast(dict[str, Any], (conn or {}).get("settings") or {})
         keys: dict[str, Any] = dict(before)

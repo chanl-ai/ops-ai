@@ -1,7 +1,7 @@
 """A provider connection's key, by the name it gives (`key_ref`), from the account's provider keys:
 models-service's own sealed table, set by account admins on Settings > Model providers. The key of the tenant a call is
-for is used, or the deployment's tenant (`model_keys_tenant`) for a call that names none. A key is kept for a minute so
-a call does not wait on the database, and an admin's save or delete drops it at once.
+for is used; a call that names none is refused before it gets here. A key is kept for a minute so a call does not wait
+on the database, and an admin's save or delete drops it at once.
 
 Dev-only exception: the shared dev stack's key may come from settings (`OPS_MODEL_PROVIDER_KEYS`,
 filled from .env by scripts/stack.sh); a key an admin saved wins over it. Outside dev a key in settings stops start-up
@@ -27,23 +27,20 @@ class ProviderKeys:
         store: ProviderKeyStore | None,
         fallback: Mapping[str, str] | None = None,
         *,
-        tenant: str = "local",
         ttl_s: float = 60,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        """`store` holds the accounts' keys; `fallback` is the dev stack's keys from settings; `tenant` is the
-        deployment's, for a call that names no tenant."""
+        """`store` holds the accounts' keys; `fallback` is the dev stack's keys from settings."""
         self.store = store
         self.fallback = dict(fallback or {})
-        self.tenant = tenant
         self.ttl_s = ttl_s
         self.clock = clock
         self._cache: dict[tuple[str, str], tuple[float, str | None]] = {}
 
-    async def get(self, name: str, tenant_id: str | None = None) -> str | None:
+    async def get(self, name: str, tenant_id: str) -> str | None:
         """The key saved as `name` for the call's tenant, or None when neither the account nor the dev settings hold
         it."""
-        at = (tenant_id or self.tenant, name)
+        at = (tenant_id, name)
         hit = self._cache.get(at)
         if hit is not None and self.clock() - hit[0] < self.ttl_s:
             return hit[1]
@@ -61,7 +58,7 @@ class ProviderKeys:
         if self.store is None:
             return None
         try:
-            # A call that names no tenant reads the deployment's keys: the transaction acts in the tenant read.
+            # The transaction acts in the tenant whose key it reads.
             with isolation.scope(tenant_id, None):
                 return await self.store.value(tenant_id, name)
         except CipherError:

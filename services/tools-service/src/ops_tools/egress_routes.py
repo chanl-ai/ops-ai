@@ -17,7 +17,6 @@ from ops_access import Access, require_provisioner
 from ops_identity import CurrentService
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.http import Envelope, ListResult, Out, error_responses, ok, page_window, paged
-from ops_service_kit.settings import Settings
 
 from .callers import Person, person, security_admin
 from .egress import EgressDenied, listable_host, listable_range
@@ -82,10 +81,9 @@ class HeldHostDecisionIn(_In):
     by: str | None = None
 
 
-def egress_router(store: EgressStore, *, security_team: str | None = None) -> APIRouter:
+def egress_router(store: EgressStore) -> APIRouter:
     caller = person
-    team = security_team or Settings().security_team_id
-    changer = security_admin(team)
+    changer = security_admin
 
     r = APIRouter(prefix="/v1/egress", tags=["egress"], responses=error_responses())
 
@@ -131,7 +129,7 @@ def egress_router(store: EgressStore, *, security_team: str | None = None) -> AP
         """A Security admin's decision on a held host, sent by agents-service with its own token: a person
         decides in Human Tasks, never here. Approved lists the host, in the name of whoever approved it. The token must
         hold secrets_egress:manage, which only agents-service's scope cap allows (Settings.service_scopes)."""
-        Access(security_team=team).can(svc, "secrets_egress", "manage", what="the allowed hosts")
+        Access().can(svc, "secrets_egress", "manage", what="the allowed hosts")
         host = _valid("host", body.host)
         if body.decision != "approved":
             return ok({"kind": "host", "value": host, "changed": False})
@@ -192,7 +190,7 @@ def egress_router(store: EgressStore, *, security_team: str | None = None) -> AP
         if who.principal is not None:
             # A `system` entry is the provisioner's: no person removes it, a Security admin included.
             protection = await store.protection(who.tenant_id, kind, value)
-            Access(security_team=team).can(
+            Access().can(
                 who.principal, "secrets_egress", "manage", what=value, code="not_security_admin", protection=protection
             )
         try:

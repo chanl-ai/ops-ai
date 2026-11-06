@@ -296,7 +296,11 @@ def create_app(
     # Every model call of a graph run is one record: the budget sums them, a crashed node's re-run replays them
     # (store/model_calls.py, api/model_ledger.py).
     usage = UsageLedger(db, PriceTable.parse(settings.prices))
-    kernel_model = LedgerModel(model, usage, settings.model_alias) if model is not None else None
+    kernel_model = (
+        LedgerModel(model, usage, settings.model_alias, call_headers=through_models is not None)
+        if model is not None
+        else None
+    )
     per_alias = LedgerSource(through_models, usage) if through_models is not None else None
     kb_http = kb_client or (httpx.AsyncClient(base_url=settings.kb_url, timeout=10) if settings.kb_url else None)
     if knowledge is None:

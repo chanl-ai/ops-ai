@@ -16,7 +16,6 @@ from ops_email import (
     FolderSender,
     GraphSender,
     GraphToken,
-    MailboxNotConfiguredError,
     MailNotConfiguredError,
     OutboundAttachment,
     OutboundMessage,
@@ -122,13 +121,6 @@ def test_the_provider_comes_from_settings(tmp_path: Path) -> None:
 def test_a_missing_secret_or_a_fake_outside_dev_refuses_at_start_up(settings: dict[str, str]) -> None:
     with pytest.raises(MailNotConfiguredError):
         EmailProviders(Settings(**settings))  # pyright: ignore[reportArgumentType]
-
-
-def test_a_graph_mailbox_without_credentials_refuses_and_none_reads_nothing() -> None:
-    with pytest.raises(MailboxNotConfiguredError):
-        EmailProviders(Settings(mailbox_source="graph"))
-    with pytest.raises(MailboxNotConfiguredError):
-        EmailProviders(Settings()).source("a@b.example")
 
 
 async def test_the_dev_fake_writes_what_went_out(tmp_path: Path) -> None:

@@ -127,9 +127,8 @@ class DomainListedError(Exception):
 class SignInStore:
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION, Guarantee.RLS})
 
-    def __init__(self, db: TenantDb, *, security_team: str) -> None:
+    def __init__(self, db: TenantDb) -> None:
         self.db = db
-        self.security_team = security_team
 
     # ── Providers and domains ──
 
@@ -737,7 +736,7 @@ class SignInStore:
             team_id=team,
             user_id=user_id,
             member_role=role,
-            security_team=await security_team_in(c, p.tenant_id, self.security_team),
+            security_team=await security_team_in(c, p.tenant_id),
             granted_by=f"signin:{p.id}",
             at=at,
         )

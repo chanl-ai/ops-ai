@@ -716,7 +716,6 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
           ? {
               OPS_PLATFORM_PUBLIC_URL: `http://127.0.0.1:${PLATFORM_PORT}`,
               OPS_CONSOLE_URL: consoleUrl,
-              OPS_SIGNIN_SECRETS: JSON.stringify({ [SIGNIN_SECRET]: 'uc-oidc-secret' }),
               OPS_SIGNIN_DNS_SERVERS: JSON.stringify([`127.0.0.1:${IDP_PORT}`]),
               OPS_MAIL_PROVIDER: 'fake',
               OPS_MAIL_FROM: 'ops@harborpine.example',
@@ -728,6 +727,13 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       await runToEnd('platform-migrate', ['uv', 'run', 'alembic', 'upgrade', 'head'], platformDir, platformEnv);
       // Dev mode seeds on start. The public app has no /health; the key set answers once it serves.
       platformProc = await serve('platform', PLATFORM_PORT, ['uv', 'run', 'python', '-m', 'ops_platform'], platformDir, platformEnv, `http://127.0.0.1:${PLATFORM_PORT}/.well-known/jwks.json`, 90_000);
+      if (stack.mailDir) {
+        // The OIDC client secret the sign-in use cases name, saved by the seed's Security admin as the workspace's own.
+        const sam = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: SAM, password: DEMO_PASSWORD }) });
+        const token = ((await sam.json()) as { data: { token: string } }).data.token;
+        const saved = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/settings/sign-in/secrets/${SIGNIN_SECRET}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_security', 'Content-Type': 'application/json' }, body: JSON.stringify({ value: 'uc-oidc-secret' }) });
+        if (saved.status !== 200) throw new Error(`sign-in secret ${SIGNIN_SECRET}: ${saved.status} ${await saved.text()}`);
+      }
       Object.assign(signIn, { NEXT_PUBLIC_AUTH_PROVIDER: 'platform', NEXT_PUBLIC_OPS_PLATFORM_API_URL: `http://127.0.0.1:${PLATFORM_PORT}` });
     }
     // files-service on the run's database: kb-service stores every upload there, as on the shared stack.

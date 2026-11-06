@@ -18,7 +18,7 @@ from .fastapi import (
     current_tenant_caller,
     install_auth,
 )
-from .http import http_introspect, http_jwks
+from .http import http_current_version, http_introspect, http_jwks
 from .jwks import JwksCache
 from .principal import Principal
 from .resolve import Identity, ServiceAuth, mint_service_token
@@ -46,6 +46,7 @@ __all__ = [
     "current_service",
     "current_tenant_caller",
     "dev_service_signer",
+    "http_current_version",
     "http_introspect",
     "http_jwks",
     "install_auth",

@@ -99,7 +99,7 @@ def _view(row: dict[str, Any]) -> dict[str, Any]:
     ).model_dump(by_alias=True)
 
 
-def mocks_router(mocks: MockStore, modules: ModuleStore, directory: Directory, *, security_team: str) -> APIRouter:
+def mocks_router(mocks: MockStore, modules: ModuleStore, directory: Directory) -> APIRouter:
     caller = caller_in(directory)
     r = APIRouter(prefix="/v1/tool-modules", tags=["tool-modules"], responses=ERRORS)
 
@@ -115,9 +115,7 @@ def mocks_router(mocks: MockStore, modules: ModuleStore, directory: Directory, *
 
     def _may_edit(who: Caller, m: dict[str, Any]) -> None:
         if who.principal is not None:
-            Access(security_team=security_team).can(
-                who.principal, "tools", "edit", what="tools", protection=m.get("protection")
-            )
+            Access().can(who.principal, "tools", "edit", what="tools", protection=m.get("protection"))
 
     def _checked(i: dict[str, Any], op: dict[str, Any]) -> None:
         fields = cast(list[dict[str, Any]], op.get("input") or [])

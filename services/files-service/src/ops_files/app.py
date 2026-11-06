@@ -304,7 +304,6 @@ def create_files_app(
 
     app = FastAPI(title="files-service", version="0.1.0", lifespan=lifespan, generate_unique_id_function=operation_id)
     config = Settings()
-    app.state.security_team = config.security_team_id
     install_error_handlers(app)
     install_auth(app, auth or Auth.from_settings(config, audience="files"))
     cors_origins = config.cors_origins
@@ -579,12 +578,12 @@ _NAME = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 _OLD_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
 
-async def storage_admin(p: CurrentPrincipal, request: Request) -> Who:
-    """settings.manage, held in the Security team (Security admin in the grid): storage settings decide where
-    every team's files are kept."""
-    team: str = request.app.state.security_team
-    Access(security_team=team).can(p, "settings", "manage", what="storage settings", code="admin_only")
-    return Who(tenant_id=p.tenant_id, team=p.team_id or team, actor=p.email or p.sub)
+async def storage_admin(p: CurrentPrincipal) -> Who:
+    """settings.manage, held in the workspace's Security team (Security admin in the grid): storage settings decide
+    where every team's files are kept."""
+    access = Access()
+    access.can(p, "settings", "manage", what="storage settings", code="admin_only")
+    return Who(tenant_id=p.tenant_id, team=p.team_id or access.security_team_of(p) or "", actor=p.email or p.sub)
 
 
 StorageAdmin = Annotated[Who, Depends(storage_admin)]

@@ -73,7 +73,7 @@ class FirstAdmin:
 async def bootstrap(database_url: str, admin: FirstAdmin, *, iterations: int) -> Outcome:
     db = TenantDb.open(database_url)
     try:
-        signin = SignInStore(db, security_team=admin.team_id)
+        signin = SignInStore(db)
         # Found by email, so the id comes from the one id generator and a second run names the same person.
         known = [u for u in await IdentityStore(db).users_by_email(admin.email) if u.tenant_id == admin.tenant_id]
         user_id = known[0].id if known else new_id("usr")
@@ -97,7 +97,7 @@ async def bootstrap(database_url: str, admin: FirstAdmin, *, iterations: int) ->
         }
         await write_seed(db, seed, security_team=admin.team_id)
         # The team is the workspace's security team and the one people join when nothing else names one.
-        await WorkspaceStore(db, fallback_security_team=admin.team_id).set(
+        await WorkspaceStore(db).set(
             admin.tenant_id,
             security_team=admin.team_id,
             default_team=admin.team_id,

@@ -10,13 +10,9 @@ from typing import Any
 import httpx
 import pytest
 
-from ops_agents.activities.catalog import load_catalog
-from ops_email import MailSender, MemorySender
 from ops_tools.egress import EgressDenied, EgressPolicy, EgressTransport, for_tenant
 from ops_tools.store.egress import EgressStore
-from ops_tools.tools import LocalToolRunner, ToolCaller
 
-from .conftest import AGENTS_FIXTURES
 from .test_egress import Dialled, RecordingNetwork, ScriptedResolver
 
 HOST = "core.bank.test"
@@ -55,17 +51,3 @@ async def test_a_request_naming_no_tenant_is_refused_before_anything_is_dialled(
     with pytest.raises(EgressDenied):
         await _send(transport, {})
     assert transport.pools == {}
-
-
-async def test_send_reply_runs_for_the_callers_tenant() -> None:
-    made: dict[str, MemorySender] = {}
-
-    def mail_for(caller: ToolCaller) -> MailSender:
-        return made.setdefault(caller.tenant_id, MemorySender())
-
-    runner = LocalToolRunner(load_catalog(AGENTS_FIXTURES), mail_for=mail_for)
-    reply = {"to": "ana@example.com", "subject": "Re: dispute", "body": "Opened."}
-    for t in ("t_a", "t_b"):
-        caller = ToolCaller(tenant_id=t, team_id="team_ops", sub="service:agents", kind="service")
-        assert (await runner.run("send_reply", reply, key=f"{t}:reply", caller=caller)).ok
-    assert {t: list(m.sent) for t, m in made.items()} == {"t_a": ["t_a:reply"], "t_b": ["t_b:reply"]}

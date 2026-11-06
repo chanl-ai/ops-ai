@@ -78,6 +78,8 @@ def _person(role: str) -> Any:
             roles={team: role},
             scopes=[],
             auth_method="session",
+            # The workspace's Security team, which platform-service names in every person's token.
+            security_team="team_security",
         )
 
     return caller
@@ -119,7 +121,10 @@ class Azure:
         if tools:
             body["tools"] = [{"type": "function", "function": {"name": "lookup_claim", "parameters": {}}}]
         return await self.client.post(
-            "/v1/models/chat/completions", json=body, headers={"Authorization": f"Bearer {secret}"}
+            "/v1/models/chat/completions",
+            json=body,
+            # The account whose saved Azure key signs the call, as a calling service names it.
+            headers={"Authorization": f"Bearer {secret}", "X-Tenant-Id": "local"},
         )
 
     async def connection(self, provider_id: str) -> dict[str, Any]:

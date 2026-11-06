@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints
 from pydantic.alias_generators import to_camel
 
 from ops_service_kit.flags import FlagName
@@ -36,6 +36,11 @@ class StepUpOut(Out):
 
 class Introspect(In):
     api_key: str = Field(min_length=1, max_length=200)
+
+
+class PermissionVersionOut(Out):
+    # Rises with every role, grid, assignment, membership or policy change; a person's token older than it is refused.
+    permission_version: int
 
 
 class ActingForIn(In):
@@ -148,8 +153,8 @@ class Me(Out):
     teams: list[MeTeam]
     # The tenant's access policies now, every key with its value.
     policies: dict[str, Any]
-    # The team that holds the Security team's actions in this deployment.
-    security_team_id: str
+    # The team that holds the Security team's actions in this workspace; null when it names none.
+    security_team_id: str | None
     workspace: WorkspaceStateOut
     # Every flag in the registry with whether this install turns it on; the console hides a feature whose flag is off.
     flags: list[FlagOut]
@@ -246,8 +251,21 @@ class WorkspaceTeamsIn(In):
     default_team: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,64}$")
 
 
+class SignInSecretIn(In):
+    value: SecretStr = Field(min_length=1, max_length=4000)
+
+
+class SignInSecretOut(Out):
+    name: str
+    version: int
+    created_by: str
+    created_at: str
+    rotated_at: str | None
+
+
 class WorkspaceTeamsOut(Out):
-    security_team: str
+    # Null: the workspace names no Security team, and nobody holds its actions.
+    security_team: str | None
     default_team: str | None
 
 

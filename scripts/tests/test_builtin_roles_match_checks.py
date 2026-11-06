@@ -76,6 +76,8 @@ def person(role: str, team: str) -> Principal:
         roles={team: role},
         scopes=[],
         auth_method="session",
+        # The workspace's Security team, which platform-service names in every person's token.
+        security_team=SECURITY,
     )
 
 
@@ -221,7 +223,7 @@ def tools_caller(p: Principal) -> Caller:
 
 def tools_step(area: str, action: str) -> Verdict:
     def verdict(p: Principal) -> Scope | None:
-        return yes(passes(lambda: tools_can(tools_caller(p), area, action, what="modules", security_team=SECURITY)))
+        return yes(passes(lambda: tools_can(tools_caller(p), area, action, what="modules")))
 
     return verdict
 
@@ -229,13 +231,11 @@ def tools_step(area: str, action: str) -> Verdict:
 def tools_system_edit(p: Principal) -> Scope | None:
     """Editing a tool module provisioned as `system` needs tools.manage as well as the edit."""
     caller = tools_caller(p)
-    return yes(
-        passes(lambda: tools_can(caller, "tools", "edit", what="it", security_team=SECURITY, protection="system"))
-    )
+    return yes(passes(lambda: tools_can(caller, "tools", "edit", what="it", protection="system")))
 
 
 def tools_security_admin(p: Principal) -> Scope | None:
-    return yes(passes(lambda: security_admin(SECURITY)(p)))
+    return yes(passes(lambda: security_admin(p)))
 
 
 def tools_team_secret(action: str) -> Verdict:
@@ -243,7 +243,7 @@ def tools_team_secret(action: str) -> Verdict:
     routes check."""
 
     def verdict(p: Principal) -> Scope | None:
-        return yes(passes(lambda: may_write_secret(p, action, str(p.team_id), security_team=SECURITY)))
+        return yes(passes(lambda: may_write_secret(p, action, str(p.team_id))))
 
     return verdict
 
@@ -258,8 +258,7 @@ def files_legal_hold(p: Principal) -> Scope | None:
 
 
 def files_storage(p: Principal) -> Scope | None:
-    request = cast(Any, SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(security_team=SECURITY))))
-    return yes(passes(lambda: storage_admin(p, request)))
+    return yes(passes(lambda: storage_admin(p)))
 
 
 # documents-service: a person extracts with documents.run and keeps types and corrects fields with documents.edit.
@@ -278,7 +277,7 @@ def documents_check(action: str) -> Verdict:
 # tools-service connections: every change and sign-in is connections.manage, admins' by default.
 def tools_connections(action: str) -> Verdict:
     def verdict(p: Principal) -> Scope | None:
-        return yes(passes(lambda: connection_rights(p, action, security_team=SECURITY)))
+        return yes(passes(lambda: connection_rights(p, action)))
 
     return verdict
 
@@ -309,8 +308,8 @@ def platform_admin(area: str, action: str) -> Verdict:
         async def security_team_of(_tenant: str) -> str:
             return SECURITY
 
-        # The workspace's security team is a tenant setting; the fake names the deployment's.
-        store = cast(Any, SimpleNamespace(security_team=SECURITY, security_team_of=security_team_of, db=None))
+        # The workspace's security team is its record; the fake names it.
+        store = cast(Any, SimpleNamespace(security_team_of=security_team_of, db=None))
         members = Members(store, roles=cast(Any, _Roles(p.role or "", team)))
         actor = Actor(p.tenant_id, team, p.sub, "req_1")
         return yes(passes(lambda: members.require_admin(actor, area, action)))

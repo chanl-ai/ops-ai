@@ -24,7 +24,7 @@ ready = "http://127.0.0.1:8181/health"
 
 [process.platform]
 command = ["/app/.venv/bin/python", "-m", "ops_platform"]
-env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_PLATFORM}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_PLATFORM}", OPS_SERVICE_SIGNING_KID = "svc-platform-1", OPS_PLATFORM_SIGNING_KEY = "${OPS_PLATFORM_SIGNING_KEY}" }
+env = { OPS_DATABASE_URL = "${OPS_DATABASE_URL_PLATFORM}", OPS_SERVICE_SIGNING_KEY = "${OPS_SVC_KEY_PLATFORM}", OPS_SERVICE_SIGNING_KID = "svc-platform-1", OPS_PLATFORM_SIGNING_KEY = "${OPS_PLATFORM_SIGNING_KEY}", OPS_SECRETS_KEY = "${OPS_SECRETS_KEY}" }
 ready = "http://127.0.0.1:8710/v1/health"
 
 [process.files]

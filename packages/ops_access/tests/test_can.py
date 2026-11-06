@@ -31,7 +31,7 @@ from ops_service_kit.errors import Forbidden
 
 ISSUER = Ed25519Signer.generate("platform-1")
 SERVICES = Ed25519Signer.generate("services-1")
-ACCESS = Access(security_team="team_security")
+ACCESS = Access()
 
 
 class _Request:
@@ -50,6 +50,8 @@ async def person(team: str = "team_a", **claims: Any) -> Principal:
         "kind": "person",
         "auth_method": "session",
         "aud": ["agents"],
+        # The workspace's Security team, which platform-service names in every person's token.
+        "security_team": "team_security",
         **claims,
     }
     token = mint(body, ISSUER, ttl_s=TEST_TOKEN_TTL_S)
@@ -277,6 +279,12 @@ async def test_security_actions_are_held_in_the_workspaces_own_security_team() -
         security_team="team_sec2",
     )
     refused("role_required", ACCESS.can, deployments_team, "settings", "manage")
+
+
+async def test_a_workspace_that_names_no_security_team_holds_no_security_action() -> None:
+    """The Security team is the workspace's record, carried in the token; no install setting stands in for it."""
+    p = await person(access={"team_a": ["admin"], "team_security": ["admin", "security_admin"]}, security_team=None)
+    refused("no_security_team", ACCESS.can, p, "settings", "manage")
 
 
 async def test_a_role_that_reads_all_chats_reads_its_own_while_the_workspace_keeps_them_private() -> None:

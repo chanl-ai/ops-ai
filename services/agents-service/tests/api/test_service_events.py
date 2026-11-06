@@ -243,6 +243,7 @@ def runner() -> dict[str, str]:
         "email": "rae@harborpine.example",
         "name": "rae",
         "kind": "person",
+        "security_team": "team_security",
         "aud": ["agents"],
         "tenant_id": TENANT,
         "team_ids": ["team_ops"],

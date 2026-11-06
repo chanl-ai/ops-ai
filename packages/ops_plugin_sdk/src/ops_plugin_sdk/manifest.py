@@ -183,6 +183,10 @@ class Setting(Strict):
     # The values it may take, and a host typed in place of one: tools-service refuses any other value before a sign-in.
     choices: list[Choice] | None = None
     other: Other | None = None
+    # Where a person sets it: `config` the auth config's New and Edit windows (it then belongs to the app registration,
+    # as `connection.credential_settings` do), `connect` the Connect and Add account windows, `settings` the app's
+    # Settings tab only. None keeps the default: an account's own where the sign-in addresses name it, else the team's.
+    asked: Literal["config", "connect", "settings"] | None = None
 
     @property
     def at_sign_in(self) -> bool:
@@ -354,6 +358,12 @@ class Manifest(Strict):
         if not PLUGIN_ID.match(v):
             raise ValueError("a plugin id is <publisher>.<name>, lower-case")
         return v
+
+    @property
+    def config_settings(self) -> list[str]:
+        """The settings an auth config holds: `connection.credential_settings` and every setting `asked: config`."""
+        asked = [k for k, s in self.settings.items() if s.asked == "config"]
+        return list(dict.fromkeys([*self.connection.credential_settings, *asked]))
 
     @property
     def short(self) -> str:

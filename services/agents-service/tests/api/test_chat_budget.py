@@ -31,6 +31,7 @@ def who(sub: str, role: str) -> dict[str, str]:
         "email": f"{sub}@harborpine.example",
         "name": sub,
         "kind": "person",
+        "security_team": "team_security",
         "aud": ["agents"],
         "tenant_id": "acme",
         "team_ids": ["team_ops"],

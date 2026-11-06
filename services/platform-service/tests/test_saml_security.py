@@ -64,10 +64,10 @@ async def test_a_plain_assertion_is_refused_where_encryption_is_required(signin:
 
 
 def test_a_provider_asking_for_the_key_is_refused_where_none_is_set() -> None:
-    settings = SignInSettings(store=None, members=None, secrets={}, dns=TxtResolver(), sp_key_set=False)  # type: ignore[arg-type]
+    settings = SignInSettings(store=None, members=None, secrets=None, dns=TxtResolver(), sp_key_set=False)  # type: ignore[arg-type]
     body = {"saml": {"idpEntityId": "x", "ssoUrl": "https://idp/sso", "certificate": SP_CERT, "signRequests": True}}
     with pytest.raises(ValidationFailed) as refused:
-        settings._config("saml", body)  # pyright: ignore[reportPrivateUsage]
+        settings._config("saml", body, set())  # pyright: ignore[reportPrivateUsage]
     assert refused.value.code == "sp_key_missing"
 
 

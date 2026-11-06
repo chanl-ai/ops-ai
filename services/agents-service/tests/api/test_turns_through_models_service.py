@@ -28,6 +28,7 @@ from ops_agents.api.model_ledger import LedgerSource
 from ops_agents.store.base import metadata
 from ops_agents.store.model_calls import ModelCallLedger
 from ops_agents.store.usage import UsageLedger
+from ops_identity.fastapi import DEV_TENANT
 from ops_metering import PriceTable
 from ops_service_kit.settings import Settings
 from tests.api.test_chat import new_thread, send
@@ -120,6 +121,8 @@ async def test_an_agents_turn_runs_on_its_alias_with_this_services_key(
     assert json.loads(sent.content)["model"] == "bank-reasoning"
     assert sent.headers["authorization"] == f"Bearer {KEY}"
     assert sent.url.path == "/v1/models/chat/completions"
+    # The tenant whose provider keys and budget the call uses: always named, never an install's default.
+    assert sent.headers["x-tenant-id"] == DEV_TENANT
 
 
 async def test_a_graph_runs_record_and_models_service_name_the_same_alias_and_request(
@@ -137,6 +140,7 @@ async def test_a_graph_runs_record_and_models_service_name_the_same_alias_and_re
     assert sent.headers["x-thread-id"] == thread["id"]
     assert sent.headers["x-request-hash"] == rows[0]["request_hash"]
     assert sent.headers["x-run-id"] == rows[0]["run_id"]
+    assert sent.headers["x-tenant-id"] == DEV_TENANT
 
 
 @pytest.mark.parametrize(
