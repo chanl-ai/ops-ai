@@ -393,6 +393,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/apps/{app_id}/tools/{tool}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Switch Tool
+         * @description Switches one of an app's tools on or off for the team; off, agents cannot pick it and calls are refused.
+         */
+        put: operations["apps_switch_tool"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/apps/{app_id}/update": {
         parameters: {
             query?: never;
@@ -1818,8 +1838,18 @@ export interface components {
         AppTool: {
             /** Access */
             access: string;
+            /**
+             * Askedatsignin
+             * @default false
+             */
+            askedAtSignIn: boolean;
             /** Name */
             name: string;
+            /**
+             * On
+             * @default true
+             */
+            on: boolean;
             /** Title */
             title: string;
             usedBy?: components["schemas"]["ToolUsedBy"] | null;
@@ -2491,6 +2521,15 @@ export interface components {
         /** Envelope[AppPage] */
         Envelope_AppPage_: {
             data: components["schemas"]["AppPage"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[AppTool] */
+        Envelope_AppTool_: {
+            data: components["schemas"]["AppTool"];
             /**
              * Success
              * @constant
@@ -5093,6 +5132,11 @@ export interface components {
             transformError?: string | null;
             /** Wouldpause */
             wouldPause: boolean;
+        };
+        /** ToolSwitchIn */
+        ToolSwitchIn: {
+            /** On */
+            on: boolean;
         };
         /** ToolUsedBy */
         ToolUsedBy: {
@@ -7782,6 +7826,132 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_SystemCard_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    apps_switch_tool: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: string;
+                tool: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolSwitchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AppTool_"];
                 };
             };
             /** @description Invalid request */

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-05",
+  "title": "Choose which of an app's tools agents use",
+  "description": "Each app's tools can be switched on or off for your team; a new app starts with its read tools on and its write tools off. Agents are offered only switched-on tools, a call to one that is off is refused, and a sign-in asks only for the permissions the switched-on tools need.",
+  "tag": "new"
+}

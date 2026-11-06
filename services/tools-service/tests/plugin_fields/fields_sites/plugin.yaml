@@ -11,6 +11,7 @@ connection:
   token_url: "{login_url}/token"
   scopes:
     - { id: openid, label: Know which account signed in, required: true }
+    - { id: "records:write", label: Change records }
   sign_in: [team, person, person_or_team]
   authorize_params: { audience: "{audience}", prompt: consent }
   after_sign_in: { url: "{base_url}/sites/accessible", read: "[0].id", setting: site_id }
@@ -29,3 +30,10 @@ tools:
     access: read
     input: { id: { type: string, pattern: "^[a-z0-9-]+$" } }
     request: { method: GET, path: "/records/{id}" }
+  # A write tool whose permission is asked only once the team switches it on (team_tools tests).
+  - name: update_record
+    title: Change a record
+    access: write
+    scopes: ["records:write"]
+    input: { id: { type: string, pattern: "^[a-z0-9-]+$" } }
+    request: { method: PATCH, path: "/records/{id}" }

@@ -328,6 +328,10 @@ def create_gateway_app(
         agents-service lists, grants and hands a run its tools from here; it keeps no catalogue of its own."""
         can(caller, "tools", "view", what="the grantable operations")
         rows = await registry.grantable(caller.tenant_id, team_view(caller))
+        if plugins is not None and caller.team_id:
+            # A tool the team switched off on its app's Tools tab is not offered to its agents.
+            off = await plugins.tools_off(caller.tenant_id, caller.team_id)
+            rows = [r for r in rows if str(r["name"]) not in off]
         if await all_writes_wait(caller.tenant_id, caller.team_id):
             # The caller's team has every write wait, so the agents that list these pause before each one.
             rows = [r | {"requires_approval": True} if r["access"] in WRITES else r for r in rows]

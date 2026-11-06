@@ -331,6 +331,18 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "apps_switch_tool": {
+    "body": "json",
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/apps/{app_id}/tools/{tool}",
+    "pathParams": [
+      "app_id",
+      "tool"
+    ],
+    "query": [],
+    "stream": false
+  },
   "apps_take_plugin_update": {
     "body": "json",
     "headers": [],

@@ -280,6 +280,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "apps_switch_tool": {
+        "body": "json",
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/apps/{app_id}/tools/{tool}",
+        "pathParams": ["app_id", "tool"],
+        "query": [],
+        "stream": False,
+    },
     "apps_take_plugin_update": {
         "body": "json",
         "headers": [],
@@ -876,6 +885,10 @@ class Operations:
         "Set Team App"
         return self._t.call(SERVICE, OPERATIONS["apps_set_team_app"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def apps_switch_tool(self, app_id: str, tool: str, body: ToolSwitchIn) -> AppTool:
+        "Switch Tool"
+        return self._t.call(SERVICE, OPERATIONS["apps_switch_tool"], {"app_id": app_id, "tool": tool}, {}, {}, body)  # type: ignore[no-any-return]
+
     def apps_plugin_update(self, app_id: str) -> PluginUpdateView:
         "Plugin Update"
         return self._t.call(SERVICE, OPERATIONS["apps_plugin_update"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -1381,6 +1394,12 @@ class AsyncOperations:
     async def apps_set_team_app(self, app_id: str, body: TeamPluginIn) -> SystemCard:
         "Set Team App"
         return await self._t.call(SERVICE, OPERATIONS["apps_set_team_app"], {"app_id": app_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def apps_switch_tool(self, app_id: str, tool: str, body: ToolSwitchIn) -> AppTool:
+        "Switch Tool"
+        return await self._t.call(
+            SERVICE, OPERATIONS["apps_switch_tool"], {"app_id": app_id, "tool": tool}, {}, {}, body
+        )  # type: ignore[no-any-return]
 
     async def apps_plugin_update(self, app_id: str) -> PluginUpdateView:
         "Plugin Update"

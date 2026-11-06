@@ -230,6 +230,9 @@ class ConnectionService:
         # A plugin app's title and logo by its app id (PluginHost.display_of), for My accounts; set once the plugin
         # host is up.
         self.app_display: Callable[[str], tuple[str, str | None] | None] | None = None
+        # The permissions a plugin account's sign-in asks for, from its team's switched-on tools
+        # (PluginHost.sign_in_scopes); set once the plugin host is up.
+        self.sign_in_scopes: Callable[[str, str], Awaitable[list[str] | None]] | None = None
         # Tests that run after a sign-in, held so the event loop keeps them until they finish.
         self._after_sign_in: set[asyncio.Task[None]] = set()
 
@@ -777,7 +780,10 @@ class ConnectionService:
         # The team's account signs calls nobody can be asked for, so it asks up front for every scope its operations
         # need; a person's own sign-in asks for the connection's and is asked again when an operation needs more.
         needed = [] if personal else await self.store.operation_scopes(who.tenant_id, str(conn["id"]))
-        wanted: list[str] = [*str(settings.get("scopes") or "").split(), *(scopes or []), *needed]
+        # A plugin's permissions follow the tools its team switched on; any other account asks what its settings list.
+        derived = await self.sign_in_scopes(who.tenant_id, str(conn["id"])) if self.sign_in_scopes else None
+        listed = derived if derived is not None else str(settings.get("scopes") or "").split()
+        wanted: list[str] = [*listed, *(scopes or []), *needed]
         asked = list(dict.fromkeys(wanted))
         expired = await self.store.add_state(
             {

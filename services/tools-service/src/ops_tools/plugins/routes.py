@@ -31,7 +31,16 @@ from ..modules.routes import ERRORS
 from ..modules.service import Caller
 from ..modules.tool_users import ToolUsers
 from ..store.connections import PLUGIN_APP
-from .host import PluginHost, fixed_fields, offered, per_account, readable, render, sign_in_fixed
+from .host import (
+    PluginHost,
+    default_tools_on,
+    fixed_fields,
+    offered,
+    per_account,
+    readable,
+    render,
+    sign_in_fixed,
+)
 
 # The OAuth app's own fields: an app credential's, made under Credentials, never typed into an account.
 CLIENT_FIELDS = ("clientId", "clientSecret")
@@ -228,6 +237,9 @@ class PluginAccounts:
             settings=settings,
             by=who.name,
         )
+        if not before:
+            # A new app hands agents its read tools only; a write tool waits until someone switches it on.
+            await self.host.bindings.set_tools(who.tenant_id, who.team.id, m.id, default_tools_on(m))
         if self.host.versions and not before.get("version"):
             # A team turning a plugin on takes the installed version; a later upgrade waits for its review.
             await self.host.take_installed(who.tenant_id, who.team.id, plugin)

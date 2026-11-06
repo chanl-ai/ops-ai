@@ -1132,6 +1132,10 @@ class ToolRunResult(TypedDict, closed=True):
     wouldPause: bool
 
 
+class ToolSwitchIn(TypedDict, closed=True):
+    on: bool
+
+
 class ToolUser(TypedDict, closed=True):
     id: str
     name: str
@@ -1844,7 +1848,9 @@ class AppCredentialDetail(TypedDict, closed=True):
 
 class AppTool(TypedDict, closed=True):
     access: str
+    askedAtSignIn: NotRequired[bool]
     name: str
+    on: NotRequired[bool]
     title: str
     usedBy: NotRequired[ToolUsedBy | None]
 
@@ -1856,6 +1862,11 @@ class EnvelopeAppCredentialChange(TypedDict, closed=True):
 
 class EnvelopeAppCredentialDetail(TypedDict, closed=True):
     data: AppCredentialDetail
+    success: Literal[True]
+
+
+class EnvelopeAppTool(TypedDict, closed=True):
+    data: AppTool
     success: Literal[True]
 
 
