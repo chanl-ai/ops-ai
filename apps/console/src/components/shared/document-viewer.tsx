@@ -90,7 +90,7 @@ export function DocumentViewer({
     holder.current.querySelector(`[data-box-key="${CSS.escape(selected)}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, [selected, pages]);
 
-  if (error) return <p className={cn('flex items-center justify-center rounded-lg border p-6 text-sm text-destructive', className)}>{error}</p>;
+  if (error) return <p className={cn('flex items-center justify-center rounded-lg border p-6 text-sm text-destructive-text', className)}>{error}</p>;
   if (!pages)
     return (
       <div className={cn('flex items-center justify-center rounded-lg border bg-muted/30', className)} aria-busy="true">

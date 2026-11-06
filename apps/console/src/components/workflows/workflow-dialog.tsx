@@ -69,7 +69,7 @@ export function WorkflowDialog({
           void submit();
         }}
       >
-        {submitError && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{submitError}</p>}
+        {submitError && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive-text">{submitError}</p>}
         <FormField id="wf-name" label="Name" error={errors.name}>
           <Input id="wf-name" value={values.name} onChange={(e) => (setValues((v) => ({ ...v, name: e.target.value })), setErrors((x) => ({ ...x, name: undefined })))} placeholder="e.g. Overdraft fee refund" aria-invalid={!!errors.name} />
         </FormField>

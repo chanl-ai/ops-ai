@@ -112,7 +112,7 @@ export function DiffView({ before, after, testId }: { before: string; after: str
   return (
     <pre className="max-h-[50vh] overflow-auto rounded-md border bg-muted/30 py-2 font-mono text-xs leading-relaxed" data-testid={testId}>
       {rows.map((r, i) => (
-        <div key={i} className={cn('px-3 whitespace-pre-wrap', r.kind === 'add' && 'bg-success/10 text-success-text', r.kind === 'del' && 'bg-destructive/10 text-destructive line-through decoration-destructive/40')}>
+        <div key={i} className={cn('px-3 whitespace-pre-wrap', r.kind === 'add' && 'bg-success/10 text-success-text', r.kind === 'del' && 'bg-destructive/10 text-destructive-text line-through decoration-destructive/40')}>
           <span className="mr-2 inline-block w-3 select-none text-muted-foreground">{r.kind === 'add' ? '+' : r.kind === 'del' ? '−' : ' '}</span>
           {r.text || ' '}
         </div>

@@ -146,7 +146,7 @@ function columns(onDelete: (m: ToolModule) => void, canBuild: boolean): ColumnDe
       header: ({ column }) => <DataTableColumnHeader column={column} title="Errors" />,
       cell: ({ row }) =>
         !row.original.reachable ? (
-          <span className="text-xs font-medium text-destructive">Unreachable</span>
+          <span className="text-xs font-medium text-destructive-text">Unreachable</span>
         ) : row.original.calls24h ? (
           <span className={`tabular-nums ${errorTone(row.original.errorRate)}`}>{pctText(row.original.errorRate)}</span>
         ) : (

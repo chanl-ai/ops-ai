@@ -61,7 +61,7 @@ export function SourceHistoryTab({ source, onSync }: { source: SourceDetail; onS
       { accessorKey: 'durationSec', header: ({ column }) => <DataTableColumnHeader column={column} title="Duration" />, cell: ({ row }) => <span className="whitespace-nowrap tabular-nums">{row.original.status === 'running' ? '—' : duration(row.original.durationSec)}</span> },
       { id: 'listed', accessorFn: (r) => r.counts.listed, header: ({ column }) => <DataTableColumnHeader column={column} title="Listed" />, cell: ({ row }) => <span className="tabular-nums">{count(row.original.counts.listed)}</span> },
       { id: 'changed', accessorFn: (r) => r.counts.upserted + r.counts.deleted, header: ({ column }) => <DataTableColumnHeader column={column} title="Changed" />, cell: ({ row }) => <span className="tabular-nums">{count(row.original.counts.upserted + row.original.counts.deleted)}</span> },
-      { id: 'failed', accessorFn: (r) => r.counts.failed, header: ({ column }) => <DataTableColumnHeader column={column} title="Failed" />, cell: ({ row }) => <span className={row.original.counts.failed ? 'tabular-nums text-destructive' : 'tabular-nums'}>{count(row.original.counts.failed)}</span> },
+      { id: 'failed', accessorFn: (r) => r.counts.failed, header: ({ column }) => <DataTableColumnHeader column={column} title="Failed" />, cell: ({ row }) => <span className={row.original.counts.failed ? 'tabular-nums text-destructive-text' : 'tabular-nums'}>{count(row.original.counts.failed)}</span> },
       {
         accessorKey: 'status',
         header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,

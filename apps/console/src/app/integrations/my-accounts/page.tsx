@@ -132,7 +132,7 @@ function RowMenu({ c, onEnd, onGive }: { c: MyConnection; onEnd: () => void; onG
           Test now
         </DropdownMenuItem>
         {c.personFields.length > 0 && <DropdownMenuItem onClick={onGive}>Replace {noun}</DropdownMenuItem>}
-        <DropdownMenuItem onClick={onEnd} className="text-destructive" data-testid={`disconnect-${c.connectionId}`}>
+        <DropdownMenuItem onClick={onEnd} className="text-destructive-text" data-testid={`disconnect-${c.connectionId}`}>
           Disconnect
         </DropdownMenuItem>
       </DropdownMenuContent>

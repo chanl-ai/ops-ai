@@ -82,7 +82,7 @@ export function InputSchemaEditor({ value, onChange, boundArg, errors, note }: {
                       <Lock className="size-3" /> Bound
                     </span>
                   )}
-                  {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
+                  {error && <p className="mt-1 text-xs text-destructive-text">{error}</p>}
                 </TableCell>
                 <TableCell className="min-w-28 align-top">
                   <Select value={f.type} onValueChange={(v) => set(i, { type: v as SchemaType, ...(v === 'string' ? {} : { allowed: '' }) })}>

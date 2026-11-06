@@ -105,7 +105,7 @@ export function TemplateSkillsStep({
           </Select>
         </div>
         <p className="pl-6 text-xs text-muted-foreground">{reason ?? (c.loading === 'always' ? 'Added to every turn, after the agent’s instructions' : c.useWhen)}</p>
-        {problem && <p className="pl-6 text-xs text-destructive">{problem}</p>}
+        {problem && <p className="pl-6 text-xs text-destructive-text">{problem}</p>}
       </li>
     );
   };

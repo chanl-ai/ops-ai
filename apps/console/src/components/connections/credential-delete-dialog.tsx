@@ -68,7 +68,7 @@ export function CredentialDeleteDialog({
     >
       {accounts.length > 0 &&
         (stranded ? (
-          <p className="text-sm text-destructive" data-testid="credential-delete-stranded">
+          <p className="text-sm text-destructive-text" data-testid="credential-delete-stranded">
             {`Add another ${credential?.appName ?? ''} auth config first, so its accounts have somewhere to move.`}
           </p>
         ) : (

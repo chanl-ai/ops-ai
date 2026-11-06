@@ -23,7 +23,7 @@ const STATE_CLS: Record<SkillVersion['state'], string> = {
   draft: 'bg-muted text-muted-foreground',
   superseded: 'bg-transparent text-muted-foreground',
   deprecated: 'bg-warning/10 text-warning-text border-warning/40',
-  rejected: 'bg-destructive/10 text-destructive border-destructive/40',
+  rejected: 'bg-destructive/10 text-destructive-text border-destructive/40',
 };
 
 /** Every version with its state, edit class, test run and review. Compare any two; restoring copies one into a new draft. */

@@ -216,7 +216,7 @@ export function Composer({
         <>
           {waiting && <span className="text-xs text-muted-foreground">{waiting}</span>}
           {tooLong && (
-            <span className="text-xs tabular-nums text-destructive">
+            <span className="text-xs tabular-nums text-destructive-text">
               {text.length.toLocaleString('en-CA')} / {MAX.toLocaleString('en-CA')}
             </span>
           )}

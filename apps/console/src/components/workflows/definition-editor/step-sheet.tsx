@@ -91,7 +91,7 @@ export function StepSheet({ node, type, workflowId, steps, checks, order, readOn
       footerActions={
         node &&
         !readOnly && (
-          <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={onDelete} data-testid="definition-node-delete">
+          <Button type="button" variant="ghost" size="sm" className="text-destructive-text" onClick={onDelete} data-testid="definition-node-delete">
             <Trash2 /> Delete step
           </Button>
         )

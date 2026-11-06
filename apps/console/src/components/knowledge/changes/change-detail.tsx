@@ -103,7 +103,7 @@ export function ChangeDetailBody({ change: c }: { change: KnowledgeChange }) {
       {c.status !== 'pending' && (
         <Section title="Decision">
           <div className="flex items-start gap-2 text-sm">
-            {c.status === 'approved' ? <CheckCircle2 className="mt-0.5 size-4 text-success-text" /> : <XCircle className="mt-0.5 size-4 text-destructive" />}
+            {c.status === 'approved' ? <CheckCircle2 className="mt-0.5 size-4 text-success-text" /> : <XCircle className="mt-0.5 size-4 text-destructive-text" />}
             <div>
               <div>
                 {c.status === 'approved' ? 'Approved' : 'Rejected'} by {c.decidedBy} · {dateTime(c.decidedAt)}

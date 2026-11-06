@@ -406,7 +406,7 @@ function ConnectForm({
           </div>
         )}
         {state.error && (
-          <p className="text-sm text-destructive" role="alert" data-testid="connect-error">
+          <p className="text-sm text-destructive-text" role="alert" data-testid="connect-error">
             {state.error}
           </p>
         )}

@@ -17,7 +17,7 @@ const VALIDATION_TONE: Record<ValidationStatus, string> = {
   in_validation: 'border-sky-300 text-sky-800 dark:border-sky-900 dark:text-sky-300',
   validated: 'border-success/40 text-success-text',
   validated_with_conditions: 'border-success/40 text-success-text',
-  expired: 'border-destructive/40 text-destructive',
+  expired: 'border-destructive/40 text-destructive-text',
 };
 
 /** `wrap` lets a long label ("Validated with conditions") break onto two lines in a narrow table column. */
@@ -31,7 +31,7 @@ export function ValidationBadge({ status, wrap }: { status: ValidationStatus; wr
 
 const SEVERITY_TONE: Record<FindingSeverity, string> = {
   critical: 'bg-destructive text-white',
-  high: 'bg-destructive/10 text-destructive',
+  high: 'bg-destructive/10 text-destructive-text',
   medium: 'bg-warning/10 text-warning-text',
   low: 'bg-muted text-muted-foreground',
 };
@@ -45,7 +45,7 @@ export const CONDITION_STATUS_LABEL: Record<ConditionStatus, string> = { open: '
 
 export function ConditionBadge({ status }: { status: ConditionStatus }) {
   return (
-    <Badge variant="outline" className={cn('font-normal', status === 'overdue' && 'border-destructive/40 text-destructive', status === 'met' && 'text-muted-foreground')}>
+    <Badge variant="outline" className={cn('font-normal', status === 'overdue' && 'border-destructive/40 text-destructive-text', status === 'met' && 'text-muted-foreground')}>
       {CONDITION_STATUS_LABEL[status]}
     </Badge>
   );

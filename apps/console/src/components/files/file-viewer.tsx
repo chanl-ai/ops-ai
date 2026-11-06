@@ -17,7 +17,7 @@ export function FileViewer({ file, boxes, selected, onSelect }: { file: FileDeta
   const frame = 'h-[min(78vh,960px)] w-full rounded-lg border bg-muted/30';
   if (!clean) return <p className={`${frame} flex items-center justify-center p-6 text-sm text-muted-foreground`}>{file.scan.status === 'pending' ? 'Shown once the scan finishes.' : 'Not shown: the scan did not clear it.'}</p>;
   if (!viewable(file.mime)) return <p className="rounded-lg border p-6 text-sm text-muted-foreground">Preview shows PDFs and images. Download the file to open it.</p>;
-  if (preview.error) return <p className={`${frame} flex items-center justify-center p-6 text-sm text-destructive`}>{preview.error}</p>;
+  if (preview.error) return <p className={`${frame} flex items-center justify-center p-6 text-sm text-destructive-text`}>{preview.error}</p>;
   if (!preview.url)
     return (
       <div className={`${frame} flex items-center justify-center`} aria-busy="true">

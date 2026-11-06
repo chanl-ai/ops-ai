@@ -75,7 +75,7 @@ export function OwnCredentialsForm({
         </p>
       )}
       {give.isError && (
-        <p className="text-sm text-destructive" role="alert" data-testid="own-credentials-error">
+        <p className="text-sm text-destructive-text" role="alert" data-testid="own-credentials-error">
           {give.error instanceof Error ? give.error.message : 'That did not save. Try again.'}
         </p>
       )}

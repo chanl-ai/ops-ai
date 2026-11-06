@@ -39,7 +39,7 @@ export type RunMark = 'passed' | 'failed' | 'skipped' | 'stopped' | 'running' | 
 
 const RUN_MARK: Record<RunMark, { label: string; icon: typeof CheckCircle2; className: string; badge: string }> = {
   passed: { label: 'Passed', icon: CheckCircle2, className: 'border-success', badge: 'border-success/40 bg-success/10 text-success-text' },
-  failed: { label: 'Failed', icon: XCircle, className: 'border-destructive border-2', badge: 'border-destructive/40 bg-destructive/10 text-destructive' },
+  failed: { label: 'Failed', icon: XCircle, className: 'border-destructive border-2', badge: 'border-destructive/40 bg-destructive/10 text-destructive-text' },
   skipped: { label: 'Skipped', icon: CircleSlash, className: 'border-dashed opacity-60', badge: 'text-muted-foreground' },
   stopped: { label: 'Stopped', icon: CircleSlash, className: 'border-warning', badge: 'border-warning/40 bg-warning/10 text-warning-text' },
   running: { label: 'Running', icon: Loader2, className: 'border-primary', badge: 'text-primary' },
@@ -111,7 +111,7 @@ export const DefinitionNode = memo(function DefinitionNode({ data, selected }: N
             <HelpCircle /> Unknown type
           </Badge>
         ) : (
-          (data.hasError && <AlertTriangle className="size-4 shrink-0 text-destructive" aria-label="Has an error" />) ||
+          (data.hasError && <AlertTriangle className="size-4 shrink-0 text-destructive-text" aria-label="Has an error" />) ||
           (data.hasWarning && <AlertTriangle className="size-4 shrink-0 text-warning-text" aria-label="Has a warning" data-testid="node-warning" />)
         )}
       </div>

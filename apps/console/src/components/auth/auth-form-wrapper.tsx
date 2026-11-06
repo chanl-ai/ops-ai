@@ -50,7 +50,7 @@ export function AuthHeading({ title, description, icon }: { title: string; descr
 export function AuthError({ message }: { message: string | null }) {
   if (!message) return null;
   return (
-    <p className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-center text-sm text-destructive" role="alert" data-testid="auth-error">
+    <p className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-center text-sm text-destructive-text" role="alert" data-testid="auth-error">
       {message}
     </p>
   );

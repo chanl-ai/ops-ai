@@ -54,7 +54,7 @@ export function RenameDialog({
         <Input id={`${testId}-name`} value={value} onChange={(e) => setValue(e.target.value)} />
       </FormField>
       {error && (
-        <p className="text-sm text-destructive" role="alert" data-testid={`${testId}-error`}>
+        <p className="text-sm text-destructive-text" role="alert" data-testid={`${testId}-error`}>
           {error}
         </p>
       )}

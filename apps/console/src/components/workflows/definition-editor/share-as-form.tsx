@@ -128,7 +128,7 @@ export function ShareAsForm({ workflowId, schema: raw, readOnly }: { workflowId:
                 <Textarea id="form-thanks" rows={2} value={after} maxLength={1000} onChange={(e) => setAfter(e.target.value)} />
               </FormField>
               {error && (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-sm text-destructive-text">
                   {error}
                 </p>
               )}
@@ -142,7 +142,7 @@ export function ShareAsForm({ workflowId, schema: raw, readOnly }: { workflowId:
               </div>
             </div>
           )}
-          {forms.isError && <p className="text-sm text-destructive">The shared forms could not be loaded. {forms.error instanceof Error ? forms.error.message : ''}</p>}
+          {forms.isError && <p className="text-sm text-destructive-text">The shared forms could not be loaded. {forms.error instanceof Error ? forms.error.message : ''}</p>}
           {forms.isSuccess && list.length === 0 && !open && !noInputs && <p className="text-sm text-muted-foreground">Not shared yet.</p>}
           {list.map((f) => (
             <SharedForm key={f.id} form={fresh[f.id] ?? f} paused={f.paused} readOnly={readOnly} publicFormPage={publicFormPage} onRotated={(r) => setFresh((x) => ({ ...x, [r.id]: r }))} />
@@ -224,7 +224,7 @@ function SharedForm({ form, paused, readOnly, publicFormPage, onRotated }: { for
         {members ? 'Signed-in members of this team can send it.' : `Expires ${shortDate(form.expiresAt)}.`} At most {count(form.dailyCap)} a day. Refused sends show in Activity with the reason.
       </p>
       {error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-destructive-text">
           {error}
         </p>
       )}
@@ -243,7 +243,7 @@ function SharedForm({ form, paused, readOnly, publicFormPage, onRotated }: { for
             Taking submissions
           </label>
           {!members && publicFormPage && (
-            <LoadingButton type="button" variant="outline" size="sm" isLoading={rotate.isPending} loadingText="Rotating…" className="text-destructive" onClick={() => setAsking(true)} data-testid="form-rotate">
+            <LoadingButton type="button" variant="outline" size="sm" isLoading={rotate.isPending} loadingText="Rotating…" className="text-destructive-text" onClick={() => setAsking(true)} data-testid="form-rotate">
               <RefreshCw /> Rotate link
             </LoadingButton>
           )}

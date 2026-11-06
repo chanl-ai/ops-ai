@@ -50,6 +50,8 @@
      text; these are 5.4:1 (docs/console/standards.md). */
   --success-text: oklch(0.5 0.13 150);
   --warning-text: oklch(0.52 0.12 65);
+  /* Red text at AA contrast on cards and selected rows; --destructive stays the fill behind white text. */
+  --destructive-text: oklch(0.5 0.2 27);
   --radius: 0.5rem;
 }
 
@@ -90,6 +92,7 @@
   --warning: oklch(0.8 0.14 75);
   --success-text: oklch(0.78 0.15 150);
   --warning-text: oklch(0.82 0.13 80);
+  --destructive-text: oklch(0.74 0.16 25);
 }
 
 @theme inline {
@@ -121,6 +124,7 @@
   --color-warning: var(--warning);
   --color-success-text: var(--success-text);
   --color-warning-text: var(--warning-text);
+  --color-destructive-text: var(--destructive-text);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);

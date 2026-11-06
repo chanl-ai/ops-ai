@@ -124,7 +124,7 @@ export function PublishEvalSection({ review, validation }: { review: Review; val
                 <span className="font-medium text-foreground">
                   {validation.passed}/{validation.total} passed
                 </span>
-                <span className={validation.regressions ? 'text-destructive' : undefined}>{plural(validation.regressions, 'regression')} vs live</span>
+                <span className={validation.regressions ? 'text-destructive-text' : undefined}>{plural(validation.regressions, 'regression')} vs live</span>
                 <span className={validation.checksFailing ? 'text-warning-text' : undefined}>{plural(validation.checksFailing, 'check')} failing</span>
               </span>
             ) : (
@@ -143,7 +143,7 @@ export function PublishEvalSection({ review, validation }: { review: Review; val
                   v{a.version}
                 </span>
                 {a.summary ? <EvalSummaryLine summary={a.summary} /> : <span className="text-xs text-muted-foreground">{a.blockerKind === 'running' ? 'Running' : 'Not run'}</span>}
-                <span className={cn('ml-auto text-xs', a.blocker ? 'font-medium text-destructive' : a.advisory.length ? 'text-warning-text' : 'text-muted-foreground')}>
+                <span className={cn('ml-auto text-xs', a.blocker ? 'font-medium text-destructive-text' : a.advisory.length ? 'text-warning-text' : 'text-muted-foreground')}>
                   {a.blocker ? 'Blocks publishing' : a.advisory.length ? 'Needs a reason' : 'Passes'}
                 </span>
               </div>
@@ -295,7 +295,7 @@ export function ModelValidationDecisionForm({
                   </Button>
                 </div>
                 {conditionErrors[i] && (
-                  <p className="text-xs text-destructive" data-testid="condition-error">
+                  <p className="text-xs text-destructive-text" data-testid="condition-error">
                     {conditionErrors[i]}
                   </p>
                 )}
@@ -309,7 +309,7 @@ export function ModelValidationDecisionForm({
           Reason
         </Label>
         <Textarea id="validation-reason" rows={1} value={reason} onChange={(e) => (setReason(e.target.value), setMissing(null))} aria-invalid={!!missing} placeholder="e.g. Evidence covers the injection set; attachment parsing still untested" className="min-h-9 resize-none bg-card" />
-        <p className={cn('text-xs', missing ? 'text-destructive' : 'text-muted-foreground')}>{missing ?? 'Reason: required to reject or return.'}</p>
+        <p className={cn('text-xs', missing ? 'text-destructive-text' : 'text-muted-foreground')}>{missing ?? 'Reason: required to reject or return.'}</p>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="sm" disabled={!!pending || locked} onClick={() => submit('returned')}>
             Return to requester

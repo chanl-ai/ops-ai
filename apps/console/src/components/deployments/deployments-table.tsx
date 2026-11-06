@@ -67,7 +67,7 @@ function columns(showWorkflow: boolean): ColumnDef<Row>[] {
       cell: ({ row }) => (
         <span className="tabular-nums">
           {count(row.original.traffic24h)}
-          {row.original.errors24h > 0 && <span className="ml-1.5 text-xs text-destructive">{plural(row.original.errors24h, 'error')}</span>}
+          {row.original.errors24h > 0 && <span className="ml-1.5 text-xs text-destructive-text">{plural(row.original.errors24h, 'error')}</span>}
         </span>
       ),
     },

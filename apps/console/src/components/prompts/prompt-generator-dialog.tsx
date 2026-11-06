@@ -179,7 +179,7 @@ export function PromptGeneratorDialog({
             <Button onClick={next}>{step === STEPS.length - 1 ? 'Generate' : 'Next'}</Button>
           ) : (
             <div className="flex items-center gap-3">
-              {blocking.length > 0 && !streaming && <span className="text-xs text-destructive">Fix {plural(blocking.length, 'error')} before applying</span>}
+              {blocking.length > 0 && !streaming && <span className="text-xs text-destructive-text">Fix {plural(blocking.length, 'error')} before applying</span>}
               <Button
                 disabled={streaming || !g.sections.length || blocking.length > 0 || backend.busy}
                 onClick={() => {
@@ -465,11 +465,11 @@ export function PromptGeneratorDialog({
               </span>
             </div>
             {g.status === 'error' && (
-              <p className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              <p className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive-text">
                 <AlertCircle className="mt-0.5 size-4 shrink-0" /> {g.error}
               </p>
             )}
-            {actionError && <p className="text-xs text-destructive">{actionError}</p>}
+            {actionError && <p className="text-xs text-destructive-text">{actionError}</p>}
             {compare ? (
               <PromptDiff before={currentInstructions} after={text} />
             ) : (
@@ -501,7 +501,7 @@ export function PromptGeneratorDialog({
                             Cancel
                           </Button>
                         </div>
-                        {rewriting.error && <p className="text-xs text-destructive">{rewriting.error}</p>}
+                        {rewriting.error && <p className="text-xs text-destructive-text">{rewriting.error}</p>}
                       </form>
                     )}
                   </section>
@@ -524,7 +524,7 @@ export function PromptGeneratorDialog({
                 {findings.map((f) => (
                   <li key={f.id} className={cn('rounded-md border p-2 text-xs', f.severity === 'error' ? 'border-destructive/30 bg-destructive/5' : 'border-warning/40 bg-warning/5')} data-rule={f.rule}>
                     <p className="flex items-start gap-1.5">
-                      {f.severity === 'error' ? <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-destructive" /> : <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-warning-text" />}
+                      {f.severity === 'error' ? <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-destructive-text" /> : <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-warning-text" />}
                       <span>{f.message}</span>
                     </p>
                     {f.fix && (

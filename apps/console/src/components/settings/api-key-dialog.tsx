@@ -94,7 +94,7 @@ export function ApiKeyDialog({
       description="For a system that starts runs or reads logs for this team. Calls made with it are logged under its name."
       footer={
         <div className="flex w-full items-center justify-between gap-2">
-          <p className="text-xs text-destructive">{error ?? ''}</p>
+          <p className="text-xs text-destructive-text">{error ?? ''}</p>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
               Cancel

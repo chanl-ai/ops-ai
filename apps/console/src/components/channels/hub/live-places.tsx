@@ -68,7 +68,7 @@ const COLUMNS: ColumnDef<Place>[] = [
       ) : (
         <span className="whitespace-nowrap tabular-nums">
           {row.original.traffic24h.toLocaleString('en-CA')}
-          {(row.original.errors24h ?? 0) > 0 && <span className="ml-1.5 text-destructive">{plural(row.original.errors24h ?? 0, 'error', 'errors')}</span>}
+          {(row.original.errors24h ?? 0) > 0 && <span className="ml-1.5 text-destructive-text">{plural(row.original.errors24h ?? 0, 'error', 'errors')}</span>}
         </span>
       ),
   },

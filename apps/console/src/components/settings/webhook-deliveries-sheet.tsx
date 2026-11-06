@@ -56,7 +56,7 @@ function DeliveryRow({ d, onResend, resending }: { d: WebhookDelivery; onResend?
         <span className="w-[84px] shrink-0 text-right">{plural(d.attempts, 'attempt')}</span>
         <span className="ml-auto shrink-0">{relativeTime(d.at)}</span>
       </div>
-      {d.error && <p className="mt-1 truncate text-xs text-destructive">{d.error}</p>}
+      {d.error && <p className="mt-1 truncate text-xs text-destructive-text">{d.error}</p>}
     </>
   );
   if (!hasBody)

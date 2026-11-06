@@ -17,7 +17,7 @@ const TONE: Record<CardTone, string> = {
   info: 'border-primary/30 bg-primary/10 text-primary',
   success: 'border-success/30 bg-success/10 text-success-text',
   warning: 'border-warning/30 bg-warning/10 text-warning-text',
-  danger: 'border-destructive/30 bg-destructive/10 text-destructive',
+  danger: 'border-destructive/30 bg-destructive/10 text-destructive-text',
 };
 
 const ICON: Record<CardRecordType, typeof Briefcase> = { case: Briefcase, task: UserCheck, run: Route, start: Play, customer: User };
@@ -26,7 +26,7 @@ const STEP_ICON: Record<CardStepState, React.ReactNode> = {
   pending: <Circle className="size-4 text-muted-foreground" />,
   running: <Loader2 className="size-4 animate-spin text-primary" />,
   done: <CheckCircle2 className="size-4 text-success-text" />,
-  failed: <XCircle className="size-4 text-destructive" />,
+  failed: <XCircle className="size-4 text-destructive-text" />,
 };
 
 /**

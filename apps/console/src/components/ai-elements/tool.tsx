@@ -53,8 +53,8 @@ const getStatusBadge = (status: ToolUIPart["state"]) => {
     "approval-requested": <ClockIcon className="size-4 text-warning-text" />,
     "approval-responded": <CheckCircleIcon className="size-4 text-primary" />,
     "output-available": <CheckCircleIcon className="size-4 text-success-text" />,
-    "output-error": <XCircleIcon className="size-4 text-destructive" />,
-    "output-denied": <XCircleIcon className="size-4 text-destructive" />,
+    "output-error": <XCircleIcon className="size-4 text-destructive-text" />,
+    "output-denied": <XCircleIcon className="size-4 text-destructive-text" />,
   };
 
   return (
@@ -151,7 +151,7 @@ export const ToolOutput = ({
         className={cn(
           "overflow-x-auto rounded-md text-xs [&_table]:w-full",
           errorText
-            ? "bg-destructive/10 text-destructive"
+            ? "bg-destructive/10 text-destructive-text"
             : "bg-muted/50 text-foreground"
         )}
       >

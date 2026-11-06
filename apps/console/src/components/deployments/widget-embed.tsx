@@ -304,7 +304,7 @@ export function WidgetEmbeds({
                       </Button>
                     ) : null}
                     {canBuild ? (
-                      <Button size="sm" variant="ghost" className="text-destructive" disabled={update.isPending} onClick={() => setAsking({ deployment: d, change: 'retire' })} data-testid="widget-retire">
+                      <Button size="sm" variant="ghost" className="text-destructive-text" disabled={update.isPending} onClick={() => setAsking({ deployment: d, change: 'retire' })} data-testid="widget-retire">
                         Retire
                       </Button>
                     ) : null}

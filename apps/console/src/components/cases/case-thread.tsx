@@ -32,7 +32,7 @@ export function CaseConversation({ messages }: { messages: CaseMessage[] }) {
             <p className="text-sm whitespace-pre-wrap">{m.body}</p>
             {m.attachments.map((a) => (
               <div key={a.fileId || a.name} className={cn('flex items-start gap-2 rounded-md border bg-card px-3 py-2 text-xs', a.blocked && 'border-destructive/40 bg-destructive/5')} data-testid="case-attachment">
-                {a.blocked ? <ShieldX className="mt-0.5 size-3.5 shrink-0 text-destructive" /> : <Paperclip className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}
+                {a.blocked ? <ShieldX className="mt-0.5 size-3.5 shrink-0 text-destructive-text" /> : <Paperclip className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}
                 <div className="min-w-0 flex-1">
                   <p className="flex flex-wrap items-center gap-x-2 font-medium">
                     <Link href={`/files?file=${a.fileId}`} className="underline-offset-2 hover:underline">
@@ -41,7 +41,7 @@ export function CaseConversation({ messages }: { messages: CaseMessage[] }) {
                     <span className="font-normal text-muted-foreground">{bytes(a.size)}</span>
                     <ScanText status={a.scan} />
                   </p>
-                  <p className={cn('text-muted-foreground', a.blocked && 'text-destructive')}>{a.blocked ?? a.summary}</p>
+                  <p className={cn('text-muted-foreground', a.blocked && 'text-destructive-text')}>{a.blocked ?? a.summary}</p>
                 </div>
                 <FileDownloadButton fileId={a.fileId} name={a.name} blocked={a.blocked ?? (a.scan === 'pending' ? 'Still being scanned' : undefined)} size="icon" variant="ghost" />
               </div>

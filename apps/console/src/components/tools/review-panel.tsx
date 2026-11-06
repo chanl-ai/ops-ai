@@ -20,7 +20,7 @@ const semverCmp = (a: string, b: string) => {
 const DECISION = {
   approved: { label: 'Approved', icon: CheckCircle2, cls: 'text-success-text' },
   pending: { label: 'Waiting for Security', icon: CircleDashed, cls: 'text-warning-text' },
-  declined: { label: 'Returned', icon: XCircle, cls: 'text-destructive' },
+  declined: { label: 'Returned', icon: XCircle, cls: 'text-destructive-text' },
 } as const;
 
 type Decision = keyof typeof DECISION;

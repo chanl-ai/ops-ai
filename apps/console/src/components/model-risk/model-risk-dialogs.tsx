@@ -92,7 +92,7 @@ export function TierDialog({ open, onOpenChange, name, current, onSubmit, isPend
             A change to or from high or critical needs second-line approval. It opens a review for Model Risk and applies when they approve.
           </p>
         )}
-        {error.submit && <p className="text-sm text-destructive">{error.submit}</p>}
+        {error.submit && <p className="text-sm text-destructive-text">{error.submit}</p>}
       </div>
     </DialogShell>
   );
@@ -144,7 +144,7 @@ export function ConditionDialog({ open, onOpenChange, owners, onSubmit, isPendin
             <Input id="cnd-due" type="date" min={today()} aria-invalid={!!error.dueDate} value={v.dueDate} onChange={(e) => (setV({ ...v, dueDate: e.target.value }), setError({ ...error, dueDate: undefined }))} />
           </FormField>
         </div>
-        {error.submit && <p className="text-sm text-destructive">{error.submit}</p>}
+        {error.submit && <p className="text-sm text-destructive-text">{error.submit}</p>}
       </div>
     </DialogShell>
   );

@@ -136,7 +136,7 @@ function Editor({ widget }: { widget: WidgetTemplate }) {
         canBuild && (
         <div className="flex gap-2">
           {!retired && widget.canDelete !== false && (
-            <Button variant="ghost" className="text-destructive" onClick={() => (setReason(''), setRetiring(true))} data-testid="retire-widget">
+            <Button variant="ghost" className="text-destructive-text" onClick={() => (setReason(''), setRetiring(true))} data-testid="retire-widget">
               Retire
             </Button>
           )}
@@ -203,7 +203,7 @@ function Editor({ widget }: { widget: WidgetTemplate }) {
               </ToggleGroupItem>
             </ToggleGroup>
             {modeError && (
-              <p className="text-sm text-destructive" role="alert">
+              <p className="text-sm text-destructive-text" role="alert">
                 {modeError}
               </p>
             )}

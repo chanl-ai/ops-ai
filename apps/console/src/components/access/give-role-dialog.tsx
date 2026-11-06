@@ -65,7 +65,7 @@ export function GiveRoleDialog({
       onSubmit={() => void submit()}
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-destructive">{error}</p>
+          <p className="text-xs text-destructive-text">{error}</p>
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
               Cancel

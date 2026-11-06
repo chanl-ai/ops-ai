@@ -181,7 +181,7 @@ export function RetrievalTraceView({ trace: t, compact }: { trace: RetrievalTrac
                       {c.flags
                         .filter((f) => !(f === 'superseded' && c.outcome === 'superseded'))
                         .map((f) => (
-                          <Badge key={f} variant="outline" className={cn('font-normal whitespace-nowrap', f === 'connection_revoked' && 'border-destructive/40 text-destructive')}>
+                          <Badge key={f} variant="outline" className={cn('font-normal whitespace-nowrap', f === 'connection_revoked' && 'border-destructive/40 text-destructive-text')}>
                             {FLAG_LABEL[f]}
                           </Badge>
                         ))}

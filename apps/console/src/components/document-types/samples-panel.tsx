@@ -413,7 +413,7 @@ function AddSampleDialog({
       onSubmit={submit}
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-destructive">{errors.submit}</p>
+          <p className="text-xs text-destructive-text">{errors.submit}</p>
           <div className="flex gap-2">
             <Button
               type="button"

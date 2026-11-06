@@ -7,7 +7,7 @@ import type { ApprovalWidget, ChatMessage } from '@/lib/types/chat';
 
 const CALL_STATE: Record<string, { label: string; className: string }> = {
   success: { label: 'done', className: 'text-success-text' },
-  failed: { label: 'failed', className: 'text-destructive' },
+  failed: { label: 'failed', className: 'text-destructive-text' },
   running: { label: 'still running', className: 'text-muted-foreground' },
 };
 

@@ -148,7 +148,7 @@ const runColumns: ColumnDef<RunRow>[] = [
     header: 'Regressions',
     cell: ({ row }) => {
       const n = row.original.summary?.regressions;
-      return n === undefined ? '—' : <span className={n ? 'font-medium text-destructive tabular-nums' : 'tabular-nums text-muted-foreground'}>{n}</span>;
+      return n === undefined ? '—' : <span className={n ? 'font-medium text-destructive-text tabular-nums' : 'tabular-nums text-muted-foreground'}>{n}</span>;
     },
   },
   {
@@ -156,7 +156,7 @@ const runColumns: ColumnDef<RunRow>[] = [
     header: 'Injection',
     cell: ({ row }) => {
       const s = row.original.summary?.suites.find((x) => x.kind === 'injection');
-      return s ? <span className={s.passed < s.total ? 'text-destructive tabular-nums' : 'tabular-nums'}>{s.passed}/{s.total}</span> : '—';
+      return s ? <span className={s.passed < s.total ? 'text-destructive-text tabular-nums' : 'tabular-nums'}>{s.passed}/{s.total}</span> : '—';
     },
   },
   {

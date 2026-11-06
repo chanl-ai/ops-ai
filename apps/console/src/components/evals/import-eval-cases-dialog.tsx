@@ -146,7 +146,7 @@ export function ImportEvalCasesDialog({
           }}
           testId="eval-import-upload"
         />
-        {fileError && <p className="text-sm text-destructive">{fileError}</p>}
+        {fileError && <p className="text-sm text-destructive-text">{fileError}</p>}
         {rows && (
           <div className="overflow-hidden rounded-md border" data-testid="eval-import-preview">
             <Table>
@@ -169,7 +169,7 @@ export function ImportEvalCasesDialog({
                     <TableCell>
                       <CheckChips checks={r.input.checks} max={4} />
                     </TableCell>
-                    <TableCell className="text-xs">{r.error ? <span className="text-destructive">{r.error}</span> : <span className="text-success-text">Ready</span>}</TableCell>
+                    <TableCell className="text-xs">{r.error ? <span className="text-destructive-text">{r.error}</span> : <span className="text-success-text">Ready</span>}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

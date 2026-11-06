@@ -54,7 +54,7 @@ export const suiteColumns: ColumnDef<Clickable<AssuranceSuite>>[] = [
       if (r.passRate === null) return <span className="text-xs text-muted-foreground">Not run</span>;
       return (
         <span className="whitespace-nowrap tabular-nums">
-          <span className={r.failing ? 'font-medium text-destructive' : 'font-medium'}>{pct(r.passRate)}</span>
+          <span className={r.failing ? 'font-medium text-destructive-text' : 'font-medium'}>{pct(r.passRate)}</span>
           <span className="text-muted-foreground"> vs {r.livePassRate === null ? '—' : pct(r.livePassRate)}</span>
         </span>
       );
@@ -63,7 +63,7 @@ export const suiteColumns: ColumnDef<Clickable<AssuranceSuite>>[] = [
   {
     accessorKey: 'regressions',
     header: ({ column }) => <DataTableColumnHeader column={column} title="Regressions" />,
-    cell: ({ row }) => <span className={row.original.regressions ? 'font-medium text-destructive tabular-nums' : 'tabular-nums text-muted-foreground'}>{row.original.regressions ?? '—'}</span>,
+    cell: ({ row }) => <span className={row.original.regressions ? 'font-medium text-destructive-text tabular-nums' : 'tabular-nums text-muted-foreground'}>{row.original.regressions ?? '—'}</span>,
   },
   tierColumn(),
   { id: 'result', accessorFn: (r) => (r.passRate === null ? 'not_run' : r.failing ? 'failing' : 'passing'), header: 'Result', filterFn: facetFilterFn },
@@ -84,7 +84,7 @@ export const runColumns: ColumnDef<AssuranceRun>[] = [
       </span>
     ),
   },
-  { accessorKey: 'regressions', header: ({ column }) => <DataTableColumnHeader column={column} title="Regressions" />, cell: ({ row }) => <span className={row.original.regressions ? 'font-medium text-destructive tabular-nums' : 'tabular-nums text-muted-foreground'}>{row.original.regressions}</span> },
+  { accessorKey: 'regressions', header: ({ column }) => <DataTableColumnHeader column={column} title="Regressions" />, cell: ({ row }) => <span className={row.original.regressions ? 'font-medium text-destructive-text tabular-nums' : 'tabular-nums text-muted-foreground'}>{row.original.regressions}</span> },
   { accessorKey: 'durationMs', header: ({ column }) => <DataTableColumnHeader column={column} title="Duration" />, cell: ({ row }) => <span className="whitespace-nowrap tabular-nums text-xs">{ms(row.original.durationMs)}</span> },
   { accessorKey: 'costUsd', header: ({ column }) => <DataTableColumnHeader column={column} title="Cost" />, cell: ({ row }) => <span className="tabular-nums text-xs">{usd(row.original.costUsd)}</span> },
   { accessorKey: 'ranAt', header: ({ column }) => <DataTableColumnHeader column={column} title="Ran" />, cell: ({ row }) => <span className="whitespace-nowrap text-xs">{relativeTime(row.original.ranAt)}</span> },
@@ -122,7 +122,7 @@ export const gateColumns: ColumnDef<AssuranceGate>[] = [
     id: 'result',
     accessorFn: (r) => (r.blocked ? 'blocked' : r.reviewStatus === 'pending' || r.reviewStatus === 'in_review' ? 'ready' : 'decided'),
     header: 'Status',
-    cell: ({ row }) => (row.original.blocked ? <span className="text-xs font-medium whitespace-nowrap text-destructive">Blocked</span> : <span className="text-xs whitespace-nowrap">{STATUS_LABEL[row.original.reviewStatus]}</span>),
+    cell: ({ row }) => (row.original.blocked ? <span className="text-xs font-medium whitespace-nowrap text-destructive-text">Blocked</span> : <span className="text-xs whitespace-nowrap">{STATUS_LABEL[row.original.reviewStatus]}</span>),
     filterFn: facetFilterFn,
   },
   { accessorKey: 'requestedAt', header: ({ column }) => <DataTableColumnHeader column={column} title="Requested" />, cell: ({ row }) => <span className="whitespace-nowrap text-xs">{relativeTime(row.original.requestedAt)}</span> },
@@ -176,7 +176,7 @@ export const judgeColumns: ColumnDef<Clickable<AssuranceJudge>>[] = [
     accessorKey: 'agreement',
     header: ({ column }) => <DataTableColumnHeader column={column} title="Agreement" />,
     cell: ({ row }) => (
-      <span className={row.original.agreement < row.original.minAgreement ? 'font-medium text-destructive tabular-nums' : 'tabular-nums'}>
+      <span className={row.original.agreement < row.original.minAgreement ? 'font-medium text-destructive-text tabular-nums' : 'tabular-nums'}>
         {pct(row.original.agreement)}
         {row.original.agreement < row.original.minAgreement && <span className="ml-1 text-xs">advisory only</span>}
       </span>

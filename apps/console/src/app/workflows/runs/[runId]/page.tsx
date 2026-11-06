@@ -286,7 +286,7 @@ export default function EngineRunPage() {
             </>
           }
         >
-          {cancelError ? <p className="text-sm text-destructive">{cancelError}</p> : <p className="text-sm text-muted-foreground">This cannot be undone; start a new run to try again.</p>}
+          {cancelError ? <p className="text-sm text-destructive-text">{cancelError}</p> : <p className="text-sm text-muted-foreground">This cannot be undone; start a new run to try again.</p>}
         </DialogShell>
         <StepSheet
           step={step}

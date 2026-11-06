@@ -130,7 +130,7 @@ export function SourceOverview({
           ) : (
             <Rows>
               {s.errorGroups.map((g) => (
-                <Row key={g.message} leading={<AlertTriangle className="size-4 text-destructive" />} title={<span className="font-normal">{g.message}</span>} trailing={<span className="text-muted-foreground">{plural(g.count, 'item')}</span>} />
+                <Row key={g.message} leading={<AlertTriangle className="size-4 text-destructive-text" />} title={<span className="font-normal">{g.message}</span>} trailing={<span className="text-muted-foreground">{plural(g.count, 'item')}</span>} />
               ))}
             </Rows>
           )}
@@ -177,7 +177,7 @@ export function SourceOverview({
                   <TableCell className="text-right tabular-nums">{r.status === 'running' ? '—' : duration(r.durationSec)}</TableCell>
                   <TableCell className="text-right tabular-nums">{count(r.counts.listed)}</TableCell>
                   <TableCell className="text-right tabular-nums">{count(r.counts.upserted + r.counts.deleted)}</TableCell>
-                  <TableCell className={r.counts.failed > 0 ? 'text-right tabular-nums text-destructive' : 'text-right tabular-nums'}>{count(r.counts.failed)}</TableCell>
+                  <TableCell className={r.counts.failed > 0 ? 'text-right tabular-nums text-destructive-text' : 'text-right tabular-nums'}>{count(r.counts.failed)}</TableCell>
                   <TableCell>
                     <RunStatusBadge status={r.status} />
                   </TableCell>

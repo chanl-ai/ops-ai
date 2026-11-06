@@ -81,7 +81,7 @@ export function SuiteSheet({ suite, open, onOpenChange, navigation }: { suite: A
                       <TableRow key={r.caseId}>
                         <TableCell className="max-w-64">
                           <div className="truncate" title={r.name}>{r.name}</div>
-                          {r.regression && <div className="text-xs text-destructive">Regression</div>}
+                          {r.regression && <div className="text-xs text-destructive-text">Regression</div>}
                         </TableCell>
                         <TableCell><OutcomeText outcome={r.candidate} /></TableCell>
                         <TableCell><OutcomeText outcome={r.live} /></TableCell>

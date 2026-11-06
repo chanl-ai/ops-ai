@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 export function DangerZone({ items }: { items: { title: string; description: string; action: string; onClick: () => void; destructive?: boolean; disabled?: boolean; testId?: string }[] }) {
   return (
     <div className="rounded-lg border border-destructive/30">
-      <div className="border-b border-destructive/30 px-4 py-2.5 text-sm font-medium text-destructive">Danger zone</div>
+      <div className="border-b border-destructive/30 px-4 py-2.5 text-sm font-medium text-destructive-text">Danger zone</div>
       <ul className="divide-y">
         {items.map((i) => (
           <li key={i.title} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">

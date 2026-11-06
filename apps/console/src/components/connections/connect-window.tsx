@@ -358,7 +358,7 @@ export function ConnectWindow({
 
         {waiting && <p className="text-sm">Allow access in the {card.name} window that opened.</p>}
         {error && (
-          <p className="text-sm text-destructive" role="alert" data-testid="connect-window-error">
+          <p className="text-sm text-destructive-text" role="alert" data-testid="connect-window-error">
             {error}
           </p>
         )}

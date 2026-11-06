@@ -17,8 +17,8 @@ const KIND: Record<NotificationKind, { icon: LucideIcon; tone: string }> = {
   approval_waiting: { icon: UserCheck, tone: 'bg-primary/10 text-primary' },
   sla_at_risk: { icon: AlertTriangle, tone: 'bg-warning/10 text-warning-text' },
   publish_request: { icon: Rocket, tone: 'bg-sky-500/10 text-sky-600 dark:text-sky-400' },
-  mailbox_disconnected: { icon: MailWarning, tone: 'bg-destructive/10 text-destructive' },
-  test_regression: { icon: FlaskConical, tone: 'bg-destructive/10 text-destructive' },
+  mailbox_disconnected: { icon: MailWarning, tone: 'bg-destructive/10 text-destructive-text' },
+  test_regression: { icon: FlaskConical, tone: 'bg-destructive/10 text-destructive-text' },
   knowledge_change: { icon: BookOpenCheck, tone: 'bg-violet-500/10 text-violet-600 dark:text-violet-400' },
 };
 
@@ -106,7 +106,7 @@ export function NotificationsBell({
             </div>
           ) : error && !feed ? (
             <div className="flex flex-col items-center gap-2 px-6 py-8 text-center text-sm">
-              <AlertCircle className="size-6 text-destructive" />
+              <AlertCircle className="size-6 text-destructive-text" />
               <p className="text-muted-foreground">Couldn’t load notifications.</p>
               <Button size="sm" variant="outline" onClick={onRetry}>
                 Try again

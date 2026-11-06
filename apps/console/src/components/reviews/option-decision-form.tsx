@@ -247,7 +247,7 @@ export function OptionDecisionForm({
                 key={option.name}
                 size="sm"
                 variant={(option.tone ? option.tone === 'primary' : i === 0) ? 'default' : 'outline'}
-                className={option.tone === 'destructive' ? 'text-destructive' : undefined}
+                className={option.tone === 'destructive' ? 'text-destructive-text' : undefined}
                 isLoading={pending === option.name}
                 disabled={!!pending || !!blocked?.[option.name]}
                 onMouseEnter={() => setFocused(option.name)}

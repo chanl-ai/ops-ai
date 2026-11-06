@@ -207,7 +207,7 @@ export default function ModulePage() {
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive" disabled={m.canDelete === false} onClick={() => setDeleteOpen(true)}>
+              <DropdownMenuItem className="text-destructive-text" disabled={m.canDelete === false} onClick={() => setDeleteOpen(true)}>
                 <Trash2 className="size-4" /> Delete
               </DropdownMenuItem>
             </DropdownMenuContent>

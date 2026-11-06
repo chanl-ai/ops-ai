@@ -289,7 +289,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
           </Button>
           {canBuild && (
             <>
-              <span role="status" data-testid="agent-save-status" className={saveError ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
+              <span role="status" data-testid="agent-save-status" className={saveError ? 'text-xs text-destructive-text' : 'text-xs text-muted-foreground'}>
                 {update.isPending ? 'Saving…' : saveError ? `Not saved: ${saveError}` : dirty ? (valid ? 'Saving soon…' : 'Fix the highlighted fields to save') : `Draft v${agent.version} saved`}
               </span>
               {saveError && !update.isPending && (
@@ -318,7 +318,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
               )}
               {assist.menuItem}
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="flex-col items-start text-destructive" disabled={liveUse.length > 0 || agent.canDelete === false} onClick={() => setDeleteOpen(true)}>
+              <DropdownMenuItem className="flex-col items-start text-destructive-text" disabled={liveUse.length > 0 || agent.canDelete === false} onClick={() => setDeleteOpen(true)}>
                 <span className="flex items-center gap-2">
                   <Trash2 className="size-4" /> Delete agent
                 </span>

@@ -124,7 +124,7 @@ export function LifecycleActions({
           </>
         }
       >
-        {error ? <p className="text-sm text-destructive">{error}</p> : <p className="text-sm text-muted-foreground">Only the live version is affected; drafts and versions in review are not.</p>}
+        {error ? <p className="text-sm text-destructive-text">{error}</p> : <p className="text-sm text-muted-foreground">Only the live version is affected; drafts and versions in review are not.</p>}
       </DialogShell>
     </>
   );

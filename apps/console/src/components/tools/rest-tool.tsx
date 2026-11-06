@@ -287,7 +287,7 @@ export function RestTool(p: RestToolProps) {
           }
         >
           {p.runError ? (
-            <p className="text-sm text-destructive">{p.runError}</p>
+            <p className="text-sm text-destructive-text">{p.runError}</p>
           ) : !p.result ? (
             <p className="py-8 text-center text-sm text-muted-foreground" data-testid="response-empty">
               Run to see the answer and the request that was sent.

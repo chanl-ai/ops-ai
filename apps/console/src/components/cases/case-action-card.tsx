@@ -83,7 +83,7 @@ export function CaseActionCard({
           </p>
         )}
         {action.result && <p className="text-xs text-success-text">{action.result}</p>}
-        {action.rejectedReason && <p className="text-xs text-destructive">Rejected: {action.rejectedReason}</p>}
+        {action.rejectedReason && <p className="text-xs text-destructive-text">Rejected: {action.rejectedReason}</p>}
 
         {pending && (
           <div className="flex flex-wrap items-center gap-2 border-t pt-3">

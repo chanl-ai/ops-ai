@@ -84,7 +84,7 @@ export function ReauthDialog({ open, onOpenChange, action, onVerified }: { open:
       {viaIdp ? (
         <div className="flex flex-col gap-2 text-sm text-muted-foreground" data-testid="reauth-sso">
           <p>You sign in through {idp}. You will go there to confirm, then come back to this page; press Approve again when you are back.</p>
-          {error && <p className="text-destructive">{error}</p>}
+          {error && <p className="text-destructive-text">{error}</p>}
         </div>
       ) : (
         <form

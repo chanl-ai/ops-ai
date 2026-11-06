@@ -70,7 +70,7 @@ export function RequestLine({ value, onChange, error, trailing, bare }: { value:
         {trailing && <div className="flex items-center gap-2">{trailing}</div>}
       </div>
   );
-  if (bare) return error ? <div className="flex flex-col gap-1.5">{line}<p className="text-xs text-destructive">{error}</p></div> : line;
+  if (bare) return error ? <div className="flex flex-col gap-1.5">{line}<p className="text-xs text-destructive-text">{error}</p></div> : line;
   return (
     <FormField id="http-url" label="Request" error={error} hint="Use {name} for a value in the path or the query. Values the case binds are filled by the gateway.">
       {line}
@@ -218,7 +218,7 @@ export function BodyEditor({ value, onChange, error }: { value: HttpOperationInp
             </div>
           ))}
           <p className="text-xs text-muted-foreground">Use {'{{name}}'} for a value the agent supplies.</p>
-          {error && <p className="text-xs text-destructive">{error}</p>}
+          {error && <p className="text-xs text-destructive-text">{error}</p>}
         </div>
       ) : (
         <FormField id="http-body" label="Body template" optional error={error}>

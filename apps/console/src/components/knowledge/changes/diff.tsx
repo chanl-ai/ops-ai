@@ -84,7 +84,7 @@ export function PassageDiff({ before, after, className }: { before: string; afte
           className={cn(
             'px-1',
             r.kind === 'add' && 'bg-success/10 text-success-text',
-            r.kind === 'del' && 'bg-destructive/10 text-destructive',
+            r.kind === 'del' && 'bg-destructive/10 text-destructive-text',
           )}
         >
           <span aria-hidden className="select-none">{r.kind === 'add' ? '+ ' : r.kind === 'del' ? '- ' : '  '}</span>

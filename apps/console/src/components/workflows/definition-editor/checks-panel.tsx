@@ -14,7 +14,7 @@ function CheckLine({ check, nodeName }: { check: DefinitionCheck; nodeName: (id:
   const Icon = isError || check.level === 'warning' ? AlertTriangle : Info;
   return (
     <>
-      <Icon className={cn('mt-0.5 size-4 shrink-0', isError ? 'text-destructive' : check.level === 'warning' ? 'text-warning-text' : 'text-muted-foreground')} />
+      <Icon className={cn('mt-0.5 size-4 shrink-0', isError ? 'text-destructive-text' : check.level === 'warning' ? 'text-warning-text' : 'text-muted-foreground')} />
       <span className="min-w-0 flex-1 text-left">
         <span className="block text-sm break-words">{check.message}</span>
         <span className="block truncate text-xs text-muted-foreground">{check.node ? nodeName(check.node) : 'Whole workflow'}</span>
@@ -47,7 +47,7 @@ export function ChecksPanel({
   return (
     <div data-testid="definition-checks" className="min-w-0">
       <Section title="Checks" description={summary} flush>
-        {failed && <p className="border-b px-4 py-2.5 text-sm text-destructive">Couldn’t check this workflow: {failed}</p>}
+        {failed && <p className="border-b px-4 py-2.5 text-sm text-destructive-text">Couldn’t check this workflow: {failed}</p>}
         {validation && checks.length === 0 ? (
           <p className="flex items-center gap-2 px-4 py-3 text-sm text-success-text">
             <CheckCircle2 className="size-4" /> No problems

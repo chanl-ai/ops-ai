@@ -71,7 +71,7 @@ export function ApprovalCard({
         </p>
       </ConfirmationAccepted>
       <ConfirmationRejected>
-        <p className="flex items-center gap-1.5 text-sm text-destructive">
+        <p className="flex items-center gap-1.5 text-sm text-destructive-text">
           <XCircle className="size-4" /> Rejected
         </p>
       </ConfirmationRejected>

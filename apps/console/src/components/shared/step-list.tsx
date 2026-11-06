@@ -10,7 +10,7 @@ const ICON = {
   pending: <Circle className="size-4 text-muted-foreground" />,
   running: <Loader2 className="size-4 animate-spin text-muted-foreground" />,
   done: <CheckCircle2 className="size-4 text-success-text" />,
-  failed: <XCircle className="size-4 text-destructive" />,
+  failed: <XCircle className="size-4 text-destructive-text" />,
 };
 
 /** A plan or a run's steps, each with its state, on AI Elements' Task; open by default. */

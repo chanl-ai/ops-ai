@@ -171,7 +171,7 @@ function ThreadSettingsSheet({ threadId, open, onOpenChange }: { threadId: strin
                   );
                 })}
               </div>
-              {errorFor('toolsOff') && <p className="text-xs text-destructive">{errorFor('toolsOff')}</p>}
+              {errorFor('toolsOff') && <p className="text-xs text-destructive-text">{errorFor('toolsOff')}</p>}
             </div>
           )}
 
@@ -181,7 +181,7 @@ function ThreadSettingsSheet({ threadId, open, onOpenChange }: { threadId: strin
             </FormField>
           )}
 
-          {fieldError && !['model', 'temperature', 'toolsOff', 'instructions'].some((f) => fieldError.field.endsWith(`.${f}`)) && <p className="text-sm text-destructive">{fieldError.message}</p>}
+          {fieldError && !['model', 'temperature', 'toolsOff', 'instructions'].some((f) => fieldError.field.endsWith(`.${f}`)) && <p className="text-sm text-destructive-text">{fieldError.message}</p>}
         </form>
       )}
     </DetailSheet>
