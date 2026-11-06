@@ -377,6 +377,21 @@ class RoleDetail(TypedDict, closed=True):
     permissions: list[PermissionOut]
 
 
+class RoleGrantIn(TypedDict, closed=True):
+    roleId: str
+    teamId: str
+
+
+class RoleGrantOut(TypedDict, closed=True):
+    createdAt: str
+    expiresAt: NotRequired[str | None]
+    grantedBy: str
+    id: str
+    roleId: str
+    roleName: str
+    teamId: str
+
+
 class RoleHolderOut(TypedDict, closed=True):
     email: NotRequired[str | None]
     id: str
@@ -705,6 +720,11 @@ class EnvelopeRoleDetail(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeRoleGrantOut(TypedDict, closed=True):
+    data: RoleGrantOut
+    success: Literal[True]
+
+
 class EnvelopeSignInSecretOut(TypedDict, closed=True):
     data: SignInSecretOut
     success: Literal[True]
@@ -767,6 +787,11 @@ class EnvelopeListPersonName(TypedDict, closed=True):
 
 class EnvelopeListPolicyOut(TypedDict, closed=True):
     data: list[PolicyOut]
+    success: Literal[True]
+
+
+class EnvelopeListRoleGrantOut(TypedDict, closed=True):
+    data: list[RoleGrantOut]
     success: Literal[True]
 
 

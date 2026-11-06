@@ -349,6 +349,17 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "people_give_role": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/people/{person_id}/role-grants",
+    "pathParams": [
+      "person_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "people_people_names": {
     "body": null,
     "headers": [],
@@ -365,6 +376,29 @@ export const platformOperations = {
     "path": "/v1/people/{person_id}/permissions",
     "pathParams": [
       "person_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "people_person_role_grants": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/people/{person_id}/role-grants",
+    "pathParams": [
+      "person_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "people_take_role": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/people/{person_id}/role-grants/{grant_id}",
+    "pathParams": [
+      "person_id",
+      "grant_id"
     ],
     "query": [],
     "stream": false

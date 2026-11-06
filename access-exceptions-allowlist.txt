@@ -72,6 +72,7 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict address_taken 0 state
 * conflict agent_paused 0 state
 * conflict already_decided 0 state
+* conflict already_granted 0 state
 * conflict already_published 0 state
 * conflict already_resumed 0 state
 * conflict archived_too_recently 0 state
@@ -110,6 +111,7 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict no_team_account 0 state
 * conflict node_missing 0 state
 * conflict not_a_draft 0 state
+* conflict not_a_member 0 state
 * conflict not_an_account_admin 0 state
 * conflict not_archived 0 state
 * conflict not_closed 0 state

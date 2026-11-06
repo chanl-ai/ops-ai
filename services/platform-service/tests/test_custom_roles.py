@@ -15,7 +15,11 @@ from ops_service_kit.errors import Forbidden
 from .conftest import Platform
 from .test_permissions import _principal, bearer, claims, grant  # pyright: ignore[reportPrivateUsage]
 
-CASE_DESK = [{"area": "cases", "action": "view", "scope": "all"}, {"area": "cases", "action": "edit", "scope": "all"}]
+# Cells a viewer does not hold, so a test sees what the custom role adds.
+CASE_DESK = [
+    {"area": "knowledge", "action": "create", "scope": "all"},
+    {"area": "knowledge", "action": "edit", "scope": "all"},
+]
 
 
 async def _admin(platform: Platform) -> tuple[Any, dict[str, str]]:
@@ -37,7 +41,7 @@ async def test_a_workspace_admin_makes_a_role_whose_cells_decide_in_a_service(pl
     ).status_code == 403
     await grant(platform, viewer, team, role["id"])
     who = await _principal(platform, await bearer(platform, viewer), team)
-    assert can(who, "cases", "edit", team=team) == "all"
+    assert can(who, "knowledge", "edit", team=team) == "all"
     with pytest.raises(Forbidden):
         can(who, "agents", "edit", team=team)
 
@@ -97,3 +101,36 @@ async def test_a_held_role_is_deleted_only_by_moving_its_holders_and_every_chang
     audit = (await platform.public.get("/v1/audit", headers={**ah, "X-Team-Id": mine})).json()["data"]["data"]
     actions = {e.get("platformAction") or e.get("action") for e in audit}
     assert {"role.create", "role.delete"} <= actions, audit[:4]
+
+
+async def test_a_team_admin_gives_and_takes_a_custom_role_in_their_team_only(platform: Platform) -> None:
+    owner, ah = await _admin(platform)
+    rid = (
+        await platform.public.post("/v1/roles", headers=ah, json={"name": "Desk 2", "permissions": CASE_DESK})
+    ).json()["data"]["id"]
+    member = await platform.person(roles=("viewer",), tenant_id=owner.tenant_id)
+    team = next(iter(member.teams))
+    team_admin = await platform.person(roles=("viewer",), tenant_id=owner.tenant_id)
+    await grant(platform, team_admin, team, "admin")
+    th = await bearer(platform, team_admin)
+    path = f"/v1/people/{member.user_id}/role-grants"
+    mh = await bearer(platform, member)
+    refused = await platform.public.post(path, headers=mh, json={"roleId": rid, "teamId": team})
+    assert refused.status_code == 403, refused.text
+    given = await platform.public.post(path, headers=th, json={"roleId": rid, "teamId": team})
+    assert given.status_code == 201 and given.json()["data"]["roleName"] == "Desk 2", given.text
+    again = await platform.public.post(path, headers=th, json={"roleId": rid, "teamId": team})
+    assert again.json()["error"]["code"] == "already_granted", again.text
+    builtin = await platform.public.post(path, headers=ah, json={"roleId": "builder", "teamId": team})
+    assert builtin.json()["error"]["code"] == "builtin_role", builtin.text
+    elsewhere = next(iter(team_admin.teams))
+    outside = await platform.public.post(path, headers=ah, json={"roleId": rid, "teamId": elsewhere})
+    assert outside.json()["error"]["code"] == "not_a_member", outside.text
+    who = await _principal(platform, await bearer(platform, member), team)
+    assert can(who, "knowledge", "edit", team=team) == "all"
+    listed = (await platform.public.get(path, headers=th)).json()["data"]
+    taken = await platform.public.delete(f"{path}/{listed[0]['id']}", headers=th)
+    assert taken.status_code == 204, taken.text
+    who = await _principal(platform, await bearer(platform, member), team)
+    with pytest.raises(Forbidden):
+        can(who, "knowledge", "edit", team=team)

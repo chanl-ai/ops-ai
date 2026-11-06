@@ -475,6 +475,21 @@ class RoleCreatedOut(RoleDetail):
     left_out: list[str] = Field(default_factory=list[str])
 
 
+class RoleGrantIn(In):
+    role_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    team_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
+
+
+class RoleGrantOut(Out):
+    id: str
+    role_id: str
+    role_name: str
+    team_id: str
+    expires_at: str | None = None
+    granted_by: str
+    created_at: str
+
+
 class RoleHolderOut(Out):
     kind: Literal["person", "team"]
     id: str

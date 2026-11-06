@@ -325,6 +325,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "people_give_role": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/people/{person_id}/role-grants",
+        "pathParams": ["person_id"],
+        "query": [],
+        "stream": False,
+    },
     "people_people_names": {
         "body": None,
         "headers": [],
@@ -340,6 +349,24 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/people/{person_id}/permissions",
         "pathParams": ["person_id"],
+        "query": [],
+        "stream": False,
+    },
+    "people_person_role_grants": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/people/{person_id}/role-grants",
+        "pathParams": ["person_id"],
+        "query": [],
+        "stream": False,
+    },
+    "people_take_role": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/people/{person_id}/role-grants/{grant_id}",
+        "pathParams": ["person_id", "grant_id"],
         "query": [],
         "stream": False,
     },
@@ -837,6 +864,20 @@ class Operations:
         "Person Permissions"
         return self._t.call(SERVICE, OPERATIONS["people_person_permissions"], {"person_id": person_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def people_person_role_grants(self, person_id: str) -> list[RoleGrantOut]:
+        "Person Role Grants"
+        return self._t.call(SERVICE, OPERATIONS["people_person_role_grants"], {"person_id": person_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def people_give_role(self, person_id: str, body: RoleGrantIn) -> RoleGrantOut:
+        "Give Role"
+        return self._t.call(SERVICE, OPERATIONS["people_give_role"], {"person_id": person_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def people_take_role(self, person_id: str, grant_id: str) -> Any:
+        "Take Role"
+        return self._t.call(
+            SERVICE, OPERATIONS["people_take_role"], {"person_id": person_id, "grant_id": grant_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
     def policies_list_policies(self) -> list[PolicyOut]:
         "List Policies"
         return self._t.call(SERVICE, OPERATIONS["policies_list_policies"], {}, {}, {}, None)  # type: ignore[no-any-return]
@@ -1209,6 +1250,22 @@ class AsyncOperations:
         "Person Permissions"
         return await self._t.call(
             SERVICE, OPERATIONS["people_person_permissions"], {"person_id": person_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def people_person_role_grants(self, person_id: str) -> list[RoleGrantOut]:
+        "Person Role Grants"
+        return await self._t.call(
+            SERVICE, OPERATIONS["people_person_role_grants"], {"person_id": person_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def people_give_role(self, person_id: str, body: RoleGrantIn) -> RoleGrantOut:
+        "Give Role"
+        return await self._t.call(SERVICE, OPERATIONS["people_give_role"], {"person_id": person_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def people_take_role(self, person_id: str, grant_id: str) -> Any:
+        "Take Role"
+        return await self._t.call(
+            SERVICE, OPERATIONS["people_take_role"], {"person_id": person_id, "grant_id": grant_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     async def policies_list_policies(self) -> list[PolicyOut]:

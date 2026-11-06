@@ -82,6 +82,16 @@ export function useRoleChanges(id: string) {
 export const useRoleHolders = (id: string, enabled: boolean) =>
   useTeamQuery({ queryKey: ['access', 'role', id, 'holders'], queryFn: () => api.teams.roleHolders!(id), enabled: enabled && !!api.teams.roleHolders });
 
+/** The custom roles given to a person, and giving or taking one; their access refreshes after either. */
+export function useRoleGrants(personId: string) {
+  const qc = useQueryClient();
+  const grants = useTeamQuery({ queryKey: ['access', 'person', personId, 'grants'], queryFn: () => api.teams.roleGrants!(personId), enabled: !!api.teams.roleGrants && !!personId });
+  const settled = () => Promise.all([qc.invalidateQueries({ queryKey: ['access', 'person', personId] }), qc.invalidateQueries({ queryKey: ['access', 'roles'] })]);
+  const give = useMutation({ mutationFn: (input: { roleId: string; teamId: string }) => api.teams.giveRole!(personId, input), onSuccess: settled });
+  const take = useMutation({ mutationFn: (grantId: string) => api.teams.takeRole!(personId, grantId), onSuccess: settled });
+  return { grants, give, take, available: !!api.teams.giveRole };
+}
+
 export const usePersonPermissions = (id: string) =>
   useTeamQuery({ queryKey: ['access', 'person', id], queryFn: () => api.teams.personPermissions!(id), enabled: !!api.teams.personPermissions && !!id });
 

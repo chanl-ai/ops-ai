@@ -41,6 +41,10 @@ class RoleNameTakenError(Exception):
     """Another role of the workspace has that name."""
 
 
+class AlreadyGrantedError(Exception):
+    """The person holds that role in that team already."""
+
+
 class RoleInUseError(Exception):
     """People or teams hold the role; `holders` names them."""
 
@@ -377,6 +381,121 @@ class RoleStore:
                 detail={"movedTo": move_to, "moved": moved},
             )
         return moved
+
+    async def grants_of(self, tenant_id: str, user_id: str) -> list[dict[str, Any]]:
+        """The roles given to the person on their own (not their team role), each with its team and who gave it."""
+        q = (
+            sa.select(
+                role_assignments.c.id,
+                role_assignments.c.role_id,
+                roles.c.name,
+                role_assignments.c.team_id,
+                role_assignments.c.expires_at,
+                role_assignments.c.granted_by,
+                role_assignments.c.created_at,
+            )
+            .join(roles, roles.c.id == role_assignments.c.role_id)
+            .where(
+                role_assignments.c.subject_kind == "person",
+                role_assignments.c.subject_id == user_id,
+                role_assignments.c.source == "grant",
+                roles.c.builtin.is_(False),
+            )
+            .order_by(roles.c.name, role_assignments.c.team_id)
+        )
+        async with self.db.tenant_tx(tenant_id) as c:
+            rows = (await c.execute(q)).all()
+        return [
+            {
+                "id": r[0],
+                "roleId": r[1],
+                "roleName": r[2],
+                "teamId": r[3],
+                "expiresAt": r[4],
+                "grantedBy": r[5],
+                "createdAt": r[6],
+            }
+            for r in rows
+        ]
+
+    async def grant(self, tenant_id: str, user_id: str, role_id: str, team_id: str, *, by: str, request_id: str) -> str:
+        """Gives the person a role in a team, audited as `role.grant`; AlreadyGrantedError when they hold it there."""
+        grant_id = new_id("ras")
+        async with self.db.tenant_tx(tenant_id) as c:
+            held = await c.execute(
+                sa.select(role_assignments.c.id).where(
+                    role_assignments.c.subject_kind == "person",
+                    role_assignments.c.subject_id == user_id,
+                    role_assignments.c.role_id == role_id,
+                    role_assignments.c.team_id == team_id,
+                )
+            )
+            if held.first() is not None:
+                raise AlreadyGrantedError
+            await c.execute(
+                role_assignments.insert().values(
+                    id=grant_id,
+                    tenant_id=tenant_id,
+                    subject_kind="person",
+                    subject_id=user_id,
+                    role_id=role_id,
+                    team_id=team_id,
+                    granted_by=by,
+                    reason="Given on Access",
+                    source="grant",
+                    created_at=now_iso(),
+                )
+            )
+            await bump_version(c, tenant_id)
+            await record(
+                c,
+                tenant_id=tenant_id,
+                team_id=team_id,
+                actor=by,
+                action="role.grant",
+                target_kind="person",
+                target_id=user_id,
+                request_id=request_id,
+                detail={"roleId": role_id, "teamId": team_id},
+            )
+        return grant_id
+
+    async def grant_row(self, tenant_id: str, grant_id: str) -> dict[str, Any] | None:
+        async with self.db.tenant_tx(tenant_id) as c:
+            row = (
+                await c.execute(
+                    sa.select(
+                        role_assignments.c.subject_id, role_assignments.c.role_id, role_assignments.c.team_id
+                    ).where(role_assignments.c.id == grant_id, role_assignments.c.source == "grant")
+                )
+            ).first()
+        return {"subjectId": row[0], "roleId": row[1], "teamId": row[2]} if row else None
+
+    async def ungrant(self, tenant_id: str, grant_id: str, *, by: str, request_id: str) -> bool:
+        """Takes a given role away, audited as `role.ungrant`; False when no such grant."""
+        async with self.db.tenant_tx(tenant_id) as c:
+            row = (
+                await c.execute(
+                    role_assignments.delete()
+                    .where(role_assignments.c.id == grant_id, role_assignments.c.source == "grant")
+                    .returning(role_assignments.c.subject_id, role_assignments.c.role_id, role_assignments.c.team_id)
+                )
+            ).first()
+            if row is None:
+                return False
+            await bump_version(c, tenant_id)
+            await record(
+                c,
+                tenant_id=tenant_id,
+                team_id=str(row[2]),
+                actor=by,
+                action="role.ungrant",
+                target_kind="person",
+                target_id=str(row[0]),
+                request_id=request_id,
+                detail={"roleId": row[1], "teamId": row[2]},
+            )
+        return True
 
     async def _holders_in(self, c: AsyncConnection, role_id: str) -> list[dict[str, Any]]:
         q = (

@@ -15,7 +15,7 @@ from ops_access.catalogue import ADMIN
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.ids import now_iso
 
-from .store.roles import Holdings, RoleInUseError, RoleNameTakenError, RoleStore
+from .store.roles import AlreadyGrantedError, Holdings, RoleInUseError, RoleNameTakenError, RoleStore
 
 
 def custom_role_refuses(area: str, action: str) -> bool:
@@ -142,6 +142,27 @@ class Roles:
                 code="role_in_use",
                 details={"holders": e.holders},
             ) from e
+
+    async def grant(
+        self, tenant_id: str, person_id: str, role_id: str, team_id: str, *, by: str, request_id: str
+    ) -> dict[str, Any]:
+        """Gives a person a custom role in a team they belong to. A built-in role comes with their team role instead
+        (409 `builtin_role`); 409 `not_a_member` outside their teams, `already_granted` when they hold it there."""
+        role = await self.store.role(tenant_id, role_id)
+        if role is None:
+            raise NotFound("No role with that id.")
+        if role["builtin"]:
+            raise Conflict(
+                f"{role['name']} comes with a person's team role; change their role in the team instead.",
+                code="builtin_role",
+            )
+        if team_id not in (await self.store.holdings(tenant_id, person_id)).teams:
+            raise Conflict("Add the person to the team before giving them a role there.", code="not_a_member")
+        try:
+            grant_id = await self.store.grant(tenant_id, person_id, role_id, team_id, by=by, request_id=request_id)
+        except AlreadyGrantedError as e:
+            raise Conflict(f"They hold {role['name']} in that team already.", code="already_granted") from e
+        return next(g for g in await self.store.grants_of(tenant_id, person_id) if g["id"] == grant_id)
 
     async def _custom(self, tenant_id: str, role_id: str, verb: str) -> dict[str, Any]:
         role = await self.store.role(tenant_id, role_id)

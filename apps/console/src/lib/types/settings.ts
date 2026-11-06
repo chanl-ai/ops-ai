@@ -87,6 +87,17 @@ export interface RoleCreated extends RoleDetail {
   leftOut: string[];
 }
 
+/** A custom role given to a person in one of their teams (GET /v1/people/{id}/role-grants). */
+export interface RoleGrant {
+  id: string;
+  roleId: string;
+  roleName: string;
+  teamId: string;
+  expiresAt?: string | null;
+  grantedBy: string;
+  createdAt: string;
+}
+
 /** Who holds a role and in which team (GET /v1/roles/{id}/holders). */
 export interface RoleHolder {
   kind: 'person' | 'team';

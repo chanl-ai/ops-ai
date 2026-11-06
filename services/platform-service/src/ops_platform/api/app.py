@@ -111,6 +111,8 @@ from .schemas import (
     RoleCreatedOut,
     RoleCreateIn,
     RoleDetail,
+    RoleGrantIn,
+    RoleGrantOut,
     RoleHolderOut,
     RoleIn,
     RoleOut,
@@ -867,6 +869,58 @@ def create_public_app(
         """Who holds the role and in which team: what deleting it would take from them. A workspace admin's."""
         await people.require_admin(actor, "access", "view")
         return ok(await roles.store.holders(actor.tenant_id, role_id))
+
+    @app.get(
+        "/v1/people/{person_id}/role-grants",
+        tags=["people"],
+        response_model=Envelope[list[RoleGrantOut]],
+        responses=ERRORS,
+    )
+    async def person_role_grants(  # pyright: ignore[reportUnusedFunction]
+        person_id: Annotated[str, Path(pattern=RECORD_ID)], claims: Annotated[dict[str, Any], Depends(claims_of)]
+    ) -> Any:
+        """The custom roles given to a person on their own, each with its team; read by whoever shares a team with
+        them, as their permissions are (404 otherwise)."""
+        tenant = str(claims["tenant_id"])
+        await roles.of_person(tenant, str(claims["sub"]), person_id)
+        return ok(await roles.store.grants_of(tenant, person_id))
+
+    @app.post(
+        "/v1/people/{person_id}/role-grants",
+        tags=["people"],
+        status_code=201,
+        response_model=Envelope[RoleGrantOut],
+        responses=ERRORS,
+    )
+    async def give_role(  # pyright: ignore[reportUnusedFunction]
+        person_id: Annotated[str, Path(pattern=RECORD_ID)],
+        body: RoleGrantIn,
+        claims: Annotated[dict[str, Any], Depends(claims_of)],
+    ) -> Any:
+        """Gives a person a custom role in one of their teams: an admin of that team or a workspace admin
+        (access.manage there). Audited; applies on their next request."""
+        actor = Actor(str(claims["tenant_id"]), body.team_id, str(claims["sub"]), new_id("req"))
+        await people.require_admin(actor, "access", "manage")
+        given = await roles.grant(
+            actor.tenant_id, person_id, body.role_id, body.team_id, by=actor.user_id, request_id=actor.request_id
+        )
+        return ok(given, status=201)
+
+    @app.delete("/v1/people/{person_id}/role-grants/{grant_id}", tags=["people"], status_code=204, responses=ERRORS)
+    async def take_role(  # pyright: ignore[reportUnusedFunction]
+        person_id: Annotated[str, Path(pattern=RECORD_ID)],
+        grant_id: Annotated[str, Path(pattern=RECORD_ID)],
+        claims: Annotated[dict[str, Any], Depends(claims_of)],
+    ) -> Response:
+        """Takes a given role away: an admin of its team or a workspace admin. Audited."""
+        tenant = str(claims["tenant_id"])
+        row = await roles.store.grant_row(tenant, grant_id)
+        if row is None or row["subjectId"] != person_id:
+            raise NotFound("No such role given to this person.")
+        actor = Actor(tenant, str(row["teamId"]), str(claims["sub"]), new_id("req"))
+        await people.require_admin(actor, "access", "manage")
+        await roles.store.ungrant(tenant, grant_id, by=actor.user_id, request_id=actor.request_id)
+        return Response(status_code=204)
 
     @app.delete("/v1/roles/{role_id}", tags=["roles"], status_code=204, responses=ERRORS)
     async def delete_role(  # pyright: ignore[reportUnusedFunction]

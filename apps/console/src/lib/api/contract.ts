@@ -92,7 +92,7 @@ import type {
   ToolStats,
   WorkflowFilters,
 } from '@/lib/types/query';
-import type { AccessCheck, Holders, Me, MyPermissions, PersonPermissions, RoleCell, RoleCreated, RoleDetail, RoleHolder, RoleInput, RoleSummary, WhyNot } from '@/lib/types/settings';
+import type { AccessCheck, Holders, Me, MyPermissions, PersonPermissions, RoleCell, RoleCreated, RoleDetail, RoleGrant, RoleHolder, RoleInput, RoleSummary, WhyNot } from '@/lib/types/settings';
 import type { Team, TeamInput, TeamRef } from '@/lib/types/team';
 
 /**
@@ -293,6 +293,10 @@ export interface OpsApi {
     renameRole?(id: string, input: { name: string; description?: string }): Promise<RoleDetail>;
     deleteRole?(id: string, moveTo?: string): Promise<void>;
     roleHolders?(id: string): Promise<RoleHolder[]>;
+    /** The custom roles given to a person, each in one of their teams; given and taken by that team's admins. */
+    roleGrants?(personId: string): Promise<RoleGrant[]>;
+    giveRole?(personId: string, input: { roleId: string; teamId: string }): Promise<RoleGrant>;
+    takeRole?(personId: string, grantId: string): Promise<void>;
     personPermissions?(id: string): Promise<PersonPermissions>;
     /** Whether a person may take an action in the current team, by the services' own check; audited. */
     /** Why the signed-in person may not take an action in the current team, and who can grant it. */
