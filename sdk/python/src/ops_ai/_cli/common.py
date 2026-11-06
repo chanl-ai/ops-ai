@@ -73,7 +73,10 @@ def dev_sign_in(ns: argparse.Namespace) -> tuple[str, dict[str, str], dict[str, 
     """The address, per-service addresses, session and team of a `--as` sign-in."""
     services = {s: f"http://127.0.0.1:{os.environ[v]}" for s, v in SERVICE_PORTS.items() if os.environ.get(v)}
     base = ns.base_url or os.environ.get("OPS_BASE_URL") or services.get("platform") or "http://127.0.0.1:8710"
-    if (urlparse(services.get("platform") or base).hostname or "") not in ("127.0.0.1", "localhost"):
+    # Both addresses: under `make` the stack's ports are exported, so the platform address is local even when the
+    # caller pointed --base-url at another host.
+    hosts = {urlparse(u).hostname or "" for u in (base, services.get("platform") or base)}
+    if not hosts <= {"127.0.0.1", "localhost"}:
         raise ValueError("--as signs in dev seed people on a local stack only")
     password = os.environ.get("OPS_PLATFORM_DEMO_PASSWORD") or "northfield-demo"
     session = sign_in(base, services, _dev_email(ns.as_role), password)
