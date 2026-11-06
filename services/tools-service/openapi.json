@@ -9036,6 +9036,17 @@
             ],
             "title": "Ends"
           },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
           "lastUsedAt": {
             "anyOf": [
               {

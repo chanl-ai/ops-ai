@@ -94,6 +94,9 @@ class SecretMeta(Out):
     auth_config: dict[str, str] | None = None
     # Whether this list may change it: false for an auth config's client secret.
     read_only: bool = False
+    # What a person calls it ("GitHub · Operations client secret") when an auth config holds it; none for a team's own
+    # secret, whose name is the one headers use and people know it by.
+    label: str | None = None
 
 
 class SecretList(ListResult[SecretMeta]):
@@ -133,6 +136,7 @@ def _meta(
     row: dict[str, Any], users: dict[str, list[dict[str, Any]]] | None = None, configs: dict[str, str] | None = None
 ) -> dict[str, Any]:
     config = row.get("credential_id")
+    config_name = (configs or {}).get(str(config), str(config)) if config else None
     out = {
         "name": row["name"],
         "version": row["version"],
@@ -146,8 +150,9 @@ def _meta(
         "protection": row.get("protection"),
         "connectionId": row.get("connection_id"),
         "credentialId": config,
-        "authConfig": {"id": str(config), "name": (configs or {}).get(str(config), str(config))} if config else None,
+        "authConfig": {"id": str(config), "name": config_name} if config_name else None,
         "readOnly": bool(config or row.get("connection_id")),
+        "label": f"{config_name} client secret" if config_name else None,
     }
     for key, col in (("rotatedAt", "rotated_at"), ("lastUsedAt", "last_used_at")):
         if row.get(col):

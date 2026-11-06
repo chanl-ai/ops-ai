@@ -4334,6 +4334,8 @@ export interface components {
             credentialId?: string | null;
             /** Ends */
             ends?: string | null;
+            /** Label */
+            label?: string | null;
             /** Lastusedat */
             lastUsedAt?: string | null;
             /** Name */

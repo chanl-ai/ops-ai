@@ -24,4 +24,6 @@ export interface SecretMeta {
   authConfig?: { id: string; name: string } | null;
   /** True when this list may not change it (an auth config's client secret). */
   readOnly?: boolean;
+  /** What a person calls it ("GitHub · Operations client secret") when an auth config holds it; none for a team's own. */
+  label?: string | null;
 }

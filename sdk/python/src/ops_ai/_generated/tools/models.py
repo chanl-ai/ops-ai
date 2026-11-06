@@ -1720,6 +1720,7 @@ class SecretMeta(TypedDict, closed=True):
     createdBy: str
     credentialId: NotRequired[str | None]
     ends: NotRequired[str | None]
+    label: NotRequired[str | None]
     lastUsedAt: NotRequired[str | None]
     name: str
     protection: NotRequired[Literal["system", "managed"] | None]
