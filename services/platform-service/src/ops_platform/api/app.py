@@ -895,14 +895,13 @@ def create_public_app(
     async def give_role(  # pyright: ignore[reportUnusedFunction]
         person_id: Annotated[str, Path(pattern=RECORD_ID)],
         body: RoleGrantIn,
-        claims: Annotated[dict[str, Any], Depends(claims_of)],
+        actor: Annotated[Actor, Depends(acting)],
     ) -> Any:
-        """Gives a person a custom role in one of their teams: an admin of that team or a workspace admin
-        (access.manage there). Audited; applies on their next request."""
-        actor = Actor(str(claims["tenant_id"]), body.team_id, str(claims["sub"]), new_id("req"))
+        """Gives a person a custom role in the team the request acts in, one of theirs: an admin of that team or a
+        workspace admin (access.manage there). Audited; applies on their next request."""
         await people.require_admin(actor, "access", "manage")
         given = await roles.grant(
-            actor.tenant_id, person_id, body.role_id, body.team_id, by=actor.user_id, request_id=actor.request_id
+            actor.tenant_id, person_id, body.role_id, actor.team_id, by=actor.user_id, request_id=actor.request_id
         )
         return ok(given, status=201)
 

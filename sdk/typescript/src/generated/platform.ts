@@ -617,8 +617,8 @@ export interface paths {
         put?: never;
         /**
          * Give Role
-         * @description Gives a person a custom role in one of their teams: an admin of that team or a workspace admin
-         *     (access.manage there). Audited; applies on their next request.
+         * @description Gives a person a custom role in the team the request acts in, one of theirs: an admin of that team or a
+         *     workspace admin (access.manage there). Audited; applies on their next request.
          */
         post: operations["people_give_role"];
         delete?: never;
@@ -2676,8 +2676,6 @@ export interface components {
         RoleGrantIn: {
             /** Roleid */
             roleId: string;
-            /** Teamid */
-            teamId: string;
         };
         /** RoleGrantOut */
         RoleGrantOut: {

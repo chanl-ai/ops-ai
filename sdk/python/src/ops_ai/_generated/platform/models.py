@@ -379,7 +379,6 @@ class RoleDetail(TypedDict, closed=True):
 
 class RoleGrantIn(TypedDict, closed=True):
     roleId: str
-    teamId: str
 
 
 class RoleGrantOut(TypedDict, closed=True):

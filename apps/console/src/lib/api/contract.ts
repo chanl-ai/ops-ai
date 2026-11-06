@@ -295,7 +295,8 @@ export interface OpsApi {
     roleHolders?(id: string): Promise<RoleHolder[]>;
     /** The custom roles given to a person, each in one of their teams; given and taken by that team's admins. */
     roleGrants?(personId: string): Promise<RoleGrant[]>;
-    giveRole?(personId: string, input: { roleId: string; teamId: string }): Promise<RoleGrant>;
+    /** Gives the role in the team the console acts in. */
+    giveRole?(personId: string, input: { roleId: string }): Promise<RoleGrant>;
     takeRole?(personId: string, grantId: string): Promise<void>;
     personPermissions?(id: string): Promise<PersonPermissions>;
     /** Whether a person may take an action in the current team, by the services' own check; audited. */

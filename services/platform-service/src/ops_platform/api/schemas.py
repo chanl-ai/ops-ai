@@ -476,8 +476,8 @@ class RoleCreatedOut(RoleDetail):
 
 
 class RoleGrantIn(In):
+    # Given in the team the request acts in (X-Team-Id), never one a body names.
     role_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
-    team_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
 
 
 class RoleGrantOut(Out):

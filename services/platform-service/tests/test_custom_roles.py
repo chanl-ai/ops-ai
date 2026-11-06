@@ -103,28 +103,28 @@ async def test_a_held_role_is_deleted_only_by_moving_its_holders_and_every_chang
     assert {"role.create", "role.delete"} <= actions, audit[:4]
 
 
-async def test_a_team_admin_gives_and_takes_a_custom_role_in_their_team_only(platform: Platform) -> None:
+async def test_an_admin_gives_and_takes_a_custom_role_in_the_team_they_act_in(platform: Platform) -> None:
     owner, ah = await _admin(platform)
     rid = (
         await platform.public.post("/v1/roles", headers=ah, json={"name": "Desk 2", "permissions": CASE_DESK})
     ).json()["data"]["id"]
     member = await platform.person(roles=("viewer",), tenant_id=owner.tenant_id)
     team = next(iter(member.teams))
-    team_admin = await platform.person(roles=("viewer",), tenant_id=owner.tenant_id)
-    await grant(platform, team_admin, team, "admin")
-    th = await bearer(platform, team_admin)
     path = f"/v1/people/{member.user_id}/role-grants"
-    mh = await bearer(platform, member)
-    refused = await platform.public.post(path, headers=mh, json={"roleId": rid, "teamId": team})
+    # A workspace admin acts in every team, the member's made after their sign-in included once they sign in again.
+    th = {**await bearer(platform, owner), "X-Team-Id": team}
+    mh = {**await bearer(platform, member), "X-Team-Id": team}
+    refused = await platform.public.post(path, headers=mh, json={"roleId": rid})
     assert refused.status_code == 403, refused.text
-    given = await platform.public.post(path, headers=th, json={"roleId": rid, "teamId": team})
+    given = await platform.public.post(path, headers=th, json={"roleId": rid})
     assert given.status_code == 201 and given.json()["data"]["roleName"] == "Desk 2", given.text
-    again = await platform.public.post(path, headers=th, json={"roleId": rid, "teamId": team})
+    again = await platform.public.post(path, headers=th, json={"roleId": rid})
     assert again.json()["error"]["code"] == "already_granted", again.text
-    builtin = await platform.public.post(path, headers=ah, json={"roleId": "builder", "teamId": team})
+    builtin = await platform.public.post(path, headers=th, json={"roleId": "builder"})
     assert builtin.json()["error"]["code"] == "builtin_role", builtin.text
-    elsewhere = next(iter(team_admin.teams))
-    outside = await platform.public.post(path, headers=ah, json={"roleId": rid, "teamId": elsewhere})
+    outside = await platform.public.post(
+        path, headers={**ah, "X-Team-Id": next(iter(owner.teams))}, json={"roleId": rid}
+    )
     assert outside.json()["error"]["code"] == "not_a_member", outside.text
     who = await _principal(platform, await bearer(platform, member), team)
     assert can(who, "knowledge", "edit", team=team) == "all"

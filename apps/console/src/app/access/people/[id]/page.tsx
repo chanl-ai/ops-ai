@@ -157,7 +157,7 @@ export default function PersonAccessPage() {
           onOpenChange={setGiving}
           personName={p.name ?? 'this person'}
           roles={roles.data ?? []}
-          teams={p.teams.map((t) => ({ teamId: t.teamId, teamName: t.teamName }))}
+          teamName={team?.name ?? 'this team'}
           pending={give.isPending}
           onSubmit={(input) => give.mutateAsync(input).then((g) => toast.success(`Gave ${p.name ?? 'them'} ${g.roleName}`))}
         />

@@ -3834,16 +3834,10 @@
             "pattern": "^[A-Za-z0-9_-]{1,64}$",
             "title": "Roleid",
             "type": "string"
-          },
-          "teamId": {
-            "pattern": "^[A-Za-z0-9_-]{1,64}$",
-            "title": "Teamid",
-            "type": "string"
           }
         },
         "required": [
-          "roleId",
-          "teamId"
+          "roleId"
         ],
         "title": "RoleGrantIn",
         "type": "object"
@@ -9426,7 +9420,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "Gives a person a custom role in one of their teams: an admin of that team or a workspace admin\n(access.manage there). Audited; applies on their next request.",
+        "description": "Gives a person a custom role in the team the request acts in, one of theirs: an admin of that team or a\nworkspace admin (access.manage there). Audited; applies on their next request.",
         "operationId": "people_give_role",
         "parameters": [
           {
@@ -9437,6 +9431,22 @@
               "pattern": "^[A-Za-z0-9_-]{1,64}$",
               "title": "Person Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
             }
           },
           {

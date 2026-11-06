@@ -10,15 +10,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import type { RoleSummary } from '@/lib/types/settings';
 
 /**
- * Gives a person one of the workspace's custom roles in one of their teams. A built-in role comes with their team
- * role, so only custom roles are offered; the server's refusal (not an admin of that team, held already) shows here.
+ * Gives a person one of the workspace's custom roles in the team the console acts in (switch team to give it in
+ * another). A built-in role comes with their team role, so only custom roles are offered; the server's refusal (not
+ * an admin of the team, not in the team, held already) shows here.
  */
 export function GiveRoleDialog({
   open,
   onOpenChange,
   personName,
   roles,
-  teams,
+  teamName,
   pending,
   onSubmit,
 }: {
@@ -27,29 +28,27 @@ export function GiveRoleDialog({
   personName: string;
   /** Every role of the workspace; only the custom ones are offered. */
   roles: RoleSummary[];
-  /** The person's teams. */
-  teams: { teamId: string; teamName: string }[];
+  /** The team the console acts in, where the role is given. */
+  teamName: string;
   pending: boolean;
-  onSubmit: (input: { roleId: string; teamId: string }) => Promise<unknown>;
+  onSubmit: (input: { roleId: string }) => Promise<unknown>;
 }) {
   const custom = roles.filter((r) => !r.builtin);
   const [roleId, setRoleId] = React.useState('');
-  const [teamId, setTeamId] = React.useState('');
   const [error, setError] = React.useState('');
   React.useEffect(() => {
     if (!open) return;
     setRoleId('');
-    setTeamId(teams.length === 1 ? teams[0].teamId : '');
     setError('');
-  }, [open, teams]);
+  }, [open]);
 
   const submit = async () => {
-    if (!roleId || !teamId) {
-      setError('Choose the role and the team.');
+    if (!roleId) {
+      setError('Choose the role.');
       return;
     }
     try {
-      await onSubmit({ roleId, teamId });
+      await onSubmit({ roleId });
       onOpenChange(false);
     } catch (e) {
       setError((e as Error).message);
@@ -62,7 +61,7 @@ export function GiveRoleDialog({
       onOpenChange={(o) => !pending && onOpenChange(o)}
       size="md"
       title={`Give ${personName} a role`}
-      description="A role adds what it allows in one team, on top of their team role. It applies on their next action."
+      description={`In ${teamName}: the role adds what it allows there, on top of their team role, from their next action. To give it in another team, switch to that team first.`}
       onSubmit={() => void submit()}
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
@@ -88,20 +87,6 @@ export function GiveRoleDialog({
               {custom.map((r) => (
                 <SelectItem key={r.id} value={r.id}>
                   {r.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </FormField>
-        <FormField id="give-role-team" label="In team">
-          <Select value={teamId} onValueChange={(v) => (setTeamId(v), setError(''))}>
-            <SelectTrigger id="give-role-team" data-testid="give-role-team">
-              <SelectValue placeholder="Choose a team" />
-            </SelectTrigger>
-            <SelectContent>
-              {teams.map((t) => (
-                <SelectItem key={t.teamId} value={t.teamId}>
-                  {t.teamName}
                 </SelectItem>
               ))}
             </SelectContent>

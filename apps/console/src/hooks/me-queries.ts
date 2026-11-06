@@ -87,7 +87,7 @@ export function useRoleGrants(personId: string) {
   const qc = useQueryClient();
   const grants = useTeamQuery({ queryKey: ['access', 'person', personId, 'grants'], queryFn: () => api.teams.roleGrants!(personId), enabled: !!api.teams.roleGrants && !!personId });
   const settled = () => Promise.all([qc.invalidateQueries({ queryKey: ['access', 'person', personId] }), qc.invalidateQueries({ queryKey: ['access', 'roles'] })]);
-  const give = useMutation({ mutationFn: (input: { roleId: string; teamId: string }) => api.teams.giveRole!(personId, input), onSuccess: settled });
+  const give = useMutation({ mutationFn: (input: { roleId: string }) => api.teams.giveRole!(personId, input), onSuccess: settled });
   const take = useMutation({ mutationFn: (grantId: string) => api.teams.takeRole!(personId, grantId), onSuccess: settled });
   return { grants, give, take, available: !!api.teams.giveRole };
 }
