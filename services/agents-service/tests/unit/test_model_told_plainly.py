@@ -82,7 +82,7 @@ async def test_rows_a_tool_already_drew_are_not_presented_again() -> None:
     _, result = await run(req, KernelPorts(model=model(steps, seen), tools=Drawn(), knowledge=FixedKnowledge([])))
     parts = [r.view["part"] for r in result.tool_calls if r.view]
     assert len(parts) == 1 and parts[0]["shape"] == "rows", parts
-    assert "present" in json.dumps(seen[0]) and "already sees" in json.dumps(seen[0]), seen[0]
+    assert "present" in json.dumps(seen[0]) and "above or below" in json.dumps(seen[0]), seen[0]
 
 
 async def test_a_record_read_after_a_query_that_drew_it_is_not_drawn_again() -> None:

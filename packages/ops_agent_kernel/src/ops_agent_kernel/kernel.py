@@ -155,7 +155,10 @@ class _TurnState:
 
 
 # What the model is told with a tool result the person already sees drawn, so it does not present it again.
-SHOWN = "The person already sees this result as a table or card. Do not call present for it; answer in text."
+SHOWN = (
+    "The person sees this result as a table or card drawn with this step. Do not call present for it, and do not say "
+    "where it is (above or below); answer in text."
+)
 
 
 def _present(state: _TurnState) -> Tool[None]:

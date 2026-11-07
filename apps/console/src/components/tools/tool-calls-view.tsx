@@ -19,6 +19,7 @@ import { idColumn } from '@/components/shared/id-column';
 import { selectColumn } from '@/components/shared/select-column';
 import { useToolCall, useToolCalls } from '@/hooks/governance-queries';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
+import { failureWords } from '@/lib/failure-words';
 import { count, dateTime, ms, pct, relativeTime } from '@/lib/format';
 import type { ToolCallFilters, ToolCallRow } from '@/lib/types/governance';
 
@@ -107,10 +108,29 @@ const columns: ColumnDef<Row>[] = [
   { accessorKey: 'operation', header: ({ column }) => <DataTableColumnHeader column={column} title="Operation" />, cell: ({ row }) => <OperationBadge operation={row.original.operation} />, filterFn: facetFilterFn },
   { accessorKey: 'record', header: ({ column }) => <DataTableColumnHeader column={column} title="Bound record" />, cell: ({ row }) => <span className="text-xs whitespace-nowrap">{row.original.record ?? '—'}</span> },
   { id: 'approval', accessorFn: (r) => r.approval.kind, header: ({ column }) => <DataTableColumnHeader column={column} title="Approval" />, cell: ({ row }) => <ApprovalCell approval={row.original.approval} />, filterFn: facetFilterFn },
-  { accessorKey: 'status', header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />, cell: ({ row }) => <CallStatusText status={row.original.status} replayOf={row.original.replayOf} />, filterFn: facetFilterFn },
+  {
+    accessorKey: 'status',
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+    cell: ({ row }) => <CallStatusCell call={row.original} />,
+    filterFn: facetFilterFn,
+  },
   { accessorKey: 'latencyMs', header: ({ column }) => <DataTableColumnHeader column={column} title="Latency" />, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground tabular-nums">{ms(row.original.latencyMs)}</span> },
   { accessorKey: 'cost', header: ({ column }) => <DataTableColumnHeader column={column} title="Cost" />, cell: ({ row }) => <span className="whitespace-nowrap tabular-nums">{row.original.cost != null ? cad(row.original.cost) : '—'}</span> },
 ];
+
+/** A call's status and, for one that failed, why in words; the code is on the call's details. */
+function CallStatusCell({ call }: { call: ToolCallRow }) {
+  return (
+    <div className="flex max-w-56 flex-col gap-0.5">
+      <CallStatusText status={call.status} replayOf={call.replayOf} />
+      {call.status === 'error' && (
+        <span className="text-xs text-muted-foreground" data-testid="call-failure-words">
+          {failureWords(call.errorCode, call.errorMessage)}
+        </span>
+      )}
+    </div>
+  );
+}
 
 /** A workflow or agent the API named, or a dash for a call that had none. */
 function NameCell({ name }: { name?: string | null }) {

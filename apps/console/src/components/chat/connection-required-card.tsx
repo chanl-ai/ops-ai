@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { OwnCredentialsForm } from '@/components/connections/own-credentials-form';
 import { useMyConnections } from '@/hooks/connections-queries';
 import type { ToolCall } from '@/lib/types/chat';
+import { actsAs } from '@/lib/failure-words';
 import type { ConnectionRequired, ConnectionRequiredReason } from '@/lib/types/connections';
 
 /**
@@ -43,8 +44,7 @@ export function connectionRequired(call: ToolCall): (ConnectionRequired & { mess
 type Need = ConnectionRequired & { message: string };
 // The app in the person's words: its name ("Salesforce"), else the account's.
 const appOf = (need: Need) => need.app ?? need.connection;
-// What the call does with the person's account, by its access: a read reads as them, a write changes in their name.
-const acts = (need: Need) => (need.access === 'write' ? `This tool makes the change in ${appOf(need)} in your name` : `This tool reads ${appOf(need)} as you`);
+const acts = (need: Need) => actsAs({ app: appOf(need), access: need.access });
 
 const WHY: Record<ConnectionRequiredReason, (need: Need, keyed: boolean) => string> = {
   not_connected: (need) => `${acts(need)}. Connect your account once for this team.`,
