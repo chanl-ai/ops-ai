@@ -118,8 +118,11 @@ async def test_only_the_owner_reads_lists_or_changes_a_chat(dev_platform: AsyncC
     assert made.status_code == 201, made.text
     tid = made.json()["data"]["id"]
     assert (await dev_platform.get(f"/chat/threads/{tid}", headers=james)).status_code == 200
+    # A teammate following a link is told whose it is and reads nothing of it; outside the team it is not found.
+    sealed = await dev_platform.get(f"/chat/threads/{tid}", headers=teammate)
+    assert sealed.status_code == 200 and sealed.json()["data"] == {"id": tid, "readable": False}, sealed.text
+    assert (await dev_platform.get(f"/chat/threads/{tid}", headers=outsider)).status_code == 404
     for other in (teammate, outsider):
-        assert (await dev_platform.get(f"/chat/threads/{tid}", headers=other)).status_code == 404
         assert (await dev_platform.delete(f"/chat/threads/{tid}", headers=other)).status_code == 404
         listed = (await dev_platform.get("/chat/threads", headers=other)).json()["data"]["data"]
         assert tid not in [t["id"] for t in listed]
