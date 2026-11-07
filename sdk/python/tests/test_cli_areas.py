@@ -16,7 +16,7 @@ from typing import Any
 import httpx
 import pytest
 from ops_ai import OpsAI
-from ops_ai._cli import common
+from ops_ai._cli import chat_script, common
 from ops_ai._client import _upload_meta
 from ops_ai.cli import main
 
@@ -307,3 +307,76 @@ def test_a_chat_started_as_a_seed_person_carries_the_test_mark(monkeypatch: pyte
     assert main(["chat", "say", "-m", "Status of case 42?", "--as", "james", "--quiet"]) == 0
     made = next(r for r in seen if r.url.path.endswith("/v1/chat/threads"))
     assert json.loads(made.content)["title"] == "[test] Status of case 42?"
+
+
+def _seen(text: str, tools: list[str] | None = None) -> dict[str, Any]:
+    return {"text": text, "tools": [{"name": t} for t in tools or []], "cards": [], "error": None}
+
+
+def _failed(want: dict[str, Any], text: str, message: dict[str, Any] | None = None) -> list[str]:
+    return [name for name, ok, _ in chat_script.reply_checks(want, _seen(text), message or {}) if not ok]
+
+
+def test_the_assistant_expectations_each_catch_their_failure() -> None:
+    # One reply per failure the assistant's scripts guard against, and a clean reply that passes them all.
+    assert _failed({"noQuestion": True}, "I found two cases. Want me to show the team's tasks?") == [
+        "asks nothing back"
+    ]
+    assert _failed({"noErrorCode": True}, "Error: CONNECTION_NOT_LINKED, connect first.") == ["no error code"]
+    assert _failed({"endsClean": True}, "Two cases are open.\n\nok") == ["ends clean"]
+    assert _failed({"endsClean": True}, "It stays open until the review is done.") == []
+    assert _failed({"cites": True}, "Overdue reviews are escalated.", {"citations": []}) == ["cites the knowledge"]
+    assert _failed({"table": True}, "Three are waiting.", {"parts": []}) == ["draws a table"]
+    assert _failed({"maxSteps": 2}, "Done.", {"usage": {"calls": 5}}) == ["at most 2 steps"]
+    clean = {"citations": [{"n": 1}], "parts": [{"shape": "rows"}], "usage": {"calls": 2}}
+    want = {"noQuestion": True, "noErrorCode": True, "endsClean": True, "cites": True, "table": True, "maxSteps": 2}
+    assert _failed(want, "Customer CUS-1002 waits on its tax return [1].", clean) == []
+    # Knowledge the assistant read with search_knowledge is cited by the document it came from.
+    searched = _seen("Per Control testing, reviews escalate.", [])
+    searched["tools"] = [{"name": "search_knowledge", "output": {"passages": [{"title": "Control testing"}]}}]
+    assert all(ok for _, ok, _ in chat_script.reply_checks({"cites": True}, searched, {}))
+    searched["text"] = "Reviews escalate."
+    assert not any(ok for _, ok, _ in chat_script.reply_checks({"cites": True}, searched, {}))
+
+
+def test_chat_script_reads_the_stored_reply_for_its_steps(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    # maxSteps is read from the reply the chat stored, not the stream, which carries no model call count.
+    stored = {"id": "th_1", "messages": [{"role": "assistant", "content": "Two cases.", "usage": {"calls": 4}}]}
+
+    def answer(r: httpx.Request) -> httpx.Response:
+        if r.url.path.endswith("/messages"):
+            return httpx.Response(200, content=_sse({"type": "text", "delta": "Two cases."}))
+        if r.method == "GET" and r.url.path.endswith("/threads/th_1"):
+            return _ok(stored)
+        return _ok({"id": "th_1"}, 201)
+
+    script = tmp_path / "s.json"
+    script.write_text(json.dumps({"turns": [{"say": "Cases?", "expect": {"maxSteps": 3}}]}))
+    _use(monkeypatch, "chat", _client([], answer))
+    assert main(["chat", "script", str(script)]) == 1
+    assert "FAIL at most 3 steps: 4 model calls" in capsys.readouterr().out
+
+
+def test_evals_run_each_script_as_its_people_and_keep_the_real_subset_within_its_cap(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    ran: list[tuple[str, str]] = []
+
+    def run(ns: argparse.Namespace, _ops: Any, path: Path) -> chat_script.Outcome:
+        ran.append((path.stem, ns.as_role))
+        return chat_script.Outcome(True, 3, "th_x")
+
+    monkeypatch.setattr(chat_script, "run_script", run)
+    monkeypatch.setattr(chat_script, "client", lambda _ns: None)
+    turns = [{"say": "x", "expect": {"maxSteps": 3}}]
+    (tmp_path / "a.yaml").write_text(json.dumps({"as": ["wealth", "risk"], "real": ["wealth"], "turns": turns}))
+    (tmp_path / "b.yaml").write_text(json.dumps({"as": ["lending"], "real": ["lending", "risk"], "turns": turns}))
+    assert main(["chat", "evals", str(tmp_path)]) == 0
+    assert ran == [("a", "wealth"), ("a", "risk"), ("b", "lending")]
+    ran.clear()
+    # Three real runs of three calls each would pass a cap of 8: the third is skipped, and the run fails.
+    assert main(["chat", "evals", str(tmp_path), "--real", "--max-calls", "8"]) == 1
+    assert ran == [("a", "wealth"), ("b", "lending")]
+    assert "SKIP" in capsys.readouterr().out

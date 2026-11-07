@@ -10,7 +10,7 @@ OPS_AS = --as '$(AS)' $(if $(TEAM),--team $(TEAM)) $(if $(JSON),--json)
 # $(call need,VAR,example): stops the target with what to give when VAR is empty.
 need = $(if $($(1)),,$(error make $@: give $(1)=, e.g. $(2)))
 
-.PHONY: chat chat-script chat-show chat-calls chat-agents chat-accounts chat-kbs chat-threads chat-connected \
+.PHONY: chat chat-script assistant-evals chat-show chat-calls chat-agents chat-accounts chat-kbs chat-threads chat-connected \
 	chat-approve chat-reject chat-submit \
 	kb-bases kb-show kb-documents kb-sources kb-source kb-items kb-add-file kb-add-text kb-sync kb-search kb-changes \
 	kb-change \
@@ -31,6 +31,16 @@ chat: ## make chat AS=james AGENT='Case helper' SAY='…' [THREAD=th_…] [TEST=
 chat-script: ## make chat-script FILE=docs/usecases/chat/<x>.yaml AS=james: a scripted conversation, PASS or FAIL per turn
 	$(call need,FILE,FILE=docs/usecases/chat/salesforce-case-helper.yaml)
 	@$(OPS_CLI) chat $(OPS_AS) script '$(FILE)'
+# The real-model subset moves only the assistant's alias, on its own provider connection, to a real model and back,
+# so memory and every other alias stay on the fake (scripts/demo_model.py PROVIDER=).
+ASSISTANT_ALIAS ?= thinking
+ASSISTANT_PROVIDER ?= assistant-model
+REAL_MODEL ?= gpt-5.5
+MAX_CALLS ?= 10
+assistant-evals: ## make assistant-evals [REAL=1]: the team assistant's scripted chats (docs/usecases/chat/assistant/) as each script's people, with a scorecard; REAL=1 runs the real subset on ASSISTANT_ALIAS bound to REAL_MODEL, at most MAX_CALLS model calls
+	@$(if $(REAL),$(MAKE) -s demo-model ALIAS=$(ASSISTANT_ALIAS) PROVIDER=$(ASSISTANT_PROVIDER) MODEL=$(REAL_MODEL) &&) \
+	$(OPS_CLI) chat $(OPS_AS) evals docs/usecases/chat/assistant $(if $(REAL),--real --max-calls $(MAX_CALLS)); status=$$?; \
+	$(if $(REAL),$(MAKE) -s demo-model ALIAS=$(ASSISTANT_ALIAS) PROVIDER=$(ASSISTANT_PROVIDER) MODEL=fake;) exit $$status
 chat-show: ## make chat-show THREAD=th_… AS=james: the conversation as the chat reads it
 	$(call need,THREAD,THREAD=th_…)
 	@$(OPS_CLI) chat $(OPS_AS) show $(THREAD)

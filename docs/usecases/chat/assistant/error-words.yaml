@@ -1,0 +1,6 @@
+# A tool call fails (a file the team does not have): the reply says what happened in words, with no error code.
+as: [dana.whitfield@harborpine.example, marco.silva@harborpine.example, lena.hoffmann@harborpine.example]
+real: [marco.silva@harborpine.example]
+turns:
+  - say: "Read the file q3-pipeline-forecast.xlsx"
+    expect: {tool: read_file, says: ["q3-pipeline-forecast.xlsx"], noErrorCode: true, endsClean: true, maxSteps: 2}
