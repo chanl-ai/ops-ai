@@ -1,0 +1,12 @@
+{
+  "$comment": "The meeting flows' records for a Salesforce demo org (make demo-org-seed). {prefix} marks each name so make demo-org-remove finds the account and Salesforce deletes the rest with it; {today}, {ago17} and {in60} are dates. Every name is invented.",
+  "account": "{prefix}Okafor Family Trust",
+  "records": [
+    {"object": "Account", "ref": "acct", "fields": {"Name": "{prefix}Okafor Family Trust", "Type": "Customer - Direct", "Phone": "(555) 014-2290", "Description": "Household client since 2019. Annual review due this month; risk profile last refreshed 14 months ago."}},
+    {"object": "Contact", "ref": "grace", "fields": {"FirstName": "Grace", "LastName": "Okafor", "Title": "Trustee", "Email": "grace.okafor@example.com", "Phone": "(555) 014-2291", "AccountId": "@{acct.id}", "Description": "{prefix}seeded for the meeting flows"}},
+    {"object": "Opportunity", "ref": "edu", "fields": {"Name": "{prefix}Education savings", "AccountId": "@{acct.id}", "StageName": "Needs Analysis", "Amount": 50000, "CloseDate": "{in60}", "NextStep": "Propose a plan for two children's education"}},
+    {"object": "Task", "ref": "call", "fields": {"Subject": "{prefix}Call with Grace Okafor", "Status": "Completed", "Priority": "Normal", "ActivityDate": "{ago17}", "WhatId": "@{acct.id}", "WhoId": "@{grace.id}", "Description": "Asked about saving for two children's education. Cash is 18% of the portfolio against a 5% target."}},
+    {"object": "Task", "ref": "risk", "fields": {"Subject": "{prefix}Refresh risk profile", "Status": "Not Started", "Priority": "High", "ActivityDate": "{today}", "WhatId": "@{acct.id}", "Description": "Last refreshed 14 months ago; due before the annual review."}}
+  ],
+  "case": {"object": "Case", "fields": {"Subject": "{prefix}Update the beneficiary on the trust account", "Status": "Working", "Priority": "Medium", "Origin": "Phone", "AccountId": "{acct}", "ContactId": "{grace}", "Description": "Grace Okafor asked to name a contingent beneficiary on the trust account."}}
+}

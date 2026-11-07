@@ -10,7 +10,7 @@ OPS_AS = --as '$(AS)' $(if $(TEAM),--team $(TEAM)) $(if $(JSON),--json)
 # $(call need,VAR,example): stops the target with what to give when VAR is empty.
 need = $(if $($(1)),,$(error make $@: give $(1)=, e.g. $(2)))
 
-.PHONY: chat chat-script assistant-evals chat-show chat-calls chat-agents chat-accounts chat-kbs chat-threads chat-connected \
+.PHONY: demo-org-seed demo-org-remove chat chat-script assistant-evals chat-show chat-calls chat-agents chat-accounts chat-kbs chat-threads chat-connected \
 	chat-approve chat-reject chat-submit chat-transcript chat-transcripts \
 	kb-bases kb-show kb-documents kb-sources kb-source kb-items kb-add-file kb-add-text kb-sync kb-search kb-changes \
 	kb-change \
@@ -155,6 +155,38 @@ tools-run: ## make tools-run APP=… TOOL=… INPUT='{"number": 1}' [REAL=1] AS=
 	$(call need,APP,APP=plugin:acme.ticketdesk)
 	$(call need,TOOL,TOOL=ticketdesk_get_ticket)
 	@$(OPS_CLI) tools $(OPS_AS) run '$(APP)' $(TOOL) $(if $(INPUT),--input '$(INPUT)') $(if $(REAL),--real)
+# The meeting flows' records in the team's Salesforce org (scripts/demo-org/okafor.json), each name marked with
+# DEMO_ORG_PREFIX. Writes run as AS through the gateway as live calls, so the team must have added
+# Salesforce's save_records (seed) and delete_record (remove) tools.
+DEMO_ORG_PREFIX ?= [Demo]$(empty) $(empty)
+DEMO_ORG_DATA = $(ROOT)/scripts/demo-org/okafor.json
+DEMO_ORG_RUN = $(OPS_CLI) tools --as '$(AS)' --json run plugin:opsai.salesforce
+DEMO_ORG_FILL = jq --arg prefix '$(DEMO_ORG_PREFIX)' --arg today "$$(date +%F)" \
+	--arg ago17 "$$(date -v-17d +%F 2>/dev/null || date -d '-17 days' +%F)" \
+	--arg in60 "$$(date -v+60d +%F 2>/dev/null || date -d '+60 days' +%F)" \
+	'walk(if type == "string" then gsub("{prefix}"; $$prefix) | gsub("{today}"; $$today) | gsub("{ago17}"; $$ago17) | gsub("{in60}"; $$in60) else . end)' $(DEMO_ORG_DATA)
+# The marked account's id, or nothing.
+DEMO_ORG_FIND = $(DEMO_ORG_FILL) | jq --arg sq "'" '{q: ("SELECT Id FROM Account WHERE Name = " + $$sq + .account + $$sq)}' \
+	| $(DEMO_ORG_RUN) salesforce_query --input - --real \
+	| jq -rn 'try input catch error("the Salesforce query gave no answer") | if (.output.records | type) == "array" then (.output.records[0].Id // "") else error("the Salesforce query failed") end'
+demo-org-seed: ## make demo-org-seed AS=james: the meeting flows' records in the team's Salesforce org (an account, its contact, an open opportunity, two Tasks, a Case), names marked [Demo]; skips them when the account is there
+	$(call need,AS,AS=james)
+	@set -e; found=$$($(DEMO_ORG_FIND)); \
+	if [ -n "$$found" ]; then echo "FOUND  the demo account is already in the org ($$found); nothing made"; exit 0; fi; \
+	saved=$$($(DEMO_ORG_FILL) | jq '{records: .records}' | $(DEMO_ORG_RUN) salesforce_save_records --input - --real --environment live); \
+	ids=$$(echo "$$saved" | jq -c '.output.saved // empty'); \
+	if [ -z "$$ids" ]; then echo "FAIL   nothing was saved: $$(echo "$$saved" | jq -c '{decision, denyMessage, output}')"; exit 1; fi; \
+	acct=$$(echo "$$ids" | jq -r '.[0].id'); grace=$$(echo "$$ids" | jq -r '.[1].id'); \
+	case=$$($(DEMO_ORG_FILL) | jq --arg a "$$acct" --arg g "$$grace" '.case | .fields.AccountId = $$a | .fields.ContactId = $$g | {records: [.]}' \
+		| $(DEMO_ORG_RUN) salesforce_save_records --input - --real --environment live | jq -c '.output.saved // .output'); \
+	echo "MADE   account $$acct, contact $$grace, an opportunity and two Tasks; case $$case"
+demo-org-remove: ## make demo-org-remove AS=james: deletes the [Demo] account; Salesforce deletes its contact, opportunity, Tasks and Case with it
+	$(call need,AS,AS=james)
+	@set -e; found=$$($(DEMO_ORG_FIND)); \
+	if [ -z "$$found" ]; then echo "GONE   no demo account in the org"; exit 0; fi; \
+	jq -n --arg id "$$found" '{object: "Account", id: $$id}' | $(DEMO_ORG_RUN) salesforce_delete_record --input - --real --environment live \
+		| jq -c '{decision, status, output}'; \
+	again=$$($(DEMO_ORG_FIND)); [ -z "$$again" ] && echo "REMOVED the demo account $$found and its records" || { echo "FAIL   $$again is still there"; exit 1; }
 tools-calls: ## make tools-calls AS=admin [TOOL=] [THREAD=] [LIMIT=20]: the tool-call log
 	@$(OPS_CLI) tools $(OPS_AS) calls $(if $(TOOL),--tool $(TOOL)) $(if $(THREAD),--thread $(THREAD)) $(if $(LIMIT),--limit $(LIMIT))
 tools-call: ## make tools-call ID=gwc_… AS=admin: one logged tool call
