@@ -341,7 +341,7 @@ export function ConnectWindow({
             <span className="grid gap-1">
               <span className="text-sm">Team account</span>
               <span className="text-xs text-muted-foreground">
-                {ownAllowed ? `Anyone in ${current?.name ?? 'the team'} can run tools as this account. Off, it is yours alone.` : `Anyone in ${current?.name ?? 'the team'} can run tools as this account. Personal accounts are off for ${card.name} in its Settings.`}
+                {ownAllowed && plugin?.signIn.includes('person_or_team') ? `Runs nobody started, such as schedules and mailboxes, use this account; each person in ${current?.name ?? 'the team'} connects their own for what they run. Off, it is yours alone.` : ownAllowed ? `Anyone in ${current?.name ?? 'the team'} can run tools as this account. Off, it is yours alone.` : `Anyone in ${current?.name ?? 'the team'} can run tools as this account. Personal accounts are off for ${card.name} in its Settings.`}
               </span>
             </span>
           </label>
