@@ -154,6 +154,10 @@ class _TurnState:
         return rec
 
 
+# What the model is told with a tool result the person already sees drawn, so it does not present it again.
+SHOWN = "The person already sees this result as a table or card. Do not call present for it; answer in text."
+
+
 def _present(state: _TurnState) -> Tool[None]:
     """The built-in present tool: a shaped part on the call record, no port behind it (present.py). An agent's widgets
     and composition widen it per turn; each shown part counts toward the agent's widgets per turn."""
@@ -177,6 +181,11 @@ def _present(state: _TurnState) -> Tool[None]:
         if shown is None:
             rec.status, rec.output = "error", {"error": said}
             return {"error": said}
+        drawn = [p for r in state.records.values() if (p := (r.view or {}).get("part"))]
+        if present.already_shown(shown, drawn):
+            # The rows a tool's result already drew this turn: nothing is shown twice.
+            rec.status, rec.output = "ok", {"presented": "already shown"}
+            return {"presented": "already shown", "note": SHOWN}
         state.shown += 1
         rec.status, rec.output = "ok", {"presented": said}
         rec.view = {"part": shown}
@@ -318,8 +327,13 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
         rec.status = "ok" if outcome.ok else "error"
         rec.output = outcome.output
         rec.view = outcome.view
+        said = outcome.for_model if outcome.for_model is not None else outcome.output
+        if outcome.ok and (outcome.view or {}).get("part"):
+            # Drawn for the person already (a table or a record): told so, the model answers in text instead of
+            # presenting the same rows a second time.
+            return {"note": SHOWN, "result": said}
         # Errors go back to the model as information so it can explain or try other arguments (spec 15 4.2).
-        return outcome.output if outcome.ok else {"error": outcome.output}
+        return said if outcome.ok else {"error": said}
 
     tool = Tool[None].from_schema(
         cast(Callable[..., Awaitable[Any]], call), grant.name, grant.description, grant.input_schema, takes_ctx=True

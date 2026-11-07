@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Agents show each result once and ask plainly to connect",
+  "description": "A result already shown as a table is no longer shown again, so answers come back sooner. When you need to connect your own account, the agent asks you to press the Connect button instead of repeating an error code, a link or your email.",
+  "tag": "fix"
+}

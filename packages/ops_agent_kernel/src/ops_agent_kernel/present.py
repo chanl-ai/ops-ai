@@ -147,6 +147,29 @@ def grant(settings: AgentSettings) -> ToolGrant:
     return ToolGrant(NAME, SERVER, desc + _BUTTON_LINE, "read", schema)
 
 
+def _rows_of(part: dict[str, Any]) -> list[dict[str, Any]]:
+    data = part.get("data")
+    if part.get("shape") == "rows" and isinstance(data, list):
+        return [cast(dict[str, Any], r) for r in cast(list[Any], data) if isinstance(r, dict)]
+    if part.get("shape") == "record" and isinstance(data, dict):
+        return [cast(dict[str, Any], data)]
+    return []
+
+
+def already_shown(part: dict[str, Any], shown: list[dict[str, Any]]) -> bool:
+    """Whether every row of a presented table or record is one a tool's result already drew this turn, field for
+    field (a presented row may leave fields out). A chart, a metric, a widget or a layout is never a repeat."""
+    rows = _rows_of(part)
+    drawn = [r for p in shown for r in _rows_of(p)]
+    if not rows or not drawn:
+        return False
+
+    def within(row: dict[str, Any]) -> bool:
+        return any(all(str(d.get(k)) == str(v) for k, v in row.items()) for d in drawn)
+
+    return all(within(r) for r in rows)
+
+
 def _ungranted(part: dict[str, Any], granted: set[str]) -> list[str]:
     return [t for t in layout.required_tools(part.get("layout")) if t not in granted]
 

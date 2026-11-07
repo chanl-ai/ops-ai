@@ -8,8 +8,9 @@ Pure: no database, no network. `shape_part` returns None when nothing fits, and 
 Rules, in order:
 - An operation's declared shape (`x-ops-shape` on its response, `declared`) wins when the data fits that shape;
   when it does not, inference runs as if nothing were declared. A malformed part is never emitted.
-- An object whose only key holds a list (`{"transactions": [...]}`), or whose only list of objects sits beside flat
-  values (a query's `{totalSize, done, records: [...]}`), is read as that list; the key becomes the title.
+- An object whose only key holds a list (`{"transactions": [...]}`), or whose only list of objects sits beside a count,
+  a done flag or a paging link (a query's `{totalSize, done, records: [...]}`), is read as that list; the key becomes
+  the title. Other text beside a list (`{customerId, addresses: [...]}`) keeps the object a record.
 - A value that is not flat is drawn as one cell: a list of scalars joins with ", " (`accountIds`), a
   list of objects or a nested object becomes a count naming its key ("2 holds", "1 address"), so a customer with
   accounts or an account with holds still draws. Inference reads the flat columns only; a joined or counted cell is
@@ -159,9 +160,21 @@ def _objects(items: list[Any]) -> bool:
     return bool(items) and all(isinstance(r, dict) for r in items)
 
 
+# An envelope's own keys beside its list: a next-page link, cursor or token. Any other text beside a list (a customer's
+# id beside their addresses) makes the object a record.
+PAGING_KEY = re.compile(r"next|cursor|token|page|url|link", re.IGNORECASE)
+
+
+def _paging(key: str, value: Any) -> bool:
+    """Whether a value beside a list is the envelope's own: a count, a done flag, null, or a paging link."""
+    if value is None or isinstance(value, bool | int | float):
+        return True
+    return isinstance(value, str) and bool(PAGING_KEY.search(key))
+
+
 def _listed(output: Any) -> tuple[str, list[Any]] | None:
-    """(key, list) when `output` is one list in an envelope: its only key, or its only list of objects beside flat
-    values such as a count, a done flag or a next-page link (Salesforce's {totalSize, done, records})."""
+    """(key, list) when `output` is one list in an envelope: its only key, or its only list of objects beside a count,
+    a done flag or a next-page link (Salesforce's {totalSize, done, nextRecordsUrl, records})."""
     if not isinstance(output, dict):
         return None
     o = cast(dict[str, Any], output)
@@ -169,7 +182,7 @@ def _listed(output: Any) -> tuple[str, list[Any]] | None:
         ((key, value),) = o.items()
         return (key, cast(list[Any], value)) if isinstance(value, list) else None
     lists = [k for k, v in o.items() if isinstance(v, list) and _objects(cast(list[Any], v))]
-    if len(lists) == 1 and all(_flat(v) for k, v in o.items() if k != lists[0]):
+    if len(lists) == 1 and all(_paging(k, v) for k, v in o.items() if k != lists[0]):
         return lists[0], cast(list[Any], o[lists[0]])
     return None
 

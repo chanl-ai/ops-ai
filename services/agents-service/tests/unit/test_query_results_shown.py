@@ -22,8 +22,13 @@ def test_a_query_envelope_is_drawn_as_a_table_of_its_records() -> None:
     assert part is not None and part["shape"] == "rows", part
     assert [r["CaseNumber"] for r in part["data"]] == ["00044818", "00044901"]
     assert part["hint"]["title"] == "records"
-    # Two lists, or a list beside a nested object, are not one list in an envelope: still a record.
+    paged = shape_part(
+        {**envelope, "done": False, "nextRecordsUrl": "/services/data/v61.0/query/01g-2000"}, part_id="p"
+    )
+    assert paged is not None and paged["shape"] == "rows", paged
+    # Two lists, or a list beside other text (a customer's id beside their addresses), are a record.
     assert shape_part({"cases": RECORDS, "contacts": RECORDS}, part_id="p")["shape"] == "record"  # type: ignore[index]
+    assert shape_part({"customerId": "CUS-1", "addresses": RECORDS}, part_id="p")["shape"] == "record"  # type: ignore[index]
 
 
 def test_present_takes_data_alone_as_a_table_and_plain_column_names() -> None:
