@@ -521,8 +521,13 @@ async def _end_check(
     ]
     reads_ok = bool(systems) and all(r.status == "ok" and r.access == "read" for r in systems)
     offered = frozenset(state.grants)
+    read_only = all(r.access == "read" for r in systems)
     found = answer_check.defects(
-        state.text, needs_citation=had_passages and not systems, all_reads_succeeded=reads_ok, tools=offered
+        state.text,
+        needs_citation=had_passages and not systems,
+        all_reads_succeeded=reads_ok,
+        tools=offered,
+        read_only=read_only,
     )
     if not found:
         return None, TokenUsage()
@@ -539,7 +544,11 @@ async def _end_check(
     if not corrected:
         return None, spent
     still = answer_check.defects(
-        corrected, needs_citation=had_passages and not systems, all_reads_succeeded=reads_ok, tools=offered
+        corrected,
+        needs_citation=had_passages and not systems,
+        all_reads_succeeded=reads_ok,
+        tools=offered,
+        read_only=read_only,
     )
     return (corrected if len(still) < len(found) else None), spent
 
