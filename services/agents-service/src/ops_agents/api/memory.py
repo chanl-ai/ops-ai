@@ -74,13 +74,24 @@ _ASKING = re.compile(
     re.I,
 )
 _APP_STATE = re.compile(r"\b(?:connected|disconnected|reconnected|signed (?:in|out)|logged (?:in|out))\b", re.I)
+# What happened or was asked once, as the model words it ("The person has a meeting with ... and wants preparation",
+# "Plan updated with $75,000 ... and a note about her request"): an event, a record's state or a request, never a
+# lasting preference, way of working or fact about the person.
+_EPISODE = re.compile(
+    r"\b(?:wants?|wanted|asked|asks|requests?|requested|would like|needs? help|updated|created|logged|saved|"
+    r"scheduled|meeting with|appointment|upcoming|proposal stage)\b",
+    re.I,
+)
 
 
-def one_off(quote: str) -> bool:
-    """Whether the person's words are a one-off ask (_ASKING, a question, or an app's state) rather than something
-    about them or how they work."""
+def one_off(quote: str, value: str = "") -> bool:
+    """Whether a candidate is a one-off rather than something lasting about the person or how they work: their words
+    are an ask (_ASKING), a question or an app's state, or the model's reading of them is an event, a record's state or
+    a request (_EPISODE)."""
     said = quote.strip()
-    return said.endswith("?") or bool(_ASKING.match(said)) or bool(_APP_STATE.search(said))
+    return (
+        said.endswith("?") or bool(_ASKING.match(said)) or bool(_APP_STATE.search(said)) or bool(_EPISODE.search(value))
+    )
 
 
 _WORD = re.compile(r"[a-z0-9][a-z0-9'-]{3,}")
@@ -131,7 +142,10 @@ EXTRACT_SYSTEM = (
     "details, else none. Memories already kept are listed under <saved> with their ids: answer same and its id when "
     "the person repeats one, replaces and its id when they change one (a new preference about the same thing, in "
     "other words, changes it), conflicts and its id when they contradict one, "
-    "otherwise new. No secrets, passwords or card numbers. Return an empty list when there is nothing to remember."
+    "otherwise new. Mark lasting true only for what stays true across conversations (a preference, a way of working, a "
+    "fact about the person or someone they work with) and false for an event, a meeting, a record's state or "
+    "change, or a request. No secrets, passwords or card numbers. Return an empty list when there is nothing to "
+    "remember."
 )
 
 SCHEMA: dict[str, Any] = {
@@ -150,6 +164,7 @@ SCHEMA: dict[str, Any] = {
                     "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                     "sensitivity": {"enum": list(SENSITIVITIES)},
                     "decision": {"enum": list(DECISIONS)},
+                    "lasting": {"type": "boolean"},
                     "ref": {"type": "string", "maxLength": 64},
                 },
                 "required": ["kind", "value", "quote", "confidence"],
@@ -355,7 +370,10 @@ def keepable(agent: AgentDefinition, extraction: Extraction) -> list[dict[str, A
             # "Always ..." in the person's own words is a rule they set, kept as if they had said "remember".
             m |= {"confidence": max(confidence, 1.0), ASKED: True}
             confidence = 1.0
-        elif not m.get(ASKED) and one_off(quote):
+        elif not m.get(ASKED) and (m.get("lasting") is False or one_off(quote, str(m.get("value") or ""))):
+            # A suggestion is only for something that stays true: a preference, a way of working, a fact about the
+            # person or someone they work with. The model marks the rest `lasting: false`; one_off catches what it
+            # misses.
             continue
         if not _kept_kind(agent, kind) or confidence < MIN_CONFIDENCE or m.get("sensitivity") == NEVER_KEPT:
             continue

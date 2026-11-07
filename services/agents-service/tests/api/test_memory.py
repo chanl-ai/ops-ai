@@ -552,7 +552,8 @@ async def test_a_turn_makes_one_decision_per_memory(stack: Stack) -> None:  # no
 
 async def test_a_one_off_ask_is_neither_kept_nor_suggested_however_sure_the_model_is(stack: Stack) -> None:  # noqa: F811
     """Sure candidates were saved at once, then offered as "Remember 'Reply with the single word ok'?": an account's
-    state, a one-off find, a reply-format command and a question about the assistant. None is kept or suggested."""
+    state, a one-off find, a reply-format command, a question about the assistant, a meeting and a record's state.
+    None is kept or suggested; a suggestion is only for a lasting preference, way of working or fact."""
     c, rt = stack
     turns = {
         "My Salesforce account is connected now, thanks.": said("Salesforce account is connected", key="salesforce"),
@@ -562,6 +563,15 @@ async def test_a_one_off_ask_is_neither_kept_nor_suggested_however_sure_the_mode
         "Reply with the single word ok.": said("Reply with the single word ok", kind="preference", key="reply format"),
         "Show me the open cases for this week only.": said("Open cases this week", kind="preference", key="cases"),
         "Can you tell me which apps you can reach?": said("Asks which apps", kind="preference", key="apps"),
+        # An event and a record's state, as a real model worded them (th_59f5828c8972, th_9e52b6374159).
+        "I have a meeting with the Okafor Family Trust tomorrow and want to be ready.": said(
+            "The person has a meeting with the Okafor Family Trust and wants preparation for it.", key="meeting"
+        ),
+        "The education savings plan is at $75,000 in proposal now, with a note on Grace's request.": said(
+            "Education savings plan updated with $75,000 in proposal stage and note about Grace Okafor's request.",
+            key="education savings plan",
+            lasting=False,
+        ),
     }
     for message, candidate in turns.items():
         rt.memory_extractor = Answering(candidate | {"quote": message.rstrip(".")})
