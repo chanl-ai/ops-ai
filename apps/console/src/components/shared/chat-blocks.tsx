@@ -109,10 +109,10 @@ const TOOL_STATE: Record<ChatToolState, ToolUIPart['state']> = {
 };
 
 /** One tool call: its name and state on one line, open to show the input and the output. */
-export function ChatToolCall({ name, state, input, output, error, detail }: { name: string; state: ChatToolState; input: unknown; output?: unknown; error?: string; detail?: React.ReactNode }) {
+export function ChatToolCall({ name, state, input, output, error, detail, badge }: { name: string; state: ChatToolState; input: unknown; output?: unknown; error?: string; detail?: React.ReactNode; badge?: React.ReactNode }) {
   return (
     <Tool className="mb-0 bg-muted/30" data-testid="chat-tool-call" data-state={state}>
-      <ToolHeader title={name} type={`tool-${name}`} state={TOOL_STATE[state]} className="p-2 [&_span]:text-xs" />
+      <ToolHeader title={name} type={`tool-${name}`} state={TOOL_STATE[state]} badge={badge} className="p-2 [&_span]:text-xs" />
       <ToolContent>
         {detail && <div className="px-4 pt-3 text-xs text-muted-foreground">{detail}</div>}
         <ToolInput input={input} />

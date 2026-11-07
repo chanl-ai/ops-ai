@@ -75,8 +75,8 @@ async def test_a_paused_child_returns_a_handle_and_shows_in_cases(stack: tuple[A
     children = [t for t in await rt.graph_store.threads("dispute_email") if t["parent_thread_id"] == parent]
     assert len(children) == 1
     child = children[0]["id"]
-    # The parent says it is waiting and names the child; it does not invent an outcome.
-    assert f"waiting for a review: {child}" in text
+    # The parent says it is waiting, does not invent an outcome, and leaves the child's id to its run card.
+    assert "waiting for a review" in text and child not in text
     rows = (await client.get("/runs", params={"view": "needs_person", "page": 1, "pageSize": 25})).json()["data"]
     row = next(r for r in rows["data"] if r["id"] == child)
     assert row["state"] == "waiting" and row["trigger"].startswith("Started by agent")

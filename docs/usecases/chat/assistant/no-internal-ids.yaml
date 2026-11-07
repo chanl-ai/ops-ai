@@ -1,0 +1,5 @@
+# A reply never shows a record id or a tool's name; the end check corrects one that does, once (the fake names the tool).
+as: [dana.whitfield@harborpine.example]
+turns:
+  - say: "Which of my cases are overdue?"
+    expect: {tool: find_cases, says: ["Ramos"], noInternalIds: true, endsClean: true, maxSteps: 3}

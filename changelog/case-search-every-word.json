@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Case search finds every word, in any order",
+  "description": "Searching cases, on the Cases page or through the assistant, now finds the cases that hold every word you type, in any order, across the subject and the customer.",
+  "tag": "improved"
+}

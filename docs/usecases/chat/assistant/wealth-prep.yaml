@@ -1,0 +1,8 @@
+# A relationship manager with meetings today asks to be prepped for the 2 pm one: one reply from the client's records,
+# naming the client, with no question back. The first teams come from make sample-teams; the scorecard is
+# make assistant-evals (as each person under `as`; REAL=1 runs the `real` people on the real model).
+as: [dana.whitfield@harborpine.example]
+real: [dana.whitfield@harborpine.example]
+turns:
+  - say: "Prep me for my 2 pm meeting"
+    expect: {tool: find_cases, says: ["Okafor"], noQuestion: true, noErrorCode: true, endsClean: true, maxSteps: 3}

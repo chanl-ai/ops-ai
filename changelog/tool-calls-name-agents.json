@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Tool calls name the agent and the workflow",
+  "description": "The Tool calls page shows the agent and the workflow behind each call by name, each in its own column, instead of an agent id under Workflow.",
+  "tag": "fix"
+}

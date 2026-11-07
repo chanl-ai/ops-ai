@@ -1,0 +1,6 @@
+# A lending officer asks which applications wait on documents: a table of them, with no question back.
+as: [marco.silva@harborpine.example]
+real: [marco.silva@harborpine.example]
+turns:
+  - say: "Which applications are waiting on documents?"
+    expect: {tool: find_cases, table: true, noQuestion: true, noErrorCode: true, endsClean: true, maxSteps: 2}

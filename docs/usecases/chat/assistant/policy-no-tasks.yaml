@@ -1,0 +1,14 @@
+# A policy question is answered from the knowledge, with its source named: it reads no tasks or cases, and names no
+# task id or button (a live reply opened with an unrelated overdue task and "press Complete").
+as: [lena.hoffmann@harborpine.example]
+real: [lena.hoffmann@harborpine.example]
+turns:
+  - say: "What does our policy say about overdue reviews?"
+    expect:
+      tool: search_knowledge
+      notTools: [my_human_tasks, get_human_task, find_cases]
+      cites: true
+      noControls: true
+      noInternalIds: true
+      noQuestion: true
+      maxSteps: 2

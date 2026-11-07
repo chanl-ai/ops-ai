@@ -101,7 +101,6 @@ def remembered(text: str) -> dict[str, Any]:
 
 # A widget button's reply: "<text> (action: <tool>, key: value, ...)" asks for one granted tool.
 _ACTION = re.compile(r"\(action: (\w+)((?:, [^:,()]+: [^,()]+)*)\)")
-_CHILD = re.compile(r"gth_\w+")
 _IMAGE = re.compile(r"\bshow image (\S+)")
 
 
@@ -153,10 +152,8 @@ def scripted(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         if "rejected" in body:
             return ModelResponse(parts=[TextPart("Understood. The hold was rejected, so the wire continues.")])
         if "waiting_review" in body:
-            child = _CHILD.search(body)
-            return ModelResponse(
-                parts=[TextPart(f"The workflow is waiting for a review: {child.group(0) if child else ''}.")]
-            )
+            # Said in words: the run's card names it, and a reply never shows a thread id (answer_check).
+            return ModelResponse(parts=[TextPart("The workflow is waiting for a review.")])
         if "'finished'" in body:
             return ModelResponse(parts=[TextPart("The workflow finished.")])
         if "reference" in body:

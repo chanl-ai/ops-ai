@@ -35,6 +35,7 @@ import { EmailPreview } from '@/components/shared/email-preview';
 import { useFilePreviewUrl } from '@/hooks/extraction-queries';
 import { initials, money } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { readingOrder } from '@/lib/widgets/table-columns';
 import type { Cell, ChartNode, ColumnFormat, KindAction, KindNode, KindStatus, MetricNode, Rows, StepStateKind, TableNode, Tone } from '@/lib/types/widgets';
 
 /** What the thread lets a widget do. Undefined when the conversation is read-only. */
@@ -138,7 +139,10 @@ function MetricKind({ node }: { node: MetricNode }) {
 
 /** Rows on the console's data table, sortable and paged (10 a page); columns named and formatted when given. */
 function TableKind({ node, truncatedFrom }: { node: TableNode; truncatedFrom?: number }) {
-  const cols = React.useMemo(() => node.columns ?? Object.keys(node.rows[0] ?? {}).map((key) => ({ key, label: key, format: undefined as ColumnFormat | undefined })), [node]);
+  // Columns the result named stay as given; inferred ones read name first, with ids behind the View menu.
+  const reading = React.useMemo(() => readingOrder(Object.keys(node.rows[0] ?? {}), node.rows), [node]);
+  const cols = React.useMemo(() => node.columns ?? reading.order.map((key) => ({ key, label: key, format: undefined as ColumnFormat | undefined })), [node, reading]);
+  const hidden = React.useMemo(() => (node.columns ? {} : Object.fromEntries(reading.hidden.map((k) => [k, false]))), [node, reading]);
   const columns = React.useMemo<ColumnDef<Rows[number]>[]>(
     () =>
       cols.map((c) => ({
@@ -148,14 +152,22 @@ function TableKind({ node, truncatedFrom }: { node: TableNode; truncatedFrom?: n
         header: ({ column }) => <DataTableColumnHeader column={column} title={c.label ?? c.key} />,
         cell: ({ row }) => {
           const v = row.original[c.key] ?? null;
-          return <span className={typeof v === 'number' ? 'block text-right text-xs tabular-nums' : 'text-xs whitespace-nowrap'}>{formatted(v, c.format)}</span>;
+          if (typeof v === 'number') return <span className="block text-right text-xs tabular-nums">{formatted(v, c.format)}</span>;
+          // Trimmed to one line with the whole value on hover; the column a phone pins wraps it to two (data-table-column-kinds).
+          // A nowrap span would overflow the pinned column on a phone and draw over the next one.
+          const text = formatted(v, c.format);
+          return (
+            <span className="block max-w-80 truncate text-xs" title={text}>
+              {text}
+            </span>
+          );
         },
       })),
     [cols],
   );
   return (
     <div className="p-2" data-kind="table" data-testid="widget-table">
-      <DataTableWithViews columns={columns} data={node.rows} hideViewSwitcher />
+      <DataTableWithViews columns={columns} data={node.rows} hideViewSwitcher initialColumnVisibility={hidden} />
       {truncatedFrom && truncatedFrom > node.rows.length && (
         <p className="px-2 pt-1 text-xs text-muted-foreground" data-testid="widget-truncated">
           Showing {node.rows.length.toLocaleString()} of {truncatedFrom.toLocaleString()} rows

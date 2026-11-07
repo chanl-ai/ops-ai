@@ -1,0 +1,6 @@
+# A risk analyst asks what the policy says: the answer, read with search_knowledge, cites the policy it came from.
+as: [lena.hoffmann@harborpine.example]
+real: [lena.hoffmann@harborpine.example]
+turns:
+  - say: "What does our policy say about overdue control reviews?"
+    expect: {tool: search_knowledge, cites: true, says: ["business days"], noQuestion: true, noErrorCode: true, endsClean: true, maxSteps: 2}

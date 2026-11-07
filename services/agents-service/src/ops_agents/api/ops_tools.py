@@ -42,6 +42,9 @@ from .runs import graph_store
 log = get_logger("ops_agents.ops_tools")
 
 LIMIT = 5
+# From this many matching cases, find_cases answers with one table instead of a card each: a list reads as rows, and a
+# stack of large cards pushes the answer off screen.
+TABLE_FROM = 3
 # Who the registry records as having made a team's Ops Assistant: the platform.
 SYSTEM = "system:ops-assistant"
 # The built-in read tools tools-service provisions in every team (its BUILT_IN apps): the assistant is granted
@@ -49,35 +52,51 @@ SYSTEM = "system:ops-assistant"
 BUILT_IN_READS = ("search_knowledge", "read_file", "read_document")
 # The team's Ops Assistant, the team default agents-service provisions: read tools only, fixed instructions.
 # `version` rises with any change here; a team's assistant nobody changed takes it at the next start or first chat.
+# The instructions are the core fragments (identity, act-first, answer-style, the plan rule), each one rule set, named
+# for what it pins; they name no app, team or customer, so every team's assistant reads the same core
+# (tests/unit/test_ops_assistant_prompt.py holds them to a budget). What a team adds comes from its skills and
+# knowledge, never from here.
+ASSISTANT_FRAGMENTS: dict[str, str] = {
+    "identity": "You are Ops Assistant, the team's assistant in Ops AI. You work for the person you are talking "
+    "with: you find their cases, the Human Tasks waiting for them and their workflow runs, answer from the team's "
+    "knowledge bases and files, and show a workflow's start form. You never decide a task or start a run yourself: "
+    "the person does that on the card, so show the card.",
+    "act-first": "Act before asking. The team's work items (an application, a client meeting, a review, a request, a "
+    "follow-up) are its cases, and decisions waiting on a person are Human Tasks: look there for the person's work. A "
+    "question about a policy, a procedure or how something is done is answered from search_knowledge alone, never "
+    "from cases or tasks. read_file and read_document are only for a file the person names. For any read, "
+    "call the tool with sensible defaults (the person's own items, "
+    "open ones, overdue first, the last seven days) instead of asking which. Make independent reads together in one "
+    "step. Show what one more read would show instead of offering to show it. Ask one short question only before a "
+    "change, when no tool you hold can find the answer, or when two readings would lead to different work. Never ask "
+    "for a token, password, connection or org, and never give command-line, API or console steps: a Connect card "
+    'appears when an app needs the person\'s sign-in, and after it you go on with the same ask. On "again", repeat '
+    "the last call with the same arguments. The tools you hold are what you can reach: say so from them without "
+    "searching, and use search_tools only when none of them fits the ask.",
+    "answer-style": "Answer in one short paragraph and let the cards and tables carry the details: never repeat a "
+    "card's fields. Cite each fact from a <knowledge> block with its [n]; a passage "
+    "search_knowledge returned has no number, so name the document it came from. Name the record a fact comes from. "
+    "To prepare someone for a case or meeting, give its customer, its purpose and the points its notes hold. "
+    "Say only what a tool result or passage holds; never add steps, documents or details of your own. Never name a "
+    "button, link or other control: each card shows its own. Never write a record's id or a tool's name; name the "
+    "record by its title. present is for figures you worked out, never for a record a tool already shows. "
+    "When a call failed, say in plain words what happened and the next step; never repeat an error code, or a link a "
+    "card already shows. End on a full sentence.",
+    "plan": "When an ask needs several lookups and a later one depends on an earlier result, make them in order in "
+    "this reply and answer once at the end; do not stop to ask between them.",
+}
 OPS_ASSISTANT: dict[str, Any] = {
     "name": "Ops Assistant",
     "role": "Finds your cases, Human Tasks and runs, answers from your knowledge and files, and starts workflows",
-    "version": 2,
-    "instructions": [
-        {
-            "text": "You are Ops Assistant, the team's assistant in Ops AI. You help the person you are talking with "
-            "find their cases, see the Human Tasks waiting for them, follow a workflow run and start a workflow."
-        },
-        {
-            "text": "Use find_cases and get_case for cases, my_human_tasks and get_human_task for Human Tasks, get_run "
-            "for a run, list_startable_workflows and start_workflow_form to start one. Each answers with cards the "
-            "person sees under your reply, so say in one short line what you found and let the cards carry the "
-            "details; never repeat a card's fields."
-        },
-        {
-            "text": "Use search_knowledge to answer from the team's knowledge bases and say where the answer came "
-            "from; read_file to read a file the team uploaded, by its name or id; read_document to read a document's "
-            "fields with one of the team's document types."
-        },
-        {
-            "text": "You cannot decide a task or start a run yourself: the person does that with the buttons on the "
-            "card. If they ask you to, show the card and say which button to press."
-        },
-    ],
+    "version": 4,
+    "instructions": [{"text": text} for text in ASSISTANT_FRAGMENTS.values()],
     "tools": list(BUILT_IN_READS),
     "default_kb_ids": [],
     "suggestions": ["What needs me today?", "Find a case", "Start a workflow", "What happened to my last run?"],
-    "max_tool_calls": 4,
+    # Independent reads go together in one step, and the last step is kept for the answer (kernel max_steps).
+    "max_tool_calls": 6,
+    # Its own alias (models-service seeds it), so the assistant's model moves without moving every other agent's.
+    "model_alias": "assistant",
 }
 
 
@@ -100,7 +119,8 @@ async def follow_declared(rt: Runtime, team_id: str) -> None:
     published = await reg.version(aid, int(row["published_version"]))
     if published["saved_by"] != SYSTEM:
         return
-    want = {k: v for k, v in _declared(rt, aid).items() if k in SEED_FIELDS}
+    # The caps too: the published version is the platform's, so nothing a person chose is replaced.
+    want = {k: v for k, v in _declared(rt, aid).items() if k in (*SEED_FIELDS, "guardrails", "model")}
     if all(published["spec"].get(k) == v for k, v in want.items()):
         return
 
@@ -147,8 +167,9 @@ async def catch_up_assistants(rt: Runtime) -> int:
 _TEXT = {"type": "string", "maxLength": 200}
 TOOLS: dict[str, tuple[str, dict[str, Any]]] = {
     "find_cases": (
-        "Find the team's cases by words in the subject or the customer's name, by status, or assigned to the person "
-        "you are talking with. Answers with up to five cases as cards.",
+        "Find the team's cases, its work items of any kind (applications, client meetings, reviews, requests), by "
+        "words in the subject or the customer's name, by status, or assigned to the person you are talking with. "
+        "Answers with up to five cases, as cards or, from three, as one table, and a summary naming each.",
         {
             "type": "object",
             "properties": {
@@ -198,6 +219,34 @@ def declared_args(tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
 
 def _answer(cards: list[dict[str, str]], summary: str) -> ToolOutcome:
     return ToolOutcome(True, {"cards": cards, "summary": summary})
+
+
+def _brief(row: dict[str, Any], events: list[dict[str, Any]]) -> str:
+    """One case for the model to answer from: subject and status, customer, when it is due, and its notes in order, so
+    a "prep me" names the client and the points the case holds instead of making them up."""
+    notes = [str(e["detail"].get("text")) for e in events if e.get("kind") == "note" and e["detail"].get("text")]
+    parts = [f"{row['subject']} ({row['status']})"]
+    if row.get("customer_name"):
+        parts.append(f"customer {row['customer_name']}")
+    if row.get("resolution_due_at"):
+        parts.append(f"due {str(row['resolution_due_at'])[:16].replace('T', ' ')}")
+    parts.append("notes: " + " | ".join(notes) if notes else "no notes")
+    return "; ".join(parts)
+
+
+def _case_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """The cases as one table part: subject first, the id last, which the chat's table keeps behind its View menu."""
+    data = [
+        {
+            "subject": r["subject"],
+            "customer": r.get("customer_name") or "",
+            "status": str(r["status"]).replace("_", " "),
+            "due": str(r.get("resolution_due_at") or "")[:10],
+            "id": r["id"],
+        }
+        for r in rows
+    ]
+    return {"type": "widget", "id": "", "shape": "rows", "data": data, "hint": {"title": "Cases"}}
 
 
 def _refused(message: str) -> ToolOutcome:
@@ -255,9 +304,16 @@ class OpsReads:
             page=1,
             size=LIMIT,
         )
-        cards = [{"type": "case", "id": str(r["id"])} for r in rows]
         named = "; ".join(f"{r['subject']} ({r['status']})" for r in rows)
-        return _answer(cards, f"{total} case(s) match; showing {len(rows)}: {named}" if rows else "No case matches.")
+        summary = f"{total} case(s) match; showing {len(rows)}: {named}" if rows else "No case matches."
+        if len(rows) == 1:
+            # The one match is the case asked about: its brief saves a get_case call.
+            events = await CaseStore(self.rt.db).events(str(rows[0]["id"]))
+            summary = f"1 case matches: {_brief(rows[0], events)}"
+        if len(rows) >= TABLE_FROM:
+            # The table is drawn in place of the cards, so the cases are shown once.
+            return ToolOutcome(True, {"cards": [], "summary": summary}, {"part": _case_rows(rows)})
+        return _answer([{"type": "case", "id": str(r["id"])} for r in rows], summary)
 
     async def _get_case(self, person: Principal, args: dict[str, Any]) -> ToolOutcome:
         case_id = str(args["caseId"])
@@ -265,7 +321,8 @@ class OpsReads:
             row = await CaseStore(self.rt.db).get(case_id, [str(person.team_id)])
         except CaseNotFound:
             return _refused(f"There is no case {case_id} in this team.")
-        return _answer([{"type": "case", "id": case_id}], f"{row['subject']} ({row['status']})")
+        events = await CaseStore(self.rt.db).events(case_id)
+        return _answer([{"type": "case", "id": case_id}], _brief(row, events))
 
     async def _my_human_tasks(self, person: Principal, args: dict[str, Any]) -> ToolOutcome:
         """`mine`: the open tasks assigned to the person; when none is, the open tasks they may decide. `team`: every
@@ -372,6 +429,9 @@ async def fill_cards(rt: Runtime, me: Principal, messages: list[ChatMessage]) ->
     """Fills each Ops tool call's card references in place as `me`, the person reading the thread, so a card always
     draws its record's current state and only what the reader may see. Called on every thread read."""
     for message in messages:
+        # A record drawn once in a reply is not drawn again when a later call there returns it too (find_cases, then
+        # get_case on the same case).
+        drawn: set[tuple[str, str]] = set()
         for call in message.tool_calls or []:
             raw: object = call.output
             if call.server != OPS_SERVER or not isinstance(raw, dict):
@@ -380,10 +440,10 @@ async def fill_cards(rt: Runtime, me: Principal, messages: list[ChatMessage]) ->
             cards = output.get("cards")
             if not isinstance(cards, list):
                 continue
-            filled = [
-                await _filled(rt, me, cast(dict[str, Any], c)) for c in cast(list[Any], cards) if isinstance(c, dict)
-            ]
-            call.output = {**output, "cards": filled}
+            refs = [cast(dict[str, Any], c) for c in cast(list[Any], cards) if isinstance(c, dict)]
+            fresh = [c for c in refs if (str(c.get("type")), str(c.get("id"))) not in drawn]
+            drawn |= {(str(c.get("type")), str(c.get("id"))) for c in fresh}
+            call.output = {**output, "cards": [await _filled(rt, me, c) for c in fresh]}
 
 
 def team_created_handlers(runtime: Callable[[], Runtime]) -> dict[str, Handler]:

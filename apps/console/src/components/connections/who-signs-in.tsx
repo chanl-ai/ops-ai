@@ -18,8 +18,8 @@ const WHO: { value: SignIn; label: string; hint: string }[] = [
   },
   {
     value: 'person_or_team',
-    label: 'Each person, team account as backup',
-    hint: 'Runs with nobody behind them use the team account.',
+    label: 'Each person, team account for unattended runs',
+    hint: 'Calls a person starts act as them, and anyone who has not connected is asked. Runs nobody started, such as schedules and mailboxes, use the team account.',
   },
 ];
 

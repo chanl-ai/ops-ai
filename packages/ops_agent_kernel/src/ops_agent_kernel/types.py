@@ -83,8 +83,16 @@ class AgentSettings:
     # None: no cap. A real agent may need many; seeds and tests set low ones.
     max_tool_calls: int | None = 6
     # Model requests in one turn (the loop's steps). Always a number: an uncapped loop would spend real calls until
-    # the deadline, so an agent with no cap set runs on the platform default.
+    # the deadline, so an agent with no cap set runs on the platform default. Above one, the last step offers no tool,
+    # so a turn always has a step left to answer in.
     max_steps: int = 8
+    # Calls to the kernel's own tools (present, search_tools, load_skill) in one turn, all kinds together; past it they
+    # answer "answer in text now" and are withdrawn. None: no cap. They reach no system, so max_tool_calls never
+    # charges them, and without this a model can spend every step on them.
+    max_builtin_calls: int | None = 3
+    # Check the finished answer with no model call (answer_check.py): an error code, a stray last word, a question
+    # after reads that all succeeded, uncited knowledge. A defect gets one correction call naming it.
+    end_check: bool = False
     # More granted tools than this and they are searched for, not all offered; 0 means always search. None is
     # off, every tool offered: the install flag tool_search is off by default.
     tool_search_above: int | None = None

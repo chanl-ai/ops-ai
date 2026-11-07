@@ -1,0 +1,5 @@
+# The same read twice in one step reaches the system once: the second is answered from the first and drawn once.
+as: [dana.whitfield@harborpine.example]
+turns:
+  - say: "Prep me for my 2 pm meeting and open its case"
+    expect: {tool: get_case, noRepeatCalls: true, noQuestion: true, noErrorCode: true, endsClean: true, maxSteps: 3}
