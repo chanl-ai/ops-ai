@@ -1,0 +1,16 @@
+# Prep for a meeting names no button or other control, invents no prep steps, shows no ids, and does not present the
+# meeting again as its own card (a live reply did all four).
+as: [dana.whitfield@harborpine.example]
+real: [dana.whitfield@harborpine.example]
+turns:
+  - say: "Prep me for my 2 pm meeting"
+    expect:
+      tool: find_cases
+      says: ["Okafor"]
+      noControls: true
+      noInternalIds: true
+      never: ["render", "checklist"]
+      noQuestion: true
+      noErrorCode: true
+      endsClean: true
+      maxSteps: 3

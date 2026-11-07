@@ -18,6 +18,9 @@ A script is YAML or JSON: `agent` (the team's default when left out), `test`, `k
                     search_knowledge passage came from, or its knowledge base
     table           the reply drew a table
     maxSteps        at most this many model calls answered the turn
+    noRepeatCalls   no call reached a system twice with the same input (a repeat the kernel answered is marked)
+    noInternalIds   no record id (case_0eef29f68716) or snake_case name (find_cases, waiting_on_customer) in the reply
+    noControls      the reply names no button or other control to press: the cards show their own
 """
 
 from __future__ import annotations
@@ -39,6 +42,8 @@ CODE = re.compile(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b|\bError:")
 STRAY = re.compile(r"(?:^|[.!?]\s+|\n\s*)(ok|okay|done)[.!]?\s*$", re.IGNORECASE)
 CITE = re.compile(r"\[\d+\]")
 # What a sentence or a table may end on, closing quotes included ("... from \u201cthe policy.\u201d").
+RECORD_ID = re.compile(r"\b[a-z]{2,8}_[0-9a-f]{8,}\b|\b[a-z]+(?:_[a-z]+)+\b")
+CONTROL = re.compile(r"\b(press|click|tap|buttons?)\b", re.IGNORECASE)
 ENDINGS = (".", "!", "?", ")", "]", "*", "|", '"', "'", "\u201d", "\u2019", "\u00bb")
 
 
@@ -100,6 +105,20 @@ def reply_checks(want: dict[str, Any], seen: dict[str, Any], message: dict[str, 
     if want.get("table"):
         drawn = [p for p in message.get("parts") or [] if p.get("shape") in ("rows", "table")]
         out.append(("draws a table", bool(drawn), f"parts {[p.get('shape') for p in message.get('parts') or []]}"))
+    if want.get("noRepeatCalls"):
+        sent = [
+            (c.get("name"), repr(c.get("input")))
+            for c in seen["tools"]
+            if not (isinstance(c.get("output"), dict) and "repeatOf" in c["output"])
+        ]
+        twice = sorted({k for k in sent if sent.count(k) > 1})
+        out.append(("no call sent twice", not twice, f"{twice}"))
+    if want.get("noInternalIds"):
+        found = RECORD_ID.search(text)
+        out.append(("no internal id or name", found is None, found.group(0) if found else ""))
+    if want.get("noControls"):
+        found = CONTROL.search(text)
+        out.append(("names no control", found is None, short(text, 200)))
     if "maxSteps" in want:
         calls = int((message.get("usage") or {}).get("calls") or 0)
         out.append((f"at most {want['maxSteps']} steps", 0 < calls <= int(want["maxSteps"]), f"{calls} model calls"))
@@ -163,7 +182,7 @@ def run_script(ns: argparse.Namespace, ops: OpsAI, path: Path) -> Outcome:
     return Outcome(not failed, calls, thread, failed)
 
 
-def evals(ns: argparse.Namespace, folder: Path, *, real: bool, max_calls: int) -> int:
+def evals(ns: argparse.Namespace, folder: Path, *, real: bool, max_calls: int, only: list[str] | None = None) -> int:
     """Every script in `folder` as each person it names (`as`, else this command's own --as), then a scorecard. With
     `real`, only each script's `real` people, and a script starts only while the model calls already spent plus its
     turns' maxSteps stay within `max_calls`."""
@@ -172,6 +191,8 @@ def evals(ns: argparse.Namespace, folder: Path, *, real: bool, max_calls: int) -
     rows: list[tuple[str, str, str, int, str]] = []
     spent = 0
     for path in sorted(folder.glob("*.y*ml")):
+        if only and path.stem not in only:
+            continue
         spec = load_data(path)
         people: list[str] = list(spec.get("real") or []) if real else list(spec.get("as") or [ns.as_role])
         for person in people:

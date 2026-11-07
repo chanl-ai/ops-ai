@@ -1,5 +1,11 @@
 {
  "rules": [
+  {"when": "prep me for my 2 pm meeting and open its case", "tool": "find_cases", "arguments": {"search": "meeting", "assignedToMe": true}},
+  {"when": "open its case", "after": "find_cases", "result": "\\\"id\\\": ?\\\"(?P<id>case_[0-9a-f]+)\\\"", "tools": [{"tool": "get_case", "arguments": {"caseId": "{id}"}}, {"tool": "get_case", "arguments": {"caseId": "{id}"}}]},
+  {"when": "open its case", "after": "get_case", "text": "Your 2:00 pm is the Okafor Family Trust annual review; its case is below."},
+  {"when": "which of my cases are overdue", "tool": "find_cases", "arguments": {"overdue": true, "assignedToMe": true}},
+  {"when": "which of my cases are overdue", "after": "find_cases", "result": "Suitability note missing: (?P<who>[^;(]+?) rebalancing", "text": "The {who} suitability note is overdue (find_cases)."},
+  {"when": "^Your reply shows an internal name", "text": "The Ramos household suitability note is overdue; its case is below."},
   {"when": "prep me for my (?P<t>\\d{1,2}(?::\\d\\d)?\\s*[ap]m) meeting", "tool": "find_cases", "arguments": {"search": "meeting", "assignedToMe": true}},
   {"when": "prep me for my 2", "after": "find_cases", "result": "Client meeting 2:00 pm: (?P<client>[^;(]+?) annual review", "text": "Your 2:00 pm is the {client} annual review; its case and notes are below."},
   {"when": "which applications are waiting on documents", "tool": "find_cases", "arguments": {"status": "waiting_on_customer"}},

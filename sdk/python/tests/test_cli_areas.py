@@ -329,6 +329,16 @@ def test_the_assistant_expectations_each_catch_their_failure() -> None:
     assert _failed({"cites": True}, "Overdue reviews are escalated.", {"citations": []}) == ["cites the knowledge"]
     assert _failed({"table": True}, "Three are waiting.", {"parts": []}) == ["draws a table"]
     assert _failed({"maxSteps": 2}, "Done.", {"usage": {"calls": 5}}) == ["at most 2 steps"]
+    assert _failed({"noInternalIds": True}, "The review is at 2 pm (case_0eef29f68716).") == ["no internal id or name"]
+    assert _failed({"noInternalIds": True}, "One item is open (my_human_tasks).") == ["no internal id or name"]
+    assert _failed({"noControls": True}, 'Press the card\'s "Open briefing" button.') == ["names no control"]
+    twice = _seen("The case is below.", [])
+    twice["tools"] = [{"name": "get_case", "input": {"caseId": "c1"}}] * 2
+    assert [n for n, ok, _ in chat_script.reply_checks({"noRepeatCalls": True}, twice, {}) if not ok] == [
+        "no call sent twice"
+    ]
+    twice["tools"][1] = {"name": "get_case", "input": {"caseId": "c1"}, "output": {"repeatOf": "x"}}
+    assert all(ok for _, ok, _ in chat_script.reply_checks({"noRepeatCalls": True}, twice, {}))
     clean = {"citations": [{"n": 1}], "parts": [{"shape": "rows"}], "usage": {"calls": 2}}
     want = {"noQuestion": True, "noErrorCode": True, "endsClean": True, "cites": True, "table": True, "maxSteps": 2}
     assert _failed(want, "Customer CUS-1002 waits on its tax return [1].", clean) == []

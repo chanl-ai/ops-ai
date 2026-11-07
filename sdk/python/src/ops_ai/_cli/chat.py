@@ -56,6 +56,9 @@ def main(argv: list[str]) -> int:
     ev.add_argument("folder")
     ev.add_argument("--real", action="store_true", help="only each script's real-model people, within --max-calls")
     ev.add_argument("--max-calls", type=int, default=10, help="model calls the real subset may spend (default 10)")
+    ev.add_argument(
+        "--only", action="append", metavar="SCRIPT", help="run only this script (its file name); repeatable"
+    )
     ns = ap.parse_args(argv)
     try:
         return _dispatch(ns)
@@ -72,7 +75,7 @@ def _start_options(p: argparse.ArgumentParser) -> None:
 def _dispatch(ns: argparse.Namespace) -> int:
     if ns.verb == "evals":
         # Each script signs in as its own people, so no one client serves the whole run.
-        return evals(ns, Path(ns.folder), real=ns.real, max_calls=ns.max_calls)
+        return evals(ns, Path(ns.folder), real=ns.real, max_calls=ns.max_calls, only=ns.only)
     ops = client(ns)
     if ns.verb == "agents":
         return table(ns, ops.chat.agents(), "id", "name", "role")

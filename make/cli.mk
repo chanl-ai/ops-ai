@@ -33,16 +33,16 @@ chat-script: ## make chat-script FILE=docs/usecases/chat/<x>.yaml AS=james: a sc
 	@$(OPS_CLI) chat $(OPS_AS) script '$(FILE)'
 # The real-model subset moves only the assistant's alias, on its own provider connection, to a real model and back,
 # so memory and every other alias stay on the fake (scripts/demo_model.py PROVIDER=).
-ASSISTANT_ALIAS ?= thinking
+ASSISTANT_ALIAS ?= assistant
 ASSISTANT_PROVIDER ?= assistant-model
 REAL_MODEL ?= gpt-5.5
 # The effort the real binding sends; none by default, as gpt-5.5 refuses function tools with any effort on chat
 # completions ("Function tools with reasoning_effort are not supported").
 REAL_EFFORT ?=
 MAX_CALLS ?= 10
-assistant-evals: ## make assistant-evals [REAL=1]: the team assistant's scripted chats (docs/usecases/chat/assistant/) as each script's people, with a scorecard; REAL=1 runs the real subset on ASSISTANT_ALIAS bound to REAL_MODEL, at most MAX_CALLS model calls
+assistant-evals: ## make assistant-evals [REAL=1] [ONLY='a b']: the team assistant's scripted chats (docs/usecases/chat/assistant/) as each script's people, with a scorecard; REAL=1 runs the real subset on ASSISTANT_ALIAS bound to REAL_MODEL, at most MAX_CALLS model calls
 	@$(if $(REAL),$(MAKE) -s demo-model ALIAS=$(ASSISTANT_ALIAS) PROVIDER=$(ASSISTANT_PROVIDER) MODEL=$(REAL_MODEL) EFFORT=$(REAL_EFFORT) &&) \
-	$(OPS_CLI) chat $(OPS_AS) evals docs/usecases/chat/assistant $(if $(REAL),--real --max-calls $(MAX_CALLS)); status=$$?; \
+	$(OPS_CLI) chat $(OPS_AS) evals docs/usecases/chat/assistant $(if $(REAL),--real --max-calls $(MAX_CALLS)) $(foreach s,$(ONLY),--only $(s)); status=$$?; \
 	$(if $(REAL),$(MAKE) -s demo-model ALIAS=$(ASSISTANT_ALIAS) PROVIDER=$(ASSISTANT_PROVIDER) MODEL=fake;) exit $$status
 assistant-walk: ## make assistant-walk [SHOTS=dir]: the first teams' assistant scripts in a browser on the console, screenshots at 1280 and 390 (no model call on the fake)
 	@SHOTS='$(SHOTS)' node $(ROOT)/scripts/assistant-walk.mjs
