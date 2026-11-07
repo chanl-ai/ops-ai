@@ -38,7 +38,8 @@ QUESTION = re.compile(r"\?(?=[\s*_)\]\"']|$)")
 CODE = re.compile(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b|\bError:")
 STRAY = re.compile(r"(?:^|[.!?]\s+|\n\s*)(ok|okay|done)[.!]?\s*$", re.IGNORECASE)
 CITE = re.compile(r"\[\d+\]")
-ENDINGS = (".", "!", "?", ")", "]", "*", "|", '"', "'")
+# What a sentence or a table may end on, closing quotes included ("... from \u201cthe policy.\u201d").
+ENDINGS = (".", "!", "?", ")", "]", "*", "|", '"', "'", "\u201d", "\u2019", "\u00bb")
 
 
 @dataclass

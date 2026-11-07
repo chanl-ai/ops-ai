@@ -325,6 +325,7 @@ def test_the_assistant_expectations_each_catch_their_failure() -> None:
     assert _failed({"noErrorCode": True}, "Error: CONNECTION_NOT_LINKED, connect first.") == ["no error code"]
     assert _failed({"endsClean": True}, "Two cases are open.\n\nok") == ["ends clean"]
     assert _failed({"endsClean": True}, "It stays open until the review is done.") == []
+    assert _failed({"endsClean": True}, "It is escalated, from \u201cControl testing.\u201d") == []
     assert _failed({"cites": True}, "Overdue reviews are escalated.", {"citations": []}) == ["cites the knowledge"]
     assert _failed({"table": True}, "Three are waiting.", {"parts": []}) == ["draws a table"]
     assert _failed({"maxSteps": 2}, "Done.", {"usage": {"calls": 5}}) == ["at most 2 steps"]
