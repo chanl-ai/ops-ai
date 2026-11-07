@@ -76,7 +76,8 @@ def spec_from_seed(a: AgentDefinition, model: str) -> dict[str, Any]:
     return {
         "name": a.name,
         "role": a.role,
-        "model": model,
+        # A seed that names its own alias runs on it; the others on the runtime's.
+        "model": a.model_alias or model,
         "channels": ["chat"],
         "instructions": "\n\n".join(f.text for f in a.instructions),
         "fragments": [f.model_dump() for f in a.instructions],

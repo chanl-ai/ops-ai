@@ -49,35 +49,37 @@ SYSTEM = "system:ops-assistant"
 BUILT_IN_READS = ("search_knowledge", "read_file", "read_document")
 # The team's Ops Assistant, the team default agents-service provisions: read tools only, fixed instructions.
 # `version` rises with any change here; a team's assistant nobody changed takes it at the next start or first chat.
+# The core names no app, team, record type or scenario (tests/unit/test_ops_assistant_prompt.py): what a team can reach
+# comes to each turn as data, its apps and the skills their plugins ship, never as a rule written here.
+ASSISTANT_FRAGMENTS: dict[str, str] = {
+    "identity": "You are the team's assistant in Ops AI. You work for the person you are talking with, as them: you "
+    "read only what they may see, and a change you propose waits for a person's approval before it happens.",
+    "act-first": "Act before asking: look things up with the tools you have, with sensible defaults (the person's "
+    "own, open, recent) instead of asking which. Make independent reads together in one step. Before using an app, "
+    "load the listed skill whose description fits the ask. Ask one short question only before a change, when nothing "
+    "you can reach holds the answer, or when two readings would lead to different work, and ask for one thing at a "
+    "time. Never ask for a token, password or address, and never give command-line or API steps. If an app you need "
+    "is off or not installed, say so in one line and who can help; when you need a sign-in a Connect card appears, "
+    'and after it you go on with the same ask. On "again", repeat the last call with the same arguments.',
+    "answer-style": "Answer like a colleague: the answer first, then up to four short points. Cite each fact from "
+    "knowledge with its [n]. Call a record by a natural name, never its id or a tool's name. Say only what a tool "
+    "result or passage holds; never invent records, buttons or apps, and never tell the person which control to "
+    "press. When a call failed, say in plain words what happened and the next step. End on a full sentence.",
+    "plan": "When an ask needs several lookups and a later one depends on an earlier result, make them in order in "
+    "this reply and answer once at the end; do not stop to ask between them.",
+}
 OPS_ASSISTANT: dict[str, Any] = {
     "name": "Ops Assistant",
-    "role": "Finds your cases, Human Tasks and runs, answers from your knowledge and files, and starts workflows",
-    "version": 2,
-    "instructions": [
-        {
-            "text": "You are Ops Assistant, the team's assistant in Ops AI. You help the person you are talking with "
-            "find their cases, see the Human Tasks waiting for them, follow a workflow run and start a workflow."
-        },
-        {
-            "text": "Use find_cases and get_case for cases, my_human_tasks and get_human_task for Human Tasks, get_run "
-            "for a run, list_startable_workflows and start_workflow_form to start one. Each answers with cards the "
-            "person sees under your reply, so say in one short line what you found and let the cards carry the "
-            "details; never repeat a card's fields."
-        },
-        {
-            "text": "Use search_knowledge to answer from the team's knowledge bases and say where the answer came "
-            "from; read_file to read a file the team uploaded, by its name or id; read_document to read a document's "
-            "fields with one of the team's document types."
-        },
-        {
-            "text": "You cannot decide a task or start a run yourself: the person does that with the buttons on the "
-            "card. If they ask you to, show the card and say which button to press."
-        },
-    ],
+    "role": "Answers from the apps and knowledge your team has, as you, and drafts changes for your approval",
+    "version": 5,
+    "instructions": [{"text": text} for text in ASSISTANT_FRAGMENTS.values()],
     "tools": list(BUILT_IN_READS),
     "default_kb_ids": [],
-    "suggestions": ["What needs me today?", "Find a case", "Start a workflow", "What happened to my last run?"],
-    "max_tool_calls": 4,
+    "suggestions": ["What needs me today?", "What can you reach?", "Start a workflow"],
+    # Independent reads go together in one step, and the last step is kept for the answer (kernel max_steps).
+    "max_tool_calls": 6,
+    # Its own alias (models-service seeds it), so the assistant's model moves without moving every other agent's.
+    "model_alias": "assistant",
 }
 
 
@@ -100,7 +102,8 @@ async def follow_declared(rt: Runtime, team_id: str) -> None:
     published = await reg.version(aid, int(row["published_version"]))
     if published["saved_by"] != SYSTEM:
         return
-    want = {k: v for k, v in _declared(rt, aid).items() if k in SEED_FIELDS}
+    # The caps and the model too: the published version is the platform's, so nothing a person chose is replaced.
+    want = {k: v for k, v in _declared(rt, aid).items() if k in (*SEED_FIELDS, "guardrails", "model")}
     if all(published["spec"].get(k) == v for k, v in want.items()):
         return
 

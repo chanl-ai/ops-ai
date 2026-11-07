@@ -35,10 +35,13 @@ EXTRACT_TENANT_BUDGET = Decimal(10)
 TOOLS_CHECK_KEY = "tools:check"
 TOOLS_CHECK_SECRET = "mk_dev_tools_check"
 OPENAI_LOCAL = "openai-local"
-# The runtime's default alias, served by whatever openai-local points at: the fake in dev, where any model name answers.
-# Pointing it at a real provider means setting its provider model too (PUT the alias); no vendor model is named here.
+# The runtime's default alias, and the team assistant's own, served by whatever openai-local points at: the fake in dev,
+# where any model name answers. Pointing one at a real provider means setting its provider model too (PUT the alias);
+# no vendor model is named here. `assistant` carries no reasoning effort: a model that refuses function tools with one
+# (gpt-5.5 on chat completions) would refuse every assistant turn.
 OPENAI_ALIASES: dict[str, tuple[str, str, str, str, str]] = {
     "default": ("chat", "default", "confidential", "1.25", "10"),
+    "assistant": ("chat", "assistant", "confidential", "1.25", "10"),
 }
 
 
