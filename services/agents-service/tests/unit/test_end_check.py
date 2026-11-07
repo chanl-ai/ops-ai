@@ -143,6 +143,26 @@ async def test_a_question_after_reads_that_succeeded_is_corrected() -> None:
     assert "every lookup succeeded" in writer.corrections[0]
 
 
+async def test_an_offer_to_read_more_after_failed_reads_is_corrected() -> None:
+    # A live reply after three failed reads: "I can retry now using the platform's defaults ... proceed?"
+    class Failing(Tools):
+        async def execute(
+            self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
+        ) -> ToolOutcome:
+            return ToolOutcome(False, {"error": "The team has no file named open."})
+
+    writer = Writer(
+        "The reads failed; I can retry with your own open cases. Proceed?", "Nothing could be read.", read=True
+    )
+    req = TurnRequest("t1", "th1", SETTINGS, [CASES], user_turn="What needs me?")
+    events = [
+        e async for e in run_turn(req, KernelPorts(model=writer.model(), tools=Failing(), knowledge=Knowledge([])))
+    ]
+    result = events[-1]
+    assert isinstance(result, TurnFinished)
+    assert writer.calls == 3 and result.result.text == "Nothing could be read.", result.result.text
+
+
 async def test_a_question_with_no_lookup_is_left_alone() -> None:
     # A vague ask may get one question back when nothing was looked up.
     writer = Writer("Which team's cases do you mean?", "unused")

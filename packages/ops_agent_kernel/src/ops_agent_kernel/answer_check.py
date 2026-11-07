@@ -24,6 +24,11 @@ _STRAY = re.compile(r"(?:^|[.!?]\s+|\n\s*)(ok|okay|done)[.!]?\s*$", re.IGNORECAS
 _DANGLING = (":", ",", ";", "(", "-", "\u2014", "\u2013")
 # A platform record id (case_0eef29f68716, th_4148e7b2edcd, fil_ac70…): a short prefix, an underscore, hex.
 _RECORD_ID = re.compile(r"\b[a-z]{2,8}_[0-9a-f]{8,}\b")
+# A question back offering to do more reading ("... and show the cards, proceed?"): the reads were the model's to make.
+_OFFER = re.compile(
+    r"\b(proceed|shall I|should I|do you want me to|want me to|would you like me to|can I go ahead)\b[^.!?]*\?\s*$",
+    re.IGNORECASE,
+)
 _QUESTION = re.compile(r"\?\s*\**\s*$")
 
 
@@ -63,13 +68,19 @@ def ends_in_question(text: str) -> bool:
 
 
 def defects(
-    text: str, *, needs_citation: bool, all_reads_succeeded: bool, tools: frozenset[str] = frozenset()
+    text: str,
+    *,
+    needs_citation: bool,
+    all_reads_succeeded: bool,
+    tools: frozenset[str] = frozenset(),
+    read_only: bool = False,
 ) -> list[str]:
     """What is wrong with a finished answer, as phrases for the correction prompt; empty when it is clean.
 
     `needs_citation`: the turn had knowledge passages and called no tool, so its facts come from the passages.
     `all_reads_succeeded`: the turn called tools, every one a read and every one ok, so a question back is one the
-    tools could have answered. `tools`: the names the turn offered, none of which a reply may show."""
+    tools could have answered. `tools`: the names the turn offered, none of which a reply may show. `read_only`: no
+    call this turn was a write, so a question offering to read more asks for what the model may do itself."""
     found: list[str] = []
     if (code := error_code(text)) is not None:
         found.append(f"repeats an error code ({code}): say what happened in plain words and the next step, no code")
@@ -79,6 +90,8 @@ def defects(
         found.append(f"ends on a stray {tail!r}: end on a full sentence")
     if all_reads_succeeded and ends_in_question(text):
         found.append("ends by asking the person something although every lookup succeeded: answer with what you found")
+    elif read_only and _OFFER.search(text.rstrip()):
+        found.append("asks permission to read more: make the read, or say plainly what could not be read")
     if needs_citation and not cited_numbers(text):
         found.append(
             "uses the knowledge passages without citing them: cite each fact with its [n], or say plainly that the "
