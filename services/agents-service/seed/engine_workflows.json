@@ -60,7 +60,7 @@
         },
         "position": {
           "x": 768,
-          "y": -98
+          "y": -30
         }
       },
       {
@@ -76,7 +76,7 @@
         },
         "position": {
           "x": 1152,
-          "y": -98
+          "y": -156
         }
       },
       {
@@ -110,7 +110,7 @@
         },
         "position": {
           "x": 1536,
-          "y": -110
+          "y": -156
         }
       },
       {
@@ -124,7 +124,7 @@
         },
         "position": {
           "x": 1920,
-          "y": -174
+          "y": -156
         }
       },
       {
@@ -138,20 +138,20 @@
         },
         "position": {
           "x": 1920,
-          "y": -31
+          "y": 57
         }
       },
       {
         "id": "not_found",
         "type": "ops.flow.end",
         "typeVersion": 1,
-        "name": "Not found",
+        "name": "No such customer",
         "parameters": {
-          "outcome": "not_found"
+          "outcome": "customer_not_found"
         },
         "position": {
-          "x": 1536,
-          "y": 57
+          "x": 1152,
+          "y": 35
         }
       }
     ],
@@ -182,7 +182,7 @@
           "port": "refused"
         },
         "to": {
-          "node": "not_found",
+          "node": "failed",
           "port": "in"
         }
       },
@@ -192,7 +192,7 @@
           "port": "error"
         },
         "to": {
-          "node": "not_found",
+          "node": "failed",
           "port": "in"
         }
       },
@@ -232,7 +232,7 @@
           "port": "refused"
         },
         "to": {
-          "node": "not_found",
+          "node": "failed",
           "port": "in"
         }
       },
@@ -242,7 +242,7 @@
           "port": "error"
         },
         "to": {
-          "node": "not_found",
+          "node": "failed",
           "port": "in"
         }
       },
