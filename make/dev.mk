@@ -112,7 +112,10 @@ ifneq ($(filter api,$(firstword $(MAKECMDGOALS))),)
 API_WORDS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 $(eval $(API_WORDS):;@:)
 endif
-AS ?= admin
+# make's built-in AS (the assembler, `as`) means `AS ?=` never applies; only an unset or built-in AS takes the default.
+ifneq ($(filter default undefined,$(origin AS)),)
+AS := admin
+endif
 ENV ?= local
 
 .PHONY: api sdk-call
