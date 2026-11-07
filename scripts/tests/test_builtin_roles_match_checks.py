@@ -334,7 +334,7 @@ TODAY: dict[tuple[str, str], Verdict] = {
     **{
         (area, "view"): open_to_members
         for area in AREAS
-        if area not in ("settings", "audit", "activity", "chat", "memory", "workspace")
+        if area not in ("settings", "audit", "activity", "webhooks", "usage", "chat", "memory", "workspace")
     },
     ("chat", "view"): chat_owner,
     ("memory", "edit"): memory_editor,

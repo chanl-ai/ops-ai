@@ -45,6 +45,10 @@ AREAS = (
     # The team's activity log of tool calls: who called which tool, as whom, and what came back (tools-service
     # GET /v1/executions). It names people, so viewers do not read it; reviewers, builders and admins do.
     "activity",
+    # The team's webhooks (endpoint addresses and delivery history) and its usage and cost: team-admin data, held by
+    # admins only by default.
+    "webhooks",
+    "usage",
     # The workspace itself: `manage` transfers, closes and restores it. Only Owner holds it, one person per
     # workspace, moved only by a transfer; Admin's every-cell grid leaves it out.
     "workspace",
@@ -82,7 +86,7 @@ def _all(area: str, *actions: str) -> list[Grant]:
 _READS: list[Grant] = [
     (area, "view", "all")
     for area in AREAS
-    if area not in ("settings", "audit", "activity", "chat", "memory", "workspace")
+    if area not in ("settings", "audit", "activity", "webhooks", "usage", "chat", "memory", "workspace")
 ]
 _DEFINITIONS = ("agents", "workflows", "skills", "guardrails", "widgets", "tools")
 # Decided by a reviewer or admin of the reviewing team; a module access approval by an approver or admin of the
@@ -103,9 +107,10 @@ _MEMBER: list[Grant] = [
     # Anyone in the team opens a case and works it: status, assignee, notes. Closing it is cases.manage.
     *_all("cases", "create", "edit"),
 ]
-# Builders do everything in their team except people and access and the workspace's settings (D59):
+# Builders do everything in their team except people and access, the workspace's settings, and the team's webhooks and
+# usage, which stay team-admin data (D59):
 # connections, secrets and auth configs included. What agents remember about a person stays that person's to edit.
-_NOT_BUILDERS = ("access", "settings", "workspace")
+_NOT_BUILDERS = ("access", "settings", "workspace", "webhooks", "usage")
 _BUILDS: list[Grant] = [
     (area, action, "own" if (area, action) == ("memory", "edit") else "all")
     for area in AREAS

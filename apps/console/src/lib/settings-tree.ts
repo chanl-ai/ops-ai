@@ -1,3 +1,4 @@
+import type { NavNeed } from './nav';
 import { IconAdjustmentsHorizontal, IconBell, IconBrain, IconChartBar, IconCpu, IconGavel, IconGitPullRequest, IconKey, IconLock, IconLogin, IconServer, IconShieldCheck, IconUserCircle, IconUserShield, IconWebhook, IconWorld, type Icon } from '@tabler/icons-react';
 
 
@@ -6,6 +7,12 @@ import { IconAdjustmentsHorizontal, IconBell, IconBrain, IconChartBar, IconCpu, 
  * workspace pages under /settings/workspace, and Govern pages stay where Govern keeps them.
  */
 export type SettingsGroup = 'Workspace' | 'Team' | 'Govern';
+
+/** Storage settings decide where every team's files are kept: files-service reads them under settings.manage. */
+export const STORAGE_SETTINGS: NavNeed = { area: 'settings', action: 'manage' };
+/** A team's webhooks and its usage and cost are team-admin data, each with its own cell. */
+export const WEBHOOKS: NavNeed = { area: 'webhooks', action: 'view' };
+export const USAGE: NavNeed = { area: 'usage', action: 'view' };
 
 export interface SettingsEntry {
   id: string;
@@ -16,16 +23,18 @@ export interface SettingsEntry {
   group: SettingsGroup;
   /** Entries sharing a section nest under one parent row in the sidebar (Govern > Security). */
   section?: string;
+  /** The roles-grid cell the page needs (lib/nav.ts); the sidebar and Find offer it only to who holds it. */
+  needs?: NavNeed;
 }
 
 export const SETTINGS_NAV: SettingsEntry[] = [
   { id: 'workspace-general', title: 'General', href: '/settings/workspace', icon: IconAdjustmentsHorizontal, description: 'The workspace’s name, address and logo', group: 'Workspace' },
-  { id: 'storage', title: 'Storage', href: '/settings/workspace/storage', icon: IconServer, description: 'Where files are kept, upload limits, scanning and retention', group: 'Workspace' },
+  { id: 'storage', title: 'Storage', href: '/settings/workspace/storage', icon: IconServer, description: 'Where files are kept, upload limits, scanning and retention', group: 'Workspace', needs: STORAGE_SETTINGS },
   { id: 'model-providers', title: 'Model providers', href: '/settings/workspace/model-providers', icon: IconCpu, description: 'Keys the account’s AI models sign in with, never shown again', group: 'Workspace' },
-  { id: 'usage', title: 'Usage and cost', href: '/settings/workspace/usage', icon: IconChartBar, description: 'Tokens, model cost and tool calls for chargeback', group: 'Workspace' },
+  { id: 'usage', title: 'Usage and cost', href: '/settings/workspace/usage', icon: IconChartBar, description: 'Tokens, model cost and tool calls for chargeback', group: 'Workspace', needs: USAGE },
   { id: 'team-general', title: 'General', href: '/settings/team', icon: IconAdjustmentsHorizontal, description: 'The team’s name, owner and the agent new chats start on', group: 'Team' },
   { id: 'notifications', title: 'Notifications', href: '/settings/team/notifications', icon: IconBell, description: 'Where approvals, SLA warnings and alerts go', group: 'Team' },
-  { id: 'webhooks', title: 'Webhooks', href: '/settings/team/webhooks', icon: IconWebhook, description: 'Send events to the bank’s other systems', group: 'Team' },
+  { id: 'webhooks', title: 'Webhooks', href: '/settings/team/webhooks', icon: IconWebhook, description: 'Send events to the bank’s other systems', group: 'Team', needs: WEBHOOKS },
   { id: 'api-keys', title: 'API keys', href: '/settings/team/api-keys', icon: IconKey, description: 'Keys for systems that start runs or read logs', group: 'Team' },
   { id: 'policies', title: 'Workspace policies', href: '/settings/policies', icon: IconShieldCheck, description: 'Who may decide what, and how long things may wait', group: 'Govern', section: 'Policies' },
   { id: 'publish-reviews', title: 'Publish reviews', href: '/settings/policies/publish-reviews', icon: IconGitPullRequest, description: 'Which publishes need a second person’s review', group: 'Govern', section: 'Policies' },
@@ -55,6 +64,7 @@ export interface FoundSetting {
   label: string;
   where: string;
   href: string;
+  needs?: NavNeed;
 }
 
 /** What the Find box searches on the live tree: every page by its name and what it holds. */
@@ -62,7 +72,7 @@ export function findInSettings(query: string): FoundSetting[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
   const all = [
-    ...SETTINGS_NAV.map((e) => ({ label: e.title, where: `${e.group} · ${e.description}`, href: e.href, hay: `${e.title} ${e.description} ${e.group}`.toLowerCase() })),
+    ...SETTINGS_NAV.map((e) => ({ label: e.title, where: `${e.group} · ${e.description}`, href: e.href, needs: e.needs, hay: `${e.title} ${e.description} ${e.group}`.toLowerCase() })),
     ...PERSONAL_SETTINGS.map((e) => ({ label: e.label, where: 'My account', href: e.href, hay: `${e.label} my account profile password`.toLowerCase() })),
   ];
   return all.filter((h) => q.split(/\s+/).every((w) => h.hay.includes(w))).slice(0, 12);
@@ -74,7 +84,8 @@ export interface SidebarItem {
   label: string;
   href: string;
   icon: Icon;
-  children?: { id: string; label: string; href: string; icon: Icon }[];
+  needs?: NavNeed;
+  children?: { id: string; label: string; href: string; icon: Icon; needs?: NavNeed }[];
 }
 
 export interface SidebarTree {
@@ -88,11 +99,11 @@ function itemsOf(group: SettingsGroup): SidebarItem[] {
   const out: SidebarItem[] = [];
   for (const e of SETTINGS_NAV.filter((x) => x.group === group)) {
     if (!e.section) {
-      out.push({ id: e.id, label: e.title, href: e.href, icon: e.icon });
+      out.push({ id: e.id, label: e.title, href: e.href, icon: e.icon, needs: e.needs });
       continue;
     }
     const parent = out.find((o) => o.id === `section-${e.section}`);
-    const child = { id: e.id, label: e.title, href: e.href, icon: e.icon };
+    const child = { id: e.id, label: e.title, href: e.href, icon: e.icon, needs: e.needs };
     if (parent) parent.children!.push(child);
     else out.push({ id: `section-${e.section}`, label: e.section, href: e.href, icon: SECTION_ICON[e.section] ?? e.icon, children: [child] });
   }

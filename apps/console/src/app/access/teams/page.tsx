@@ -89,7 +89,7 @@ export default function TeamsPage() {
   const list = useListParams<WorkspaceTeamFilters>('name');
   const canView = !!editor.data?.canView;
   const canManage = !!editor.data?.canManage;
-  const query = useWorkspaceTeams(list.params);
+  const query = useWorkspaceTeams(list.params, canView);
   const create = useCreateWorkspaceTeam();
   const rename = useRenameWorkspaceTeam();
   const archive = useArchiveWorkspaceTeam();

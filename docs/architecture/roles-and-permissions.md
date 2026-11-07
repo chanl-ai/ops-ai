@@ -236,6 +236,22 @@ role holds are left out.
 | activity | run | all | all | no | no | no | no | no |
 | activity | decide | all | all | no | no | no | no | no |
 | activity | manage | all | all | no | no | no | no | no |
+| webhooks | view | all | no | no | no | no | no | no |
+| webhooks | create | all | no | no | no | no | no | no |
+| webhooks | edit | all | no | no | no | no | no | no |
+| webhooks | publish | all | no | no | no | no | no | no |
+| webhooks | delete | all | no | no | no | no | no | no |
+| webhooks | run | all | no | no | no | no | no | no |
+| webhooks | decide | all | no | no | no | no | no | no |
+| webhooks | manage | all | no | no | no | no | no | no |
+| usage | view | all | no | no | no | no | no | no |
+| usage | create | all | no | no | no | no | no | no |
+| usage | edit | all | no | no | no | no | no | no |
+| usage | publish | all | no | no | no | no | no | no |
+| usage | delete | all | no | no | no | no | no | no |
+| usage | run | all | no | no | no | no | no | no |
+| usage | decide | all | no | no | no | no | no | no |
+| usage | manage | all | no | no | no | no | no | no |
 | workspace | manage | no | no | no | no | no | no | all |
 
 <!-- roles-matrix:end -->
