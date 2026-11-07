@@ -26,6 +26,7 @@ from ops_agents.activities.gateway import GatewayClient, GatewayReplySender, Gat
 from ops_agents.activities.knowledge import KbService, Knowledge, NoKnowledgeService
 from ops_agents.activities.tool_directory import CatalogTools, ToolDirectory, ToolsApps, ToolsOperations
 from ops_agents.activities.tools import LocalReplySender, LocalToolExecutor, ReplySender
+from ops_agents.api.error_words import WordedTools
 from ops_agents.graphs import agent_wrapper
 from ops_agents.graphs.checkpointer import open_checkpointer
 from ops_agents.graphs.common import GraphDeps
@@ -292,7 +293,9 @@ def create_app(
         if gateway_http
         else CatalogTools(catalog)
     )
-    tools = GatewayToolExecutor(gateway_client, directory) if gateway_client else LocalToolExecutor(catalog)
+    # A failed call reaches the model in words, its code kept on the call log (error_words.py).
+    inner = GatewayToolExecutor(gateway_client, directory) if gateway_client else LocalToolExecutor(catalog)
+    tools = WordedTools(inner)
     replies: ReplySender = GatewayReplySender(gateway_client) if gateway_client else LocalReplySender()
     # Every model call of a graph run is one record: the budget sums them, a crashed node's re-run replays them
     # (store/model_calls.py, api/model_ledger.py).
