@@ -752,8 +752,8 @@ class PluginHost:
         if plugin is None:
             return {
                 **module,
-                "plugin_off": f"{module['display_name']} is no longer installed, so its tools are off. An admin "
-                "installs it again to turn them back on.",
+                "plugin_off": f"{module['display_name']} isn't installed on this system, so its tools are off. Your "
+                "operator installs apps.",
             }
         reason = await self.off_reason(tenant_id, team_id, plugin)
         if reason is not None or team_id is None:

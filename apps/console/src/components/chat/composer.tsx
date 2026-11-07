@@ -12,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { ChatAttachment } from '@/lib/types/chat';
+import { cn } from '@/lib/utils';
 
 const MAX = 8000;
 
@@ -26,10 +27,11 @@ export interface KbOption {
  * The knowledge an answer may use. `agentName` names the agent whose allowed bases `kbs` are, so an empty list says the
  * agent holds none and where they are added, rather than suggesting the person can read none (UX knowledge-5).
  */
-export function KbChips({ kbs, value, onChange, disabled, agentName }: { kbs: KbOption[]; value: string[]; onChange: (ids: string[]) => void; disabled?: boolean; agentName?: string }) {
+/** `oneLine`: the chips stay on one line and scroll sideways, for a header that has one line for them. */
+export function KbChips({ kbs, value, onChange, disabled, agentName, oneLine = false }: { kbs: KbOption[]; value: string[]; onChange: (ids: string[]) => void; disabled?: boolean; agentName?: string; oneLine?: boolean }) {
   const selected = value.map((id) => kbs.find((k) => k.id === id) ?? { id, name: id, color: 'slate' });
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div className={cn('flex items-center gap-1.5', oneLine ? 'min-w-0 overflow-x-auto [scrollbar-width:none] [&>*]:shrink-0' : 'flex-wrap')}>
       {selected.map((k) => (
         <Badge key={k.id} variant="outline" className="h-6 gap-1.5 rounded-full bg-background pr-1 pl-2 font-normal">
           <KbDot color={k.color} className="size-2" />

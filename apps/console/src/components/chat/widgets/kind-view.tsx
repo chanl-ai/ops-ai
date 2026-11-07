@@ -35,7 +35,7 @@ import { EmailPreview } from '@/components/shared/email-preview';
 import { useFilePreviewUrl } from '@/hooks/extraction-queries';
 import { initials, money } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import { readingOrder } from '@/lib/widgets/table-columns';
+import { dateCell, isEmptyColumn, isIsoDate, readingOrder, shownLabel } from '@/lib/widgets/table-columns';
 import type { Cell, ChartNode, ColumnFormat, KindAction, KindNode, KindStatus, MetricNode, Rows, StepStateKind, TableNode, Tone } from '@/lib/types/widgets';
 
 /** What the thread lets a widget do. Undefined when the conversation is read-only. */
@@ -63,6 +63,7 @@ const ENTER = 'animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-r
 export const cellText = (v: Cell | undefined) => (v === null || v === undefined ? '—' : typeof v === 'boolean' ? (v ? 'Yes' : 'No') : typeof v === 'number' ? v.toLocaleString() : v);
 
 function formatted(v: Cell, format?: ColumnFormat): string {
+  if (isIsoDate(v)) return dateCell(v);
   if (typeof v !== 'number') return cellText(v);
   if (format === 'money') return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (format === 'percent') return `${v.toLocaleString()}%`;
@@ -141,7 +142,14 @@ function MetricKind({ node }: { node: MetricNode }) {
 function TableKind({ node, truncatedFrom }: { node: TableNode; truncatedFrom?: number }) {
   // Columns the result named stay as given; inferred ones read name first, with ids behind the View menu.
   const reading = React.useMemo(() => readingOrder(Object.keys(node.rows[0] ?? {}), node.rows), [node]);
-  const cols = React.useMemo(() => node.columns ?? reading.order.map((key) => ({ key, label: key, format: undefined as ColumnFormat | undefined })), [node, reading]);
+  // Every column reads in words, and one with nothing in any row is left out, named or inferred.
+  const cols = React.useMemo(
+    () =>
+      (node.columns ?? reading.order.map((key) => ({ key, label: undefined as string | undefined, format: undefined as ColumnFormat | undefined })))
+        .filter((c) => !isEmptyColumn(c.key, node.rows))
+        .map((c) => ({ ...c, label: shownLabel(c.key, c.label) })),
+    [node, reading],
+  );
   const hidden = React.useMemo(() => (node.columns ? {} : Object.fromEntries(reading.hidden.map((k) => [k, false]))), [node, reading]);
   const columns = React.useMemo<ColumnDef<Rows[number]>[]>(
     () =>
@@ -149,10 +157,11 @@ function TableKind({ node, truncatedFrom }: { node: TableNode; truncatedFrom?: n
         // Keys can hold dots, which an accessorKey would read as a path.
         id: c.key,
         accessorFn: (r) => r[c.key],
-        header: ({ column }) => <DataTableColumnHeader column={column} title={c.label ?? c.key} />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={c.label} />,
         cell: ({ row }) => {
           const v = row.original[c.key] ?? null;
-          return <span className={typeof v === 'number' ? 'block text-right text-xs tabular-nums' : 'text-xs whitespace-nowrap'}>{formatted(v, c.format)}</span>;
+          // Text wraps so a long subject is read whole; numbers and dates stay on one line.
+          return <span className={typeof v === 'number' ? 'block text-right text-xs tabular-nums' : isIsoDate(v) ? 'text-xs whitespace-nowrap' : 'block min-w-32 text-xs break-words whitespace-normal'}>{formatted(v, c.format)}</span>;
         },
       })),
     [cols],
