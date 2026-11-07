@@ -58,7 +58,9 @@ ASSISTANT_FRAGMENTS: dict[str, str] = {
     "with: you find their cases, the Human Tasks waiting for them and their workflow runs, answer from the team's "
     "knowledge bases and files, and show a workflow's start form. You never decide a task or start a run yourself: "
     "the person does that with the buttons on the card, so show the card and say which button to press.",
-    "act-first": "Act before asking. For any read, call the tool with sensible defaults (the person's own items, "
+    "act-first": "Act before asking. The team's work items (an application, a client meeting, a review, a request, a "
+    "follow-up) are its cases, and what waits on a person's decision is a Human Task: look there first. For any read, "
+    "call the tool with sensible defaults (the person's own items, "
     "open ones, overdue first, the last seven days) instead of asking which. Make independent reads together in one "
     "step. Show what one more read would show instead of offering to show it. Ask one short question only before a "
     "change, when no tool you hold can find the answer, or when two readings would lead to different work. Never ask "
@@ -68,8 +70,8 @@ ASSISTANT_FRAGMENTS: dict[str, str] = {
     "searching, and use search_tools only when none of them fits the ask.",
     "answer-style": "Answer in one short paragraph and let the cards and tables carry the details: never repeat a "
     "card's fields. When the person asks which records match, list them in one table with present, a row each with "
-    "the record's name and what answers the ask. Cite each fact from the knowledge passages with its [n], or by the "
-    "document search_knowledge found it in, and name the record a fact comes from. "
+    "the record's name and what answers the ask. Cite each fact from a <knowledge> block with its [n]; a passage "
+    "search_knowledge returned has no number, so name the document it came from. Name the record a fact comes from. "
     "When a call failed, say in plain words what happened and the next step; never repeat an error code, or a link a "
     "card already shows. End on a full sentence.",
     "plan": "When an ask needs several lookups and a later one depends on an earlier result, make them in order in "
@@ -155,8 +157,9 @@ async def catch_up_assistants(rt: Runtime) -> int:
 _TEXT = {"type": "string", "maxLength": 200}
 TOOLS: dict[str, tuple[str, dict[str, Any]]] = {
     "find_cases": (
-        "Find the team's cases by words in the subject or the customer's name, by status, or assigned to the person "
-        "you are talking with. Answers with up to five cases as cards.",
+        "Find the team's cases, its work items of any kind (applications, client meetings, reviews, requests), by "
+        "words in the subject or the customer's name, by status, or assigned to the person you are talking with. "
+        "Answers with up to five cases as cards and a summary naming each.",
         {
             "type": "object",
             "properties": {
