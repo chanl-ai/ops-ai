@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 from typing import Any, cast
 
 from .manifest import Manifest, Tool
@@ -19,13 +20,24 @@ COMPARED = ("request", "headers", "access", "requires_approval", "amount_max", "
 INPUT_COMPARED = ("type", "required", "enum", "format", "default", "pattern", "properties", "items", "max_items")
 
 
-def declarations(manifest: Manifest) -> dict[str, Any]:
-    """The version's declarations: plugin-wide headers and every tool's entry, defaults left out."""
-    return {
+def declarations(manifest: Manifest, root: Path | None = None) -> dict[str, Any]:
+    """The version's declarations: plugin-wide headers and every tool's entry, defaults left out. Given the plugin's
+    folder, each template's file is hashed in too, so a release that changes only a skill or an agent is an update."""
+    out: dict[str, Any] = {
         "version": manifest.version,
         "headers": dict(manifest.headers),
         "tools": [t.model_dump(mode="json", exclude_defaults=True) for t in manifest.tools],
     }
+    if root is not None and manifest.templates:
+        out["templates"] = {t.id: _file_digest(root / t.path) for t in manifest.templates}
+    return out
+
+
+def _file_digest(path: Path) -> str:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return "missing"
 
 
 def digest(decl: dict[str, Any]) -> str:

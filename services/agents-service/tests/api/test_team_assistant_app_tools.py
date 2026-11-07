@@ -5,6 +5,8 @@ draft someone is editing is stepped over."""
 
 from __future__ import annotations
 
+import hashlib
+import json
 from types import SimpleNamespace
 from typing import Any
 
@@ -94,6 +96,12 @@ def skill(tid: str, name: str, tools: list[str]) -> dict[str, Any]:
     }
 
 
+def digested(t: dict[str, Any]) -> dict[str, Any]:
+    """The template as tools-service lists it: with the digest of its body, which moves when the plugin changes it."""
+    body = json.dumps(t["body"], sort_keys=True, separators=(",", ":")).encode()
+    return {**t, "digest": hashlib.sha256(body).hexdigest()}
+
+
 class Templates:
     """tools-service's plugin templates for the team: two skills the team can use and one naming a tool it lacks."""
 
@@ -123,3 +131,32 @@ async def test_turning_an_app_on_pins_its_skills_with_the_tools_they_name_once(s
     assert "salesforce_update_record" in live.tools and "salesforce_save_records" not in live.tools
     again = (await give(c, ADMIN)).json()["data"]
     assert again["state"] == "already" and again["skills"] == [], again
+
+
+class ChangingTemplates:
+    """One skill whose text the plugin changes in a later release, at the same template version."""
+
+    def __init__(self) -> None:
+        self.instructions = "Read the client with six queries."
+
+    async def get(self, path: str, **_: Any) -> list[dict[str, Any]]:
+        t = skill("salesforce-clients", "Salesforce clients", ["salesforce_query"])
+        return [digested({**t, "body": {**t["body"], "instructions": self.instructions}})]
+
+
+async def test_a_plugin_release_that_changes_a_skill_reaches_the_assistant_on_the_next_turn_on(stack: Stack) -> None:  # noqa: F811
+    # Salesforce 0.3.1 read a client in one query, but the assistant kept the six-query text it copied at first turn-on.
+    c, rt = stack
+    rt.tool_directory = Directory()
+    templates = ChangingTemplates()
+    rt.tool_reviews = SimpleNamespace(tools=templates)  # type: ignore[assignment]
+    await start(c, ADMIN)
+    await give(c, ADMIN)
+    templates.instructions = "Read the client in one query with its related records."
+    data = (await give(c, ADMIN)).json()["data"]
+    assert data["skills"] == ["Salesforce clients"], data
+    live = rt.catalog.agent(AID)
+    assert live is not None
+    [pinned] = live.skills
+    assert pinned.version == 2 and "one query" in pinned.instructions, pinned
+    assert (await give(c, ADMIN)).json()["data"]["state"] == "already"

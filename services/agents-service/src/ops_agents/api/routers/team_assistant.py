@@ -106,10 +106,10 @@ async def give_app_tools(rt: Runtime, me: Principal, module_ids: list[str]) -> A
     if row["version"] != published or any(r["status"] == "pending" for r in await reg.requests("agent", agent.id)):
         return answer("waiting")
     spec = {**live, "toolIds": [*held, *dict.fromkeys(t for t in needed if t not in held)]}
-    for skill_id, name in await _skill_copies(rt, me, team, shipped):
-        if skill_id in holds:
+    for skill_id, name, version, renewed in await _skill_copies(rt, me, team, shipped):
+        if skill_id in holds and not renewed:
             continue
-        spec["skillPins"] = await pin(rt, spec, skill_id, 1, by=me.email, at=now_iso())
+        spec["skillPins"] = await pin(rt, spec, skill_id, version, by=me.email, at=now_iso())
         pinned.append(name)
     note = f"Given the read tools of {', '.join(module_ids)} when the app was turned on"
     n = await reg.save(agent.id, spec, by=me.email, note=note)
@@ -138,27 +138,62 @@ async def _shipped(rt: Runtime, team: str) -> list[dict[str, Any]]:
 
 
 async def _unpinned(rt: Runtime, shipped: list[dict[str, Any]], holds: set[str]) -> list[dict[str, Any]]:
-    """The app's skills the team holds no pinned copy of yet."""
+    """The app's skills the team holds no pinned copy of yet, or whose copy the app's template has since changed."""
     copies = TemplateCopies(rt.db)
     out: list[dict[str, Any]] = []
     for t in shipped:
         held = await copies.live(str(t["source"]), str(t["id"]), int(t["version"]))
-        if held is None or str(held["record_id"]) not in holds:
+        if held is None or str(held["record_id"]) not in holds or await _stale(rt, held, t):
             out.append(t)
     return out
 
 
-async def _skill_copies(rt: Runtime, me: Principal, team: str, shipped: list[dict[str, Any]]) -> list[tuple[str, str]]:
+async def _newest_digest(rt: Runtime, skill_id: str) -> tuple[int, str | None]:
+    row = await skills(rt).row(skill_id)
+    found = await skills(rt).version(skill_id, int(row["version"]))
+    return int(row["version"]), (str(found["digest"]) if found else None)
+
+
+async def _stale(rt: Runtime, held: dict[str, Any], t: dict[str, Any]) -> bool:
+    """Whether the team's copy was made from a template body the app has since changed, and the team has not edited
+    the copy since, so taking the app's text overwrites nothing of theirs. A copy made with no record digest counts as
+    edited once it has a version past its first."""
+    if not t.get("digest") or held.get("digest") == t.get("digest"):
+        return False
+    version, newest = await _newest_digest(rt, str(held["record_id"]))
+    kept = held.get("record_digest")
+    return newest == kept if kept else version == 1
+
+
+async def _skill_copies(
+    rt: Runtime, me: Principal, team: str, shipped: list[dict[str, Any]]
+) -> list[tuple[str, str, int, bool]]:
     """The team's published copy of each of the app's skills, made on first turn-on as the template install makes a
     copy, through the skill's content checks; published at once, since the admin turning the app on chose to give it
-    to the assistant. A name another team's copy holds takes a number, as slugs are unique across teams."""
-    copies, out = TemplateCopies(rt.db), list[tuple[str, str]]()
+    to the assistant. A name another team's copy holds takes a number, as slugs are unique across teams. A copy the
+    app's template has since changed, and the team has not edited, takes the new text as its next published version
+    (the plugin's update reaches the assistant); each entry is (skill id, name, version to pin, renewed)."""
+    copies, out = TemplateCopies(rt.db), list[tuple[str, str, int, bool]]()
     for t in shipped:
         source, tid, version = str(t["source"]), str(t["id"]), int(t["version"])
         held = await copies.live(source, tid, version)
         if held is not None:
-            row = await skills(rt).row(str(held["record_id"]))
-            out.append((str(held["record_id"]), str(row.get("name") or tid)))
+            sid = str(held["record_id"])
+            row = await skills(rt).row(sid)
+            now = cast(dict[str, Any], (await skills(rt).versions(sid))[0]["content"])
+            name = str(now.get("name") or row.get("name") or tid)
+            if not await _stale(rt, held, t):
+                out.append((sid, name, int(row["published_version"] or row["version"]), False))
+                continue
+            content = await _skill_content(rt, team, t, name, list(now.get("knowledgeBases") or []))
+            note = f"Update from {cast(dict[str, Any], t.get('plugin') or {}).get('title') or source}"
+            n = await skills(rt).save_draft(sid, content, by=me.email, note=note)
+            await skills(rt).publish(sid, n, by=me.email, review_id="app_turn_on")
+            await copies.updated(
+                str(held["id"]), version=version, digest=cast(str | None, t.get("digest")),
+                record_digest=(await _newest_digest(rt, sid))[1],
+            )  # fmt: skip
+            out.append((sid, name, n, True))
             continue
         base = str(cast(dict[str, Any], t.get("body") or {}).get("name") or t["title"])
         for n in range(1, 10):
@@ -181,8 +216,9 @@ async def _skill_copies(rt: Runtime, me: Principal, team: str, shipped: list[dic
                 version=version,
                 by=me.email,
                 digest=cast(str | None, t.get("digest")),
+                record_digest=(await _newest_digest(rt, sid))[1],
             )
-            out.append((sid, name))
+            out.append((sid, name, 1, False))
             break
     return out
 

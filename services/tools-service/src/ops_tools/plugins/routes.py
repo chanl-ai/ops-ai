@@ -620,7 +620,7 @@ def plugins_router(
     r = APIRouter(tags=["apps"], responses=ERRORS)
 
     def _installed(plugin: Plugin) -> tuple[dict[str, Any], str]:
-        decl = declarations(plugin.manifest)
+        decl = declarations(plugin.manifest, plugin.root)
         return decl, digest(decl)
 
     def _team_tools(plugin: Plugin, b: dict[str, Any]) -> list[str]:
