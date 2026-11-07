@@ -41,7 +41,7 @@
   "cases": [
     {
       "key": "brightside",
-      "subject": "Loan application: Brightside Bakery LLC, waiting on the 2024 business tax return",
+      "subject": "Loan application: Brightside Bakery LLC, waiting on documents: the 2024 business tax return",
       "customer": "Brightside Bakery LLC",
       "assignee": "officer",
       "status": "waiting_on_customer",
@@ -49,7 +49,7 @@
     },
     {
       "key": "coastal",
-      "subject": "Loan application: Coastal Freight Co, waiting on 3 months of bank statements",
+      "subject": "Loan application: Coastal Freight Co, waiting on documents: 3 months of bank statements",
       "customer": "Coastal Freight Co",
       "assignee": "officer",
       "status": "waiting_on_customer",
@@ -57,7 +57,7 @@
     },
     {
       "key": "nguyen",
-      "subject": "Loan application: Nguyen Family Pharmacy, waiting on a signed personal guarantee",
+      "subject": "Loan application: Nguyen Family Pharmacy, waiting on documents: a signed personal guarantee",
       "customer": "Nguyen Family Pharmacy",
       "assignee": "officer",
       "status": "waiting_on_customer",

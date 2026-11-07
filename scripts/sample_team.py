@@ -992,7 +992,7 @@ def due_at(when: str, now: datetime | None = None) -> str:
 
 def ensure_cases(lead: Session, team_name: str, cases: list[dict[str, Any]], people: dict[str, str]) -> None:
     """Each case by its producer key, so a second run answers the case it opened: assigned to a manifest person (by
-    key), with its status, deadline and notes. A case found keeps the notes it has; its status is set again."""
+    key), with its status, deadline and notes. A case found keeps its notes and deadline."""
     api = lead("agents")
     for c in cases:
         body: dict[str, Any] = {
@@ -1007,8 +1007,11 @@ def ensure_cases(lead: Session, team_name: str, cases: list[dict[str, Any]], peo
         r = api.post("/v1/cases", json={k: v for k, v in body.items() if v is not None})
         made = data(r)
         state = "MADE" if r.status_code == 201 else "FOUND"
-        if c.get("status", "open") != made.get("status"):
-            data(api.patch(f"/v1/cases/{made['id']}", json={"status": c["status"]}))
+        # A case found keeps its id; its subject and status follow the manifest, and a change is reported as made.
+        wanted = {"subject": c["subject"], "status": c.get("status", "open")}
+        if changed := {k: v for k, v in wanted.items() if made.get(k) != v}:
+            data(api.patch(f"/v1/cases/{made['id']}", json=changed))
+            state = "MADE"
         if state == "MADE":
             for note in c.get("notes", []):
                 data(api.post(f"/v1/cases/{made['id']}/events", json={"kind": "note", "text": note}))
