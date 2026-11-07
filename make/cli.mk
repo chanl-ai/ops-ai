@@ -11,7 +11,7 @@ OPS_AS = --as '$(AS)' $(if $(TEAM),--team $(TEAM)) $(if $(JSON),--json)
 need = $(if $($(1)),,$(error make $@: give $(1)=, e.g. $(2)))
 
 .PHONY: chat chat-script chat-show chat-calls chat-agents chat-accounts chat-kbs chat-threads chat-connected \
-	chat-approve chat-reject chat-submit \
+	chat-approve chat-reject chat-submit chat-transcript chat-transcripts \
 	kb-bases kb-show kb-documents kb-sources kb-source kb-items kb-add-file kb-add-text kb-sync kb-search kb-changes \
 	kb-change \
 	apps-list apps-show apps-add-tool apps-accounts apps-mine apps-connect apps-test apps-auth-configs \
@@ -45,6 +45,11 @@ chat-accounts: ## make chat-accounts AS=james: My accounts, the sign-ins the cha
 	@$(OPS_CLI) apps $(OPS_AS) mine
 chat-kbs: ## make chat-kbs AS=james: the knowledge bases a chat may answer from
 	@$(OPS_CLI) kb $(OPS_AS) bases
+chat-transcript: ## make chat-transcript THREAD=th_… AS=james [ALL=1]: the conversation as Markdown to paste (the last turn; ALL=1 every turn)
+	$(call need,THREAD,THREAD=th_…)
+	@$(OPS_CLI) chat $(OPS_AS) transcript --thread $(THREAD) $(if $(ALL),--all-turns)
+chat-transcripts: ## make chat-transcripts AS=james [SEARCH='[test]'] [ALL=1]: a transcript of each of the person's chats whose title holds SEARCH
+	@$(OPS_CLI) chat $(OPS_AS) transcripts $(if $(SEARCH),--search '$(SEARCH)') $(if $(ALL),--all-turns)
 chat-connected: ## make chat-connected THREAD=th_… [APP=Salesforce] AS=james: the Connect card's follow-up once signed in
 	$(call need,THREAD,THREAD=th_…)
 	@$(OPS_CLI) chat $(OPS_AS) connected $(THREAD) $(if $(APP),'$(APP)')

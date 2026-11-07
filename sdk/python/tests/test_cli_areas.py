@@ -17,6 +17,7 @@ import httpx
 import pytest
 from ops_ai import OpsAI
 from ops_ai._cli import common
+from ops_ai._cli.transcript import transcript
 from ops_ai._client import _upload_meta
 from ops_ai.cli import main
 
@@ -307,3 +308,71 @@ def test_a_chat_started_as_a_seed_person_carries_the_test_mark(monkeypatch: pyte
     assert main(["chat", "say", "-m", "Status of case 42?", "--as", "james", "--quiet"]) == 0
     made = next(r for r in seen if r.url.path.endswith("/v1/chat/threads"))
     assert json.loads(made.content)["title"] == "[test] Status of case 42?"
+
+
+def _thread(*turns: tuple[str, dict[str, Any]]) -> dict[str, Any]:
+    messages: list[dict[str, Any]] = []
+    for say, reply in turns:
+        messages += [{"role": "user", "content": say}, {"role": "assistant", "model": "default", **reply}]
+    return {"id": "th_1", "title": "[test] Cases", "agentName": "Ops Assistant", "messages": messages}
+
+
+def _transcript(thread: dict[str, Any], log: list[dict[str, Any]] | None = None, *, every: bool = False) -> str:
+    return transcript(thread, person="James Richardson", team="Operations", log=log or [], all_turns=every)
+
+
+def test_a_refused_call_is_marked_refused_with_the_app_to_connect() -> None:
+    refused = {
+        "name": "salesforce_query",
+        "label": "Run a SOQL query",
+        "status": "failed",
+        "input": {"q": "SELECT Id FROM Case"},
+        "output": {"error": {"code": "CONNECTION_NOT_LINKED", "details": {"connection": "Salesforce"}}},
+    }
+    denied = {"name": "send_email", "label": "Send an email", "status": "failed", "input": {"to": "a@b.example"}}
+    log = [{"target": "send_email", "decision": "deny", "reason": "egress host not allowed", "at": "1"}]
+    text = _transcript(_thread(("Status?", {"content": "Connect first.", "toolCalls": [refused, denied]})), log)
+    assert "Run a SOQL query (q SELECT Id FROM Case) → refused: connect Salesforce first" in text
+    assert "Send an email (to a@b.example) → refused: egress host not allowed" in text
+    assert "{" not in text
+
+
+def test_a_card_and_a_table_are_one_line_each_with_their_row_count() -> None:
+    parts = [
+        {"type": "widget", "shape": "rows", "hint": {"title": "Cases"}, "data": [{"id": "c1"}, {"id": "c2"}]},
+        {"type": "card", "title": "Customer", "children": [{"type": "text", "text": "x"}]},
+    ]
+    text = _transcript(_thread(("Show cases", {"content": "Here.", "parts": parts})))
+    assert "- table: Cases (2 rows)" in text
+    assert "- card: Customer" in text
+    assert "c1" not in text
+
+
+def test_multi_turn_shows_the_last_turn_unless_all_turns_and_wraps_on_words(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    long = "word " * 60 + "https://bank.example/" + "a" * 110
+    thread = _thread(
+        ("First question", {"content": "First answer", "usage": {"calls": 1, "seconds": 2.0}}),
+        ("Second question", {"content": long, "usage": {"calls": 2, "seconds": 3.5}}),
+    )
+
+    def answer(r: httpx.Request) -> httpx.Response:
+        if r.url.path.endswith("/v1/me"):
+            return _ok({"user": {"name": "James Richardson"}, "teams": [{"id": "team_a", "name": "Operations"}]})
+        if r.url.path.endswith("/v1/executions"):
+            return _ok({"data": []})
+        return _ok(thread)
+
+    _use(monkeypatch, "chat", _client([], answer))
+    assert main(["chat", "transcript", "--thread", "th_1"]) == 0
+    last = capsys.readouterr().out
+    assert "Second question" in last and "First question" not in last
+    assert "James Richardson (Operations) with Ops Assistant on `default` · turn 2: 2 model calls, 0 tool calls" in last
+    body = last.splitlines()[2:]
+    assert all(len(line) <= 100 or " " not in line for line in body)
+    assert "https://bank.example/" + "a" * 110 in last
+    assert main(["chat", "transcript", "--thread", "th_1", "--all-turns"]) == 0
+    every = capsys.readouterr().out
+    assert every.index("First question") < every.index("Second question")
+    assert "turn 1: 1 model call, 0 tool calls, 2.0 s; turn 2" in every

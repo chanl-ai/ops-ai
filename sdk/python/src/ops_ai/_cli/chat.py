@@ -19,7 +19,8 @@ from ops_ai import OpsAI
 from ops_ai._chat import action_body, connect_card
 from ops_ai._io import load_data
 
-from .common import client, console_url, emit, marked, parser, refuse, short, table, testing, values, verb_options
+from .common import MARK, client, console_url, emit, marked, parser, refuse, short, table, testing, values, verb_options
+from .transcript import transcript
 
 
 def main(argv: list[str]) -> int:
@@ -49,6 +50,12 @@ def main(argv: list[str]) -> int:
             act.add_argument("--reason", required=True)
         if name == "submit":
             act.add_argument("--value", action="append", metavar="FIELD=VALUE", default=[])
+    tr = sub.add_parser("transcript", parents=common, help="the conversation as Markdown to paste")
+    tr.add_argument("--thread", required=True)
+    tr.add_argument("--all-turns", action="store_true", help="every turn; the last one when left out")
+    trs = sub.add_parser("transcripts", parents=common, help="a transcript of each of your matching conversations")
+    trs.add_argument("--search", default=MARK.strip(), help="text the title holds (default: the test-data mark)")
+    trs.add_argument("--all-turns", action="store_true")
     script = sub.add_parser("script", parents=common, help="a scripted conversation, PASS or FAIL per turn")
     script.add_argument("file")
     ns = ap.parse_args(argv)
@@ -89,9 +96,24 @@ def _dispatch(ns: argparse.Namespace) -> int:
         body = action_body(ns.verb, reason=getattr(ns, "reason", None), values=values(getattr(ns, "value", None)))
         done = ops.chat.act(ns.thread, message, widget, body)
         return emit(ns, done, text=f"{widget} {done.get('state', '')} {short(done.get('result') or '', 120)}".strip())
+    if ns.verb == "transcript":
+        return emit(ns, {"thread": ns.thread}, text=_transcript(ops, ns.thread, ns.all_turns))
+    if ns.verb == "transcripts":
+        found = [t for test in (False, True) for t in ops.chat.threads(pageSize=100, test=test)]
+        hits = [t for t in found if ns.search.lower() in str(t.get("title") or "").lower()]
+        texts = [_transcript(ops, str(t["id"]), ns.all_turns) for t in hits]
+        return emit(ns, [t["id"] for t in hits], text="\n\n---\n\n".join(texts) or "(no matching conversations)")
     if ns.verb == "script":
         return _script(ns, ops)
     return 2
+
+
+def _transcript(ops: OpsAI, thread: str, all_turns: bool) -> str:
+    me = ops.raw.platform.me_me()
+    team = next((t["name"] for t in me.get("teams") or [] if t.get("id") == ops.config.team), ops.config.team or "-")
+    return transcript(
+        ops.chat.get(thread), person=me["user"]["name"], team=team, log=calls(ops, thread), all_turns=all_turns
+    )
 
 
 def followup(app: str) -> str:
