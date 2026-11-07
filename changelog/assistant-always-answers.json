@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "The assistant always answers within its limits",
+  "description": "A reply no longer stops at its step limit with nothing to show, and each reply is checked for error codes, stray endings and missing citations before it is kept.",
+  "tag": "improved"
+}
