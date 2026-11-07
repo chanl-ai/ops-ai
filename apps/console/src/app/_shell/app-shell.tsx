@@ -133,6 +133,7 @@ function Guarded({ children }: { children: React.ReactNode }) {
           actions={
             <>
               <HeaderSearch />
+              <WhatsNew />
               <HeaderNotifications />
             </>
           }
@@ -142,7 +143,6 @@ function Guarded({ children }: { children: React.ReactNode }) {
           <ClientGate fallback={<Loading />}>{children}</ClientGate>
         </div>
       </SidebarInset>
-      <WhatsNew />
       {expired && <SessionEndedDialog name={session?.user.name ?? wasIn.current?.name} next={here} />}
     </SidebarProvider>
   );

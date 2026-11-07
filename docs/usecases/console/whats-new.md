@@ -22,8 +22,8 @@ and one or two sentences, with a Coming next tab for the roadmap. A dot marks an
 | 2 | Open Coming next | Every roadmap item's title is listed |
 | 3 | Close and reload | No dot |
 | 4 | In a tab whose storage refuses the seen list, open What's new, close, reload | The popover opens; the dot is back after the reload |
-| 5 | At 1280 px, find What's new and open it | A round 48 px button in the bottom-right corner, not in the sidebar; the popover ends with "Version" and the release tag (`v2026-10-23.1`) or `main · <short commit>` |
-| 6 | At 375 px, open it | The popover opens upward inside the screen; no sideways scroll |
+| 5 | At 1280 px, find What's new and open it | A button in the header beside notifications, not in the sidebar and over no page control; the popover ends with "Version" and the release tag (`v2026-10-23.1`) or `main · <short commit>` |
+| 6 | At 375 px, open it | The popover opens downward inside the screen; no sideways scroll |
 | 7 | Through all of it | No page error |
 
 The non-vacuous check is step 3: before the popover remembered what was opened, the dot showed on every load.
