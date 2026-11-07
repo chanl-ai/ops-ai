@@ -515,3 +515,13 @@ def test_the_log_flow_checks_see_quick_replies_and_a_pending_approval() -> None:
     ]
     waiting = {"widgets": [{"id": "w1", "state": "pending"}]}
     assert all(ok for _, ok, _ in chat_script.reply_checks({"approval": True}, plain, waiting))
+
+
+def test_the_widget_check_names_the_card_kind_the_reply_drew() -> None:
+    # A prep answered in prose passed every text check while the brief card never appeared.
+    plain = _seen("Grace Okafor is the trustee.")
+    drew = {"parts": [{"type": "text"}, {"type": "widget", "kind": "brief"}]}
+    assert all(ok for _, ok, _ in chat_script.reply_checks({"widget": "brief"}, plain, drew))
+    assert [n for n, ok, _ in chat_script.reply_checks({"widget": ["brief", "form"]}, plain, drew) if not ok] == [
+        "draws a form card"
+    ]

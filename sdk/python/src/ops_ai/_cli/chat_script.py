@@ -25,6 +25,7 @@ A script is YAML or JSON: `agent` (the team's default when left out), `test`, `k
     cardsOnce       no record's card is drawn twice in the stored reply
     followUps       the reply offers quick replies (true), or this many
     approval        the reply waits on an approval (a widget still open)
+    widget          the reply drew a card of this kind (brief, form, entity), or of each kind in a list
 A turn may be `approve: true` instead of `say`: it approves the newest open widget, as the turn's `as` person when
 given (an approver), waits for the resumed reply and checks it like any other.
 """
@@ -128,6 +129,10 @@ def reply_checks(want: dict[str, Any], seen: dict[str, Any], message: dict[str, 
         wanted = want["followUps"]
         ok = len(offered) == wanted if isinstance(wanted, int) and not isinstance(wanted, bool) else bool(offered)
         out.append(("offers quick replies", ok, f"{offered}"))
+    if "widget" in want:
+        kinds = [str(p.get("kind")) for p in message.get("parts") or [] if p.get("type") == "widget"]
+        for kind in [want["widget"]] if isinstance(want["widget"], str) else want["widget"]:
+            out.append((f"draws a {kind} card", kind in kinds, f"{kinds}"))
     if want.get("approval"):
         open_ = [w for w in message.get("widgets") or [] if w.get("state") in ("pending", "awaiting_second", "open")]
         out.append(("waits on an approval", bool(open_), f"{[w.get('state') for w in message.get('widgets') or []]}"))

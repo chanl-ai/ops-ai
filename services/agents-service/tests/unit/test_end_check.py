@@ -236,3 +236,23 @@ async def test_an_answer_from_searched_passages_without_a_citation_is_corrected(
         "Overdue reviews escalate after 10 business days.", "They escalate after 10 days [1]."
     )
     assert writer.calls == 3 and [c.n for c in result.citations] == [1], writer.corrections
+
+
+async def test_an_interview_question_with_its_quick_replies_is_left_alone() -> None:
+    # Logging a meeting must ask "update the open opportunity or open a new one?" after reading it; the check took
+    # that for an offer to read more and rewrote it into a statement.
+    class Interviewer(Writer):
+        def _reply(self, messages: list[ModelMessage]) -> str | tuple[str, dict[str, Any]]:
+            out = super()._reply(messages)
+            presented = any(
+                isinstance(p, ToolCallPart) and p.tool_name == "present"
+                for m in messages
+                for p in getattr(m, "parts", [])
+            )
+            if isinstance(out, str) and out == self.first and not presented:
+                return ("present", {"followUps": ["Update Education savings", "Open a new opportunity"]})
+            return out
+
+    writer = Interviewer("Update Education savings, or open a new opportunity?", "unused", read=True)
+    _, result = await run(writer, tools=[CASES])
+    assert writer.corrections == [] and result.text.endswith("?"), (writer.corrections, result.text)

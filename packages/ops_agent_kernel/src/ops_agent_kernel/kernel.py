@@ -568,9 +568,13 @@ async def _end_check(
         for i in state.order
         if (r := state.records[i]).server != UNGRANTED and r.tool not in (present.NAME, search.NAME, skillset.NAME)
     ]
-    reads_ok = bool(systems) and all(r.status == "ok" and r.access == "read" for r in systems)
+    # A question the model gave its likely answers for (present followUps) is the interview's own, not an offer.
+    interviewed = any(
+        r.tool == present.NAME and r.status == "ok" and (r.view or {}).get("followUps") for r in state.records.values()
+    )
+    reads_ok = not interviewed and bool(systems) and all(r.status == "ok" and r.access == "read" for r in systems)
     offered = frozenset(state.grants)
-    read_only = all(r.access == "read" for r in systems)
+    read_only = not interviewed and all(r.access == "read" for r in systems)
     # From knowledge only: the block with no call, or calls that each brought passages (search_knowledge).
     from_knowledge = (block > 0 and not systems) or (
         bool(systems) and all(r.tool_call_id in state.passage_calls for r in systems)
