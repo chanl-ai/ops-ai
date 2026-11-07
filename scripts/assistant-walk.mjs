@@ -1,7 +1,8 @@
 // make assistant-walk [SHOTS=dir]: the team assistant's first-team scripts in a browser on the stack's console. As one
 // person of each first team (make sample-teams), it starts a chat on the team's assistant, sends the script's ask,
 // waits for the reply the script expects, screenshots it at 1280 and 390, and checks what the script checks: the
-// record or passage named, no question back, no error code, nothing shown twice. Each chat it makes is titled
+// record or passage named, no question back, no error code, nothing shown twice. Then the Cases page's search, as
+// the lending person, with several words in any order. Each chat it makes is titled
 // "[test] …" so make test-data-clean finds it. Runs on whatever model the stack's assistant alias is bound to; on the
 // fake (make assistant-evals' default) it spends no model call.
 import { mkdirSync } from 'node:fs';
@@ -76,6 +77,28 @@ for (const w of WALKS) {
     ? { status: 200 }
     : await api('PATCH', `/v1/chat/threads/${thread}`, token, { title: `[test] ${w.ask}` });
   check(`${w.team}: the chat is marked as test data`, marked.status === 200, marked);
+  await context.close();
+}
+// The Cases page searches the same way find_cases does: every word, any order, subject or customer.
+{
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await context.newPage();
+  page.on('pageerror', (e) => errors.push(`cases: ${e.message}`));
+  await page.goto(`${CONSOLE}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+  await page.getByLabel('Work email').fill(WALKS[1].email);
+  await page.getByLabel('Password').fill(PASSWORD);
+  await page.getByTestId('login-submit').click();
+  await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
+  for (const [query, want] of [['documents application', 3], ['nguyen DOCUMENTS', 1], ['application mortgage', 0]]) {
+    await page.goto(`${CONSOLE}/cases`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+    const box = page.getByPlaceholder('Search subject or customer…');
+    await box.waitFor({ timeout: 90_000 });
+    await box.fill(query);
+    await page.waitForTimeout(2500);
+    const rows = await page.locator('tbody tr').filter({ hasText: 'Loan application' }).count();
+    check(`cases page: "${query}" finds ${want}`, rows === want, `${rows} rows`);
+    await page.screenshot({ path: join(SHOTS, `cases-search-${query.replace(/\s+/g, '-').toLowerCase()}-1280.png`) });
+  }
   await context.close();
 }
 await browser.close();
