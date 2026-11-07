@@ -97,7 +97,10 @@ def _with_task(run: dict[str, Any]) -> dict[str, Any]:
 def _upload_meta(name: str, content: bytes, mime: str, purpose: str) -> tuple[dict[str, Any], str]:
     digest = hashlib.sha256(content).hexdigest()
     meta = {"name": name, "size": len(content), "mime": mime, "purpose": purpose, "digest": digest}
-    return meta, f"sdk-{digest[:32]}"
+    # The key names the whole upload, not only its bytes: the same bytes under another name or purpose are another
+    # upload, which the files service refuses under a key it has seen.
+    key = hashlib.sha256(f"{digest}\n{purpose}\n{mime}\n{name}".encode()).hexdigest()
+    return meta, f"sdk-{key[:32]}"
 
 
 class Raw:
