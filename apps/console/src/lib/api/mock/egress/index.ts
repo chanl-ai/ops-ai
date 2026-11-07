@@ -27,7 +27,7 @@ function checked(kind: 'host' | 'range', raw: string): string {
 /** The allow-list in memory, seeded with the hosts the seeded modules call. `inUse` maps a host to its modules' names. */
 export function createEgressMock(deps: { me: string; inUse: () => Record<string, ModuleRef[]> }): EgressApi {
   const at = new Date(Date.now() - 86_400_000 * 12).toISOString();
-  const hosts: Omit<ListedHost, 'modules'>[] = Object.keys(deps.inUse()).map((host) => ({ host, note: 'Seeded with its tool module', addedBy: 'Platform team', addedAt: at }));
+  const hosts: Omit<ListedHost, 'modules'>[] = Object.keys(deps.inUse()).map((host) => ({ host, note: 'Called by the sample tool sets', addedBy: 'Sample data', addedAt: at }));
   const ranges: ListedRange[] = [{ cidr: '10.20.0.0/16', note: 'Core banking network', addedBy: 'Platform team', addedAt: at }];
   return {
     list: () => respond(() => ({ hosts: hosts.map((h) => ({ ...h, modules: deps.inUse()[h.host] ?? [] })), ranges })),

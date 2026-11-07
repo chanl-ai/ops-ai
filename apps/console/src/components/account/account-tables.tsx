@@ -61,10 +61,10 @@ export function SessionsTable({ sessions, onRevoke, busyId }: { sessions: Accoun
       accessorKey: 'device',
       header: 'Device',
       cell: ({ row }) => (
-        <div>
-          {/* The name stays on one line and the badge moves under it on a narrow screen, so neither breaks mid-word. */}
+        // Table cells keep text on one line; a long device name wraps here instead of running past its column.
+        <div className="max-w-56 min-w-32 whitespace-normal">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
-            <span className="whitespace-nowrap">{row.original.device}</span>
+            <span className="break-words">{row.original.device}</span>
             {row.original.current && <Badge variant="secondary">This device</Badge>}
           </span>
           <span className="text-xs text-muted-foreground">{row.original.browser}</span>

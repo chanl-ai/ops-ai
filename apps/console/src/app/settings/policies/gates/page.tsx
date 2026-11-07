@@ -51,11 +51,12 @@ function columns(onEdit: (p: GatePolicy) => void, onDelete: (p: GatePolicy) => v
       header: ({ column }) => <DataTableColumnHeader column={column} title="Pauses the run when" />,
       // In words a person reads; the rule as written stays one click away.
       cell: ({ row }) => (
-        <div className="max-w-80 min-w-48 text-sm">
+        // Table cells keep text on one line; a rule wraps within its column instead of running into the next.
+        <div className="max-w-80 min-w-48 text-sm whitespace-normal">
           <div>{conditionInWords(row.original.condition)}</div>
           <details className="text-xs text-muted-foreground">
             <summary className="cursor-pointer">Rule</summary>
-            <code className="font-mono">{row.original.condition}</code>
+            <code className="font-mono break-words">{row.original.condition}</code>
           </details>
         </div>
       ),

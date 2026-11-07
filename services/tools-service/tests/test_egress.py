@@ -20,7 +20,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from ops_service_kit.settings import Settings
 from ops_tools.egress import EgressBackend, EgressDenied, EgressPolicy, address_allowed
+from ops_tools.modules.seed import load
 from ops_tools.store.egress import EgressStore
+from ops_tools.store.modules import ModuleStore
 
 from .conftest import Api
 
@@ -48,6 +50,22 @@ async def test_a_module_names_only_listed_hosts(api: Api) -> None:
     assert r.status_code == 200, r.text
     listed = [h["host"] for h in (await api.client.get("/v1/egress")).json()["data"]["hosts"]]
     assert "receipts.example.com" in listed
+
+
+async def test_the_seeded_hosts_say_who_added_them_in_words_people_use(
+    api: Api, engine: Any, seed: dict[str, Any], catalog_tools: list[dict[str, Any]]
+) -> None:
+    """The seed listed its hosts as added by "dev seed", "called by a seeded module"; a fresh database and one seeded
+    with that wording both show the sample wording after the seed runs."""
+    store = EgressStore(engine)
+    await store.add(
+        api.tenant, "host", "old.example.com", actor="dev seed", note="called by a seeded module", at=datetime.now(UTC)
+    )
+    await load(ModuleStore(engine), seed, tenant_id=api.tenant, now=datetime.now(UTC), catalog=catalog_tools)
+    hosts = (await api.client.get("/v1/egress")).json()["data"]["hosts"]
+    words = {(h["addedBy"], h["note"]) for h in hosts}
+    assert ("dev seed", "called by a seeded module") not in words
+    assert ("Sample data", "Called by the sample tool sets") in words
 
 
 async def test_a_listed_host_names_its_modules_as_people_know_them(api: Api) -> None:

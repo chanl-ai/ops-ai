@@ -189,6 +189,20 @@ class EgressStore:
             await self._audit(c, tenant_id, (kind, value, "added"), actor=actor, at=at)
         return True
 
+    async def reword(self, tenant_id: str, *, was: tuple[str, str], now: tuple[str, str]) -> int:
+        """Hosts added by `was` (actor, note) take `now` instead; the hosts and their audit entries are unchanged."""
+        q = (
+            egress_hosts.update()
+            .where(
+                egress_hosts.c.tenant_id == tenant_id,
+                egress_hosts.c.added_by == was[0],
+                egress_hosts.c.note == was[1],
+            )
+            .values(added_by=now[0], note=now[1])
+        )
+        async with self.engine.begin() as c:
+            return (await c.execute(q)).rowcount
+
     async def remove(self, tenant_id: str, kind: str, value: str, *, actor: str, at: datetime) -> bool:
         """Removes a host or a range; False when it was not listed. HostInUseError while a module uses the host."""
         table, col = TABLES[kind]
