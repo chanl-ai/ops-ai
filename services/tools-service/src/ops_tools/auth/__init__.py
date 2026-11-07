@@ -273,13 +273,11 @@ class Authenticator:
         # Whose sign-in is chosen before the team's parts are checked: a person who gives their own key needs none of
         # the team's.
         person = SHARED if team_account else self._whose(conn, kind, acting_for, needs_person)
+        # A call a person started is signed as them only, even where the team account backs runs nobody started: one
+        # with no sign-in of their own is asked to connect rather than quietly acting as the team.
         held_own: dict[str, Any] | None = None
         if person != SHARED and acting_for is not None:
             held_own = await self.connections.token(tenant_id, str(connection_id), person)
-            if held_own is None and self._backed(conn) and not needs_person:
-                # Each person may add their own account, with the team as backup: one who has not is served by the
-                # team's sign-in rather than stopped.
-                person = SHARED
         missing = [
             f.label for f in kind.requires(plain, each_person=person != SHARED) if f.secret and f.name not in values
         ]
@@ -312,7 +310,9 @@ class Authenticator:
             await STRATEGIES[kind.id](given, prepared)
         except AuthFailed as e:
             if person != SHARED and acting_for is not None and e.code == "NOT_SIGNED_IN":
-                raise await self._not_linked(conn, acting_for, settings, scopes=list(scopes)) from e
+                # A sign-in they hold that has ended is reconnected, as a refused one is; with none they connect.
+                reason: NotLinkedReason = "refused" if held_own is not None else "not_connected"
+                raise await self._not_linked(conn, acting_for, settings, scopes=list(scopes), reason=reason) from e
             if person == SHARED and (stopped := await self._team_account_stopped(conn, e, actor)) is not None:
                 raise stopped from e
             if e.side == "upstream":
@@ -324,6 +324,11 @@ class Authenticator:
                 await self.connections.note(
                     tenant_id, str(connection_id), {**event, "detail": {"code": e.code, "own": True}}
                 )
+                if person != SHARED and acting_for is not None:
+                    # Asked to reconnect now, with a link, rather than on their next call.
+                    raise await self._not_linked(
+                        conn, acting_for, settings, scopes=list(scopes), reason="refused"
+                    ) from e
             raise
         # A team key is not logged as a sign-in; a person's own key is, as their token is.
         prepared.credential = "person" if person != SHARED else ("team" if kind.holds_token else None)
@@ -398,14 +403,14 @@ class Authenticator:
 
     @staticmethod
     def _backed(conn: dict[str, Any]) -> bool:
-        """Each person may sign in with their own account, and the team's sign-in serves calls with no own one."""
+        """Each person may sign in with their own account, and the team's sign-in serves runs nobody started."""
         return str(conn.get("sign_in") or "team") == "person_or_team" and bool(conn.get("team_backup"))
 
     @staticmethod
     def _whose(conn: dict[str, Any], kind: Kind, acting_for: ActingForPerson | None, needs_person: bool) -> str:
         """The token row a call uses: the team's on a team connection; on one each person signs in to, the person's
-        the call acts for (`prepare` falls back to the team's while the backup is on and they have none), or the
-        team's for a call with nobody behind it while the backup is on and the operation does not need a person."""
+        the call acts for, always, or the team's for a call with nobody behind it while the backup is on and the
+        operation does not need a person."""
         sign_in = str(conn.get("sign_in") or "team")
         if sign_in == "team" or not kind.per_person:
             return SHARED
@@ -470,7 +475,7 @@ class Authenticator:
             "personFields": list(kind.person_fields),
             # What a run that waits for this person to connect waits on: their connecting reports it.
             "connectedEvent": {"name": CONNECTED, "key": connected_key(str(conn["id"]), person.sub)},
-            # Whether the team account may stand in for the person (`_whose`): a call acting for nobody uses it.
+            # Whether the team account serves runs nobody started (`_whose`); a call this person started never uses it.
             "teamAccount": str(conn.get("sign_in") or "team") == "person_or_team" and bool(conn.get("team_backup")),
         }
         if self.links is not None:

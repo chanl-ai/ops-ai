@@ -40,7 +40,7 @@ const STATE: Record<Account['state'], { label: string; variant: 'default' | 'sec
   revoked: { label: 'Revoked', variant: 'destructive' },
 };
 
-const shared = (a: Account) => (a.signIn === 'team' ? a.team : a.signIn === 'person' ? 'Each person' : 'Each person, team as backup');
+const shared = (a: Account) => (a.signIn === 'team' ? a.team : a.signIn === 'person' ? 'Each person' : 'Each person, team account for unattended runs');
 
 const COLUMNS: ColumnDef<Account>[] = [
   {

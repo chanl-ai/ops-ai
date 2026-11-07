@@ -129,8 +129,8 @@ with (
         (given.status_code, given.text[:200], went_on.get("status"), went_on.get("error")),
     )
 
-    # 3d. On a desk whose team account backs its people, Priya's run does not wait for her own account: with none of
-    # her own, it reads the record with the team's token at once.
+    # 3d. On a desk whose team account backs runs nobody started, a run Priya starts still waits for her own account;
+    # its task offers the team account, and choosing Run as the team account reads the record.
     own = w.credential("admin", "test.person", "multi-app", w.m["clients"]["multi-app"])
     backed = w.turn_on("admin", "test.person", signIn="person_or_team", credentialId=own)
     backed_path = account_path("plugin:test.person", backed)
@@ -171,11 +171,24 @@ with (
     def run_of(rid: str) -> dict[str, Any]:
         return data(api.get(f"/v1/runs/{rid}", headers=w.who["admin"])) or {}
 
+    held = until(lambda: (r := run_of(team_run)).get("status") in ("waiting", "succeeded", "failed") and r, timeout=60)
+    held = held or {}
+    tasks = data(api.get("/reviews", params={"pageSize": 100}, headers=w.who["admin"])) or {}
+    team_task = next(
+        (r for r in (tasks.get("data") if isinstance(tasks, dict) else tasks) or [] if r.get("runId") == team_run), {}
+    )
+    chose = api.post(f"/reviews/{team_task.get('id') or team_run}/team-account", headers=w.who["admin"])
     finished = until(lambda: (r := run_of(team_run)).get("status") in ("succeeded", "failed") and r, timeout=60) or {}
     check(
-        "3d with the team account as backup, Priya's run uses the team's sign-in at once and reads the record",
-        signed.status_code == 200 and finished.get("status") == "succeeded" and finished.get("outcome") == "read",
-        (signed.text[:300], team.text[:200], finished.get("status"), finished.get("error")),
+        "3d with a team account for runs nobody started, Priya's own run waits for her account, offers the team "
+        "account, and reads the record once she chooses it",
+        signed.status_code == 200
+        and held.get("status") == "waiting"
+        and (team_task.get("connect") or {}).get("teamAccount") is True
+        and chose.status_code == 200
+        and finished.get("status") == "succeeded"
+        and finished.get("outcome") == "read",
+        (signed.text[:200], held.get("status"), team_task.get("connect"), chose.text[:200], finished.get("error")),
     )
 
     # 4. An app's first address on a host nobody listed is held for a Security admin, nothing saved.

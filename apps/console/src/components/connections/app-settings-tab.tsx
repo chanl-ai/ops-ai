@@ -35,7 +35,7 @@ export function SettingsTab({ app, kinds, onSetUp, onDeleted }: { app: AppPage; 
   if (!conn) return null;
   const may = Boolean(conn.mayManage);
   const personal = conn.signIn !== 'team';
-  // On: each person may add their own account, with the team's sign-in as backup for those who have not.
+  // On: tools a person runs use their own account, and the team's sign-in serves only runs nobody started.
   const flip = (on: boolean) =>
     change.mutate(
       { appId: app.card.id, accountId: conn.id, body: { revision: conn.revision, signIn: on ? 'person_or_team' : 'team', teamBackup: on } },
@@ -48,7 +48,7 @@ export function SettingsTab({ app, kinds, onSetUp, onDeleted }: { app: AppPage; 
           <div className="flex items-center gap-3">
             <label htmlFor="app-everyone" className="min-w-0 flex-1 text-sm">
               <span className="block font-medium">{`People can connect their own ${app.card.name} account`}</span>
-              <span className="block text-xs text-muted-foreground">They connect it under My accounts, and tools they run use it. Off, everyone runs as a team account.</span>
+              <span className="block text-xs text-muted-foreground">Tools a person runs use their own account, connected under My accounts; anyone who has not is asked to connect. Runs nobody started, such as schedules and mailboxes, use the team account. Off, everyone runs as the team account.</span>
             </label>
             <Switch id="app-everyone" checked={personal} disabled={!may || change.isPending} onCheckedChange={flip} data-testid="app-everyone" />
           </div>
