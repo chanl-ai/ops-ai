@@ -215,7 +215,16 @@ def _present(state: _TurnState) -> Tool[None]:
             why = f"This agent shows at most {cap} widgets in one answer. Do not call present again; answer in text."
             rec.status, rec.output = "error", {"error": why}
             return {"error": why}
-        shown, said = present.run(arguments, state.req.settings, {t.name for t in state.req.tools})
+        replies, refused = present.follow_ups(arguments)
+        if refused is not None:
+            rec.status, rec.output = "error", {"error": refused}
+            return {"error": refused}
+        rest = {k: v for k, v in arguments.items() if k != "followUps"}
+        if replies is not None and not ({"shape", "kind", "widget", "layout", "data"} & set(rest)):
+            # Quick replies alone: nothing is drawn but the chips under the reply.
+            rec.status, rec.output, rec.view = "ok", {"offered": replies}, {"followUps": replies}
+            return {"offered": replies}
+        shown, said = present.run(rest, state.req.settings, {t.name for t in state.req.tools})
         if shown is None:
             rec.status, rec.output = "error", {"error": said}
             return {"error": said}
@@ -226,7 +235,7 @@ def _present(state: _TurnState) -> Tool[None]:
             return {"presented": "already shown", "note": SHOWN}
         state.shown += 1
         rec.status, rec.output = "ok", {"presented": said}
-        rec.view = {"part": shown}
+        rec.view = {"part": shown, **({"followUps": replies} if replies else {})}
         return {"presented": said}
 
     # Still offered after a refusal: a model that calls it again reaches `call`, which ends the turn. Withdrawing the

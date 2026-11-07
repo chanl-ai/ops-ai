@@ -14,6 +14,24 @@ from . import kinds, layout
 from .types import AgentSettings, ToolGrant
 
 SHAPES = ("rows", "series", "record", "metric")
+# The quick replies under a reply (ChatMessage.follow_ups): a few short answers, never a menu.
+MAX_FOLLOW_UPS = 3
+FOLLOW_UP_CHARS = 120
+
+
+def follow_ups(arguments: dict[str, Any]) -> tuple[list[str] | None, str | None]:
+    """The call's quick replies, or why they are refused; (None, None) when it gives none."""
+    raw = arguments.get("followUps")
+    if raw is None:
+        return None, None
+    if not isinstance(raw, list) or not raw or len(cast(list[Any], raw)) > MAX_FOLLOW_UPS:
+        return None, f"followUps is a list of one to {MAX_FOLLOW_UPS} short replies."
+    replies = [str(r).strip() for r in cast(list[Any], raw)]
+    if any(not r or len(r) > FOLLOW_UP_CHARS for r in replies):
+        return None, f"Each follow-up is a reply of 1 to {FOLLOW_UP_CHARS} characters."
+    return list(dict.fromkeys(replies)), None
+
+
 NAME = "present"
 SERVER = "kernel"
 
@@ -34,6 +52,13 @@ PRESENT = ToolGrant(
             "shape": {"type": "string", "enum": list(SHAPES)},
             "kind": {"type": "string", "enum": list(kinds.KINDS)},
             "data": {"description": "The rows, record or metric to show, in the shape's form."},
+            "followUps": {
+                "type": "array",
+                "maxItems": MAX_FOLLOW_UPS,
+                "items": {"type": "string", "maxLength": FOLLOW_UP_CHARS},
+                "description": "Up to three short replies the person is likely to send next, such as the answers to "
+                "a question you ask; shown as chips that send the reply. May be given alone, with no data.",
+            },
             "hint": {
                 "type": "object",
                 "description": "Optional: title, x (the series key), y (the value keys), prefer (table, line, bar, "
@@ -46,7 +71,6 @@ PRESENT = ToolGrant(
                 },
             },
         },
-        "required": ["data"],
     },
 )
 

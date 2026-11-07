@@ -185,6 +185,9 @@ class AssistantBuilder:
                     # The built-in present tool: the answer is the part, so no tool card is shown or kept. A search
                     # of the agent's own tools (search_tools) is shown like any call, so a person sees what it found.
                     view = _d(data).get("view")
+                    if view and _d(data).get("status") == "ok" and isinstance(_d(view).get("followUps"), list):
+                        # The reply's quick replies: the latest call's stand, at most three.
+                        m.follow_ups = [str(r) for r in cast(list[Any], _d(view)["followUps"])][:3]
                     if view and _d(data).get("status") == "ok" and "part" in _d(view):
                         part = WidgetPart.model_validate({**_d(_d(view)["part"]), "id": f"wp_{call.id}"})
                         m.parts = [*(p for p in m.parts or [] if p.id != part.id), part]
