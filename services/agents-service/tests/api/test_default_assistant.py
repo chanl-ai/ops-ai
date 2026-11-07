@@ -40,6 +40,7 @@ async def test_a_teams_first_chat_gets_an_assistant_granted_the_built_in_reads(s
     assert (await start(c, VIEWER))["agentId"] == AID
     live = rt.catalog.agent(AID)
     assert live is not None and set(BUILT_IN_READS) <= set(live.tools), live
+    assert live.model_alias == "assistant", live.model_alias
 
 
 async def test_a_restart_brings_an_older_assistant_to_the_declared_one(stack: Stack) -> None:  # noqa: F811
@@ -53,7 +54,9 @@ async def test_a_restart_brings_an_older_assistant_to_the_declared_one(stack: St
 async def test_a_restart_brings_an_older_assistant_its_new_prompt_and_tool_cap(stack: Stack) -> None:  # noqa: F811
     # An assistant made with the old prompt kept its cap of four: only the instructions and tools followed the seed.
     _, rt = stack
-    old = AgentDefinition.model_validate({**OPS_ASSISTANT, "id": AID, "version": 1, "max_tool_calls": 4})
+    old = AgentDefinition.model_validate(
+        {**OPS_ASSISTANT, "id": AID, "version": 1, "max_tool_calls": 4, "model_alias": None}
+    )
     spec = spec_from_seed(old.model_copy(update={"instructions": old.instructions[:1]}), rt.settings.model_alias)
     with tenant_scope(TENANT):
         assert await registry(rt).create_if_absent(spec, by=SYSTEM, team_id=TEAM, agent_id=AID)
@@ -62,6 +65,8 @@ async def test_a_restart_brings_an_older_assistant_its_new_prompt_and_tool_cap(s
     await catch_up_assistants(rt)
     live = rt.catalog.agent(AID)
     assert live is not None and live.max_tool_calls == OPS_ASSISTANT["max_tool_calls"], live
+    # It ran on the runtime's alias with every other agent; it moves to its own.
+    assert spec["model"] == rt.settings.model_alias and live.model_alias == "assistant", live.model_alias
     assert [f.text for f in live.instructions] == [f["text"] for f in OPS_ASSISTANT["instructions"]]
 
 

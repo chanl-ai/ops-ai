@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "The team assistant has its own model setting",
+  "description": "The team assistant runs on its own model alias, so an admin can give it a stronger model without changing every other agent. It also no longer points you to buttons a card does not have, or adds details its records do not hold.",
+  "tag": "improved"
+}
