@@ -152,7 +152,15 @@ function TableKind({ node, truncatedFrom }: { node: TableNode; truncatedFrom?: n
         header: ({ column }) => <DataTableColumnHeader column={column} title={c.label ?? c.key} />,
         cell: ({ row }) => {
           const v = row.original[c.key] ?? null;
-          return <span className={typeof v === 'number' ? 'block text-right text-xs tabular-nums' : 'text-xs whitespace-nowrap'}>{formatted(v, c.format)}</span>;
+          if (typeof v === 'number') return <span className="block text-right text-xs tabular-nums">{formatted(v, c.format)}</span>;
+          // Trimmed to one line with the whole value on hover; the column a phone pins wraps it to two (data-table-column-kinds).
+          // A nowrap span would overflow the pinned column on a phone and draw over the next one.
+          const text = formatted(v, c.format);
+          return (
+            <span className="block max-w-80 truncate text-xs" title={text}>
+              {text}
+            </span>
+          );
         },
       })),
     [cols],
