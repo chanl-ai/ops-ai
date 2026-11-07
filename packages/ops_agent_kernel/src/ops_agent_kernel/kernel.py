@@ -124,6 +124,8 @@ class _TurnState:
     present_closed: bool = False
     # Set when the model repeats a call it already made this reply: it is offered no system tool after that.
     tools_closed: bool = False
+    # The step whose calls past max_tool_calls were told to stop and answer; a call in a later step ends the turn.
+    cap_told_step: int | None = None
     # Calls to the kernel's own tools this turn, against the agent's max_builtin_calls; set once one is refused.
     builtin_calls: int = 0
     builtins_refused: bool = False
@@ -386,6 +388,14 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
         # and is bounded by the step limit instead, so an agent with no tool calls can still answer with a widget.
         cap = state.req.settings.max_tool_calls
         if cap is not None and state.granted_calls >= cap:
+            # Past the budget with reads already made, every call of that step is told to stop, so the reply answers
+            # from what was read; a call after that step, or a budget hit before any read, ends the turn.
+            told = state.cap_told_step
+            if state.granted_calls > 0 and (told is None or told == ctx.run_step):
+                state.cap_told_step = ctx.run_step
+                rec = state.record(tool_call_id, grant.name, arguments)
+                rec.status, rec.output = "error", {"error": NOT_RUN["max_tool_calls"]}
+                return {"error": TOOL_BUDGET_SPENT.format(cap=cap)}
             raise ToolLimitExceeded(f"The agent may make {cap} tool calls a reply.")
         state.granted_calls += 1
         rec = state.record(tool_call_id, grant.name, arguments)
@@ -541,6 +551,11 @@ TOOL_LIMIT_REACHED = (
 BUILTIN_LIMIT = (
     "This turn has used its {cap} calls to present, search_tools and load_skill. Do not call them again; answer in "
     "text now from what you have."
+)
+# What a call past max_tool_calls answers when the reply already read something, so it answers from that.
+TOOL_BUDGET_SPENT = (
+    "Not run: this reply has used its {cap} tool calls. Do not call another tool; answer now from the results you "
+    "already have, and say in one line what you could not read."
 )
 STEP_LIMIT_REACHED = "I reached the step limit for one reply before I could answer. Ask again, or narrow the question."
 # Appended when a limit stops a turn that had already written part of its answer, so a partial reply never reads as

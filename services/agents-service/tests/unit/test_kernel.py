@@ -316,3 +316,37 @@ async def test_the_same_call_twice_in_one_step_reaches_the_system_once() -> None
     assert len(tools.calls) == 1, tools.calls
     first, second = result.tool_calls
     assert second.output == {"repeatOf": first.tool_call_id}, result.tool_calls
+
+
+def reading_model(reads: int) -> FunctionModel:
+    """A model that makes `reads` reads in one step, then answers from the results it got."""
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        if len(messages) == 1:
+            return ModelResponse(parts=[ToolCallPart("get_human_task", {"taskId": f"REV-{i}"}) for i in range(reads)])
+        return ModelResponse(parts=[TextPart(ANSWERED)])
+
+    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
+        part = respond(messages, info).parts
+        if isinstance(part[0], TextPart):
+            yield part[0].content
+        else:
+            yield {
+                i: DeltaToolCall(name="get_human_task", json_args=json.dumps({"taskId": f"REV-{i}"}))
+                for i in range(len(part))
+            }
+
+    return FunctionModel(respond, stream_function=stream)
+
+
+async def test_reads_past_the_tool_budget_are_told_to_stop_and_the_reply_answers_from_the_rest() -> None:
+    # A prep turn made six reads in one step under a cap of four and ended with "I reached the most tool calls",
+    # throwing away the four reads that had succeeded.
+    tools = RecordingTools()
+    req = TurnRequest(
+        "t1", "th1", replace(SETTINGS, max_tool_calls=2), [TASK], user_turn="Give me a summary of what waits"
+    )
+    _, result = await run(req, KernelPorts(model=reading_model(3), tools=tools, knowledge=FixedKnowledge([])))
+    assert len(tools.calls) == 2, tools.calls
+    assert result.stop_reason == "final" and result.text == ANSWERED, result
+    assert sorted(r.status for r in result.tool_calls) == ["error", "ok", "ok"], result.tool_calls
