@@ -1,0 +1,28 @@
+# The meeting log flow on a real Salesforce org, as James with the real model: the assistant finds the open
+# opportunity and asks whether to update it, with quick replies; shows one review form; Save writes the opportunity
+# and the meeting's Task in one save_records call; the saved card shows old -> new. Needs the demo records
+# (make demo-org-seed AS=james), and save_records added to James's team. make demo-org-remove AS=james then
+# make demo-org-seed AS=james puts the opportunity back before a second run.
+as: [james]
+real: [james]
+turns:
+  - say: "Log my meeting with the Okafor Family Trust: Grace wants to add $25,000 and we agreed to move to the proposal stage"
+    expect:
+      tool: salesforce_query
+      followUps: true
+      says: ["Education savings"]
+      noInternalIds: true
+      maxSteps: 4
+  - say: "Update Education savings"
+    expect:
+      widget: form
+      noInternalIds: true
+      maxSteps: 2
+  - say: "Save these to Salesforce (Stage: Proposal/Price Quote, Amount: 75000, Note: Grace Okafor wants to add $25,000 to the education savings plan. Agreed to move to proposal.)"
+    expect:
+      tool: salesforce_save_records
+      widget: entity
+      noQuestion: true
+      noInternalIds: true
+      noErrorCode: true
+      maxSteps: 2

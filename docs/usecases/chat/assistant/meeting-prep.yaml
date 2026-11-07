@@ -1,0 +1,25 @@
+# The meeting prep flow on a real Salesforce org, as James with the real model. The first turn shows the apps line
+# reached the model; the second names the client and gets the brief from Salesforce. Needs the demo records
+# (make demo-org-seed AS=james) and Salesforce on for James's team with the assistant given its skills.
+# Run on demand, not in CI: make chat-script FILE=docs/usecases/chat/assistant/meeting-prep.yaml AS=james
+as: [james]
+real: [james]
+turns:
+  - say: "Which apps can you reach?"
+    expect:
+      says: ["Salesforce"]
+      noTool: true
+      noInternalIds: true
+      endsClean: true
+      maxSteps: 1
+  - say: "I'm meeting the Okafor Family Trust, prepare me"
+    expect:
+      tool: salesforce_query
+      widget: brief
+      says: ["Education savings"]
+      card: false
+      noQuestion: true
+      noInternalIds: true
+      noErrorCode: true
+      endsClean: true
+      maxSteps: 6
