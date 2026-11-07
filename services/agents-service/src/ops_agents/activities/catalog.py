@@ -70,6 +70,8 @@ class SkillPinRule(_Model):
     tokens: int = 0
     # The skill's own reply when one of its guardrails refuses; absent on versions saved before it.
     refusal: str = ""
+    # The tools the skill names, so a turn can say which app it needs and that app's state.
+    tool_ids: list[str] = Field(default_factory=list[str], alias="toolIds")
 
 
 class WidgetPinRule(_Model):

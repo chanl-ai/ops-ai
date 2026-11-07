@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Turning an app on teaches the assistant to use it",
+  "description": "When an admin turns an app on and gives it to the team assistant, the skills the app ships come with it, and each says which app it needs and whether you are signed in.",
+  "tag": "new"
+}

@@ -253,12 +253,22 @@ class AppsRunner(Protocol):
         not the team's default or there is no person."""
         ...
 
+    async def skill_needs(self, agent_id: str) -> dict[str, str]:
+        """Each pinned skill's app and its state, by skill id ("needs Salesforce: you are not signed in"), for the
+        skills whose tools belong to an app; read with the same apps as the line."""
+        ...
+
 
 async def with_apps(deps: GraphDeps, settings: AgentSettings, agent_id: str) -> AgentSettings:
-    """The turn's settings with the apps line after the agent's own instructions, as a volatile fragment."""
+    """The turn's settings with the apps line after the agent's own instructions, as a volatile fragment, and each
+    skill's index line saying which app it needs and that app's state."""
     if deps.apps is None or (fragment := await deps.apps.fragment(agent_id)) is None:
         return settings
-    return replace(settings, instructions=[*settings.instructions, fragment])
+    needs = await deps.apps.skill_needs(agent_id)
+    skills = [
+        replace(s, use_when=f"{s.use_when} ({n})") if (n := needs.get(s.skill_id)) else s for s in settings.skills
+    ]
+    return replace(settings, instructions=[*settings.instructions, fragment], skills=skills)
 
 
 async def with_memory(deps: GraphDeps, settings: AgentSettings, agent_id: str) -> AgentSettings:

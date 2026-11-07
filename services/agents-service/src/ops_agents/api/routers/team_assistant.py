@@ -18,20 +18,27 @@ from pydantic import Field
 
 from ops_access import can
 from ops_contracts.chat import WireModel
+from ops_service_kit.errors import Conflict, ServiceUnavailable
 from ops_service_kit.http import Envelope, Out
+from ops_service_kit.ids import now_iso
+from ops_service_kit.logging import get_logger
 
 from ...store.team_defaults import TeamDefaults
+from ...store.template_copies import TemplateCopies
 from ..agent_registry import agent_review_body, go_live, registry
 from ..auth import Principal, caller_in, caller_of
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..ops_tools import ensure_ops_assistant
 from ..publish_policy import decide
+from ..skills import pin, skills
+from .templates import _offered, _skill_content  # pyright: ignore[reportPrivateUsage] - one rule for a copy's content
 
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(caller_in("agents"))]  # noqa: UP040
 
 router = APIRouter(prefix="/v1/team-assistant")
+log = get_logger("ops_agents.team_assistant")
 
 GiveState = Literal["given", "in_review", "waiting", "already", "none"]
 
@@ -46,6 +53,9 @@ class AppToolsGiven(Out):
     agent_name: str
     # The read tools the assistant now holds from the app, by operation name, including any it held before.
     tools: list[str]
+    # The app's skills pinned on the assistant with this change, by name: those whose every tool the team has added
+    # (a skill that writes waits until an admin adds its write tool).
+    skills: list[str] = Field(default_factory=list[str])
     # given: published at once; in_review: a new version waits on the team's publish review; waiting: someone's draft
     # or an open review comes first, so nothing changed; already: it held them all; none: the app has no read tools.
     state: GiveState
@@ -66,24 +76,41 @@ async def give_app_tools(rt: Runtime, me: Principal, module_ids: list[str]) -> A
     wanted = set(module_ids)
     reads = sorted({o.name for o in ops if o.module_id in wanted and o.access == "read"})
 
+    added = {o.name for o in ops if o.module_id in wanted}
+    shipped = [
+        t
+        for t in await _shipped(rt, team)
+        if t.get("kind") == "skill" and set(cast(list[str], t["requires"]["tools"])) <= added
+    ]
+    pinned: list[str] = []
+
     def answer(state: GiveState) -> AppToolsGiven:
         # The app's state changed for the team: its apps line is read again on the next turn.
         if rt.apps_line is not None:
             rt.apps_line.forget(team)
-        return AppToolsGiven(agent_id=agent.id, agent_name=agent.name, tools=reads, state=state)
+        return AppToolsGiven(agent_id=agent.id, agent_name=agent.name, tools=reads, skills=pinned, state=state)
 
-    if not reads:
+    if not reads and not shipped:
         return answer("none")
     reg = registry(rt)
     row = await reg.row(agent.id)
     published = row["published_version"]
     live = dict((await reg.version(agent.id, int(published)))["spec"]) if published is not None else {}
     held = [str(t) for t in cast(list[Any], live.get("toolIds") or [])]
-    if set(reads) <= set(held):
+    # A skill brings the tools it names, writes included once the team has added them; a write still waits for a
+    # person's approval at the gate on every call.
+    needed = [*reads, *(str(n) for t in shipped for n in cast(list[Any], t["requires"]["tools"]))]
+    holds = {str(p.get("skillId")) for p in cast(list[dict[str, Any]], live.get("skillPins") or [])}
+    if set(needed) <= set(held) and not await _unpinned(rt, shipped, holds):
         return answer("already")
     if row["version"] != published or any(r["status"] == "pending" for r in await reg.requests("agent", agent.id)):
         return answer("waiting")
-    spec = {**live, "toolIds": [*held, *(t for t in reads if t not in held)]}
+    spec = {**live, "toolIds": [*held, *dict.fromkeys(t for t in needed if t not in held)]}
+    for skill_id, name in await _skill_copies(rt, me, team, shipped):
+        if skill_id in holds:
+            continue
+        spec["skillPins"] = await pin(rt, spec, skill_id, 1, by=me.email, at=now_iso())
+        pinned.append(name)
     note = f"Given the read tools of {', '.join(module_ids)} when the app was turned on"
     n = await reg.save(agent.id, spec, by=me.email, note=note)
     decision = await decide(rt, area="agents", team_id=team, old=live, new=spec)
@@ -96,6 +123,68 @@ async def give_app_tools(rt: Runtime, me: Principal, module_ids: list[str]) -> A
     body = {**agent_review_body(agent.id, spec, row, v, note=note, by=me.email), **decision.record()}
     await reg.open_request("agent", agent.id, n, note=note, by=me.email, body=body, approved=False)
     return answer("in_review")
+
+
+async def _shipped(rt: Runtime, team: str) -> list[dict[str, Any]]:
+    """The templates of the team's plugins; none when tools-service cannot list them, so the tools are still given and
+    the skills follow on the next turn-on."""
+    if rt.tool_reviews is None:
+        return []
+    try:
+        return await _offered(rt, team)
+    except ServiceUnavailable:
+        log.warning("app_skills_unlisted", team=team)
+        return []
+
+
+async def _unpinned(rt: Runtime, shipped: list[dict[str, Any]], holds: set[str]) -> list[dict[str, Any]]:
+    """The app's skills the team holds no pinned copy of yet."""
+    copies = TemplateCopies(rt.db)
+    out: list[dict[str, Any]] = []
+    for t in shipped:
+        held = await copies.live(str(t["source"]), str(t["id"]), int(t["version"]))
+        if held is None or str(held["record_id"]) not in holds:
+            out.append(t)
+    return out
+
+
+async def _skill_copies(rt: Runtime, me: Principal, team: str, shipped: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    """The team's published copy of each of the app's skills, made on first turn-on as the template install makes a
+    copy, through the skill's content checks; published at once, since the admin turning the app on chose to give it
+    to the assistant. A name another team's copy holds takes a number, as slugs are unique across teams."""
+    copies, out = TemplateCopies(rt.db), list[tuple[str, str]]()
+    for t in shipped:
+        source, tid, version = str(t["source"]), str(t["id"]), int(t["version"])
+        held = await copies.live(source, tid, version)
+        if held is not None:
+            row = await skills(rt).row(str(held["record_id"]))
+            out.append((str(held["record_id"]), str(row.get("name") or tid)))
+            continue
+        base = str(cast(dict[str, Any], t.get("body") or {}).get("name") or t["title"])
+        for n in range(1, 10):
+            name = base if n == 1 else f"{base} {n}"
+            content = await _skill_content(rt, team, t, name, [])
+            try:
+                sid = await skills(rt).create(
+                    content, owner_team=team, team_id=team, origin="imported", by=me.email, published=True
+                )
+            except Conflict as e:
+                if e.code == "name_taken":
+                    continue
+                raise
+            await copies.add(
+                team_id=team,
+                kind="skill",
+                record_id=sid,
+                source=source,
+                template_id=tid,
+                version=version,
+                by=me.email,
+                digest=cast(str | None, t.get("digest")),
+            )
+            out.append((sid, name))
+            break
+    return out
 
 
 @router.post("/app-tools", response_model=Envelope[AppToolsGiven])

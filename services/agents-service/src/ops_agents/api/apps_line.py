@@ -11,7 +11,7 @@ team's lines at once (team_assistant.give_app_tools).
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Any, cast
 
 from langgraph.config import get_config
 
@@ -72,14 +72,15 @@ class AppsLine:
 
     def __init__(self, rt: Runtime) -> None:
         self.rt = rt
-        self._kept: dict[tuple[str, str], tuple[float, str | None]] = {}
+        self._kept: dict[tuple[str, str], tuple[float, list[dict[str, Any]]]] = {}
 
     def forget(self, team_id: str) -> None:
         """Drops the team's kept lines, so the next turn reads the apps again (an app was just turned on)."""
         for key in [k for k in self._kept if k[0] == team_id]:
             self._kept.pop(key, None)
 
-    async def fragment(self, agent_id: str) -> PromptFragment | None:
+    async def _turn(self, agent_id: str) -> tuple[str, str] | None:
+        """The turn's team and person, when the turn is the team's default agent's with a person."""
         person = TURN_PERSON.get()
         if person is None or not person.email or self.rt.app_states is None:
             return None
@@ -92,10 +93,18 @@ class AppsLine:
         # The team's default agent only: an agent a builder made holds its own tools and needs no catalog of apps.
         if not team or await TeamDefaults(self.rt.db).agent(team) != agent_id:
             return None
-        text = await self.line(team, person.email)
+        return team, person.email
+
+    async def fragment(self, agent_id: str) -> PromptFragment | None:
+        turn = await self._turn(agent_id)
+        text = await self.line(*turn) if turn else None
         return PromptFragment(text, False) if text else None
 
     async def line(self, team: str, email: str, now: float | None = None) -> str | None:
+        cards = await self.cards(team, email, now)
+        return render(cards) if cards is not None else None
+
+    async def cards(self, team: str, email: str, now: float | None = None) -> list[dict[str, Any]] | None:
         at = time.monotonic() if now is None else now
         kept = self._kept.get((team, email))
         if kept is not None and at - kept[0] < KEEP_S:
@@ -106,6 +115,24 @@ class AppsLine:
         except ToolsUnavailable:
             log.info("apps_line_unavailable", team=team)
             return None
-        text = render(cards)
-        self._kept[(team, email)] = (at, text)
-        return text
+        self._kept[(team, email)] = (at, cards)
+        return cards
+
+    async def skill_needs(self, agent_id: str) -> dict[str, str]:
+        agent = self.rt.catalog.agent_in_flight(agent_id)
+        turn = await self._turn(agent_id)
+        if agent is None or turn is None:
+            return {}
+        cards = await self.cards(*turn) or []
+        by_module = {str(m): c for c in cards for m in cast(list[Any], c.get("moduleIds") or [])}
+        try:
+            ops = await self.rt.directory().operations()
+        except ToolsUnavailable:
+            return {}
+        module_of = {o.name: o.module_id for o in ops}
+        out: dict[str, str] = {}
+        for s in agent.skills:
+            apps = [by_module[m] for t in s.tool_ids if (m := module_of.get(t)) and m in by_module]
+            if apps and (state := describe(apps[0])) is not None:
+                out[s.skill_id] = "needs " + state.replace(": ", ", ", 1)
+        return out

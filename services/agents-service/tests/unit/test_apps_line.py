@@ -8,7 +8,9 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
+from ops_agent_kernel.types import AgentSettings, PromptFragment, Skill
 from ops_agents.api.apps_line import KEEP_S, MAX_CHARS, AppsLine, render
+from ops_agents.graphs.common import with_apps
 
 
 def card(name: str, state: str, *, kind: str = "plugin", sign_in: str | None = "person") -> dict[str, Any]:
@@ -71,3 +73,52 @@ async def test_a_kept_line_is_read_again_once_the_team_turns_an_app_on() -> None
     line.forget("team_a")
     assert "not signed in" in (await line.line("team_a", "dana@bank.example", now=2) or "")
     assert "not signed in" in (await line.line("team_a", "dana@bank.example", now=2 + KEEP_S + 1) or "")
+
+
+class Ops:
+    async def operations(self) -> list[Any]:
+        return [
+            SimpleNamespace(name="salesforce_query", module_id="mod_sf"),
+            SimpleNamespace(name="read_file", module_id=None),
+        ]
+
+
+async def test_a_skill_says_which_app_it_needs_and_whether_the_person_is_signed_in() -> None:
+    # The model loaded a Salesforce skill and called its tools with no idea the person had never signed in.
+    sf = {**card("Salesforce", "needs_sign_in"), "moduleIds": ["mod_sf"]}
+    agent = SimpleNamespace(
+        skills=[
+            SimpleNamespace(skill_id="sk_clients", tool_ids=["salesforce_query"]),
+            SimpleNamespace(skill_id="sk_files", tool_ids=["read_file"]),
+        ]
+    )
+    rt = SimpleNamespace(
+        app_states=Cards({"team_a": [sf]}),
+        catalog=SimpleNamespace(agent_in_flight=lambda _id: agent),
+        directory=Ops,
+    )
+    line = AppsLine(rt)  # type: ignore[arg-type]
+
+    async def turn(_agent: str) -> tuple[str, str]:
+        return "team_a", "dana@bank.example"
+
+    line._turn = turn  # type: ignore[method-assign]  # pyright: ignore[reportPrivateUsage]
+    needs = await line.skill_needs("ag_ops_team_a")
+    assert needs == {"sk_clients": "needs Salesforce, on · you are not signed in (a call shows a Connect card)"}
+
+
+async def test_each_skills_index_line_carries_its_apps_state() -> None:
+    class Apps:
+        async def fragment(self, agent_id: str) -> PromptFragment | None:
+            return PromptFragment("Apps for this conversation: Salesforce: on", False)
+
+        async def skill_needs(self, agent_id: str) -> dict[str, str]:
+            return {"sk_clients": "needs Salesforce, on · you are signed in"}
+
+    clients = Skill(
+        "sk_clients", 1, "Salesforce clients", "salesforce-clients", "A client in Salesforce", "on_match", "x"
+    )
+    settings = AgentSettings("ag", 1, [], "m", skills=[clients])
+    out = await with_apps(SimpleNamespace(apps=Apps()), settings, "ag")  # type: ignore[arg-type]
+    assert out.skills[0].use_when == "A client in Salesforce (needs Salesforce, on · you are signed in)"
+    assert out.instructions[-1].text.startswith("Apps for this conversation")

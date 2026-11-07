@@ -1,9 +1,11 @@
 """The Turn on window's "Give the team's assistant this app's read tools", by failure mode: the assistant gets the
-app's write tools or another app's tools; a second turn-on makes another version for nothing; someone who may not edit
-the team's agents changes the assistant; and a draft someone is editing is stepped over."""
+app's write tools (other than those its skills name) or another app's tools; the app's skills are not pinned; a second
+turn-on makes another version for nothing; someone who may not edit the team's agents changes the assistant; and a
+draft someone is editing is stepped over."""
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 from ops_agents.activities.tool_directory import OperationRef
@@ -78,3 +80,46 @@ async def test_a_draft_someone_is_editing_is_not_stepped_over(stack: Stack) -> N
     data = (await give(c, ADMIN)).json()["data"]
     live = rt.catalog.agent(AID)
     assert data["state"] == "waiting" and live is not None and "salesforce_query" not in live.tools, data
+
+
+def skill(tid: str, name: str, tools: list[str]) -> dict[str, Any]:
+    return {
+        "source": "plugin:opsai.salesforce",
+        "kind": "skill",
+        "id": tid,
+        "version": 1,
+        "title": name,
+        "requires": {"tools": tools},
+        "body": {"name": name, "useWhen": f"When {name.lower()} helps", "instructions": f"How to use {name}."},
+    }
+
+
+class Templates:
+    """tools-service's plugin templates for the team: two skills the team can use and one naming a tool it lacks."""
+
+    async def get(self, path: str, **_: Any) -> list[dict[str, Any]]:
+        assert path == "/v1/plugin-templates"
+        return [
+            skill("salesforce-clients", "Salesforce clients", ["salesforce_query", "salesforce_get_record"]),
+            skill(
+                "salesforce-opportunities", "Salesforce opportunities", ["salesforce_query", "salesforce_update_record"]
+            ),
+            skill("salesforce-saving", "Salesforce saving", ["salesforce_save_records"]),
+        ]
+
+
+async def test_turning_an_app_on_pins_its_skills_with_the_tools_they_name_once(stack: Stack) -> None:  # noqa: F811
+    # Routing comes from the app's own skills: an app turned on gave the assistant tools but no way to use them.
+    c, rt = stack
+    rt.tool_directory = Directory()
+    rt.tool_reviews = SimpleNamespace(tools=Templates())  # type: ignore[assignment]
+    await start(c, ADMIN)
+    data = (await give(c, ADMIN)).json()["data"]
+    assert sorted(data["skills"]) == ["Salesforce clients", "Salesforce opportunities"], data
+    live = rt.catalog.agent(AID)
+    assert live is not None
+    assert sorted(s.name for s in live.skills) == ["Salesforce clients", "Salesforce opportunities"]
+    # A skill's write tool comes with it, gated on every call; one naming a tool the team has not added is not pinned.
+    assert "salesforce_update_record" in live.tools and "salesforce_save_records" not in live.tools
+    again = (await give(c, ADMIN)).json()["data"]
+    assert again["state"] == "already" and again["skills"] == [], again
