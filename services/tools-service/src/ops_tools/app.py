@@ -39,7 +39,7 @@ from .mocks import MockAnswers
 from .modules.directory import Directory
 from .modules.policy import WriteApprovals, app_ids, approves_own_writes
 from .modules.service import ModuleService
-from .opa import POLICY_FILE, OpaClient, PolicyMismatchError, policy_hash
+from .opa import POLICY_FILE, OpaClient, PolicyMismatchError, policy_hash, registered_identities
 from .plugins.executor import PluginExecutor
 from .plugins.host import PluginHost
 from .registry import Resolved, ToolRegistry
@@ -265,6 +265,7 @@ def create_gateway_app(
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
         await opa.load_review_key(review_key)
+        await opa.load_identities(registered_identities())
         await opa.load_policy(rules)
         if await opa.loaded_policy_hash() != expected:
             raise PolicyMismatchError("OPA does not hold this gateway's policy after loading it; refusing to start.")
