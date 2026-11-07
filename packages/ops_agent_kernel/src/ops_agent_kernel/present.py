@@ -20,11 +20,13 @@ SERVER = "kernel"
 PRESENT = ToolGrant(
     NAME,
     SERVER,
-    "Show the person a shaped result from facts already in this conversation: a table (rows: a list of flat objects "
-    "with the same keys), a chart (series: rows with one date or ordinal key and numeric values), one record (record: "
-    "a flat object) or one figure (metric: {label, value, unit?, delta?}). Or give kind, a generic widget the same in "
-    "any industry, with data in that kind's fields (* required): " + kinds.describe() + ". Use it for comparisons and "
-    "summaries; it reads nothing and changes nothing.",
+    "Show the person a table, chart, record or figure built from facts already in this conversation; it reads "
+    "nothing and changes nothing. A tool's own result is already shown to the person, so do not present it again; "
+    "use this for comparisons and summaries you put together. Pass data and at most one of: shape (rows: a list of "
+    "flat objects with the same keys; series: rows with one date or ordinal key and numeric values; record: one flat "
+    "object; metric: {label, value, unit?, delta?}) or kind, a generic widget with data in its fields (* required; "
+    "columns may be plain key names): " + kinds.describe() + ". With data alone, a list shows as a table and an "
+    "object as a record.",
     "read",
     {
         "type": "object",
@@ -131,9 +133,7 @@ def grant(settings: AgentSettings) -> ToolGrant:
     props["data"] = {
         "description": "For shape, the rows, record or metric. For widget, an object with that widget's fields."
     }
-    desc = PRESENT.description.replace(
-        "Use it for comparisons", "Give exactly one of shape, kind, widget or layout. Use it for comparisons"
-    )
+    desc = PRESENT.description.replace("at most one of: shape", "at most one of: widget, layout, shape")
     if settings.widgets:
         props["widget"] = {"type": "string", "enum": [w.widget_id for w in settings.widgets]}
         desc += " Or give widget with data matching its fields. Widgets: " + " ".join(
@@ -151,6 +151,41 @@ def _ungranted(part: dict[str, Any], granted: set[str]) -> list[str]:
     return [t for t in layout.required_tools(part.get("layout")) if t not in granted]
 
 
+def _columns(value: Any) -> Any:
+    """A table's columns as the catalogue keeps them: a plain key name is the column {key}."""
+    if not isinstance(value, list):
+        return value
+    return [{"key": c} if isinstance(c, str) else c for c in cast(list[Any], value)]
+
+
+def _plain(arguments: dict[str, Any]) -> dict[str, Any]:
+    """A call as a model most often writes it, read as it meant: data alone is a table (a list) or a record (an
+    object), and a table's columns may be plain key names, in a kind's data or in a composed layout's table nodes."""
+    out = dict(arguments)
+    if all(out.get(k) is None for k in ("shape", "kind", "widget", "layout")) and out.get("data") is not None:
+        data = out["data"]
+        out["shape"] = "rows" if isinstance(data, list) else "record" if isinstance(data, dict) else None
+    if out.get("kind") == "table" and isinstance(out.get("data"), dict):
+        data = dict(cast(dict[str, Any], out["data"]))
+        if "columns" in data:
+            data["columns"] = _columns(data["columns"])
+        out["data"] = data
+    if isinstance(out.get("layout"), dict):
+        out["layout"] = _layout_columns(out["layout"])
+    return out
+
+
+def _layout_columns(node: Any) -> Any:
+    if not isinstance(node, dict):
+        return node
+    n = dict(cast(dict[str, Any], node))
+    if n.get("type") == "table" and "columns" in n:
+        n["columns"] = _columns(n["columns"])
+    if isinstance(n.get("children"), list):
+        n["children"] = [_layout_columns(c) for c in cast(list[Any], n["children"])]
+    return n
+
+
 def run(
     arguments: dict[str, Any], settings: AgentSettings, granted: set[str] | None = None
 ) -> tuple[dict[str, Any] | None, str]:
@@ -158,11 +193,14 @@ def run(
     one of the agent's widgets filled with data, or a composed layout when the agent may compose. A button whose
     `requires` names a tool this turn was not granted refuses the part, so a widget never offers an action the agent
     cannot take (`granted` None skips the check)."""
+    arguments = _plain(arguments)
     shape, widget, tree = arguments.get("shape"), arguments.get("widget"), arguments.get("layout")
     kind = arguments.get("kind")
     forms = [f for f in (shape, kind, widget, tree) if f is not None]
-    if len(forms) != 1:
-        return None, "Give exactly one of shape, kind, widget or layout."
+    if len(forms) > 1:
+        return None, "Pass data with only one of shape, kind, widget or layout."
+    if not forms:
+        return None, "Pass data: a list of objects shows as a table, an object as a record."
     data = arguments.get("data")
     if kind is not None:
         if kind not in kinds.SCHEMAS:

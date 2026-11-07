@@ -8,7 +8,8 @@ Pure: no database, no network. `shape_part` returns None when nothing fits, and 
 Rules, in order:
 - An operation's declared shape (`x-ops-shape` on its response, `declared`) wins when the data fits that shape;
   when it does not, inference runs as if nothing were declared. A malformed part is never emitted.
-- An object whose only key holds a list (`{"transactions": [...]}`) is read as that list; the key becomes the title.
+- An object whose only key holds a list (`{"transactions": [...]}`), or whose only list of objects sits beside flat
+  values (a query's `{totalSize, done, records: [...]}`), is read as that list; the key becomes the title.
 - A value that is not flat is drawn as one cell: a list of scalars joins with ", " (`accountIds`), a
   list of objects or a nested object becomes a count naming its key ("2 holds", "1 address"), so a customer with
   accounts or an account with holds still draws. Inference reads the flat columns only; a joined or counted cell is
@@ -154,14 +155,32 @@ def _as(shape: str, data: Any) -> tuple[Any, dict[str, Any]] | None:
     return None
 
 
+def _objects(items: list[Any]) -> bool:
+    return bool(items) and all(isinstance(r, dict) for r in items)
+
+
+def _listed(output: Any) -> tuple[str, list[Any]] | None:
+    """(key, list) when `output` is one list in an envelope: its only key, or its only list of objects beside flat
+    values such as a count, a done flag or a next-page link (Salesforce's {totalSize, done, records})."""
+    if not isinstance(output, dict):
+        return None
+    o = cast(dict[str, Any], output)
+    if len(o) == 1:
+        ((key, value),) = o.items()
+        return (key, cast(list[Any], value)) if isinstance(value, list) else None
+    lists = [k for k, v in o.items() if isinstance(v, list) and _objects(cast(list[Any], v))]
+    if len(lists) == 1 and all(_flat(v) for k, v in o.items() if k != lists[0]):
+        return lists[0], cast(list[Any], o[lists[0]])
+    return None
+
+
 def shape_part(output: Any, *, part_id: str, declared: str | None = None) -> dict[str, Any] | None:
     """The widget part for a tool's `output`, or None when it stays a plain tool card."""
     data: Any = output
     title: str | None = None
-    if isinstance(output, dict) and len(cast(dict[str, Any], output)) == 1:
-        ((key, value),) = cast(dict[str, Any], output).items()
-        if isinstance(value, list):
-            data, title = cast(list[Any], value), key
+    found = _listed(output)
+    if found is not None:
+        title, data = found
     order = ([declared] if declared in SHAPES else []) + ["series", "rows", "metric", "record"]
     for shape in order:
         found = _as(shape, data)
