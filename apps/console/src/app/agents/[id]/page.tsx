@@ -32,13 +32,14 @@ import { AgentChatChannel } from '@/components/agents/agent-channels';
 import { MakeDefaultAgentDialog } from '@/components/chat/make-default-agent';
 import { AgentSkillsSection, type AttachFilter } from '@/components/skills/agent-skills-section';
 import { useAgentSkills, useAttachSkill, useDetachSkill } from '@/hooks/skill-queries';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTabParam } from '@/hooks/use-tab-param';
 import { useWidgetTemplates } from '@/hooks/widget-queries';
 import { EvalsTab } from './_parts/evals-tab';
 import { useInstructionsAssist } from './_parts/instructions-assist';
 import { WidgetEmbeds } from '@/components/deployments/widget-embed';
 import { PageLayout } from '@/components/page-layout';
+import { PageTabPanel, PageTabs } from '@/components/shared/page-tabs';
 import { BuilderFieldset, ReadOnlyNotice } from '@/components/shared/builder-only';
 import { DangerZone } from '@/components/shared/danger-zone';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
@@ -208,293 +209,297 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
 
 
   return (
-    <PageLayout
-      icon={Bot}
-      backHref="/agents"
-      title={agent.name}
-      description={agent.role}
-      badge={
-        <>
-          <AgentAvailabilityBadge availability={agent.availability} />
-          {/* The availability badge already says whether it is published; this adds only which version is live. */}
-          {agent.publishedVersion !== null && (
-            <span className="text-xs text-muted-foreground" data-testid="agent-published-version">
-              v{agent.publishedVersion} live
-            </span>
-          )}
-          {newest && newest.state !== 'published' && newest.state !== 'superseded' && (
-            <span className="flex items-center gap-1.5 text-xs" data-testid="agent-draft-version">
-              <span className="font-medium">v{newest.version}</span>
-              <AgentVersionBadge state={newest.state} />
-            </span>
-          )}
-          <span className="text-xs text-muted-foreground">
-            {teamName} · used in {agent.usedIn.length} workflow{agent.usedIn.length === 1 ? '' : 's'} · updated {relativeTime(agent.updatedAt)}
-          </span>
-        </>
-      }
-      tabs={
-        <Tabs value={tab} onValueChange={(t) => setTab(t as Tab)}>
-          <TabsList>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-            {agent.controls.evals && (
-              <TabsTrigger value="evals" data-testid="agent-evals-tab-trigger">
-                Evals
-              </TabsTrigger>
+    <PageTabs value={tab} onValueChange={(t) => setTab(t as Tab)}>
+      <PageLayout
+        icon={Bot}
+        backHref="/agents"
+        title={agent.name}
+        description={agent.role}
+        badge={
+          <>
+            <AgentAvailabilityBadge availability={agent.availability} />
+            {/* The availability badge already says whether it is published; this adds only which version is live. */}
+            {agent.publishedVersion !== null && (
+              <span className="text-xs text-muted-foreground" data-testid="agent-published-version">
+                v{agent.publishedVersion} live
+              </span>
             )}
-            <TabsTrigger value="channels" data-testid="agent-channels-tab-trigger">
-              Channels
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      }
-      actions={
-        // A draft the person may not publish says why and who can, rather than offering nothing.
-        !canBuild ? (
-          newest?.state === 'draft' && agent.canPublish === false ? <LockedReason area="agents" action="publish" label="Request publish" /> : undefined
-        ) : (
-        <>
-          {agent.wrapperWorkflowId && (
+            {newest && newest.state !== 'published' && newest.state !== 'superseded' && (
+              <span className="flex items-center gap-1.5 text-xs" data-testid="agent-draft-version">
+                <span className="font-medium">v{newest.version}</span>
+                <AgentVersionBadge state={newest.state} />
+              </span>
+            )}
+            <span className="text-xs text-muted-foreground">
+              {teamName} · used in {agent.usedIn.length} workflow{agent.usedIn.length === 1 ? '' : 's'} · updated {relativeTime(agent.updatedAt)}
+            </span>
+          </>
+        }
+        tabs={
+          <>
+            <TabsList>
+              <TabsTrigger value="settings">Settings</TabsTrigger>
+              {agent.controls.evals && (
+                <TabsTrigger value="evals" data-testid="agent-evals-tab-trigger">
+                  Evals
+                </TabsTrigger>
+              )}
+              <TabsTrigger value="channels" data-testid="agent-channels-tab-trigger">
+                Channels
+              </TabsTrigger>
+            </TabsList>
+          </>
+        }
+        actions={
+          // A draft the person may not publish says why and who can, rather than offering nothing.
+          !canBuild ? (
+            newest?.state === 'draft' && agent.canPublish === false ? <LockedReason area="agents" action="publish" label="Request publish" /> : undefined
+          ) : (
+          <>
+            {agent.wrapperWorkflowId && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setTab('channels');
+                  setDeployOpen(true);
+                }}
+                data-testid="embed-agent"
+              >
+                <Send className="size-4" /> Embed on a page
+              </Button>
+            )}
+            {newest?.state === 'draft' && agent.canPublish !== false && (
+              <Button variant="outline" onClick={() => setPublishOpen(true)} disabled={dirty} title={dirty ? 'Saving your changes first' : undefined} data-testid="request-agent-publish">
+                <Rocket className="size-4" /> Request publish
+              </Button>
+            )}
+            {newest?.state === 'in_review' && newest.reviewId && (
+              <Button variant="outline" asChild data-testid="agent-publish-in-review">
+                <Link href={`/reviews?review=${newest.reviewId}`}>In review · {newest.reviewId}</Link>
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={() => {
-                setTab('channels');
-                setDeployOpen(true);
+                setTab('settings');
+                setTestTab('test');
+                requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
               }}
-              data-testid="embed-agent"
+              data-testid="test-agent-button"
             >
-              <Send className="size-4" /> Embed on a page
+              <FlaskConical className="size-4" /> Test
             </Button>
-          )}
-          {newest?.state === 'draft' && agent.canPublish !== false && (
-            <Button variant="outline" onClick={() => setPublishOpen(true)} disabled={dirty} title={dirty ? 'Saving your changes first' : undefined} data-testid="request-agent-publish">
-              <Rocket className="size-4" /> Request publish
-            </Button>
-          )}
-          {newest?.state === 'in_review' && newest.reviewId && (
-            <Button variant="outline" asChild data-testid="agent-publish-in-review">
-              <Link href={`/reviews?review=${newest.reviewId}`}>In review · {newest.reviewId}</Link>
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            onClick={() => {
-              setTab('settings');
-              setTestTab('test');
-              requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-            }}
-            data-testid="test-agent-button"
-          >
-            <FlaskConical className="size-4" /> Test
-          </Button>
-          {canBuild && (
-            <>
-              <span role="status" data-testid="agent-save-status" className={saveError ? 'text-xs text-destructive-text' : 'text-xs text-muted-foreground'}>
-                {update.isPending ? 'Saving…' : saveError ? `Not saved: ${saveError}` : dirty ? (valid ? 'Saving soon…' : 'Fix the highlighted fields to save') : `Draft v${agent.version} saved`}
-              </span>
-              {saveError && !update.isPending && (
-                <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={saveNow} data-testid="agent-save-retry">
-                  Retry
-                </Button>
-              )}
-            </>
-          )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" aria-label="More actions">
-                <MoreHorizontal className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {pausable && (
-                <DropdownMenuItem onClick={togglePaused}>
-                  {agent.paused ? <Play className="size-4" /> : <Pause className="size-4" />} {agent.paused ? 'Resume agent' : 'Pause agent'}
-                </DropdownMenuItem>
-              )}
-              {isAdmin && agent.availability === 'published' && agent.id !== defaultId && (
-                <DropdownMenuItem onClick={() => setMakeDefaultOpen(true)} data-testid="agent-make-default">
-                  <Star className="size-4" /> Make default for chat
-                </DropdownMenuItem>
-              )}
-              {assist.menuItem}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="flex-col items-start text-destructive-text" disabled={liveUse.length > 0 || agent.canDelete === false} onClick={() => setDeleteOpen(true)}>
-                <span className="flex items-center gap-2">
-                  <Trash2 className="size-4" /> Delete agent
+            {canBuild && (
+              <>
+                <span role="status" data-testid="agent-save-status" className={saveError ? 'text-xs text-destructive-text' : 'text-xs text-muted-foreground'}>
+                  {update.isPending ? 'Saving…' : saveError ? `Not saved: ${saveError}` : dirty ? (valid ? 'Saving soon…' : 'Fix the highlighted fields to save') : `Draft v${agent.version} saved`}
                 </span>
-                {liveUse.length > 0 && <span className="pl-6 text-xs text-muted-foreground">Used by a live workflow</span>}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </>
-        )
-      }
-    >
-      {tab === 'evals' && agent.controls.evals ? (
-        <EvalsTab agent={agent} />
-      ) : tab === 'channels' ? (
-        agent.wrapperWorkflowId ? (
-          <div className="flex flex-col gap-4">
-            {/* Where each version is live, then the embeds' own snippets and keys, which are made here. */}
-            <LivePlacesPanel kind="agent" id={agent.id} name={agent.name} between={<AgentChatChannel agent={agent} />} />
-            <WidgetEmbeds agentId={agent.id} publishedVersion={agent.publishedVersion} scriptUrl={widgetScriptUrl} createOpen={deployOpen} onCreateOpenChange={setDeployOpen} canEdit={agent.canEdit} />
-          </div>
-        ) : (
-          <EmptyState icon={Send} title="Publish the agent to put it in channels" description="Chat, embeds and workflows use a published version. Request publish from the header, then come back here." />
-        )
-      ) : (
-      <SplitView id="agent-settings" bare defaultLeft={62} leftMin="40" rightMin="30" left={
-<div className="flex min-w-0 flex-col gap-4">
-          <ReadOnlyNotice noun="agents" canEdit={agent.canEdit} teamId={agent.teamId} teamName={agent.teamName} />
-          <BuilderFieldset canEdit={agent.canEdit}>
-          <IdentitySection draft={draft} set={set} teamId={agent.teamId} models={modelAliases.data ?? []} errors={errors} channels={agent.controls.channels} agentId={agent.id} />
-          <InstructionsSection draft={draft} set={set} toolbar={assist.toolbar} footer={assist.footer} textareaRef={assist.textareaRef} />
-          <ToolsSection draft={draft} set={set} stale={agent.staleToolIds} />
-          <KnowledgeSection draft={draft} set={set} />
-          <WidgetsSection draft={draft} set={set} />
-          <MemorySection draft={draft} set={set} />
-          <AgentSkillsSection
-            agentName={agent.name}
-            data={skills.data}
-            isPending={skills.isPending}
-            isError={skills.isError}
-            onRetry={() => skills.refetch()}
-            blockedReason={dirty ? 'Your changes are still saving; skills change once they are saved.' : undefined}
-            busy={attachSkill.isPending || detachSkill.isPending}
-            attach={attach}
-            onAttachChange={setAttach}
-            onAttach={async (skillId, version, name, moving) => {
-              const after = await attachSkill.mutateAsync({ skillId, version });
-              const pinned = after.pins.find((p) => p.skillId === skillId);
-              const label = pinned ? `${pinned.name} v${pinned.pinnedVersion}` : name;
-              toast.success(moving ? `Moved ${name} to v${version}` : `Attached ${label}`, { description: `Saved ${agent.name} as v${agent.version + 1}. Workflows adopt it on their next publish.` });
+                {saveError && !update.isPending && (
+                  <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={saveNow} data-testid="agent-save-retry">
+                    Retry
+                  </Button>
+                )}
+              </>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" aria-label="More actions">
+                  <MoreHorizontal className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {pausable && (
+                  <DropdownMenuItem onClick={togglePaused}>
+                    {agent.paused ? <Play className="size-4" /> : <Pause className="size-4" />} {agent.paused ? 'Resume agent' : 'Pause agent'}
+                  </DropdownMenuItem>
+                )}
+                {isAdmin && agent.availability === 'published' && agent.id !== defaultId && (
+                  <DropdownMenuItem onClick={() => setMakeDefaultOpen(true)} data-testid="agent-make-default">
+                    <Star className="size-4" /> Make default for chat
+                  </DropdownMenuItem>
+                )}
+                {assist.menuItem}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="flex-col items-start text-destructive-text" disabled={liveUse.length > 0 || agent.canDelete === false} onClick={() => setDeleteOpen(true)}>
+                  <span className="flex items-center gap-2">
+                    <Trash2 className="size-4" /> Delete agent
+                  </span>
+                  {liveUse.length > 0 && <span className="pl-6 text-xs text-muted-foreground">Used by a live workflow</span>}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+          )
+        }
+      >
+        <PageTabPanel value={tab}>
+          {tab === 'evals' && agent.controls.evals ? (
+            <EvalsTab agent={agent} />
+          ) : tab === 'channels' ? (
+            agent.wrapperWorkflowId ? (
+              <div className="flex flex-col gap-4">
+                {/* Where each version is live, then the embeds' own snippets and keys, which are made here. */}
+                <LivePlacesPanel kind="agent" id={agent.id} name={agent.name} between={<AgentChatChannel agent={agent} />} />
+                <WidgetEmbeds agentId={agent.id} publishedVersion={agent.publishedVersion} scriptUrl={widgetScriptUrl} createOpen={deployOpen} onCreateOpenChange={setDeployOpen} canEdit={agent.canEdit} />
+              </div>
+            ) : (
+              <EmptyState icon={Send} title="Publish the agent to put it in channels" description="Chat, embeds and workflows use a published version. Request publish from the header, then come back here." />
+            )
+          ) : (
+          <SplitView id="agent-settings" bare defaultLeft={62} leftMin="40" rightMin="30" left={
+    <div className="flex min-w-0 flex-col gap-4">
+              <ReadOnlyNotice noun="agents" canEdit={agent.canEdit} teamId={agent.teamId} teamName={agent.teamName} />
+              <BuilderFieldset canEdit={agent.canEdit}>
+              <IdentitySection draft={draft} set={set} teamId={agent.teamId} models={modelAliases.data ?? []} errors={errors} channels={agent.controls.channels} agentId={agent.id} />
+              <InstructionsSection draft={draft} set={set} toolbar={assist.toolbar} footer={assist.footer} textareaRef={assist.textareaRef} />
+              <ToolsSection draft={draft} set={set} stale={agent.staleToolIds} />
+              <KnowledgeSection draft={draft} set={set} />
+              <WidgetsSection draft={draft} set={set} />
+              <MemorySection draft={draft} set={set} />
+              <AgentSkillsSection
+                agentName={agent.name}
+                data={skills.data}
+                isPending={skills.isPending}
+                isError={skills.isError}
+                onRetry={() => skills.refetch()}
+                blockedReason={dirty ? 'Your changes are still saving; skills change once they are saved.' : undefined}
+                busy={attachSkill.isPending || detachSkill.isPending}
+                attach={attach}
+                onAttachChange={setAttach}
+                onAttach={async (skillId, version, name, moving) => {
+                  const after = await attachSkill.mutateAsync({ skillId, version });
+                  const pinned = after.pins.find((p) => p.skillId === skillId);
+                  const label = pinned ? `${pinned.name} v${pinned.pinnedVersion}` : name;
+                  toast.success(moving ? `Moved ${name} to v${version}` : `Attached ${label}`, { description: `Saved ${agent.name} as v${agent.version + 1}. Workflows adopt it on their next publish.` });
+                }}
+                onDetach={async (pin) => {
+                  try {
+                    await detachSkill.mutateAsync(pin.skillId);
+                    toast.success(`Detached ${pin.name}`, { description: `Saved ${agent.name} as v${agent.version + 1}.` });
+                  } catch (e) {
+                    toast.error('Couldn’t detach the skill', { description: (e as Error).message });
+                  }
+                }}
+              />
+              <GuardrailsSection draft={draft} set={set} shown={agent.controls.guardrails} />
+              <LimitsSection draft={draft} set={set} models={modelAliases.data ?? []} tools={tools.data ?? []} />
+              </BuilderFieldset>
+              {canBuild && (
+              <DangerZone
+                items={[
+                  ...(pausable
+                    ? [
+                        {
+                          title: agent.paused ? 'Resume this agent' : 'Pause this agent',
+                          description: agent.paused ? `New runs use v${agent.publishedVersion} again.` : 'New runs stop using it until you resume it. Runs already started finish. Versions, pins and open publish requests are unchanged.',
+                          action: agent.paused ? 'Resume' : 'Pause',
+                          onClick: togglePaused,
+                          disabled: setPaused.isPending,
+                        },
+                      ]
+                    : []),
+                  {
+                    title: 'Delete this agent',
+                    description: liveUse.length ? `Used by ${liveUse.map((u) => u.workflowName).join(', ')}, which is live. Remove it from the workflow first.` : 'Nothing live uses it.',
+                    action: 'Delete',
+                    destructive: true,
+                    disabled: liveUse.length > 0,
+                    onClick: () => setDeleteOpen(true),
+                  },
+                ]}
+              />
+              )}
+            </div>
+    } right={
+    <aside ref={panelRef} className="scroll-mt-4" aria-label="Test and agent details">
+              <AgentTestPanel
+                agentId={agent.id}
+                agentName={agent.name}
+                kbNames={kbNames}
+                held={(tools.data ?? []).filter((t) => draft.toolIds.includes(t.id)).map((t) => ({ name: t.name, approval: t.requiresApproval ? (t.approval ?? 'a review') : null }))}
+                tab={testTab}
+                onTabChange={setTestTab}
+                threadId={testThreadId}
+                onThreadIdChange={setTestThreadId}
+                versions={<HistoryCard versions={versions.data} loading={versions.isPending} onOpen={() => setHistoryOpen(true)} />}
+                newestVersion={agent.version}
+                savedVersions={versions.data ?? []}
+                usedIn={
+                  <>
+                    <UsedInCard agent={agent} />
+                    <RecentRunsCard runs={runs.data} loading={runs.isPending} />
+                  </>
+                }
+              />
+            </aside>
+    } />
+          )}
+
+          <RequestAgentPublishDialog
+            agentId={agent.id}
+            open={publishOpen}
+            onOpenChange={setPublishOpen}
+            version={agent.version}
+            publishedVersion={agent.publishedVersion}
+            owner={teamName}
+            evalSummary={newest?.evalSummary}
+            isPending={requestPublish.isPending}
+            onSubmit={async (note) => {
+              const r = await requestPublish.mutateAsync({ version: agent.version, note });
+              announcePublish({ name: agent.name, version: agent.version, live: r.status === 'approved', liveNote: 'New conversations use it.', decidedBy: `Another publisher in ${teamName}`, reviewId: r.id, openReview: (id) => router.push(`/reviews?review=${id}`) });
             }}
-            onDetach={async (pin) => {
+          />
+          <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
+            <SheetContent className="flex w-full flex-col gap-0 p-0 sm:max-w-lg">
+              <SheetHeader className="border-b px-5 py-4 pr-12">
+                <SheetTitle>Version history</SheetTitle>
+                <SheetDescription>Published versions and the one draft your edits save into. Restoring copies a version into the draft. Workflows pin the published version.</SheetDescription>
+              </SheetHeader>
+              <div className="flex-1 overflow-y-auto px-5 py-4">
+                <VersionHistory
+                  noun="agent"
+                  currentLabel="Current"
+                  restoreConsequence="Workflows keep the version they were published with until they are republished."
+                  versions={versions.data}
+                  isPending={versions.isPending}
+                  isError={versions.isError}
+                  onRetry={() => versions.refetch()}
+                  restoring={restore.isPending}
+                  onRestore={async (v) => {
+                    try {
+                      const a = await restore.mutateAsync(v);
+                      toast.success(`Restored v${v} as v${a.version}`);
+                      setHistoryOpen(false);
+                    } catch (e) {
+                      toast.error('Restore failed', { description: (e as Error).message });
+                    }
+                  }}
+                />
+              </div>
+            </SheetContent>
+          </Sheet>
+          {assist.dialogs}
+          <MakeDefaultAgentDialog agent={agent} open={makeDefaultOpen} onOpenChange={setMakeDefaultOpen} />
+          <DeleteDialog
+            open={deleteOpen}
+            onOpenChange={setDeleteOpen}
+            entityType="agent"
+            entityName={agent.name}
+            requireNameConfirmation
+            description={others(agent).length ? `${agent.name} is used in ${others(agent).map((u) => u.workflowName).join(', ')}. Those steps fail until another agent is chosen.` : 'No other workflow uses this agent.'}
+            isLoading={remove.isPending}
+            onConfirm={async () => {
               try {
-                await detachSkill.mutateAsync(pin.skillId);
-                toast.success(`Detached ${pin.name}`, { description: `Saved ${agent.name} as v${agent.version + 1}.` });
+                await remove.mutateAsync(agent.id);
+                toast.success(`Deleted ${agent.name}`);
+                router.push('/agents');
               } catch (e) {
-                toast.error('Couldn’t detach the skill', { description: (e as Error).message });
+                toast.error('Couldn’t delete the agent', { description: (e as Error).message });
               }
             }}
           />
-          <GuardrailsSection draft={draft} set={set} shown={agent.controls.guardrails} />
-          <LimitsSection draft={draft} set={set} models={modelAliases.data ?? []} tools={tools.data ?? []} />
-          </BuilderFieldset>
-          {canBuild && (
-          <DangerZone
-            items={[
-              ...(pausable
-                ? [
-                    {
-                      title: agent.paused ? 'Resume this agent' : 'Pause this agent',
-                      description: agent.paused ? `New runs use v${agent.publishedVersion} again.` : 'New runs stop using it until you resume it. Runs already started finish. Versions, pins and open publish requests are unchanged.',
-                      action: agent.paused ? 'Resume' : 'Pause',
-                      onClick: togglePaused,
-                      disabled: setPaused.isPending,
-                    },
-                  ]
-                : []),
-              {
-                title: 'Delete this agent',
-                description: liveUse.length ? `Used by ${liveUse.map((u) => u.workflowName).join(', ')}, which is live. Remove it from the workflow first.` : 'Nothing live uses it.',
-                action: 'Delete',
-                destructive: true,
-                disabled: liveUse.length > 0,
-                onClick: () => setDeleteOpen(true),
-              },
-            ]}
-          />
-          )}
-        </div>
-} right={
-<aside ref={panelRef} className="scroll-mt-4" aria-label="Test and agent details">
-          <AgentTestPanel
-            agentId={agent.id}
-            agentName={agent.name}
-            kbNames={kbNames}
-            held={(tools.data ?? []).filter((t) => draft.toolIds.includes(t.id)).map((t) => ({ name: t.name, approval: t.requiresApproval ? (t.approval ?? 'a review') : null }))}
-            tab={testTab}
-            onTabChange={setTestTab}
-            threadId={testThreadId}
-            onThreadIdChange={setTestThreadId}
-            versions={<HistoryCard versions={versions.data} loading={versions.isPending} onOpen={() => setHistoryOpen(true)} />}
-            newestVersion={agent.version}
-            savedVersions={versions.data ?? []}
-            usedIn={
-              <>
-                <UsedInCard agent={agent} />
-                <RecentRunsCard runs={runs.data} loading={runs.isPending} />
-              </>
-            }
-          />
-        </aside>
-} />
-      )}
-
-      <RequestAgentPublishDialog
-        agentId={agent.id}
-        open={publishOpen}
-        onOpenChange={setPublishOpen}
-        version={agent.version}
-        publishedVersion={agent.publishedVersion}
-        owner={teamName}
-        evalSummary={newest?.evalSummary}
-        isPending={requestPublish.isPending}
-        onSubmit={async (note) => {
-          const r = await requestPublish.mutateAsync({ version: agent.version, note });
-          announcePublish({ name: agent.name, version: agent.version, live: r.status === 'approved', liveNote: 'New conversations use it.', decidedBy: `Another publisher in ${teamName}`, reviewId: r.id, openReview: (id) => router.push(`/reviews?review=${id}`) });
-        }}
-      />
-      <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
-        <SheetContent className="flex w-full flex-col gap-0 p-0 sm:max-w-lg">
-          <SheetHeader className="border-b px-5 py-4 pr-12">
-            <SheetTitle>Version history</SheetTitle>
-            <SheetDescription>Published versions and the one draft your edits save into. Restoring copies a version into the draft. Workflows pin the published version.</SheetDescription>
-          </SheetHeader>
-          <div className="flex-1 overflow-y-auto px-5 py-4">
-            <VersionHistory
-              noun="agent"
-              currentLabel="Current"
-              restoreConsequence="Workflows keep the version they were published with until they are republished."
-              versions={versions.data}
-              isPending={versions.isPending}
-              isError={versions.isError}
-              onRetry={() => versions.refetch()}
-              restoring={restore.isPending}
-              onRestore={async (v) => {
-                try {
-                  const a = await restore.mutateAsync(v);
-                  toast.success(`Restored v${v} as v${a.version}`);
-                  setHistoryOpen(false);
-                } catch (e) {
-                  toast.error('Restore failed', { description: (e as Error).message });
-                }
-              }}
-            />
-          </div>
-        </SheetContent>
-      </Sheet>
-      {assist.dialogs}
-      <MakeDefaultAgentDialog agent={agent} open={makeDefaultOpen} onOpenChange={setMakeDefaultOpen} />
-      <DeleteDialog
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
-        entityType="agent"
-        entityName={agent.name}
-        requireNameConfirmation
-        description={others(agent).length ? `${agent.name} is used in ${others(agent).map((u) => u.workflowName).join(', ')}. Those steps fail until another agent is chosen.` : 'No other workflow uses this agent.'}
-        isLoading={remove.isPending}
-        onConfirm={async () => {
-          try {
-            await remove.mutateAsync(agent.id);
-            toast.success(`Deleted ${agent.name}`);
-            router.push('/agents');
-          } catch (e) {
-            toast.error('Couldn’t delete the agent', { description: (e as Error).message });
-          }
-        }}
-      />
-    </PageLayout>
+        </PageTabPanel>
+      </PageLayout>
+    </PageTabs>
   );
 }

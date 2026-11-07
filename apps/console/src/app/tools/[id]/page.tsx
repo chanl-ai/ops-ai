@@ -7,6 +7,7 @@ import { ChevronDown, CircleDashed, Download, GitCompareArrows, KeyRound, ListPl
 import { toast } from 'sonner';
 
 import { PageLayout } from '@/components/page-layout';
+import { PageTabPanel, PageTabs } from '@/components/shared/page-tabs';
 import { ConfirmActionDialog } from '@/components/shared/confirm-action-dialog';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { DialogShell } from '@/components/shared/dialog-shell';
@@ -35,7 +36,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useToolCall } from '@/hooks/governance-queries';
 import { useConnectionOptions } from '@/hooks/systems-queries';
@@ -149,472 +150,476 @@ export default function ModulePage() {
     );
 
   return (
-    <PageLayout
-      icon={<ModuleMark name={m.displayName} className="size-8" />}
-      title={m.displayName}
-      onTitleClick={() => setEditOpen(true)}
-      badge={<ApprovalStateBadge state={m.approvalState} />}
-      description={
-        <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <OperationKindBadge operations={m.operations} />
-          <span className="text-xs">{m.status === 'draft' ? `Draft v${m.version}` : `v${m.version}`}</span>
-          <span>{ownerText(m.ownerTeam)}</span>
-          {baseOfApp(m.connection) && <span className="max-w-full truncate font-mono text-xs">{baseOfApp(m.connection)}</span>}
-          {m.description && <span className="w-full text-sm">{m.description}</span>}
-          <ConnectionChip connection={m.connection} />
-        </span>
-      }
-      backHref="/tools"
-      actions={
-        canBuild && (
-        <div className="flex items-center gap-2">
-          {m.pendingChanges.length > 0 && (
-            <span className="hidden text-xs text-muted-foreground sm:inline" data-testid="unpublished-indicator">
-              {plural(m.pendingChanges.length, 'unpublished change')}
-            </span>
-          )}
-          {tab === 'operations' && m.operations.length > 0 && (
-            <>
-              <Button variant="outline" onClick={() => setImportOpen(true)} data-testid="ops-import">
-                <Download className="size-4" /> Import
-              </Button>
-              <Button onClick={() => setAddOpOpen(true)} data-testid="ops-add">
-                <ListPlus className="size-4" /> Add operation
-              </Button>
-            </>
-          )}
-          {canRequestReview && m.canPublish !== false && (
-            <Button variant="outline" onClick={() => setReviewOpen(true)} data-testid="header-request-review">
-              <ShieldCheck className="size-4" /> Request security review
-            </Button>
-          )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button>
-                Actions <ChevronDown className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem disabled={m.status === 'draft'} onClick={() => setRequestOpen(true)}>
-                <Plus className="size-4" /> Request approval for a workflow
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setEditOpen(true)} data-testid="edit-details">
-                <Pencil className="size-4" /> Edit details
-              </DropdownMenuItem>
-              {!draft && (
-                <DropdownMenuItem disabled={reviewOpenNow} onClick={() => setReviewOpen(true)}>
-                  <ShieldCheck className="size-4" /> Request security review
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive-text" disabled={m.canDelete === false} onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="size-4" /> Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        )
-      }
-      tabs={
-        <Tabs value={tab} onValueChange={(t) => setTab(t as Tab)}>
-          <TabsList>
-            {TABS.map((t) => (
-              <TabsTrigger key={t} value={t}>
-                {LABEL[t]}
-                {t === 'operations' && <span className="ml-1 text-muted-foreground tabular-nums">{m.operations.length}</span>}
-                {t === 'access' && requested > 0 && <span className="ml-1 text-warning-text tabular-nums">{requested}</span>}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      }
-    >
-      <ReadOnlyNotice noun="tools" />
-      <div className="grid gap-4">
-        <div className="flex min-w-0 flex-col gap-4">
-          {m.pendingChanges.length > 0 && (
-            <Alert>
-              <GitCompareArrows className="size-4" />
-              <AlertTitle>{plural(m.pendingChanges.length, 'unpublished change')}</AlertTitle>
-              <AlertDescription className="flex flex-col items-start gap-2">
-                <p>{major ? 'Includes a major change: publishing opens a security review, and workflows need new approvals before they move to it.' : 'Minor changes: workflows take them at their next publish, which re-runs their tests.'}</p>
-                <div className={canBuild && m.canPublish !== false ? 'flex gap-2' : 'hidden'}>
-                  <Button size="sm" onClick={() => (setNote(''), setPublishOpen(true))}>
-                    Publish version
-                  </Button>
-                  <LoadingButton size="sm" variant="outline" isLoading={discard.isPending} onClick={() => discard.mutate(m.id, { onSuccess: () => toast.success('Changes discarded'), onError: fail('discard the changes') })}>
-                    Discard
-                  </LoadingButton>
-                </div>
-              </AlertDescription>
-            </Alert>
-          )}
-          {m.status === 'draft' && (
-            <Alert>
-              <CircleDashed className="size-4" />
-              <AlertTitle>Draft</AlertTitle>
-              <AlertDescription>
-                {m.operations.length
-                  ? 'Workflows cannot request it yet. Check the operations’ access classes and record bindings, then request a security review from the header.'
-                  : 'Add its first operation, by hand or from an MCP server or OpenAPI spec. Review and approval come when you request a security review.'}
-                {m.operations.some((o) => o.executor === 'code') && ' Code operations run in the gateway sandbox, which ships after the first workflow; until then they can be drafted and stubbed but not called.'}
-              </AlertDescription>
-            </Alert>
-          )}
-          {m.status === 'in_review' && (
-            <Alert>
-              <ShieldCheck className="size-4" />
-              <AlertTitle>Security is reviewing v{m.version}</AlertTitle>
-              <AlertDescription>Workflows can request it now; approvals take effect once the review is approved.</AlertDescription>
-            </Alert>
-          )}
-          {m.drift && (
-            <Alert variant="destructive">
-              <ShieldAlert className="size-4" />
-              <AlertTitle>The server’s tools changed since review</AlertTitle>
-              <AlertDescription>The MCP server lists tools that are not in the reviewed snapshot. The gateway refuses them; reviewed operations keep working. Request a re-review to expose the new ones.</AlertDescription>
-            </Alert>
-          )}
-          {!m.reachable && (
-            <Alert variant="destructive">
-              <Unplug className="size-4" />
-              <AlertTitle>Unreachable from the gateway</AlertTitle>
-              <AlertDescription className="flex flex-col items-start gap-2">
-                <p>
-                  {m.connection && m.connection.status !== 'healthy' && m.connection.status !== 'expiring'
-                    ? `Its app ${m.connection.name} is ${m.connection.status === 'revoked' ? 'revoked' : m.connection.status === 'error' ? 'failing to sign in' : 'expired'}. Calls fail into the workflow’s human step until it is fixed in Apps.`
-                    : 'Calls fail into the workflow’s human step until the app responds.'}
-                </p>
-                {m.connection && (
-                  <Button size="sm" variant="outline" className="border-destructive/40 text-foreground" asChild>
-                    {/* An app connected by name is its own app page; the sample connection page is gone. */}
-                    <Link href={`/integrations/apps/${encodeURIComponent(m.connection.id)}`}>Open app</Link>
-                  </Button>
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* Access and Approval stay live: reviewers and Security decide there, not only builders. */}
-          <BuilderFieldset>
-          {tab === 'operations' &&
-            (m.operations.length ? (
-              <div className="flex flex-col gap-3">
-                <OperationsTable
-                  operations={m.operations}
-                  stagedCalls={stagedCalls}
-                  hrefOf={(o) => `/tools/${m.id}/operations/${encodeURIComponent(o.name)}`}
-                  onOpen={(o) => router.push(`/tools/${m.id}/operations/${encodeURIComponent(o.name)}`)}
-                  toggling={updateOp.isPending}
-                  onToggle={(o, enabled) => stageOp(o.id, { enabled }, enabled ? `Exposed ${o.name}` : `Hid ${o.name}`)}
-                />
-              </div>
-            ) : (
-              <EmptyState
-                icon={ListPlus}
-                testId="ops-empty"
-                title="No operations yet"
-                description="Build one request by hand, or import operations from an MCP server or an OpenAPI spec."
-                action={{ label: 'Add operation', onClick: () => setAddOpOpen(true) }}
-                secondaryAction={{ label: 'Import', onClick: () => setImportOpen(true) }}
-              />
-            ))}
-          </BuilderFieldset>
-          {tab === 'access' && (
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm text-muted-foreground">
-                  Each workflow calls only the operations its approval names, until it expires. Decided by {m.ownerTeam}; never by the person who asked.
-                </p>
-                <Button size="sm" variant="outline" disabled={m.status === 'draft'} onClick={() => setRequestOpen(true)}>
-                  <Plus className="size-4" /> Request approval
+    <PageTabs value={tab} onValueChange={(t) => setTab(t as Tab)}>
+      <PageLayout
+        icon={<ModuleMark name={m.displayName} className="size-8" />}
+        title={m.displayName}
+        onTitleClick={() => setEditOpen(true)}
+        badge={<ApprovalStateBadge state={m.approvalState} />}
+        description={
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <OperationKindBadge operations={m.operations} />
+            <span className="text-xs">{m.status === 'draft' ? `Draft v${m.version}` : `v${m.version}`}</span>
+            <span>{ownerText(m.ownerTeam)}</span>
+            {baseOfApp(m.connection) && <span className="max-w-full truncate font-mono text-xs">{baseOfApp(m.connection)}</span>}
+            {m.description && <span className="w-full text-sm">{m.description}</span>}
+            <ConnectionChip connection={m.connection} />
+          </span>
+        }
+        backHref="/tools"
+        actions={
+          canBuild && (
+          <div className="flex items-center gap-2">
+            {m.pendingChanges.length > 0 && (
+              <span className="hidden text-xs text-muted-foreground sm:inline" data-testid="unpublished-indicator">
+                {plural(m.pendingChanges.length, 'unpublished change')}
+              </span>
+            )}
+            {tab === 'operations' && m.operations.length > 0 && (
+              <>
+                <Button variant="outline" onClick={() => setImportOpen(true)} data-testid="ops-import">
+                  <Download className="size-4" /> Import
                 </Button>
-              </div>
-              {m.approvals.length ? (
-                <ApprovalsTable
-                  approvals={m.approvals}
-                  operations={m.operations}
-                  me={me}
-                  busy={decide.isPending || revoke.isPending}
-                  onRevoke={setRevoking}
-                  onDecide={(a, decision) => (decision === 'rejected' ? setRejecting(a) : setApproving(a))}
-                />
-              ) : (
-                <EmptyState icon={KeyRound} title="No workflow is approved" description={m.status === 'draft' ? 'Request a security review first; then workflows can ask for operations.' : 'A workflow asks for the operations it needs, and the owner team approves them with an expiry.'} action={m.status === 'draft' ? undefined : { label: 'Request approval', onClick: () => setRequestOpen(true) }} />
-              )}
-            </div>
-          )}
-          {tab === 'approval' &&
-            (draft ? (
-              <EmptyState
-                icon={CircleDashed}
-                testId="approval-draft"
-                title="No approval gates on a draft"
-                description={`${m.operations.length ? 'Request a security review from the header when the operations are ready.' : 'Add an operation first; then request a security review from the header.'}${m.connection ? '' : ' It has no app yet, so it calls nothing outside the gateway; pick its app on the App tab before review.'}`}
-              />
-            ) : (
-              <ReviewPanel major={m.major} versions={m.versions} drift={m.drift} canRequest={!reviewOpenNow} onRequest={() => setReviewOpen(true)} />
-            ))}
-          <BuilderFieldset>
-          {tab === 'connection' && (
-            <div className="flex flex-col gap-3 rounded-lg border bg-card p-4" data-testid="module-connection">
-              <p className="text-sm text-muted-foreground">
-                Every operation in this module calls {m.system} through this connection. Its credential, scopes, owner and expiry are managed in Connections; this module cannot change them.
-                {m.auth.header && (
-                  <>
-                    {' '}
-                    The gateway sends it as the <code className="font-mono">{m.auth.header}</code> header.
-                  </>
+                <Button onClick={() => setAddOpOpen(true)} data-testid="ops-add">
+                  <ListPlus className="size-4" /> Add operation
+                </Button>
+              </>
+            )}
+            {canRequestReview && m.canPublish !== false && (
+              <Button variant="outline" onClick={() => setReviewOpen(true)} data-testid="header-request-review">
+                <ShieldCheck className="size-4" /> Request security review
+              </Button>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button>
+                  Actions <ChevronDown className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem disabled={m.status === 'draft'} onClick={() => setRequestOpen(true)}>
+                  <Plus className="size-4" /> Request approval for a workflow
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setEditOpen(true)} data-testid="edit-details">
+                  <Pencil className="size-4" /> Edit details
+                </DropdownMenuItem>
+                {!draft && (
+                  <DropdownMenuItem disabled={reviewOpenNow} onClick={() => setReviewOpen(true)}>
+                    <ShieldCheck className="size-4" /> Request security review
+                  </DropdownMenuItem>
                 )}
-                {!m.connection && ' A draft may have none yet.'}
-              </p>
-              <ConnectionSelect
-                value={m.connection}
-                options={connections.data?.map((c) => ({ id: c.id, name: c.name, status: c.status as IntegrationStatus }))}
-                loading={connections.isPending}
-                disabled={setConnection.isPending}
-                onChange={(v) =>
-                  setConnection.mutate(
-                    { id: m.id, connectionId: v },
-                    { onSuccess: (x) => toast.success(`Calls ${x.connection?.name} now`), onError: fail('change the app') },
-                  )
-                }
-              />
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="text-destructive-text" disabled={m.canDelete === false} onClick={() => setDeleteOpen(true)}>
+                  <Trash2 className="size-4" /> Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          )
+        }
+        tabs={
+          <>
+            <TabsList>
+              {TABS.map((t) => (
+                <TabsTrigger key={t} value={t}>
+                  {LABEL[t]}
+                  {t === 'operations' && <span className="ml-1 text-muted-foreground tabular-nums">{m.operations.length}</span>}
+                  {t === 'access' && requested > 0 && <span className="ml-1 text-warning-text tabular-nums">{requested}</span>}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </>
+        }
+      >
+        <PageTabPanel value={tab}>
+          <ReadOnlyNotice noun="tools" />
+          <div className="grid gap-4">
+            <div className="flex min-w-0 flex-col gap-4">
+              {m.pendingChanges.length > 0 && (
+                <Alert>
+                  <GitCompareArrows className="size-4" />
+                  <AlertTitle>{plural(m.pendingChanges.length, 'unpublished change')}</AlertTitle>
+                  <AlertDescription className="flex flex-col items-start gap-2">
+                    <p>{major ? 'Includes a major change: publishing opens a security review, and workflows need new approvals before they move to it.' : 'Minor changes: workflows take them at their next publish, which re-runs their tests.'}</p>
+                    <div className={canBuild && m.canPublish !== false ? 'flex gap-2' : 'hidden'}>
+                      <Button size="sm" onClick={() => (setNote(''), setPublishOpen(true))}>
+                        Publish version
+                      </Button>
+                      <LoadingButton size="sm" variant="outline" isLoading={discard.isPending} onClick={() => discard.mutate(m.id, { onSuccess: () => toast.success('Changes discarded'), onError: fail('discard the changes') })}>
+                        Discard
+                      </LoadingButton>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+              {m.status === 'draft' && (
+                <Alert>
+                  <CircleDashed className="size-4" />
+                  <AlertTitle>Draft</AlertTitle>
+                  <AlertDescription>
+                    {m.operations.length
+                      ? 'Workflows cannot request it yet. Check the operations’ access classes and record bindings, then request a security review from the header.'
+                      : 'Add its first operation, by hand or from an MCP server or OpenAPI spec. Review and approval come when you request a security review.'}
+                    {m.operations.some((o) => o.executor === 'code') && ' Code operations run in the gateway sandbox, which ships after the first workflow; until then they can be drafted and stubbed but not called.'}
+                  </AlertDescription>
+                </Alert>
+              )}
+              {m.status === 'in_review' && (
+                <Alert>
+                  <ShieldCheck className="size-4" />
+                  <AlertTitle>Security is reviewing v{m.version}</AlertTitle>
+                  <AlertDescription>Workflows can request it now; approvals take effect once the review is approved.</AlertDescription>
+                </Alert>
+              )}
+              {m.drift && (
+                <Alert variant="destructive">
+                  <ShieldAlert className="size-4" />
+                  <AlertTitle>The server’s tools changed since review</AlertTitle>
+                  <AlertDescription>The MCP server lists tools that are not in the reviewed snapshot. The gateway refuses them; reviewed operations keep working. Request a re-review to expose the new ones.</AlertDescription>
+                </Alert>
+              )}
+              {!m.reachable && (
+                <Alert variant="destructive">
+                  <Unplug className="size-4" />
+                  <AlertTitle>Unreachable from the gateway</AlertTitle>
+                  <AlertDescription className="flex flex-col items-start gap-2">
+                    <p>
+                      {m.connection && m.connection.status !== 'healthy' && m.connection.status !== 'expiring'
+                        ? `Its app ${m.connection.name} is ${m.connection.status === 'revoked' ? 'revoked' : m.connection.status === 'error' ? 'failing to sign in' : 'expired'}. Calls fail into the workflow’s human step until it is fixed in Apps.`
+                        : 'Calls fail into the workflow’s human step until the app responds.'}
+                    </p>
+                    {m.connection && (
+                      <Button size="sm" variant="outline" className="border-destructive/40 text-foreground" asChild>
+                        {/* An app connected by name is its own app page; the sample connection page is gone. */}
+                        <Link href={`/integrations/apps/${encodeURIComponent(m.connection.id)}`}>Open app</Link>
+                      </Button>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Access and Approval stay live: reviewers and Security decide there, not only builders. */}
+              <BuilderFieldset>
+              {tab === 'operations' &&
+                (m.operations.length ? (
+                  <div className="flex flex-col gap-3">
+                    <OperationsTable
+                      operations={m.operations}
+                      stagedCalls={stagedCalls}
+                      hrefOf={(o) => `/tools/${m.id}/operations/${encodeURIComponent(o.name)}`}
+                      onOpen={(o) => router.push(`/tools/${m.id}/operations/${encodeURIComponent(o.name)}`)}
+                      toggling={updateOp.isPending}
+                      onToggle={(o, enabled) => stageOp(o.id, { enabled }, enabled ? `Exposed ${o.name}` : `Hid ${o.name}`)}
+                    />
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={ListPlus}
+                    testId="ops-empty"
+                    title="No operations yet"
+                    description="Build one request by hand, or import operations from an MCP server or an OpenAPI spec."
+                    action={{ label: 'Add operation', onClick: () => setAddOpOpen(true) }}
+                    secondaryAction={{ label: 'Import', onClick: () => setImportOpen(true) }}
+                  />
+                ))}
+              </BuilderFieldset>
+              {tab === 'access' && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm text-muted-foreground">
+                      Each workflow calls only the operations its approval names, until it expires. Decided by {m.ownerTeam}; never by the person who asked.
+                    </p>
+                    <Button size="sm" variant="outline" disabled={m.status === 'draft'} onClick={() => setRequestOpen(true)}>
+                      <Plus className="size-4" /> Request approval
+                    </Button>
+                  </div>
+                  {m.approvals.length ? (
+                    <ApprovalsTable
+                      approvals={m.approvals}
+                      operations={m.operations}
+                      me={me}
+                      busy={decide.isPending || revoke.isPending}
+                      onRevoke={setRevoking}
+                      onDecide={(a, decision) => (decision === 'rejected' ? setRejecting(a) : setApproving(a))}
+                    />
+                  ) : (
+                    <EmptyState icon={KeyRound} title="No workflow is approved" description={m.status === 'draft' ? 'Request a security review first; then workflows can ask for operations.' : 'A workflow asks for the operations it needs, and the owner team approves them with an expiry.'} action={m.status === 'draft' ? undefined : { label: 'Request approval', onClick: () => setRequestOpen(true) }} />
+                  )}
+                </div>
+              )}
+              {tab === 'approval' &&
+                (draft ? (
+                  <EmptyState
+                    icon={CircleDashed}
+                    testId="approval-draft"
+                    title="No approval gates on a draft"
+                    description={`${m.operations.length ? 'Request a security review from the header when the operations are ready.' : 'Add an operation first; then request a security review from the header.'}${m.connection ? '' : ' It has no app yet, so it calls nothing outside the gateway; pick its app on the App tab before review.'}`}
+                  />
+                ) : (
+                  <ReviewPanel major={m.major} versions={m.versions} drift={m.drift} canRequest={!reviewOpenNow} onRequest={() => setReviewOpen(true)} />
+                ))}
+              <BuilderFieldset>
+              {tab === 'connection' && (
+                <div className="flex flex-col gap-3 rounded-lg border bg-card p-4" data-testid="module-connection">
+                  <p className="text-sm text-muted-foreground">
+                    Every operation in this module calls {m.system} through this connection. Its credential, scopes, owner and expiry are managed in Connections; this module cannot change them.
+                    {m.auth.header && (
+                      <>
+                        {' '}
+                        The gateway sends it as the <code className="font-mono">{m.auth.header}</code> header.
+                      </>
+                    )}
+                    {!m.connection && ' A draft may have none yet.'}
+                  </p>
+                  <ConnectionSelect
+                    value={m.connection}
+                    options={connections.data?.map((c) => ({ id: c.id, name: c.name, status: c.status as IntegrationStatus }))}
+                    loading={connections.isPending}
+                    disabled={setConnection.isPending}
+                    onChange={(v) =>
+                      setConnection.mutate(
+                        { id: m.id, connectionId: v },
+                        { onSuccess: (x) => toast.success(`Calls ${x.connection?.name} now`), onError: fail('change the app') },
+                      )
+                    }
+                  />
+                </div>
+              )}
+              </BuilderFieldset>
+              {tab === 'activity' &&
+                (activity.isPending ? (
+                  <div className="flex flex-col gap-4">
+                    <Skeleton className="h-20 w-full" />
+                    <Skeleton className="h-64 w-full" />
+                  </div>
+                ) : activity.isError ? (
+                  <QueryError what="activity" onRetry={() => activity.refetch()} retrying={activity.isFetching} error={activity.error} />
+                ) : (
+                  <ActivityPanel module={m} activity={activity.data} onOpenCall={setCallId} />
+                ))}
+              {tab === 'versions' && <VersionsPanel versions={m.versions} />}
             </div>
-          )}
-          </BuilderFieldset>
-          {tab === 'activity' &&
-            (activity.isPending ? (
-              <div className="flex flex-col gap-4">
-                <Skeleton className="h-20 w-full" />
-                <Skeleton className="h-64 w-full" />
+          </div>
+
+          <ToolCallSheet
+            row={(tab === 'activity' && activity.data?.recent.find((c) => c.id === callId)) || null}
+            call={call.data}
+            isPending={call.isPending}
+            isError={call.isError}
+            onRetry={() => call.refetch()}
+            onOpenChange={(o) => !o && setCallId(null)}
+          />
+          <EditModuleDialog
+            open={editOpen}
+            onOpenChange={setEditOpen}
+            displayName={m.displayName}
+            description={m.description}
+            moduleName={m.name}
+            saving={updateDetails.isPending}
+            onSave={async (patch) => {
+              await updateDetails.mutateAsync({ id: m.id, ...patch });
+              toast.success('Saved the details');
+              setEditOpen(false);
+            }}
+          />
+          <AddOperationDialog
+            open={addOpOpen}
+            onOpenChange={setAddOpOpen}
+            adding={addOp.isPending}
+            onAdd={async (input) => {
+              await addOp.mutateAsync({ id: m.id, input });
+              toast.success(`Added ${input.name}`, { description: draft ? 'It is part of the draft.' : 'Staged. Workflows get it when you publish a version.' });
+              setAddOpOpen(false);
+            }}
+          />
+          <AddModuleDialog
+            mode="append"
+            existingNames={m.operations.map((o) => o.name)}
+            open={importOpen}
+            onOpenChange={setImportOpen}
+            moduleName={m.displayName}
+            onDiscover={(source) => discover.mutateAsync(source)}
+            discovering={discover.isPending}
+            creating={importOps.isPending}
+            onCreate={async () => undefined}
+            onAppend={async (input) => {
+              const x = await importOps.mutateAsync({ id: m.id, ...input });
+              toast.success(`Imported ${plural(input.operations.length, 'operation')}`, { description: x.drift ? 'The server no longer lists some operations these tools have. See the drift notice.' : undefined });
+              setImportOpen(false);
+            }}
+          />
+
+          <DialogShell
+            open={publishOpen}
+            onOpenChange={setPublishOpen}
+            size="md"
+            title={major ? 'Publish a major version?' : 'Publish a minor version?'}
+            description={major ? 'Security reviews it before any workflow can move to it, and each workflow needs a new approval. Workflows keep calling the current version meanwhile.' : 'Workflows take it at their next publish, which re-runs their tests. Approvals carry over.'}
+            footer={
+              <div className="flex w-full justify-end gap-2">
+                <Button variant="outline" onClick={() => setPublishOpen(false)} disabled={publish.isPending}>
+                  Cancel
+                </Button>
+                <LoadingButton
+                  isLoading={publish.isPending}
+                  disabled={!note.trim()}
+                  onClick={() =>
+                    publish.mutate(
+                      { id: m.id, note },
+                      {
+                        onSuccess: (x) => {
+                          // The Security review is decided on this page until tool reviews move into Reviews, so no review link.
+                          announcePublish({ name: x.displayName, version: x.version, live: !x.pendingReview, liveNote: 'Workflows take it at their next publish.', decidedBy: 'The Security team', where: 'on this page' });
+                          setPublishOpen(false);
+                        },
+                        onError: fail('publish the version'),
+                      },
+                    )
+                  }
+                >
+                  Publish
+                </LoadingButton>
               </div>
-            ) : activity.isError ? (
-              <QueryError what="activity" onRetry={() => activity.refetch()} retrying={activity.isFetching} error={activity.error} />
-            ) : (
-              <ActivityPanel module={m} activity={activity.data} onOpenCall={setCallId} />
-            ))}
-          {tab === 'versions' && <VersionsPanel versions={m.versions} />}
-        </div>
-      </div>
+            }
+          >
+            <div className="flex flex-col gap-4">
+              <ChangeList changes={m.pendingChanges} />
+              <FormField id="pub-note" label="What changed" required hint="Required. Workflows and reviewers read it.">
+                <Textarea id="pub-note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Rate limit raised for month-end volume" />
+              </FormField>
+            </div>
+          </DialogShell>
 
-      <ToolCallSheet
-        row={(tab === 'activity' && activity.data?.recent.find((c) => c.id === callId)) || null}
-        call={call.data}
-        isPending={call.isPending}
-        isError={call.isError}
-        onRetry={() => call.refetch()}
-        onOpenChange={(o) => !o && setCallId(null)}
-      />
-      <EditModuleDialog
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        displayName={m.displayName}
-        description={m.description}
-        moduleName={m.name}
-        saving={updateDetails.isPending}
-        onSave={async (patch) => {
-          await updateDetails.mutateAsync({ id: m.id, ...patch });
-          toast.success('Saved the details');
-          setEditOpen(false);
-        }}
-      />
-      <AddOperationDialog
-        open={addOpOpen}
-        onOpenChange={setAddOpOpen}
-        adding={addOp.isPending}
-        onAdd={async (input) => {
-          await addOp.mutateAsync({ id: m.id, input });
-          toast.success(`Added ${input.name}`, { description: draft ? 'It is part of the draft.' : 'Staged. Workflows get it when you publish a version.' });
-          setAddOpOpen(false);
-        }}
-      />
-      <AddModuleDialog
-        mode="append"
-        existingNames={m.operations.map((o) => o.name)}
-        open={importOpen}
-        onOpenChange={setImportOpen}
-        moduleName={m.displayName}
-        onDiscover={(source) => discover.mutateAsync(source)}
-        discovering={discover.isPending}
-        creating={importOps.isPending}
-        onCreate={async () => undefined}
-        onAppend={async (input) => {
-          const x = await importOps.mutateAsync({ id: m.id, ...input });
-          toast.success(`Imported ${plural(input.operations.length, 'operation')}`, { description: x.drift ? 'The server no longer lists some operations these tools have. See the drift notice.' : undefined });
-          setImportOpen(false);
-        }}
-      />
+          <DialogShell
+            open={reviewOpen}
+            onOpenChange={setReviewOpen}
+            size="sm"
+            title="Request a security review"
+            description={`Security reviews major version ${m.major} once. Every minor version in it reuses the decision.`}
+            footer={
+              <div className="flex w-full justify-end gap-2">
+                <Button variant="outline" onClick={() => setReviewOpen(false)} disabled={review.isPending}>
+                  Cancel
+                </Button>
+                <LoadingButton
+                  isLoading={review.isPending}
+                  onClick={() =>
+                    review.mutate(
+                      { id: m.id, note },
+                      {
+                        onSuccess: () => {
+                          toast.success('Security review requested');
+                          setReviewOpen(false);
+                          setNote('');
+                        },
+                        onError: fail('request the review'),
+                      },
+                    )
+                  }
+                >
+                  Request review
+                </LoadingButton>
+              </div>
+            }
+          >
+            <FormField id="rev-note" label="Note for Security" optional>
+              <Textarea id="rev-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. New tools on the server: delete_contact is not needed and stays hidden" />
+            </FormField>
+          </DialogShell>
 
-      <DialogShell
-        open={publishOpen}
-        onOpenChange={setPublishOpen}
-        size="md"
-        title={major ? 'Publish a major version?' : 'Publish a minor version?'}
-        description={major ? 'Security reviews it before any workflow can move to it, and each workflow needs a new approval. Workflows keep calling the current version meanwhile.' : 'Workflows take it at their next publish, which re-runs their tests. Approvals carry over.'}
-        footer={
-          <div className="flex w-full justify-end gap-2">
-            <Button variant="outline" onClick={() => setPublishOpen(false)} disabled={publish.isPending}>
-              Cancel
-            </Button>
-            <LoadingButton
-              isLoading={publish.isPending}
-              disabled={!note.trim()}
-              onClick={() =>
-                publish.mutate(
-                  { id: m.id, note },
-                  {
-                    onSuccess: (x) => {
-                      // The Security review is decided on this page until tool reviews move into Reviews, so no review link.
-                      announcePublish({ name: x.displayName, version: x.version, live: !x.pendingReview, liveNote: 'Workflows take it at their next publish.', decidedBy: 'The Security team', where: 'on this page' });
-                      setPublishOpen(false);
-                    },
-                    onError: fail('publish the version'),
-                  },
-                )
+          <RequestApprovalDialog
+            open={requestOpen}
+            onOpenChange={setRequestOpen}
+            workflows={(approvalWorkflows?.data ?? []).map((w) => ({ id: w.id, name: w.name }))}
+            operations={m.operations}
+            major={m.major}
+            isPending={request.isPending}
+            onSubmit={(input) => request.mutateAsync({ id: m.id, ...input }).then(() => toast.success('Approval requested', { description: 'It waits in Human Tasks for its reviewers.' }))}
+          />
+          <ConfirmActionDialog
+            open={!!approving}
+            onOpenChange={(o) => !o && setApproving(null)}
+            title={`Approve ${approving?.workflowName ?? ''} in ${approving ? ENV_LABEL[approving.environment].toLowerCase() : ''}?`}
+            consequence={
+              approving
+                ? `${approving.workflowName} can call ${approving.operations.join(', ')} in ${ENV_LABEL[approving.environment].toLowerCase()} from now until ${shortDate(approving.expiresAt)}.${approving.operations.some((n) => m.operations.find((o) => o.name === n)?.approvers === 2) ? ' Operations that need two approvers still need them on every call.' : ''}`
+                : ''
+            }
+            details={
+              approving
+                ? [
+                    { label: 'Workflow', value: approving.workflowName },
+                    { label: 'Operations', value: approving.operations.join(', ') },
+                    { label: 'Environment', value: ENV_LABEL[approving.environment] },
+                    { label: 'Expires', value: shortDate(approving.expiresAt) },
+                    { label: 'Requested by', value: approving.requestedBy },
+                  ]
+                : undefined
+            }
+            runsNow
+            note="Takes effect as soon as you confirm. You can revoke it from this tab later."
+            confirmLabel="Approve"
+            isPending={decide.isPending}
+            onConfirm={() =>
+              decide.mutateAsync({ id: m.id, approvalId: approving!.id, decision: 'approved' }).then(() => {
+                toast.success(`Approved ${approving!.workflowName}`, { description: `${plural(approving!.operations.length, 'operation')} until ${shortDate(approving!.expiresAt)}` });
+                setApproving(null);
+              })
+            }
+          />
+          <ReasonDialog
+            open={!!rejecting}
+            onOpenChange={(o) => !o && setRejecting(null)}
+            title={`Reject ${rejecting?.workflowName ?? ''}?`}
+            description="The workflow keeps any other approval it holds. The requester sees the reason."
+            reasons={REJECT}
+            confirmLabel="Reject"
+            destructive
+            isPending={decide.isPending}
+            onConfirm={(reason) =>
+              decide.mutateAsync({ id: m.id, approvalId: rejecting!.id, decision: 'rejected', reason }).then(() => {
+                toast.success(`Rejected ${rejecting!.workflowName}`);
+                setRejecting(null);
+              }, fail('reject the request'))
+            }
+          />
+          <ReasonDialog
+            open={!!revoking}
+            onOpenChange={(o) => !o && setRevoking(null)}
+            title={`Revoke ${revoking?.workflowName ?? ''}?`}
+            description={`Calls to ${revoking ? plural(revoking.operations.length, 'operation') : 'these operations'} are refused from now; a run mid-call finishes that call. The workflow falls into its human step.`}
+            reasons={REVOKE}
+            confirmLabel="Revoke"
+            destructive
+            isPending={revoke.isPending}
+            onConfirm={(reason) =>
+              revoke.mutateAsync({ id: m.id, approvalIds: [revoking!.id], reason }).then((r) => {
+                if (r.skipped.length) toast.error('Couldn’t revoke', { description: r.skipped[0].reason });
+                else toast.success(`Revoked ${revoking!.workflowName}`);
+                setRevoking(null);
+              }, fail('revoke the approval'))
+            }
+          />
+          <DeleteDialog
+            open={deleteOpen}
+            onOpenChange={setDeleteOpen}
+            entityType="tools"
+            entityName={m.displayName}
+            requireNameConfirmation
+            description={`Its ${plural(m.operations.length, 'operation')} are removed from every agent that holds them.${m.workflows.length ? ` ${plural(m.workflows.length, 'workflow')} still ${m.workflows.length === 1 ? 'holds an approval' : 'hold approvals'}; revoke ${m.workflows.length === 1 ? 'it' : 'them'} first.` : ''}`}
+            isLoading={remove.isPending}
+            onConfirm={async () => {
+              try {
+                await remove.mutateAsync(m.id);
+                toast.success(`Deleted ${m.displayName}`);
+                router.push('/tools');
+              } catch (e) {
+                toast.error(`Couldn’t delete ${m.displayName}`, { description: (e as Error).message });
               }
-            >
-              Publish
-            </LoadingButton>
-          </div>
-        }
-      >
-        <div className="flex flex-col gap-4">
-          <ChangeList changes={m.pendingChanges} />
-          <FormField id="pub-note" label="What changed" required hint="Required. Workflows and reviewers read it.">
-            <Textarea id="pub-note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Rate limit raised for month-end volume" />
-          </FormField>
-        </div>
-      </DialogShell>
-
-      <DialogShell
-        open={reviewOpen}
-        onOpenChange={setReviewOpen}
-        size="sm"
-        title="Request a security review"
-        description={`Security reviews major version ${m.major} once. Every minor version in it reuses the decision.`}
-        footer={
-          <div className="flex w-full justify-end gap-2">
-            <Button variant="outline" onClick={() => setReviewOpen(false)} disabled={review.isPending}>
-              Cancel
-            </Button>
-            <LoadingButton
-              isLoading={review.isPending}
-              onClick={() =>
-                review.mutate(
-                  { id: m.id, note },
-                  {
-                    onSuccess: () => {
-                      toast.success('Security review requested');
-                      setReviewOpen(false);
-                      setNote('');
-                    },
-                    onError: fail('request the review'),
-                  },
-                )
-              }
-            >
-              Request review
-            </LoadingButton>
-          </div>
-        }
-      >
-        <FormField id="rev-note" label="Note for Security" optional>
-          <Textarea id="rev-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. New tools on the server: delete_contact is not needed and stays hidden" />
-        </FormField>
-      </DialogShell>
-
-      <RequestApprovalDialog
-        open={requestOpen}
-        onOpenChange={setRequestOpen}
-        workflows={(approvalWorkflows?.data ?? []).map((w) => ({ id: w.id, name: w.name }))}
-        operations={m.operations}
-        major={m.major}
-        isPending={request.isPending}
-        onSubmit={(input) => request.mutateAsync({ id: m.id, ...input }).then(() => toast.success('Approval requested', { description: 'It waits in Human Tasks for its reviewers.' }))}
-      />
-      <ConfirmActionDialog
-        open={!!approving}
-        onOpenChange={(o) => !o && setApproving(null)}
-        title={`Approve ${approving?.workflowName ?? ''} in ${approving ? ENV_LABEL[approving.environment].toLowerCase() : ''}?`}
-        consequence={
-          approving
-            ? `${approving.workflowName} can call ${approving.operations.join(', ')} in ${ENV_LABEL[approving.environment].toLowerCase()} from now until ${shortDate(approving.expiresAt)}.${approving.operations.some((n) => m.operations.find((o) => o.name === n)?.approvers === 2) ? ' Operations that need two approvers still need them on every call.' : ''}`
-            : ''
-        }
-        details={
-          approving
-            ? [
-                { label: 'Workflow', value: approving.workflowName },
-                { label: 'Operations', value: approving.operations.join(', ') },
-                { label: 'Environment', value: ENV_LABEL[approving.environment] },
-                { label: 'Expires', value: shortDate(approving.expiresAt) },
-                { label: 'Requested by', value: approving.requestedBy },
-              ]
-            : undefined
-        }
-        runsNow
-        note="Takes effect as soon as you confirm. You can revoke it from this tab later."
-        confirmLabel="Approve"
-        isPending={decide.isPending}
-        onConfirm={() =>
-          decide.mutateAsync({ id: m.id, approvalId: approving!.id, decision: 'approved' }).then(() => {
-            toast.success(`Approved ${approving!.workflowName}`, { description: `${plural(approving!.operations.length, 'operation')} until ${shortDate(approving!.expiresAt)}` });
-            setApproving(null);
-          })
-        }
-      />
-      <ReasonDialog
-        open={!!rejecting}
-        onOpenChange={(o) => !o && setRejecting(null)}
-        title={`Reject ${rejecting?.workflowName ?? ''}?`}
-        description="The workflow keeps any other approval it holds. The requester sees the reason."
-        reasons={REJECT}
-        confirmLabel="Reject"
-        destructive
-        isPending={decide.isPending}
-        onConfirm={(reason) =>
-          decide.mutateAsync({ id: m.id, approvalId: rejecting!.id, decision: 'rejected', reason }).then(() => {
-            toast.success(`Rejected ${rejecting!.workflowName}`);
-            setRejecting(null);
-          }, fail('reject the request'))
-        }
-      />
-      <ReasonDialog
-        open={!!revoking}
-        onOpenChange={(o) => !o && setRevoking(null)}
-        title={`Revoke ${revoking?.workflowName ?? ''}?`}
-        description={`Calls to ${revoking ? plural(revoking.operations.length, 'operation') : 'these operations'} are refused from now; a run mid-call finishes that call. The workflow falls into its human step.`}
-        reasons={REVOKE}
-        confirmLabel="Revoke"
-        destructive
-        isPending={revoke.isPending}
-        onConfirm={(reason) =>
-          revoke.mutateAsync({ id: m.id, approvalIds: [revoking!.id], reason }).then((r) => {
-            if (r.skipped.length) toast.error('Couldn’t revoke', { description: r.skipped[0].reason });
-            else toast.success(`Revoked ${revoking!.workflowName}`);
-            setRevoking(null);
-          }, fail('revoke the approval'))
-        }
-      />
-      <DeleteDialog
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
-        entityType="tools"
-        entityName={m.displayName}
-        requireNameConfirmation
-        description={`Its ${plural(m.operations.length, 'operation')} are removed from every agent that holds them.${m.workflows.length ? ` ${plural(m.workflows.length, 'workflow')} still ${m.workflows.length === 1 ? 'holds an approval' : 'hold approvals'}; revoke ${m.workflows.length === 1 ? 'it' : 'them'} first.` : ''}`}
-        isLoading={remove.isPending}
-        onConfirm={async () => {
-          try {
-            await remove.mutateAsync(m.id);
-            toast.success(`Deleted ${m.displayName}`);
-            router.push('/tools');
-          } catch (e) {
-            toast.error(`Couldn’t delete ${m.displayName}`, { description: (e as Error).message });
-          }
-        }}
-      />
-    </PageLayout>
+            }}
+          />
+        </PageTabPanel>
+      </PageLayout>
+    </PageTabs>
   );
 }

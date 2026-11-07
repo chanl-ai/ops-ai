@@ -12,10 +12,11 @@ import { SuiteSheet } from '@/components/assurance/suite-sheet';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { openLink } from '@/components/files/file-actions';
 import { PageLayout } from '@/components/page-layout';
+import { PageTabPanel, PageTabs } from '@/components/shared/page-tabs';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { StatCard, StatCardGrid } from '@/components/shared/stat-card';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAssurance, useExportBundle } from '@/hooks/assurance-queries';
 import { useDownloadFile } from '@/hooks/file-queries';
 import { useListParams } from '@/hooks/use-list-params';
@@ -142,71 +143,75 @@ export default function AssurancePage() {
   const empty = EMPTY[tab];
 
   return (
-    <PageLayout
-      switcher
-      icon={ShieldCheck}
-      title="Evals"
-      description="Suites, runs, gates and evidence for every agent, skill and workflow"
-      tabs={
-        <div className="flex flex-col gap-2">
-          <Tabs value={tab} onValueChange={(t) => changeTab(t as AssuranceTab)}>
-            <TabsList>
-              {TABS.map((t) => (
-                <TabsTrigger key={t} value={t} data-testid={`assurance-tab-${t}`}>
-                  {TAB_LABEL[t]}
-                  {counts && <span className="ml-1 text-muted-foreground tabular-nums">{counts[t]}</span>}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </div>
-      }
-    >
-      {query.isPending ? (
-        <PageSkeleton statCards={4} tableRows={8} />
-      ) : query.isError && !data ? (
-        <QueryError what="assurance" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />
-      ) : (
-        <div className="flex flex-col gap-4">
-          <StatCardGrid columns={4}>
-            <StatCard label="Failing suites" value={stats?.failingSuites} icon={ShieldX} footer={{ text: 'Latest run has a failing case', subtext: 'Agents, skills and workflows' }} />
-            <StatCard label="Gates blocked" value={stats?.gatesBlocked} icon={ShieldAlert} footer={{ text: 'Open publish requests', subtext: 'A blocking step failed' }} />
-            <StatCard label="Live without evidence" value={stats?.liveUnsealed} icon={History} footer={{ text: 'Live versions with no sealed bundle', subtext: 'Published before sealing' }} />
-            <StatCard
-              label="Lowest judge agreement"
-              value={stats?.lowestJudge ? pct(stats.lowestJudge.agreement) : '—'}
-              icon={Gavel}
-              footer={{ text: stats?.lowestJudge?.name ?? 'No judges yet', subtext: 'Agreement with reviewer labels' }}
-            />
-          </StatCardGrid>
+    <PageTabs value={tab} onValueChange={(t) => changeTab(t as AssuranceTab)}>
+      <PageLayout
+        switcher
+        icon={ShieldCheck}
+        title="Evals"
+        description="Suites, runs, gates and evidence for every agent, skill and workflow"
+        tabs={
+          <div className="flex flex-col gap-2">
+            <>
+              <TabsList>
+                {TABS.map((t) => (
+                  <TabsTrigger key={t} value={t} data-testid={`assurance-tab-${t}`}>
+                    {TAB_LABEL[t]}
+                    {counts && <span className="ml-1 text-muted-foreground tabular-nums">{counts[t]}</span>}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </>
+          </div>
+        }
+      >
+        <PageTabPanel value={tab}>
+          {query.isPending ? (
+            <PageSkeleton statCards={4} tableRows={8} />
+          ) : query.isError && !data ? (
+            <QueryError what="assurance" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />
+          ) : (
+            <div className="flex flex-col gap-4">
+              <StatCardGrid columns={4}>
+                <StatCard label="Failing suites" value={stats?.failingSuites} icon={ShieldX} footer={{ text: 'Latest run has a failing case', subtext: 'Agents, skills and workflows' }} />
+                <StatCard label="Gates blocked" value={stats?.gatesBlocked} icon={ShieldAlert} footer={{ text: 'Open publish requests', subtext: 'A blocking step failed' }} />
+                <StatCard label="Live without evidence" value={stats?.liveUnsealed} icon={History} footer={{ text: 'Live versions with no sealed bundle', subtext: 'Published before sealing' }} />
+                <StatCard
+                  label="Lowest judge agreement"
+                  value={stats?.lowestJudge ? pct(stats.lowestJudge.agreement) : '—'}
+                  icon={Gavel}
+                  footer={{ text: stats?.lowestJudge?.name ?? 'No judges yet', subtext: 'Agreement with reviewer labels' }}
+                />
+              </StatCardGrid>
 
-          <DataTableWithViews
-            key={tab}
-            columns={table.columns}
-            data={table.data}
-            getRowId={(r) => ('id' in r ? r.id : r.reviewId)}
-            searchColumn="name"
-            searchPlaceholder={table.search}
-            initialColumnVisibility={table.hidden as Record<string, boolean>}
-            filters={table.filters}
-            onColumnFiltersChange={list.onColumnFiltersChange}
-            serverPagination={{
-              enabled: true,
-              total: data?.pagination.total ?? 0,
-              page: list.pagination.page,
-              pageSize: list.pagination.pageSize,
-              totalPages: data?.pagination.totalPages,
-              onPaginationChange: list.setPagination,
-              isLoading: query.isFetching && query.isPlaceholderData,
-            }}
-            emptyState={<ListEmpty icon={empty.icon} noun={empty.noun} filtered={list.isFiltered} description={empty.description} />}
-          />
-          {tab === 'suites' && counts && counts.suites > 0 && <p className="text-xs text-muted-foreground">{plural(stats?.failingSuites ?? 0, 'suite')} failing. Draft cases from rejected reviews wait for their owner before the gate runs them.</p>}
-        </div>
-      )}
+              <DataTableWithViews
+                key={tab}
+                columns={table.columns}
+                data={table.data}
+                getRowId={(r) => ('id' in r ? r.id : r.reviewId)}
+                searchColumn="name"
+                searchPlaceholder={table.search}
+                initialColumnVisibility={table.hidden as Record<string, boolean>}
+                filters={table.filters}
+                onColumnFiltersChange={list.onColumnFiltersChange}
+                serverPagination={{
+                  enabled: true,
+                  total: data?.pagination.total ?? 0,
+                  page: list.pagination.page,
+                  pageSize: list.pagination.pageSize,
+                  totalPages: data?.pagination.totalPages,
+                  onPaginationChange: list.setPagination,
+                  isLoading: query.isFetching && query.isPlaceholderData,
+                }}
+                emptyState={<ListEmpty icon={empty.icon} noun={empty.noun} filtered={list.isFiltered} description={empty.description} />}
+              />
+              {tab === 'suites' && counts && counts.suites > 0 && <p className="text-xs text-muted-foreground">{plural(stats?.failingSuites ?? 0, 'suite')} failing. Draft cases from rejected reviews wait for their owner before the gate runs them.</p>}
+            </div>
+          )}
 
-      <SuiteSheet suite={tab === 'suites' && openIndex >= 0 ? (sheetRows[openIndex] as AssuranceSuite) : null} open={tab === 'suites' && openIndex >= 0} onOpenChange={(o) => !o && setOpenId(null)} navigation={navigation} />
-      <JudgeSheet judge={tab === 'judges' && openIndex >= 0 ? (sheetRows[openIndex] as AssuranceJudge) : null} open={tab === 'judges' && openIndex >= 0} onOpenChange={(o) => !o && setOpenId(null)} navigation={navigation} />
-    </PageLayout>
+          <SuiteSheet suite={tab === 'suites' && openIndex >= 0 ? (sheetRows[openIndex] as AssuranceSuite) : null} open={tab === 'suites' && openIndex >= 0} onOpenChange={(o) => !o && setOpenId(null)} navigation={navigation} />
+          <JudgeSheet judge={tab === 'judges' && openIndex >= 0 ? (sheetRows[openIndex] as AssuranceJudge) : null} open={tab === 'judges' && openIndex >= 0} onOpenChange={(o) => !o && setOpenId(null)} navigation={navigation} />
+        </PageTabPanel>
+      </PageLayout>
+    </PageTabs>
   );
 }
