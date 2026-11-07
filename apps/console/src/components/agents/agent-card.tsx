@@ -52,7 +52,7 @@ export function AgentCard({ agent }: { agent: Agent }) {
         <AgentAvatar name={agent.name} />
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-sm font-medium">{agent.name}</h3>
-          <p className="line-clamp-1 text-xs text-muted-foreground">{agent.role}</p>
+          <p className="text-xs text-muted-foreground break-words">{agent.role}</p>
         </div>
         <span className="font-mono text-[11px] text-muted-foreground">v{agent.version}</span>
       </div>

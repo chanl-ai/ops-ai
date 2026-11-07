@@ -94,7 +94,7 @@ function AppCard({ system, onConnect }: { system: SystemCard; onConnect: (s: Sys
         </div>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-3 px-4">
-        {system.description && <CardDescription className="line-clamp-1">{system.description}</CardDescription>}
+        {system.description && <CardDescription className="break-words line-clamp-none">{system.description}</CardDescription>}
         {system.category && (
           <div>
             <Badge variant="secondary">{system.category}</Badge>
@@ -106,7 +106,7 @@ function AppCard({ system, onConnect }: { system: SystemCard; onConnect: (s: Sys
           </p>
         )}
         {failure && (
-          <p className="line-clamp-2 text-xs text-warning-text" data-testid={`system-${system.id}-test-failed`}>
+          <p className="text-xs text-warning-text break-words" data-testid={`system-${system.id}-test-failed`}>
             Signed in, but a test call failed: {failure}
           </p>
         )}
@@ -157,7 +157,7 @@ const columns = (onConnect: (s: SystemCard, mode: ConnectMode) => void): ColumnD
         </Avatar>
         <div className="min-w-0">
           <div className="truncate font-medium">{row.original.name}</div>
-          {row.original.description && <div className="max-w-md truncate text-xs text-muted-foreground">{row.original.description}</div>}
+          {row.original.description && <div className="max-w-md text-xs text-muted-foreground break-words">{row.original.description}</div>}
         </div>
       </div>
     ),

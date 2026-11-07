@@ -64,7 +64,7 @@ function columns(onDelete: (m: ToolModule) => void, canBuild: boolean): ColumnDe
             {/* On the name, not in Approval: Approval is not among the default columns, and a module whose secret is
                 not set fails every call that reads it. */}
             {row.original.unsetSecrets ? (
-              <Link href="/integrations/credentials?tab=secrets" className="block truncate text-xs text-warning-text underline-offset-4 hover:underline" data-testid={`unset-secrets-${row.original.id}`}>
+              <Link href="/integrations/credentials?tab=secrets" className="block text-xs text-warning-text underline-offset-4 hover:underline break-words whitespace-normal" data-testid={`unset-secrets-${row.original.id}`}>
                 {plural(row.original.unsetSecrets, 'secret')} not set
               </Link>
             ) : (

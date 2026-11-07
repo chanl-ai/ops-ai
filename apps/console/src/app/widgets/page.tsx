@@ -38,7 +38,7 @@ const columns: ColumnDef<Row>[] = [
     cell: ({ row }) => (
       <div className="min-w-56 max-w-xl">
         <div className="text-sm font-medium">{row.original.name}</div>
-        <div className="line-clamp-2 text-xs text-muted-foreground">{row.original.useWhen}</div>
+        <div className="text-xs text-muted-foreground break-words whitespace-normal">{row.original.useWhen}</div>
       </div>
     ),
     enableHiding: false,

@@ -81,7 +81,7 @@ export function ApprovalsTable({
                     <>
                       {a.decidedBy}
                       <div>{relativeTime(a.decidedAt)}</div>
-                      {a.reason && <div className="max-w-40 truncate" title={a.reason}>{a.reason}</div>}
+                      {a.reason && <div className="max-w-40 break-words whitespace-normal" title={a.reason}>{a.reason}</div>}
                     </>
                   ) : (
                     <>

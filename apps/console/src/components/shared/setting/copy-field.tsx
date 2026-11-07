@@ -4,7 +4,6 @@ import * as React from 'react';
 import { Check, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { MiddleTruncate } from '@/components/shared/setting/middle-truncate';
 import { Button } from '@/components/ui/button';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/components/ui/input-group';
 
@@ -44,7 +43,8 @@ export function CopyField({ value, label, id }: { value: string; label: string; 
 export function CopyId({ value, label = 'id' }: { value: string; label?: string }) {
   return (
     <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-      <MiddleTruncate text={value} head={12} tail={6} />
+      {/* Whole, never cut mid-word: an id is read to be compared or copied. */}
+      <span className="font-mono break-all">{value}</span>
       <CopyIconButton value={value} label={label} />
     </span>
   );

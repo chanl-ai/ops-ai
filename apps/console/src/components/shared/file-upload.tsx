@@ -146,7 +146,7 @@ export function FileUpload({
               {it.phase === 'ready' ? <Paperclip className="size-3" /> : it.phase === 'error' || it.phase === 'blocked' ? <AlertCircle className="size-3" /> : <Loader2 className="size-3 animate-spin" />}
               <span className="max-w-40 truncate">{it.name}</span>
               {/* A composer has no room for a status line, so the chip itself says why a file was refused. */}
-              {it.phase === 'error' || it.phase === 'blocked' ? <span className="max-w-72 truncate">{it.error}</span> : <span className="text-muted-foreground tabular-nums">{it.phase === 'uploading' ? `${Math.round(it.progress * 100)}%` : it.phase === 'scanning' ? 'scanning' : bytes(it.size)}</span>}
+              {it.phase === 'error' || it.phase === 'blocked' ? <span className="max-w-72 break-words">{it.error}</span> : <span className="text-muted-foreground tabular-nums">{it.phase === 'uploading' ? `${Math.round(it.progress * 100)}%` : it.phase === 'scanning' ? 'scanning' : bytes(it.size)}</span>}
               {it.phase === 'error' && it.retryable && (
                 <button type="button" onClick={() => up.retry(it.key)} className="rounded-sm p-0.5 hover:bg-foreground/10" aria-label={`Retry ${it.name}`}>
                   <RotateCcw className="size-3" />

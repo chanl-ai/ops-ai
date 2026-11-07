@@ -45,7 +45,7 @@ export function TemplateCard({ template: t, selected, onSelect }: { template: Ag
         </span>
         {t.category !== 'Start from scratch' && <RiskBadge risk={t.riskTier} />}
       </span>
-      <span className="line-clamp-2 text-xs text-muted-foreground">{t.summary}</span>
+      <span className="text-xs text-muted-foreground break-words">{t.summary}</span>
       <span className="mt-auto flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1">
           <Wrench className="size-3" /> {plural(t.expectedTools.length, 'tool')}

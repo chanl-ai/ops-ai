@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Lists show whole names and descriptions",
+  "description": "Names, descriptions, reasons and errors in lists and page headers wrap instead of stopping mid-word or mid-sentence. Record ids are shown whole and sit under View until you turn them on.",
+  "tag": "improved"
+}

@@ -158,7 +158,9 @@ function useRememberedColumns<T, V>(columns: ColumnDef<T, V>[], initial: Visibil
     for (const c of columns) {
       const k = keyOf(c);
       if (!k || k === 'select' || k === 'actions' || k in initial) continue;
-      if (c.enableHiding === false || shown < SHOWN_BY_DEFAULT) shown++;
+      // The record id is a detail: under View until the person turns it on, and never counted among the five.
+      if ((c.meta as ColumnMeta | undefined)?.kind === 'id') out[k] = false;
+      else if (c.enableHiding === false || shown < SHOWN_BY_DEFAULT) shown++;
       else out[k] = false;
     }
     return out;

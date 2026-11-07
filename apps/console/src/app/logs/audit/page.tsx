@@ -54,12 +54,12 @@ function columns(showTeam: boolean): ColumnDef<Row>[] {
         <div className="max-w-sm min-w-56">
           <div className="flex min-w-0 items-center gap-2">
             <ActionBadge action={row.original.action} />
-            <span className="truncate text-sm" title={row.original.summary}>
+            <span className="text-sm break-words whitespace-normal" title={row.original.summary}>
               {row.original.summary}
             </span>
           </div>
           {row.original.reason && (
-            <div className="mt-0.5 truncate text-xs text-muted-foreground" title={row.original.reason}>
+            <div className="mt-0.5 text-xs text-muted-foreground break-words whitespace-normal" title={row.original.reason}>
               {row.original.reason}
             </div>
           )}
