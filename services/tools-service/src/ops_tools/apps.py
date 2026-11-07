@@ -22,7 +22,7 @@ from ops_identity import ActingPerson
 from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.manifest import Setting
 from ops_plugin_sdk.versions import tools_of
-from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, ValidationFailed
+from ops_service_kit.errors import Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import Envelope, Out, ok
 
 from .auth.kinds import BY_ID, kind_of
@@ -1561,10 +1561,15 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
                     for k, kind in (("agents", "agent"), ("workflows", "workflow"))
                 }
     if apps.calls is not None and card["moduleIds"]:
-        ran = await apps.calls.executions(
-            who, page=1, page_size=20, tool=None, module_ids=list(card["moduleIds"]), thread_id=None, decision=None
-        )
-        usage = list(ran["data"])
+        # The latest calls name their callers, so they come only to whoever reads the call log (activity.view);
+        # anyone else gets the page without them.
+        try:
+            ran = await apps.calls.executions(
+                who, page=1, page_size=20, tool=None, module_ids=list(card["moduleIds"]), thread_id=None, decision=None
+            )
+            usage = list(ran["data"])
+        except Forbidden:
+            usage = []
     skills: list[dict[str, Any]] = []
     plugin = _plugin(apps, card)
     if plugin is not None:

@@ -36,6 +36,8 @@ export interface NavItem {
 
 /** platform-service reads the audit log for whoever holds audit.view in the team (GET /v1/audit). */
 export const AUDIT_LOG: NavNeed = { area: 'audit', action: 'view' };
+/** The gateway's call log names who called what: tools-service reads it under activity.view (GET /v1/executions). */
+export const TOOL_CALL_LOG: NavNeed = { area: 'activity', action: 'view' };
 /** agents-service answers GET /v1/background only for an account admin: access.manage in every team. */
 export const BACKGROUND: NavNeed = { area: 'access', action: 'manage', everyTeam: true };
 
@@ -92,7 +94,7 @@ export const NAV: NavGroup[] = [
     label: 'Govern',
     items: [
       // The one Activity list; tool calls keep their own page until they are an Activity kind.
-      { title: 'Activity', tabTitle: 'Everything', url: '/activity', icon: IconListDetails, tabIcon: IconList, children: [{ title: 'Tool calls', url: '/tools/calls', icon: IconTool }, { title: 'Audit log', url: '/logs/audit', needs: AUDIT_LOG, icon: IconFileSearch }, { title: 'Background', url: '/logs/background', needs: BACKGROUND, icon: IconHeartbeat }] },
+      { title: 'Activity', tabTitle: 'Everything', url: '/activity', icon: IconListDetails, tabIcon: IconList, children: [{ title: 'Tool calls', url: '/tools/calls', needs: TOOL_CALL_LOG, icon: IconTool }, { title: 'Audit log', url: '/logs/audit', needs: AUDIT_LOG, icon: IconFileSearch }, { title: 'Background', url: '/logs/background', needs: BACKGROUND, icon: IconHeartbeat }] },
       { title: 'Access', tabTitle: 'Members', url: '/access', icon: IconShieldLock, tabIcon: IconUsers, children: [{ title: 'Roles', url: '/access/roles', icon: IconUserShield }, { title: 'Tool access', url: '/access/tool-access', icon: IconKey }] },
       // Evals holds testing and governance evidence in one place; the model inventory is one view of it.
       { title: 'Evals', tabTitle: 'Suites', url: '/assurance', icon: IconShieldCheck, tabIcon: IconChecklist, children: [{ title: 'Model inventory', url: '/model-risk', icon: IconCpu }] },

@@ -228,6 +228,14 @@ role holds are left out.
 | audit | run | all | all | no | no | no | no | no |
 | audit | decide | all | all | no | no | no | no | no |
 | audit | manage | all | all | no | no | no | no | no |
+| activity | view | all | all | all | no | all | no | no |
+| activity | create | all | all | no | no | no | no | no |
+| activity | edit | all | all | no | no | no | no | no |
+| activity | publish | all | all | no | no | no | no | no |
+| activity | delete | all | all | no | no | no | no | no |
+| activity | run | all | all | no | no | no | no | no |
+| activity | decide | all | all | no | no | no | no | no |
+| activity | manage | all | all | no | no | no | no | no |
 | workspace | manage | no | no | no | no | no | no | all |
 
 <!-- roles-matrix:end -->

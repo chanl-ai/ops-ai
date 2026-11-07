@@ -41,7 +41,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToolCall } from '@/hooks/governance-queries';
 import { useConnectionOptions } from '@/hooks/systems-queries';
 import { useCurrentPerson } from '@/hooks/auth-queries';
-import { useCanBuild } from '@/hooks/me-queries';
+import { useCanBuild, useNavAllows } from '@/hooks/me-queries';
 import { useWorkflows } from '@/hooks/queries';
 import {
   useAddOperation,
@@ -62,6 +62,7 @@ import {
 } from '@/hooks/tool-module-queries';
 import { useTabParam } from '@/hooks/use-tab-param';
 import { plural, shortDate } from '@/lib/format';
+import { TOOL_CALL_LOG } from '@/lib/nav';
 import type { IntegrationStatus } from '@/lib/types/integrations';
 import type { ModuleApproval, OperationPatch } from '@/lib/types/tool-modules';
 
@@ -74,7 +75,11 @@ const REVOKE = ['No longer needed', 'Workflow retired', 'Security review finding
 export default function ModulePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [tab, setTab] = useTabParam(TABS, 'operations');
+  const [asked, setTab] = useTabParam(TABS, 'operations');
+  // Activity lists the latest calls with their callers, read under the call log's cell; without it the tab is not
+  // offered and a link to it opens Operations.
+  const mayReadCalls = useNavAllows()(TOOL_CALL_LOG) === true;
+  const tab: Tab = asked === 'activity' && !mayReadCalls ? 'operations' : asked;
   const teamCanBuild = useCanBuild();
   const query = useToolModule(id);
   const activity = useModuleActivity(id, tab === 'activity');
@@ -220,7 +225,7 @@ export default function ModulePage() {
         tabs={
           <>
             <TabsList>
-              {TABS.map((t) => (
+              {TABS.filter((t) => t !== 'activity' || mayReadCalls).map((t) => (
                 <TabsTrigger key={t} value={t}>
                   {LABEL[t]}
                   {t === 'operations' && <span className="ml-1 text-muted-foreground tabular-nums">{m.operations.length}</span>}

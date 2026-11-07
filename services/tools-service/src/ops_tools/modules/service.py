@@ -878,7 +878,9 @@ class ModuleService:
         return await self._detail(await self._find(who, module_id), who.team, who)
 
     async def activity(self, who: Caller, module_id: str) -> dict[str, Any]:
-        """Calls per UTC day over the last 14 days from the call log, days without calls at zero."""
+        """Calls per UTC day over the last 14 days from the call log, days without calls at zero, and the latest calls
+        with their callers: the call log's view of one module, so read under activity.view as the log is."""
+        _can(who, "activity", "view", what="the tool-call log")
         m = await self._find(who, module_id)
         today = self.clock().astimezone(UTC).date()
         first = today - timedelta(days=13)
@@ -917,7 +919,9 @@ class ModuleService:
         key: str | None = None,
     ) -> dict[str, Any]:
         """Every call made in the caller's team, newest first, on the modules that team sees. `key` finds the calls
-        sent under one idempotency key: how a workflow run reconciles a write after a crash."""
+        sent under one idempotency key: how a workflow run reconciles a write after a crash. The log names who called
+        what, so it is read under activity.view."""
+        _can(who, "activity", "view", what="the tool-call log")
         mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self._sees(who, m)}
         scope = None if not who.verified and who.team.scope == "all" else list(mods)
         if module_ids is not None:
@@ -959,6 +963,7 @@ class ModuleService:
     async def execution(self, who: Caller, call_id: str) -> dict[str, Any]:
         """One call from the gateway's log, so an Activity row opens to its call. The same scope as the list: another
         team's call, or one on a module the caller's team does not see, is not found, never a different answer."""
+        _can(who, "activity", "view", what="the tool-call log")
         row = await self.calls.get(call_id, tenant_id=who.tenant_id, team_ids=self._call_teams(who))
         if row is None:
             raise NotFound("Call")

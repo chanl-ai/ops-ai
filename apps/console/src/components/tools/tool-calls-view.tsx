@@ -3,13 +3,14 @@
 import * as React from 'react';
 import Link from 'next/link';
 import type { ColumnDef } from '@tanstack/react-table';
-import { AlertCircle, Ban, Clock, ScrollText, UserCheck } from 'lucide-react';
+import { AlertCircle, Ban, Clock, ScrollText, ShieldCheck, UserCheck } from 'lucide-react';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { Badge } from '@/components/ui/badge';
 import { APPROVAL_LABEL, ApprovalCell, cad, CALL_STATUS_LABEL, CallStatusText, GATEWAY_LABEL, GatewayIcon, OPERATION_LABEL, OperationBadge, options } from '@/components/logs/log-meta';
 import { ToolCallSheet } from '@/components/logs/tool-call-sheet';
+import { EmptyState } from '@/components/shared/empty-state';
 import { StopRowClick } from '@/components/shared/form-field';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
@@ -18,8 +19,10 @@ import { StatCard, StatCardGrid } from '@/components/shared/stat-card';
 import { idColumn } from '@/components/shared/id-column';
 import { selectColumn } from '@/components/shared/select-column';
 import { useToolCall, useToolCalls } from '@/hooks/governance-queries';
+import { useNavAllows } from '@/hooks/me-queries';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { count, dateTime, ms, pct, relativeTime } from '@/lib/format';
+import { TOOL_CALL_LOG } from '@/lib/nav';
 import type { ToolCallFilters, ToolCallRow } from '@/lib/types/governance';
 
 type Row = ToolCallRow & { onRowClick: (r: ToolCallRow) => void };
@@ -122,7 +125,9 @@ const columns: ColumnDef<Row>[] = [
  */
 export function ToolCallsView({ fixed, run, q, totals = true, emptyText }: { fixed?: Pick<ToolCallFilters, 'tool' | 'moduleId'>; run?: string | null; q?: string | null; totals?: boolean; emptyText?: string }) {
   const list = useListParams<ToolCallFilters>('target', 20);
-  const query = useToolCalls({ ...list.params, filters: { ...list.params.filters, ...fixed } });
+  // The log names who called what, so it is read under the audit cell; anyone else is told so without a request.
+  const may = useNavAllows()(TOOL_CALL_LOG);
+  const query = useToolCalls({ ...list.params, filters: { ...list.params.filters, ...fixed } }, may === true);
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const detail = useToolCall(activeId);
 
@@ -143,7 +148,9 @@ export function ToolCallsView({ fixed, run, q, totals = true, emptyText }: { fix
 
   return (
     <>
-      {query.isPending ? (
+      {may === false ? (
+        <EmptyState icon={ShieldCheck} title="Tool calls are read by who reads the audit log" description="The log names who called each tool. Ask an admin of this team for the role that reads it." testId="tool-calls-refused" />
+      ) : query.isPending ? (
         <PageSkeleton statCards={totals ? 4 : 0} tableRows={10} />
       ) : query.isError && !query.data ? (
         <QueryError what="tool calls" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />

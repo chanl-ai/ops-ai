@@ -25,9 +25,11 @@ import { PluginUpdatePanel } from '@/components/connections/plugin-update-panel'
 import { useSignInWindow } from '@/components/connections/sign-in';
 import { AppStateBadge } from '@/components/connections/systems-grid';
 import { ToolCallsView } from '@/components/tools/tool-calls-view';
+import { useNavAllows } from '@/hooks/me-queries';
 import { type SystemCard, useApp, useConnectionKinds, useStartSignIn, useTestAccount } from '@/hooks/systems-queries';
 import type { Kinds } from '@/lib/connect-plan';
 import { initials, plural } from '@/lib/format';
+import { TOOL_CALL_LOG } from '@/lib/nav';
 
 
 function Logo({ name, logo }: { name: string; logo?: string | null }) {
@@ -49,6 +51,7 @@ export function AppPageView({ appId }: { appId: string }) {
   const kinds = useConnectionKinds();
   const start = useStartSignIn();
   const router = useRouter();
+  const allows = useNavAllows();
   const [setUp, setSetUp] = React.useState(false);
   // The one Connect: a window that asks the auth config, what it leaves open, test or live and team or mine.
   const [connecting, setConnecting] = React.useState(false);
@@ -97,12 +100,14 @@ export function AppPageView({ appId }: { appId: string }) {
   };
 
   const toolsAdded = data.tools.filter((t) => t.added ?? true).length;
+  const mayReadCalls = allows(TOOL_CALL_LOG) === true;
   const tabs: [string, string][] = [
     ...(builtIn ? [] : ([['accounts', `Accounts · ${accounts.length}`]] as [string, string][])),
     ['tools', card.kind === 'plugin' ? `Tools · ${toolsAdded} of ${data.tools.length} added` : 'Tools'],
     ...(builtIn || !configs.length ? [] : ([['auth', `Auth configs · ${configs.length}`]] as [string, string][])),
     ['resources', 'Resources'],
-    ['logs', 'Logs'],
+    // The call log names who called each tool, so it is offered only with its cell (lib/nav.ts TOOL_CALL_LOG).
+    ...(mayReadCalls ? ([['logs', 'Logs']] as [string, string][]) : []),
     ['settings', 'Settings'],
   ];
   const showAccounts = (id: string) => (setConfig(id), setTab('accounts'));
