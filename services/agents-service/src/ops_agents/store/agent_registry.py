@@ -184,6 +184,18 @@ class AgentRegistry:
             team = (await c.execute(q)).scalar()
         return str(team) if team else None
 
+    async def owner_teams(self, agent_ids: set[str]) -> dict[str, str]:
+        """owner_team for each of these agents in one query, so a list of publish requests finds each one's team
+        without a read per request; an agent with no team is left out. Never for showing the agents."""
+        if not agent_ids:
+            return {}
+        a = registry_agents
+        q = sa.select(a.c.id, a.c.team_id).where(
+            a.c.id.in_(sorted(agent_ids)), any_team(a, "the team each publish request is a task of")
+        )
+        async with self.engine.connect() as c:
+            return {str(i): str(t) for i, t in (await c.execute(q)).all() if t}
+
     async def row(self, agent_id: str, c: AsyncConnection | None = None, *, lock: bool = False) -> dict[str, Any]:
         """The agent, when the acting team owns it; another team's agent is NotFound, so its routes answer 404."""
         q = sa.select(registry_agents).where(registry_agents.c.id == agent_id, team_visible(registry_agents))

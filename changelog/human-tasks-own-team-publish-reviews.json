@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Human Tasks shows only your team's publish reviews",
+  "description": "A publish review now appears and counts only in the team that owns what it publishes, and a tool's security review only in the Security team. Other teams no longer see or count it, and the team that asked can still open it.",
+  "tag": "fix"
+}

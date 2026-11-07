@@ -98,16 +98,59 @@ async def view(
 
 
 async def get(rt: Runtime, request_id: str) -> dict[str, Any]:
-    return await view(rt, await registry(rt).request(request_id))
+    req = await registry(rt).request(request_id)
+    if not await in_acting_team(rt, req, asked_from=True):
+        raise NotFound(f"Publish request {request_id}")
+    return await view(rt, req)
+
+
+async def in_acting_team(rt: Runtime, req: dict[str, Any], *, asked_from: bool = False) -> bool:
+    """A publish request is a task of the team that owns what it ships (`_owners`), as a run's review is its team's: it
+    is listed and counted there, and in every team when no team owns it. A security change to a tool module is the
+    Security team's. `asked_from` also lets the team that asked open it by id (a module's page shows its pending
+    review). Requests are stored per tenant, so this is the team rule for them; with no acting team (a service acting
+    for the tenant) every request is read."""
+    acting = isolation.team()
+    if acting is None:
+        return True
+    key = (str(req["subject_id"]), int(req["version"]))
+    versions = await engine_lifecycle.definitions(rt).pinned({key}) if req["kind"] == engine_lifecycle.KIND else {}
+    [owner] = await _owners(rt, [req], versions)
+    asked = req["body"].get("teamId") if asked_from else None
+    return owner is None or acting in (owner, asked)
+
+
+async def _owners(
+    rt: Runtime, requests: list[dict[str, Any]], versions: dict[tuple[str, int], dict[str, Any]]
+) -> list[str | None]:
+    """subject_team of each request, with agents read in one query and workflows from the versions already read
+    (`versions`, the requested versions), so a list's reads do not grow with its requests."""
+    agents = await registry(rt).owner_teams({str(r["subject_id"]) for r in requests if r["kind"] == "agent"})
+    out: list[str | None] = []
+    for r in requests:
+        if r["kind"] == "agent":
+            out.append(agents.get(str(r["subject_id"])))
+        elif r["kind"] == engine_lifecycle.KIND:
+            row = versions.get((str(r["subject_id"]), int(r["version"]))) or {}
+            out.append(str(row.get("team_id") or "") or None)
+        else:
+            out.append(await subject_team(rt, r))
+    return out
 
 
 async def all_views(rt: Runtime) -> list[dict[str, Any]]:
-    """Every publish request, pending and decided, for the Reviews list. A tool access request still pending is not
-    one: it runs as its system workflow now, and listing both would show it twice."""
+    """The acting team's publish requests (`in_acting_team`), pending and decided, for the Reviews list. A tool
+    access request still pending is not one: it runs as its system workflow now, and listing both would show it
+    twice."""
     out: list[dict[str, Any]] = []
     requests = await registry(rt).all_requests()
     pinned = {(str(r["subject_id"]), int(r["version"])) for r in requests if r["kind"] == engine_lifecycle.KIND}
-    names = {k: str(row["name"]) for k, row in (await engine_lifecycle.definitions(rt).pinned(pinned)).items()}
+    versions = await engine_lifecycle.definitions(rt).pinned(pinned)
+    acting = isolation.team()
+    if acting is not None:
+        owners = await _owners(rt, requests, versions)
+        requests = [r for r, owner in zip(requests, owners, strict=True) if owner is None or owner == acting]
+    names = {k: str(row["name"]) for k, row in versions.items()}
     asked = {(str(r["subject_id"]), int(r["version"])) for r in requests if r["kind"] == "agent"}
     agents = await registry(rt).named_versions(asked)
     for req in requests:
