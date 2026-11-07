@@ -10,7 +10,7 @@ OPS_AS = --as '$(AS)' $(if $(TEAM),--team $(TEAM)) $(if $(JSON),--json)
 # $(call need,VAR,example): stops the target with what to give when VAR is empty.
 need = $(if $($(1)),,$(error make $@: give $(1)=, e.g. $(2)))
 
-.PHONY: chat chat-script assistant-evals chat-show chat-calls chat-agents chat-accounts chat-kbs chat-threads chat-connected \
+.PHONY: chat chat-script assistant-evals assistant-walk chat-show chat-calls chat-agents chat-accounts chat-kbs chat-threads chat-connected \
 	chat-approve chat-reject chat-submit \
 	kb-bases kb-show kb-documents kb-sources kb-source kb-items kb-add-file kb-add-text kb-sync kb-search kb-changes \
 	kb-change \
@@ -44,6 +44,8 @@ assistant-evals: ## make assistant-evals [REAL=1]: the team assistant's scripted
 	@$(if $(REAL),$(MAKE) -s demo-model ALIAS=$(ASSISTANT_ALIAS) PROVIDER=$(ASSISTANT_PROVIDER) MODEL=$(REAL_MODEL) EFFORT=$(REAL_EFFORT) &&) \
 	$(OPS_CLI) chat $(OPS_AS) evals docs/usecases/chat/assistant $(if $(REAL),--real --max-calls $(MAX_CALLS)); status=$$?; \
 	$(if $(REAL),$(MAKE) -s demo-model ALIAS=$(ASSISTANT_ALIAS) PROVIDER=$(ASSISTANT_PROVIDER) MODEL=fake;) exit $$status
+assistant-walk: ## make assistant-walk [SHOTS=dir]: the first teams' assistant scripts in a browser on the console, screenshots at 1280 and 390 (no model call on the fake)
+	@SHOTS='$(SHOTS)' node $(ROOT)/scripts/assistant-walk.mjs
 chat-show: ## make chat-show THREAD=th_… AS=james: the conversation as the chat reads it
 	$(call need,THREAD,THREAD=th_…)
 	@$(OPS_CLI) chat $(OPS_AS) show $(THREAD)
