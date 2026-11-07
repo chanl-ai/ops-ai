@@ -3,13 +3,13 @@
 import * as React from 'react';
 
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useChangelog } from '@/hooks/use-changelog';
 import { type ChangelogEntry, isMajor } from '@/lib/changelog';
 import { dateOnly } from '@/lib/format';
-import { cn } from '@/lib/utils';
 
 const TAG: Record<ChangelogEntry['tag'], { label: string; variant: 'default' | 'secondary' | 'outline' }> = {
   new: { label: 'New', variant: 'default' },
@@ -20,7 +20,7 @@ const TAG: Record<ChangelogEntry['tag'], { label: string; variant: 'default' | '
 /** The What's new mark: a ring with an arc inside, turned a quarter. */
 function WhatsNewMark() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-7" aria-hidden>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-4" aria-hidden>
       <g transform="rotate(-90 12 12)">
         <path d="M5.636 5.636a9 9 0 1 0 12.728 12.728a9 9 0 0 0 -12.728 -12.728z" />
         <path d="M16.243 7.757a6 6 0 0 0 -8.486 0" />
@@ -46,12 +46,13 @@ function EntryRow({ entry: e }: { entry: ChangelogEntry }) {
 }
 
 /**
- * What's new: a floating button, bottom-right on every console page, its popover opening
- * upward with a Coming next tab for the roadmap and the build's version in its header. A dot marks an entry this
+ * What's new: a button in the header beside notifications, on every console page, where it covers no page control
+ * (a floating corner button sat over table Copy buttons and the chat's Send at phone width). Its popover opens downward
+ * with a Coming next tab for the roadmap and the build's version in its header. A dot marks an entry this
  * person has not opened, and a ring pulses now and then while it is closed; opening the popover clears the dot.
  */
 export function WhatsNew() {
-  const { entries, roadmap, unseen, markSeen, version, feedbackOn } = useChangelog();
+  const { entries, roadmap, unseen, markSeen, version } = useChangelog();
   const [open, setOpen] = React.useState(false);
   const [pulsing, setPulsing] = React.useState(false);
   const [showMinor, setShowMinor] = React.useState(false);
@@ -72,28 +73,21 @@ export function WhatsNew() {
     };
   }, [open]);
   return (
-    // Above the dev Feedback button (16px from the corner) when it shares the corner, so neither covers the other.
-    <div className={cn('fixed right-4 z-50', feedbackOn ? 'bottom-14' : 'bottom-4')}>
-      <Popover
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (next) markSeen();
-        }}
-      >
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            className="relative flex size-12 items-center justify-center rounded-full bg-foreground text-background shadow-lg transition-transform select-none hover:scale-105 active:scale-95"
-            aria-label="What’s new"
-            data-testid="whats-new-trigger"
-          >
-            {pulsing && <span className="absolute inset-0 animate-ping rounded-full border-2 border-primary/40" aria-hidden />}
-            <WhatsNewMark />
-            {unseen && <span className="absolute top-0 right-0 size-3 rounded-full bg-primary ring-2 ring-background" data-testid="whats-new-dot" aria-label="New changes" />}
-          </button>
-        </PopoverTrigger>
-        <PopoverContent side="top" align="end" sideOffset={12} className="w-80 max-w-[calc(100vw-2rem)] p-0" data-testid="whats-new-popup">
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) markSeen();
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="icon" className="relative size-8" aria-label="What’s new" data-testid="whats-new-trigger">
+          {pulsing && <span className="absolute inset-0 animate-ping rounded-full border-2 border-primary/40" aria-hidden />}
+          <WhatsNewMark />
+          {unseen && <span className="absolute top-1 right-1 size-2 rounded-full bg-primary ring-2 ring-background" data-testid="whats-new-dot" aria-label="New changes" />}
+        </Button>
+      </PopoverTrigger>
+        <PopoverContent side="bottom" align="end" sideOffset={8} className="w-80 max-w-[calc(100vw-2rem)] p-0" data-testid="whats-new-popup">
           <Tabs defaultValue="new" className="gap-0">
             <div className="flex items-center justify-between gap-2 p-3">
               <TabsList>
@@ -151,7 +145,6 @@ export function WhatsNew() {
             </p>
           )}
         </PopoverContent>
-      </Popover>
-    </div>
+    </Popover>
   );
 }

@@ -9,6 +9,7 @@ import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { Badge } from '@/components/ui/badge';
 import { APPROVAL_LABEL, ApprovalCell, cad, CALL_STATUS_LABEL, CallStatusText, GATEWAY_LABEL, GatewayIcon, OPERATION_LABEL, OperationBadge, options } from '@/components/logs/log-meta';
+import { FailureReason } from '@/components/logs/failure-reason';
 import { ToolCallSheet } from '@/components/logs/tool-call-sheet';
 import { StopRowClick } from '@/components/shared/form-field';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
@@ -32,6 +33,8 @@ const columns: ColumnDef<Row>[] = [
   {
     accessorKey: 'at',
     header: ({ column }) => <DataTableColumnHeader column={column} title="Time" />,
+    // On a phone the call's name and why it failed take the row; the time is on the call's details.
+    meta: { kind: 'date', className: 'max-sm:hidden' },
     cell: ({ row }) => (
       <span className="whitespace-nowrap text-muted-foreground tabular-nums" title={dateTime(row.original.at)}>
         {relativeTime(row.original.at)}
@@ -43,6 +46,8 @@ const columns: ColumnDef<Row>[] = [
     id: 'target',
     accessorFn: (r) => `${r.title ?? ''} ${r.target} ${r.system} ${r.workflowName} ${r.agentName} ${r.runId} ${r.caseId ?? ''} ${r.record ?? ''}`,
     header: ({ column }) => <DataTableColumnHeader column={column} title="Tool or model" />,
+    // The call's name column, pinned so its failure reason stays on screen however wide the table is.
+    meta: { kind: 'name' },
     cell: ({ row }) => (
       <div className="flex max-w-72 min-w-48 items-start gap-2">
         <GatewayIcon gateway={row.original.gateway} className="mt-0.5" />
@@ -53,6 +58,7 @@ const columns: ColumnDef<Row>[] = [
             {row.original.target}
           </code>
           <div className="truncate text-xs text-muted-foreground">{row.original.app ?? row.original.system}</div>
+          <FailureReason call={row.original} />
         </div>
       </div>
     ),
@@ -65,16 +71,12 @@ const columns: ColumnDef<Row>[] = [
   {
     accessorKey: 'workflowName',
     header: ({ column }) => <DataTableColumnHeader column={column} title="Workflow" />,
-    cell: ({ row }) => (
-      <div className="max-w-56 min-w-36">
-        <div className="truncate text-sm" title={row.original.workflowName}>
-          {row.original.workflowName}
-        </div>
-        <div className="truncate text-xs text-muted-foreground" title={row.original.agentName}>
-          {row.original.agentName}
-        </div>
-      </div>
-    ),
+    cell: ({ row }) => <NameCell name={row.original.workflowName} />,
+  },
+  {
+    accessorKey: 'agentName',
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Agent" />,
+    cell: ({ row }) => <NameCell name={row.original.agentName} />,
   },
   {
     // Whose account of the app the call signed in with: a person's own, or the team account.
@@ -111,10 +113,26 @@ const columns: ColumnDef<Row>[] = [
   { accessorKey: 'operation', header: ({ column }) => <DataTableColumnHeader column={column} title="Operation" />, cell: ({ row }) => <OperationBadge operation={row.original.operation} />, filterFn: facetFilterFn },
   { accessorKey: 'record', header: ({ column }) => <DataTableColumnHeader column={column} title="Bound record" />, cell: ({ row }) => <span className="text-xs whitespace-nowrap">{row.original.record ?? '—'}</span> },
   { id: 'approval', accessorFn: (r) => r.approval.kind, header: ({ column }) => <DataTableColumnHeader column={column} title="Approval" />, cell: ({ row }) => <ApprovalCell approval={row.original.approval} />, filterFn: facetFilterFn },
-  { accessorKey: 'status', header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />, cell: ({ row }) => <CallStatusText status={row.original.status} replayOf={row.original.replayOf} />, filterFn: facetFilterFn },
+  {
+    accessorKey: 'status',
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+    cell: ({ row }) => <CallStatusText status={row.original.status} replayOf={row.original.replayOf} />,
+    filterFn: facetFilterFn,
+  },
   { accessorKey: 'latencyMs', header: ({ column }) => <DataTableColumnHeader column={column} title="Latency" />, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground tabular-nums">{ms(row.original.latencyMs)}</span> },
   { accessorKey: 'cost', header: ({ column }) => <DataTableColumnHeader column={column} title="Cost" />, cell: ({ row }) => <span className="whitespace-nowrap tabular-nums">{row.original.cost != null ? cad(row.original.cost) : '—'}</span> },
 ];
+
+/** A workflow or agent the API named, or a dash for a call that had none. */
+function NameCell({ name }: { name?: string | null }) {
+  return name ? (
+    <span className="block max-w-56 min-w-28 truncate text-sm" title={name}>
+      {name}
+    </span>
+  ) : (
+    <span className="text-xs text-muted-foreground">—</span>
+  );
+}
 
 /**
  * The tool-call log: every gateway call, newest first, each opening its sheet. The Tool calls page shows all of them;

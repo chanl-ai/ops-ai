@@ -10,6 +10,7 @@ import { QueryError } from '@/components/shared/query-states';
 import { KeyValues, Section } from '@/components/shared/surface';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { failureWords } from '@/lib/failure-words';
 import { count, dateTime, ms } from '@/lib/format';
 import type { ToolCallDetail, ToolCallRow } from '@/lib/types/governance';
 
@@ -72,6 +73,7 @@ export function ToolCallSheet({
                 ...(c.caseId ? ([['Case', <Link key="c" href={`/cases/${c.caseId}`} className="font-mono text-xs underline-offset-4 hover:underline">{c.caseId}</Link>]] as [string, ReactNode][]) : []),
                 ...(call?.identity ? ([['Identity', <code key="i" className="font-mono text-xs">{call.identity}</code>]] as [string, ReactNode][]) : []),
                 ...(c.step ? ([['Step', <code key="s" className="font-mono text-xs">{c.step}</code>]] as [string, ReactNode][]) : []),
+                ...(c.status === 'error' ? ([['Failed', failureWords(c.errorCode, c.errorMessage)], ...(c.errorCode ? [['Error code', <code key="e" className="font-mono text-xs">{c.errorCode}</code>]] : [])] as [string, ReactNode][]) : []),
                 ['Latency', ms(c.latencyMs)],
                 ...(c.tokens ? ([['Tokens', `${count(c.tokens.input)} in · ${count(c.tokens.output)} out`], ['Cost', c.cost != null ? cad(c.cost) : undefined]] as [string, ReactNode][]) : []),
                 ...(call?.requestId ? ([['Request id', <code key="q" className="font-mono text-xs">{call.requestId}</code>]] as [string, ReactNode][]) : []),

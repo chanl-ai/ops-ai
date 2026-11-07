@@ -316,8 +316,8 @@ class Salesforce:
             if ARTICLES in q:
                 return JSONResponse(self._articles_page(q, 0))
             if PLUGIN_CASE_ID in q or "00044818" in q:
-                return JSONResponse({"totalSize": 1, "done": True, "records": [dict(self.cases[PLUGIN_CASE_ID])]})
-            return JSONResponse({"totalSize": 1, "done": True, "records": [dict(self.case)]})
+                return JSONResponse({"totalSize": 1, "done": True, "records": [typed(self.cases[PLUGIN_CASE_ID])]})
+            return JSONResponse({"totalSize": 1, "done": True, "records": [typed(self.case)]})
         if path.startswith(f"{API}/query/"):
             locator = path.rsplit("/", 1)[1]
             q, _, offset = locator.partition("-")
@@ -448,7 +448,7 @@ class Salesforce:
             rows = [c for c in rows if after is not None and _when(c["LastModifiedDate"]) > after]  # type: ignore[operator]
         if account := re.search(r"AccountId = '(\w+)'", q):
             rows = [c for c in rows if c["AccountId"] == account[1]]
-        page = rows[offset : offset + PAGE_SIZE]
+        page = [typed(c) for c in rows[offset : offset + PAGE_SIZE]]
         out: dict[str, Any] = {"totalSize": len(rows), "done": offset + PAGE_SIZE >= len(rows), "records": page}
         if not out["done"]:
             key = f"c{len(self._locators)}"
@@ -618,6 +618,11 @@ class Salesforce:
             "revoked": list(self.revoked),
             "clients": list(self.clients),
         }
+
+
+def typed(case: dict[str, Any]) -> dict[str, Any]:
+    """A case as a SOQL query answers it: Salesforce puts each record's type and address under `attributes`."""
+    return {"attributes": {"type": "Case", "url": f"{API}/sobjects/Case/{case['Id']}"}, **case}
 
 
 def _when(text: str) -> datetime | None:

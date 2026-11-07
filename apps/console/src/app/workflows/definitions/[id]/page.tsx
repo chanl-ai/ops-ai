@@ -13,8 +13,6 @@ import { useCan, useCanBuild } from '@/hooks/me-queries';
 import { useDefinition, useNodeTypes, usePublishDefinition, useRequestDefinitionPublish, useSetDefinitionPaused, useStartEngineRun, useStartWorkflow, useValidateDefinition } from '@/hooks/engine-queries';
 import type { EngineDefinition } from '@/lib/types/engine';
 
-const shortDigest = (digest: string) => digest.replace(/^sha256:/, '').slice(0, 8);
-
 export default function WorkflowDefinitionPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -54,7 +52,7 @@ export default function WorkflowDefinitionPage() {
   const header = {
     icon: Workflow,
     title: view?.name || view?.definition.name || id,
-    description: view ? `Latest version ${view.version} · digest ${shortDigest(view.digest)}` : undefined,
+    description: view ? `Latest version ${view.version}` : undefined,
     backHref: '/workflows',
     // The canvas fills what is left of the window under the header, so the page itself does not scroll.
     className: 'min-h-0 py-4 lg:py-4',
