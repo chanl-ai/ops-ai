@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -17,6 +18,10 @@ DECISION = "/v1/data/ops/gateway/decision"
 # that module instead of adding a second one with the same rules.
 POLICY_ID = "policy/gateway.rego"
 POLICY_FILE = Path(__file__).resolve().parents[2] / "policy" / "gateway.rego"
+# The service callers the policy lets in (data.ops.identities). The gateway writes them at start rather than trusting
+# OPA's mount: the one OPA container serves every checkout, and a mount of a folder that is gone serves no identities,
+# so every agent's tool call reads as "caller identity is not registered".
+DATA_FILE = POLICY_FILE.parent / "data.json"
 
 
 # Start-up writes to OPA are retried for this long after a timeout or a refused connection: OPA is one container every
@@ -28,6 +33,12 @@ _BACKOFF_S = (0.2, 0.5, 1.0, 2.0)
 
 # The policy's reason when a token does not verify against data.ops.secrets.review_key (policy/gateway.rego).
 UNSIGNED = "approval token is not signed by the review service"
+# The policy's reason when run_context.sub is not in data.ops.identities.
+UNREGISTERED = "caller identity is not registered"
+
+
+def registered_identities() -> list[str]:
+    return list(json.loads(DATA_FILE.read_text())["ops"]["identities"])
 
 
 class PolicyMismatchError(RuntimeError):
@@ -48,6 +59,7 @@ class OpaClient:
     def __init__(self, client: httpx.AsyncClient) -> None:
         self.client = client
         self._review_key: str | None = None
+        self._identities: list[str] | None = None
 
     async def _starting(self, call: Callable[[], Awaitable[httpx.Response]]) -> httpx.Response:
         """`call` retried after a timeout or a refused connection, with a short backoff, until START_UP_BOUND_S."""
@@ -67,6 +79,17 @@ class OpaClient:
         r = await self._starting(lambda: self.client.put("/v1/data/ops/secrets", json={"review_key": key}))
         r.raise_for_status()
         self._review_key = key
+
+    async def load_identities(self, identities: list[str]) -> None:
+        """Writes the service callers the policy lets in into OPA's data."""
+        r = await self._starting(lambda: self.client.put("/v1/data/ops/identities", json=identities))
+        r.raise_for_status()
+        self._identities = identities
+
+    async def _identities_loaded(self) -> bool:
+        r = await self.client.get("/v1/data/ops/identities")
+        r.raise_for_status()
+        return r.json().get("result") is not None
 
     async def _review_key_loaded(self) -> bool:
         r = await self.client.get("/v1/data/ops/secrets/review_key")
@@ -97,6 +120,11 @@ class OpaClient:
         # refused.
         if UNSIGNED in decision.reasons and self._review_key is not None and not await self._review_key_loaded():
             await self.load_review_key(self._review_key)
+            decision = await self._decide(query)
+        # The same reload drops the identities; a caller that is really unregistered stays refused, since they are
+        # written again only when they are gone.
+        if UNREGISTERED in decision.reasons and self._identities is not None and not await self._identities_loaded():
+            await self.load_identities(self._identities)
             decision = await self._decide(query)
         return decision
 
