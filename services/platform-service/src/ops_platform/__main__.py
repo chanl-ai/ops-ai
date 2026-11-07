@@ -48,6 +48,7 @@ async def serve(settings: Settings) -> None:
         demo_password=settings.platform_demo_password.get_secret_value() if settings.environment == "dev" else None,
         audiences=settings.platform_audiences,
         dev_people=settings.platform_seed_file if settings.environment == "dev" else None,
+        sample_teams=settings.platform_sample_teams_dir if settings.environment == "dev" else None,
         cors_origins=settings.cors_origins,
         token_ttl_s=settings.platform_token_ttl_seconds,
         signin=SignInOptions.from_settings(settings, mail=mail),

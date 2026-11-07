@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "The demo sign-in lists the sample teams' people",
+  "description": "On a local install, Sign in as a demo person now offers the people of the installed sample teams (Wealth Advisory, Small Business Lending, Risk Oversight) beside the seeded ones. Someone whose team is not installed yet is not offered.",
+  "tag": "improved"
+}
