@@ -190,7 +190,7 @@ function useRememberedColumns<T, V>(columns: ColumnDef<T, V>[], initial: Visibil
 }
 
 export function DataTableWithViews<TData, TValue>({
-  columns,
+  columns: given,
   data,
   searchColumn = 'title',
   searchPlaceholder = 'Filter...',
@@ -216,6 +216,10 @@ export function DataTableWithViews<TData, TValue>({
   prependFilters,
   getRowId,
 }: DataTableWithViewsProps<TData, TValue>) {
+  // A row checkbox only where picking rows does something: a bulk action the person may take, or a page that reads the
+  // selection. Without either (a viewer, whose bulk actions are all withheld) the column is left out.
+  const selects = bulkActions.length > 0 || !!onSelectionChange;
+  const columns = React.useMemo(() => (selects ? given : given.filter((c) => c.id !== 'select')), [given, selects]);
   const [rowSelection, setRowSelection] = React.useState({});
   const [columnVisibility, setColumnVisibility] = useRememberedColumns(columns, initialColumnVisibility);
   const [columnFilters, setColumnFilters] =
