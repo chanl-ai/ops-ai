@@ -327,6 +327,12 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
         rec.status = "ok" if outcome.ok else "error"
         rec.output = outcome.output
         rec.view = outcome.view
+        part = (outcome.view or {}).get("part")
+        drawn = [p for r in state.records.values() if r is not rec and (p := (r.view or {}).get("part"))]
+        if part and present.already_shown(part, drawn):
+            # A record or rows an earlier call this turn already drew (a query's row, then the same record read by
+            # id): drawn once.
+            rec.view = None
         said = outcome.for_model if outcome.for_model is not None else outcome.output
         if outcome.ok and (outcome.view or {}).get("part"):
             # Drawn for the person already (a table or a record): told so, the model answers in text instead of

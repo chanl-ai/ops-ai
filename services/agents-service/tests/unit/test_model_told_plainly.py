@@ -85,6 +85,28 @@ async def test_rows_a_tool_already_drew_are_not_presented_again() -> None:
     assert "present" in json.dumps(seen[0]) and "already sees" in json.dumps(seen[0]), seen[0]
 
 
+async def test_a_record_read_after_a_query_that_drew_it_is_not_drawn_again() -> None:
+    seen: list[Any] = []
+    get = ToolGrant("salesforce_get_record", "Salesforce", "Get a record", "read", {"type": "object", "properties": {}})
+
+    class QueryThenRead:
+        async def execute(
+            self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
+        ) -> ToolOutcome:
+            out: Any = ENVELOPE if tool == "salesforce_query" else RECORDS[0]
+            return ToolOutcome(True, out, {"part": shape_part(out, part_id="")})
+
+    steps = [
+        ModelResponse(parts=[ToolCallPart("salesforce_query", {})]),
+        ModelResponse(parts=[ToolCallPart("salesforce_get_record", {})]),
+        ModelResponse(parts=[TextPart("Case 00044818 is New.")]),
+    ]
+    req = TurnRequest("t1", "th1", SETTINGS, [QUERY, get], user_turn="status of case 00044818")
+    tools = QueryThenRead()
+    _, result = await run(req, KernelPorts(model=model(steps, seen), tools=tools, knowledge=FixedKnowledge([])))
+    assert [r.tool for r in result.tool_calls if r.view] == ["salesforce_query"], result.tool_calls
+
+
 async def test_a_connect_card_refusal_reaches_the_model_as_a_plain_line() -> None:
     seen: list[Any] = []
     steps = [ModelResponse(parts=[ToolCallPart("salesforce_query", {})]), ModelResponse(parts=[TextPart("Connect.")])]
