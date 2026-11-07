@@ -26,8 +26,13 @@ export function createChatHttp(get: Get, send: Send, qs: (p: ListParams) => stri
       // A teammate's conversation answers {id, readable: false}: read as a refusal with its own code, so the page says
       // whose it is without a failing request.
       get: async (id) => {
-        const t = await get<ChatThread | { id: string; readable: false }>(`/chat/threads/${id}`);
-        if ('readable' in t && t.readable === false) throw new ApiError('This conversation is someone else’s.', 403, undefined, SOMEONE_ELSES);
+        const t = await get<ChatThread | { id: string; readable: false; teamId?: string; teamName?: string }>(`/chat/threads/${id}`);
+        if ('readable' in t && t.readable === false) {
+          // The reader's own conversation in another of their teams: refused as another team's record, so the page
+          // offers to switch to it.
+          if (t.teamId) throw new ApiError('This conversation is in another of your teams.', 403, { id: t.teamId, name: t.teamName ?? t.teamId }, 'team_forbidden');
+          throw new ApiError('This conversation is someone else’s.', 403, undefined, SOMEONE_ELSES);
+        }
         return t as ChatThread;
       },
       create: (i) => send('POST', '/chat/threads', i),

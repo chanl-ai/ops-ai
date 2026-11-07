@@ -62,6 +62,7 @@ from ops_service_kit.errors import (
 from ops_service_kit.errors import ServiceUnavailable as Unavailable
 from ops_service_kit.http import Envelope
 from ops_service_kit.ids import new_id, now_iso
+from ops_store import isolation
 
 from ...store.events import EventLog
 from ...store.leases import LeaseHeldError
@@ -411,6 +412,17 @@ async def get_thread(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     conversation that does not exist, or is another team's, is not found."""
     row = await chat_row(rt, thread_id, None)
     if row is None:
+        # A link opened while acting in another team: the conversation may be in one of the reader's other teams. Its
+        # own conversation there names that team so the console can switch; anyone else's says only that it is not
+        # theirs. A team the reader is not in stays not found.
+        for team in (t for t in me.team_ids if t != isolation.team()):
+            with isolation.scope(isolation.tenant(), team):
+                other = await chat_row(rt, thread_id, None)
+            if other is not None:
+                if not may_read(_meta(other), me):
+                    return ok({"id": thread_id, "readable": False})
+                name = await rt.team_names.name(team) if rt.team_names is not None else None
+                return ok({"id": thread_id, "readable": False, "teamId": team, "teamName": name or team})
         raise NotFound("Conversation")
     if not may_read(_meta(row), me):
         return ok({"id": thread_id, "readable": False})

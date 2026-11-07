@@ -60,3 +60,35 @@ async def test_with_the_policy_off_the_grid_lets_a_reader_of_every_chat_read_it(
     thread = await chat(c, VIEWER)
     r = await c.get(f"/chat/threads/{thread}", headers=reader({"chatThreadsOwnerOnly": False}))
     assert r.status_code == 200, r.text
+
+
+async def test_a_link_opened_in_another_of_the_readers_teams_finds_the_conversation(stack: Stack) -> None:  # noqa: F811
+    """A link opened while acting in another team answered not found, a refused request on a page that works: the
+    reader's own conversation names its team so the console can switch, and a teammate's says only it is not theirs."""
+    c, _ = stack
+    thread = await chat(c, VIEWER)
+
+    def in_two_teams(sub: str) -> dict[str, str]:
+        claims: dict[str, Any] = {
+            "sub": sub,
+            "email": f"{sub}@harborpine.example",
+            "name": sub,
+            "kind": "person",
+            "security_team": "team_security",
+            "aud": ["agents"],
+            "tenant_id": TENANT,
+            "team_ids": ["team_ops", "team_fraud"],
+            "roles": {"team_ops": "viewer", "team_fraud": "viewer"},
+        }
+        token = mint(claims, PLATFORM, ttl_s=TEST_TOKEN_TTL_S)
+        return {"Authorization": f"Bearer {token}", "X-Team-Id": "team_fraud"}
+
+    own = await c.get(f"/chat/threads/{thread}", headers=in_two_teams("vera"))
+    assert own.status_code == 200, own.text
+    assert {k: own.json()["data"][k] for k in ("id", "readable", "teamId")} == {
+        "id": thread,
+        "readable": False,
+        "teamId": "team_ops",
+    }, own.text
+    other = await c.get(f"/chat/threads/{thread}", headers=in_two_teams("otto"))
+    assert other.status_code == 200 and other.json()["data"] == {"id": thread, "readable": False}, other.text
