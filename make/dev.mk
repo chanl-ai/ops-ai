@@ -115,7 +115,8 @@ ports: ## Print the ports this stack uses
 # A query string goes in Q=, since make reads any word holding `=` as a variable.
 ifneq ($(filter api,$(firstword $(MAKECMDGOALS))),)
 API_WORDS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
-$(eval $(API_WORDS):;@:)
+# A path's colons (plugin:opsai.salesforce) are escaped, or make reads the path as a rule's target and prerequisites.
+$(eval $(subst :,\:,$(API_WORDS)):;@:)
 endif
 # make's built-in AS (the assembler, `as`) means `AS ?=` never applies; only an unset or built-in AS takes the default.
 ifneq ($(filter default undefined,$(origin AS)),)
