@@ -63,6 +63,26 @@ _REMEMBER = re.compile(r"^\s*remember(?: that)?\s*[:,]?\s+(.+?)\s*$", re.I | re.
 # Words that make a preference or way of working a standing rule the person set, kept at once as if they had said
 # "remember": "always show cases as a table", "from now on reply in French".
 _STANDING = re.compile(r"\b(?:always|from now on|every time|each time|whenever)\b", re.I)
+# A one-off ask, never kept or suggested whatever the model makes of it: an instruction for this reply or this
+# conversation ("Reply with the single word ok", "Show me this week's cases"), a request ("Can you ..."), a question,
+# or the state of an app or account ("my Salesforce account is connected"). Only asking to remember, or a standing
+# rule, keeps such words.
+_ASKING = re.compile(
+    r"^(?:(?:please|just|now|ok|okay|so)\b[\s,]*)*(?:(?:can|could|would|will) you\b|(?:reply|respond|answer|say|"
+    r"write|show|list|find|get|give|open|send|tell|make|create|draft|summari[sz]e|check|look|search|pull|run|start|"
+    r"book|update|log|delete|cancel|add|use|switch|stop|try|repeat|explain|translate)\b)",
+    re.I,
+)
+_APP_STATE = re.compile(r"\b(?:connected|disconnected|reconnected|signed (?:in|out)|logged (?:in|out))\b", re.I)
+
+
+def one_off(quote: str) -> bool:
+    """Whether the person's words are a one-off ask (_ASKING, a question, or an app's state) rather than something
+    about them or how they work."""
+    said = quote.strip()
+    return said.endswith("?") or bool(_ASKING.match(said)) or bool(_APP_STATE.search(said))
+
+
 _WORD = re.compile(r"[a-z0-9][a-z0-9'-]{3,}")
 _FENCED = re.compile(r"```.*?(```|$)", re.S)
 _REPORTED = re.compile(r"\b(?:wrote|writes|says|said)\s*:", re.I)
@@ -335,6 +355,8 @@ def keepable(agent: AgentDefinition, extraction: Extraction) -> list[dict[str, A
             # "Always ..." in the person's own words is a rule they set, kept as if they had said "remember".
             m |= {"confidence": max(confidence, 1.0), ASKED: True}
             confidence = 1.0
+        elif not m.get(ASKED) and one_off(quote):
+            continue
         if not _kept_kind(agent, kind) or confidence < MIN_CONFIDENCE or m.get("sensitivity") == NEVER_KEPT:
             continue
         # A card number, IBAN or national id is never kept, however the model marked it.

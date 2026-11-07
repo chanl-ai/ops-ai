@@ -550,24 +550,28 @@ async def test_a_turn_makes_one_decision_per_memory(stack: Stack) -> None:  # no
     assert [r["value"] for r in await rows(rt)] == ["Eastern"], "one memory per key from one turn"
 
 
-async def test_junk_the_model_rates_sure_is_never_kept_at_once(stack: Stack) -> None:  # noqa: F811
-    """Sure candidates were saved at once, so an account's state, a one-off find and a reply-format command became
-    memories. Whatever the model's confidence, nothing is in use unless the person asked; at most it is suggested."""
+async def test_a_one_off_ask_is_neither_kept_nor_suggested_however_sure_the_model_is(stack: Stack) -> None:  # noqa: F811
+    """Sure candidates were saved at once, then offered as "Remember 'Reply with the single word ok'?": an account's
+    state, a one-off find, a reply-format command and a question about the assistant. None is kept or suggested."""
     c, rt = stack
     turns = {
         "My Salesforce account is connected now, thanks.": said("Salesforce account is connected", key="salesforce"),
         "Find a customer called Harbor Bakery for me please.": said(
             "Wants to find a customer", kind="preference", key="search"
         ),
-        "Reply with ok so I know you are there.": said("Reply with ok", kind="preference", key="reply format"),
+        "Reply with the single word ok.": said("Reply with the single word ok", kind="preference", key="reply format"),
         "Show me the open cases for this week only.": said("Open cases this week", kind="preference", key="cases"),
+        "Can you tell me which apps you can reach?": said("Asks which apps", kind="preference", key="apps"),
     }
     for message, candidate in turns.items():
         rt.memory_extractor = Answering(candidate | {"quote": message.rstrip(".")})
-        await say(c, await chat(c, VIEWER), message, VIEWER)
-    assert await mine(c, VIEWER) == [], "nothing in use"
-    assert all(status == SUGGESTED for _, status in await statuses(rt))
-    assert "connected" not in await profile(rt, question="salesforce account cases reply")
+        events = await say(c, await chat(c, VIEWER), message, VIEWER)
+        done: dict[str, Any] = next(e for e in events if e.get("type") == "done")["message"]
+        assert not done.get("remembered"), (message, done.get("remembered"))
+    assert await statuses(rt) == [], "nothing kept, nothing suggested"
+    rt.memory_extractor = Answering(said("Prefers short answers with bullet points", kind="preference", key="style"))
+    await say(c, await chat(c, VIEWER), "Prefers short answers with bullet points", VIEWER)
+    assert await statuses(rt) == [("Prefers short answers with bullet points", SUGGESTED)], "a preference still asks"
 
 
 async def test_always_is_kept_at_once_and_applies_in_a_new_thread(stack: Stack) -> None:  # noqa: F811
