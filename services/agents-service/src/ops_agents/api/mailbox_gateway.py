@@ -17,6 +17,7 @@ from ops_email import (
     IdleSource,
     InboundMessage,
     MailboxNotConfiguredError,
+    MailboxRefusedError,
     MailSource,
 )
 from ops_email.graph import parse_item as graph_item
@@ -43,7 +44,10 @@ class GatewayMailSource:
         try:
             data = await self.mail.post(f"/v1/mailboxes/{path}", payload, team=self.mailbox.team_id, timeout=timeout)
         except ServiceCallError as e:
-            raise RuntimeError(f"tools-service refused {path} on {self.mailbox.address}: {e.status} {e}") from e
+            said = f"tools-service refused {path} on {self.mailbox.address}: {e.status} {e}"
+            if refused_for_good(e):
+                raise MailboxRefusedError(said) from e
+            raise RuntimeError(said) from e
         return dict(data)
 
     async def delta(self, link: str | None) -> DeltaPage:
@@ -69,6 +73,13 @@ class GatewayMailSource:
     async def test(self) -> dict[str, Any]:
         """tools-service's connection test: sign-in, then the newest message read without marking it read."""
         return await self._post("test", {})
+
+
+def refused_for_good(e: ServiceCallError) -> bool:
+    """A refusal of the mailbox itself (403 secret_refused or egress_denied, 422 mailbox_incomplete, any other 4xx),
+    which asking again cannot change: not a timeout, a rate limit or a cursor the source no longer takes."""
+    status = e.status or 0
+    return 400 <= status < 500 and status not in (408, 409, 429) and e.code != "cursor_refused"
 
 
 def is_idle(source: MailSource) -> TypeGuard[IdleSource]:

@@ -27,7 +27,15 @@ from typing import Any, Literal, cast
 import httpx
 
 from ops_access import can
-from ops_email import CursorRefusedError, EmailFilter, InboundAttachment, InboundMessage, MailSource, drain
+from ops_email import (
+    CursorRefusedError,
+    EmailFilter,
+    InboundAttachment,
+    InboundMessage,
+    MailboxRefusedError,
+    MailSource,
+    drain,
+)
 from ops_engine.store import DefinitionStore, RunStore
 from ops_files_client import FilesClient, FilesRefused
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable
@@ -422,6 +430,13 @@ class EmailTriggers:
         # The mail listener's heartbeat; the worker sets it and the job log on `starts`, tests leave them off.
         self.beat: background.Beat | None = None
         self.starts = EmailStarts(db, files)
+        # Mailboxes whose own setup tools-service refused (MailboxRefusedError), by (tenant, mailbox id), with the
+        # record's updated_at then: nothing reads one again until a person changes it on Channels > Email.
+        self._refused: dict[tuple[str, str], str] = {}
+
+    def _refuse(self, b: Bound, e: MailboxRefusedError) -> None:
+        self._refused[(b.tenant, b.mailbox.id)] = b.mailbox.updated_at
+        log.warning("mailbox_refused", workflow=b.workflow, mailbox=b.mailbox.address, reason=str(e))
 
     async def bindings(self) -> list[Bound]:
         """Every live version's email trigger whose mailbox it may read, in every tenant. A paused mailbox is left
@@ -435,8 +450,10 @@ class EmailTriggers:
             if mailbox is None:
                 log.warning("email_binding_refused", workflow=row["workflow_id"], mailbox=binding.mailbox, reason=why)
                 continue
-            if not mailbox.paused:
-                out.append(Bound(row, binding, mailbox))
+            bound = Bound(row, binding, mailbox)
+            if mailbox.paused or self._refused.get((bound.tenant, mailbox.id)) == mailbox.updated_at:
+                continue
+            out.append(bound)
         return out
 
     def source(self, b: Bound) -> MailSource:
@@ -449,6 +466,8 @@ class EmailTriggers:
                 # One failing mailbox must not stop the others; its cursor stayed, so its next pass retries.
                 try:
                     out.append(await self.poll(b))
+                except MailboxRefusedError as e:
+                    self._refuse(b, e)
                 except Exception as e:
                     log.exception("email_poll_failed", workflow=b.workflow, error=type(e).__name__)
         return out
@@ -503,6 +522,10 @@ class EmailTriggers:
                         await _pause(stop, 1.0)
                 except asyncio.CancelledError:
                     raise
+                except MailboxRefusedError as e:
+                    # The poll stops reading it too; the next binding pass leaves it out until the mailbox changes.
+                    self._refuse(b, e)
+                    return
                 except Exception as e:
                     log.warning("email_idle_failed", workflow=b.workflow, error=type(e).__name__)
                     await _pause(stop, every)

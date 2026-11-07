@@ -87,6 +87,12 @@ class MailboxNotConfiguredError(RuntimeError):
     """The settings name no mail source, or one whose secrets are missing."""
 
 
+class MailboxRefusedError(RuntimeError):
+    """The mailbox's own setup is refused: its secret cannot be used in its team, its host is not on the egress list,
+    or its connection details are incomplete. Every read is refused the same way until the mailbox is changed, so the
+    caller stops reading it until then rather than asking again."""
+
+
 class CursorRefusedError(RuntimeError):
     """The source no longer accepts a stored cursor (its key changed, or the cursor predates sealing). Mail that
     arrived after that cursor cannot be read from it; the caller takes a fresh one and says what was skipped."""
