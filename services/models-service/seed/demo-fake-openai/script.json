@@ -1,5 +1,8 @@
 {
  "rules": [
+  {"when": "read my open work and my recent runs", "tools": [{"tool": "read_document", "arguments": {"file": "open", "documentType": "human_task"}}, {"tool": "read_document", "arguments": {"file": "mine", "documentType": "case"}}]},
+  {"when": "read my open work", "after": "read_document", "text": "The reads failed because there are no files named open or mine; I can retry with your own cases and tasks. Proceed?"},
+  {"when": "^Your reply asks permission to read more", "text": "Those reads failed: the team has no files named open or mine."},
   {"when": "prep me for my 2 pm meeting and open its case", "tool": "find_cases", "arguments": {"search": "meeting", "assignedToMe": true}},
   {"when": "open its case", "after": "find_cases", "result": "\\\"id\\\": ?\\\"(?P<id>case_[0-9a-f]+)\\\"", "tools": [{"tool": "get_case", "arguments": {"caseId": "{id}"}}, {"tool": "get_case", "arguments": {"caseId": "{id}"}}]},
   {"when": "open its case", "after": "get_case", "text": "Your 2:00 pm is the Okafor Family Trust annual review; its case is below."},
@@ -7,6 +10,8 @@
   {"when": "which of my cases are overdue", "after": "find_cases", "result": "Suitability note missing: (?P<who>[^;(]+?) rebalancing", "text": "The {who} suitability note is overdue (find_cases)."},
   {"when": "^Your reply shows an internal name", "text": "The Ramos household suitability note is overdue; its case is below."},
   {"when": "prep me for my (?P<t>\\d{1,2}(?::\\d\\d)?\\s*[ap]m) meeting", "tool": "find_cases", "arguments": {"search": "meeting", "assignedToMe": true}},
+  {"when": "prep me for my 2", "after": "find_cases", "result": "\\\"id\\\": ?\\\"(?P<id>case_[0-9a-f]+)\\\"", "tool": "get_case", "arguments": {"caseId": "{id}"}},
+  {"when": "prep me for my 2", "after": "get_case", "result": "Client meeting 2:00 pm: [^;]+; customer (?P<client>[^;]+); due [^;]+; notes: (?P<notes>[^\\\"]+)\\\"", "text": "Your 2:00 pm is the {client} annual review. From its notes: {notes}"},
   {"when": "prep me for my 2", "after": "find_cases", "result": "Client meeting 2:00 pm: (?P<client>[^;(]+?) annual review", "text": "Your 2:00 pm is the {client} annual review; its case and notes are below."},
   {"when": "which applications are waiting on documents", "tool": "find_cases", "arguments": {"status": "waiting_on_customer"}},
   {"when": "which applications are waiting on documents", "after": "find_cases", "result": "(?P<n>\\d+) case\\(s\\) match", "text": "{n} applications are waiting on documents; the table names each one and what it waits on."},

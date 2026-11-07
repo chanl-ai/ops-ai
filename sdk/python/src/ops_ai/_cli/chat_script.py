@@ -21,6 +21,8 @@ A script is YAML or JSON: `agent` (the team's default when left out), `test`, `k
     noRepeatCalls   no call reached a system twice with the same input (a repeat the kernel answered is marked)
     noInternalIds   no record id (case_0eef29f68716) or snake_case name (find_cases, waiting_on_customer) in the reply
     noControls      the reply names no button or other control to press: the cards show their own
+    notTools        tool names none of which was called (a policy question reads no tasks)
+    cardsOnce       no record's card is drawn twice in the stored reply
 """
 
 from __future__ import annotations
@@ -113,6 +115,18 @@ def reply_checks(want: dict[str, Any], seen: dict[str, Any], message: dict[str, 
         ]
         twice = sorted({k for k in sent if sent.count(k) > 1})
         out.append(("no call sent twice", not twice, f"{twice}"))
+    for tool in want.get("notTools", []):
+        out.append((f"does not call {tool}", tool not in names, f"called {names}"))
+    if want.get("cardsOnce"):
+        refs = [
+            (str(c.get("type")), str(c.get("id")))
+            for call in message.get("toolCalls") or []
+            if isinstance(call.get("output"), dict)
+            for c in call["output"].get("cards") or []
+            if isinstance(c, dict)
+        ]
+        twice = sorted({r for r in refs if refs.count(r) > 1})
+        out.append(("each card drawn once", not twice, f"{twice}"))
     if want.get("noInternalIds"):
         found = RECORD_ID.search(text)
         out.append(("no internal id or name", found is None, found.group(0) if found else ""))

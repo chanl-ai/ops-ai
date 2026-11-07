@@ -1,0 +1,15 @@
+# Prep for a meeting: the case drawn once, and a short summary from it, naming the client and the points its notes
+# hold (a live reply drew one case three times and named neither).
+as: [dana.whitfield@harborpine.example]
+real: [dana.whitfield@harborpine.example]
+turns:
+  - say: "Prep me for my 2 pm meeting"
+    expect:
+      tool: find_cases
+      says: ["Okafor", "risk profile"]
+      cardsOnce: true
+      noControls: true
+      noInternalIds: true
+      noQuestion: true
+      endsClean: true
+      maxSteps: 3

@@ -339,6 +339,11 @@ def test_the_assistant_expectations_each_catch_their_failure() -> None:
     ]
     twice["tools"][1] = {"name": "get_case", "input": {"caseId": "c1"}, "output": {"repeatOf": "x"}}
     assert all(ok for _, ok, _ in chat_script.reply_checks({"noRepeatCalls": True}, twice, {}))
+    asked = _seen("Policy says ten days.", ["my_human_tasks", "search_knowledge"])
+    failed = [n for n, ok, _ in chat_script.reply_checks({"notTools": ["my_human_tasks"]}, asked, {}) if not ok]
+    assert failed == ["does not call my_human_tasks"]
+    case = {"output": {"cards": [{"type": "case", "id": "c1"}]}}
+    assert _failed({"cardsOnce": True}, "Done.", {"toolCalls": [case, case]}) == ["each card drawn once"]
     clean = {"citations": [{"n": 1}], "parts": [{"shape": "rows"}], "usage": {"calls": 2}}
     want = {"noQuestion": True, "noErrorCode": True, "endsClean": True, "cites": True, "table": True, "maxSteps": 2}
     assert _failed(want, "Customer CUS-1002 waits on its tax return [1].", clean) == []
