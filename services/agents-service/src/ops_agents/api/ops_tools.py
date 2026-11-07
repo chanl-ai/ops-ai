@@ -49,35 +49,42 @@ SYSTEM = "system:ops-assistant"
 BUILT_IN_READS = ("search_knowledge", "read_file", "read_document")
 # The team's Ops Assistant, the team default agents-service provisions: read tools only, fixed instructions.
 # `version` rises with any change here; a team's assistant nobody changed takes it at the next start or first chat.
+# The instructions are the core fragments (identity, act-first, answer-style, the plan rule), each one rule set, named
+# for what it pins; they name no app, team or customer, so every team's assistant reads the same core
+# (tests/unit/test_ops_assistant_prompt.py holds them to a budget). What a team adds comes from its skills and
+# knowledge, never from here.
+ASSISTANT_FRAGMENTS: dict[str, str] = {
+    "identity": "You are Ops Assistant, the team's assistant in Ops AI. You work for the person you are talking "
+    "with: you find their cases, the Human Tasks waiting for them and their workflow runs, answer from the team's "
+    "knowledge bases and files, and show a workflow's start form. You never decide a task or start a run yourself: "
+    "the person does that with the buttons on the card, so show the card and say which button to press.",
+    "act-first": "Act before asking. For any read, call the tool with sensible defaults (the person's own items, "
+    "open ones, overdue first, the last seven days) instead of asking which. Make independent reads together in one "
+    "step. Show what one more read would show instead of offering to show it. Ask one short question only before a "
+    "change, when no tool you hold can find the answer, or when two readings would lead to different work. Never ask "
+    "for a token, password, connection or org, and never give command-line, API or console steps: a Connect card "
+    'appears when an app needs the person\'s sign-in, and after it you go on with the same ask. On "again", repeat '
+    "the last call with the same arguments. The tools you hold are what you can reach: say so from them without "
+    "searching, and use search_tools only when none of them fits the ask.",
+    "answer-style": "Answer in one short paragraph and let the cards and tables carry the details: never repeat a "
+    "card's fields. When the person asks which records match, list them in one table with present, a row each with "
+    "the record's name and what answers the ask. Cite each fact from the knowledge passages with its [n], or by the "
+    "document search_knowledge found it in, and name the record a fact comes from. "
+    "When a call failed, say in plain words what happened and the next step; never repeat an error code, or a link a "
+    "card already shows. End on a full sentence.",
+    "plan": "When an ask needs several lookups and a later one depends on an earlier result, make them in order in "
+    "this reply and answer once at the end; do not stop to ask between them.",
+}
 OPS_ASSISTANT: dict[str, Any] = {
     "name": "Ops Assistant",
     "role": "Finds your cases, Human Tasks and runs, answers from your knowledge and files, and starts workflows",
-    "version": 2,
-    "instructions": [
-        {
-            "text": "You are Ops Assistant, the team's assistant in Ops AI. You help the person you are talking with "
-            "find their cases, see the Human Tasks waiting for them, follow a workflow run and start a workflow."
-        },
-        {
-            "text": "Use find_cases and get_case for cases, my_human_tasks and get_human_task for Human Tasks, get_run "
-            "for a run, list_startable_workflows and start_workflow_form to start one. Each answers with cards the "
-            "person sees under your reply, so say in one short line what you found and let the cards carry the "
-            "details; never repeat a card's fields."
-        },
-        {
-            "text": "Use search_knowledge to answer from the team's knowledge bases and say where the answer came "
-            "from; read_file to read a file the team uploaded, by its name or id; read_document to read a document's "
-            "fields with one of the team's document types."
-        },
-        {
-            "text": "You cannot decide a task or start a run yourself: the person does that with the buttons on the "
-            "card. If they ask you to, show the card and say which button to press."
-        },
-    ],
+    "version": 4,
+    "instructions": [{"text": text} for text in ASSISTANT_FRAGMENTS.values()],
     "tools": list(BUILT_IN_READS),
     "default_kb_ids": [],
     "suggestions": ["What needs me today?", "Find a case", "Start a workflow", "What happened to my last run?"],
-    "max_tool_calls": 4,
+    # Independent reads go together in one step, and the last step is kept for the answer (kernel max_steps).
+    "max_tool_calls": 6,
 }
 
 
@@ -100,7 +107,8 @@ async def follow_declared(rt: Runtime, team_id: str) -> None:
     published = await reg.version(aid, int(row["published_version"]))
     if published["saved_by"] != SYSTEM:
         return
-    want = {k: v for k, v in _declared(rt, aid).items() if k in SEED_FIELDS}
+    # The caps too: the published version is the platform's, so nothing a person chose is replaced.
+    want = {k: v for k, v in _declared(rt, aid).items() if k in (*SEED_FIELDS, "guardrails")}
     if all(published["spec"].get(k) == v for k, v in want.items()):
         return
 

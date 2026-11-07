@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "A team assistant that looks things up first",
+  "description": "The team assistant now looks up your cases, tasks and knowledge with sensible defaults instead of asking which, reads several things at once, lists matching records in a table, and never hands out command-line steps.",
+  "tag": "improved"
+}
