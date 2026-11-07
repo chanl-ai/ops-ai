@@ -80,7 +80,7 @@ export const ACTION_LABEL: Record<AuditAction, string> = {
   granted: 'Granted',
   revoked: 'Revoked',
   connected: 'Connected',
-  login: 'Signed in',
+  login: 'Sign-in',
   uploaded: 'Uploaded',
   downloaded: 'Downloaded',
   legal_hold: 'Legal hold',

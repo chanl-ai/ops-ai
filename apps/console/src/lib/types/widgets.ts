@@ -220,6 +220,8 @@ export interface WidgetTemplate {
   requiresTools?: string[];
   /** Absent on the agents-service library, which serves published templates only. */
   status?: WidgetStatus;
+  /** The owning team; absent on the seeded library, whose widgets ship with Ops AI. */
+  teamId?: string | null;
   updatedBy?: string;
   updatedAt?: string;
 }

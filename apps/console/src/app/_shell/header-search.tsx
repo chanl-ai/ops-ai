@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { CommandPalette, type PaletteAction, type PalettePage, SearchButton } from '@/components/header/command-palette';
 import { useConnectUrl } from '@/hooks/connect-queries';
 import { useFlagged } from '@/hooks/flag-queries';
+import { useNavAllows } from '@/hooks/me-queries';
 import { useRecentSearches, useSearch, useVisitSearchHit } from '@/hooks/search-queries';
 import { useTeam } from '@/hooks/use-team';
 import { NAV } from '@/lib/nav';
@@ -28,6 +29,7 @@ const EXTRA_PAGES: (PalettePage & { flag?: FlagName })[] = [
  */
 export function HeaderSearch() {
   const router = useRouter();
+  const allows = useNavAllows();
   const pathname = usePathname();
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState('');
@@ -58,8 +60,9 @@ export function HeaderSearch() {
     router.push(href);
   };
   // Child routes are tabs, not sidebar rows, so they are listed here to stay reachable by name.
+  // A child page the person's roles do not open is left out, as in the sidebar and the title switcher.
   const navPages: PalettePage[] = NAV.flatMap((g) =>
-    g.items.flatMap((i) => [{ title: i.title, href: i.url, section: g.label, icon: i.icon }, ...(i.children ?? []).map((c) => ({ title: c.title, href: c.url, section: `${g.label} · ${i.title}`, icon: i.icon }))]),
+    g.items.flatMap((i) => [{ title: i.title, href: i.url, section: g.label, icon: i.icon }, ...(i.children ?? []).filter((c) => allows(c.needs) === true).map((c) => ({ title: c.title, href: c.url, section: `${g.label} · ${i.title}`, icon: i.icon }))]),
   );
   const pages: PalettePage[] = [...navPages, ...extraPages.filter((e) => !navPages.some((p) => p.href === e.href))];
   const newChat: PaletteAction = { id: 'new-chat', label: 'New chat', icon: MessageSquarePlus, keywords: 'ask conversation start', run: () => go('/chat') };

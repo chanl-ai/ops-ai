@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
+import type { NavNeed } from '@/lib/nav';
 import type { MemberRole, RoleCell, RoleInput } from '@/lib/types/settings';
 
 import { useSession } from './auth-queries';
@@ -111,21 +112,34 @@ export function useRenameWorkspace() {
   return useMutation({ mutationFn: (name: string) => api.teams.renameWorkspace!(name), onSuccess: () => qc.invalidateQueries({ queryKey: ['me'] }) });
 }
 
-export function useCan(area: string, action: string): boolean | undefined {
-  return useCanCheck()(area, action);
+export function useCan(area: string, action: string, everyTeam = false): boolean | undefined {
+  return useCanCheck()(area, action, everyTeam);
 }
 
-/** useCan as a function, for a list whose checks are known only as data (the sidebar's rows). */
-export function useCanCheck(): (area: string, action: string) => boolean | undefined {
+/**
+ * Whether the person may open a nav page with these needs (lib/nav.ts): true for a page that needs nothing, undefined
+ * while permissions load. The sidebar, the title switcher and search all read it, so none offers a page that refuses.
+ */
+export function useNavAllows(): (needs?: NavNeed) => boolean | undefined {
+  const can = useCanCheck();
+  return (needs) => (needs ? can(needs.area, needs.action, needs.everyTeam) : true);
+}
+
+/**
+ * useCan as a function, for a list whose checks are known only as data (the sidebar's rows). `everyTeam` asks for the
+ * cell held in every team at once (a `*` role), the account admin's check.
+ */
+export function useCanCheck(): (area: string, action: string, everyTeam?: boolean) => boolean | undefined {
   // The team the console acts in: the stored id when it is one of the person's teams, else their first, as useTeam does.
   const { teamId, team } = useTeam();
   const current = team?.id ?? teamId;
   const perms = useMyPermissions();
   const role = useTeamRole();
-  return (area, action) => {
+  return (area, action, everyTeam = false) => {
     if (!api.teams.permissions) return role === undefined ? undefined : role === 'builder' || role === 'admin';
     if (!perms.data) return undefined;
     const held = (list: { area: string; action: string }[]) => list.some((p) => p.area === area && p.action === action);
+    if (everyTeam) return held(perms.data.workspace ?? []);
     const mine = perms.data.teams.find((t) => t.teamId === current);
     // The Security team's actions are held in that team whatever team the console acts in.
     const security = perms.data.teams.some((t) =>

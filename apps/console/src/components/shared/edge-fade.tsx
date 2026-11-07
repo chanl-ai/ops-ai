@@ -29,6 +29,52 @@ export function useMoreToTheRight(root: React.RefObject<HTMLElement | null>, sel
 }
 
 /**
+ * Makes every sideways-scrolling table under `root` reachable by keyboard while it overflows: a focusable region
+ * named after its section's heading, so arrow keys scroll it. A table that fits takes no tab stop. The table primitive
+ * draws the scroller itself (`data-slot=table-container`), so they are found in the page rather than given props, and
+ * a table that appears or grows later is caught by the observers.
+ */
+export function useKeyboardScrollRegions(root: React.RefObject<HTMLElement | null>): void {
+  React.useEffect(() => {
+    const host = root.current;
+    if (!host) return;
+    let frame = 0;
+    const mark = () => {
+      frame = 0;
+      for (const el of host.querySelectorAll<HTMLElement>('[data-slot=table-container]')) {
+        const ours = el.dataset.scrollRegion === 'on';
+        if (el.scrollWidth > el.clientWidth + 1) {
+          if (ours) continue;
+          el.dataset.scrollRegion = 'on';
+          el.tabIndex = 0;
+          el.setAttribute('role', 'region');
+          const heading = el.closest('section, [data-slot=card]')?.querySelector('h1, h2, h3, [data-slot=card-title]')?.textContent?.trim();
+          el.setAttribute('aria-label', heading ? `${heading} table` : 'Table');
+        } else if (ours) {
+          delete el.dataset.scrollRegion;
+          el.removeAttribute('tabindex');
+          el.removeAttribute('role');
+          el.removeAttribute('aria-label');
+        }
+      }
+    };
+    const soon = () => {
+      if (!frame) frame = requestAnimationFrame(mark);
+    };
+    mark();
+    const changed = new MutationObserver(soon);
+    changed.observe(host, { childList: true, subtree: true });
+    const resized = new ResizeObserver(soon);
+    resized.observe(host);
+    return () => {
+      cancelAnimationFrame(frame);
+      changed.disconnect();
+      resized.disconnect();
+    };
+  }, [root]);
+}
+
+/**
  * A fade over the right edge of a sideways scroller while more sits past it, so a phone shows that a table or a tab
  * strip goes on. Drawn in the surface's own token, so it matches light and dark; it never takes a click.
  */

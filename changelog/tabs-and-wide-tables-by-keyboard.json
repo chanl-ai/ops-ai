@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Page tabs and wide tables work by keyboard",
+  "description": "Tabs on Evals and on agent, skill, guardrail, tool, knowledge base and source pages now point a screen reader at the content they show. A table wider than the screen can be focused and scrolled with the arrow keys.",
+  "tag": "fix"
+}

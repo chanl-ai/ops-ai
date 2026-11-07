@@ -7,6 +7,7 @@ import { CalendarClock, CheckCheck, CirclePlay, Gift, LayoutDashboard, Search, U
 import { PageLayout } from '@/components/page-layout';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
+import { ListItem } from '@/components/shared/list-item';
 import { QueryError } from '@/components/shared/query-states';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -120,16 +121,18 @@ export default function OverviewPage() {
                       <ItemGroup className="divide-y">
                         {rows.map((r) =>
                           r.href ? (
-                            <Item key={r.id} asChild size="sm" className="rounded-none px-6 hover:bg-muted/50">
-                              <Link href={r.href} data-testid={`overview-${w.id}-row`}>
-                                <ItemContent className="min-w-0">
-                                  <ItemTitle className="w-full truncate">{r.title}</ItemTitle>
-                                  <ItemDescription className="truncate">{r.detail}</ItemDescription>
-                                </ItemContent>
-                              </Link>
-                            </Item>
+                            <ListItem key={r.id}>
+                              <Item asChild size="sm" className="rounded-none px-6 hover:bg-muted/50">
+                                <Link href={r.href} data-testid={`overview-${w.id}-row`}>
+                                  <ItemContent className="min-w-0">
+                                    <ItemTitle className="w-full truncate">{r.title}</ItemTitle>
+                                    <ItemDescription className="truncate">{r.detail}</ItemDescription>
+                                  </ItemContent>
+                                </Link>
+                              </Item>
+                            </ListItem>
                           ) : (
-                            <Item key={r.id} size="sm" className="rounded-none px-6">
+                            <Item key={r.id} role="listitem" size="sm" className="rounded-none px-6">
                               <ItemContent className="min-w-0">
                                 <ItemTitle className="w-full truncate">{r.title}</ItemTitle>
                                 <ItemDescription className="truncate">{r.detail}</ItemDescription>

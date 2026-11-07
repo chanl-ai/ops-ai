@@ -40,7 +40,7 @@ export function ChannelLanding({ type, summary, week, sources, action }: { type:
       <CardContent className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,16rem)]">
         <ItemGroup className="gap-1">
           {k.includes.map((line) => (
-            <Item key={line} size="sm" className="px-0 py-1">
+            <Item key={line} role="listitem" size="sm" className="px-0 py-1">
               <ItemMedia>
                 <Check className="size-4 text-success-text" />
               </ItemMedia>

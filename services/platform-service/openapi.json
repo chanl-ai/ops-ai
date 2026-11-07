@@ -558,7 +558,7 @@
             "additionalProperties": {
               "type": "integer"
             },
-            "description": "Entries in each of the audit page's views: all, access, deletions, publishes",
+            "description": "Entries in each of the audit page's views: all, changes (all but sign-ins), access, deletions, publishes, sign_ins",
             "title": "Viewcounts",
             "type": "object"
           }
@@ -6029,9 +6029,11 @@
               "default": "all",
               "enum": [
                 "all",
+                "changes",
                 "publishes",
                 "access",
-                "deletions"
+                "deletions",
+                "sign_ins"
               ],
               "title": "View",
               "type": "string"

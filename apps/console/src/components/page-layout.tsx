@@ -1,6 +1,6 @@
 import type React from 'react';
 import type { ReactNode } from 'react';
-import { createElement, isValidElement, useCallback, useState } from 'react';
+import { createElement, isValidElement, useCallback, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
@@ -10,6 +10,7 @@ import { ArrowLeft, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { PreviewBadge } from '@/components/shared/preview-badge';
+import { useKeyboardScrollRegions } from '@/components/shared/edge-fade';
 import { TitleSwitcher } from '@/components/shared/title-switcher';
 import { SampleOnPage } from '@/components/shared/sample-data';
 import { WholeTokens } from '@/components/shared/whole-tokens';
@@ -89,6 +90,9 @@ export function PageLayout({
   const previewOfArea = usePreview();
   // A sample section anywhere on the page counts too: its area may be live while that section is not.
   const [samples, setSamples] = useState(0);
+  // Every table on the page that scrolls sideways takes a keyboard stop while it overflows.
+  const body = useRef<HTMLDivElement>(null);
+  useKeyboardScrollRegions(body);
   const reportSample = useCallback((change: 1 | -1) => setSamples((n) => n + change), []);
   const preview = previewProp ?? (previewOfArea || samples > 0);
 
@@ -295,7 +299,9 @@ export function PageLayout({
         {/* px-1 / -mx-1 gives cards breathing room so borders & focus rings
             aren't clipped by the dashboard layout's overflow-x-hidden.
             No overflow here — the dashboard layout handles scrolling. */}
-        <div className={cn('flex-1 px-1 -mx-1', contentClassName)}>{children}</div>
+        <div ref={body} className={cn('flex-1 px-1 -mx-1', contentClassName)}>
+          {children}
+        </div>
       </div>
     </BulkSelectionContext.Provider>
     </SampleOnPage.Provider>

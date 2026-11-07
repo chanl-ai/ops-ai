@@ -13,4 +13,5 @@ export const useActivityCount = (source: string[]) =>
   useTeamQuery({ queryKey: ['activity', 'count', source], queryFn: async () => (await api.activity.list({ page: 1, pageSize: 1, source })).pagination.total, enabled: source.length > 0, staleTime: 30_000 });
 
 /** Every background process and the latest jobs, for an account admin's Govern > Background page; polled like Activity. */
-export const useBackground = () => useTeamQuery({ queryKey: ['activity', 'background'], queryFn: () => api.activity.background(), refetchInterval: 10_000, retry: false });
+/** `enabled` false for whoever agents-service would answer with not found, so the page never asks. */
+export const useBackground = (enabled = true) => useTeamQuery({ queryKey: ['activity', 'background'], queryFn: () => api.activity.background(), refetchInterval: 10_000, retry: false, enabled });
