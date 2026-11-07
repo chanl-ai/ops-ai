@@ -62,7 +62,9 @@ ASSISTANT_FRAGMENTS: dict[str, str] = {
     "knowledge bases and files, and show a workflow's start form. You never decide a task or start a run yourself: "
     "the person does that on the card, so show the card.",
     "act-first": "Act before asking. The team's work items (an application, a client meeting, a review, a request, a "
-    "follow-up) are its cases, and what waits on a person's decision is a Human Task: look there first. For any read, "
+    "follow-up) are its cases, and decisions waiting on a person are Human Tasks: look there for the person's work. A "
+    "question about a policy, a procedure or how something is done is answered from search_knowledge alone, never "
+    "from cases or tasks. read_file and read_document are only for a file the person names. For any read, "
     "call the tool with sensible defaults (the person's own items, "
     "open ones, overdue first, the last seven days) instead of asking which. Make independent reads together in one "
     "step. Show what one more read would show instead of offering to show it. Ask one short question only before a "
@@ -74,6 +76,7 @@ ASSISTANT_FRAGMENTS: dict[str, str] = {
     "answer-style": "Answer in one short paragraph and let the cards and tables carry the details: never repeat a "
     "card's fields. Cite each fact from a <knowledge> block with its [n]; a passage "
     "search_knowledge returned has no number, so name the document it came from. Name the record a fact comes from. "
+    "To prepare someone for a case or meeting, give its customer, its purpose and the points its notes hold. "
     "Say only what a tool result or passage holds; never add steps, documents or details of your own. Never name a "
     "button, link or other control: each card shows its own. Never write a record's id or a tool's name; name the "
     "record by its title. present is for figures you worked out, never for a record a tool already shows. "
@@ -218,6 +221,19 @@ def _answer(cards: list[dict[str, str]], summary: str) -> ToolOutcome:
     return ToolOutcome(True, {"cards": cards, "summary": summary})
 
 
+def _brief(row: dict[str, Any], events: list[dict[str, Any]]) -> str:
+    """One case for the model to answer from: subject and status, customer, when it is due, and its notes in order, so
+    a "prep me" names the client and the points the case holds instead of making them up."""
+    notes = [str(e["detail"].get("text")) for e in events if e.get("kind") == "note" and e["detail"].get("text")]
+    parts = [f"{row['subject']} ({row['status']})"]
+    if row.get("customer_name"):
+        parts.append(f"customer {row['customer_name']}")
+    if row.get("resolution_due_at"):
+        parts.append(f"due {str(row['resolution_due_at'])[:16].replace('T', ' ')}")
+    parts.append("notes: " + " | ".join(notes) if notes else "no notes")
+    return "; ".join(parts)
+
+
 def _case_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """The cases as one table part: subject first, the id last, which the chat's table keeps behind its View menu."""
     data = [
@@ -290,6 +306,10 @@ class OpsReads:
         )
         named = "; ".join(f"{r['subject']} ({r['status']})" for r in rows)
         summary = f"{total} case(s) match; showing {len(rows)}: {named}" if rows else "No case matches."
+        if len(rows) == 1:
+            # The one match is the case asked about: its brief saves a get_case call.
+            events = await CaseStore(self.rt.db).events(str(rows[0]["id"]))
+            summary = f"1 case matches: {_brief(rows[0], events)}"
         if len(rows) >= TABLE_FROM:
             # The table is drawn in place of the cards, so the cases are shown once.
             return ToolOutcome(True, {"cards": [], "summary": summary}, {"part": _case_rows(rows)})
@@ -301,7 +321,8 @@ class OpsReads:
             row = await CaseStore(self.rt.db).get(case_id, [str(person.team_id)])
         except CaseNotFound:
             return _refused(f"There is no case {case_id} in this team.")
-        return _answer([{"type": "case", "id": case_id}], f"{row['subject']} ({row['status']})")
+        events = await CaseStore(self.rt.db).events(case_id)
+        return _answer([{"type": "case", "id": case_id}], _brief(row, events))
 
     async def _my_human_tasks(self, person: Principal, args: dict[str, Any]) -> ToolOutcome:
         """`mine`: the open tasks assigned to the person; when none is, the open tasks they may decide. `team`: every
@@ -408,6 +429,9 @@ async def fill_cards(rt: Runtime, me: Principal, messages: list[ChatMessage]) ->
     """Fills each Ops tool call's card references in place as `me`, the person reading the thread, so a card always
     draws its record's current state and only what the reader may see. Called on every thread read."""
     for message in messages:
+        # A record drawn once in a reply is not drawn again when a later call there returns it too (find_cases, then
+        # get_case on the same case).
+        drawn: set[tuple[str, str]] = set()
         for call in message.tool_calls or []:
             raw: object = call.output
             if call.server != OPS_SERVER or not isinstance(raw, dict):
@@ -416,10 +440,10 @@ async def fill_cards(rt: Runtime, me: Principal, messages: list[ChatMessage]) ->
             cards = output.get("cards")
             if not isinstance(cards, list):
                 continue
-            filled = [
-                await _filled(rt, me, cast(dict[str, Any], c)) for c in cast(list[Any], cards) if isinstance(c, dict)
-            ]
-            call.output = {**output, "cards": filled}
+            refs = [cast(dict[str, Any], c) for c in cast(list[Any], cards) if isinstance(c, dict)]
+            fresh = [c for c in refs if (str(c.get("type")), str(c.get("id"))) not in drawn]
+            drawn |= {(str(c.get("type")), str(c.get("id"))) for c in fresh}
+            call.output = {**output, "cards": [await _filled(rt, me, c) for c in fresh]}
 
 
 def team_created_handlers(runtime: Callable[[], Runtime]) -> dict[str, Handler]:

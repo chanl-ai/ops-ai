@@ -16,6 +16,7 @@ from ops_agents.api.auth import Principal
 from ops_agents.api.child_runs import acting_for
 from ops_agents.api.ops_tools import TOOLS, OpsReads, declared_args, ensure_ops_assistant
 from ops_agents.store.cases import CaseStore
+from ops_contracts.chat import ChatMessage, ToolCall
 from ops_store.isolation import scope
 from tests.api.test_action_roles import ADMIN, VIEWER
 from tests.api.test_team_default_agent import (  # noqa: F401
@@ -186,3 +187,51 @@ async def test_three_or_more_cases_draw_as_one_table_and_fewer_as_cards(stack: S
     assert len(part["data"]) == 3
     assert {"subject", "customer", "status", "due", "id"} == set(part["data"][0])
     assert few.view is None and len(few.output["cards"]) == 1, few
+
+
+async def test_a_case_found_and_then_read_is_drawn_once_in_the_reply(stack: Stack) -> None:  # noqa: F811 - the shared fixture
+    # A prep turn drew one case three times: find_cases, then get_case on it twice.
+    _, rt = stack
+    case = await opened(stack, "team_ops", "Client meeting 2:00 pm: Okafor Family Trust annual review")
+    ref = {"type": "case", "id": case}
+    calls = [
+        ToolCall(
+            id=f"c{i}",
+            name=name,
+            server="ops",
+            input={},
+            output={"cards": [ref], "summary": ""},
+            status="success",
+            duration_ms=1,
+        )
+        for i, name in enumerate(("find_cases", "get_case", "get_case"))
+    ]
+    message = ChatMessage(id="m1", role="assistant", content="", at="2026-11-07T00:00:00Z", tool_calls=calls)
+    with scope(TENANT, "team_ops"):
+        await ops_tools.fill_cards(rt, viewer(), [message])
+    drawn = [c["id"] for call in message.tool_calls or [] for c in call.output["cards"]]
+    assert drawn == [case], drawn
+
+
+async def test_a_case_read_brings_its_customer_due_date_and_notes(stack: Stack) -> None:  # noqa: F811 - the shared fixture
+    # "Prep me for my 2 pm meeting" named no client or prep points: the model saw the subject and status only.
+    _, rt = stack
+    with scope(TENANT, "team_ops"):
+        store = CaseStore(rt.db)
+        made = await store.open(
+            team_id="team_ops",
+            subject="Client meeting 2:00 pm: annual review",
+            priority="high",
+            by="seed@harborpine.example",
+            customer_name="Okafor Family Trust",
+        )
+        cid = str(made.case["id"])
+        await store.add_event(
+            cid, "note", ref=None, detail={"text": "Risk profile last refreshed 14 months ago."}, by="x"
+        )
+    ops = OpsReads(rt)
+    with scope(TENANT, "team_ops"), acting_for(viewer()):
+        read = await ops.run("get_case", {"caseId": cid})
+        found = await ops.run("find_cases", {"search": "annual review"})
+    for summary in (read.output["summary"], found.output["summary"]):
+        assert "Okafor Family Trust" in summary and "Risk profile last refreshed 14 months ago." in summary, summary
