@@ -67,6 +67,9 @@ async def give_app_tools(rt: Runtime, me: Principal, module_ids: list[str]) -> A
     reads = sorted({o.name for o in ops if o.module_id in wanted and o.access == "read"})
 
     def answer(state: GiveState) -> AppToolsGiven:
+        # The app's state changed for the team: its apps line is read again on the next turn.
+        if rt.apps_line is not None:
+            rt.apps_line.forget(team)
         return AppToolsGiven(agent_id=agent.id, agent_name=agent.name, tools=reads, state=state)
 
     if not reads:

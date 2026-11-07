@@ -56,6 +56,7 @@ from . import agent_registry, engine_seed, guardrails, skills, workflow_registry
 from .acting_for import CallPeople, acting_for_tokens
 from .agent_calls import AgentCalls
 from .approval_renewal import ApprovalRenewal
+from .apps_line import AppsLine
 from .chat_attachments import ChatAttachmentReader
 from .child_runs import ChildRuns
 from .deps import Runtime
@@ -386,6 +387,7 @@ def create_app(
                 )
                 channels = ChannelStore(db)
                 rt.channels = channels
+                rt.apps_line = AppsLine(rt)
                 deps = GraphDeps(
                     catalog,
                     ports,
@@ -397,6 +399,7 @@ def create_app(
                     workflows=ChildRuns(rt),
                     agents=AgentCalls(rt),
                     memory=MemoryReads(rt),
+                    apps=rt.apps_line,
                     ops=OpsReads(rt),
                     tools=directory,
                 )

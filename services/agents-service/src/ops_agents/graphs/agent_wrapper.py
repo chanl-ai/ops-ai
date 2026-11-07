@@ -34,6 +34,7 @@ from .common import (
     kernel_turn,
     needs_step_up,
     ports_with_workflows,
+    with_apps,
     with_memory,
 )
 
@@ -113,7 +114,9 @@ def build(
         req = TurnRequest(
             turn_id=new_id("turn"),
             run_id=new_id("run"),
-            settings=await with_memory(deps, deps.catalog.settings_for(a, deps.model_alias, effective), a.id),
+            settings=await with_apps(
+                deps, await with_memory(deps, deps.catalog.settings_for(a, deps.model_alias, effective), a.id), a.id
+            ),
             tools=[*_switched_on(await agent_grants(deps, a), effective), *offers],
             transcript=transcript,
             user_turn=state["message"],
@@ -170,7 +173,9 @@ def build(
         req = TurnRequest(
             turn_id=new_id("turn"),
             run_id=new_id("run"),
-            settings=await with_memory(deps, deps.catalog.settings_for(a, deps.model_alias, effective), a.id),
+            settings=await with_apps(
+                deps, await with_memory(deps, deps.catalog.settings_for(a, deps.model_alias, effective), a.id), a.id
+            ),
             tools=[*_switched_on(await agent_grants(deps, a), effective), *offers],
             resume=Resume(
                 interrupt=interrupt_from_state(state.get("pending") or {}),

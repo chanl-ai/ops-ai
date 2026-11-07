@@ -61,6 +61,8 @@ class GraphDeps:
     agents: AgentRunner | None = None
     # What the agent remembers about the turn's person: their profile and search_memory; None remembers nothing.
     memory: MemoryRunner | None = None
+    # The team's apps and the person's sign-in to each, for the team's default agent; None names no apps.
+    apps: AppsRunner | None = None
     # The Ops tools for the team's default agent; None offers none.
     ops: OpsRunner | None = None
 
@@ -241,6 +243,22 @@ async def ports_with_workflows(
         names = frozenset(g.name for g in reads)
         ports, offers = replace(ports, tools=OpsTools(ports.tools, deps.ops, names)), [*offers, *reads]
     return ports, offers
+
+
+class AppsRunner(Protocol):
+    """The API side of the apps line (api/apps_line.py), so this layer does not import the API."""
+
+    async def fragment(self, agent_id: str) -> PromptFragment | None:
+        """Which apps are on for the turn's team and whether its person is signed in to each; None when the agent is
+        not the team's default or there is no person."""
+        ...
+
+
+async def with_apps(deps: GraphDeps, settings: AgentSettings, agent_id: str) -> AgentSettings:
+    """The turn's settings with the apps line after the agent's own instructions, as a volatile fragment."""
+    if deps.apps is None or (fragment := await deps.apps.fragment(agent_id)) is None:
+        return settings
+    return replace(settings, instructions=[*settings.instructions, fragment])
 
 
 async def with_memory(deps: GraphDeps, settings: AgentSettings, agent_id: str) -> AgentSettings:
