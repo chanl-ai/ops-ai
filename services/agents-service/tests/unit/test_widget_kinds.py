@@ -52,6 +52,17 @@ def test_data_outside_the_schema_is_refused_with_the_field_named() -> None:
         ("document", {"name": "a.pdf", "passage": "p", "fileId": "https://evil.example/a.pdf"}),
         ("quote", {"passage": "p", "source": "s", "html": "<script>alert(1)</script>"}),
         ("entity", {"title": "x", "fields": [], "image": "https://evil.example/a.png"}),
+        # A record opens by path on the app account's own address: a host, a scheme or `//` is refused.
+        (
+            "entity",
+            {"title": "x", "fields": [], "app": "plugin:opsai.salesforce", "open": {"path": "https://evil.example"}},
+        ),
+        ("brief", {"title": "x", "sections": [{"title": "s", "items": []}], "open": {"path": "//evil.example/x"}}),
+        (
+            "brief",
+            {"title": "x", "sections": [{"title": "s", "items": [{"text": "t", "href": "https://evil.example"}]}]},
+        ),
+        ("entity", {"title": "x", "fields": [], "app": "javascript:alert(1)//"}),
     ],
 )
 def test_a_kind_carries_no_link_script_html_or_image_source(kind: str, data: dict[str, Any]) -> None:

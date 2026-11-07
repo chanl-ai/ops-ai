@@ -22,6 +22,7 @@ import { OpsCallCards, opsCards } from './ops-call-cards';
 import { ToolCallCard } from './tool-call-card';
 import { ConnectionRequiredCard, connectionRequired } from './connection-required-card';
 import { rememberedLine } from '@/components/memory/remembered-line';
+import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion';
 import { LayoutWidget } from './widget-layout';
 import { WidgetView } from './widget-view';
 import { ChatWidgetView } from './widgets';
@@ -110,8 +111,11 @@ export function AssistantMessage({
   byline,
   onOpenMemory,
   cardsReadOnly,
+  followUps,
 }: {
   message: ChatMessage;
+  /** The turn's next asks as chips; given for the conversation's latest reply only, so older turns offer none. */
+  followUps?: string[];
   /** Draws Ops cards with Open and no buttons: the embedded chat, whose widget API serves no record routes. */
   cardsReadOnly?: boolean;
   /** Set while the reply is in flight and nothing has been written yet. */
@@ -183,6 +187,14 @@ export function AssistantMessage({
           <ListTree className="size-3" /> How this was found · {message.trace.candidates.filter((c) => c.outcome === 'returned').length} of {message.trace.searched} passages
           {message.trace.precedence.length ? ` · ${message.trace.precedence.length} precedence ${message.trace.precedence.length === 1 ? 'decision' : 'decisions'}` : ''}
         </button>
+      )}
+
+      {settled && onReply && !readOnly && !!followUps?.length && (
+        <Suggestions data-testid="follow-ups" className="flex-wrap">
+          {followUps.slice(0, 3).map((f) => (
+            <Suggestion key={f} suggestion={f} onClick={() => onReply(f)} className="h-7 rounded-full px-3 text-xs font-normal" data-testid="follow-up" />
+          ))}
+        </Suggestions>
       )}
 
       {message.skills?.length && settled ? (

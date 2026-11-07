@@ -15,6 +15,7 @@ const KINDS: Record<string, { name: string; empty: string; error: string }> = {
   timeline: { name: 'Timeline', empty: 'No activity yet.', error: 'The activity could not load.' },
   tracker: { name: 'Status tracker', empty: 'This process has not started.', error: 'The status could not load.' },
   entity: { name: 'Entity card', empty: 'Nothing found for that name or number.', error: 'The record could not load.' },
+  brief: { name: 'Prep brief', empty: 'Nothing on file before this meeting.', error: 'The brief could not load.' },
   comparison: { name: 'Comparison', empty: 'Nothing to compare yet.', error: 'The comparison could not load.' },
   checklist: { name: 'Checklist', empty: 'Nothing left to do.', error: 'The checklist could not load.' },
   form: { name: 'Form', empty: 'This form has no fields.', error: 'The form could not load.' },
