@@ -312,3 +312,32 @@ async def test_load_skill_refuses_a_slug_the_agent_has_not_attached() -> None:
     result, events = await turn(model, [HARDSHIP])
     assert result.skills == [] and not any(isinstance(e, SkillLoaded) for e in events)
     assert "No skill named someone-elses-skill" in json.dumps(model.results)
+
+
+async def test_a_follow_up_keeps_the_skill_an_earlier_turn_loaded_and_the_records_it_read() -> None:
+    # Each turn of a meeting log loaded the same skill and searched the account again: five model calls a turn.
+    model = Model([], "Updating Education savings.")
+    settings = AgentSettings("ag_advisor", 1, [PromptFragment("You help bankers.")], "m", skills=[HARDSHIP])
+    read = 'salesforce_query {"q": "SELECT Id FROM Account"} answered {"records": [{"Id": "001A"}]}'
+    req = TurnRequest(
+        "t2",
+        "r2",
+        settings,
+        [],
+        user_turn="Update Education savings",
+        carried_skills=[{"skillId": "sk_1", "version": 1, "name": HARDSHIP.name, "matched": "cannot pay"}],
+        earlier_reads=[read],
+    )
+    events = [
+        e async for e in run_turn(req, KernelPorts(model=model.build(), tools=NoTools(), knowledge=NoKnowledge()))
+    ]
+    result = events[-1].result  # type: ignore[attr-defined]
+    sent = model.instructions[0]
+    assert HARDSHIP.instructions in sent and read in sent, sent
+    assert result.skills == [{"skillId": "sk_1", "name": HARDSHIP.name, "version": 1, "matched": "cannot pay"}]
+
+
+def test_a_skill_carried_from_an_earlier_turn_leaves_room_for_two_loads() -> None:
+    one, two = _skill(1), _skill(2)
+    assert skillset.load([HARDSHIP, one, two], [HARDSHIP, one], "skill-2", [HARDSHIP]) == (two, None)
+    assert skillset.load([HARDSHIP, one, two], [HARDSHIP, one], "skill-2")[0] is None

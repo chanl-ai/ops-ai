@@ -73,6 +73,7 @@ from ..agent_registry import definition_of, pinned_definition, refuse_new_turns,
 from ..auth import Principal, caller_of, principal, require_chat_use
 from ..chat_attachments import ChatAttachmentReader
 from ..chat_budget import ensure_budget
+from ..chat_history import history_entry
 from ..chat_threads import (
     CHAT_GRAPH,
     NEW_TITLE,
@@ -618,7 +619,7 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         **({"agent_version": agent.version} if pinned is not None else {}),
         **({"test_agent": agent.model_dump(mode="json")} if test else {}),
         "message": question,
-        "history": [{"role": m.role, "content": m.content} for m in transcript],
+        "history": [history_entry(m) for m in transcript],
         "requested_by": me.email,
     }
     # The settings this turn runs on: the agent's limits, then the thread's overrides, then this message's; a value

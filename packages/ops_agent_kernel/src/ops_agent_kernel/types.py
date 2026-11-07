@@ -212,6 +212,11 @@ class TurnRequest:
     knowledge_asked: bool | None = None
     variables: dict[str, str] = field(default_factory=dict[str, str])
     resume: Resume | None = None
+    # On-match skills an earlier turn of the conversation loaded ({skillId, version, name, matched}): this turn keeps
+    # them loaded with their bodies in the system prompt, so a follow-up does not load them again.
+    carried_skills: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
+    # What earlier turns of the conversation read, one line each, so a follow-up answers from them, not a new read.
+    earlier_reads: list[str] = field(default_factory=list[str])
     deadline_seconds: float = 120.0
     # A JSON Schema the turn's answer must match (a workflow's agent step): the model returns structured output
     # through the call, validated against it, on `TurnResult.output`; a mismatch finishes with `schema_error`.

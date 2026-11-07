@@ -118,6 +118,8 @@ class _TurnState:
     # Text already sent as deltas this turn.
     shown_text: str = ""
     loads: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
+    # Skills an earlier turn of the conversation loaded, kept loaded here outside this turn's load caps.
+    carried: list[Skill] = field(default_factory=list[Skill])
     # Widget parts present showed this turn, against the agent's widgets_per_turn.
     shown: int = 0
     # Set once present is refused for the cap: a further call ends the turn.
@@ -283,6 +285,15 @@ def _with_skills(system_prompt: str, pinned: list[Skill]) -> str:
     return f"{system_prompt}\n\n{added}" if added else system_prompt
 
 
+def _with_earlier(system_prompt: str, carried: list[Skill], reads: list[str]) -> str:
+    """The bodies of skills an earlier turn loaded and the results earlier turns read, after the skill index."""
+    parts = [f"## {s.name} (loaded earlier in this conversation)\n\n{s.instructions}" for s in carried]
+    if reads:
+        lines = "\n".join(f"- {r}" for r in reads)
+        parts.append(f"## {EARLIER_READS}\n\n{lines}")
+    return "\n\n".join([system_prompt, *parts]) if parts else system_prompt
+
+
 def _withhold(state: _TurnState, guarded: bool) -> TextReplaced | None:
     """A guarded turn that ends any way but a passed check keeps none of its unchecked text in the stored message or
     the result. Text it streamed is cleared from the screen too (the TextReplaced to send); text it held was never
@@ -320,7 +331,9 @@ def _load_skill(state: _TurnState, grant: ToolGrant) -> Tool[None]:
         if (over := state.charge_builtin()) is not None:
             rec.status, rec.output = "error", {"error": over}
             return {"error": over}
-        skill, why = skillset.load(state.req.settings.skills, state.loaded, str(arguments.get("slug") or ""))
+        skill, why = skillset.load(
+            state.req.settings.skills, state.loaded, str(arguments.get("slug") or ""), state.carried
+        )
         if skill is None:
             rec.status, rec.output = "error", {"error": why}
             return {"error": why}
@@ -557,6 +570,12 @@ TOOL_BUDGET_SPENT = (
     "Not run: this reply has used its {cap} tool calls. Do not call another tool; answer now from the results you "
     "already have, and say in one line what you could not read."
 )
+# What a skill carried from an earlier turn was loaded for, and the heading of the reads earlier turns made.
+EARLIER = "earlier in this conversation"
+EARLIER_READS = (
+    "Read earlier in this conversation. Answer from these; read again only for what they do not hold, or when the "
+    "person asks for fresh data"
+)
 STEP_LIMIT_REACHED = "I reached the step limit for one reply before I could answer. Ask again, or narrow the question."
 # Appended when a limit stops a turn that had already written part of its answer, so a partial reply never reads as
 # a complete one.
@@ -695,6 +714,16 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             state.loaded.append(skill)
             state.loads.append(entry)
             restored += 1
+    # Skills an earlier turn loaded stay loaded (pinned at their current version), outside this turn's load caps.
+    carried: list[Skill] = []
+    for entry in req.carried_skills:
+        skill = next((s for s in req.settings.skills if s.skill_id == entry.get("skillId")), None)
+        if skill is not None and skill.loading == "on_match" and skill not in state.loaded:
+            state.loaded.append(skill)
+            state.loads.append(skillset.loaded_entry(skill, str(entry.get("matched") or EARLIER)))
+            carried.append(skill)
+            restored += 1
+    state.carried = carried
     passages: list[Passage] = []
     digest: dict[str, str] = {}
     all_messages: list[ModelMessage] = []
@@ -781,7 +810,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             )
             results = DeferredToolResults(approvals={call_id: decision})
             system_prompt, user_prompt = "\n\n".join(f.text for f in req.settings.instructions if f.stable), None
-            system_prompt = _with_skills(system_prompt, req.settings.skills)
+            system_prompt = _with_earlier(_with_skills(system_prompt, req.settings.skills), carried, req.earlier_reads)
         else:
             if req.kb_ids and req.user_turn:
                 yield StatusChanged("retrieving")
@@ -807,7 +836,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             )
             digest = ctx.digest
             history, results, system_prompt, user_prompt = ctx.history, None, ctx.system_prompt, ctx.user_prompt
-            system_prompt = _with_skills(system_prompt, req.settings.skills)
+            system_prompt = _with_earlier(_with_skills(system_prompt, req.settings.skills), carried, req.earlier_reads)
     except UnknownVariableError as e:
         yield finish("failed", "error", error=str(e))
         return
