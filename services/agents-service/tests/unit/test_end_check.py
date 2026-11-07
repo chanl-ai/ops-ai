@@ -115,6 +115,14 @@ async def test_ids_and_capitalised_words_are_not_error_codes() -> None:
     assert writer.calls == 1 and result.text.startswith("Customer CUS-1002")
 
 
+async def test_a_record_id_or_tool_name_in_the_reply_is_corrected() -> None:
+    # A live reply read "the annual review at 2:00 pm (case_0eef29f68716) ... (my_human_tasks)".
+    writer = Writer("The review is at 2:00 pm (case_0eef29f68716).", "The Okafor review is at 2:00 pm.", read=True)
+    _, result = await run(writer, tools=[CASES])
+    assert writer.calls == 3 and result.text == "The Okafor review is at 2:00 pm."
+    assert answer_check.internal_name("Nothing waits for you (find_cases).", frozenset({"find_cases"})) == "find_cases"
+
+
 async def test_a_stray_ok_at_the_end_is_corrected() -> None:
     writer = Writer("Two cases are open for you.\n\nok", "Two cases are open for you.")
     _, result = await run(writer, tools=[])
