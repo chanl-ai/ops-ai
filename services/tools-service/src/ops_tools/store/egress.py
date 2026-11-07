@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from ops_store import Guarantee
 from ops_store.search import contains
 
-from .modules import metadata, module_egress_hosts
+from .modules import metadata, module_egress_hosts, tool_modules
 
 _TS = sa.DateTime(timezone=True)
 
@@ -61,6 +61,25 @@ egress_audit = sa.Table(
 TABLES = {"host": (egress_hosts, egress_hosts.c.host), "range": (egress_ranges, egress_ranges.c.cidr)}
 
 
+def _by_name(modules: list[dict[str, str]]) -> list[dict[str, str]]:
+    return sorted(modules, key=lambda m: m["name"].lower())
+
+
+def _users(tenant_id: str) -> sa.Select[tuple[str, str, str | None]]:
+    """Each host's modules with the name a person knows them by, so the allow list never shows a bare module id."""
+    return (
+        sa.select(module_egress_hosts.c.host, module_egress_hosts.c.module_id, tool_modules.c.display_name)
+        .outerjoin(
+            tool_modules,
+            sa.and_(
+                tool_modules.c.tenant_id == module_egress_hosts.c.tenant_id,
+                tool_modules.c.id == module_egress_hosts.c.module_id,
+            ),
+        )
+        .where(module_egress_hosts.c.tenant_id == tenant_id)
+    )
+
+
 class HostInUseError(RuntimeError):
     def __init__(self, host: str, modules: list[str]) -> None:
         super().__init__(host)
@@ -79,16 +98,14 @@ class EgressStore:
         """Hosts, each with the modules that use it, and ranges."""
         hosts_q = egress_hosts.select().where(egress_hosts.c.tenant_id == tenant_id).order_by(egress_hosts.c.host)
         ranges_q = egress_ranges.select().where(egress_ranges.c.tenant_id == tenant_id).order_by(egress_ranges.c.cidr)
-        users_q = sa.select(module_egress_hosts.c.host, module_egress_hosts.c.module_id).where(
-            module_egress_hosts.c.tenant_id == tenant_id
-        )
+        users_q = _users(tenant_id)
         async with self.engine.connect() as c:
             hosts = [dict(r) for r in (await c.execute(hosts_q)).mappings()]
             ranges = [dict(r) for r in (await c.execute(ranges_q)).mappings()]
-            used: dict[str, list[str]] = {}
-            for host, module_id in await c.execute(users_q):
-                used.setdefault(host, []).append(module_id)
-        return {"hosts": [{**h, "modules": sorted(used.get(h["host"], []))} for h in hosts], "ranges": ranges}
+            used: dict[str, list[dict[str, str]]] = {}
+            for host, module_id, name in await c.execute(users_q):
+                used.setdefault(host, []).append({"id": module_id, "name": name or module_id})
+        return {"hosts": [{**h, "modules": _by_name(used.get(h["host"], []))} for h in hosts], "ranges": ranges}
 
     async def hosts_page(
         self, tenant_id: str, search: str, offset: int, limit: int, template_id: str | None = None
@@ -102,13 +119,11 @@ class EgressStore:
         )
         async with self.engine.connect() as c:
             hosts = [dict(r) for r in (await c.execute(q.offset(offset).limit(limit))).mappings()]
-            users_q = sa.select(module_egress_hosts.c.host, module_egress_hosts.c.module_id).where(
-                module_egress_hosts.c.tenant_id == tenant_id, module_egress_hosts.c.host.in_([h["host"] for h in hosts])
-            )
-            used: dict[str, list[str]] = {}
-            for host, module_id in await c.execute(users_q):
-                used.setdefault(host, []).append(module_id)
-        return [{**h, "modules": sorted(used.get(h["host"], []))} for h in hosts]
+            users_q = _users(tenant_id).where(module_egress_hosts.c.host.in_([h["host"] for h in hosts]))
+            used: dict[str, list[dict[str, str]]] = {}
+            for host, module_id, name in await c.execute(users_q):
+                used.setdefault(host, []).append({"id": module_id, "name": name or module_id})
+        return [{**h, "modules": _by_name(used.get(h["host"], []))} for h in hosts]
 
     async def hosts_count(self, tenant_id: str, search: str, template_id: str | None = None) -> int:
         q = (

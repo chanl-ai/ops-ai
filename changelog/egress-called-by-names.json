@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Egress shows which tool sets call a host by name",
+  "description": "The Called by column on the egress allow-list names each tool set as you know it, instead of its internal id, and still links to it.",
+  "tag": "improved"
+}

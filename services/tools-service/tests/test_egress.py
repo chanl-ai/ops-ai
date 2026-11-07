@@ -50,6 +50,19 @@ async def test_a_module_names_only_listed_hosts(api: Api) -> None:
     assert "receipts.example.com" in listed
 
 
+async def test_a_listed_host_names_its_modules_as_people_know_them(api: Api) -> None:
+    """The allow list showed module ids (mod_document_service) where a person reads names; each module now comes with
+    its display name, on the whole list and on a page of it."""
+    await api.client.post("/v1/egress/hosts", json={"value": "statements.example.com"})
+    await api.call("POST", "/mod_document_service/operations", json=OP)
+    name = (await api.call("GET", "/mod_document_service")).json()["data"]["displayName"]
+    whole = (await api.client.get("/v1/egress")).json()["data"]["hosts"]
+    paged = (await api.client.get("/v1/egress/hosts", params={"search": "statements"})).json()["data"]["data"]
+    for hosts in (whole, paged):
+        [host] = [h for h in hosts if h["host"] == "statements.example.com"]
+        assert host["modules"] == [{"id": "mod_document_service", "name": name}], host
+
+
 async def test_a_host_in_use_stays_listed_and_every_change_is_audited(api: Api, engine: Any) -> None:
     await api.client.post("/v1/egress/hosts", json={"value": "statements.example.com"})
     await api.call("POST", "/mod_document_service/operations", json=OP)

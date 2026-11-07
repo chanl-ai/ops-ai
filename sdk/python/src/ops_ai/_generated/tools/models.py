@@ -484,16 +484,6 @@ class KnowledgeSourceView(TypedDict, closed=True):
     title: str
 
 
-class ListedHost(TypedDict, closed=True):
-    addedAt: str
-    addedBy: str
-    host: str
-    modules: list[str]
-    note: str
-    protection: NotRequired[Literal["system", "managed"] | None]
-    templateId: NotRequired[str | None]
-
-
 class ListedRange(TypedDict, closed=True):
     addedAt: str
     addedBy: str
@@ -1220,11 +1210,6 @@ class AccountDetail(TypedDict, closed=True):
     usedBy: list[ModuleUse]
 
 
-class AllowList(TypedDict, closed=True):
-    hosts: list[ListedHost]
-    ranges: list[ListedRange]
-
-
 class AppAccount(TypedDict, closed=True):
     account: NotRequired[str | None]
     actions: NotRequired[
@@ -1405,11 +1390,6 @@ class EnvelopeAccountDetail(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeAllowList(TypedDict, closed=True):
-    data: AllowList
-    success: Literal[True]
-
-
 class EnvelopeBulkResult(TypedDict, closed=True):
     data: BulkResult
     success: Literal[True]
@@ -1535,15 +1515,19 @@ class HTTPValidationError(TypedDict):
     detail: NotRequired[list[ValidationError]]
 
 
-class HostList(TypedDict, closed=True):
-    data: list[ListedHost]
-    facets: dict[str, dict[str, int]]
-    pagination: Pagination
-
-
 class ImportOperationsIn(TypedDict, closed=True):
     operations: list[DiscoveredOperationIn]
     source: ModuleSourceIn
+
+
+class ListedHost(TypedDict, closed=True):
+    addedAt: str
+    addedBy: str
+    host: str
+    modules: list[ModuleRef]
+    note: str
+    protection: NotRequired[Literal["system", "managed"] | None]
+    templateId: NotRequired[str | None]
 
 
 class ModuleActivity(TypedDict, closed=True):
@@ -1824,6 +1808,11 @@ class ToolUsedBy(TypedDict, closed=True):
     workflows: list[ToolUser]
 
 
+class AllowList(TypedDict, closed=True):
+    hosts: list[ListedHost]
+    ranges: list[ListedRange]
+
+
 class AppCredentialChange(TypedDict, closed=True):
     accounts: int
     accountsList: list[CredentialAccount]
@@ -1895,6 +1884,11 @@ class AuthConfig(TypedDict, closed=True):
     type: Literal["ops_ai", "own", "account"]
 
 
+class EnvelopeAllowList(TypedDict, closed=True):
+    data: AllowList
+    success: Literal[True]
+
+
 class EnvelopeAppCredentialChange(TypedDict, closed=True):
     data: AppCredentialChange
     success: Literal[True]
@@ -1912,11 +1906,6 @@ class EnvelopeAppTool(TypedDict, closed=True):
 
 class EnvelopeExecutionList(TypedDict, closed=True):
     data: ExecutionList
-    success: Literal[True]
-
-
-class EnvelopeHostList(TypedDict, closed=True):
-    data: HostList
     success: Literal[True]
 
 
@@ -1970,6 +1959,12 @@ class EnvelopeListPluginTemplate(TypedDict, closed=True):
     success: Literal[True]
 
 
+class HostList(TypedDict, closed=True):
+    data: list[ListedHost]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
 class SecretList(TypedDict, closed=True):
     data: list[SecretMeta]
     facets: dict[str, dict[str, int]]
@@ -2019,6 +2014,11 @@ class AppPage(TypedDict, closed=True):
 
 class EnvelopeAppPage(TypedDict, closed=True):
     data: AppPage
+    success: Literal[True]
+
+
+class EnvelopeHostList(TypedDict, closed=True):
+    data: HostList
     success: Literal[True]
 
 

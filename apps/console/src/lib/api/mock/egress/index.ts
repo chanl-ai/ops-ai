@@ -2,6 +2,7 @@ import type { EgressApi } from '../../egress-contract';
 import { ApiError } from '../../contract';
 import { list as pageOf, respond } from '../runtime';
 import type { ListedHost, ListedRange } from '@/lib/types/egress';
+import type { ModuleRef } from '@/lib/types/tool-modules';
 
 const HOST = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 const CIDR = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/;
@@ -24,7 +25,7 @@ function checked(kind: 'host' | 'range', raw: string): string {
 }
 
 /** The allow-list in memory, seeded with the hosts the seeded modules call. `inUse` maps a host to its modules' names. */
-export function createEgressMock(deps: { me: string; inUse: () => Record<string, string[]> }): EgressApi {
+export function createEgressMock(deps: { me: string; inUse: () => Record<string, ModuleRef[]> }): EgressApi {
   const at = new Date(Date.now() - 86_400_000 * 12).toISOString();
   const hosts: Omit<ListedHost, 'modules'>[] = Object.keys(deps.inUse()).map((host) => ({ host, note: 'Seeded with its tool module', addedBy: 'Platform team', addedAt: at }));
   const ranges: ListedRange[] = [{ cidr: '10.20.0.0/16', note: 'Core banking network', addedBy: 'Platform team', addedAt: at }];
@@ -53,7 +54,7 @@ export function createEgressMock(deps: { me: string; inUse: () => Record<string,
       respond(() => {
         const value = checked(kind, raw);
         const users = kind === 'host' ? (deps.inUse()[value] ?? []) : [];
-        if (users.length) throw new ApiError(`${value} is called by ${users.join(', ')}. Change those modules first.`, 409);
+        if (users.length) throw new ApiError(`${value} is called by ${users.map((u) => u.name).join(', ')}. Change those modules first.`, 409);
         const list: { host?: string; cidr?: string }[] = kind === 'host' ? hosts : ranges;
         const i = list.findIndex((r) => (r.host ?? r.cidr) === value);
         if (i < 0) throw new ApiError(`${value} on the egress allow-list not found`, 404);

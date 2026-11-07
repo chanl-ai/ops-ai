@@ -5637,7 +5637,7 @@
           },
           "modules": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ModuleRef"
             },
             "title": "Modules",
             "type": "array"
