@@ -33,7 +33,7 @@ Design: the app set-up design (one Turn on window, two questions and one choice)
 | 6 | James, who has not connected his own Salesforce account, opens My accounts | Salesforce is listed and not connected |
 | 7 | In the console, Priya opens Salesforce and presses Connect | One window: where you sign in, whose account tools use, and the assistant box, ticked |
 | 8 | She allows access at the fake Salesforce | The window says Connected as the account, how many read tools were added and that the assistant got them |
-| 9 | Ravi opens Salesforce's page | No Connect for him; the page says who can turn it on |
+| 9 | Ravi, a viewer, opens Salesforce's page and presses Connect | The window connects only his own account: no Turn on questions and no assistant box |
 | 10 | James asks the assistant about a case in a new chat | The Connect card asks for his own Salesforce account |
 
 ## What would make a step pass with the code broken

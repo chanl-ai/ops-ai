@@ -154,6 +154,12 @@ export const useDeleteAppCredential = () =>
 
 export const useSetCredentialSecret = () =>
   useSystemsMutation((a: Args<'apps_set_app_credential_secret'>) => sdk((ops) => ops.raw.tools.apps_set_app_credential_secret(a)));
+/**
+ * Gives the team's assistant an app's read tools (POST /v1/team-assistant/app-tools, agents-service), the Turn on
+ * window's choice: which tools, and whether that was published at once, waits on a review or on someone's draft.
+ */
+export const useGiveAssistantAppTools = () =>
+  useSystemsMutation((moduleIds: string[]) => sdk((ops) => ops.raw.agents.agents_give_assistant_app_tools({ body: { moduleIds } })));
 /** Turns a plugin's app on or off for the team (PUT /v1/apps/plugin:{id}/team); answers the app's card. */
 export const useSetTeamApp = () =>
   useSystemsMutation((a: { appId: string; body: TeamAppBody }) => sdk((ops) => ops.raw.tools.apps_set_team_app({ path: { app_id: a.appId }, body: a.body })));
