@@ -253,6 +253,8 @@ class Catalog(_Model):
             temperature=effective.temperature if effective else None,
             max_tool_calls=agent.max_tool_calls,
             max_steps=agent.max_model_calls,
+            # Every chat answer is checked for codes, stray endings and uncited knowledge before it is kept.
+            end_check=True,
             tool_search_above=self.tool_search_above,
             redact_pii=agent.redact_pii,
             guardrails=[

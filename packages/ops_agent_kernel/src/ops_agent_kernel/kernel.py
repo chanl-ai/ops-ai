@@ -46,7 +46,7 @@ from pydantic_ai.usage import UsageLimits
 
 from ops_service_kit.ids import action_id, input_hash
 
-from . import guard, pii, present, search
+from . import answer_check, guard, pii, present, search
 from . import skills as skillset
 from .context import UnknownVariableError, assemble, cited_numbers
 from .events import (
@@ -124,6 +124,31 @@ class _TurnState:
     present_closed: bool = False
     # Set when the model repeats a call it already made this reply: it is offered no system tool after that.
     tools_closed: bool = False
+    # Calls to the kernel's own tools this turn, against the agent's max_builtin_calls; set once one is refused.
+    builtin_calls: int = 0
+    builtins_refused: bool = False
+
+    def last_step(self, step: int) -> bool:
+        """The last step of a turn with more than one offers no tool, so the turn always keeps a step to answer in."""
+        steps = self.req.settings.max_steps
+        return steps > 1 and step >= steps
+
+    def offered(self, ctx: RunContext[None], *, builtin: bool) -> bool:
+        """Whether a tool is offered on the step about to run; `ctx.run_step` is that step's number."""
+        return not self.last_step(ctx.run_step) and (builtin or not self.tools_closed)
+
+    def charge_builtin(self) -> str | None:
+        """Counts one call to a kernel tool. Past the cap the first call gets the instruction to answer in text; a call
+        after that ends the turn, as present's widget cap does. They stay offered: a withdrawn tool leaves the library
+        answering "unknown tool" and the model retrying until the turn fails."""
+        cap = self.req.settings.max_builtin_calls
+        if cap is not None and self.builtin_calls >= cap:
+            if self.builtins_refused:
+                raise BuiltinLimitReached(f"A kernel tool was called again after the limit of {cap} a turn.")
+            self.builtins_refused = True
+            return BUILTIN_LIMIT.format(cap=cap)
+        self.builtin_calls += 1
+        return None
 
     def record(self, tool_call_id: str, tool: str, arguments: dict[str, Any]) -> ToolCallRecord:
         """The record for a call, created on first sight. The tool function can run before its call event is
@@ -169,6 +194,9 @@ def _present(state: _TurnState) -> Tool[None]:
 
     async def call(ctx: RunContext[None], **arguments: Any) -> Any:
         rec = state.record(ctx.tool_call_id or f"call_{len(state.order)}", present.NAME, arguments)
+        if (over := state.charge_builtin()) is not None:
+            rec.status, rec.output = "error", {"error": over}
+            return {"error": over}
         if state.present_closed:
             # The model was told to stop and called again: end the turn with what it has shown, so a model that
             # ignores the refusal cannot spend the rest of the step limit.
@@ -203,12 +231,27 @@ def _present(state: _TurnState) -> Tool[None]:
         g.input_schema,
         takes_ctx=True,
     )
+    tool.prepare = _offer(state, builtin=True)
     return tool
+
+
+def _offer(
+    state: _TurnState, *, builtin: bool
+) -> Callable[[RunContext[None], ToolDefinition], Awaitable[ToolDefinition | None]]:
+    async def prepare(ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition | None:
+        return tool_def if state.offered(ctx, builtin=builtin) else None
+
+    return prepare
 
 
 class WidgetLimitReached(UsageLimitExceeded):
     """present called after the per-answer widget limit refused it and was withdrawn. Ends the turn with the
     text and widgets it already has."""
+
+
+class BuiltinLimitReached(UsageLimitExceeded):
+    """A kernel tool called again after max_builtin_calls refused it: the turn ends as at the step limit, its partial
+    reply marked cut short."""
 
 
 class ToolLimitExceeded(UsageLimitExceeded):
@@ -256,6 +299,9 @@ def _load_skill(state: _TurnState, grant: ToolGrant) -> Tool[None]:
 
     async def call(ctx: RunContext[None], **arguments: Any) -> Any:
         rec = state.record(ctx.tool_call_id or f"call_{len(state.order)}", skillset.NAME, arguments)
+        if (over := state.charge_builtin()) is not None:
+            rec.status, rec.output = "error", {"error": over}
+            return {"error": over}
         skill, why = skillset.load(state.req.settings.skills, state.loaded, str(arguments.get("slug") or ""))
         if skill is None:
             rec.status, rec.output = "error", {"error": why}
@@ -266,9 +312,11 @@ def _load_skill(state: _TurnState, grant: ToolGrant) -> Tool[None]:
         rec.status, rec.output = "ok", {"loaded": skill.slug, "version": skill.version}
         return {"skill": skill.name, "version": skill.version, "instructions": skill.instructions}
 
-    return Tool[None].from_schema(
+    tool = Tool[None].from_schema(
         cast(Callable[..., Awaitable[Any]], call), skillset.NAME, grant.description, grant.input_schema, takes_ctx=True
     )
+    tool.prepare = _offer(state, builtin=True)
+    return tool
 
 
 def _search(state: _TurnState) -> Tool[None]:
@@ -277,17 +325,22 @@ def _search(state: _TurnState) -> Tool[None]:
 
     async def call(ctx: RunContext[None], **arguments: Any) -> Any:
         rec = state.record(ctx.tool_call_id or f"call_{len(state.order)}", search.NAME, arguments)
+        if (over := state.charge_builtin()) is not None:
+            rec.status, rec.output = "error", {"error": over}
+            return {"error": over}
         found = search.search(state.req.tools, str(arguments.get("query") or ""))
         rec.status, rec.output = "ok", {"tools": found}
         return {"tools": found}
 
-    return Tool[None].from_schema(
+    tool = Tool[None].from_schema(
         cast(Callable[..., Awaitable[Any]], call),
         search.NAME,
         search.SEARCH.description,
         search.SEARCH.input_schema,
         takes_ctx=True,
     )
+    tool.prepare = _offer(state, builtin=True)
+    return tool
 
 
 def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: bool = False) -> Tool[None]:
@@ -352,10 +405,7 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
     # Above the agent's tool-search threshold its schema is sent only once a search finds it.
     tool.defer_loading = deferred
 
-    async def offered(_ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition | None:
-        return None if state.tools_closed else tool_def
-
-    tool.prepare = offered
+    tool.prepare = _offer(state, builtin=False)
     return tool
 
 
@@ -427,6 +477,11 @@ TOOL_LIMIT_REACHED = (
     "I reached the most tool calls this agent may make in one reply before I could answer. Ask again, or narrow the "
     "question."
 )
+# What a kernel tool answers past the agent's max_builtin_calls; said as an instruction, as present's widget cap is.
+BUILTIN_LIMIT = (
+    "This turn has used its {cap} calls to present, search_tools and load_skill. Do not call them again; answer in "
+    "text now from what you have."
+)
 STEP_LIMIT_REACHED = "I reached the step limit for one reply before I could answer. Ask again, or narrow the question."
 # Appended when a limit stops a turn that had already written part of its answer, so a partial reply never reads as
 # a complete one.
@@ -439,6 +494,38 @@ KNOWLEDGE_WITHDRAWN = (
     "The knowledge this conversation searches is no longer available to this agent, so I cannot answer from it. "
     "Start a new conversation, or ask the agent's owner to grant the knowledge base again."
 )
+
+
+async def _end_check(
+    state: _TurnState, model: Any, system_prompt: str, history: list[ModelMessage], had_passages: bool
+) -> tuple[str | None, TokenUsage]:
+    """The end-clean check (answer_check.py) on the finished answer: None when it is clean, else the one correction,
+    made by a tool-less agent told each defect. A correction that fails, comes back empty or has more defects than the
+    answer leaves the answer as it was; there is never a second one."""
+    # Calls that reached a system; the kernel's own tools say nothing about whether the person's ask was answerable.
+    systems = [
+        r
+        for i in state.order
+        if (r := state.records[i]).server != UNGRANTED and r.tool not in (present.NAME, search.NAME, skillset.NAME)
+    ]
+    reads_ok = bool(systems) and all(r.status == "ok" and r.access == "read" for r in systems)
+    found = answer_check.defects(state.text, needs_citation=had_passages and not systems, all_reads_succeeded=reads_ok)
+    if not found:
+        return None, TokenUsage()
+    try:
+        fixer = Agent[None, str](model, deps_type=type(None), output_type=str, instructions=system_prompt)
+        again = await fixer.run(
+            answer_check.correction_prompt(found), message_history=history, usage_limits=UsageLimits(request_limit=1)
+        )
+    except Exception:  # a correction that fails leaves the answer as written
+        return None, TokenUsage()
+    u = again.usage
+    spent = TokenUsage(u.input_tokens, u.output_tokens, u.requests)
+    corrected = again.output.strip()
+    if not corrected:
+        return None, spent
+    still = answer_check.defects(corrected, needs_citation=had_passages and not systems, all_reads_succeeded=reads_ok)
+    return (corrected if len(still) < len(found) else None), spent
 
 
 async def run_turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEvent]:
@@ -756,6 +843,15 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     except UnexpectedModelBehavior as e:
         if (cleared := _withhold(state, guarded)) is not None:
             yield cleared
+        if req.output_schema is None and state.last_step(state.step):
+            # A model that calls a tool on the last step, where none is offered, ends the turn at the step limit.
+            notice = CUT_SHORT_STEPS if state.text else STEP_LIMIT_REACHED
+            state.text += notice
+            yield TextDelta(notice)
+            for closed in _close_open(state, NOT_RUN["max_steps"]):
+                yield closed
+            yield finish("completed", "max_steps", error=None)
+            return
         if req.output_schema is None:
             yield finish("failed", "error", error=f"The model call failed: {type(e).__name__}: {e}")
             return
@@ -795,6 +891,20 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         yield Interrupted(interrupt)
         yield finish("interrupted", "interrupt", interrupt=interrupt)
         return
+
+    if req.settings.end_check and req.output_schema is None and state.text.strip():
+        # Checked before any guardrail, so a corrected answer is the one the guardrail checks.
+        corrected, spent = await _end_check(state, model, system_prompt, all_messages, bool(passages))
+        usage = TokenUsage(
+            usage.input_tokens + spent.input_tokens,
+            usage.output_tokens + spent.output_tokens,
+            usage.requests + spent.requests,
+        )
+        if corrected is not None:
+            if state.shown_text:
+                yield _replace(state, corrected)
+            else:
+                state.text = corrected
 
     fired: dict[str, Any] | None = None
     noted: dict[str, Any] | None = None
