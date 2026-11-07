@@ -307,3 +307,34 @@ def test_a_chat_started_as_a_seed_person_carries_the_test_mark(monkeypatch: pyte
     assert main(["chat", "say", "-m", "Status of case 42?", "--as", "james", "--quiet"]) == 0
     made = next(r for r in seen if r.url.path.endswith("/v1/chat/threads"))
     assert json.loads(made.content)["title"] == "[test] Status of case 42?"
+
+
+def test_apps_on_turns_the_app_on_as_the_window_does_and_prints_the_sign_in_link(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    card = {"id": "plugin:opsai.salesforce", "name": "Salesforce", "toolsAdded": 9, "connectionId": "ca_1"}
+    card["moduleIds"] = ["mod_plugin_salesforce"]
+
+    def answer(r: httpx.Request) -> httpx.Response:
+        if r.url.path.endswith("/team"):
+            return _ok(card)
+        if r.url.path.endswith("/team-assistant/app-tools"):
+            return _ok(
+                {"agentId": "ag_ops", "agentName": "Ops Assistant", "tools": ["salesforce_query"], "state": "given"}
+            )
+        if r.url.path.endswith("/sign-in"):
+            return _ok({"authorizeUrl": "https://sf.example/authorize?x=1", "redirectUri": "https://c/return"})
+        return _ok({"card": card, "accounts": []})
+
+    seen: list[httpx.Request] = []
+    _use(monkeypatch, "apps", _client(seen, answer))
+    place = "https://acme.my.salesforce.com/services/oauth2"
+    assert main(["apps", "on", "plugin:opsai.salesforce", "--place", place]) == 0
+    out = capsys.readouterr().out
+    turned = next(r for r in seen if r.url.path.endswith("/team"))
+    assert json.loads(turned.content) == {"enabled": True, "signIn": "person_or_team", "settings": {"login_url": place}}
+    gave = next(r for r in seen if r.url.path.endswith("/team-assistant/app-tools"))
+    assert json.loads(gave.content) == {"moduleIds": ["mod_plugin_salesforce"]}
+    signed = next(r for r in seen if r.url.path.endswith("/sign-in"))
+    assert json.loads(signed.content) == {"account": "team"}
+    assert "9 read tools added" in out and "Ops Assistant can use them now" in out and "sf.example/authorize" in out

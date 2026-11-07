@@ -106,6 +106,12 @@ class Apps:
         plugin_of(app)
         return cast(dict[str, Any], self._raw.tools.apps_set_team_app(app, {"enabled": False}))
 
+    def give_assistant(self, app: str) -> dict[str, Any]:
+        """Gives the team's assistant the app's read tools the team added (the Turn on window's choice): which tools,
+        and whether it was published at once (given), waits on a review, or waits on someone's draft."""
+        modules = list(self.get(app)["card"].get("moduleIds") or [])
+        return cast(dict[str, Any], self._raw.agents.agents_give_assistant_app_tools({"moduleIds": modules}))
+
     def users(self, app: str) -> dict[str, Any]:
         """The team's agents and workflows that use the app's tools: what turning it off stops."""
         plugin_of(app)
@@ -325,6 +331,10 @@ class AsyncApps:
     async def turn_off(self, app: str) -> dict[str, Any]:
         plugin_of(app)
         return cast(dict[str, Any], await self._raw.tools.apps_set_team_app(app, {"enabled": False}))
+
+    async def give_assistant(self, app: str) -> dict[str, Any]:
+        modules = list((await self.get(app))["card"].get("moduleIds") or [])
+        return cast(dict[str, Any], await self._raw.agents.agents_give_assistant_app_tools({"moduleIds": modules}))
 
     async def users(self, app: str) -> dict[str, Any]:
         plugin_of(app)
