@@ -164,6 +164,35 @@ def words(value: str) -> str:
     return text[:1].upper() + text[1:]
 
 
+async def outcome_texts(rt: Runtime, rows: list[dict[str, Any]]) -> dict[str, str]:
+    """How each run ended, as a sentence, by run id. The outcome itself is the End's key (`not_found`), which read
+    bare looks like an error; the sentence names the End the run reached by its name in the workflow ("Finished at
+    the Not found end."). A cancelled run's outcome is the reason given, kept as written. Two reads for a whole page:
+    the End steps and the versions they belong to."""
+    ended = [r for r in rows if r.get("outcome") and r.get("status") in ("succeeded", "failed")]
+    ends = await RunStore(EngineTransactions(rt.db)).ends([str(r["id"]) for r in ended])
+    versions = await DefinitionStore(EngineTransactions(rt.db)).pinned(
+        {(str(r["workflow_id"]), int(r["version"])) for r in ended if str(r["id"]) in ends}
+    )
+    out: dict[str, str] = {}
+    for r in rows:
+        if not r.get("outcome"):
+            continue
+        if r.get("status") not in ("succeeded", "failed"):
+            out[str(r["id"])] = (
+                "Cancelled by the person who started it" if r["outcome"] == "by_user" else str(r["outcome"])
+            )
+            continue
+        stored = versions.get((str(r["workflow_id"]), int(r["version"]))) or {}
+        nodes = cast(list[dict[str, Any]], cast(dict[str, Any], stored.get("definition") or {}).get("nodes") or [])
+        end = ends.get(str(r["id"]))
+        name = next((str(n.get("name")) for n in nodes if n.get("id") == end and n.get("name")), None)
+        said = name or words(str(r["outcome"]))
+        verb = "Failed" if r["status"] == "failed" else "Finished"
+        out[str(r["id"])] = f"{verb} at the {said} end."
+    return out
+
+
 def first_text(value: Any) -> str | None:
     """The first text in a value that is not an id, depth first in its own order."""
     if isinstance(value, str):
