@@ -111,8 +111,17 @@ export interface KindStatus {
 export interface Pair {
   label: string;
   value: Cell;
+  /** The value before a change the card reports, drawn as old → new. */
+  was?: Cell;
   /** Where the value opens, when it names a record (a case, a run). */
   href?: string;
+}
+
+/** The app a card's data came from (its id in the team's Apps), and a record in it by path; the console opens the path
+ * on the address the app's account signed in to, never on a host the data names. */
+export interface KindApp {
+  app?: string;
+  open?: { path: string; label?: string };
 }
 
 export type MetricNode = { type: 'metric'; label: string; value: number | string; unit?: string; delta?: number; deltaLabel?: string; goodWhen?: 'up' | 'down'; trend?: number[] };
@@ -122,14 +131,38 @@ export type ChartNode = { type: 'chart'; rows: Rows; x: string; y: string[]; kin
 export type KindNode =
   | { type: 'timeline'; title?: string; events: { at: string; title: string; detail?: string; tone?: Tone }[] }
   | { type: 'tracker'; title?: string; reference?: string; steps: { label: string; state: StepStateKind; detail?: string; at?: string }[] }
-  | { type: 'entity'; title: string; subtitle?: string; category?: string; status?: KindStatus; fields: Pair[]; actions?: KindAction[] }
+  | ({ type: 'entity'; title: string; subtitle?: string; category?: string; status?: KindStatus; fields: Pair[]; actions?: KindAction[] } & KindApp)
+  | ({
+      type: 'brief';
+      title: string;
+      when?: string;
+      who?: string;
+      sections: { title: string; count?: number; items: { text: string; detail?: string }[]; note?: string }[];
+    } & KindApp)
   | { type: 'comparison'; title?: string; attributes: string[]; options: { name: string; badge?: string; recommended?: boolean; values: Record<string, Cell>; action?: KindAction }[] }
   | { type: 'checklist'; title?: string; items: { label: string; done: boolean; detail?: string }[] }
   | {
       type: 'form';
       title?: string;
-      fields: { name: string; label: string; type: 'text' | 'textarea' | 'number' | 'date' | 'select' | 'boolean'; options?: string[]; required?: boolean; placeholder?: string; /** The value the field starts with. */ value?: Cell }[];
+      fields: {
+        name: string;
+        label: string;
+        type: 'text' | 'textarea' | 'number' | 'date' | 'select' | 'boolean';
+        options?: string[];
+        required?: boolean;
+        placeholder?: string;
+        /** The value the field starts with. */
+        value?: Cell;
+        /** Why the app refused the value, when the card comes back after a failed save. */
+        error?: string;
+      }[];
       submit: KindAction;
+      /** A second button beside submit; it sends its reply like any action. */
+      edit?: KindAction;
+      subtitle?: string;
+      /** What submitting writes, beside the buttons. */
+      note?: string;
+      app?: string;
     }
   /** `actionsOff`: the page around it owns the decision (a Human Task's footer), so the card draws no buttons. */
   | { type: 'confirm'; title: string; summary?: string; details?: Pair[]; tone?: Tone; confirm: KindAction; cancel?: KindAction; actionsOff?: boolean }

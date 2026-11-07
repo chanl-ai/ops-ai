@@ -35,6 +35,7 @@ import { EmailPreview } from '@/components/shared/email-preview';
 import { useFilePreviewUrl } from '@/hooks/extraction-queries';
 import { initials, money } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { BriefKind, EntityKind, FormKind } from './app-cards';
 import { dateCell, isEmptyColumn, isIsoDate, readingOrder, shownLabel } from '@/lib/widgets/table-columns';
 import type { Cell, ChartNode, ColumnFormat, KindAction, KindNode, KindStatus, MetricNode, Rows, StepStateKind, TableNode, Tone } from '@/lib/types/widgets';
 
@@ -370,49 +371,6 @@ function ReasoningKind({ node }: { node: Extract<KindNode, { type: 'reasoning' }
 
 // ── things and people ──
 
-function EntityKind({ node, onReply }: { node: Extract<KindNode, { type: 'entity' }>; onReply?: (t: string) => void }) {
-  return (
-    <Card className={ENTER} data-kind="entity">
-      <CardHeader className="flex flex-row items-center gap-3">
-        <Avatar className="size-10">
-          <AvatarFallback>{initials(node.title)}</AvatarFallback>
-        </Avatar>
-        <div className="min-w-0 flex-1">
-          {node.category && <p className="text-xs text-muted-foreground">{node.category}</p>}
-          <CardTitle className="truncate">{node.title}</CardTitle>
-          {node.subtitle && <CardDescription className="truncate">{node.subtitle}</CardDescription>}
-        </div>
-        <StatusBadge status={node.status} />
-      </CardHeader>
-      {node.fields.length > 0 && (
-        <CardContent>
-          <dl className="grid grid-cols-[minmax(0,9rem)_1fr] gap-x-4 gap-y-2 text-sm">
-            {node.fields.map((f, i) => (
-              <React.Fragment key={i}>
-                <dt className="text-muted-foreground">{f.label}</dt>
-                <dd className="min-w-0 font-medium break-words tabular-nums">
-                  {f.href ? (
-                    <Link href={f.href} className="underline underline-offset-2">
-                      {cellText(f.value)}
-                    </Link>
-                  ) : (
-                    cellText(f.value)
-                  )}
-                </dd>
-              </React.Fragment>
-            ))}
-          </dl>
-        </CardContent>
-      )}
-      {!!node.actions?.length && (
-        <CardFooter className="justify-end">
-          <ActionButtons actions={node.actions} onReply={onReply} />
-        </CardFooter>
-      )}
-    </Card>
-  );
-}
-
 function CopyLine({ icon: Icon, text }: { icon: typeof Phone; text: string }) {
   const [copied, setCopied] = React.useState(false);
   return (
@@ -670,90 +628,6 @@ function QuoteKind({ node, onOpenFile }: { node: Extract<KindNode, { type: 'quot
 
 // ── asking the person ──
 
-function FormKind({ node, actions }: { node: Extract<KindNode, { type: 'form' }>; actions: KindActions }) {
-  const [values, setValues] = React.useState<Record<string, Cell>>(() => Object.fromEntries(node.fields.map((f) => [f.name, f.value ?? (f.type === 'boolean' ? false : '')])));
-  const [state, setState] = React.useState<'open' | 'sending' | 'sent'>('open');
-  const send = actions.onSubmit ?? (actions.onReply && ((v: Record<string, Cell>) => (actions.onReply!(answerText(node, v)), Promise.resolve())));
-  const missing = node.fields.some((f) => f.required && (values[f.name] === '' || values[f.name] === null));
-  const set = (k: string, v: Cell) => setValues((x) => ({ ...x, [k]: v }));
-  const disabled = !send || state !== 'open';
-  return (
-    <Card className={ENTER} data-kind="form">
-      {node.title && (
-        <CardHeader>
-          <CardTitle>{node.title}</CardTitle>
-        </CardHeader>
-      )}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!send) return;
-          setState('sending');
-          send(values).then(() => setState('sent'), () => setState('open'));
-        }}
-      >
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          {node.fields.map((f) => {
-            const id = `wk-${f.name}`;
-            if (f.type === 'boolean')
-              return (
-                <label key={f.name} className="flex items-center gap-2 text-sm sm:col-span-2">
-                  <Switch id={id} checked={values[f.name] === true} disabled={disabled} onCheckedChange={(v) => set(f.name, v)} /> {f.label}
-                </label>
-              );
-            return (
-              <div key={f.name} className={cn('grid gap-1.5', f.type === 'textarea' && 'sm:col-span-2')}>
-                <Label htmlFor={id}>
-                  {f.label}
-                  {f.required ? '' : <span className="font-normal text-muted-foreground"> (optional)</span>}
-                </Label>
-                {f.type === 'select' ? (
-                  <Select value={String(values[f.name] ?? '')} disabled={disabled} onValueChange={(v) => set(f.name, v)}>
-                    <SelectTrigger id={id} className="w-full">
-                      <SelectValue placeholder={f.placeholder ?? 'Choose'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(f.options ?? []).map((o) => (
-                        <SelectItem key={o} value={o}>
-                          {o}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : f.type === 'textarea' ? (
-                  <Textarea id={id} rows={3} placeholder={f.placeholder} value={String(values[f.name] ?? '')} disabled={disabled} onChange={(e) => set(f.name, e.target.value)} />
-                ) : (
-                  <Input
-                    id={id}
-                    type={f.type === 'date' ? 'date' : 'text'}
-                    inputMode={f.type === 'number' ? 'decimal' : undefined}
-                    placeholder={f.placeholder}
-                    value={String(values[f.name] ?? '')}
-                    disabled={disabled}
-                    onChange={(e) => set(f.name, f.type === 'number' && e.target.value !== '' ? Number(e.target.value) : e.target.value)}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </CardContent>
-        <CardFooter className="mt-4 justify-end">
-          <Button type="submit" size="sm" disabled={!send || missing || state !== 'open'}>
-            {state === 'sending' ? <Loader2 className="animate-spin" /> : null}
-            {state === 'sent' ? 'Sent' : node.submit.label}
-          </Button>
-        </CardFooter>
-      </form>
-    </Card>
-  );
-}
-
-/** A form's answers as the message the agent reads: its reply, then each filled field by label. */
-export function answerText(node: Extract<KindNode, { type: 'form' }>, values: Record<string, Cell>): string {
-  const filled = node.fields.filter((f) => values[f.name] !== '' && values[f.name] !== null && values[f.name] !== undefined).map((f) => `${f.label}: ${cellText(values[f.name])}`);
-  return filled.length ? `${node.submit.reply} (${filled.join(', ')})` : node.submit.reply;
-}
-
 function ConfirmKind({ node, actions }: { node: Extract<KindNode, { type: 'confirm' }>; actions: KindActions }) {
   const [answered, setAnswered] = React.useState<'confirmed' | 'cancelled'>();
   const [busy, setBusy] = React.useState(false);
@@ -892,12 +766,14 @@ export function KindView({ node, actions = {}, onOpenFile, truncatedFrom, fieldE
       return <TrackerKind node={node} />;
     case 'entity':
       return <EntityKind node={node} onReply={reply} />;
+    case 'brief':
+      return <BriefKind node={node} />;
     case 'comparison':
       return <ComparisonKind node={node} onReply={reply} />;
     case 'checklist':
       return <ChecklistKind node={node} />;
     case 'form':
-      return <FormKind node={node} actions={actions} />;
+      return <FormKind node={node} onReply={reply} onSubmit={actions.onSubmit} />;
     case 'confirm':
       return <ConfirmKind node={node} actions={actions} />;
     case 'document':

@@ -453,6 +453,9 @@ class ChatMessage(WireModel):
     agent_name: str | None = None
     # What this turn saved about the person, so the reply can say so; absent when it saved nothing.
     remembered: list[RememberedItem] | None = None
+    # Up to three next asks the turn offers as chips, filled from its data (an open record, a field's picklist); a click
+    # sends one as the person's next message.
+    follow_ups: list[Annotated[str, Field(min_length=1, max_length=120)]] | None = Field(default=None, max_length=3)
 
 
 class ChatThreadBase(WireModel):
