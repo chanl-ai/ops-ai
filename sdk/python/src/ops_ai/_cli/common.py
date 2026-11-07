@@ -77,8 +77,11 @@ def dev_client(ns: argparse.Namespace) -> OpsAI:
     return OpsAI(base_url=base, services=services, access_token=session["token"], team=team)
 
 
-def dev_sign_in(ns: argparse.Namespace) -> tuple[str, dict[str, str], dict[str, Any], str | None]:
-    """The address, per-service addresses, session and team of a `--as` sign-in."""
+def dev_sign_in(
+    ns: argparse.Namespace, *, fresh: bool = False
+) -> tuple[str, dict[str, str], dict[str, Any], str | None]:
+    """The address, per-service addresses, session and team of a `--as` sign-in; `fresh` signs in again rather than
+    use a kept session, which may hold no refresh token (`make api` keeps none)."""
     services = {s: f"http://127.0.0.1:{os.environ[v]}" for s, v in SERVICE_PORTS.items() if os.environ.get(v)}
     base = ns.base_url or os.environ.get("OPS_BASE_URL") or services.get("platform") or "http://127.0.0.1:8710"
     # Both addresses: under `make` the stack's ports are exported, so the platform address is local even when the
@@ -88,7 +91,7 @@ def dev_sign_in(ns: argparse.Namespace) -> tuple[str, dict[str, str], dict[str, 
     if not hosts <= {"127.0.0.1", "localhost"}:
         raise ValueError("--as signs in dev seed people on a local stack only")
     email = dev_email(ns.as_role)
-    session = _cached(ns.as_role, platform)
+    session = None if fresh else _cached(ns.as_role, platform)
     if session is None:
         password = os.environ.get("OPS_PLATFORM_DEMO_PASSWORD") or "northfield-demo"
         session = sign_in(base, services, email, password)
@@ -143,11 +146,15 @@ def dev_email(who: str) -> str:
     raise ValueError(f"--as {who} is not a dev role or a seeded person; use one of {', '.join(roles)}, {names}")
 
 
-def _cache_file(who: str) -> Path:
-    """The session file `make api AS=` keeps too, so the two share one sign-in per person."""
+def _cache_file(who: str) -> Path | None:
+    """The session file `make api AS=` keeps too, so the two share one sign-in per person; none outside the repo, where
+    an email signs in each time."""
     tokens = os.environ.get("OPS_API_TOKENS")
-    root = Path(tokens) if tokens else _seed().parents[2] / ".run" / "api-tokens"
-    key = who if who in _roles() else dev_email(who)
+    try:
+        root = Path(tokens) if tokens else _seed().parents[2] / ".run" / "api-tokens"
+    except ValueError:
+        return None
+    key = dev_email(who) if "@" in who or who not in _roles() else who
     return root / f"local-{re.sub(r'[^a-z0-9._-]', '_', key.lower())}.json"
 
 
@@ -160,6 +167,8 @@ def _cached(who: str, platform: str) -> dict[str, Any] | None:
     """A kept session that has not expired, issued by this stack's platform-service (another stack signs with another
     key)."""
     path = _cache_file(who)
+    if path is None:
+        return None
     try:
         saved = cast(dict[str, Any], json.loads(path.read_text()))
         expires = datetime.fromisoformat(str(saved["expiresAt"]).replace("Z", "+00:00")).timestamp()
@@ -182,6 +191,8 @@ def _keep(who: str, platform: str, session: dict[str, Any]) -> None:
         "expiresAt": session.get("expiresAt"),
     }
     path = _cache_file(who)
+    if path is None:
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(saved))
     path.chmod(0o600)

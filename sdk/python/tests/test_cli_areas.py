@@ -212,3 +212,41 @@ def test_the_same_bytes_for_another_purpose_are_another_upload() -> None:
     _, again = _upload_meta("notice.pdf", b"%PDF", "application/pdf", "knowledge_source")
     _, other = _upload_meta("notice.pdf", b"%PDF", "application/pdf", "case_attachment")
     assert first == again and first != other
+
+
+def _fake_sign_in(signed: list[str]) -> Any:
+    later = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 3600))
+
+    def sign_in(_base: str, _services: dict[str, str], email: str, _password: str) -> dict[str, Any]:
+        signed.append(email)
+        return {"token": "t", "refreshToken": "r", "expiresAt": later, "principal": {"email": email}}
+
+    return sign_in
+
+
+def test_ops_login_as_signs_in_afresh_so_the_profile_can_renew(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(ROOT)
+    monkeypatch.setenv("OPS_API_TOKENS", str(tmp_path))
+    monkeypatch.setenv("OPS_CONFIG", str(tmp_path / "config.json"))
+    monkeypatch.setenv("OPS_PLATFORM_PORT", "8710")
+    later = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 3600))
+    # `make api` keeps a session with no refresh token.
+    kept = {"email": "p.shah@harborpine.example", "token": "k", "expiresAt": later, "platform": "http://127.0.0.1:8710"}
+    (tmp_path / "local-admin.json").write_text(json.dumps(kept))
+    signed: list[str] = []
+    monkeypatch.setattr(common, "sign_in", _fake_sign_in(signed))
+    assert main(["login", "--as", "admin", "--quiet"]) == 0
+    assert signed == ["p.shah@harborpine.example"]
+    assert json.loads((tmp_path / "config.json").read_text())["profiles"]["default"]["refreshToken"] == "r"
+
+
+def test_as_an_email_outside_the_repo_signs_in_without_a_kept_session(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("OPS_API_TOKENS", raising=False)
+    signed: list[str] = []
+    monkeypatch.setattr(common, "sign_in", _fake_sign_in(signed))
+    ns = argparse.Namespace(as_role="dev@bank.example", base_url="http://127.0.0.1:8710", team=None)
+    assert common.dev_sign_in(ns)[2]["token"] == "t"
+    assert signed == ["dev@bank.example"]
