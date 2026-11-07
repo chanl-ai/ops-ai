@@ -139,7 +139,8 @@ def worded(tool: str, output: Any) -> dict[str, Any] | None:
     return out
 
 
-@dataclass(frozen=True)
+# Not frozen: tests replace the port's execute on the instance, as they do on the gateway executor it wraps.
+@dataclass
 class WordedTools:
     """The kernel's tool port with every failed call put into words for the model; `inner` runs the call."""
 
