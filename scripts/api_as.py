@@ -1,10 +1,11 @@
-"""Call any Ops AI API as a standard dev user: `make api GET /v1/me AS=viewer`, `make sdk-call CALL=… AS=…`.
+"""Call any Ops AI API as a dev user or any person: `make api GET /v1/me AS=viewer`, `AS=james`, `AS=<email>`.
 
-Each role in services/platform-service/seed/dev-roles.json is a seeded person; the call acts in the team the sign-in
-names as the person's default (TEAM= overrides). The person signs in through the real password sign-in, POST
-/v1/auth/sign-in, with the dev demo password from Settings (local) or the staging admin file (ENV=staging, admin).
-The session is kept in .run/api-tokens/<env>-<role>.json (mode 600) until it expires; a 401 drops it and signs in once
-more. No password is printed or cached.
+AS= is a role in services/platform-service/seed/dev-roles.json, a seeded person's name, first name or email name
+from people.json, or an email (local only); the call acts in the team the sign-in names as the person's default
+(TEAM= overrides). The person signs in through the real password sign-in, POST /v1/auth/sign-in, with the dev demo
+password from Settings (local) or the staging admin file (ENV=staging, admin). The session is kept in
+.run/api-tokens/<env>-<role or email>.json (mode 600) until it expires; a 401 drops it and signs in once more. No
+password is printed or cached.
 
     uv run python scripts/api_as.py api GET /v1/me --as viewer [--env staging] [--team t] [--service tools]
     uv run python scripts/api_as.py sdk "ops.raw.platform.me_me()" --as builder
@@ -54,6 +55,40 @@ def roles() -> dict[str, str]:
     return {k: v for k, v in json.loads((SEED / "dev-roles.json").read_text()).items() if not k.startswith("_")}
 
 
+def people() -> list[dict[str, Any]]:
+    return json.loads((SEED / "people.json").read_text())["people"]
+
+
+def email_for(who: str) -> str:
+    """The email `who` names: a dev role, an email, or a seeded person's full name, first name or email name."""
+    known = roles()
+    if who in known:
+        return known[who]
+    if "@" in who:
+        return who
+    wanted = who.strip().lower()
+    hits = [
+        p["email"]
+        for p in people()
+        if wanted in (p["name"].lower(), p["name"].split()[0].lower(), p["email"].split("@")[0].lower())
+    ]
+    if len(hits) == 1:
+        return hits[0]
+    names = ", ".join(f"{p['name'].split()[0].lower()} ({p['email']})" for p in people())
+    if hits:
+        raise Refused(f"api: AS={who} names {len(hits)} people; use the email: {', '.join(hits)}")
+    raise Refused(
+        f"api: AS={who} is not a dev role or a seeded person; use a role ({', '.join(known)}), an email, "
+        f"or one of {names}"
+    )
+
+
+def cache_name(env: str, who: str) -> str:
+    """The session file's name: the role as before, else the email with anything but [a-z0-9._-] dropped."""
+    key = who if who in roles() else email_for(who)
+    return f"{env}-{re.sub(r'[^a-z0-9._-]', '_', key.lower())}.json"
+
+
 def team_of(principal: dict[str, Any]) -> str | None:
     """The team a call acts in when none is named: the sign-in's own default team, else its first."""
     return principal.get("teamId") or next(iter(principal.get("teamIds") or []), None)
@@ -84,15 +119,13 @@ def credentials(env: str, role: str) -> tuple[str, str]:
             raise Refused(f"api: only the staging admin's sign-in is on this machine; AS={role} works only locally")
         admin = _staging_file("staging-admin.env")
         return admin["OPS_BOOTSTRAP_ADMIN_EMAIL"], admin["OPS_BOOTSTRAP_ADMIN_PASSWORD"]
-    known = roles()
-    if role not in known:
-        raise Refused(f"api: AS={role} is not a dev role; use one of {', '.join(known)}")
-    return known[role], Settings().platform_demo_password.get_secret_value()
+    # Seeded people sign in with the dev demo password; any other email is tried with it too.
+    return email_for(role), Settings().platform_demo_password.get_secret_value()
 
 
 def token(env: str, role: str, urls: dict[str, str], *, fresh: bool = False) -> dict[str, Any]:
     """The role's session (token, email, team), from the cache while it lasts, else from the password sign-in."""
-    path = CACHE / f"{env}-{role}.json"
+    path = CACHE / cache_name(env, role)
     if not fresh and path.is_file():
         try:
             saved = json.loads(path.read_text())
