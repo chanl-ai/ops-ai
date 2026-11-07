@@ -6,6 +6,7 @@ import { Check, ChevronsUpDown } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useNavAllows } from '@/hooks/me-queries';
 import { sectionFor } from '@/lib/nav';
 
 /**
@@ -14,8 +15,11 @@ import { sectionFor } from '@/lib/nav';
  */
 export function TitleSwitcher({ title }: { title: string }) {
   const pathname = usePathname();
-  const section = sectionFor(pathname);
-  if (!section) return <>{title}</>;
+  const allows = useNavAllows();
+  const found = sectionFor(pathname);
+  // Only pages the person may open; a page whose answer is still loading waits for it rather than flashing in.
+  const section = found && { ...found, pages: found.pages.filter((p) => allows(p.needs) === true) };
+  if (!section || section.pages.length < 2) return <>{title}</>;
   // The longest matching href wins, so /knowledge/changes is not also read as /knowledge.
   const current = [...section.pages].sort((a, b) => b.href.length - a.href.length).find((p) => pathname === p.href || pathname.startsWith(`${p.href}/`))?.href;
   return (

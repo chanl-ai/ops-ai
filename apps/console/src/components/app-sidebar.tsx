@@ -32,7 +32,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { SidebarRowAction } from '@/components/shared/sidebar-row-action';
-import { useTeamRole, useWorkspaceIdentity } from '@/hooks/me-queries';
+import { useNavAllows, useWorkspaceIdentity } from '@/hooks/me-queries';
 import { useBrand, useLookups, useOverview } from '@/hooks/queries';
 import { usePreviewCheck } from '@/hooks/use-preview';
 import { useTeam } from '@/hooks/use-team';
@@ -139,7 +139,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const { data: lookups, isError: lookupsFailed, refetch: retryLookups } = useLookups();
   const identity = useWorkspaceIdentity();
   const { team, teams, switchTeam, create, canCreate, isError: teamsFailed, retry: retryTeams } = useTeam();
-  const role = useTeamRole();
+  const allows = useNavAllows();
   const badges: Record<string, number | undefined> = { '/reviews': waiting };
 
   // One console page as a sidebar row, with its child pages as sub-rows under a fold.
@@ -149,8 +149,8 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
     // On a child page the child's own row is the active one; the parent only shows which section it is in.
     const onParentPage = inSection && !hit?.child;
     // A lone child reads as the section's only page, so the parent page gets its own sub-row beside it and the row that lights is always a sub-row.
-    // A page only an admin may read is not offered to anyone else.
-    const children = item.children?.filter((c) => !c.adminOnly || role === 'admin');
+    // A page the person's roles do not open is not offered (lib/nav.ts `needs`).
+    const children = item.children?.filter((c) => allows(c.needs) === true);
     const parentSubRow = children?.length === 1;
     const subRows = parentSubRow && children ? [{ title: item.tabTitle ?? item.title, url: item.url, icon: item.tabIcon }, ...children] : (children ?? []);
     const active = onParentPage && !parentSubRow;
