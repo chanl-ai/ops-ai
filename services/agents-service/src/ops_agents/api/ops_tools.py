@@ -42,6 +42,9 @@ from .runs import graph_store
 log = get_logger("ops_agents.ops_tools")
 
 LIMIT = 5
+# From this many matching cases, find_cases answers with one table instead of a card each: a list reads as rows, and a
+# stack of large cards pushes the answer off screen.
+TABLE_FROM = 3
 # Who the registry records as having made a team's Ops Assistant: the platform.
 SYSTEM = "system:ops-assistant"
 # The built-in read tools tools-service provisions in every team (its BUILT_IN apps): the assistant is granted
@@ -69,8 +72,7 @@ ASSISTANT_FRAGMENTS: dict[str, str] = {
     "the last call with the same arguments. The tools you hold are what you can reach: say so from them without "
     "searching, and use search_tools only when none of them fits the ask.",
     "answer-style": "Answer in one short paragraph and let the cards and tables carry the details: never repeat a "
-    "card's fields. When the person asks which records match, list them in one table with present, a row each with "
-    "the record's name and what answers the ask. Cite each fact from a <knowledge> block with its [n]; a passage "
+    "card's fields. Cite each fact from a <knowledge> block with its [n]; a passage "
     "search_knowledge returned has no number, so name the document it came from. Name the record a fact comes from. "
     "When a call failed, say in plain words what happened and the next step; never repeat an error code, or a link a "
     "card already shows. End on a full sentence.",
@@ -159,7 +161,7 @@ TOOLS: dict[str, tuple[str, dict[str, Any]]] = {
     "find_cases": (
         "Find the team's cases, its work items of any kind (applications, client meetings, reviews, requests), by "
         "words in the subject or the customer's name, by status, or assigned to the person you are talking with. "
-        "Answers with up to five cases as cards and a summary naming each.",
+        "Answers with up to five cases, as cards or, from three, as one table, and a summary naming each.",
         {
             "type": "object",
             "properties": {
@@ -209,6 +211,21 @@ def declared_args(tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
 
 def _answer(cards: list[dict[str, str]], summary: str) -> ToolOutcome:
     return ToolOutcome(True, {"cards": cards, "summary": summary})
+
+
+def _case_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """The cases as one table part: subject first, the id last, which the chat's table keeps behind its View menu."""
+    data = [
+        {
+            "subject": r["subject"],
+            "customer": r.get("customer_name") or "",
+            "status": str(r["status"]).replace("_", " "),
+            "due": str(r.get("resolution_due_at") or "")[:10],
+            "id": r["id"],
+        }
+        for r in rows
+    ]
+    return {"type": "widget", "id": "", "shape": "rows", "data": data, "hint": {"title": "Cases"}}
 
 
 def _refused(message: str) -> ToolOutcome:
@@ -266,9 +283,12 @@ class OpsReads:
             page=1,
             size=LIMIT,
         )
-        cards = [{"type": "case", "id": str(r["id"])} for r in rows]
         named = "; ".join(f"{r['subject']} ({r['status']})" for r in rows)
-        return _answer(cards, f"{total} case(s) match; showing {len(rows)}: {named}" if rows else "No case matches.")
+        summary = f"{total} case(s) match; showing {len(rows)}: {named}" if rows else "No case matches."
+        if len(rows) >= TABLE_FROM:
+            # The table is drawn in place of the cards, so the cases are shown once.
+            return ToolOutcome(True, {"cards": [], "summary": summary}, {"part": _case_rows(rows)})
+        return _answer([{"type": "case", "id": str(r["id"])} for r in rows], summary)
 
     async def _get_case(self, person: Principal, args: dict[str, Any]) -> ToolOutcome:
         case_id = str(args["caseId"])

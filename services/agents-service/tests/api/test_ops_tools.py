@@ -169,3 +169,20 @@ async def test_a_call_missing_a_required_argument_is_refused_not_a_failed_turn(s
     with scope(TENANT, "team_ops"), acting_for(viewer()):
         refused = await OpsReads(rt).run("get_run", {})
     assert not refused.ok and "runId" in refused.output["error"], refused.output
+
+
+async def test_three_or_more_cases_draw_as_one_table_and_fewer_as_cards(stack: Stack) -> None:  # noqa: F811 - the shared fixture
+    # A list of applications came back as a stack of cards, so "which are waiting" never read as a table; drawn both
+    # ways it would show each case twice.
+    _, rt = stack
+    for name in ("Brightside Bakery", "Coastal Freight", "Nguyen Pharmacy"):
+        await opened(stack, "team_ops", f"Loan application: {name}")
+    ops = OpsReads(rt)
+    with scope(TENANT, "team_ops"), acting_for(viewer()):
+        many = await ops.run("find_cases", {"search": "Loan application"})
+        few = await ops.run("find_cases", {"search": "Coastal Freight"})
+    part = (many.view or {})["part"]
+    assert part["shape"] == "rows" and many.output["cards"] == [], many
+    assert len(part["data"]) == 3
+    assert {"subject", "customer", "status", "due", "id"} == set(part["data"][0])
+    assert few.view is None and len(few.output["cards"]) == 1, few
