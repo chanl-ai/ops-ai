@@ -276,17 +276,19 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
               <Link href={`/reviews?review=${newest.reviewId}`}>In review · {newest.reviewId}</Link>
             </Button>
           )}
-          <Button
-            variant="outline"
-            onClick={() => {
-              setTab('settings');
-              setTestTab('test');
-              requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-            }}
-            data-testid="test-agent-button"
-          >
-            <FlaskConical className="size-4" /> Test
-          </Button>
+          {canBuild && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setTab('settings');
+                setTestTab('test');
+                requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+              }}
+              data-testid="test-agent-button"
+            >
+              <FlaskConical className="size-4" /> Test
+            </Button>
+          )}
           {canBuild && (
             <>
               <span role="status" data-testid="agent-save-status" className={saveError ? 'text-xs text-destructive-text' : 'text-xs text-muted-foreground'}>
@@ -421,6 +423,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
             versions={<HistoryCard versions={versions.data} loading={versions.isPending} onOpen={() => setHistoryOpen(true)} />}
             newestVersion={agent.version}
             savedVersions={versions.data ?? []}
+            canTest={canBuild}
             usedIn={
               <>
                 <UsedInCard agent={agent} />

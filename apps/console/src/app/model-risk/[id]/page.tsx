@@ -26,6 +26,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useCanBuild } from '@/hooks/me-queries';
 import { useLookups } from '@/hooks/queries';
 import { useAddCondition, useChangeTier, useModelEntry, useRequestValidation, useSetConditionStatus, useSetNextReview } from '@/hooks/model-risk-queries';
 import { dateOnly, pct, relativeTime, shortDate, shortId } from '@/lib/format';
@@ -71,6 +72,9 @@ function ModelEntryView({ entry: e }: { entry: ModelEntryDetail }) {
   const [dialog, setDialog] = React.useState<'tier' | 'condition' | 'validate' | 'review' | null>(null);
   const [conditionTarget, setConditionTarget] = React.useState<ModelCondition | null>(null);
   const Icon = e.type === 'agent' ? Bot : Route;
+  // Tier, conditions, validation and the review date change the entry, so only whoever may change the agent or
+  // workflow it describes sees them (roles grid); everyone else reads the page.
+  const canChange = useCanBuild(e.type === 'agent' ? 'agents' : 'workflows');
   const openConditions = e.conditions.filter((c) => c.status !== 'met');
 
   return (
@@ -89,6 +93,7 @@ function ModelEntryView({ entry: e }: { entry: ModelEntryDetail }) {
         </>
       }
       actions={
+        canChange && (
         <>
           <DisabledReason reason={e.pendingReview?.scope === 'tier_change' ? `A tier change is already waiting for Model Risk (${e.pendingReview.id}).` : undefined}>
             <Button variant="outline" onClick={() => setDialog('tier')} disabled={e.pendingReview?.scope === 'tier_change'} data-testid="change-tier-button">
@@ -104,6 +109,7 @@ function ModelEntryView({ entry: e }: { entry: ModelEntryDetail }) {
             </Button>
           </DisabledReason>
         </>
+        )
       }
     >
       <div className="flex flex-col gap-4">
@@ -127,9 +133,9 @@ function ModelEntryView({ entry: e }: { entry: ModelEntryDetail }) {
                 <FieldRow label="Team" value={e.ownerTeam} />
                 <FieldRow label="Model" value={e.model} mono />
                 <FieldRow label="Alias" value={`${e.alias} · ${e.provider}`} mono />
-                <FieldRow label="Next review" value={e.nextReviewAt ? dateOnly(e.nextReviewAt) : undefined} onEdit={() => setDialog('review')} />
+                <FieldRow label="Next review" value={e.nextReviewAt ? dateOnly(e.nextReviewAt) : undefined} onEdit={canChange ? () => setDialog('review') : undefined} />
               </AttributeCard>
-              <AttributeCard title="Risk tier" icon={Gauge} action={<Button variant="ghost" size="sm" className="h-7" onClick={() => setDialog('tier')} disabled={e.pendingReview?.scope === 'tier_change'}>Change</Button>}>
+              <AttributeCard title="Risk tier" icon={Gauge} action={canChange && <Button variant="ghost" size="sm" className="h-7" onClick={() => setDialog('tier')} disabled={e.pendingReview?.scope === 'tier_change'}>Change</Button>}>
                 <div className="flex flex-col gap-2 text-sm">
                   <RiskBadge risk={e.tier} />
                   <p className="text-muted-foreground">{e.tierReason}</p>
@@ -228,7 +234,7 @@ function ModelEntryView({ entry: e }: { entry: ModelEntryDetail }) {
               </div>
             </Section>
 
-            <Section title={`Conditions · ${openConditions.length} open`} icon={ListChecks} action={<Button variant="outline" size="sm" onClick={() => setDialog('condition')}><Plus className="size-3.5" /> Add condition</Button>} testId="model-conditions">
+            <Section title={`Conditions · ${openConditions.length} open`} icon={ListChecks} action={canChange && <Button variant="outline" size="sm" onClick={() => setDialog('condition')}><Plus className="size-3.5" /> Add condition</Button>} testId="model-conditions">
               {e.conditions.length ? (
                 <div className="overflow-x-auto rounded-md border">
                   <Table>
@@ -251,9 +257,11 @@ function ModelEntryView({ entry: e }: { entry: ModelEntryDetail }) {
                             <ConditionBadge status={c.status} />
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button variant="ghost" size="sm" onClick={() => setConditionTarget(c)}>
-                              {c.status === 'met' ? 'Reopen' : 'Mark met'}
-                            </Button>
+                            {canChange && (
+                              <Button variant="ghost" size="sm" onClick={() => setConditionTarget(c)}>
+                                {c.status === 'met' ? 'Reopen' : 'Mark met'}
+                              </Button>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}

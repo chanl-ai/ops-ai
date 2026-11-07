@@ -4,6 +4,7 @@ import { use } from 'react';
 import { Mail } from 'lucide-react';
 
 import { MailboxSettingsForm, MailboxStatus, MailboxWorkflows } from '@/components/channels/mailbox-panels';
+import { BuilderFieldset, ReadOnlyNotice } from '@/components/shared/builder-only';
 import { PageLayout } from '@/components/page-layout';
 import { QueryError } from '@/components/shared/query-states';
 import { RecordSkeleton } from '@/components/shared/record-skeleton';
@@ -24,9 +25,13 @@ export default function MailboxPage({ params }: { params: Promise<{ id: string }
   return (
     <PageLayout icon={Mail} title={m.name} description={m.address} backHref="/channels/email">
       <div className="flex flex-col gap-6 pb-16" data-testid="mailbox-page">
+        <ReadOnlyNotice noun="mailboxes" area="deployments" />
         <MailboxStatus mailbox={m} />
         <MailboxWorkflows mailbox={m} />
-        <MailboxSettingsForm mailbox={m} />
+        {/* Saving, testing, pausing and adding a secret change the mailbox (deployments.edit); others read its settings. */}
+        <BuilderFieldset area="deployments">
+          <MailboxSettingsForm mailbox={m} />
+        </BuilderFieldset>
       </div>
     </PageLayout>
   );

@@ -45,6 +45,7 @@ export function AgentTestPanel({
   usedIn,
   newestVersion,
   savedVersions,
+  canTest,
 }: {
   agentId: string;
   agentName: string;
@@ -61,6 +62,9 @@ export function AgentTestPanel({
   /** The newest version and every saved one, for Compare. */
   newestVersion: number;
   savedVersions: AgentVersion[];
+  /** Whether the person may run test turns (the agent's edit cell, as agents-service checks): without it the panel
+   * offers Versions and Used in only, since Test, Why and Compare each start or read a test turn. */
+  canTest: boolean;
 }) {
   const thread = useChatThread(threadId);
   const live = useLiveTurn(threadId);
@@ -92,21 +96,26 @@ export function AgentTestPanel({
     chat.send(id, { content: text });
   };
 
+  const shown: TestTab = canTest || tab === 'versions' || tab === 'used' ? tab : 'versions';
   return (
     <div className="flex min-h-[28rem] flex-col rounded-lg border bg-card lg:sticky lg:top-4 lg:h-[calc(100vh-17rem)]" data-testid="agent-test-panel">
       {actions.stepUpDialog}
-      <Tabs value={tab} onValueChange={(v) => onTabChange(v as TestTab)} className="flex min-h-0 flex-1 flex-col gap-0">
+      <Tabs value={shown} onValueChange={(v) => onTabChange(v as TestTab)} className="flex min-h-0 flex-1 flex-col gap-0">
         <div className="overflow-x-auto border-b px-2 py-1.5">
           <TabsList>
-            <TabsTrigger value="test" data-testid="test-tab">
-              <FlaskConical className="size-4" /> Test
-            </TabsTrigger>
-            <TabsTrigger value="why" data-testid="why-tab">
-              Why
-            </TabsTrigger>
-            <TabsTrigger value="compare" data-testid="compare-tab">
-              Compare
-            </TabsTrigger>
+            {canTest && (
+              <>
+                <TabsTrigger value="test" data-testid="test-tab">
+                  <FlaskConical className="size-4" /> Test
+                </TabsTrigger>
+                <TabsTrigger value="why" data-testid="why-tab">
+                  Why
+                </TabsTrigger>
+                <TabsTrigger value="compare" data-testid="compare-tab">
+                  Compare
+                </TabsTrigger>
+              </>
+            )}
             <TabsTrigger value="versions">Versions</TabsTrigger>
             <TabsTrigger value="used">Used in</TabsTrigger>
           </TabsList>

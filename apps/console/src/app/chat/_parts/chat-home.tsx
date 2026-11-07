@@ -9,6 +9,7 @@ import { QueryError } from '@/components/shared/query-states';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useChatAgents, useDefaultAgent } from '@/hooks/chat-queries';
+import { useCan } from '@/hooks/me-queries';
 import { useOverview } from '@/hooks/queries';
 import { hintsFrom } from '@/lib/overview';
 import type { ChatAttachment } from '@/lib/types/chat';
@@ -17,7 +18,8 @@ import type { ChatAttachment } from '@/lib/types/chat';
 const STARTS = [
   { id: 'needs', label: 'What needs me today', detail: 'Your Human Tasks, oldest first', text: 'What needs me today?' },
   { id: 'case', label: 'Find a case', detail: 'By customer, subject or status', text: 'Find my open cases' },
-  { id: 'start', label: 'Start a workflow', detail: 'From its start form', text: 'Which workflows can I start?' },
+  // Offered only to who may start one (workflows.run).
+  { id: 'start', label: 'Start a workflow', detail: 'From its start form', text: 'Which workflows can I start?', startsRuns: true },
   { id: 'run', label: 'What happened to a run', detail: 'Its steps so far', text: 'What happened to my latest run?' },
 ];
 
@@ -54,6 +56,8 @@ export function ChatHome({
   const agent = list.find((a) => a.id === (picked ?? defaultId));
   const overview = useOverview();
   const hints = hintsFrom(overview.data);
+  const canRun = useCan('workflows', 'run') === true;
+  const starts = STARTS.filter((s) => !('startsRuns' in s) || canRun);
   const begin = (text: string, attachments: ChatAttachment[] = []) => onStart(agent?.id, agent?.defaultKbIds ?? [], text, attachments);
   // The agent and its default knowledge bases come from the list, so sending waits for it: a message sent before it
   // arrived started on the team's default agent, whatever ?agent= asked for.
@@ -113,7 +117,7 @@ export function ChatHome({
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" data-testid="home-starts">
-                {STARTS.map((s) => (
+                {starts.map((s) => (
                   <Suggestion key={s.id} suggestion={s.text} onClick={() => begin(s.text)} disabled={busy} className="h-auto justify-start rounded-lg px-3 py-2 text-left" data-testid={`home-start-${s.id}`}>
                     <span className="flex min-w-0 flex-col">
                       <span className="font-medium">{s.label}</span>
