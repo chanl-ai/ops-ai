@@ -185,7 +185,8 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenuSub>
               {subRows.map((child) => (
                 <SidebarMenuSubItem key={child.url}>
-                  <SidebarMenuSubButton asChild isActive={child.url === item.url ? onParentPage : hit?.child?.url === child.url}>
+                  {/* A long name ("Model inventory") wraps to a second line rather than being cut at the sidebar's width. */}
+                  <SidebarMenuSubButton asChild isActive={child.url === item.url ? onParentPage : hit?.child?.url === child.url} className="h-auto min-h-7 py-1 [&>span:last-child]:whitespace-normal! [&>span:last-child]:leading-snug">
                     <Link href={child.url} onClick={closeOnPhone}>
                       {child.icon && <child.icon />}
                       <span>{child.title}</span>

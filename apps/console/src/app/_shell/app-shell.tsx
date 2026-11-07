@@ -18,6 +18,7 @@ import { LoadingButton } from '@/components/shared/loading-button';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { SiteHeader } from '@/components/site-header';
 import { DialogShell } from '@/components/shared/dialog-shell';
+import { useKeyboardScrollRegions } from '@/components/shared/edge-fade';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { useSession, useSignInPolicy, useSignOut } from '@/hooks/auth-queries';
 import { useTeam, useTeamReady } from '@/hooks/use-team';
@@ -92,6 +93,8 @@ function Guarded({ children }: { children: React.ReactNode }) {
   // The session ended while the person was in: its lifetime passed (`expired`), or a refresh was refused and no one chose
   // Sign out. The page stays, under a sign-in dialog that keeps what they were typing.
   const wasIn = React.useRef<{ name?: string } | null>(null);
+  const [scroller, setScroller] = React.useState<HTMLDivElement | null>(null);
+  useKeyboardScrollRegions(scroller);
   if (status === 'signed_in' && teamReady) wasIn.current = { name: session?.user.name };
   React.useEffect(() => {
     if (status === 'signed_in') resetChosenSignOut();
@@ -137,7 +140,8 @@ function Guarded({ children }: { children: React.ReactNode }) {
             </>
           }
         />
-        <div className="@container/main flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
+        {/* The page scrolls here; it and every box inside that scrolls take a keyboard stop when nothing in them can. */}
+        <div ref={setScroller} className="@container/main flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
           <ServicesDownBanner />
           <ClientGate fallback={<Loading />}>{children}</ClientGate>
         </div>

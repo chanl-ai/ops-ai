@@ -28,28 +28,38 @@ export function useMoreToTheRight(root: React.RefObject<HTMLElement | null>, sel
   return more;
 }
 
+// What can scroll inside the page: the table primitive's container and any box styled to scroll. Matched by class,
+// so a scroller drawn by a primitive is found without props.
+const SCROLLERS = '[data-slot=table-container], [class*="overflow-x-auto"], [class*="overflow-y-auto"], [class*="overflow-auto"]';
+const FOCUSABLE = 'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+
 /**
- * Makes every sideways-scrolling table under `root` reachable by keyboard while it overflows: a focusable region
- * named after its section's heading, so arrow keys scroll it. A table that fits takes no tab stop. The table primitive
- * draws the scroller itself (`data-slot=table-container`), so they are found in the page rather than given props, and
- * a table that appears or grows later is caught by the observers.
+ * Makes every scrolling box under `root`, and `root` itself, reachable by keyboard while it overflows and holds nothing
+ * a keyboard can reach: a focusable region named after its section's heading, so arrow keys scroll it. A box that fits,
+ * or whose links and buttons already take focus (the browser scrolls to them), takes no tab stop. Controls disabled by
+ * a fieldset count as unreachable. Observers catch a box that appears or grows later. `host` is an element, not a ref, so a host mounted after the
+ * first render is still watched.
  */
-export function useKeyboardScrollRegions(root: React.RefObject<HTMLElement | null>): void {
+export function useKeyboardScrollRegions(host: HTMLElement | null): void {
   React.useEffect(() => {
-    const host = root.current;
     if (!host) return;
     let frame = 0;
+    const reachable = (el: HTMLElement) =>
+      [...el.querySelectorAll<HTMLElement>(FOCUSABLE)].some((f) => f !== el && !f.closest('fieldset:disabled') && f.dataset.scrollRegion !== 'on');
     const mark = () => {
       frame = 0;
-      for (const el of host.querySelectorAll<HTMLElement>('[data-slot=table-container]')) {
+      for (const el of [host, ...host.querySelectorAll<HTMLElement>(SCROLLERS)]) {
         const ours = el.dataset.scrollRegion === 'on';
-        if (el.scrollWidth > el.clientWidth + 1) {
+        const style = getComputedStyle(el);
+        const scrolls = (/(auto|scroll)/.test(style.overflowX) && el.scrollWidth > el.clientWidth + 1) || (/(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 1);
+        if (scrolls && !reachable(el)) {
           if (ours) continue;
           el.dataset.scrollRegion = 'on';
           el.tabIndex = 0;
           el.setAttribute('role', 'region');
-          const heading = el.closest('section, [data-slot=card]')?.querySelector('h1, h2, h3, [data-slot=card-title]')?.textContent?.trim();
-          el.setAttribute('aria-label', heading ? `${heading} table` : 'Table');
+          const heading = el.closest('section, [data-slot=card]')?.querySelector('h1, h2, h3, [data-slot=card-title]')?.textContent?.trim()
+            ?? el.querySelector('h1, h2')?.textContent?.trim();
+          el.setAttribute('aria-label', heading ? `${heading}, scrolls` : 'Scrolling content');
         } else if (ours) {
           delete el.dataset.scrollRegion;
           el.removeAttribute('tabindex');
@@ -63,7 +73,7 @@ export function useKeyboardScrollRegions(root: React.RefObject<HTMLElement | nul
     };
     mark();
     const changed = new MutationObserver(soon);
-    changed.observe(host, { childList: true, subtree: true });
+    changed.observe(host, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled'] });
     const resized = new ResizeObserver(soon);
     resized.observe(host);
     return () => {
@@ -71,7 +81,7 @@ export function useKeyboardScrollRegions(root: React.RefObject<HTMLElement | nul
       changed.disconnect();
       resized.disconnect();
     };
-  }, [root]);
+  }, [host]);
 }
 
 /**
