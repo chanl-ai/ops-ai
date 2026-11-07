@@ -9,6 +9,7 @@ import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { Badge } from '@/components/ui/badge';
 import { APPROVAL_LABEL, ApprovalCell, cad, CALL_STATUS_LABEL, CallStatusText, GATEWAY_LABEL, GatewayIcon, OPERATION_LABEL, OperationBadge, options } from '@/components/logs/log-meta';
+import { FailureReason } from '@/components/logs/failure-reason';
 import { ToolCallSheet } from '@/components/logs/tool-call-sheet';
 import { StopRowClick } from '@/components/shared/form-field';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
@@ -19,7 +20,6 @@ import { idColumn } from '@/components/shared/id-column';
 import { selectColumn } from '@/components/shared/select-column';
 import { useToolCall, useToolCalls } from '@/hooks/governance-queries';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
-import { failureWords } from '@/lib/failure-words';
 import { count, dateTime, ms, pct, relativeTime } from '@/lib/format';
 import type { ToolCallFilters, ToolCallRow } from '@/lib/types/governance';
 
@@ -33,6 +33,8 @@ const columns: ColumnDef<Row>[] = [
   {
     accessorKey: 'at',
     header: ({ column }) => <DataTableColumnHeader column={column} title="Time" />,
+    // On a phone the call's name and why it failed take the row; the time is on the call's details.
+    meta: { kind: 'date', className: 'max-sm:hidden' },
     cell: ({ row }) => (
       <span className="whitespace-nowrap text-muted-foreground tabular-nums" title={dateTime(row.original.at)}>
         {relativeTime(row.original.at)}
@@ -44,6 +46,8 @@ const columns: ColumnDef<Row>[] = [
     id: 'target',
     accessorFn: (r) => `${r.title ?? ''} ${r.target} ${r.system} ${r.workflowName} ${r.agentName} ${r.runId} ${r.caseId ?? ''} ${r.record ?? ''}`,
     header: ({ column }) => <DataTableColumnHeader column={column} title="Tool or model" />,
+    // The call's name column, pinned so its failure reason stays on screen however wide the table is.
+    meta: { kind: 'name' },
     cell: ({ row }) => (
       <div className="flex max-w-72 min-w-48 items-start gap-2">
         <GatewayIcon gateway={row.original.gateway} className="mt-0.5" />
@@ -54,6 +58,7 @@ const columns: ColumnDef<Row>[] = [
             {row.original.target}
           </code>
           <div className="truncate text-xs text-muted-foreground">{row.original.app ?? row.original.system}</div>
+          <FailureReason call={row.original} />
         </div>
       </div>
     ),
@@ -111,26 +116,12 @@ const columns: ColumnDef<Row>[] = [
   {
     accessorKey: 'status',
     header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
-    cell: ({ row }) => <CallStatusCell call={row.original} />,
+    cell: ({ row }) => <CallStatusText status={row.original.status} replayOf={row.original.replayOf} />,
     filterFn: facetFilterFn,
   },
   { accessorKey: 'latencyMs', header: ({ column }) => <DataTableColumnHeader column={column} title="Latency" />, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground tabular-nums">{ms(row.original.latencyMs)}</span> },
   { accessorKey: 'cost', header: ({ column }) => <DataTableColumnHeader column={column} title="Cost" />, cell: ({ row }) => <span className="whitespace-nowrap tabular-nums">{row.original.cost != null ? cad(row.original.cost) : '—'}</span> },
 ];
-
-/** A call's status and, for one that failed, why in words; the code is on the call's details. */
-function CallStatusCell({ call }: { call: ToolCallRow }) {
-  return (
-    <div className="flex max-w-56 flex-col gap-0.5">
-      <CallStatusText status={call.status} replayOf={call.replayOf} />
-      {call.status === 'error' && (
-        <span className="text-xs text-muted-foreground" data-testid="call-failure-words">
-          {failureWords(call.errorCode, call.errorMessage)}
-        </span>
-      )}
-    </div>
-  );
-}
 
 /** A workflow or agent the API named, or a dash for a call that had none. */
 function NameCell({ name }: { name?: string | null }) {
