@@ -14,3 +14,14 @@ per service, the bundle, grants), guarded upgrade and downgrade SQL between two 
 | `proof.sh` | The proof on a throwaway PostgreSQL: baseline equals Alembic, upgrade equals head, runtime roles refused DDL, drift red and green, a service refusing an old schema |
 | `tests/test_offline.py` | Every revision after the eight named renders as offline SQL (run by `make verify`) |
 | `tests/test_mssql_ddl.py` | The golden files equal what the models compile to; a policy on every TENANT_SCOPED table and no other; nullable unique keys filtered; upgrades before the baseline refused (run by `make verify`) |
+
+## Working here
+
+| Task | Command |
+|---|---|
+| Tests (no server needed for most) | `uv run pytest -q deploy/database/tests` |
+| Baseline, upgrade SQL, drift | `make db-ddl SERVER=<throwaway url>`, `make db-upgrade-sql FROM=<ref>`, `make db-drift DATABASE=<url> SERVER=<url>`; `DIALECT=mssql` for SQL Server |
+| After a migration or model change | `make db-ddl-golden`, review the diff in `golden/mssql/`, then the tests |
+| Full proof (own container on :15499) | `make db-scripts-proof FROM=<older ref>` |
+
+Never point `SERVER` or `DATABASE` at the dev stack's database. Folder rules: `../CLAUDE.md`.

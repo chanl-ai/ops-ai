@@ -8,4 +8,4 @@ implements.
 Design: [docs/architecture/workflow-runner.md](../../docs/architecture/workflow-runner.md). Node types:
 [workflow-nodes.md](../../docs/design/workflows/workflow-nodes.md).
 
-Tests: `uv run pytest packages/ops_engine/tests`.
+Tests: `make test PKG=packages/ops_engine`.

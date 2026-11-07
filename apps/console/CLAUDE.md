@@ -6,6 +6,70 @@ Ops AI is the operations console for a bank's AI agents (demo tenant: Harbor & P
 enforced by `pnpm verify` (type-check, the embed app's type-check, since it draws these chat components through its own `@/lib/api`, and `scripts/check-standards.mjs`), which the pre-commit hook runs.
 A rule that is not checked by the script is still a rule; the script covers the ones a grep can prove.
 
+This app runs Next.js 16 (`next` 16.4.1), whose APIs and file conventions differ from older releases; read the notes in
+@AGENTS.md and the matching guide in `node_modules/next/dist/docs/` before writing Next.js code. Rules shared with every
+other folder (onion order, one stack, calling the API as a person, tests, commits) are in
+[Working in one folder](../../CLAUDE.md#working-in-one-folder).
+
+## Run and check from this folder
+
+| Task | Command (in `apps/console/`) |
+|---|---|
+| The console on the live stack | `make up` from the root serves it at http://localhost:3016 with every area on the services; `make -C ../.. logs SVC=console FOLLOW=0` prints its log |
+| The console on the mock alone | `pnpm dev` (:3016) or `pnpm dev:runtime` (:3017, chat on the agents service); not while `make up` holds the port |
+| Type-check | `pnpm typecheck` |
+| Standards check | `pnpm check:standards` (`scripts/check-standards.mjs`; `--write-baseline` locks in a drop it reports) |
+| Unit tests | `pnpm test` (`node --test 'src/**/*.test.ts'`, beside the code they test under `src/lib/`) |
+| All of the above, plus the embed app's type-check | `pnpm verify` |
+| Production build | `pnpm build` |
+| Make verbs | `make help`: `install`, `run`, `lint`, `typecheck`, `verify`, `stop`, `logs`, `health`, `clean`. `make test` prints "no tests yet" and runs nothing; use `pnpm test` |
+
+The console type-checks against the TypeScript SDK's build in `sdk/typescript/dist/`, made by `pnpm install`. After a
+route change regenerates the SDK (`make openapi`), rebuild it with `pnpm --filter @chanl-ai/ops-ai build` (or
+`make sdk-verify`, which builds it as part of its test); until then `tsc` reports fields the services already return as
+missing (TS2339).
+
+## Checking a screen in a browser
+
+Check every changed route headless with Playwright before calling the change done. `chromium` comes from
+`@ops-ai/usecase-runner/harness`, which resolves from the repo root.
+
+| Check | How |
+|---|---|
+| Against the live stack | A scratch Node script run from the repo root: open http://localhost:3016/login, sign in as a seeded person (their emails are in `services/platform-service/seed/people.json`; the dev password is `platform_demo_password` in `packages/ops_service_kit/src/ops_service_kit/settings.py:287`), visit the route, collect `pageerror` events and take a screenshot at 1440 and 390 wide |
+| As a repeatable check | A ui use case: `docs/usecases/<service>/scripts/test-uc-NNN-ui.mjs` with `withUiStack` and `chromium` from the harness (example: `docs/usecases/console/scripts/test-uc-047-ui.mjs`), run with `make usecase-test UC=<id> LAYER=ui` |
+| Loading, error and empty states | On the mock (`pnpm dev`), add `?mock=slow`, `?mock=error` or `?mock=empty` to the route |
+| Developer pages | `/dev/*` (the widget gallery and others) answer only under `next dev` or with `OPS_ALLOW_PREVIEW_PAGES=1` (`src/proxy.ts:10`) |
+
+Before the browser, call the routes the screen uses as the same person: `make api GET <path> AS=<role> SVC=<service>`
+([Calling the API as a person](../../CLAUDE.md#calling-the-api-as-a-person)). A screen that shows the wrong data
+because the route returns it is fixed in the service, never in the hook or component.
+
+## Where things live
+
+| Path | Holds |
+|---|---|
+| `src/app/` | Routes (App Router); `(auth)` holds sign-in, `_shell` the signed-in frame, `dev` the developer pages |
+| `src/components/ui/` | shadcn primitives (`components.json`: style `new-york`, registries `@ai-elements` and `@shadcnblocks`); never edited |
+| `src/components/shared/` | The app's own building blocks over the primitives (`PageLayout`, `DialogShell`, `FormField`, `FileUpload`, `DeleteDialog` and the rest of the Components table below) |
+| `src/components/<area>/` | One folder per console area |
+| `src/hooks/` | Data hooks (`<area>-queries.ts`) |
+| `src/lib/api/` | `contract.ts` (`OpsApi`), `<area>-contract.ts` and `<area>-http.ts` per area, `ops-sdk.ts` for screens on the generated SDK, `index.ts` (the only env reader), `mock/` (the only fixtures) |
+| `src/lib/types/` | Shared types |
+| `scripts/` | `check-standards.mjs` with its baselines, `bake-workflow-positions.ts` (`pnpm bake:workflows`) |
+
+## Reference docs
+
+| Topic | Doc |
+|---|---|
+| Every page and what it shows | [docs/console/page-plan.md](../../docs/console/page-plan.md) |
+| Settings tree, chat, agents and workflows | [docs/console/](../../docs/console/) |
+| Product designs by area | [docs/design/](../../docs/design/) |
+| Use cases the console must pass | [docs/usecases/README.md](../../docs/usecases/README.md) (rows with service `console`) |
+| The SDK screens move onto | [docs/sdk/](../../docs/sdk/), [sdk/CLAUDE.md](../../sdk/CLAUDE.md) |
+
+A `feat` or `fix` that changes this folder needs a What's new entry ([Commits](../../CLAUDE.md#commits)).
+
 ## Layers (one direction only)
 
 | Layer | Path | May import | Must not |
