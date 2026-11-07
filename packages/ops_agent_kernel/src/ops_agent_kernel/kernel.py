@@ -127,6 +127,11 @@ class _TurnState:
     # Calls to the kernel's own tools this turn, against the agent's max_builtin_calls; set once one is refused.
     builtin_calls: int = 0
     builtins_refused: bool = False
+    # Passages: the knowledge block's, then each a tool returned (search_knowledge), numbered on from the block's, so
+    # the reply cites either with [n] and the chat draws each as a citation.
+    passages: list[Passage] = field(default_factory=list[Passage])
+    # The calls whose result brought passages: a turn that read only these answers from knowledge and cites it.
+    passage_calls: set[str] = field(default_factory=set[str])
     # Calls being made now, by (tool, input hash): the same call made twice in one step waits for the first.
     inflight: dict[tuple[str, str], asyncio.Event] = field(default_factory=dict[tuple[str, str], asyncio.Event])
 
@@ -398,6 +403,11 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
                 # id): drawn once.
                 rec.view = None
             said = outcome.for_model if outcome.for_model is not None else outcome.output
+            if outcome.ok and outcome.for_model is None:
+                before = len(state.passages)
+                said = _numbered(state, outcome.output)
+                if len(state.passages) > before:
+                    state.passage_calls.add(rec.tool_call_id)
             if outcome.ok and (outcome.view or {}).get("part"):
                 # Drawn for the person already (a table or a record): told so, the model answers in text instead of
                 # presenting the same rows a second time.
@@ -418,6 +428,36 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
 
     tool.prepare = _offer(state, builtin=False)
     return tool
+
+
+def _numbered(state: _TurnState, output: Any) -> Any:
+    """A result's passages (`{"passages": [{text, title, section?, page?, knowledgeBase?, itemId?}]}`) numbered on from
+    the turn's, so the model cites them as it cites the knowledge block; any other result as it is."""
+    if not isinstance(output, dict):
+        return output
+    result = cast(dict[str, Any], output)
+    found = result.get("passages")
+    if not isinstance(found, list) or not found:
+        return result
+    numbered: list[Any] = []
+    for raw in cast(list[Any], found):
+        if not isinstance(raw, dict) or not cast(dict[str, Any], raw).get("text"):
+            numbered.append(raw)
+            continue
+        p = cast(dict[str, Any], raw)
+        state.passages.append(
+            Passage(
+                document_id=str(p.get("itemId") or p.get("documentId") or ""),
+                title=str(p.get("title") or ""),
+                section=str(p.get("section") or ""),
+                version=str(p.get("version") or ""),
+                text=str(p["text"]),
+                kb_id=str(p.get("knowledgeBase") or ""),
+                page=p["page"] if isinstance(p.get("page"), int) else None,
+            )
+        )
+        numbered.append({"n": len(state.passages), **p})
+    return {**result, "passages": numbered}
 
 
 async def _retrieve(req: TurnRequest, ports: KernelPorts) -> list[Passage]:
@@ -508,7 +548,7 @@ KNOWLEDGE_WITHDRAWN = (
 
 
 async def _end_check(
-    state: _TurnState, model: Any, system_prompt: str, history: list[ModelMessage], had_passages: bool
+    state: _TurnState, model: Any, system_prompt: str, history: list[ModelMessage], block: int
 ) -> tuple[str | None, TokenUsage]:
     """The end-clean check (answer_check.py) on the finished answer: None when it is clean, else the one correction,
     made by a tool-less agent told each defect. A correction that fails, comes back empty or has more defects than the
@@ -522,9 +562,13 @@ async def _end_check(
     reads_ok = bool(systems) and all(r.status == "ok" and r.access == "read" for r in systems)
     offered = frozenset(state.grants)
     read_only = all(r.access == "read" for r in systems)
+    # From knowledge only: the block with no call, or calls that each brought passages (search_knowledge).
+    from_knowledge = (block > 0 and not systems) or (
+        bool(systems) and all(r.tool_call_id in state.passage_calls for r in systems)
+    )
     found = answer_check.defects(
         state.text,
-        needs_citation=had_passages and not systems,
+        needs_citation=from_knowledge,
         all_reads_succeeded=reads_ok,
         tools=offered,
         read_only=read_only,
@@ -545,7 +589,7 @@ async def _end_check(
         return None, spent
     still = answer_check.defects(
         corrected,
-        needs_citation=had_passages and not systems,
+        needs_citation=from_knowledge,
         all_reads_succeeded=reads_ok,
         tools=offered,
         read_only=read_only,
@@ -643,7 +687,8 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             status, stop, extra = "failed", "no_output", {**extra, "error": reason, "error_code": "no_output"}
         records = [state.records[i] for i in state.order]
         answered = next((m.model_name for m in reversed(all_messages) if isinstance(m, ModelResponse)), None)
-        cited = [CitationRef(n, passages[n - 1]) for n in cited_numbers(state.text) if 0 < n <= len(passages)]
+        every = state.passages
+        cited = [CitationRef(n, every[n - 1]) for n in cited_numbers(state.text) if 0 < n <= len(every)]
         return TurnFinished(
             TurnResult(
                 turn_id=req.turn_id,
@@ -714,6 +759,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                 yield StatusChanged("retrieving")
                 try:
                     passages = await _retrieve(req, ports)
+                    state.passages = list(passages)
                 except KnowledgeUnavailableError:
                     # Asked for knowledge, the turn says it is unavailable; otherwise it goes on without passages
                     # (a tool call or a plain answer needs none).
@@ -919,7 +965,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
 
     if req.settings.end_check and req.output_schema is None and state.text.strip():
         # Checked before any guardrail, so a corrected answer is the one the guardrail checks.
-        corrected, spent = await _end_check(state, model, system_prompt, all_messages, bool(passages))
+        corrected, spent = await _end_check(state, model, system_prompt, all_messages, len(passages))
         usage = TokenUsage(
             usage.input_tokens + spent.input_tokens,
             usage.output_tokens + spent.output_tokens,

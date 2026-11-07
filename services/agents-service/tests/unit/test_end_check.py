@@ -48,6 +48,7 @@ class Writer:
 
     def __init__(self, first: str, fixed: str, *, read: bool = False) -> None:
         self.first, self.fixed, self.read = first, fixed, read
+        self.read_tool = "find_cases"
         self.calls = 0
         self.corrections: list[str] = []
 
@@ -61,7 +62,11 @@ class Writer:
             self.corrections.append(str(asked[0]))
             return self.fixed
         called = any(isinstance(p, ToolCallPart) for m in messages for p in getattr(m, "parts", []))
-        return ("find_cases", {"search": "open"}) if self.read and not called else self.first
+        return (
+            (self.read_tool, {"search": "open"} if self.read_tool == "find_cases" else {"query": "overdue"})
+            if self.read and not called
+            else self.first
+        )
 
     def model(self) -> FunctionModel:
         def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
@@ -186,3 +191,48 @@ def test_the_check_reads_codes_only_in_capitals() -> None:
     assert answer_check.error_code("call find_cases with search_knowledge") is None
     assert answer_check.error_code('{"error": "FORBIDDEN"}') == "FORBIDDEN"
     assert answer_check.error_code("Error: Unknown file") is None
+
+
+SEARCH = ToolGrant(
+    "search_knowledge", "kb", "Search", "read", {"type": "object", "properties": {"query": {"type": "string"}}}
+)
+
+
+class Searching(Tools):
+    async def execute(
+        self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
+    ) -> ToolOutcome:
+        passage = {
+            "text": "Overdue reviews escalate after 10 business days.",
+            "title": "Control testing",
+            "itemId": "itm_1",
+        }
+        return ToolOutcome(True, {"passages": [passage]})
+
+
+async def searched(first: str, fixed: str) -> tuple[Writer, TurnResult]:
+    writer = Writer(first, fixed, read=True)
+    writer.read_tool = "search_knowledge"
+    req = TurnRequest("t1", "th1", SETTINGS, [SEARCH], user_turn="What does our policy say about overdue reviews?")
+    events = [
+        e async for e in run_turn(req, KernelPorts(model=writer.model(), tools=Searching(), knowledge=Knowledge([])))
+    ]
+    last = events[-1]
+    assert isinstance(last, TurnFinished)
+    return writer, last.result
+
+
+async def test_a_searched_passage_cited_by_number_becomes_a_citation() -> None:
+    # A policy answer ended "from 'Control testing and exceptions.'": a search's passages had no number to cite.
+    writer, result = await searched("Overdue reviews escalate after 10 business days [1].", "unused")
+    assert writer.calls == 2, writer.corrections
+    assert [(c.n, c.passage.title, c.passage.document_id) for c in result.citations] == [
+        (1, "Control testing", "itm_1")
+    ]
+
+
+async def test_an_answer_from_searched_passages_without_a_citation_is_corrected() -> None:
+    writer, result = await searched(
+        "Overdue reviews escalate after 10 business days.", "They escalate after 10 days [1]."
+    )
+    assert writer.calls == 3 and [c.n for c in result.citations] == [1], writer.corrections
