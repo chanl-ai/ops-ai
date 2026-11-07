@@ -18,3 +18,6 @@ coder login http://127.0.0.1:3000
 coder templates push ops-ai --directory deploy/devhost -y
 coder users create --username dev1 --email dev1@example.com --login-type password
 ```
+
+Working here: `main.tf` is the template, published with `coder templates push` (above). Nothing in `make verify` or CI
+checks it, so a change is proved only by pushing it and opening a workspace. Folder rules: `../CLAUDE.md`.

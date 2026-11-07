@@ -10,3 +10,9 @@ One versioned package a client team installs on its own Linux machines with Dock
 | `version` | The image version a checkout installs (`./install.sh`) and the release workflow publishes by default |
 | `images.sh` | Builds every image from one commit (`git archive`) for the platforms given, loads or pushes them, with the OCI labels; used by `package.sh`, `install.sh --build` and `.github/workflows/release-images.yml` |
 | `install_proof.sh` | `make install-proof`: a fresh clone, `./install.sh` unattended on images pulled from GHCR, every console page, rerun, upgrade, backup, restore, a failed upgrade rolled back, and DBA mode (`docs/deploy/install.md`) |
+
+## Working here
+
+Every script here is slow and builds or pulls every image; none runs in `make verify`. `make release-tag DRY=1`
+prints the tag a merged commit would get without pushing it. Bump `version` only for a published image version.
+Folder rules: `../CLAUDE.md`.

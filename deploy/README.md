@@ -13,4 +13,9 @@ and Kubernetes are optional. Design: `docs/architecture/service-map.md` ("Deploy
 | `host/` | The process host: starts the processes `OPS_ENABLED_SERVICES` names from a config file, restarts one that exits, stops them together |
 | `fly/` | Staging on one Fly machine: the Dockerfile with every image's stage, proxy, processes, release command, keys, model connection and the smoke walk any install can run. Runbook: `docs/deploy/fly-staging.md` |
 | `vm/` | Not started: systemd units for the gateway, tools service and AI gateway, native PostgreSQL |
+| `devhost/` | A Coder template for a shared dev VM: one workspace per developer from `.devcontainer/` (`docs/deploy/devhost.md`) |
+| `mirror-test/` | The behind-a-mirror lane, `make qa-mirror`: a clean install through a local Nexus on a closed network |
+| `plugins.json` | The plugins every image ships with, each pinned to a full commit (`images/bake_plugins.py`) |
 | `k8s/` | Kustomize: a base per service and an overlay per environment, from the same images, against an outside PostgreSQL (runbook `docs/deploy/kubernetes.md`) |
+
+Working rules for this folder (make targets, tests, proofs, generated files): `CLAUDE.md`.

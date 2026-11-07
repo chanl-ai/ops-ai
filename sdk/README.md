@@ -10,4 +10,4 @@ Guides: [Python](../docs/sdk/python.md), [TypeScript](../docs/sdk/typescript.md)
 | `make sdk-check` | `sdk-verify`, the packages installed in an empty folder, and the examples on `make up` |
 
 Only operations marked `x-ops-public: sdk` or `both` are generated (`docs/architecture/api.md`). Publishing is
-`.github/workflows/sdk-publish.yml`: a dry run until the owner turns it on.
+`.github/workflows/sdk-publish.yml`: a dry run until a maintainer sets the repository variable that turns it on.

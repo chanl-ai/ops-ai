@@ -6,11 +6,11 @@ Design: `docs/architecture/service-map.md`. Experiment that built it: `docs/serv
 
 ## Run it
 
-PostgreSQL and OPA come from the shared dev stack.
+PostgreSQL and OPA come from the shared dev stack (`make db-up` at the root); `make up` runs this service as `tools`.
 
 ```bash
-make -C ../agents-service db-up migrate
-make run          # http://127.0.0.1:8720
+make migrate      # its own chain, version table alembic_version_tools
+make run          # http://127.0.0.1:8720 (stop the make up copy first: make stop)
 ```
 
 ## Common tasks
@@ -18,7 +18,8 @@ make run          # http://127.0.0.1:8720
 | Task | Command |
 |---|---|
 | Lint, strict types, tests | `make verify` |
+| One test file | `make test T=tests/test_cors.py` |
 | Policy | `policy/gateway.rego`, served by OPA from `deploy/compose/compose.yaml` |
 
-Its tests and tables still live in `services/agents-service` (`tests/gateway`, `migrations/`) until migrations split
-per service.
+Its gateway tests still live in `services/agents-service/tests/gateway` (`make test-gateway`) while `ops_tools`
+imports the agents catalogue. Working rules: `CLAUDE.md`; full docs: `docs/services/tools-service/overview.md`.
