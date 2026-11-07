@@ -86,8 +86,15 @@ ROUTE_ACTIONS: dict[tuple[str, str], str] = {
     ("DELETE", "/v1/settings/sign-in/secrets/{name}"): "signin_secret.delete",
 }
 
-# The audit page's views, as the platform actions each holds; platform-service records no publishes.
+# Sign-ins, sign-outs and step-ups: most of an account's entries, so they have a view of their own and are left out of
+# Changes, the page's first view, where the edits a person looks for would otherwise sit behind pages of them.
+SIGN_INS = frozenset(a for a, k in KIND.items() if k == "login")
+
+# The audit page's views, as the platform actions each holds; platform-service records no publishes. A view in
+# EVERYTHING_BUT holds every action except the ones named.
+EVERYTHING_BUT: dict[str, frozenset[str]] = {"changes": SIGN_INS}
 VIEWS: dict[str, frozenset[str]] = {
+    "sign_ins": SIGN_INS,
     "access": frozenset(a for a in KIND if a.startswith(("member.", "key.", "role."))),
     "deletions": frozenset(
         {
@@ -227,6 +234,8 @@ class AuditLog:
                 where.append(audit_entries.c[column] == filters[column])
         if filters.get("view") in VIEWS:
             where.append(audit_entries.c.action.in_(sorted(VIEWS[str(filters["view"])])))
+        if filters.get("view") in EVERYTHING_BUT:
+            where.append(audit_entries.c.action.not_in(sorted(EVERYTHING_BUT[str(filters["view"])])))
         if filters.get("kind"):
             where.append(audit_entries.c.action.in_([a for a, k in KIND.items() if k == filters["kind"]]))
         if filters.get("from"):

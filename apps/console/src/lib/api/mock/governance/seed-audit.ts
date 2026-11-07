@@ -59,7 +59,7 @@ export function loginSeeds(): AuditSeed[] {
   for (let d = 0; d < 6; d++)
     [...PEOPLE.slice(0, 5), 'Tom Haddad', 'Lena Fischer'].forEach((name, i) => {
       if ((d + i) % 3 === 2) return;
-      out.push({ min: d * D + 8 * H + i * 7 + 40, actor: p(name), action: 'login', target: { type: 'session', name: 'Single sign-on · Entra ID' }, owner: HOME[name], summary: 'Signed in', diff: [] });
+      out.push({ min: d * D + 8 * H + i * 7 + 40, actor: p(name), action: 'login', target: { type: 'session', name: 'Single sign-on · Entra ID' }, owner: HOME[name], summary: 'Signed in with single sign-on', diff: [] });
     });
   return out;
 }

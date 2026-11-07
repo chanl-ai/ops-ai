@@ -1166,7 +1166,7 @@ def create_public_app(
         actor: Annotated[Actor, Depends(acting)],
         action: Annotated[str | None, Query(max_length=80)] = None,
         kind: Annotated[AuditKind | None, Query()] = None,
-        view: Annotated[Literal["all", "publishes", "access", "deletions"], Query()] = "all",
+        view: Annotated[Literal["all", "changes", "publishes", "access", "deletions", "sign_ins"], Query()] = "all",
         actor_id: Annotated[str | None, Query(alias="actor", max_length=320)] = None,
         target_kind: Annotated[str | None, Query(alias="targetKind", max_length=40)] = None,
         since: Annotated[str | None, Query(alias="from", pattern=ISO_TIME)] = None,
