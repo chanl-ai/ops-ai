@@ -58,7 +58,11 @@ async def give_app_tools(rt: Runtime, me: Principal, module_ids: list[str]) -> A
     agent = rt.catalog.agent(agent_id) if agent_id else None
     if agent is None:
         agent = await ensure_ops_assistant(rt, team)
-    ops = await rt.directory().operations()
+    directory = rt.directory()
+    # Read fresh: the app was turned on moments ago, after the kept list was read.
+    if (forget := getattr(directory, "forget", None)) is not None:
+        forget()
+    ops = await directory.operations()
     wanted = set(module_ids)
     reads = sorted({o.name for o in ops if o.module_id in wanted and o.access == "read"})
 

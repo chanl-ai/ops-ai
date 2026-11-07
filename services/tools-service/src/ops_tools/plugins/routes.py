@@ -237,7 +237,9 @@ class PluginAccounts:
             settings=settings,
             by=who.name,
         )
-        if not before:
+        if not before or (body.enabled and not before.get("connection_id") and before.get("tools_on") is None):
+            # A first turn-on, including one over a binding made before the team ever had an account (start_binding,
+            # the plugin catalog), starts with the app's read tools added and the installed version taken.
             await self._first_binding(who, plugin)
         elif self.host.versions and not before.get("version"):
             await self.host.take_installed(who.tenant_id, who.team.id, plugin)
