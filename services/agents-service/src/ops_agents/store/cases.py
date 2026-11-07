@@ -195,7 +195,8 @@ class CaseStore:
         size: int = 25,
     ) -> tuple[list[dict[str, Any]], int]:
         """One page of the teams' cases, the soonest resolution deadline first, and the count that matched. `search`
-        finds the words in the subject, the customer's name or the customer's id, ignoring case."""
+        keeps the cases holding every one of its words, in any order and ignoring case, each word in the subject, the
+        customer's name or the customer's id."""
         at = _iso(now or datetime.now(UTC))
         where: list[Any] = [cases.c.team_id.in_(teams), team_visible(cases)]
         if status:
@@ -206,8 +207,10 @@ class CaseStore:
             where.append(cases.c.priority.in_(priority))
         if customer_id:
             where.append(cases.c.customer_id == customer_id)
-        if search and search.strip():
-            like = f"%{search.strip()}%"
+        # Word by word: "application documents" finds "Loan application: ..., waiting on documents: ...", which the
+        # phrase does not.
+        for word in (search or "").split():
+            like = f"%{word}%"
             where.append(
                 sa.or_(cases.c.subject.ilike(like), cases.c.customer_name.ilike(like), cases.c.customer_id.ilike(like))
             )
