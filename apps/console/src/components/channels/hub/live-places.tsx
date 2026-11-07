@@ -119,7 +119,7 @@ export function LivePlacesPanel({ kind, id, name, between }: { kind: 'agent' | '
               {[...q.data.versions]
                 .sort((a, b) => b.version - a.version)
                 .map((v) => (
-                  <Item key={v.version} variant="outline" size="sm" data-testid={`version-live-${v.version}`}>
+                  <Item key={v.version} role="listitem" variant="outline" size="sm" data-testid={`version-live-${v.version}`}>
                     <ItemContent>
                       <ItemTitle>
                         v{v.version} {v.version === latest ? <Badge variant="secondary">Latest</Badge> : <Badge variant="outline">{plural(latest - v.version, 'version behind', 'versions behind')}</Badge>}

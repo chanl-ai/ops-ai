@@ -39,11 +39,12 @@ export function CopyField({ value, label, id }: { value: string; label: string; 
 
 /**
  * A record id for a table cell: copyable, whole value in the title, and whole on screen up to 19 characters. A longer
- * one keeps its first 12 and last 6, enough to tell apart ids that share a prefix (levy_document_… and levy_debtor_…).
+ * one keeps about its first 12 and last 6, at word breaks, enough to tell apart ids that share a prefix (levy_document_…
+ * and levy_debtor_…). It never wraps, so the copy button stays beside it.
  */
 export function CopyId({ value, label = 'id' }: { value: string; label?: string }) {
   return (
-    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+    <span className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground">
       <MiddleTruncate text={value} head={12} tail={6} />
       <CopyIconButton value={value} label={label} />
     </span>

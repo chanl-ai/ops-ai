@@ -116,7 +116,7 @@ function MemoryRow({ memory: m }: { memory: Memory }) {
   };
 
   return (
-    <Item variant="outline" size="sm" data-testid="memory-row" data-key={m.key ?? ''}>
+    <Item role="listitem" variant="outline" size="sm" data-testid="memory-row" data-key={m.key ?? ''}>
       <ItemContent>
         <ItemTitle>
           <span>{label}</span>

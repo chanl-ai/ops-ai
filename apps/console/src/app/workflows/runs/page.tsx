@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { History, Mail } from 'lucide-react';
+import { History, Play } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { PageLayout } from '@/components/page-layout';
@@ -20,7 +20,7 @@ export default function RunsPage() {
     if (run && current) router.replace(`/workflows/runs/${encodeURIComponent(run)}`);
   }, [run, current, router]);
   return (
-    <PageLayout icon={Mail} title="Runs" switcher description="Runs across every workflow: what is open, what waits on a person, and what the agent did">
+    <PageLayout icon={Play} title="Runs" switcher description="Runs across every workflow: what is open, what waits on a person, and what the agent did">
       {run && !current && (
         <Alert className="mb-4" data-testid="run-no-longer-available">
           <History />

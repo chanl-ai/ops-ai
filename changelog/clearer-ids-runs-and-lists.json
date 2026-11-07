@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Clearer ids, icons and lists",
+  "description": "Long ids in tables are shortened at word breaks instead of mid-word, and library widgets read Built in under Updated. The Runs and Audit log pages have their own icons, and lists on Overview, cases and channels read correctly to screen readers.",
+  "tag": "fix"
+}
