@@ -65,7 +65,7 @@ def models_main(argv: list[str]) -> int:
     sub.add_parser("keys", parents=common, help="the provider keys by name (account admins); no value is shown")
     test = sub.add_parser("test", parents=common, help="one test turn on an agent's model, as its Test panel")
     test.add_argument("agent", help="the agent's id, slug or name")
-    test.add_argument("-m", "--message", default="Reply with the single word ok.")
+    test.add_argument("-m", "--message", default="What is 2 + 2?")
     test.add_argument("--confirm", action="store_true", help="spend a real model call")
     ns = ap.parse_args(argv)
     if ns.verb == "test" and not ns.confirm:

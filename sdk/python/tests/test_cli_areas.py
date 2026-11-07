@@ -250,3 +250,19 @@ def test_as_an_email_outside_the_repo_signs_in_without_a_kept_session(
     ns = argparse.Namespace(as_role="dev@bank.example", base_url="http://127.0.0.1:8710", team=None)
     assert common.dev_sign_in(ns)[2]["token"] == "t"
     assert signed == ["dev@bank.example"]
+
+
+def test_models_test_runs_on_a_test_thread_that_remembers_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    def answer(r: httpx.Request) -> httpx.Response:
+        if r.url.path.endswith(("/v1/agents", "/v1/chat/agents")):
+            return _ok({"data": [{"id": "ag_1", "name": "Ops Assistant"}]})
+        if r.url.path.endswith("/messages"):
+            return httpx.Response(200, content=_sse({"type": "text", "delta": "4"}))
+        return _ok({"id": "th_t"}, 201)
+
+    seen: list[httpx.Request] = []
+    _use(monkeypatch, "people", _client(seen, answer))
+    assert main(["models", "test", "Ops Assistant", "--confirm", "--quiet"]) == 0
+    made = next(r for r in seen if r.method == "POST" and r.url.path.endswith("/v1/chat/threads"))
+    # A test thread is the agent page's Test panel: kept out of the person's memory and their chat list.
+    assert json.loads(made.content) == {"kbIds": [], "agentId": "ag_1", "test": True}
