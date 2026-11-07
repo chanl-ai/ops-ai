@@ -23,6 +23,10 @@ A script is YAML or JSON: `agent` (the team's default when left out), `test`, `k
     noControls      the reply names no button or other control to press: the cards show their own
     notTools        tool names none of which was called (a policy question reads no tasks)
     cardsOnce       no record's card is drawn twice in the stored reply
+    followUps       the reply offers quick replies (true), or this many
+    approval        the reply waits on an approval (a widget still open)
+A turn may be `approve: true` instead of `say`: it approves the newest open widget, as the turn's `as` person when
+given (an approver), waits for the resumed reply and checks it like any other.
 """
 
 from __future__ import annotations
@@ -30,11 +34,13 @@ from __future__ import annotations
 import argparse
 import copy
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from ops_ai import OpsAI
+from ops_ai._chat import action_body
 from ops_ai._io import load_data
 
 from .common import client, short
@@ -42,6 +48,8 @@ from .common import client, short
 QUESTION = re.compile(r"\?(?=[\s*_)\]\"']|$)")
 CODE = re.compile(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b|\bError:")
 STRAY = re.compile(r"(?:^|[.!?]\s+|\n\s*)(ok|okay|done)[.!]?\s*$", re.IGNORECASE)
+# How long an approved write's resumed reply may take.
+APPROVE_WAIT_S = 90.0
 CITE = re.compile(r"\[\d+\]")
 # What a sentence or a table may end on, closing quotes included ("... from \u201cthe policy.\u201d").
 RECORD_ID = re.compile(r"\b[a-z]{2,8}_[0-9a-f]{8,}\b|\b[a-z]+(?:_[a-z]+)+\b")
@@ -115,6 +123,14 @@ def reply_checks(want: dict[str, Any], seen: dict[str, Any], message: dict[str, 
         ]
         twice = sorted({k for k in sent if sent.count(k) > 1})
         out.append(("no call sent twice", not twice, f"{twice}"))
+    if "followUps" in want:
+        offered = list(message.get("followUps") or [])
+        wanted = want["followUps"]
+        ok = len(offered) == wanted if isinstance(wanted, int) and not isinstance(wanted, bool) else bool(offered)
+        out.append(("offers quick replies", ok, f"{offered}"))
+    if want.get("approval"):
+        open_ = [w for w in message.get("widgets") or [] if w.get("state") in ("pending", "awaiting_second", "open")]
+        out.append(("waits on an approval", bool(open_), f"{[w.get('state') for w in message.get('widgets') or []]}"))
     for tool in want.get("notTools", []):
         out.append((f"does not call {tool}", tool not in names, f"called {names}"))
     if want.get("cardsOnce"):
@@ -174,7 +190,10 @@ def run_script(ns: argparse.Namespace, ops: OpsAI, path: Path) -> Outcome:
     first = next((str(t["say"]) for t in spec["turns"] if t.get("say")), path.stem)
     thread, card, calls, failed = start_thread(ns, ops, first), None, 0, list[str]()
     for t in spec["turns"]:
-        seen = turn(ns, ops, thread, t.get("say") or followup((card or {}).get("connection") or "the app"))
+        if t.get("approve"):
+            seen = approved(ns, ops, thread, t.get("as"))
+        else:
+            seen = turn(ns, ops, thread, t.get("say") or followup((card or {}).get("connection") or "the app"))
         card = seen["cards"][-1] if seen["cards"] else card
         message = last_reply(ops, thread)
         calls += int((message.get("usage") or {}).get("calls") or 0)
@@ -194,6 +213,35 @@ def run_script(ns: argparse.Namespace, ops: OpsAI, path: Path) -> Outcome:
                 failed.append(name)
     line(ns, f"\n{'PASS' if not failed else 'FAIL'} {path.name}  {thread}")
     return Outcome(not failed, calls, thread, failed)
+
+
+def approved(ns: argparse.Namespace, ops: OpsAI, thread: str, person: str | None) -> dict[str, Any]:
+    """Approves the newest open widget, as `person` when given, then waits for the resumed reply and answers what a
+    turn does: the reply's tool calls and text."""
+    from .chat import _widget, line  # noqa: PLC0415  # pyright: ignore[reportPrivateUsage]
+
+    who = ops
+    if person:
+        other = copy.copy(ns)
+        other.as_role = person
+        who = client(other)
+    message, widget = _widget(who.chat.get(thread), None)
+    line(ns, f"\n{person or 'the person'} approves {widget}")
+    done = who.chat.act(thread, message, widget, action_body("approve"))
+    seen: dict[str, Any] = {"tools": [], "cards": [], "widgets": [], "text": "", "error": None, "phases": []}
+    end = time.monotonic() + APPROVE_WAIT_S
+    while time.monotonic() < end:
+        reply = last_reply(ops, thread)
+        calls = list(reply.get("toolCalls") or [])
+        settled = calls and all(c.get("status") != "running" for c in calls) and reply.get("content")
+        if settled and not any(w.get("state") in ("pending", "awaiting_second") for w in reply.get("widgets") or []):
+            seen.update(tools=calls, text=str(reply.get("content") or ""), error=reply.get("errorCode"))
+            break
+        time.sleep(1.5)
+    else:
+        seen["error"] = f"no reply within {APPROVE_WAIT_S:.0f} s of the approval ({done.get('state')})"
+    line(ns, f"agent > {seen['text'].strip()}")
+    return seen
 
 
 def evals(ns: argparse.Namespace, folder: Path, *, real: bool, max_calls: int, only: list[str] | None = None) -> int:

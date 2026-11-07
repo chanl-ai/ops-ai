@@ -499,3 +499,19 @@ def test_evals_run_each_script_as_its_people_and_keep_the_real_subset_within_its
     assert main(["chat", "evals", str(tmp_path), "--real", "--max-calls", "8"]) == 1
     assert ran == [("a", "wealth"), ("b", "lending")]
     assert "SKIP" in capsys.readouterr().out
+
+
+def test_the_log_flow_checks_see_quick_replies_and_a_pending_approval() -> None:
+    # An interview reply with no chips, or a save that never waited for its review, passed every other check.
+    plain = _seen("Update Education savings, or open a new one?")
+    assert [n for n, ok, _ in chat_script.reply_checks({"followUps": True}, plain, {}) if not ok] == [
+        "offers quick replies"
+    ]
+    asked = {"followUps": ["Update Education savings", "Open a new one"]}
+    assert all(ok for _, ok, _ in chat_script.reply_checks({"followUps": 2}, plain, asked))
+    saved = {"widgets": [{"id": "w1", "state": "approved"}]}
+    assert [n for n, ok, _ in chat_script.reply_checks({"approval": True}, plain, saved) if not ok] == [
+        "waits on an approval"
+    ]
+    waiting = {"widgets": [{"id": "w1", "state": "pending"}]}
+    assert all(ok for _, ok, _ in chat_script.reply_checks({"approval": True}, plain, waiting))
