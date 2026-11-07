@@ -237,10 +237,28 @@ class PluginAccounts:
             settings=settings,
             by=who.name,
         )
-        if not before:
+        if not before or (body.enabled and not before.get("connection_id") and before.get("tools_on") is None):
+            # A first turn-on, including one over a binding made before the team ever had an account (start_binding,
+            # the plugin catalog), starts with the app's read tools added and the installed version taken.
             await self._first_binding(who, plugin)
         elif self.host.versions and not before.get("version"):
             await self.host.take_installed(who.tenant_id, who.team.id, plugin)
+        if body.enabled and not before.get("connection_id") and body.credential_id is None:
+            await self._fix_first_place(who, plugin, own)
+
+    async def _fix_first_place(self, who: Caller, plugin: Plugin, own: dict[str, Any]) -> None:
+        """The first turn-on on Ops AI's app: where it signs in (the plugin's `asked: config` values the window asked)
+        is fixed on Ops AI's auth config for the team, so it is asked once and every account after signs in there. A
+        value the team already set on that config is kept."""
+        m = plugin.manifest
+        given = {k: v for k, v in own.items() if k in m.config_settings and v not in (None, "")}
+        b = await self.host.bindings.get(who.tenant_id, who.team.id, m.id) or {}
+        held = {k: v for k, v in dict(b.get("config_settings") or {}).items() if v not in (None, "")}
+        fresh = {k: v for k, v in given.items() if k not in held}
+        if not fresh:
+            return
+        modes = {**dict(b.get("setting_modes") or {}), **dict.fromkeys(fresh, "fixed")}
+        await self.host.bindings.set_config(who.tenant_id, who.team.id, m.id, {**held, **fresh}, modes, by=who.name)
 
     async def make_team_default(self, who: Caller, app_id: str, account_id: str) -> None:
         """Makes one of the team's live accounts of a plugin's app the one calls naming no account use: a team admin's

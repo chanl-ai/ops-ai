@@ -1,4 +1,5 @@
-"""`ops apps`: the Apps area. The catalog, one app's page, adding its tools to the team, its accounts and My accounts,
+"""`ops apps`: the Apps area. The catalog, one app's page, turning an app on as the Turn on window does, adding its
+tools to the team, its accounts and My accounts,
 the sign-in link to connect an account (printed, for a browser to open), an account's test, and the auth configs
 (the team's own app credentials)."""
 
@@ -21,6 +22,13 @@ def main(argv: list[str]) -> int:
     sub.add_parser("show", parents=common, help="one app's page: card, accounts, tools, latest calls").add_argument(
         "app"
     )
+    on = sub.add_parser("on", parents=common, help="turn an app on for the team and print the sign-in link")
+    on.add_argument("app")
+    on.add_argument(
+        "--place", help="where the team signs in (the app's sign-in address); the app's default when left out"
+    )
+    on.add_argument("--whose", choices=sorted(WHOSE), default="each", help="whose account tools use (default: each)")
+    on.add_argument("--no-assistant", action="store_true", help="leave the team's assistant without the read tools")
     add = sub.add_parser("add-tool", parents=common, help="add tools of an app to the team")
     add.add_argument("app")
     add.add_argument("tools", nargs="+")
@@ -46,6 +54,8 @@ def _dispatch(ns: argparse.Namespace, ops: OpsAI) -> int:
         return table(ns, cards, "id", "name", "kindLabel", "status", "toolsCount", "accountsCount")
     if ns.verb == "show":
         return emit(ns, ops.apps.get(ns.app))
+    if ns.verb == "on":
+        return _turn_on(ns, ops)
     if ns.verb == "add-tool":
         return table(ns, ops.raw.tools.apps_add_tools(ns.app, {"tools": ns.tools}), "name", "title", "added")
     if ns.verb == "accounts":
@@ -63,6 +73,39 @@ def _dispatch(ns: argparse.Namespace, ops: OpsAI) -> int:
         rows = ops.raw.tools.apps_list_app_credentials(app=ns.app)
         return table(ns, rows, "id", "name", "appName", "type", "status", "accounts")
     return 2
+
+
+# The window's "Whose account do tools use?": each person's own with the team account for runs nobody started, the
+# team account only, or each person only.
+WHOSE = {"each": "person_or_team", "team": "team", "person": "person"}
+
+
+def _turn_on(ns: argparse.Namespace, ops: OpsAI) -> int:
+    """The Turn on window from the terminal: the app on with its read tools added, the assistant given them unless
+    asked not to, and the team account's sign-in link, which a browser opens to finish."""
+    fields: dict[str, Any] = {"signIn": WHOSE[ns.whose]}
+    if ns.place:
+        fields["settings"] = {"login_url": ns.place}
+    card = ops.apps.turn_on(ns.app, **fields)
+    given = None if ns.no_assistant else ops.apps.give_assistant(ns.app)
+    start = ops.accounts.connect(ns.app, account=card.get("connectionId"), team=True)
+    lines = [f"Turned on {card.get('name')}: {card.get('toolsAdded') or 0} read tools added."]
+    if given is not None:
+        lines.append(_given(given))
+    lines.append(_link(start))
+    return emit(ns, {"card": card, "assistant": given, "signIn": start}, text="\n".join(lines))
+
+
+def _given(given: dict[str, Any]) -> str:
+    """What the assistant got, in words, by the route's state."""
+    name = given.get("agentName")
+    return {
+        "given": f"{name} can use them now.",
+        "already": f"{name} already had them.",
+        "in_review": f"{name} gets them once its new version is approved in Reviews.",
+        "waiting": f"{name} has a draft or a review open, so it was left as it is; add the tools on its Tools tab.",
+        "none": "The app has no read tools to give.",
+    }.get(str(given.get("state")), f"{name}: {given.get('state')}")
 
 
 def _link(start: dict[str, Any]) -> str:

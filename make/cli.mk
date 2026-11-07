@@ -14,7 +14,7 @@ need = $(if $($(1)),,$(error make $@: give $(1)=, e.g. $(2)))
 	chat-approve chat-reject chat-submit chat-transcript chat-transcripts \
 	kb-bases kb-show kb-documents kb-sources kb-source kb-items kb-add-file kb-add-text kb-sync kb-search kb-changes \
 	kb-change \
-	apps-list apps-show apps-add-tool apps-accounts apps-mine apps-connect apps-test apps-auth-configs \
+	apps-list apps-show apps-on apps-add-tool apps-accounts apps-mine apps-connect apps-test apps-auth-configs \
 	tools-list tools-show tools-run tools-calls tools-call \
 	runs-list runs-start runs-show runs-events runs-cancel runs-retry tasks-list tasks-show tasks-decide \
 	cases-list cases-show cases-note files-list files-show files-upload documents-types documents-type \
@@ -114,6 +114,9 @@ apps-add-tool: ## make apps-add-tool APP=… TOOL='a b' AS=builder: add the app'
 	$(call need,APP,APP=plugin:opsai.github)
 	$(call need,TOOL,TOOL=github_get_issue)
 	@$(OPS_CLI) apps $(OPS_AS) add-tool '$(APP)' $(TOOL)
+apps-on: ## make apps-on APP=… [PLACE=] [WHOSE=each|team|person] [NO_ASSISTANT=1] AS=admin: turn an app on, print its sign-in link
+	$(call need,APP,APP=plugin:opsai.salesforce)
+	@$(OPS_CLI) apps $(OPS_AS) on '$(APP)' $(if $(PLACE),--place '$(PLACE)') $(if $(WHOSE),--whose $(WHOSE)) $(if $(NO_ASSISTANT),--no-assistant)
 apps-accounts: ## make apps-accounts APP=… AS=admin: an app's accounts
 	$(call need,APP,APP=plugin:opsai.salesforce)
 	@$(OPS_CLI) apps $(OPS_AS) accounts '$(APP)'

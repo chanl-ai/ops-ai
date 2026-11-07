@@ -199,6 +199,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "agents_give_assistant_app_tools": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/team-assistant/app-tools",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "agents_guardrail_options": {
         "body": None,
         "headers": [],
@@ -2505,6 +2514,10 @@ class Operations:
         "Get Task"
         return self._t.call(SERVICE, OPERATIONS["reviews_get_task"], {"task_id": task_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def agents_give_assistant_app_tools(self, body: AppToolsIn) -> AppToolsGiven:
+        "Give Assistant App Tools"
+        return self._t.call(SERVICE, OPERATIONS["agents_give_assistant_app_tools"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     def workflows_team_usage(self) -> TeamUsage:
         "Team Usage"
         return self._t.call(SERVICE, OPERATIONS["workflows_team_usage"], {}, {}, {}, None)  # type: ignore[no-any-return]
@@ -3749,6 +3762,10 @@ class AsyncOperations:
     async def reviews_get_task(self, task_id: str) -> TaskState:
         "Get Task"
         return await self._t.call(SERVICE, OPERATIONS["reviews_get_task"], {"task_id": task_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def agents_give_assistant_app_tools(self, body: AppToolsIn) -> AppToolsGiven:
+        "Give Assistant App Tools"
+        return await self._t.call(SERVICE, OPERATIONS["agents_give_assistant_app_tools"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def workflows_team_usage(self) -> TeamUsage:
         "Team Usage"

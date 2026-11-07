@@ -110,6 +110,7 @@ from .routers import run_resume as run_resume_routes
 from .routers import skills as skill_routes
 from .routers import task_types as task_type_routes
 from .routers import tasks as task_routes
+from .routers import team_assistant as team_assistant_routes
 from .routers import team_usage as team_usage_routes
 from .routers import timers as timer_routes
 from .routers import tool_uses as tool_uses_routes
@@ -509,6 +510,7 @@ def create_app(
     mount(workflows.refs_router, "Workflows")
     mount(knowledge_usage_routes.router, "Agents")
     mount(tool_uses_routes.router, "Agents")
+    mount(team_assistant_routes.router, "Agents")
     mount(tool_uses_routes.document_type_router, "Workflows")
     mount(team_usage_routes.router, "Workflows")
     mount(tool_catalog.router, "Agents")

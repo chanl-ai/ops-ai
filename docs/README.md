@@ -498,3 +498,4 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/tools-service/sign-in-return-any-window.md` | uc-625: Connect comes back Connected in any window, for every sign-in app |
 | `usecases/tools-service/apps-screens-for-each-role.md` | uc-626: Apps screens offer only what you may do, in plain words |
 | `usecases/tools-service/salesforce-org-address.md` | uc-627: A team connects Salesforce at its company address and its agents query that org |
+| `usecases/tools-service/turn-on-in-one-window.md` | uc-628: An admin turns an app on in one window and everyone can use it |

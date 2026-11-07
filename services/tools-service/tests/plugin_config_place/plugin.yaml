@@ -12,7 +12,7 @@ connection:
   scopes:
     - { id: api, label: Read records, required: true }
     - { id: write, label: Change records }
-  sign_in: [team, person]
+  sign_in: [team, person, person_or_team]
   credential_settings: [tenant]
   sign_in_errors:
     - { error: invalid_client, description_contains: must be installed, say: "Install {app}'s app in your org first.", who: admin }

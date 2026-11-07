@@ -376,3 +376,34 @@ def test_multi_turn_shows_the_last_turn_unless_all_turns_and_wraps_on_words(
     every = capsys.readouterr().out
     assert every.index("First question") < every.index("Second question")
     assert "turn 1: 1 model call, 0 tool calls, 2.0 s; turn 2" in every
+
+
+def test_apps_on_turns_the_app_on_as_the_window_does_and_prints_the_sign_in_link(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    card = {"id": "plugin:opsai.salesforce", "name": "Salesforce", "toolsAdded": 9, "connectionId": "ca_1"}
+    card["moduleIds"] = ["mod_plugin_salesforce"]
+
+    def answer(r: httpx.Request) -> httpx.Response:
+        if r.url.path.endswith("/team"):
+            return _ok(card)
+        if r.url.path.endswith("/team-assistant/app-tools"):
+            return _ok(
+                {"agentId": "ag_ops", "agentName": "Ops Assistant", "tools": ["salesforce_query"], "state": "given"}
+            )
+        if r.url.path.endswith("/sign-in"):
+            return _ok({"authorizeUrl": "https://sf.example/authorize?x=1", "redirectUri": "https://c/return"})
+        return _ok({"card": card, "accounts": []})
+
+    seen: list[httpx.Request] = []
+    _use(monkeypatch, "apps", _client(seen, answer))
+    place = "https://acme.my.salesforce.com/services/oauth2"
+    assert main(["apps", "on", "plugin:opsai.salesforce", "--place", place]) == 0
+    out = capsys.readouterr().out
+    turned = next(r for r in seen if r.url.path.endswith("/team"))
+    assert json.loads(turned.content) == {"enabled": True, "signIn": "person_or_team", "settings": {"login_url": place}}
+    gave = next(r for r in seen if r.url.path.endswith("/team-assistant/app-tools"))
+    assert json.loads(gave.content) == {"moduleIds": ["mod_plugin_salesforce"]}
+    signed = next(r for r in seen if r.url.path.endswith("/sign-in"))
+    assert json.loads(signed.content) == {"account": "team"}
+    assert "9 read tools added" in out and "Ops Assistant can use them now" in out and "sf.example/authorize" in out
