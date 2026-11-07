@@ -300,3 +300,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-626 | tools-service | Apps screens offer only what you may do, in plain words | api, ui | draft |
 | uc-627 | tools-service | A team connects Salesforce at its company address and its agents query that org | api, ui | draft |
 | uc-628 | tools-service | An admin turns an app on in one window and everyone can use it | api, ui | draft |
+| uc-668 | tools-service | An advisor's meeting log saves the opportunity and its note together, or neither | api | current |

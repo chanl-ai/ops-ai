@@ -79,6 +79,8 @@ ARTICLES = "Knowledge__kav"
 PAGE_SIZE = 2
 # The scope an operation that writes a case needs, beyond `api`; a token signed in without it is refused (US4).
 WRITE_SCOPE = "cases.write"
+# The advisor org's records are written under the scope the Salesforce plugin asks for.
+ORG_WRITE_SCOPE = "api"
 # One account's data for the query tools: three open escalated cases, one escalated case in the recycle bin,
 # a contact, and a list view of escalated cases. The fake answers the fixed query shapes the plugin's tools send.
 ACCOUNT_ID = "001300000000ACMEAA"
@@ -1586,11 +1588,12 @@ class Org:
         return 200, {"attributes": self.attributes(obj, record), **{n: record.get(n) for n in names}}
 
     def _refuse(self, who: str, scopes: set[str]) -> Answer | None:
-        """Writes need the scope the case PATCH needs; a token signed in without it is refused."""
-        if WRITE_SCOPE in scopes:
+        """Writes to the org's records need the `api` scope, as in Salesforce, where the user's own permissions then
+        decide; a token signed in without it is refused."""
+        if ORG_WRITE_SCOPE in scopes:
             return None
         self.refused.append(f"insufficient_scope:{who}")
-        return 403, [{"errorCode": "INSUFFICIENT_ACCESS", "message": f"needs {WRITE_SCOPE}"}]
+        return 403, [{"errorCode": "INSUFFICIENT_ACCESS", "message": f"needs {ORG_WRITE_SCOPE}"}]
 
     def _check(self, obj: str, body: dict[str, Any], creating: bool) -> tuple[Record, list[dict[str, Any]]]:
         """A write's fields under the object's spelling, dates normalised, with Salesforce's errors for a value of the

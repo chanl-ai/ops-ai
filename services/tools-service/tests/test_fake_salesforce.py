@@ -18,7 +18,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 LIB = Path(__file__).resolve().parents[3] / "docs" / "usecases" / "lib"
-DANA = {"x-subject": "dana.whitfield", "x-scopes": "api cases.write"}
+DANA = {"x-subject": "dana.whitfield", "x-scopes": "openid api refresh_token"}
 
 
 def fake_salesforce() -> ModuleType:
@@ -131,9 +131,10 @@ def test_a_create_and_an_update_are_recorded_with_the_signer(rig: Rig) -> None:
     assert (opportunity["StageName"], opportunity["LastModifiedById"]) == ("Proposal", sf.DANA_ID)
 
 
-def test_a_write_without_the_write_scope_is_refused(rig: Rig) -> None:
+def test_a_write_without_the_api_scope_is_refused(rig: Rig) -> None:
+    # The plugin signs in with openid, api and refresh_token; a token holding only openid reads who signed in.
     sf = rig.sf
-    reader = {"x-subject": "dana.whitfield", "x-scopes": "api"}
+    reader = {"x-subject": "dana.whitfield", "x-scopes": "openid"}
     r = rig.client.post(f"{sf.API}/sobjects/Task", json={"Subject": "Call back"}, headers=reader)
     assert r.status_code == 403
     assert rig.fake.edits == []
