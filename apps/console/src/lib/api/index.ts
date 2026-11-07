@@ -220,7 +220,7 @@ function createAuthProvider(): AuthProvider {
  */
 export const authProvider: AuthProvider = createAuthProvider();
 
-export { ApiError, type Lookups, type OpsApi } from './contract';
+export { ApiError, type Lookups, type OpsApi, SOMEONE_ELSES } from './contract';
 export { currentTeamId, DEFAULT_TEAM_ID, ownTeamId, setCurrentTeamId, teamStore } from './team-context';
 
 /** A demo can show another organisation's name and mark without a code change: both come from the console's own

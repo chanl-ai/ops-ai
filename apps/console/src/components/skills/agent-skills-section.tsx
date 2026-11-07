@@ -130,7 +130,7 @@ export function AgentSkillsSection({
                   <>
                     <div className="w-36 text-right text-xs">
                       <div className="tabular-nums">{plural(p.loads7d, 'load')} · 7 days</div>
-                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted" aria-label={`${pct(p.share7d)} of turns`}>
+                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
                         <div className="h-full rounded-full bg-primary/70" style={{ width: `${Math.min(100, Math.max(2, p.share7d * 300))}%` }} />
                       </div>
                       <div className="mt-0.5 text-muted-foreground tabular-nums">{pct(p.share7d)} of turns</div>

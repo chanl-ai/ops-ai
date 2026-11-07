@@ -114,8 +114,9 @@ export default function KnowledgeBasePage() {
                   {LABEL[t]}
                   {t === 'sources' && <span className="ml-1 text-muted-foreground tabular-nums">{kb.sources.length}</span>}
                   {t === 'changes' && !!changes.data?.viewCounts.open && (
-                    <span className="ml-1 rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground tabular-nums" aria-label={`${changes.data.viewCounts.open} open`}>
+                    <span className="ml-1 rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground tabular-nums">
                       {changes.data.viewCounts.open}
+                      <span className="sr-only"> open</span>
                     </span>
                   )}
                 </TabsTrigger>

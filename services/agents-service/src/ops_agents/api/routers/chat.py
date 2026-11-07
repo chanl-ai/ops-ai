@@ -81,6 +81,7 @@ from ..chat_threads import (
     chat_row,
     chat_rows,
     matching_ids,
+    may_read,
     messages_of,
     store_summary,
     thread_row_view,
@@ -405,7 +406,14 @@ async def create_thread(rt: Rt, me: Me, body: ChatThreadInput) -> JSONResponse:
 
 @router.get("/threads/{thread_id}")
 async def get_thread(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
-    row = await _thread_row(rt, me, thread_id)
+    """The conversation, for whoever may read it. A teammate's conversation that the reader may not read answers
+    `{id, readable: false}` and nothing else, so a link to it says it is someone else's instead of failing; a
+    conversation that does not exist, or is another team's, is not found."""
+    row = await chat_row(rt, thread_id, None)
+    if row is None:
+        raise NotFound("Conversation")
+    if not may_read(_meta(row), me):
+        return ok({"id": thread_id, "readable": False})
     # Text a guardrail kept or took back from the person is shown to whoever the roles grid lets view the audit.
     audit = ACCESS.may(caller_of(me), "audit", "view", team=me.team_id)
     messages = (await messages_of(rt, [thread_id], audit=audit, reader=person_of(me)))[thread_id]

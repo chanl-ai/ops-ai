@@ -90,7 +90,7 @@ export function WhatsNew() {
           >
             {pulsing && <span className="absolute inset-0 animate-ping rounded-full border-2 border-primary/40" aria-hidden />}
             <WhatsNewMark />
-            {unseen && <span className="absolute top-0 right-0 size-3 rounded-full bg-primary ring-2 ring-background" data-testid="whats-new-dot" aria-label="New changes" />}
+            {unseen && <span className="absolute top-0 right-0 size-3 rounded-full bg-primary ring-2 ring-background" data-testid="whats-new-dot" role="img" aria-label="New changes" />}
           </button>
         </PopoverTrigger>
         <PopoverContent side="top" align="end" sideOffset={12} className="w-80 max-w-[calc(100vw-2rem)] p-0" data-testid="whats-new-popup">

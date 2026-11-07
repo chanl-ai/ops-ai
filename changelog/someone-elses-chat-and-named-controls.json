@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "A link to someone else's chat says so",
+  "description": "Opening a teammate's conversation now says it is someone else's instead of showing a broken page. Pickers, status dots and usage bars carry names a screen reader can read.",
+  "tag": "fix"
+}

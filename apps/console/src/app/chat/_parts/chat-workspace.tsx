@@ -43,6 +43,7 @@ import {
 import { useKnowledgeBases } from '@/hooks/knowledge-queries';
 import { useSticky } from '@/hooks/use-sticky';
 import { teamOfError } from '@/hooks/use-team';
+import { SOMEONE_ELSES } from '@/lib/api';
 import type { ChatAgent, ChatAttachment, ChatMessage, ChatThread, ChatThreadPatch, ChatThreadRow, MessageFeedback, SendInput, WidgetAction } from '@/lib/types/chat';
 import type { RetrievalTrace } from '@/lib/types/knowledge-retrieval';
 
@@ -228,6 +229,7 @@ function ThreadView({
   const streaming = !!live?.streaming;
 
   const notFound = query.isError && (query.error as { status?: number }).status === 404;
+  const someoneElses = query.isError && (query.error as { code?: string }).code === SOMEONE_ELSES;
   const owner = !!t && !!me && t.owner === me;
   const readOnly = !t || !owner || t.archived;
   // What I remember is the person's own memories with this agent, so only the chat's owner is offered it.
@@ -237,6 +239,25 @@ function ThreadView({
   // Replies name their agent once the conversation has had more than one (a handover).
   const severalAgents = !!t?.startAgentId || new Set(messages.flatMap((m) => (m.role === 'assistant' && m.agentName ? [m.agentName] : []))).size > 1;
   const handTo = (to: { id: string; name: string }, back = false) => onPatch(threadId, { agentId: to.id }, back ? `Back to ${to.name}` : `${to.name} has the chat`);
+
+  if (someoneElses)
+    return (
+      <>
+        <header className="flex min-h-12 items-center gap-2 border-b px-3 py-2">
+          <span className="px-1 text-sm font-semibold">Someone else’s conversation</span>
+        </header>
+        <div className="flex flex-1 items-center justify-center p-6">
+          <EmptyState
+            icon={MessageSquareDashed}
+            title="This conversation is someone else’s"
+            description="Only the person who started it reads it. Pick one of your chats or start a new one."
+            action={{ label: 'New chat', href: '/chat' }}
+            secondaryAction={{ label: 'All conversations', href: '/chat/conversations' }}
+            testId="chat-someone-elses"
+          />
+        </div>
+      </>
+    );
 
   if (notFound)
     return (

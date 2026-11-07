@@ -10,7 +10,8 @@ export function DisabledReason({ reason, children }: { reason?: string; children
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span tabIndex={0} aria-label={reason} className="inline-flex">
+        {/* A focusable group, so the reason is read on focus; a plain span may not carry a name. */}
+        <span tabIndex={0} role="group" aria-label={reason} className="inline-flex">
           {children}
         </span>
       </TooltipTrigger>

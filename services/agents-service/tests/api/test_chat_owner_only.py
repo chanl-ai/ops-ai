@@ -49,7 +49,10 @@ async def test_with_the_policy_on_only_the_starter_reads(stack: Stack, policies:
     c, _ = stack
     thread = await chat(c, VIEWER)
     assert (await c.get(f"/chat/threads/{thread}", headers=VIEWER)).status_code == 200
-    assert (await c.get(f"/chat/threads/{thread}", headers=reader(policies))).status_code == 404
+    # Someone else's: no message, title or owner, and no failing request for a link the reader followed.
+    sealed = await c.get(f"/chat/threads/{thread}", headers=reader(policies))
+    assert sealed.status_code == 200 and sealed.json()["data"] == {"id": thread, "readable": False}, sealed.text
+    assert (await c.get("/chat/threads/th_does_not_exist", headers=reader(policies))).status_code == 404
 
 
 async def test_with_the_policy_off_the_grid_lets_a_reader_of_every_chat_read_it(stack: Stack) -> None:  # noqa: F811
