@@ -141,6 +141,7 @@ async def who(p: CurrentCaller, request: Request) -> Who:
         tenant_id=p.tenant_id,
         team=p.team_id,
         actor=p.email or p.sub,
+        creates=_holds(p, "create"),
         edits=_holds(p, "edit"),
         manages=_holds(p, "manage"),
     )
@@ -342,7 +343,7 @@ def create_documents_app(
     @types.get("", response_model=Envelope[DocumentTypeList], dependencies=[service_scope("view")])
     async def list_types(who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The team's types, and whether the caller may add one (the console's New type)."""
-        return ok({"items": await document_types.list(who), "canCreate": who.edits})
+        return ok({"items": await document_types.list(who), "canCreate": who.creates})
 
     @types.get("/{type_id}", response_model=Envelope[DocumentType], dependencies=[service_scope("view")])
     async def get_type(type_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

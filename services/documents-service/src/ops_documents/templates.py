@@ -207,7 +207,7 @@ def templates_router(
             mine_now = _copy_view(latest) if latest else None
             extra = {
                 "state": state,
-                "canAdd": who.edits,
+                "canAdd": who.creates,
                 "addCell": cell,
                 "removeCell": cell if mine_now else None,
                 "copy": mine_now,

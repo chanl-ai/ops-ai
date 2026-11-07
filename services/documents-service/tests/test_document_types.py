@@ -157,6 +157,22 @@ async def test_a_member_who_cannot_edit_documents_reads_types_but_changes_none(m
     assert listed.status_code == 403 and refused.status_code == 403, (listed.text, refused.text)
 
 
+async def test_a_viewer_extracts_and_keeps_types_but_adds_none(make: Make) -> None:
+    """A viewer holds documents.edit and run but not create (roles grid); a new type was gated on edit, so a viewer
+    was offered New type and could add one. The list says canCreate false and the add is refused with role_required."""
+    builder = make(Models(), Floor(), Prices())
+    async with builder.client as c:
+        data(await c.post("/v1/document-types", json=TYPE, headers=OPS), 201)
+    viewer = make(Models(), Floor(), Prices(), role="viewer")
+    async with viewer.client as c:
+        listed = data(await c.get("/v1/document-types", headers=OPS))
+        refused = await c.post("/v1/document-types", json={**TYPE, "id": "viewer_type"}, headers=OPS)
+        kept = await c.post("/v1/document-types/invoice_notice/versions", json={"fields": FIELDS}, headers=OPS)
+    assert listed["canCreate"] is False and [t["id"] for t in listed["items"]] == ["invoice_notice"]
+    assert (refused.status_code, refused.json()["error"]["code"]) == (403, "role_required"), refused.text
+    assert kept.status_code in (200, 201), kept.text
+
+
 async def test_the_estimate_prices_the_alias_with_the_callers_tenant_on_the_token() -> None:
     """models-service refuses a service token naming no tenant (401), so a price asked without one read as unknown
     and every estimate showed no cost."""

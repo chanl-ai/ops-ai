@@ -160,12 +160,15 @@ class DocumentTypes:
     # ── types and versions ──
 
     @staticmethod
-    def _may_write(who: Who) -> None:
-        if not who.edits:
-            raise CreateNotAllowedError("Your role in this team cannot change document types.")
+    def _may_write(who: Who, *, adding: bool = False) -> None:
+        """Changing a type is documents.edit; adding one is documents.create too, which the roles grid keeps from
+        viewers, who keep the team's types but add none."""
+        if not who.edits or (adding and not who.creates):
+            verb = "add" if adding else "change"
+            raise CreateNotAllowedError(f"Your role in this team cannot {verb} document types.")
 
     async def create(self, who: Who, body: dict[str, Any]) -> dict[str, Any]:
-        self._may_write(who)
+        self._may_write(who, adding=True)
         type_id = body.get("id") or f"dt_{uuid.uuid4().hex[:12]}"
         if not _ID.fullmatch(type_id) and not type_id.startswith("dt_"):
             raise InvalidRequestError("id is 3 to 64 lowercase letters, digits and underscores, starting with a letter")

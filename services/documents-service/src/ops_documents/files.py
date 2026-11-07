@@ -13,13 +13,14 @@ from ops_files_client import FileInfo, FileNotFound, FileNotReady, FilesClient
 
 @dataclass(frozen=True)
 class Who:
-    """The caller, from its token: tenant, the team it acts in and who it is. `edits` is documents.edit in the team, as
-    `can()` decides it, which the console reads back as canCreate and canEdit; `manages` is documents.manage, which
-    turning on page images needs."""
+    """The caller, from its token: tenant, the team it acts in and who it is. `creates` is documents.create in the team,
+    as `can()` decides it, which a new document type needs and the console reads back as canCreate; `edits` is
+    documents.edit, read back as canEdit; `manages` is documents.manage, which turning on page images needs."""
 
     tenant_id: str
     team: str
     actor: str
+    creates: bool = True
     edits: bool = True
     manages: bool = False
     admin_teams: frozenset[str] = field(default_factory=frozenset[str])
