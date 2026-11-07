@@ -62,8 +62,9 @@ export function SessionsTable({ sessions, onRevoke, busyId }: { sessions: Accoun
       header: 'Device',
       cell: ({ row }) => (
         <div>
-          <span className="flex items-center gap-2 font-medium">
-            {row.original.device}
+          {/* The name stays on one line and the badge moves under it on a narrow screen, so neither breaks mid-word. */}
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
+            <span className="whitespace-nowrap">{row.original.device}</span>
             {row.original.current && <Badge variant="secondary">This device</Badge>}
           </span>
           <span className="text-xs text-muted-foreground">{row.original.browser}</span>

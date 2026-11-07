@@ -8,7 +8,7 @@ import { ArrowLeft, ChevronRight, Search } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 import { Kbd } from '@/components/ui/kbd';
-import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarInput, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem, SidebarSeparator } from '@/components/ui/sidebar';
+import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarInput, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem } from '@/components/ui/sidebar';
 import { SidebarRowAction } from '@/components/shared/sidebar-row-action';
 import { useNavAllows } from '@/hooks/me-queries';
 import type { SidebarTree } from '@/lib/settings-tree';
@@ -145,22 +145,28 @@ export function SettingsSidebar({ tree, ...props }: React.ComponentProps<typeof 
             </SidebarGroup>
           ))
         )}
+        {/* The person's own pages close the one scrolling list rather than sit in a fixed footer, which covered the
+            list's last rows until it was scrolled. */}
+        {!query.trim() && (
+          <SidebarGroup>
+            <SidebarGroupLabel>You</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {tree.personal.map((s) => (
+                  <SidebarMenuItem key={s.id}>
+                    <SidebarMenuButton asChild isActive={pathname === link(s.href)}>
+                      <Link href={s.href}>
+                        <s.icon />
+                        <span>{s.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
-      <SidebarFooter className="gap-2">
-        <SidebarSeparator className="mx-0" />
-        <SidebarMenu>
-          {tree.personal.map((s) => (
-            <SidebarMenuItem key={s.id}>
-              <SidebarMenuButton asChild isActive={pathname === link(s.href)}>
-                <Link href={s.href}>
-                  <s.icon />
-                  <span>{s.label}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarFooter>
     </Sidebar>
   );
 }

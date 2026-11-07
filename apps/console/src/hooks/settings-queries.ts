@@ -25,7 +25,7 @@ export const useNotificationSettings = () => useTeamQuery({ queryKey: sk.notific
 export const useWebhooks = (p: ListParams, enabled = true) => usePagedQuery({ queryKey: sk.webhooks(p), queryFn: () => api.settings.webhooks.list(p), enabled });
 export const useWebhookDeliveries = (id: string | null, p: ListParams<DeliveryFilters>) =>
   usePagedQuery({ queryKey: sk.deliveries(id ?? '', p), queryFn: () => api.settings.webhooks.deliveries(id!, p), enabled: !!id });
-export const useApiKeys = (p: ListParams) => usePagedQuery({ queryKey: sk.keys(p), queryFn: () => api.settings.apiKeys.list(p) });
+export const useApiKeys = (p: ListParams, enabled = true) => usePagedQuery({ queryKey: sk.keys(p), queryFn: () => api.settings.apiKeys.list(p), enabled });
 export const useUsage = (days: UsageDays, enabled = true) => usePagedQuery({ queryKey: sk.usage(days), queryFn: () => api.settings.usage.get(days), enabled });
 export const useSettingsLookups = () => useTeamQuery({ queryKey: sk.lookups, queryFn: api.settings.lookups, staleTime: 5 * 60_000 });
 

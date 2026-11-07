@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "API keys and gate policies follow your permissions",
+  "description": "API keys opens only for people who manage a team's access, lists only the teams they manage, and offers Create key and Revoke only with those permissions. Gate policies shows New gate and edits only to people who manage reviews, and reads each gate's rule in words with the rule itself one click away.",
+  "tag": "improved"
+}

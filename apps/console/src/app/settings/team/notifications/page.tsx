@@ -22,6 +22,9 @@ import type { NotificationEvent } from '@/lib/types/settings';
 
 type Draft = Record<NotificationEvent, string[]>;
 
+/** No service stores notification routing yet, so the page is sample data and nobody changes it here. */
+const READ_ONLY = true;
+
 export default function NotificationsPage() {
   const { team } = useTeam();
   const query = useNotificationSettings();
@@ -52,7 +55,7 @@ export default function NotificationsPage() {
   };
 
   return (
-    <SettingsPageLayout sample section="Notifications" description={`Where ${team?.name ?? 'this team'} hears about work that needs a person.`}>
+    <SettingsPageLayout sample={READ_ONLY} section="Notifications" description={`Where ${team?.name ?? 'this team'} hears about work that needs a person.`}>
       {query.isPending ? (
         <NotificationsSkeleton />
       ) : query.isError && !s ? (
@@ -111,7 +114,9 @@ export default function NotificationsPage() {
                           <Checkbox
                             aria-label={`${r.label} via ${c.name}`}
                             checked={draft[r.event].includes(c.id)}
-                            disabled={!c.connected}
+                            // Disabled on the control itself, not only by the read-only page's fieldset, so every
+                            // reader of the page (a screen reader, a test) sees it is not editable.
+                            disabled={READ_ONLY || !c.connected}
                             onCheckedChange={(v) => toggle(r.event, c.id, !!v)}
                           />
                         </TableCell>

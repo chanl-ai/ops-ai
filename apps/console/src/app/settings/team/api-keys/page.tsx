@@ -13,7 +13,9 @@ import { SettingsPageLayout } from '@/components/settings/settings-page-layout';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { StopRowClick } from '@/components/shared/form-field';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
-import { ListEmpty, QueryError } from '@/components/shared/query-states';
+import { ListEmpty, NoAccess, QueryError } from '@/components/shared/query-states';
+import { useCan, useNavAllows, useTeamsAllowing } from '@/hooks/me-queries';
+import { API_KEYS } from '@/lib/settings-tree';
 import { idColumn } from '@/components/shared/id-column';
 import { selectColumn } from '@/components/shared/select-column';
 import { Badge } from '@/components/ui/badge';
@@ -25,7 +27,7 @@ import { relativeTime, shortDate } from '@/lib/format';
 import type { ApiKey } from '@/lib/types/settings';
 import { serverPagination } from '@/components/shared/server-pagination';
 
-function columns(showTeam: boolean, onRevoke: (k: ApiKey) => void): ColumnDef<ApiKey>[] {
+function columns(showTeam: boolean, onRevoke: ((k: ApiKey) => void) | null): ColumnDef<ApiKey>[] {
   return [
     selectColumn<ApiKey>((k) => k.name),
     idColumn<ApiKey>((k) => k.id),
@@ -76,7 +78,7 @@ function columns(showTeam: boolean, onRevoke: (k: ApiKey) => void): ColumnDef<Ap
         return <span className={days <= 30 ? 'text-xs font-medium whitespace-nowrap text-warning-text' : 'text-xs whitespace-nowrap text-muted-foreground'}>{days <= 30 ? `In ${days} days` : shortDate(at)}</span>;
       },
     },
-    {
+    ...(onRevoke ? [{
       id: 'actions',
       meta: { className: 'sticky right-0 z-[1] w-10 bg-card shadow-[-8px_0_8px_-8px_rgb(0_0_0/0.12)]' },
       cell: ({ row }) => (
@@ -85,7 +87,7 @@ function columns(showTeam: boolean, onRevoke: (k: ApiKey) => void): ColumnDef<Ap
         </StopRowClick>
       ),
       enableHiding: false,
-    },
+    } satisfies ColumnDef<ApiKey>] : []),
   ];
 }
 
@@ -93,13 +95,22 @@ export default function ApiKeysPage() {
   const { team, teams } = useTeam();
   const showTeam = team?.scope === 'all';
   const list = useListParams('name');
-  const query = useApiKeys(list.params);
+  // platform-service lists a team's keys under access.manage, creates them under access.create and revokes them under
+  // access.delete; without the first the page says so and asks nothing.
+  const may = useNavAllows()(API_KEYS);
+  const canCreate = useCan('access', 'create') === true;
+  const canRevoke = useCan('access', 'delete') === true;
+  // Across teams, only the keys of teams whose access the person manages, and a new key only in a team they may create in.
+  const covered = useTeamsAllowing('access', 'manage');
+  const creatable = useTeamsAllowing('access', 'create') ?? [];
+  const params = React.useMemo(() => (showTeam && covered ? { ...list.params, filters: { ...list.params.filters, teamId: covered } } : list.params), [showTeam, covered, list.params]);
+  const query = useApiKeys(params, may === true && (!showTeam || !!covered));
   const lookups = useSettingsLookups();
   const create = useCreateApiKey();
   const revoke = useRevokeApiKey();
   const [createOpen, setCreateOpen] = React.useState(false);
   const [revoking, setRevoking] = React.useState<ApiKey | null>(null);
-  const cols = React.useMemo(() => columns(showTeam, setRevoking), [showTeam]);
+  const cols = React.useMemo(() => columns(showTeam, canRevoke ? setRevoking : null), [showTeam, canRevoke]);
 
   return (
     <SettingsPageLayout
@@ -107,12 +118,17 @@ export default function ApiKeysPage() {
       section="API keys"
       description="Keys for systems that start runs or read logs. A key is shown once, when it is created."
       actions={
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="size-4" /> Create key
-        </Button>
+        may === true &&
+        canCreate && (
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="size-4" /> Create key
+          </Button>
+        )
       }
     >
-      {query.isPending ? (
+      {may === false ? (
+        <NoAccess what="this team’s API keys" />
+      ) : query.isPending ? (
         <PageSkeleton statCards={0} tableRows={5} />
       ) : query.isError && !query.data ? (
         <QueryError what="API keys" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
@@ -125,7 +141,7 @@ export default function ApiKeysPage() {
           searchPlaceholder="Search names, prefixes or creators…"
           onColumnFiltersChange={list.onColumnFiltersChange}
           serverPagination={serverPagination(list, query)}
-          emptyState={<ListEmpty icon={KeyRound} noun="API keys" filtered={list.isFiltered} createLabel="Create key" onCreate={() => setCreateOpen(true)} description="Create a key for each system that calls Ops AI, so each one can be revoked on its own." />}
+          emptyState={<ListEmpty icon={KeyRound} noun="API keys" filtered={list.isFiltered} createLabel={canCreate ? 'Create key' : undefined} onCreate={canCreate ? () => setCreateOpen(true) : undefined} description="Create a key for each system that calls Ops AI, so each one can be revoked on its own." />}
         />
       )}
 
@@ -133,7 +149,7 @@ export default function ApiKeysPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         scopes={lookups.data?.apiScopes ?? []}
-        teams={team?.scope === 'all' ? teams.map((t) => ({ id: t.id, name: t.name })) : undefined}
+        teams={team?.scope === 'all' ? teams.filter((t) => creatable.includes(t.id)).map((t) => ({ id: t.id, name: t.name })) : undefined}
         defaultTeamId={team?.id}
         isPending={create.isPending}
         onSubmit={(input) => create.mutateAsync(input)}

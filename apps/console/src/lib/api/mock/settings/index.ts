@@ -222,7 +222,15 @@ export function createSettingsMock({ log, me }: { log: AuditLog; me: string }): 
     },
 
     apiKeys: {
-      list: (p) => respond((m) => list(scoped(keys).map(strip), p, { text: (k) => `${k.name} ${k.prefix} ${k.createdBy}`, value: field, facetKeys: [] }, m)),
+      // `filters.teamId` names the teams whose keys the caller may read; the rows carry no team id once listed.
+      list: (p) =>
+        respond((m) => {
+          const teamIds = p.filters?.teamId;
+          const rows = scoped(keys).filter((k) => !teamIds || teamIds.includes(k.teamId));
+          const { teamId: _teams, ...filters } = p.filters ?? {};
+          void _teams;
+          return list(rows.map(strip), { ...p, filters }, { text: (k) => `${k.name} ${k.prefix} ${k.createdBy}`, value: field, facetKeys: [] }, m);
+        }),
       create: (input) =>
         respond(() => {
           const name = input.name.trim();

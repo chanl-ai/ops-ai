@@ -149,6 +149,22 @@ export function useCanCheck(): (area: string, action: string, everyTeam?: boolea
   };
 }
 
+/**
+ * The person's teams in which they hold `area.action`: all of them when a workspace role grants it, undefined while
+ * permissions load. A list that spans teams shows only these, and a team picker offers only these.
+ */
+export function useTeamsAllowing(area: string, action: string): string[] | undefined {
+  const { team, teamId, teams } = useTeam();
+  const perms = useMyPermissions();
+  const here = useCanCheck()(area, action);
+  // Without per-team permissions only the current team's answer is known.
+  if (!api.teams.permissions) return here === undefined ? undefined : here ? [team?.id ?? teamId] : [];
+  if (!perms.data) return undefined;
+  const held = (list: { area: string; action: string }[]) => list.some((p) => p.area === area && p.action === action);
+  if (held(perms.data.workspace ?? [])) return teams.map((t) => t.id);
+  return perms.data.teams.filter((t) => held(t.permissions)).map((t) => t.teamId);
+}
+
 /** Who may take `area.action` in the current team, asked only while `enabled` (a "View only" notice is showing). */
 /** Who holds `area.action` in `forTeam` (a record's team), else the current team. */
 export function useHolders(area: string, action: string, enabled: boolean, forTeam?: string) {

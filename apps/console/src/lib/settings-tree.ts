@@ -13,6 +13,8 @@ export const STORAGE_SETTINGS: NavNeed = { area: 'settings', action: 'manage' };
 /** A team's webhooks and its usage and cost are team-admin data, each with its own cell. */
 export const WEBHOOKS: NavNeed = { area: 'webhooks', action: 'view' };
 export const USAGE: NavNeed = { area: 'usage', action: 'view' };
+/** platform-service lists a team's API keys to whoever manages its access. */
+export const API_KEYS: NavNeed = { area: 'access', action: 'manage' };
 
 export interface SettingsEntry {
   id: string;
@@ -35,7 +37,7 @@ export const SETTINGS_NAV: SettingsEntry[] = [
   { id: 'team-general', title: 'General', href: '/settings/team', icon: IconAdjustmentsHorizontal, description: 'The team’s name, owner and the agent new chats start on', group: 'Team' },
   { id: 'notifications', title: 'Notifications', href: '/settings/team/notifications', icon: IconBell, description: 'Where approvals, SLA warnings and alerts go', group: 'Team' },
   { id: 'webhooks', title: 'Webhooks', href: '/settings/team/webhooks', icon: IconWebhook, description: 'Send events to the bank’s other systems', group: 'Team', needs: WEBHOOKS },
-  { id: 'api-keys', title: 'API keys', href: '/settings/team/api-keys', icon: IconKey, description: 'Keys for systems that start runs or read logs', group: 'Team' },
+  { id: 'api-keys', title: 'API keys', href: '/settings/team/api-keys', icon: IconKey, description: 'Keys for systems that start runs or read logs', group: 'Team', needs: API_KEYS },
   { id: 'policies', title: 'Workspace policies', href: '/settings/policies', icon: IconShieldCheck, description: 'Who may decide what, and how long things may wait', group: 'Govern', section: 'Policies' },
   { id: 'publish-reviews', title: 'Publish reviews', href: '/settings/policies/publish-reviews', icon: IconGitPullRequest, description: 'Which publishes need a second person’s review', group: 'Govern', section: 'Policies' },
   { id: 'gates', title: 'Gate policies', href: '/settings/policies/gates', icon: IconGavel, description: 'Who reviews at each gate and how long they have', group: 'Govern', section: 'Policies' },
