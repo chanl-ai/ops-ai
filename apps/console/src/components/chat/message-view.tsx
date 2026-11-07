@@ -21,6 +21,7 @@ import { CitationPopover, SourcesList } from './citation-popover';
 import { OpsCallCards, opsCards } from './ops-call-cards';
 import { ToolCallCard } from './tool-call-card';
 import { ConnectionRequiredCard, connectionRequired } from './connection-required-card';
+import { MemorySuggestion } from '@/components/memory/memory-suggestion';
 import { rememberedLine } from '@/components/memory/remembered-line';
 import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion';
 import { LayoutWidget } from './widget-layout';
@@ -148,6 +149,9 @@ export function AssistantMessage({
     return c ? <CitationPopover citation={c} onOpenDocument={onOpenDocument} onOpenTrace={message.trace && onOpenTrace ? () => onOpenTrace(message.trace!) : undefined} /> : null;
   };
   const settled = !streaming && !phaseLabel;
+  // What the reply suggests keeping asks its own line; what it kept, or anyone else's suggestion, is told in one line.
+  const suggested = (message.remembered ?? []).filter((r) => r.status === 'suggested' && !!r.value);
+  const kept = (message.remembered ?? []).filter((r) => !suggested.includes(r));
 
   return (
     <div className="group flex flex-col gap-2">
@@ -204,10 +208,10 @@ export function AssistantMessage({
         </p>
       ) : null}
 
-      {message.remembered?.length && settled ? (
+      {kept.length && settled ? (
         <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" data-testid="saved-to-memory">
           <Brain className="size-3" />
-          {rememberedLine(message.remembered)}
+          {rememberedLine(kept)}
           {onOpenMemory && (
             <button type="button" onClick={onOpenMemory} className="underline-offset-4 hover:text-foreground hover:underline" data-testid="open-memory">
               What I remember
@@ -215,6 +219,7 @@ export function AssistantMessage({
           )}
         </p>
       ) : null}
+      {settled && !readOnly && suggested.map((r) => <MemorySuggestion key={r.id} item={r} />)}
 
       {message.guardrail && settled && (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="guardrail-refusal">

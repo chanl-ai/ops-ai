@@ -901,6 +901,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "memory_confirm_memory": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/me/memories/{memory_id}/confirm",
+        "pathParams": ["memory_id"],
+        "query": [],
+        "stream": False,
+    },
     "memory_correct_memory": {
         "body": "json",
         "headers": [],
@@ -2305,6 +2314,10 @@ class Operations:
         "Forget Memory"
         return self._t.call(SERVICE, OPERATIONS["memory_forget_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def memory_confirm_memory(self, memory_id: str) -> MemoryView:
+        "Confirm Memory"
+        return self._t.call(SERVICE, OPERATIONS["memory_confirm_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     def memory_erase_memory(self, memory_id: str) -> Any:
         "Erase Memory"
         return self._t.call(SERVICE, OPERATIONS["memory_erase_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -3545,6 +3558,10 @@ class AsyncOperations:
     async def memory_forget_memory(self, memory_id: str) -> Any:
         "Forget Memory"
         return await self._t.call(SERVICE, OPERATIONS["memory_forget_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def memory_confirm_memory(self, memory_id: str) -> MemoryView:
+        "Confirm Memory"
+        return await self._t.call(SERVICE, OPERATIONS["memory_confirm_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def memory_erase_memory(self, memory_id: str) -> Any:
         "Erase Memory"

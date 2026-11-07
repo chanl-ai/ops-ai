@@ -4,14 +4,17 @@ or its issuing rules, never by the model."""
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
+import sqlalchemy as sa
 
 from ops_agents.api.memory_safety import sensitive
+from ops_agents.api.runs import graph_store
+from ops_agents.store.memories import agent_memories
+from ops_agents.store.tenancy import tenant_scope, tenant_tx
 from tests.api.test_action_roles import VIEWER
-from tests.api.test_memory import Answering, chat, mine, said
+from tests.api.test_memory import Answering, chat, said
 from tests.api.test_team_default_agent import Stack, say, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from tests.engine.test_lifecycle_rights import TENANT
 
 
 @pytest.mark.parametrize(
@@ -57,5 +60,9 @@ async def test_a_card_number_is_never_saved_whatever_the_model_says(stack: Stack
     thread = await chat(c, VIEWER)
     await say(c, thread, message, VIEWER)
     await say(c, thread, "Remember that my card is 4111 1111 1111 1111.", VIEWER)
-    kept: list[dict[str, Any]] = await mine(c, VIEWER)
-    assert [m["value"] for m in kept] == ["Updates by email"], kept
+    m = agent_memories.c
+    with tenant_scope(TENANT):
+        async with tenant_tx(graph_store(rt).engine) as conn:
+            kept = [r[0] for r in await conn.execute(sa.select(m.value).where(m.person == "vera"))]
+    # The preference waits as a suggestion; the card number is kept in no form.
+    assert kept == ["Updates by email"], kept

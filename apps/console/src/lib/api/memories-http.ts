@@ -8,6 +8,8 @@ export function createMemoriesHttp(get: Get, send: Send): MemoriesApi {
   return {
     list: (agentId) => get(`/v1/me/memories${agentId ? `?agentId=${encodeURIComponent(agentId)}` : ''}`),
     correct: (id, value) => send('PATCH', `/v1/me/memories/${id}`, { value }),
+    keep: (id) => send('POST', `/v1/me/memories/${encodeURIComponent(id)}/confirm`),
+    undo: (id) => send('POST', `/v1/me/memories/${encodeURIComponent(id)}/undo`),
     forget: (id) => send('DELETE', `/v1/me/memories/${id}`),
     forgetAgent: (agentId) => send('DELETE', `/v1/me/memories?agentId=${encodeURIComponent(agentId)}`),
     exportAll: () => get('/v1/me/memories/export'),

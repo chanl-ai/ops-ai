@@ -287,6 +287,30 @@ class Memories:
                 .values(confirmed_at=now_iso())
             )
 
+    async def accept(self, person: str, memory_id: str, *, actor: str) -> dict[str, Any] | None:
+        """The person said yes to a suggestion (or chose a memory in conflict): it is in use and confirmed, and the
+        memory it changes, or the one in use for its key, is replaced. None when the person has no such memory
+        waiting."""
+        m, now = agent_memories, now_iso()
+        current = await self.get(person, memory_id)
+        if current is None or current["status"] not in (SUGGESTED, CONFLICT):
+            return None
+        async with tenant_tx(self.engine) as c:
+            await lock_key(c, f"memory:{current_tenant()}:{current['team_id']}:{person}")
+            hit = [m.c.id == current["supersedes_id"]] if current["supersedes_id"] else []
+            if current["key"]:
+                hit.append(sa.and_(m.c.agent_id == current["agent_id"], m.c.key == current["key"]))
+            if hit:
+                same = [*self._mine(person, None), m.c.team_id == current["team_id"], m.c.status == ACTIVE]
+                await c.execute(
+                    m.update()
+                    .where(*same, m.c.id != memory_id, sa.or_(*hit))
+                    .values(superseded_at=now, status=SUPERSEDED)
+                )
+            await c.execute(m.update().where(m.c.id == memory_id).values(status=ACTIVE, confirmed_at=now))
+            await c.execute(memory_audit.insert().values(**_audit(person, current, "confirm", actor, now)))
+        return await self.get(person, memory_id)
+
     async def undo(self, person: str, memory_id: str, *, actor: str) -> bool:
         """Takes back one of the person's memories: it is forgotten (erased after FORGET_GRACE), and when it had
         replaced another, that one is in use again. False when the person has no such memory in use or waiting."""

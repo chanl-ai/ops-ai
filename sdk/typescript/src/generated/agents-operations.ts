@@ -1120,6 +1120,17 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "memory_confirm_memory": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/me/memories/{memory_id}/confirm",
+    "pathParams": [
+      "memory_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "memory_correct_memory": {
     "body": "json",
     "headers": [],
