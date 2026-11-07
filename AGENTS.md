@@ -2,6 +2,11 @@
 
 Status: current.
 
+Every folder has a `CLAUDE.md` saying what it owns and how to run, test and lint it from there; the index is the
+"Folder guides" section of `CLAUDE.md`, and the rules every folder shares (onion order, one local stack, calling the
+API as a person, tests, commits) are its "Working in one folder" section. Read the guide for the folder you change.
+The table below holds for every change.
+
 | Rule | Detail |
 |---|---|
 | Read first | `CONTRIBUTING.md`; `apps/console/CLAUDE.md` before changing console code; `docs/README.md` for the design behind a change |

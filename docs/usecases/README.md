@@ -20,6 +20,22 @@ integration tests (pytest in the Python services); use cases only drive what a c
 Run make under your secrets manager as for the rest of the stack. The scripts do not need model keys and the runner
 removes them.
 
+## Working in this folder
+
+This folder holds docs and their scripts together, so its agent guidance lives here rather than in a `CLAUDE.md`
+(`scripts/check-docs.mjs` refuses upper-case file names under `docs/`). Rules shared with every folder are in the root
+`CLAUDE.md`, "Working in one folder".
+
+| Task | How |
+|---|---|
+| Add a use case | `make usecase-new SERVICE=<service> TITLE="<title>"` takes the next id, adds the registry row, writes the doc from the template and an api script that fails until it is written; then write one script per layer the row lists |
+| An api or sdk script | Python, `<service>/scripts/test-uc-NNN-api.py`, on the checks and scripted services in `lib/usecase_harness.py` |
+| A ui script | Node, `<service>/scripts/test-uc-NNN-ui.mjs`, with `withUiStack`, `chromium` and `check` from `@ops-ai/usecase-runner/harness`; headless Chromium against a production build of the console (example: `console/scripts/test-uc-047-ui.mjs`) |
+| Run it | `make usecase-test UC=<id> LAYER=<layer>`; stories from the latest runs: `make usecase-report UC=<id>` |
+| Lint | ruff skips `docs/usecases` (`pyproject.toml`, `extend-exclude`); run `uv run ruff check docs/usecases/<service>/scripts/<file>.py` on a script you change |
+| Try a behaviour on the live stack first | The make targets (`api`, `chat`, `kb-*`, `apps-*`, `tools-*`, `runs-*`, `tasks-*`, `memories-*`) call the routes the console uses, as a seeded person (`AS=`), in place of an ad-hoc script or SQL; `make test-data-clean` removes what they made (`make/CLAUDE.md`) |
+| A scripted chat on the live stack | `make chat-script FILE=docs/usecases/chat/<x>.yaml AS=james` prints PASS or FAIL per turn. These files are not run by `make usecase-test`, and each turn reaches whatever model the stack's aliases point at. They are `.yaml`, since `check-docs.mjs` accepts only `.md`, `.html`, `.pdf`, `.png`, `.svg`, `.gif` and `.yaml` names here |
+
 ## Rules
 
 | Rule | Detail |

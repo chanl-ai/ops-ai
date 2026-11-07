@@ -5,6 +5,7 @@
 
 include make/env.mk
 include make/dev.mk
+include make/cli.mk
 include make/db.mk
 include make/db-scripts.mk
 include make/release.mk

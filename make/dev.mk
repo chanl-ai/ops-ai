@@ -112,15 +112,18 @@ ifneq ($(filter api,$(firstword $(MAKECMDGOALS))),)
 API_WORDS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 $(eval $(API_WORDS):;@:)
 endif
-AS ?= admin
+# make's built-in AS (the assembler, `as`) means `AS ?=` never applies; only an unset or built-in AS takes the default.
+ifneq ($(filter default undefined,$(origin AS)),)
+AS := admin
+endif
 ENV ?= local
 
 .PHONY: api sdk-call
-api: ## make api GET /v1/me AS=admin|builder|approver|viewer|security|platform [Q='pageSize=5'] [BODY='{}'] [TEAM=] [SVC=] [ENV=staging]: signs in for real, prints the answer
+api: ## make api GET /v1/me AS=<role>|james|<email> [Q='pageSize=5'] [BODY='{}'] [TEAM=] [SVC=] [ENV=staging]: signs in for real, prints the answer
 	@[ -n "$(word 2,$(API_WORDS))" ] || { echo "make api: name the method and path, e.g. make api GET /v1/me AS=viewer" >&2; exit 2; }
-	@uv run --quiet python scripts/api_as.py api $(word 1,$(API_WORDS)) '$(word 2,$(API_WORDS))$(if $(Q),?$(Q))' --as $(AS) --env $(ENV) \
+	@uv run --quiet python scripts/api_as.py api $(word 1,$(API_WORDS)) '$(word 2,$(API_WORDS))$(if $(Q),?$(Q))' --as '$(AS)' --env $(ENV) \
 		$(if $(BODY),--body '$(BODY)') $(if $(TEAM),--team $(TEAM)) $(if $(SVC),--service $(SVC))
 
 sdk-call: ## make sdk-call CALL='ops.raw.platform.me_me()' AS=<role> [TEAM=] [ENV=staging]: one Python SDK call as that dev user
 	@[ -n "$(CALL)" ] || { echo "make sdk-call: give the call, e.g. CALL='ops.raw.platform.me_me()' (double quotes inside it)" >&2; exit 2; }
-	@uv run --quiet python scripts/api_as.py sdk '$(CALL)' --as $(AS) --env $(ENV) $(if $(TEAM),--team $(TEAM))
+	@uv run --quiet python scripts/api_as.py sdk '$(CALL)' --as '$(AS)' --env $(ENV) $(if $(TEAM),--team $(TEAM))

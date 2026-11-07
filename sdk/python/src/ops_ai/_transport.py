@@ -18,7 +18,7 @@ from .errors import error_for
 
 # Every service is reached through one origin under its own prefix (deploy/fly/Caddyfile); a local stack without the
 # proxy is reached by port through Config.services.
-PREFIX = {s: f"/api/{s}" for s in ("platform", "agents", "tools", "kb", "files", "documents")}
+PREFIX = {s: f"/api/{s}" for s in ("platform", "agents", "tools", "kb", "files", "documents", "models")}
 RETRY_STATUS = (429, 500, 502, 503, 504)
 IDEMPOTENCY = "Idempotency-Key"
 
