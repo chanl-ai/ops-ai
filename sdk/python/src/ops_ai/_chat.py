@@ -52,10 +52,14 @@ OPERATIONS: dict[str, Operation] = {
 }
 
 
-def thread_body(agent: str | None = None, *, kb_ids: list[str] | None = None, test: bool = False) -> dict[str, Any]:
+def thread_body(
+    agent: str | None = None, *, kb_ids: list[str] | None = None, test: bool = False, title: str | None = None
+) -> dict[str, Any]:
     """New chat's body: no agent starts on the team's default; `test` is an agent page's Test panel, which runs the
-    agent's newest version, published or not."""
+    agent's newest version, published or not. A `title` given here is kept; without one the first message names it."""
     body: dict[str, Any] = {"kbIds": list(kb_ids or [])}
+    if title:
+        body["title"] = title
     if agent:
         body["agentId"] = agent
     if test:
@@ -108,11 +112,15 @@ class Chat:
         return cast(dict[str, Any], self._call("default_agent"))
 
     def threads(self, **query: Any) -> list[dict[str, Any]]:
-        """One page of the person's conversations, newest first (page, pageSize, search, cursor)."""
+        """One page of the person's conversations, newest first (page, pageSize, search, cursor; test=True lists the
+        agent Test panel's threads, which the chat list leaves out)."""
         return page_items(self._call("threads", **query))[0]
 
-    def start(self, agent: str | None = None, *, kb_ids: list[str] | None = None, test: bool = False) -> dict[str, Any]:
-        return cast(dict[str, Any], self._call("create", body=thread_body(agent, kb_ids=kb_ids, test=test)))
+    def start(
+        self, agent: str | None = None, *, kb_ids: list[str] | None = None, test: bool = False, title: str | None = None
+    ) -> dict[str, Any]:
+        body = thread_body(agent, kb_ids=kb_ids, test=test, title=title)
+        return cast(dict[str, Any], self._call("create", body=body))
 
     def get(self, thread: str) -> dict[str, Any]:
         """The conversation as the chat reads it: its messages, each with its tool calls and widgets."""
@@ -151,9 +159,10 @@ class AsyncChat:
         return page_items(await self._call("threads", **query))[0]
 
     async def start(
-        self, agent: str | None = None, *, kb_ids: list[str] | None = None, test: bool = False
+        self, agent: str | None = None, *, kb_ids: list[str] | None = None, test: bool = False, title: str | None = None
     ) -> dict[str, Any]:
-        return cast(dict[str, Any], await self._call("create", body=thread_body(agent, kb_ids=kb_ids, test=test)))
+        body = thread_body(agent, kb_ids=kb_ids, test=test, title=title)
+        return cast(dict[str, Any], await self._call("create", body=body))
 
     async def get(self, thread: str) -> dict[str, Any]:
         return cast(dict[str, Any], await self._call("get", {"thread_id": thread}))

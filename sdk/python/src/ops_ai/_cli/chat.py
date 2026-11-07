@@ -19,7 +19,7 @@ from ops_ai import OpsAI
 from ops_ai._chat import action_body, connect_card
 from ops_ai._io import load_data
 
-from .common import client, console_url, emit, parser, refuse, short, table, values, verb_options
+from .common import client, console_url, emit, marked, parser, refuse, short, table, testing, values, verb_options
 
 
 def main(argv: list[str]) -> int:
@@ -117,10 +117,12 @@ def agent_id(ops: OpsAI, name: str | None, *, test: bool) -> str | None:
     return str(hits[0]["id"])
 
 
-def start_thread(ns: argparse.Namespace, ops: OpsAI) -> str:
+def start_thread(ns: argparse.Namespace, ops: OpsAI, first: str | None = None) -> str:
+    """The conversation to talk in: `--thread`, else a new one, titled as a test on a test run."""
     if getattr(ns, "thread", None):
         return str(ns.thread)
-    made = ops.chat.start(agent_id(ops, ns.agent, test=ns.test), kb_ids=ns.kb, test=ns.test)
+    title = marked(ns, short(first or "Chat from ops", 60)) if testing(ns) else None
+    made = ops.chat.start(agent_id(ops, ns.agent, test=ns.test), kb_ids=ns.kb, test=ns.test, title=title)
     thread = str(made.get("id") or made.get("threadId"))
     where = console_url(f"/chat/{thread}")
     _line(ns, f"thread {thread}" + (f"  {where}" if where else ""))
@@ -128,7 +130,7 @@ def start_thread(ns: argparse.Namespace, ops: OpsAI) -> str:
 
 
 def _say(ns: argparse.Namespace, ops: OpsAI, messages: list[str]) -> int:
-    thread = start_thread(ns, ops)
+    thread = start_thread(ns, ops, messages[0] if messages else None)
     turns = [turn(ns, ops, thread, text) for text in messages]
     if ns.as_json:
         return emit(ns, {"thread": thread, "turns": turns})
@@ -222,7 +224,8 @@ def _script(ns: argparse.Namespace, ops: OpsAI) -> int:
     expect: tool (a name called), noTool, card (true/false), says (text the reply holds), credential (team|person)."""
     spec = load_data(Path(ns.file))
     ns.agent, ns.test, ns.kb, ns.thread = spec.get("agent"), spec.get("test", False), spec.get("kb"), None
-    thread, good, card = start_thread(ns, ops), True, None
+    first = next((str(t["say"]) for t in spec["turns"] if t.get("say")), Path(ns.file).stem)
+    thread, good, card = start_thread(ns, ops, first), True, None
     for t in spec["turns"]:
         seen = turn(ns, ops, thread, t.get("say") or followup((card or {}).get("connection") or "the app"))
         card = seen["cards"][-1] if seen["cards"] else card

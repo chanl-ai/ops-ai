@@ -13,10 +13,12 @@ from ._cli.apps import main as apps_main
 from ._cli.chat import main as chat_main
 from ._cli.kb import main as kb_main
 from ._cli.login import main as login_main
+from ._cli.memories import main as memories_main
 from ._cli.people import models_main, people_main
 from ._cli.records import cases_main, documents_main, files_main
 from ._cli.resources import main as resources_main
 from ._cli.runs import runs_main, tasks_main
+from ._cli.testdata import main as testdata_main
 from ._cli.tools import main as tools_main
 from ._cli.workflows import main as workflows_main
 
@@ -55,6 +57,8 @@ AREAS: dict[str, tuple[Area, str]] = {
     "documents": (documents_main, "document types and extractions"),
     "people": (people_main, "members, invites (printed unless --send), roles, me"),
     "models": (models_main, "model aliases, providers, keys, and a test turn (--confirm)"),
+    "memories": (memories_main, "your memories: list, forget, forget-agent, export"),
+    "test-data": (testdata_main, "list what test runs made ([test] prefix); clean --confirm removes it"),
 }
 
 

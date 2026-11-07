@@ -266,3 +266,44 @@ def test_models_test_runs_on_a_test_thread_that_remembers_nothing(monkeypatch: p
     made = next(r for r in seen if r.method == "POST" and r.url.path.endswith("/v1/chat/threads"))
     # A test thread is the agent page's Test panel: kept out of the person's memory and their chat list.
     assert json.loads(made.content) == {"kbIds": [], "agentId": "ag_1", "test": True}
+
+
+def test_test_data_clean_never_touches_unmarked_or_another_persons_items(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(ROOT)
+    chats = [{"id": "th_real", "title": "Quarterly numbers"}, {"id": "th_t", "title": "[test] Status?"}]
+    tests = [{"id": "th_tt", "title": "[test] What is 2 + 2?"}, {"id": "th_panel", "title": "Try the new prompt"}]
+    files = [
+        {"id": "fil_m", "name": "[test] note.txt", "uploadedBy": "j.richardson@harborpine.example"},
+        {"id": "fil_o", "name": "[test] note.txt", "uploadedBy": "p.shah@harborpine.example"},
+        {"id": "fil_u", "name": "contract [test].pdf", "uploadedBy": "j.richardson@harborpine.example"},
+    ]
+
+    def answer(r: httpx.Request) -> httpx.Response:
+        if r.method == "DELETE":
+            return httpx.Response(204)
+        if r.url.path.endswith("/v1/chat/threads"):
+            return _ok({"items": tests if r.url.params.get("test") == "true" else chats})
+        return _ok({"data": files})
+
+    seen: list[httpx.Request] = []
+    monkeypatch.setattr("ops_ai._cli.testdata.person_client", lambda _ns, _who: _client(seen, answer))
+    assert main(["test-data", "clean", "--people", "james", "--json"]) == 0
+    assert not [r for r in seen if r.method == "DELETE"]
+    assert main(["test-data", "clean", "--people", "james", "--confirm", "--json"]) == 0
+    removed = sorted(r.url.path.rsplit("/", 1)[-1] for r in seen if r.method == "DELETE")
+    assert removed == ["fil_m", "th_t", "th_tt"]
+
+
+def test_a_chat_started_as_a_seed_person_carries_the_test_mark(monkeypatch: pytest.MonkeyPatch) -> None:
+    def answer(r: httpx.Request) -> httpx.Response:
+        if r.url.path.endswith("/messages"):
+            return httpx.Response(200, content=_sse({"type": "text", "delta": "ok"}))
+        if r.url.path.endswith("/v1/executions"):
+            return _ok({"data": []})
+        return _ok({"id": "th_1"}, 201)
+
+    seen: list[httpx.Request] = []
+    _use(monkeypatch, "chat", _client(seen, answer))
+    assert main(["chat", "say", "-m", "Status of case 42?", "--as", "james", "--quiet"]) == 0
+    made = next(r for r in seen if r.url.path.endswith("/v1/chat/threads"))
+    assert json.loads(made.content)["title"] == "[test] Status of case 42?"

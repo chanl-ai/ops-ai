@@ -12,7 +12,7 @@ from typing import Any
 from ops_ai import OpsAI
 from ops_ai._transport import page_items
 
-from .common import client, emit, parser, refuse, table, verb_options
+from .common import client, emit, marked, parser, refuse, table, verb_options
 
 
 def _area(prog: str, text: str) -> tuple[argparse.ArgumentParser, Any, list[argparse.ArgumentParser]]:
@@ -64,14 +64,14 @@ def files_main(argv: list[str]) -> int:
             return emit(ns, files.files_get_file(ns.file))
         if ns.verb == "limits":
             return emit(ns, files.files_upload_limits())
-        return emit(ns, upload_file(ops, Path(ns.path), ns.purpose))
+        return emit(ns, upload_file(ops, Path(ns.path), ns.purpose, marked(ns, Path(ns.path).name)))
     except Exception as exc:
         return refuse(exc)
 
 
-def upload_file(ops: OpsAI, path: Path, purpose: str) -> Any:
+def upload_file(ops: OpsAI, path: Path, purpose: str, name: str | None = None) -> Any:
     mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-    return ops.upload(path.name, path.read_bytes(), mime=mime, purpose=purpose)
+    return ops.upload(name or path.name, path.read_bytes(), mime=mime, purpose=purpose)
 
 
 def documents_main(argv: list[str]) -> int:

@@ -11,7 +11,7 @@ from typing import Any
 from ops_ai import OpsAI
 from ops_ai._transport import page_items
 
-from .common import client, emit, parser, refuse, short, table, verb_options
+from .common import client, emit, marked, parser, refuse, short, table, verb_options
 
 PURPOSE = "knowledge_source"
 
@@ -76,10 +76,10 @@ def _dispatch(ns: argparse.Namespace, ops: OpsAI) -> int:
         rows = _rows(kb.sources_list_items(ns.source, page_size=50, search=ns.search))
         return table(ns, rows, "id", "title", "status", "mime")
     if ns.verb == "add-file":
-        return emit(ns, add_files(ops, ns.kb, [Path(p) for p in ns.paths]))
+        return emit(ns, add_files(ops, ns.kb, [Path(p) for p in ns.paths], ns))
     if ns.verb == "add-text":
         text = Path(ns.text[1:]).read_text() if ns.text.startswith("@") else ns.text
-        return emit(ns, kb.knowledge_bases_add_page(ns.kb, {"title": ns.title, "text": text}))
+        return emit(ns, kb.knowledge_bases_add_page(ns.kb, {"title": marked(ns, ns.title), "text": text}))
     if ns.verb == "sync":
         if ns.target.startswith("src_"):
             return emit(ns, kb.sources_sync_source(ns.target, {"full": ns.full}))
@@ -95,13 +95,14 @@ def _dispatch(ns: argparse.Namespace, ops: OpsAI) -> int:
     return 2
 
 
-def add_files(ops: OpsAI, kb: str, paths: list[Path]) -> Any:
+def add_files(ops: OpsAI, kb: str, paths: list[Path], ns: argparse.Namespace | None = None) -> Any:
     """The knowledge base's Add files: each file uploaded to Files for knowledge, then added to the base's documents
     source, which syncs them."""
     ids = []
     for path in paths:
         mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-        made = ops.upload(path.name, path.read_bytes(), mime=mime, purpose=PURPOSE)
+        name = marked(ns, path.name) if ns is not None else path.name
+        made = ops.upload(name, path.read_bytes(), mime=mime, purpose=PURPOSE)
         ids.append(str(made.get("id") or made.get("fileId")))
     return ops.raw.kb.knowledge_bases_add_documents(kb, {"fileIds": ids})
 

@@ -278,3 +278,18 @@ def values(pairs: list[str] | None) -> dict[str, str]:
             raise ValueError(f"{pair}: give a field as name=value")
         out[key] = item
     return out
+
+
+# What a test run makes is named with this prefix, in the title or file name the routes already store, so
+# `ops test-data clean` finds it later and nothing unmarked is ever taken for test data.
+MARK = "[test] "
+
+
+def testing(ns: argparse.Namespace) -> bool:
+    """A dev seed sign-in (`--as`) is a test run on a local stack; OPS_TEST_DATA=1 marks a profile's runs too."""
+    return bool(getattr(ns, "as_role", None)) or os.environ.get("OPS_TEST_DATA") == "1"
+
+
+def marked(ns: argparse.Namespace, name: str) -> str:
+    """`name` with the test-data prefix on a test run, as it is otherwise."""
+    return f"{MARK}{name}" if testing(ns) and not name.startswith(MARK) else name

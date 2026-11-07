@@ -85,7 +85,7 @@ def _models(ns: argparse.Namespace, ops: OpsAI) -> int:
     if ns.verb == "keys":
         return table(ns, ops.models.keys(), "name", "updatedAt", "updatedBy")
     ns.kb, ns.test, ns.thread = None, True, None
-    thread = start_thread(ns, ops)
+    thread = start_thread(ns, ops, ns.message)
     seen = turn(ns, ops, thread, ns.message)
     if ns.as_json:
         return emit(ns, {"thread": thread, **seen})

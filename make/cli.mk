@@ -1,7 +1,8 @@
 # Ops AI from the terminal, through the `ops` command (sdk/python): every target calls the routes the console calls,
 # signed in through the password sign-in as AS= (a dev role, a seeded person's name such as james, or an email), with
 # X-Team-Id for TEAM= or the person's own team. JSON=1 prints JSON. The session is kept in .run/api-tokens, the file
-# `make api` keeps, so the two share one sign-in per person.
+# `make api` keeps, so the two share one sign-in per person. What a target makes carries the `[test] ` prefix (a dev
+# seed sign-in is a test run), so `make test-data-clean` finds it.
 
 OPS_CLI = uv run --quiet --project $(ROOT)/sdk/python ops
 # The options go before the verb, where every area reads them.
@@ -18,7 +19,8 @@ need = $(if $($(1)),,$(error make $@: give $(1)=, e.g. $(2)))
 	runs-list runs-start runs-show runs-events runs-cancel runs-retry tasks-list tasks-show tasks-decide \
 	cases-list cases-show cases-note files-list files-show files-upload documents-types documents-type \
 	documents-extractions people-list people-invite people-roles people-me \
-	models-aliases models-providers models-keys models-test
+	models-aliases models-providers models-keys models-test memories-list memories-forget memories-forget-agent \
+	memories-export test-data-clean
 
 ##@ Chat (ops chat)
 
@@ -217,3 +219,19 @@ models-keys: ## make models-keys AS=admin: the provider keys by name (account ad
 models-test: ## make models-test AGENT='Ops Assistant' CONFIRM=1 AS=builder: one test turn on an agent's model (costs money)
 	$(call need,AGENT,AGENT='Ops Assistant')
 	@$(OPS_CLI) models $(OPS_AS) test '$(AGENT)' $(if $(SAY),-m '$(SAY)') $(if $(CONFIRM),--confirm)
+
+##@ Memories and test data (ops memories, ops test-data)
+
+memories-list: ## make memories-list AS=james [AGENT=]: what the agents remember about this person
+	@$(OPS_CLI) memories $(OPS_AS) list $(if $(AGENT),--agent '$(AGENT)')
+memories-forget: ## make memories-forget ID=mem_… AS=james: forget one memory
+	$(call need,ID,ID=mem_…)
+	@$(OPS_CLI) memories $(OPS_AS) forget $(ID)
+memories-forget-agent: ## make memories-forget-agent AGENT='Ops Assistant' AS=james: forget everything one agent remembers
+	$(call need,AGENT,AGENT='Ops Assistant')
+	@$(OPS_CLI) memories $(OPS_AS) forget-agent '$(AGENT)'
+memories-export: ## make memories-export AS=james: every memory, as the export downloads it
+	@$(OPS_CLI) memories $(OPS_AS) export
+test-data-clean: ## make test-data-clean [AS=] [SINCE=2026-11-07] [CONFIRM=1]: list what test runs made ([test] prefix), for AS= or every seeded person; CONFIRM=1 removes it
+	@$(OPS_CLI) test-data clean $(if $(filter command line environment,$(origin AS)),--people '$(AS)') \
+		$(if $(SINCE),--since $(SINCE)) $(if $(CONFIRM),--confirm) $(if $(JSON),--json)
