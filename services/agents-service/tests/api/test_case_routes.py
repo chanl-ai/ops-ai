@@ -205,3 +205,40 @@ async def test_a_search_finds_cases_by_subject_customer_name_or_customer_id(c: A
     assert other["id"] in by_name and levy["id"] not in by_name
     assert levy["id"] in await found("CUS-1001") and other["id"] not in await found("CUS-1001")
     assert await found("nothing like this") == []
+
+
+async def two_loans(c: AsyncClient) -> tuple[str, str]:
+    loan = await opened(
+        c, subject="Loan application: waiting on documents: tax return", customerName="Brightside Bakery"
+    )
+    other = await opened(c, subject="Loan application: credit review", customerName="Redwood Print")
+    return loan["id"], other["id"]
+
+
+async def searched(c: AsyncClient, text: str) -> set[str]:
+    r = await c.get("/v1/cases", params={"search": text, "pageSize": 100}, headers=VIEWER)
+    assert r.status_code == 200, r.text
+    return {x["id"] for x in r.json()["data"]["data"]}
+
+
+async def test_a_search_of_several_words_finds_cases_holding_each(c: AsyncClient) -> None:
+    # "application documents" found nothing: the words were matched as one phrase.
+    loan, _ = await two_loans(c)
+    assert await searched(c, "application documents") == {loan}
+    assert await searched(c, "brightside documents") == {loan}, "a word in the customer, a word in the subject"
+
+
+async def test_a_search_matches_words_in_any_order_and_case(c: AsyncClient) -> None:
+    loan, _ = await two_loans(c)
+    assert await searched(c, "DOCUMENTS application") == {loan}
+
+
+async def test_a_one_word_search_finds_what_it_did(c: AsyncClient) -> None:
+    loan, other = await two_loans(c)
+    assert await searched(c, "application") == {loan, other}
+    assert await searched(c, "redwood") == {other}
+
+
+async def test_a_search_with_a_word_no_case_holds_finds_none(c: AsyncClient) -> None:
+    await two_loans(c)
+    assert await searched(c, "application mortgage") == set()

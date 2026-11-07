@@ -1,6 +1,6 @@
 # The local stack: compose (PostgreSQL, OPA), migrations, then the agents service, tools service and console in the
 # background. scripts/stack.sh is the process manager: logs in .logs/<svc>.log, pids in .run/<svc>.pid.
-.PHONY: up down restart reset-db health logs ports demo-model sample-team demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
+.PHONY: up down restart reset-db health logs ports demo-model sample-team sample-teams demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
 
 ##@ Stack (one per machine)
 
@@ -74,6 +74,11 @@ health: ## Probe every service, OPA and PostgreSQL; shows port, state and who ow
 
 sample-team: ## Install the sample team (scripts/sample-team/sample-team.json) as the first admin; a second run finds it (NAME= another team, EXPECT_FOUND=1 fails on anything made)
 	@MODEL=$(DEMO_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/sample_team.py install $(if $(NAME),--name "$(NAME)") $(if $(EXPECT_FOUND),--expect-found)
+
+sample-teams: ## Install the first teams (scripts/sample-team/teams/*.json: Wealth Advisory, Small Business Lending, Risk Oversight) with their people, cases and knowledge; a second run finds them
+	@for f in $(ROOT)/scripts/sample-team/teams/*.json; do \
+		uv run --quiet --project $(ROOT) python $(ROOT)/scripts/sample_team.py install --manifest "$$f" $(if $(EXPECT_FOUND),--expect-found) || exit 1; \
+	done
 
 logs: ## Follow one service's log: make logs SVC=agents|tools|runner|console (FOLLOW=0 to print and exit)
 	@OPS_LOGS_FOLLOW=$(if $(FOLLOW),$(FOLLOW),1) $(STACK) logs $(SVC)

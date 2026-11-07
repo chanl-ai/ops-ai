@@ -36,7 +36,9 @@ MODELS = os.environ.get("OPS_MODELS_URL") or f"http://127.0.0.1:{os.environ.get(
 FAKE_PORT = os.environ.get("OPS_FAKE_OPENAI_PORT", "8746")
 FAKE = os.environ.get("OPS_MODELS_FAKE_OPENAI_URL") or f"http://127.0.0.1:{FAKE_PORT}/v1"
 OPENAI = "https://api.openai.com/v1"
-PROVIDER = "openai-local"
+# PROVIDER names another connection by id or name, so one alias can move to a real model while the rest stay on the
+# fake (PROVIDER=assistant-model ALIAS=thinking); with CREATE=1 a missing one is made, pointing at the fake.
+PROVIDER = os.environ.get("PROVIDER") or "openai-local"
 KEY_REF = "openai"
 # USD per million tokens (input, output) from OpenAI's price list, so the call log meters what the demo spends. An id
 # not listed keeps the previous version's prices and says so.
@@ -82,9 +84,16 @@ def main() -> int:
     to_fake = model == "fake"
     token = mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id="team_ops")
     with httpx.Client(base_url=MODELS, headers={"Authorization": f"Bearer {token}"}, timeout=20) as m:
-        before = next((p for p in data(m.get("/v1/models/providers")) if p["id"] == PROVIDER), None)
+        listed = data(m.get("/v1/models/providers"))
+        before = next((p for p in listed if PROVIDER in (p["id"], p.get("name"))), None)
+        if before is None and os.environ.get("CREATE") == "1":
+            body = {"name": PROVIDER, "type": "openai-compatible", "baseUrl": FAKE}
+            made = data(m.post("/v1/models/providers", json=body))
+            print(f"provider {PROVIDER}: created on the fake as {made['id']}")
+            before = next(p for p in data(m.get("/v1/models/providers")) if p["id"] == made["id"])
         if before is None:
             raise SystemExit(f"demo-model: models-service at {MODELS} has no provider connection {PROVIDER}")
+        provider = str(before["id"])
         # OPENAI_API_TYPE or OPENAI_API_BASE (OPENAI_BASE_URL) set: the dev seed points the connection at that endpoint
         # on every start, so it is left as it is and only the alias moves (onto a deployment, on Azure).
         settled = install_connection(ModelConnectionSettings()) is not None
@@ -100,8 +109,10 @@ def main() -> int:
             if not to_fake:
                 usable(model)
         found = m.get(f"/v1/models/aliases/{alias}/versions")
-        created = found.status_code == 404 and not to_fake
-        if found.status_code == 404 and to_fake:
+        # CREATE=1 makes a missing alias on the fake too, so a stack whose runtime alias is not `default`
+        # (OPS_MODEL_ALIAS=thinking) can run on the fake before it is ever bound to a real model.
+        created = found.status_code == 404 and (not to_fake or os.environ.get("CREATE") == "1")
+        if found.status_code == 404 and not created:
             # A fresh database has only the seeded aliases; one that does not exist serves nothing to move.
             print(f"alias {alias}: none on this stack, nothing to point at the fake")
             return 0
@@ -110,19 +121,23 @@ def main() -> int:
             # is the one every dev seed has.
             chat = data(m.get("/v1/models/aliases/default/versions"))[-1]
             price_in, price_out = PRICES.get(model_id, ("0", "0"))
-            body = {"name": alias, "kind": "chat", "providerId": PROVIDER, "modelId": model_id}
+            body = {"name": alias, "kind": "chat", "providerId": provider, "modelId": model_id}
             body |= {"clearedSensitivity": chat["clearedSensitivity"], "inputPerMillion": price_in}
+            if effort := os.environ.get("EFFORT"):
+                # The effort the alias sends when a request names none; a later switch of model keeps it.
+                body["reasoningEffort"] = effort
             data(m.post("/v1/models/aliases", json=body | {"outputPerMillion": price_out}))
             print(f"alias {alias}: created on {model_id}")
             found = m.get(f"/v1/models/aliases/{alias}/versions")
         versions = data(found)
         current = next((v for v in reversed(versions) if v["status"] == "current"), versions[-1])
-        if (before["baseUrl"], before["keyRef"], current["modelId"]) == (base_url, key_ref, model_id):
+        same = (before["baseUrl"], before["keyRef"], current["modelId"], current.get("providerId", provider))
+        if same == (base_url, key_ref, model_id, provider):
             # make up runs this on every start; a version per start would bury the ones a person made.
             print(f"alias {alias}: already v{current['version']} {model_id} on {base_url}")
             return 0
         if not settled:
-            data(m.put(f"/v1/models/providers/{PROVIDER}", json={"baseUrl": base_url, "keyRef": key_ref}))
+            data(m.put(f"/v1/models/providers/{provider}", json={"baseUrl": base_url, "keyRef": key_ref}))
         if created:
             print(f"agents use {model_id} for {alias} on their next turn")
             return 0
@@ -131,13 +146,18 @@ def main() -> int:
             m.post(
                 f"/v1/models/aliases/{alias}/versions",
                 json={
-                    "providerId": PROVIDER,
+                    "providerId": provider,
                     "modelId": model_id,
                     "clearedSensitivity": current["clearedSensitivity"],
                     "inputPerMillion": str(Decimal(price_in)),
                     "outputPerMillion": str(Decimal(price_out)),
-                    # A switch of model keeps how the alias's calls are run (its reasoning effort).
-                    **({"reasoningEffort": current["reasoningEffort"]} if current.get("reasoningEffort") else {}),
+                    # A switch of model keeps the alias's reasoning effort. EFFORT= sets another;
+                    # empty sends none, as gpt-5.5 refuses function tools with any effort on chat completions.
+                    **(
+                        {"reasoningEffort": effort}
+                        if (effort := os.environ.get("EFFORT", current.get("reasoningEffort")))
+                        else {}
+                    ),
                 },
             )
         )

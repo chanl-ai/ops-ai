@@ -6,6 +6,7 @@ and Connect card printed under it; the call log under the chat says whose sign-i
     ops chat connected th_x Salesforce        # the Connect card's follow-up, once the person has signed in
     ops chat approve th_x                     # the newest open approval widget; reject needs --reason
     ops chat script docs/usecases/chat/salesforce-case-helper.yaml
+    ops chat evals docs/usecases/chat/assistant [--real]   # every script as its people; a scorecard (chat_script.py)
 """
 
 from __future__ import annotations
@@ -17,8 +18,8 @@ from typing import Any
 
 from ops_ai import OpsAI
 from ops_ai._chat import action_body, connect_card
-from ops_ai._io import load_data
 
+from .chat_script import evals, run_script
 from .common import client, console_url, emit, marked, parser, refuse, short, table, testing, values, verb_options
 
 
@@ -51,6 +52,13 @@ def main(argv: list[str]) -> int:
             act.add_argument("--value", action="append", metavar="FIELD=VALUE", default=[])
     script = sub.add_parser("script", parents=common, help="a scripted conversation, PASS or FAIL per turn")
     script.add_argument("file")
+    ev = sub.add_parser("evals", parents=common, help="every script in a folder as the people each names; a scorecard")
+    ev.add_argument("folder")
+    ev.add_argument("--real", action="store_true", help="only each script's real-model people, within --max-calls")
+    ev.add_argument("--max-calls", type=int, default=10, help="model calls the real subset may spend (default 10)")
+    ev.add_argument(
+        "--only", action="append", metavar="SCRIPT", help="run only this script (its file name); repeatable"
+    )
     ns = ap.parse_args(argv)
     try:
         return _dispatch(ns)
@@ -65,6 +73,9 @@ def _start_options(p: argparse.ArgumentParser) -> None:
 
 
 def _dispatch(ns: argparse.Namespace) -> int:
+    if ns.verb == "evals":
+        # Each script signs in as its own people, so no one client serves the whole run.
+        return evals(ns, Path(ns.folder), real=ns.real, max_calls=ns.max_calls, only=ns.only)
     ops = client(ns)
     if ns.verb == "agents":
         return table(ns, ops.chat.agents(), "id", "name", "role")
@@ -90,7 +101,7 @@ def _dispatch(ns: argparse.Namespace) -> int:
         done = ops.chat.act(ns.thread, message, widget, body)
         return emit(ns, done, text=f"{widget} {done.get('state', '')} {short(done.get('result') or '', 120)}".strip())
     if ns.verb == "script":
-        return _script(ns, ops)
+        return 0 if run_script(ns, ops, Path(ns.file)).ok else 1
     return 2
 
 
@@ -125,7 +136,7 @@ def start_thread(ns: argparse.Namespace, ops: OpsAI, first: str | None = None) -
     made = ops.chat.start(agent_id(ops, ns.agent, test=ns.test), kb_ids=ns.kb, test=ns.test, title=title)
     thread = str(made.get("id") or made.get("threadId"))
     where = console_url(f"/chat/{thread}")
-    _line(ns, f"thread {thread}" + (f"  {where}" if where else ""))
+    line(ns, f"thread {thread}" + (f"  {where}" if where else ""))
     return thread
 
 
@@ -136,13 +147,13 @@ def _say(ns: argparse.Namespace, ops: OpsAI, messages: list[str]) -> int:
         return emit(ns, {"thread": thread, "turns": turns})
     if messages:
         for r in calls(ops, thread):
-            _line(ns, _log_line(r))
+            line(ns, _log_line(r))
     return 1 if any(t["error"] for t in turns) else 0
 
 
 def turn(ns: argparse.Namespace, ops: OpsAI, thread: str, text: str) -> dict[str, Any]:
     """One message and its streamed reply, printed as the chat shows it; answers what a script checks."""
-    _line(ns, f"\nyou > {text}")
+    line(ns, f"\nyou > {text}")
     seen: dict[str, Any] = {"tools": [], "cards": [], "widgets": [], "text": "", "error": None, "phases": []}
     for e in ops.chat.say(thread, text):
         kind = e.get("type")
@@ -151,16 +162,16 @@ def turn(ns: argparse.Namespace, ops: OpsAI, thread: str, text: str) -> dict[str
         elif kind == "tool_end":
             c = e["call"]
             seen["tools"].append(c)
-            _line(ns, f"  tool {c.get('label') or c.get('name')} [{c.get('status')}] {short(c.get('input'))}")
-            _line(ns, f"       → {short(c.get('output'))}")
+            line(ns, f"  tool {c.get('label') or c.get('name')} [{c.get('status')}] {short(c.get('input'))}")
+            line(ns, f"       → {short(c.get('output'))}")
             if card := connect_card(c):
                 seen["cards"].append(card)
-                _line(ns, f"  CARD Connect {card.get('connection')} ({card.get('reason')}): {card.get('message')}")
-                _line(ns, f"       open: {card.get('connectUrl')}")
+                line(ns, f"  CARD Connect {card.get('connection')} ({card.get('reason')}): {card.get('message')}")
+                line(ns, f"       open: {card.get('connectUrl')}")
         elif kind == "widget":
             w = e["widget"]
             seen["widgets"].append(w)
-            _line(ns, f"  widget {w.get('id')} {w.get('kind')} {short(w.get('title') or '', 80)} {w.get('state', '')}")
+            line(ns, f"  widget {w.get('id')} {w.get('kind')} {short(w.get('title') or '', 80)} {w.get('state', '')}")
         elif kind == "text":
             seen["text"] += e.get("delta", "")
         elif kind == "replace":
@@ -169,7 +180,7 @@ def turn(ns: argparse.Namespace, ops: OpsAI, thread: str, text: str) -> dict[str
             seen["error"] = e.get("code") or e.get("message")
         elif kind == "done":
             seen["text"] = (e.get("message") or {}).get("content") or seen["text"]
-    _line(ns, f"agent > {seen['text'].strip()}" + (f"\n  ERROR {seen['error']}" if seen["error"] else ""))
+    line(ns, f"agent > {seen['text'].strip()}" + (f"\n  ERROR {seen['error']}" if seen["error"] else ""))
     return seen
 
 
@@ -214,44 +225,12 @@ def _widget(thread: dict[str, Any], wanted: str | None) -> tuple[str, str]:
     raise ValueError(f"no widget {wanted} in this conversation" if wanted else "no open widget in this conversation")
 
 
-def _check(ns: argparse.Namespace, name: str, ok: bool, why: str) -> bool:
-    _line(ns, f"  {'PASS' if ok else 'FAIL'} {name}" + ("" if ok else f": {why}"))
+def check(ns: argparse.Namespace, name: str, ok: bool, why: str) -> bool:
+    line(ns, f"  {'PASS' if ok else 'FAIL'} {name}" + ("" if ok else f": {why}"))
     return ok
 
 
-def _script(ns: argparse.Namespace, ops: OpsAI) -> int:
-    """Turns from a YAML or JSON file: agent, test, kb, and turns, each `say` or `connected: true` with `expect`.
-    expect: tool (a name called), noTool, card (true/false), says (text the reply holds), credential (team|person)."""
-    spec = load_data(Path(ns.file))
-    ns.agent, ns.test, ns.kb, ns.thread = spec.get("agent"), spec.get("test", False), spec.get("kb"), None
-    first = next((str(t["say"]) for t in spec["turns"] if t.get("say")), Path(ns.file).stem)
-    thread, good, card = start_thread(ns, ops, first), True, None
-    for t in spec["turns"]:
-        seen = turn(ns, ops, thread, t.get("say") or followup((card or {}).get("connection") or "the app"))
-        card = seen["cards"][-1] if seen["cards"] else card
-        want = t.get("expect", {})
-        names = [c.get("name") for c in seen["tools"]]
-        if "tool" in want:
-            good &= _check(ns, f"calls {want['tool']}", want["tool"] in names, f"called {names or 'nothing'}")
-        if want.get("noTool"):
-            good &= _check(ns, "calls no tool", not names, f"called {names}")
-        if "card" in want:
-            shown = "shown" if want["card"] else "not shown"
-            good &= _check(ns, f"Connect card {shown}", bool(seen["cards"]) == want["card"], f"{seen['cards']}")
-        for s in want.get("says", []):
-            good &= _check(ns, f"reply says {s!r}", s.lower() in seen["text"].lower(), short(seen["text"], 200))
-        if "credential" in want:
-            used = [r.get("credential") for r in calls(ops, thread)]
-            good &= _check(
-                ns, f"signed in as {want['credential']}", bool(used) and used[0] == want["credential"], f"{used}"
-            )
-        good &= _check(ns, "no error", not seen["error"], str(seen["error"]))
-    where = console_url(f"/chat/{thread}") or thread
-    _line(ns, f"\n{'PASS' if good else 'FAIL'} {Path(ns.file).name}  {where}")
-    return 0 if good else 1
-
-
-def _line(ns: argparse.Namespace, text: str) -> None:
+def line(ns: argparse.Namespace, text: str) -> None:
     # A streamed turn prints as it goes; --json prints only the result, so standard output stays one JSON document.
     if not ns.as_json and not ns.quiet:
         sys.stdout.write(text + "\n")

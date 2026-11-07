@@ -13,6 +13,11 @@ a local console origin reaches each service on its own port (OPS_<SERVICE>_PORT)
 KEY=value lines with a workspace admin's email and password (OPS_BOOTSTRAP_ADMIN_* or OPS_DEMO_ADMIN_*); the people's
 password (OPS_DEMO_PASSWORD) is generated into it on the first run and never printed.
 
+`--manifest` installs a first team instead (scripts/sample-team/teams/<team>.json, `make sample-teams`): its team,
+people, knowledge and cases, the work its people ask the team's assistant about. Only `team` and `people` are required
+there; each other section is installed when present. Its people sign in with the dev seed's password on a local stack,
+so `make chat AS=<their email>` acts as them.
+
 Each record is looked up by name or key before it is made, so a second run finds everything and makes nothing. Every
 line says MADE, FOUND, SKIP or FAIL, and the exit status is the number of FAIL lines. `--name` installs a second team
 in the same workspace, with its workflow and document type ids prefixed, since each of those ids belongs to the first
@@ -31,6 +36,7 @@ import sys
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -60,7 +66,12 @@ SECTIONS = (
     "documentTypes",
     "mailbox",
     "workflows",
+    "cases",
 )
+# A first team's manifest needs only these; the full sample team needs every section but `cases`.
+FIRST_TEAM = ("team", "people")
+FULL_TEAM = tuple(s for s in SECTIONS if s != "cases")
+TEAMS = SAMPLE / "teams"
 SERVICES = ("platform", "agents", "tools", "kb", "files", "documents")
 # The team that decides tool module publish reviews: a workspace's own security team.
 SECURITY_TEAM = os.environ.get("OPS_DEMO_SECURITY_TEAM", "team_security")
@@ -965,15 +976,70 @@ def ensure_default_agent(admin: Session, agents: dict[str, str], key: str | None
         say("MADE", "default chat agent", agents[key])
 
 
+# ── Cases ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+def due_at(when: str, now: datetime | None = None) -> str:
+    """A deadline the manifest gives relative to the install: "today 14:00" (local time), or "-12d" / "+30d"."""
+    at = now or datetime.now().astimezone()
+    if when.startswith("today "):
+        hour, minute = (int(x) for x in when.removeprefix("today ").split(":"))
+        return at.replace(hour=hour, minute=minute, second=0, microsecond=0).isoformat()
+    if when[:1] in "+-" and when.endswith("d"):
+        return (at + timedelta(days=int(when[:-1]))).replace(microsecond=0).isoformat()
+    raise SystemExit(f"sample-team: a case's due {when!r} is not 'today HH:MM' or '+Nd'/'-Nd'")
+
+
+def ensure_cases(lead: Session, team_name: str, cases: list[dict[str, Any]], people: dict[str, str]) -> None:
+    """Each case by its producer key, so a second run answers the case it opened: assigned to a manifest person (by
+    key), with its status, deadline and notes. A case found keeps its notes and deadline."""
+    api = lead("agents")
+    for c in cases:
+        body: dict[str, Any] = {
+            "subject": c["subject"],
+            "priority": c.get("priority", "normal"),
+            "producerKey": f"sample:{prefix_of(team_name)}:{c['key']}",
+            "customerName": c.get("customer"),
+            "assignee": people.get(c.get("assignee", "")),
+        }
+        if c.get("due"):
+            body["resolutionDueAt"] = body["responseDueAt"] = due_at(c["due"])
+        r = api.post("/v1/cases", json={k: v for k, v in body.items() if v is not None})
+        made = data(r)
+        state = "MADE" if r.status_code == 201 else "FOUND"
+        # A case found keeps its id; its subject and status follow the manifest, and a change is reported as made.
+        wanted = {"subject": c["subject"], "status": c.get("status", "open")}
+        if changed := {k: v for k, v in wanted.items() if made.get(k) != v}:
+            data(api.patch(f"/v1/cases/{made['id']}", json=changed))
+            state = "MADE"
+        if state == "MADE":
+            for note in c.get("notes", []):
+                data(api.post(f"/v1/cases/{made['id']}/events", json={"kind": "note", "text": note}))
+        say(state, f"case {c['subject'][:60]}", made["id"])
+
+
+def ensure_assistant(lead: Session) -> None:
+    """The team's assistant, which agents-service makes on the team's first chat: a chat started and removed as the
+    lead, so the people's first chat, or a test of the assistant, finds it there."""
+    api = lead("agents")
+    found = data(api.get("/v1/chat/default-agent"))
+    if found.get("agentId"):
+        say("FOUND", "team assistant", found["agentId"])
+        return
+    thread = data(api.post("/v1/chat/threads", json={"kbIds": [], "title": "[test] team assistant set-up"}))
+    data(api.delete(f"/v1/chat/threads/{thread['id']}"))
+    say("MADE", "team assistant", str(data(api.get("/v1/chat/default-agent")).get("agentId")))
+
+
 # ── Manifest, templates and fakes ────────────────────────────────────────────────────────────────────────────────
 
 
-def check_manifest(spec: dict[str, Any]) -> None:
+def check_manifest(spec: dict[str, Any], required: tuple[str, ...] = FULL_TEAM, name: str = MANIFEST.name) -> None:
     """Refuses a manifest with a section this installer does not know or without one it needs."""
     given = {k for k in spec if not k.startswith("$")}
-    unknown, missing = sorted(given - set(SECTIONS)), sorted(set(SECTIONS) - given)
+    unknown, missing = sorted(given - set(SECTIONS)), sorted(set(required) - given)
     if unknown or missing:
-        raise SystemExit(f"sample-team: {MANIFEST.name}: unknown sections {unknown}, missing sections {missing}")
+        raise SystemExit(f"sample-team: {name}: unknown sections {unknown}, missing sections {missing}")
 
 
 TEMPLATE_READS = {"caseType": "/v1/case-types/{id}", "taskType": "/v1/task-types/{id}"}
@@ -1178,10 +1244,44 @@ def admin_env(path: Path) -> dict[str, str]:
     return env
 
 
+def install_first_team(args: argparse.Namespace, env: dict[str, str]) -> int:
+    """A first team (`--manifest`): the team, its people, its knowledge and its cases; the team's assistant is made on
+    its first chat, as for any new team."""
+    path = Path(args.manifest)
+    spec = json.loads(path.read_text())
+    check_manifest(spec, FIRST_TEAM, path.name)
+    urls = service_urls(args.origin)
+    email, password = env["OPS_DEMO_ADMIN_EMAIL"], env["OPS_DEMO_ADMIN_PASSWORD"]
+    admin = sign_in(urls, email, password)
+    team = ensure_team(admin, spec["team"])
+    admin = sign_in(urls, email, password, team)
+    # The dev seed's password on a local stack, so the CLI's AS=<email> signs in as each person; elsewhere the
+    # people's own generated one.
+    people_password = env["OPS_DEMO_PASSWORD"]
+    if local(admin):
+        people_password = os.environ.get("OPS_PLATFORM_DEMO_PASSWORD") or "northfield-demo"
+    made = ensure_people(admin, team, spec["people"], people_password)
+    # Each invitation changes the team's permissions, so a session signed in before the last one is refused; each
+    # person signs in again once all are in.
+    people = {k: sign_in(urls, p.email, people_password, team) for k, p in made.items()}
+    lead = people.get("lead", admin)
+    builder = people.get("builder", lead)
+    if spec.get("knowledge"):
+        ensure_knowledge(builder, spec["knowledge"])
+    if spec.get("cases"):
+        emails = {p["key"]: p["email"].lower() for p in spec["people"]}
+        ensure_cases(lead, spec["team"]["name"], spec["cases"], emails)
+    ensure_assistant(lead)
+    print(f"\n{len(FAILED)} failed", flush=True)
+    return len(FAILED)
+
+
 def install(args: argparse.Namespace) -> int:
     env = admin_env(args.admin_env)
     if args.expect_found:
         EXPECT_FOUND.append(True)
+    if args.manifest:
+        return install_first_team(args, env)
     spec = json.loads(MANIFEST.read_text())
     check_manifest(spec)
     if args.name:
@@ -1252,6 +1352,7 @@ def main() -> int:
         help="file with OPS_BOOTSTRAP_ADMIN_* (or OPS_DEMO_ADMIN_*) and the people's OPS_DEMO_* settings",
     )
     cmd.add_argument("--expect-found", action="store_true", help="fail on any record this run makes (a second run)")
+    cmd.add_argument("--manifest", help="install the first team this manifest names (scripts/sample-team/teams/)")
     cmd.add_argument("--name", help="install another team under this name, its workflow and document type ids prefixed")
     cmd.add_argument(
         "--member",

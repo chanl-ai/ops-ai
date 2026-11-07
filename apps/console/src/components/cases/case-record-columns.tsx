@@ -5,6 +5,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { Badge } from '@/components/ui/badge';
+import { wordsFilterFn } from '@/hooks/use-list-params';
 import type { CasePriority, CaseRecord, CaseStatus } from '@/lib/types/case-records';
 
 export const CASE_STATUS: Record<CaseStatus, string> = {
@@ -52,6 +53,8 @@ export const caseRecordColumns: ColumnDef<CaseRecord>[] = [
   {
     id: 'subject',
     accessorKey: 'subject',
+    // The search box filters this column; it matches as the server does, each word in the subject or the customer.
+    filterFn: wordsFilterFn<CaseRecord>(['subject', 'customerName', 'customerId']),
     header: ({ column }) => <DataTableColumnHeader column={column} title="Case" />,
     cell: ({ row }) => (
       <Link href={`/cases/${row.original.id}`} className="block min-w-52 hover:underline" data-testid="case-row-link">

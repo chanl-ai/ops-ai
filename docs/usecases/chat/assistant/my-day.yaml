@@ -1,0 +1,10 @@
+# Everything that needs me today: the person's open cases and Human Tasks, read together in one step, shown not offered.
+as: [dana.whitfield@harborpine.example, marco.silva@harborpine.example, lena.hoffmann@harborpine.example]
+turns:
+  - say: "Give me everything that needs me today"
+    expect:
+      tool: [find_cases, my_human_tasks]
+      noQuestion: true
+      noErrorCode: true
+      endsClean: true
+      maxSteps: 3

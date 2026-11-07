@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Lists of cases in chat show as one table",
+  "description": "When the assistant finds three or more cases, they appear as one table with each case's subject, customer, status and due date, instead of a stack of cards.",
+  "tag": "improved"
+}

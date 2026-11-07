@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from ops_models.seed import OPENAI_LOCAL, seed
 from ops_models.store import provider_connections
+from ops_models.store.tables import model_aliases
 from ops_service_kit.ids import now_iso
 
 FAKE = "http://127.0.0.1:6199/v1"
@@ -49,4 +50,18 @@ async def test_an_openai_local_an_operator_gave_a_credential_stays_on_its_provid
     async with engine.connect() as c:
         q = sa.select(provider_connections.c.base_url).where(provider_connections.c.id == OPENAI_LOCAL)
         assert (await c.execute(q)).scalar_one() == "https://api.openai.com/v1"
+    await engine.dispose()
+
+
+async def test_the_assistant_gets_its_own_alias_beside_default_with_no_reasoning_effort(database_url: str) -> None:
+    # The team assistant ran on `default`, so moving its model moved every agent's; and gpt-5.5 refuses function
+    # tools with any reasoning effort on chat completions, so a seeded effort would refuse every assistant turn.
+    engine = create_async_engine(database_url)
+    await seed(engine, FAKE)
+    async with engine.connect() as c:
+        q = sa.select(model_aliases.c.name, model_aliases.c.provider_id, model_aliases.c.reasoning_effort).where(
+            model_aliases.c.name.in_(("default", "assistant")), model_aliases.c.status == "current"
+        )
+        rows = {r.name: (r.provider_id, r.reasoning_effort) for r in await c.execute(q)}
+    assert rows == {"default": (OPENAI_LOCAL, None), "assistant": (OPENAI_LOCAL, None)}, rows
     await engine.dispose()

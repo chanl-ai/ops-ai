@@ -1,0 +1,11 @@
+# Which apps can you reach: answered from what the assistant holds, within two steps, with no CLI steps or token asks.
+as: [dana.whitfield@harborpine.example, marco.silva@harborpine.example, lena.hoffmann@harborpine.example]
+real: [lena.hoffmann@harborpine.example]
+turns:
+  - say: "Which apps can you reach, and which exist but are not connected?"
+    expect:
+      noQuestion: true
+      noErrorCode: true
+      endsClean: true
+      never: ["sfdx", "curl", "token"]
+      maxSteps: 2

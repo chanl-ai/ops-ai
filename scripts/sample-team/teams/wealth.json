@@ -1,0 +1,81 @@
+{
+  "$comment": "A first team for the team assistant's scripted chats (docs/usecases/chat/assistant/): `make sample-teams` installs it. Every name, client and figure is invented.",
+  "team": {
+    "name": "Wealth Advisory"
+  },
+  "people": [
+    {
+      "key": "lead",
+      "name": "Helena Brooks",
+      "email": "helena.brooks@harborpine.example",
+      "role": "admin"
+    },
+    {
+      "key": "builder",
+      "name": "Omar Haddad",
+      "email": "omar.haddad@harborpine.example",
+      "role": "builder"
+    },
+    {
+      "key": "adviser",
+      "name": "Dana Whitfield",
+      "email": "dana.whitfield@harborpine.example",
+      "role": "approver"
+    }
+  ],
+  "knowledge": [
+    {
+      "key": "policies",
+      "name": "Wealth advisory policies",
+      "source": "Advisory handbook",
+      "description": "Client reviews, suitability notes and cash holdings.",
+      "color": "emerald",
+      "documents": [
+        {
+          "name": "client-reviews-and-suitability.md",
+          "text": "# Client reviews and suitability\n\n## Annual review\nEvery advisory client has a review meeting at least once every 12 months. Before the meeting the adviser checks the date of the client's risk profile. A risk profile older than 12 months is refreshed in the meeting, and the new answers are recorded before any change to the portfolio.\n\n## Cash holdings\nCash above the client's agreed target by more than 10 percentage points is raised with the client at the next review, with the reason the client gave for holding it.\n\n## Suitability notes\nA suitability note is written within 2 business days of any recommendation. A recommendation without a note may not be acted on.\n"
+        }
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "key": "okafor-review",
+      "subject": "Client meeting 2:00 pm: Okafor Family Trust annual review",
+      "customer": "Okafor Family Trust",
+      "assignee": "adviser",
+      "due": "today 14:00",
+      "priority": "high",
+      "notes": [
+        "Risk profile last refreshed 14 months ago.",
+        "Cash is 18% of the portfolio against a 5% target.",
+        "Asked last time about saving for two children's education."
+      ]
+    },
+    {
+      "key": "lindqvist-checkin",
+      "subject": "Client meeting 4:30 pm: Lindqvist Dental Group retirement plan check-in",
+      "customer": "Lindqvist Dental Group",
+      "assignee": "adviser",
+      "due": "today 16:30",
+      "notes": [
+        "Plan contributions were raised in March; confirm the new amount is running."
+      ]
+    },
+    {
+      "key": "ramos-note",
+      "subject": "Suitability note missing: Ramos household rebalancing",
+      "customer": "Ramos household",
+      "assignee": "adviser",
+      "due": "-2d",
+      "priority": "high"
+    },
+    {
+      "key": "chen-fees",
+      "subject": "Follow-up: send the fee schedule to Chen Holdings",
+      "customer": "Chen Holdings",
+      "assignee": "adviser",
+      "due": "+3d"
+    }
+  ]
+}

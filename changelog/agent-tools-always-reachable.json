@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Agents reach their app tools after a restart",
+  "description": "An agent's tool calls, such as a Salesforce query, no longer fail with \"caller identity is not registered\" after the platform's policy service restarts without its settings.",
+  "tag": "fix"
+}

@@ -28,6 +28,11 @@ def test_the_worker_and_agents_service_reach_the_same_services() -> None:
     }
 
 
+def test_tools_service_reaches_the_stacks_knowledge_service() -> None:
+    # Without it the built-in search_knowledge answered "This tools-service searches no knowledge" on every stack.
+    assert urls("tools").get("OPS_KB_URL") == urls("agents")["OPS_KB_URL"]
+
+
 def test_an_offset_stack_reaches_its_own_models_service_whatever_the_env_file_names(tmp_path: Path) -> None:
     """A laptop .env naming the default stack's models-service sends an offset stack's model calls to the other
     stack's aliases, real models included, and its fake bank certificate fails the offset stack's bank TLS."""

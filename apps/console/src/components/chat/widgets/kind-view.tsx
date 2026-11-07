@@ -160,8 +160,12 @@ function TableKind({ node, truncatedFrom }: { node: TableNode; truncatedFrom?: n
         header: ({ column }) => <DataTableColumnHeader column={column} title={c.label} />,
         cell: ({ row }) => {
           const v = row.original[c.key] ?? null;
-          // Text wraps so a long subject is read whole; numbers and dates stay on one line.
-          return <span className={typeof v === 'number' ? 'block text-right text-xs tabular-nums' : isIsoDate(v) ? 'text-xs whitespace-nowrap' : 'block min-w-32 text-xs break-words whitespace-normal'}>{formatted(v, c.format)}</span>;
+          if (typeof v === 'number') return <span className="block text-right text-xs tabular-nums">{formatted(v, c.format)}</span>;
+          const text = formatted(v, c.format);
+          if (isIsoDate(v)) return <span className="text-xs whitespace-nowrap">{text}</span>;
+          // Text wraps inside a bounded width so a long subject is read whole; a nowrap span would overflow the column a
+          // phone pins (data-table-column-kinds) and draw over the next one.
+          return <span className="block max-w-80 min-w-32 text-xs break-words whitespace-normal">{text}</span>;
         },
       })),
     [cols],

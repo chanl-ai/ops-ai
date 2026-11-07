@@ -35,6 +35,7 @@ from ..store.agent_registry import AgentRegistry
 from ..store.engine import AsyncEngine
 from ..store.usage import UsageLedger
 from .agent_registry import definition_of
+from .error_words import WordedTools
 from .model_ledger import LedgerModel, LedgerSource
 
 
@@ -267,7 +268,9 @@ def kernel_agents(
             return None
     usage = UsageLedger(db, PriceTable.parse(settings.prices))
     directory: ToolDirectory = ToolsOperations(tools) if tools is not None else CatalogTools(catalog)
-    executor = GatewayToolExecutor(gateway, directory) if gateway is not None else LocalToolExecutor(catalog)
+    inner = GatewayToolExecutor(gateway, directory) if gateway is not None else LocalToolExecutor(catalog)
+    # A failed call reaches the model in words, its code kept on the call log (error_words.py).
+    executor = WordedTools(inner)
     knowledge: Knowledge = KbService(kb) if kb is not None else NoKnowledgeService()
     ports = KernelPorts(
         model=LedgerModel(model, usage, settings.model_alias, call_headers=through is not None),
