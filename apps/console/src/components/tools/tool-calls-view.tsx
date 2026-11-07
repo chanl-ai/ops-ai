@@ -65,16 +65,12 @@ const columns: ColumnDef<Row>[] = [
   {
     accessorKey: 'workflowName',
     header: ({ column }) => <DataTableColumnHeader column={column} title="Workflow" />,
-    cell: ({ row }) => (
-      <div className="max-w-56 min-w-36">
-        <div className="truncate text-sm" title={row.original.workflowName}>
-          {row.original.workflowName}
-        </div>
-        <div className="truncate text-xs text-muted-foreground" title={row.original.agentName}>
-          {row.original.agentName}
-        </div>
-      </div>
-    ),
+    cell: ({ row }) => <NameCell name={row.original.workflowName} />,
+  },
+  {
+    accessorKey: 'agentName',
+    header: ({ column }) => <DataTableColumnHeader column={column} title="Agent" />,
+    cell: ({ row }) => <NameCell name={row.original.agentName} />,
   },
   {
     // Whose account of the app the call signed in with: a person's own, or the team account.
@@ -115,6 +111,17 @@ const columns: ColumnDef<Row>[] = [
   { accessorKey: 'latencyMs', header: ({ column }) => <DataTableColumnHeader column={column} title="Latency" />, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground tabular-nums">{ms(row.original.latencyMs)}</span> },
   { accessorKey: 'cost', header: ({ column }) => <DataTableColumnHeader column={column} title="Cost" />, cell: ({ row }) => <span className="whitespace-nowrap tabular-nums">{row.original.cost != null ? cad(row.original.cost) : '—'}</span> },
 ];
+
+/** A workflow or agent the API named, or a dash for a call that had none. */
+function NameCell({ name }: { name?: string | null }) {
+  return name ? (
+    <span className="block max-w-56 min-w-28 truncate text-sm" title={name}>
+      {name}
+    </span>
+  ) : (
+    <span className="text-xs text-muted-foreground">—</span>
+  );
+}
 
 /**
  * The tool-call log: every gateway call, newest first, each opening its sheet. The Tool calls page shows all of them;
