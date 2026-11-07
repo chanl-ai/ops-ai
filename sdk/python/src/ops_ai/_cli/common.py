@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 from ops_ai import OpsAI
 from ops_ai._config import Session
 from ops_ai._io import load_data
-from ops_ai.errors import OpsError
+from ops_ai.errors import NotFound, OpsError
 
 
 def parser(prog: str, description: str) -> argparse.ArgumentParser:
@@ -92,9 +92,19 @@ def dev_sign_in(
         raise ValueError("--as signs in dev seed people on a local stack only")
     email = dev_email(ns.as_role)
     session = None if fresh else _cached(ns.as_role, platform)
+    if session is not None and not session.get("refreshToken"):
+        # A session with no refresh token (make api keeps none) cannot renew after a role change answers
+        # permissions_changed, so it is signed in again rather than reused.
+        session = None
     if session is None:
         password = os.environ.get("OPS_PLATFORM_DEMO_PASSWORD") or "northfield-demo"
-        session = sign_in(base, services, email, password)
+        try:
+            session = sign_in(base, services, email, password)
+        except NotFound as e:
+            raise ValueError(
+                f"no Ops AI stack answers sign-in at {base}; run the command through make, which names the stack's "
+                "ports, or set OPS_BASE_URL to the console's address"
+            ) from e
         _keep(ns.as_role, platform, session)
     who, kept = ns.as_role, session
     session["_keep"] = lambda token, refresh: _keep(who, platform, {**kept, "token": token, "refreshToken": refresh})

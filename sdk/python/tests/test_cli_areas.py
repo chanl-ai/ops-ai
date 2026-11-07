@@ -20,6 +20,7 @@ from ops_ai._cli import chat_script, common
 from ops_ai._cli.transcript import transcript
 from ops_ai._client import _upload_meta
 from ops_ai.cli import main
+from ops_ai.errors import NotFound
 
 ROOT = next(p for p in Path(__file__).resolve().parents if (p / common.SEED / "people.json").is_file())
 
@@ -223,6 +224,46 @@ def _fake_sign_in(signed: list[str]) -> Any:
         return {"token": "t", "refreshToken": "r", "expiresAt": later, "principal": {"email": email}}
 
     return sign_in
+
+
+def test_a_kept_session_with_no_refresh_token_is_signed_in_again(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # make api keeps a session with no refresh token; reused, a role change answered permissions_changed with no way to
+    # renew until the file was deleted by hand.
+    monkeypatch.chdir(ROOT)
+    monkeypatch.setenv("OPS_API_TOKENS", str(tmp_path))
+    monkeypatch.setenv("OPS_PLATFORM_PORT", "8710")
+    later = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 3600))
+    kept = {"email": "j.richardson@harborpine.example", "team": "team_ops", "token": "old", "expiresAt": later}
+    (tmp_path / "local-j.richardson_harborpine.example.json").write_text(
+        json.dumps({**kept, "platform": "http://127.0.0.1:8710"})
+    )
+
+    def sign_in(_base: str, _services: dict[str, str], email: str, _password: str) -> dict[str, Any]:
+        return {"token": "new", "refreshToken": "r", "expiresAt": later, "principal": {"email": email}}
+
+    monkeypatch.setattr(common, "sign_in", sign_in)
+    session = common.dev_sign_in(argparse.Namespace(as_role="james", base_url=None, team=None))[2]
+    assert (session["token"], session["refreshToken"]) == ("new", "r")
+
+
+def test_a_sign_in_nobody_answers_names_the_address_and_how_to_reach_the_stack(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Run outside make, the CLI signed in at the fallback address and printed only "not_found: Not Found".
+    monkeypatch.chdir(ROOT)
+    monkeypatch.setenv("OPS_API_TOKENS", str(tmp_path))
+    for v in common.SERVICE_PORTS.values():
+        monkeypatch.delenv(v, raising=False)
+    monkeypatch.delenv("OPS_BASE_URL", raising=False)
+
+    def sign_in(*_: Any) -> dict[str, Any]:
+        raise NotFound(404, "not_found", "Not Found")
+
+    monkeypatch.setattr(common, "sign_in", sign_in)
+    with pytest.raises(ValueError, match=r"http://127\.0\.0\.1:8710.*make"):
+        common.dev_sign_in(argparse.Namespace(as_role="james", base_url=None, team=None))
 
 
 def test_ops_login_as_signs_in_afresh_so_the_profile_can_renew(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
