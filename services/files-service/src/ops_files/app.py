@@ -83,7 +83,7 @@ from ops_service_kit.http import (
     operation_id,
 )
 from ops_service_kit.settings import Settings
-from ops_storage.base import ObjectLockedError, content_disposition
+from ops_storage.base import ObjectLockedError, ObjectNotFoundError, content_disposition
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
 
@@ -498,7 +498,7 @@ def create_files_app(
         """A clean file's bytes: the proxy download for people, and the read agent runs, knowledge ingest and tool
         fixtures use with a service token."""
         detail, chunks = await files.open_content(who, file_id)
-        return _stream(detail, chunks)
+        return await _stream(detail, chunks)
 
     @public.delete("/{file_id}", status_code=204, response_class=Response)
     async def delete_file(file_id: str, who: Caller) -> Response:  # pyright: ignore[reportUnusedFunction]
@@ -661,9 +661,22 @@ def _settings_router(settings: StorageSettings) -> APIRouter:
     return router
 
 
-def _stream(detail: FileDetail, chunks: AsyncIterator[bytes]) -> StreamingResponse:
+async def _stream(detail: FileDetail, chunks: AsyncIterator[bytes]) -> StreamingResponse:
+    """The bytes with their length. The first chunk is read before the answer starts: a stored object that is gone
+    raises only on the first read, and once the headers are out the connection can only be cut, which a browser reports
+    as a length mismatch with no status."""
+    try:
+        first = await anext(chunks, b"")
+    except ObjectNotFoundError as e:
+        raise NotFound("This file's content is missing from storage.") from e
+
+    async def body() -> AsyncIterator[bytes]:
+        yield first
+        async for chunk in chunks:
+            yield chunk
+
     return StreamingResponse(
-        chunks,
+        body(),
         media_type=detail.mime,
         headers={
             "Content-Disposition": content_disposition(detail.name),

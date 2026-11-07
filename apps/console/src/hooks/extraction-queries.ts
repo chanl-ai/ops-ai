@@ -31,14 +31,11 @@ export const useFileLayout = (fileId: string) => {
   return useTeamQuery({
     queryKey: ['files', 'layout', fileId],
     queryFn: async () => {
-      try {
-        return await api.files.layouts.get(fileId, { ocr: true });
-      } catch (e) {
-        if ((e as { status?: number }).status !== 404) throw e;
-        const read = await api.files.layouts.read(fileId, { ocr: true });
-        void qc.invalidateQueries({ queryKey: textReadKey(fileId) });
-        return read;
-      }
+      const kept = await api.files.layouts.get(fileId, { ocr: true });
+      if (kept) return kept;
+      const read = await api.files.layouts.read(fileId, { ocr: true });
+      void qc.invalidateQueries({ queryKey: textReadKey(fileId) });
+      return read;
     },
     enabled: !!fileId,
     staleTime: Infinity,
@@ -55,15 +52,7 @@ const textReadKey = (fileId: string) => ['files', 'text-read', fileId] as const;
 export const useFileTextRead = (fileId: string) =>
   useTeamQuery({
     queryKey: textReadKey(fileId),
-    queryFn: async () => {
-      try {
-        await api.files.layouts.get(fileId, { ocr: true, page: 1 });
-        return true;
-      } catch (e) {
-        if ((e as { status?: number }).status === 404) return false;
-        throw e;
-      }
-    },
+    queryFn: async () => (await api.files.layouts.get(fileId, { ocr: true, page: 1 })) !== null,
     enabled: !!fileId,
     staleTime: Infinity,
     retry: false,
@@ -118,7 +107,8 @@ export function useStartExtraction() {
  * memory. Each signed link issued is audited, so this asks for one per page visit.
  */
 export function useFilePreviewUrl(fileId: string, enabled: boolean) {
-  const link = useTeamQuery({ queryKey: ['files', 'preview-link', fileId], queryFn: () => api.files.downloadUrl(fileId), enabled, staleTime: Infinity, gcTime: 0, retry: false });
+  // A side read: the preview says in its own place when the bytes cannot be had, and the page around it still works.
+  const link = useTeamQuery({ queryKey: ['files', 'preview-link', fileId], queryFn: () => api.files.downloadUrl(fileId), enabled, staleTime: Infinity, gcTime: 0, retry: false, meta: { side: true } });
   const [state, setState] = React.useState<{ url: string | null; error: string | null }>({ url: null, error: null });
   const signed = link.data?.url;
   React.useEffect(() => {

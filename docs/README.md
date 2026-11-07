@@ -366,6 +366,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/files-service/file-lifecycle.md` | uc-093: James stores a PDF through files-service's proxy route; download waits for the scan hook; Priya holds it and delete is refused; released, it deletes |
 | `usecases/files-service/file-team-boundary.md` | uc-094: another team's admin gets 404 on every files-service route for a file it does not own; another tenant's service gets 404 |
 | `usecases/files-service/a-file-is-read-with-detect.md` | uc-331: A file is read with Detect from the Files page |
+| `usecases/files-service/file-page-preview.md` | uc-629: A file's page shows its preview or says why not |
 | `usecases/tools-service/failure-side-and-real-reads.md` | uc-038: a failed tool call says which side failed, and a test call reaches the real system |
 | `usecases/platform-service/sign-in-and-sessions.md` | uc-021: sign in, session, refresh with rotation, sign out |
 | `usecases/platform-service/password-sign-in-and-reset.md` | uc-160: a mailed reset link sets a hashed password once and ends the old sessions |

@@ -484,3 +484,8 @@ class Layout(TypedDict, closed=True):
 class EnvelopeLayout(TypedDict, closed=True):
     data: Layout
     success: Literal[True]
+
+
+class EnvelopeUnionLayoutNoneType(TypedDict, closed=True):
+    data: Layout | None
+    success: Literal[True]

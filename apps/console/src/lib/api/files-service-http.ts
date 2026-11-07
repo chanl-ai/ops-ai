@@ -38,7 +38,10 @@ export function createFilesServiceHttp(
       const link = await send<{ url: string; expiresAt: string; ttlSeconds: number }>('POST', `/files/${id}/download-url`);
       if (new URL(link.url, filesHost).origin !== filesHost) return link;
       const res = await fetchWithIdentity(new URL(link.url, filesHost).toString());
-      if (!res.ok) throw new ApiError(`The download was refused (${res.status}).`, res.status);
+      if (!res.ok) {
+        const said = ((await res.json().catch(() => null)) as { error?: { message?: string } } | null)?.error?.message;
+        throw new ApiError(said ?? `The download was refused (${res.status}).`, res.status);
+      }
       return { ...link, url: URL.createObjectURL(await res.blob()) };
     },
     versions: async (id) => (await get<{ versions: Awaited<ReturnType<FilesApi['versions']>> }>(`/files/${id}`)).versions,

@@ -41,7 +41,7 @@ async def test_a_layout_is_read_once_and_again_after_the_engine_changes(
         with_ocr = await c.post("/v1/documents/layout", json={"fileId": fid, "ocr": True}, headers=OPS)
         monkeypatch.setattr(layouts, "ENGINE", "layout-test")
         changed = await c.post("/v1/documents/layout", json={"fileId": fid}, headers=OPS)
-    assert before.status_code == 404, before.text
+    assert before.status_code == 200 and before.json()["data"] is None, before.text
     assert again.json()["data"] == first and page["blocks"] == first["blocks"], page
     assert with_ocr.status_code == 200 and changed.status_code == 200
     assert builds == ["notice.txt", "notice.txt", "notice.txt"], (

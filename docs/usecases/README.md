@@ -283,3 +283,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-625 | tools-service | Connect comes back Connected in any window, for every sign-in app | ui | draft |
 | uc-626 | tools-service | Apps screens offer only what you may do, in plain words | api, ui | draft |
 | uc-627 | tools-service | A team connects Salesforce at its company address and its agents query that org | api, ui | draft |
+| uc-629 | files-service | A file's page shows its preview or says why not | ui | draft |

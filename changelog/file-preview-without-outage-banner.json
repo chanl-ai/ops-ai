@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "A file's page no longer reports an outage it does not have",
+  "description": "A file not yet read for text, or whose stored content is missing, opens without the \"can't reach its services\" banner. Its preview says what is wrong in its own place.",
+  "tag": "fix"
+}
