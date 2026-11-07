@@ -29,6 +29,10 @@ import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = WidgetTemplate & { onRowClick: (w: WidgetTemplate) => void; href: string };
 
+/** When a widget last changed and by whom; the seeded library's widgets ship with Ops AI and carry no edit date. */
+const updatedOf = (w: WidgetTemplate) =>
+  w.updatedAt ? `${relativeTime(w.updatedAt)}${w.updatedBy ? ` · ${w.updatedBy}` : ''}` : w.teamId ? '—' : 'Built in';
+
 const columns: ColumnDef<Row>[] = [
   selectColumn<Row>((w) => w.name),
   idColumn<Row>((w) => w.widgetId),
@@ -49,8 +53,7 @@ const columns: ColumnDef<Row>[] = [
     header: ({ column }) => <DataTableColumnHeader column={column} title="Updated" />,
     cell: ({ row }) => (
       <span className="text-sm whitespace-nowrap text-muted-foreground">
-        {row.original.updatedAt ? relativeTime(row.original.updatedAt) : '—'}
-        {row.original.updatedBy ? ` · ${row.original.updatedBy}` : ''}
+        {updatedOf(row.original)}
       </span>
     ),
   },

@@ -11,6 +11,7 @@ import { Item, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/comp
 import { Kbd } from '@/components/ui/kbd';
 import { Skeleton } from '@/components/ui/skeleton';
 import { money } from '@/lib/format';
+import { ListItem } from '@/components/shared/list-item';
 import { cn } from '@/lib/utils';
 import type { Review } from '@/lib/types/domain';
 
@@ -102,8 +103,7 @@ export function TaskQueue({
                   <span className="truncate">{r.caseTitle ?? 'Case'}</span>
                 </div>
               )}
-              {/* The group is a list, so each task is a list item holding its button. */}
-              <div role="listitem">
+              <ListItem>
               <Item
                 asChild
                 size="sm"
@@ -131,7 +131,7 @@ export function TaskQueue({
                   </ItemContent>
                 </button>
               </Item>
-              </div>
+              </ListItem>
             </React.Fragment>
           );
         })}

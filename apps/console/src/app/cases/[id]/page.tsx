@@ -249,7 +249,7 @@ export default function CasePage() {
         <div className="flex flex-col gap-4">
           <ItemGroup className="gap-2">
             {left && (
-              <Item variant="outline" size="sm" className="bg-card" data-testid="case-whats-left">
+              <Item role="listitem" variant="outline" size="sm" className="bg-card" data-testid="case-whats-left">
                 <ItemMedia variant="icon">{left.items.length ? <ListChecks /> : <CheckCircle2 />}</ItemMedia>
                 <ItemContent>
                   {left.items.length ? (
@@ -287,7 +287,7 @@ export default function CasePage() {
               </Item>
             )}
             {c.origin && (
-              <Item variant="muted" size="sm" data-testid="case-origin">
+              <Item role="listitem" variant="muted" size="sm" data-testid="case-origin">
                 <ItemMedia variant="icon">
                   <PlayCircle />
                 </ItemMedia>
@@ -323,7 +323,7 @@ export default function CasePage() {
             <Section title={`Drafted actions (${actions.length})`} bodyClassName="px-4 py-1">
               <ItemGroup data-testid="case-actions">
                 {actions.map((a) => (
-                  <Item key={a.id} size="sm" className="px-0" data-testid={`case-action-${a.status}`}>
+                  <Item key={a.id} role="listitem" size="sm" className="px-0" data-testid={`case-action-${a.status}`}>
                     <ItemContent>
                       <ItemTitle>{a.label}</ItemTitle>
                       <ItemDescription>{[ACTION_KIND[a.kind] ?? a.kind, a.approvalsNeeded > 1 ? `${a.approvalsGiven} of ${a.approvalsNeeded} approvals` : 'one approver'].join(' · ')}</ItemDescription>

@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Download, History, KeyRound, Rocket, ShieldCheck, Trash2 } from 'lucide-react';
+import { Download, FileSearch, KeyRound, Rocket, ShieldCheck, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
@@ -152,7 +152,7 @@ export default function AuditPage() {
   return (
     <PageLayout
       switcher
-      icon={History}
+      icon={FileSearch}
       title="Audit log"
       description="Who changed what: publishes, approvals, access, settings and sign-ins"
       actions={
@@ -204,7 +204,7 @@ export default function AuditPage() {
             serverPagination={serverPagination(list, query)}
             emptyState={
               <ListEmpty
-                icon={History}
+                icon={FileSearch}
                 noun={view === 'all' ? 'entries' : VIEWS.find((v) => v.id === view)!.label.toLowerCase()}
                 filtered={list.isFiltered}
                 description="Changes to workflows, agents, access and settings in this team are recorded here."
