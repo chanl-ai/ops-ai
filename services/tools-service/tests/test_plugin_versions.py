@@ -319,3 +319,21 @@ async def test_a_restart_on_the_same_version_leaves_the_row_as_it_was(up: Upgrad
     await up.host.ensure(up.tenant, datetime.now(UTC))
     again = await up.store.get(up.tenant, "mod_plugin_fields")
     assert moved is not None and again is not None and again["revision"] == moved["revision"]
+
+
+async def test_turning_the_flag_on_after_an_upgrade_gives_a_team_the_installed_version(
+    engine: AsyncEngine, store: ModuleStore, tenant: str, local_catalog: Any
+) -> None:
+    """An install that upgraded with the flag off kept the first version's row, so the new version's tools answered
+    "Operation was not found"; turning plugin_updates on at the next start stamps the team and the row follows."""
+    u = Upgrade(engine, store, tenant, local_catalog)
+    u.host = u.host_for(u.v1, versions=False)
+    await u.bindings.put(tenant, "team_ops", ID, enabled=True, connection_id="con_a", settings={}, by="t")
+    await u.host.ensure(tenant, datetime.now(UTC))
+    u.upgrade(versions=False)
+    await u.host.ensure(tenant, datetime.now(UTC))
+    assert "fields_close_case" not in await u.listed("team_ops")
+    u.upgrade(versions=True)
+    await u.host.ensure(tenant, datetime.now(UTC))
+    assert "fields_close_case" in await u.listed("team_ops")
+    assert (await u.call("team_ops", "close_case", {"id": "c-1"})).ok
