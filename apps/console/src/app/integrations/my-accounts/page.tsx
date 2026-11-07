@@ -280,7 +280,7 @@ function MyAccountsPage() {
         entityName={ending?.connection}
         verb="Disconnect"
         testIdPrefix="my-connection"
-        description={`Your tools and agents lose access to ${ending?.connection ?? 'this app'} as you until you reconnect it. The team account stays.`}
+        description={`Your tools and agents lose access to ${ending?.connection ?? 'this app'} as you until you reconnect it. The team account does not act for you; it serves only runs nobody started.`}
         isLoading={disconnect.isPending}
         onConfirm={async () => {
           if (!ending) return;
