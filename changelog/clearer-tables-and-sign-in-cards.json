@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Clearer chat tables and sign-in cards",
+  "description": "A chat table is titled by what it lists, such as Accounts, and leaves out a system's own record details. When a tool needs your account, the card says whether it reads or changes something as you, and the tool shows Needs your sign-in instead of Error.",
+  "tag": "fix"
+}

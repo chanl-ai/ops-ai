@@ -34,6 +34,8 @@ export type ToolHeaderProps = {
   type: ToolUIPart["type"];
   state: ToolUIPart["state"];
   className?: string;
+  /** Drawn in place of the state's badge: a call that waits on the person rather than failing. */
+  badge?: ReactNode;
 };
 
 const getStatusBadge = (status: ToolUIPart["state"]) => {
@@ -70,6 +72,7 @@ export const ToolHeader = ({
   title,
   type,
   state,
+  badge,
   ...props
 }: ToolHeaderProps) => (
   <CollapsibleTrigger
@@ -84,7 +87,7 @@ export const ToolHeader = ({
       <span className="font-medium text-sm">
         {title ?? type.split("-").slice(1).join("-")}
       </span>
-      {getStatusBadge(state)}
+      {badge ?? getStatusBadge(state)}
     </div>
     <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
   </CollapsibleTrigger>

@@ -128,6 +128,16 @@ def _failure(code: str, message: str, status: int | None = None, side: str | Non
     return ToolOutcome(False, {"error": error})
 
 
+def with_access(e: AuthFailed, op: Mapping[str, Any], module: Mapping[str, Any]) -> AuthFailed:
+    """A person's sign-in request names the app and whether the call reads or changes something, so the chat asks in
+    those words ("reads Salesforce as you", "makes the change in your name")."""
+    if e.code == "CONNECTION_NOT_LINKED":
+        e.details["access"] = "write" if op.get("access") == "write" else "read"
+        if module.get("display_name"):
+            e.details["app"] = str(module["display_name"])
+    return e
+
+
 def auth_failure(e: AuthFailed) -> ToolOutcome:
     outcome = _failure(e.code, str(e), e.status, e.side)
     if e.details:
@@ -330,16 +340,20 @@ class _Secrets:
     ) -> Prepared | None:
         if self.auth is None:
             return None
-        prepared = await self.auth.prepare(
-            module,
-            environment,
-            tool=str(op["name"]),
-            actor=actor,
-            stale_rotation=stale_rotation,
-            acting_for=acting_for,
-            needs_person=bool(op.get("needs_person")),
-            scopes=scope_list(op.get("scopes")),
-        )
+        try:
+            prepared = await self.auth.prepare(
+                module,
+                environment,
+                tool=str(op["name"]),
+                actor=actor,
+                stale_rotation=stale_rotation,
+                acting_for=acting_for,
+                needs_person=bool(op.get("needs_person")),
+                scopes=scope_list(op.get("scopes")),
+            )
+        except AuthFailed as e:
+            with_access(e, op, module)
+            raise
         if prepared is not None and trial is not None:
             trial.note(f"Signed in through the account {prepared.connection_id}")
         return prepared
@@ -501,7 +515,8 @@ class HttpExecutor(_Secrets):
                 and acting_for is not None
             ):
                 # A person's own key the system refused: theirs alone is marked, and the card asks for it again.
-                return auth_failure(await self.auth.refused(module, prepared, acting_for, f"{host} answered 401."))
+                refused = await self.auth.refused(module, prepared, acting_for, f"{host} answered 401.")
+                return auth_failure(with_access(refused, op, module))
         except EgressDenied as e:
             # The policy may name the URL it refused, which now carries resolved secrets.
             return _failure("EGRESS_DENIED", scrub(str(e), used), side=OURS)

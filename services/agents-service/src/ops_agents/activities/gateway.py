@@ -22,7 +22,7 @@ from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ServiceCallError, ServiceClient
 
 from .shaper import shape_part
-from .tool_directory import ToolDirectory, ToolsUnavailable
+from .tool_directory import OperationRef, ToolDirectory, ToolsUnavailable
 
 
 @dataclass(frozen=True)
@@ -229,15 +229,15 @@ class GatewayClient:
 # What the model is told when the chat shows the person a card for the refusal (connection-required-card.tsx): what
 # to ask of them in plain words, never the code, the link or whom it names, which the card already shows.
 CARD_LINES: dict[str, str] = {
-    "not_connected": "The person must connect their own {app} account first. A Connect button is shown to them; ask "
-    "them to press it, then ask again.",
-    "needs_person": "This tool must act as the person, so they must connect their own {app} account first. A Connect "
-    "button is shown to them; ask them to press it, then ask again.",
-    "refused": "The person's own {app} sign-in has stopped working. A Reconnect button is shown to them; ask them to "
-    "press it, then ask again.",
-    "insufficient_scope": "The person's {app} sign-in does not allow this yet. A button to connect again with more "
-    "access is shown to them; ask them to press it, then ask again.",
-    "no_person": "{app} signs in as each person, and this call acts for nobody, so it cannot run here.",
+    "not_connected": "Not run: the person has not connected their own {app} account. Reply with one sentence asking "
+    "them to press Connect above and ask again; offer no other steps or help.",
+    "needs_person": "Not run: this tool acts as the person, who has not connected their own {app} account. Reply "
+    "with one sentence asking them to press Connect above and ask again; offer no other steps or help.",
+    "refused": "Not run: the person's {app} sign-in has ended. Reply with one sentence asking them to press Sign in "
+    "again above and ask again; offer no other steps or help.",
+    "insufficient_scope": "Not run: the person's {app} sign-in does not allow this yet. Reply with one sentence "
+    "asking them to press Connect again above and ask again; offer no other steps or help.",
+    "no_person": "Not run: {app} signs in as each person, and this call acts for nobody, so it cannot run here.",
 }
 
 
@@ -255,7 +255,7 @@ def carded(output: Any) -> str | None:
         return None
     details = _object(error.get("details")) or {}
     line = CARD_LINES.get(str(details.get("reason") or "not_connected"), CARD_LINES["not_connected"])
-    return line.format(app=str(details.get("connection") or "this app"))
+    return line.format(app=str(details.get("app") or details.get("connection") or "this app"))
 
 
 def gateway_error(e: ServiceCallError) -> dict[str, Any]:
@@ -293,18 +293,25 @@ class GatewayToolExecutor:
             return ToolOutcome(False, data["output"], for_model=carded(data["output"]))
         if data["ok"] and view is None:
             # A shaped result is drawn by the console's widget registry; the chat names it after the call (wp_<id>).
-            part = shape_part(data["output"], part_id="", declared=await self._declared(tool))
+            op = await self._operation(tool)
+            part = shape_part(
+                data["output"],
+                part_id="",
+                declared=op.output_shape if op else None,
+                title=(op.title or None) if op else None,
+            )
             view = {"part": part} if part is not None else None
         return ToolOutcome(bool(data["ok"]), data["output"], view)
 
-    async def _declared(self, tool: str) -> str | None:
+    async def _operation(self, tool: str) -> OperationRef | None:
+        """The operation's declared result shape and title, or None without a directory or when it is down."""
         if self._directory is None:
             return None
         try:
             ops = await self._directory.operations()
         except ToolsUnavailable:
             return None
-        return next((o.output_shape for o in ops if o.name == tool), None)
+        return next((o for o in ops if o.name == tool), None)
 
 
 class GatewayReplySender:

@@ -21,7 +21,7 @@ def test_a_query_envelope_is_drawn_as_a_table_of_its_records() -> None:
     part = shape_part(envelope, part_id="p")
     assert part is not None and part["shape"] == "rows", part
     assert [r["CaseNumber"] for r in part["data"]] == ["00044818", "00044901"]
-    assert part["hint"]["title"] == "records"
+    assert "title" not in part.get("hint", {}), part
     paged = shape_part(
         {**envelope, "done": False, "nextRecordsUrl": "/services/data/v61.0/query/01g-2000"}, part_id="p"
     )
@@ -29,6 +29,18 @@ def test_a_query_envelope_is_drawn_as_a_table_of_its_records() -> None:
     # Two lists, or a list beside other text (a customer's id beside their addresses), are a record.
     assert shape_part({"cases": RECORDS, "contacts": RECORDS}, part_id="p")["shape"] == "record"  # type: ignore[index]
     assert shape_part({"customerId": "CUS-1", "addresses": RECORDS}, part_id="p")["shape"] == "record"  # type: ignore[index]
+
+
+def test_a_tables_title_and_columns_name_the_rows_not_the_systems_metadata() -> None:
+    typed = [{"attributes": {"type": "Account", "url": "/sobjects/Account/001"}, "Id": "001", "Name": "Acme"}]
+    part = shape_part({"totalSize": 1, "done": True, "records": typed}, part_id="p", title="Run a SOQL query")
+    assert part is not None and part["hint"]["title"] == "Accounts", part
+    assert list(part["data"][0]) == ["Id", "Name"], part["data"]
+    # Untyped rows under a generic key take the tool's title; a key that names the rows keeps it.
+    plain = shape_part({"totalSize": 1, "records": [{"Id": "1"}]}, part_id="p", title="Run a SOQL query")
+    assert plain is not None and plain["hint"]["title"] == "Run a SOQL query", plain
+    named = shape_part({"transactions": [{"id": "T1", "amount": 5}]}, part_id="p", title="List transactions")
+    assert named is not None and named["hint"]["title"] == "transactions", named
 
 
 def test_present_takes_data_alone_as_a_table_and_plain_column_names() -> None:

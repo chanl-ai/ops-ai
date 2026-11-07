@@ -34,19 +34,27 @@ export function connectionRequired(call: ToolCall): (ConnectionRequired & { mess
     personFields: d.personFields,
     connectUrl: d.connectUrl,
     expiresAt: d.expiresAt,
+    access: d.access === 'write' ? 'write' : 'read',
+    app: d.app,
     message: e.message ?? '',
   };
 }
 
-const WHY: Record<ConnectionRequiredReason, (name: string) => string> = {
-  not_connected: (name) => `This tool acts as you, so ${name} records your name on the change. You connect once for this team.`,
-  insufficient_scope: (name) => `Your ${name} sign-in does not allow this yet. Connect again and allow the extra access it asks for.`,
-  needs_person: (name) => `This tool must act as a person, so ${name} needs your own account. You connect once for this team.`,
-  no_person: (name) => `${name} signs in as each person, and this call ran for nobody. Connect your own account, then ask again.`,
-  refused: (name) => `${name} no longer accepts what you gave it. Give it again to go on.`,
+type Need = ConnectionRequired & { message: string };
+// The app in the person's words: its name ("Salesforce"), else the account's.
+const appOf = (need: Need) => need.app ?? need.connection;
+// What the call does with the person's account, by its access: a read reads as them, a write changes in their name.
+const acts = (need: Need) => (need.access === 'write' ? `This tool makes the change in ${appOf(need)} in your name` : `This tool reads ${appOf(need)} as you`);
+
+const WHY: Record<ConnectionRequiredReason, (need: Need, keyed: boolean) => string> = {
+  not_connected: (need) => `${acts(need)}. Connect your account once for this team.`,
+  insufficient_scope: (need) => `Your ${appOf(need)} sign-in does not allow this yet. Connect again and allow the extra access it asks for.`,
+  needs_person: (need) => `${acts(need)}, never as the team. Connect your account once for this team.`,
+  no_person: (need) => `${appOf(need)} signs in as each person, and this call ran for nobody. Connect your own account, then ask again.`,
+  refused: (need, keyed) => (keyed ? `${appOf(need)} no longer accepts what you gave it. Give it again to go on.` : `Your ${appOf(need)} sign-in has ended. Sign in again to go on.`),
 };
 // A reason a newer service sends that this console does not know reads as a plain request to connect.
-const why = (reason: string, name: string) => (WHY[reason as ConnectionRequiredReason] ?? WHY.not_connected)(name);
+const why = (need: Need, keyed: boolean) => (WHY[need.reason as ConnectionRequiredReason] ?? WHY.not_connected)(need, keyed);
 
 /**
  * The `connection-required` part: a tool call that needs the person's own account, with Connect, which opens
@@ -106,23 +114,36 @@ export function ConnectionRequiredCard({ call, need, onReply }: { call: ToolCall
 
   return (
     <div className="flex flex-col gap-2" data-testid="connection-required" data-connection={need.connectionId} data-state={connected ? 'connected' : dismissed ? 'dismissed' : 'open'}>
-      <ChatToolCall name={call.label ?? call.name} state="failed" input={call.input} output={call.output} error={need.message || undefined} detail={call.server} />
+      <ChatToolCall
+        name={call.label ?? call.name}
+        state="failed"
+        input={call.input}
+        output={call.output}
+        error={need.message || undefined}
+        detail={call.server}
+        // The call waits on the person's sign-in; it did not fail.
+        badge={
+          <Badge variant="outline" className="rounded-full text-xs" data-testid="connection-call-status">
+            {need.reason === 'refused' ? 'Sign in again' : 'Needs your sign-in'}
+          </Badge>
+        }
+      />
       <Alert>
         <Plug />
         <AlertTitle className="flex flex-wrap items-center gap-2">
           {connected
-            ? `${need.connection} is connected`
+            ? `${appOf(need)} is connected`
             : need.reason === 'insufficient_scope'
-              ? `${need.connection} needs more access to continue`
+              ? `${appOf(need)} needs more access to continue`
               : need.reason === 'refused'
                 ? keyed
-                  ? `${need.connection} refused your ${method}`
-                  : `${need.connection} needs you to sign in again`
-                : `${need.connection} needs your account to continue`}
+                  ? `${appOf(need)} refused your ${method}`
+                  : `${appOf(need)} needs you to sign in again`
+                : `${appOf(need)} needs your account to continue`}
           {status}
         </AlertTitle>
         <AlertDescription>
-          <p>{connected ? 'Calls that need your account now act as you.' : why(need.reason, need.connection)}</p>
+          <p>{connected ? 'Calls that need your account now act as you.' : why(need, keyed)}</p>
           {!connected && !dismissed && onReply && keyed && (
             <OwnCredentialsForm
               connectionId={need.connectionId}
@@ -130,7 +151,7 @@ export function ConnectionRequiredCard({ call, need, onReply }: { call: ToolCall
               authKind={need.authKind}
               personFields={need.personFields ?? []}
               docsUrl={offered?.docsUrl}
-              submitLabel={`Connect ${need.connection}`}
+              submitLabel={`Connect ${appOf(need)}`}
               onCancel={() => setDismissed(true)}
               onDone={() => {
                 setConnectedNow(need.connection);
@@ -143,7 +164,7 @@ export function ConnectionRequiredCard({ call, need, onReply }: { call: ToolCall
             <div className="mt-2 flex flex-wrap gap-2">
               <Button size="sm" onClick={connect} disabled={!need.connectUrl} data-testid="connection-connect">
                 <ExternalLink />
-                {need.reason === 'insufficient_scope' ? `Connect ${need.connection} again` : need.reason === 'refused' ? `Reconnect ${need.connection}` : `Connect ${need.connection}`}
+                {need.reason === 'insufficient_scope' ? `Connect ${appOf(need)} again` : need.reason === 'refused' ? `Sign in to ${appOf(need)} again` : `Connect ${appOf(need)}`}
               </Button>
               <Button size="sm" variant="outline" onClick={() => setDismissed(true)} data-testid="connection-not-now">
                 Not now

@@ -114,7 +114,7 @@ async def test_a_connect_card_refusal_reaches_the_model_as_a_plain_line() -> Non
     req = TurnRequest("t1", "th1", SETTINGS, [QUERY], user_turn="status of case 00044818")
     _, result = await run(req, KernelPorts(model=model(steps, seen), tools=tools, knowledge=FixedKnowledge([])))
     told = json.dumps(seen[0])
-    assert "Connect button" in told and "Salesforce" in told, told
+    assert "press Connect above" in told and "offer no other steps" in told and "Salesforce" in told, told
     assert not any(s in told for s in ("CONNECTION_NOT_LINKED", "http", "@", "connectUrl")), told
     # The card still reads the whole refusal from the call record.
     assert result.tool_calls[0].output == NOT_LINKED
