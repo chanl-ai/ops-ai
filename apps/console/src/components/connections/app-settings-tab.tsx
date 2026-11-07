@@ -33,7 +33,9 @@ export function SettingsTab({ app, kinds, onSetUp, onDeleted }: { app: AppPage; 
   const [deleting, setDeleting] = React.useState(false);
   const [changing, setChanging] = React.useState(false);
   if (!conn) return null;
-  const may = Boolean(conn.mayManage);
+  // An app the system no longer has installed changes nothing here; an admin may still delete what it left.
+  const mayDelete = Boolean(conn.mayManage);
+  const may = mayDelete && app.card.appState !== 'removed';
   const personal = conn.signIn !== 'team';
   // On: tools a person runs use their own account, and the team's sign-in serves only runs nobody started.
   const flip = (on: boolean) =>
@@ -91,7 +93,7 @@ export function SettingsTab({ app, kinds, onSetUp, onDeleted }: { app: AppPage; 
           </div>
         </SettingsSection>
       )}
-      {may && (
+      {mayDelete && (
         <DangerZone
           items={[
             {

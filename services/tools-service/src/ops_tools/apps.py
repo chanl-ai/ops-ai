@@ -138,7 +138,8 @@ class SystemPlugin(Out):
 
 
 AppState = Literal["connected", "test_failed", "needs_sign_in", "not_installed", "removed"]
-REMOVED = "This app is no longer installed, so its tools are off. An admin installs it again to turn them back on."
+# Plugins are installed by the operator on the system, never from a screen, so no person here can put it back.
+REMOVED = "This app isn't installed on this system. Your operator installs apps."
 
 
 class CardCredential(Out):
@@ -1611,6 +1612,8 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
     configs = len(creds) + int(platform)
     plugin = _plugin(apps, card)
     config_names = {str(c["id"]): str(c["name"]) for c in creds} | {f"{OPS_AI}{card['id']}": OPS_AI_APP}
+    # An app the install no longer loads keeps its accounts for the record only: nothing signs in or changes them.
+    removed = card["kind"] == "plugin" and card.get("plugin") is None
     out: list[dict[str, Any]] = []
     for a in stored:
         aid = str(a["id"])
@@ -1702,6 +1705,9 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
                 "test": t.get("test"),
             }
         )
+    if removed:
+        # Read-only, with one state: no action, and no test result from when the app was installed.
+        return [{**r, "actions": [], "test": None, "health": None, "stateReason": None} for r in out]
     return out
 
 

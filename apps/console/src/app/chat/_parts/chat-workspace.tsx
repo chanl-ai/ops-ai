@@ -258,7 +258,8 @@ function ThreadView({
 
   return (
     <>
-      <header className="flex min-h-12 flex-wrap items-center gap-2 border-b px-3 py-2">
+      {/* Two lines at any width: the title beside the actions, then the agent and its knowledge. */}
+      <header className="flex min-h-12 items-start gap-2 border-b px-3 py-2">
         <div className="min-w-0 flex-1">
           {t && editingTitle ? (
             <Input
@@ -293,17 +294,17 @@ function ThreadView({
             <Skeleton className="h-5 w-48" />
           )}
           {t && (
-            <div className="mt-1 flex flex-wrap items-center gap-2 px-1">
-              <Link href={`/agents/${t.agentId}`} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline">
-                <Bot className="size-3.5" /> {t.agentName} · v{t.agentVersion}
+            <div className="mt-1 flex min-w-0 items-center gap-2 px-1">
+              <Link href={`/agents/${t.agentId}`} className="inline-flex max-w-[60%] shrink-0 items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline">
+                <Bot className="size-3.5 shrink-0" /> <span className="truncate">{t.agentName} · v{t.agentVersion}</span>
               </Link>
-              {agent && agent.version !== t.agentVersion && <span className="text-[11px] text-muted-foreground">(v{agent.version} is live; new chats use it)</span>}
-              <KbChips kbs={kbs} value={t.kbIds} onChange={(ids) => onPatch(t.id, { kbIds: ids }, 'Knowledge updated for the next answer')} disabled={readOnly} agentName={agent?.name} />
+              {agent && agent.version !== t.agentVersion && <span className="hidden shrink-0 text-[11px] text-muted-foreground sm:inline">(v{agent.version} is live; new chats use it)</span>}
+              <KbChips kbs={kbs} value={t.kbIds} onChange={(ids) => onPatch(t.id, { kbIds: ids }, 'Knowledge updated for the next answer')} disabled={readOnly} agentName={agent?.name} oneLine />
             </div>
           )}
         </div>
         {t && (
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             {owner && !t.archived && <ThreadSettingsButton threadId={t.id} />}
             {owner && (
               <Button variant="ghost" size="sm" onClick={() => setMemoryOpen(true)} data-testid="memory-button">
