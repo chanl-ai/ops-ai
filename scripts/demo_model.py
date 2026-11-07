@@ -151,8 +151,13 @@ def main() -> int:
                     "clearedSensitivity": current["clearedSensitivity"],
                     "inputPerMillion": str(Decimal(price_in)),
                     "outputPerMillion": str(Decimal(price_out)),
-                    # A switch of model keeps how the alias's calls are run (its reasoning effort).
-                    **({"reasoningEffort": current["reasoningEffort"]} if current.get("reasoningEffort") else {}),
+                    # A switch of model keeps the alias's reasoning effort. EFFORT= sets another;
+                    # empty sends none, as gpt-5.5 refuses function tools with any effort on chat completions.
+                    **(
+                        {"reasoningEffort": effort}
+                        if (effort := os.environ.get("EFFORT", current.get("reasoningEffort")))
+                        else {}
+                    ),
                 },
             )
         )
