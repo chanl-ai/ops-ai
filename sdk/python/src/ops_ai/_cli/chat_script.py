@@ -15,7 +15,7 @@ A script is YAML or JSON: `agent` (the team's default when left out), `test`, `k
     noErrorCode     no error code (CONNECTION_NOT_LINKED, "Error: ...") in the reply
     endsClean       the reply ends on a sentence or a table, not on a stray "ok" or a separator
     cites           the reply cites its knowledge: [n] the chat turned into citations, or the document a
-                    search_knowledge passage came from
+                    search_knowledge passage came from, or its knowledge base
     table           the reply drew a table
     maxSteps        at most this many model calls answered the turn
 """
@@ -86,7 +86,13 @@ def reply_checks(want: dict[str, Any], seen: dict[str, Any], message: dict[str, 
         out.append(("ends clean", ends_clean(text), repr(text[-40:])))
     if want.get("cites"):
         # [n] the chat turned into citations, or the document a search_knowledge passage of this turn came from.
-        found = [str(p.get(k)) for c in seen["tools"] for p in _passages(c) for k in ("title", "section") if p.get(k)]
+        found = [
+            str(p.get(k))
+            for c in seen["tools"]
+            for p in _passages(c)
+            for k in ("title", "section", "knowledgeBase")
+            if p.get(k)
+        ]
         named = [f for f in found if f.lower() in text.lower()]
         cited = (bool(message.get("citations")) and CITE.search(text) is not None) or bool(named)
         out.append(("cites the knowledge", cited, f"citations {len(message.get('citations') or [])}, found {found}"))

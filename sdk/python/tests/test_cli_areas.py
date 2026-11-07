@@ -335,6 +335,9 @@ def test_the_assistant_expectations_each_catch_their_failure() -> None:
     searched = _seen("Per Control testing, reviews escalate.", [])
     searched["tools"] = [{"name": "search_knowledge", "output": {"passages": [{"title": "Control testing"}]}}]
     assert all(ok for _, ok, _ in chat_script.reply_checks({"cites": True}, searched, {}))
+    searched["tools"][0]["output"]["passages"][0]["knowledgeBase"] = "Risk policies"
+    searched["text"] = "Per the Risk policies, reviews escalate."
+    assert all(ok for _, ok, _ in chat_script.reply_checks({"cites": True}, searched, {}))
     searched["text"] = "Reviews escalate."
     assert not any(ok for _, ok, _ in chat_script.reply_checks({"cites": True}, searched, {}))
 

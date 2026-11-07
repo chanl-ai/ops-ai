@@ -35,7 +35,7 @@ no password. `make help` prints each target's arguments.
 | Area | Targets | Example |
 |---|---|---|
 | Any route | `api`, `sdk-call` | `make api GET /v1/me AS=viewer`; `make sdk-call CALL='ops.raw.platform.me_me()' AS=builder` |
-| Chat | `chat`, `chat-script`, `chat-show`, `chat-calls`, `chat-agents`, `chat-threads`, `chat-accounts`, `chat-kbs`, `chat-connected`, `chat-approve`, `chat-reject`, `chat-submit` | `make chat AS=james AGENT='Ops Assistant' SAY='What cases are open?'` |
+| Chat | `chat`, `chat-script`, `assistant-evals` (REAL=1: the real subset, at most MAX_CALLS model calls), `chat-show`, `chat-calls`, `chat-agents`, `chat-threads`, `chat-accounts`, `chat-kbs`, `chat-connected`, `chat-approve`, `chat-reject`, `chat-submit` | `make chat AS=james AGENT='Ops Assistant' SAY='What cases are open?'` |
 | Knowledge | `kb-bases`, `kb-show`, `kb-documents`, `kb-sources`, `kb-source`, `kb-items`, `kb-add-file`, `kb-add-text`, `kb-sync`, `kb-search`, `kb-changes`, `kb-change` | `make kb-search KB=kb_retail_products TEXT='overdraft fee' AS=james` |
 | Apps and connections | `apps-list`, `apps-show`, `apps-add-tool`, `apps-accounts`, `apps-mine`, `apps-connect` (prints the sign-in link), `apps-test`, `apps-auth-configs` | `make apps-connect APP=plugin:opsai.salesforce AS=james` |
 | Tools | `tools-list`, `tools-show`, `tools-run` (Mock unless `REAL=1`), `tools-calls`, `tools-call` | `make tools-run APP=plugin:acme.ticketdesk TOOL=ticketdesk_get_ticket INPUT='{"number": 1}' AS=builder` |
@@ -73,7 +73,7 @@ run records and knowledge pages have no delete route, so they stay. Code: `sdk/p
 
 | Fragment | Targets |
 |---|---|
-| `dev.mk` | `up`, `down`, `restart`, `health`, `logs`, `ports`, `sample-team`, `demo`, `demo-walk`, `demo-model`, `demo-salesforce*`, `runner-wasm`, `reset-db` |
+| `dev.mk` | `up`, `down`, `restart`, `health`, `logs`, `ports`, `sample-team`, `sample-teams` (the first teams: Wealth, Lending, Risk), `demo`, `demo-walk`, `demo-model`, `demo-salesforce*`, `runner-wasm`, `reset-db` |
 | `python.mk` | `test`, `python-install`, `python-verify`, `sbom` |
 | `git.mk` | `commit`, `commit-hunks`, `my-hunks`, `whats-mine`, `unstage`, `git-rules`, `review` ([Commits](../CLAUDE.md#commits)) |
 | `usecase.mk` | `usecase-test`, `usecase-report`, `usecase-list`, `usecase-show`, `usecase-coverage`, `usecase-new`, `usecase-reset`, `usecase-runner-test` |
