@@ -320,6 +320,7 @@ def operation_of(m: Manifest, t: Tool, op_id: str) -> dict[str, Any]:
         "amount_max": t.amount_max,
         "needs_person": t.needs_person,
         "scopes": list(t.scopes),
+        "output_shape": t.shape,
         "stub": {"ok": True},
     }
 

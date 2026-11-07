@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Chat tables lead with the record's name",
+  "description": "A table in chat starts with each record's name or subject, and its ids move to the table's View menu, where you can show them again.",
+  "tag": "improved"
+}

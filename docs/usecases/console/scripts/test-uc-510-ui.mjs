@@ -14,10 +14,12 @@ const PASSWORD = 'northfield-demo';
 const JAMES = 'j.richardson@harborpine.example';
 const SHOTS = evidenceDir('510', 'uc');
 // The newest entry as the console orders them: by date, then title.
+const RANK = { new: 0, improved: 1, fix: 2 };
 const entries = readdirSync(join(ROOT, 'changelog'))
   .filter((f) => f.endsWith('.json'))
   .map((f) => JSON.parse(readFileSync(join(ROOT, 'changelog', f), 'utf8')))
-  .sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title));
+  // The console's order (lib/changelog.ts): new, then improved, then fixes, each newest first.
+  .sort((a, b) => RANK[a.tag] - RANK[b.tag] || b.date.localeCompare(a.date) || a.title.localeCompare(b.title));
 const roadmap = JSON.parse(readFileSync(join(ROOT, 'roadmap.json'), 'utf8'));
 
 async function step(name, body) {
@@ -93,7 +95,7 @@ await withUiStack(
         const dotBack = (await blocked.getByTestId('whats-new-dot').count()) === 1;
         check('4 with storage refusing the seen list, the popover opens and the dot comes back on reload', opened && dotBack, { opened, dotBack });
       });
-      await step('5 a round button in the bottom-right corner opens What’s new with the version it was built from', async () => {
+      await step('5 a button in the header beside notifications opens What’s new with the version it was built from', async () => {
         await page.setViewportSize({ width: 1280, height: 800 });
         const box = await trigger.boundingBox();
         const inSidebar = await page.locator('[data-sidebar="sidebar"] [data-testid="whats-new-trigger"]').count();
@@ -103,14 +105,15 @@ await withUiStack(
         const version = (await popup.getByTestId('whats-new-version').innerText()).trim().replace(/^Version /, '');
         await page.screenshot({ path: join(SHOTS, 'whats-new-button-1280.png') });
         await page.keyboard.press('Escape');
-        const corner = !!box && box.x + box.width >= 1280 - 24 && box.y + box.height >= 800 - 24 && Math.round(box.width) === 48;
+        const bell = await page.getByTestId('header-notifications').boundingBox();
+        const corner = !!box && !!bell && box.y + box.height <= 80 && Math.abs(box.y - bell.y) < 4 && box.x < bell.x;
         check(
-          '5 a round button in the bottom-right corner opens What’s new with the version it was built from',
+          '5 a button in the header beside notifications opens What’s new with the version it was built from',
           corner && inSidebar === 0 && /^(v\d{4}-\d{2}-\d{2}\.\d+|main · [0-9a-f]{7,8})$/.test(version),
-          { box, inSidebar, version },
+          { box, bell, inSidebar, version },
         );
       });
-      await step('6 at 375 px the popover opens upward and fits the screen', async () => {
+      await step('6 at 375 px the popover opens downward and fits the screen', async () => {
         await page.setViewportSize({ width: 375, height: 760 });
         await trigger.click();
         await popup.waitFor();
@@ -119,7 +122,7 @@ await withUiStack(
         const sideways = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
         await page.screenshot({ path: join(SHOTS, 'whats-new-375.png') });
         await page.keyboard.press('Escape');
-        check('6 at 375 px the popover opens upward and fits the screen', !!box && box.x >= 0 && box.x + box.width <= 375 && box.y >= 0 && !sideways, { box, sideways });
+        check('6 at 375 px the popover opens downward and fits the screen', !!box && box.x >= 0 && box.x + box.width <= 375 && box.y >= 0 && !sideways, { box, sideways });
       });
       check('7 no page errors', errors.length === 0, errors.slice(0, 3));
     } finally {
