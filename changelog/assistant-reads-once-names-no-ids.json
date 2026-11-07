@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Assistant replies name records, not ids",
+  "description": "The assistant no longer reads the same record twice in one reply, and its replies name records by their title instead of showing internal ids or tool names.",
+  "tag": "fix"
+}

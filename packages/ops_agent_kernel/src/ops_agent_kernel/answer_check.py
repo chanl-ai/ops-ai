@@ -22,6 +22,8 @@ _CODE = re.compile(
 # "the review is done."), or a dangling separator.
 _STRAY = re.compile(r"(?:^|[.!?]\s+|\n\s*)(ok|okay|done)[.!]?\s*$", re.IGNORECASE)
 _DANGLING = (":", ",", ";", "(", "-", "\u2014", "\u2013")
+# A platform record id (case_0eef29f68716, th_4148e7b2edcd, fil_ac70…): a short prefix, an underscore, hex.
+_RECORD_ID = re.compile(r"\b[a-z]{2,8}_[0-9a-f]{8,}\b")
 _QUESTION = re.compile(r"\?\s*\**\s*$")
 
 
@@ -49,19 +51,30 @@ def stray_ending(text: str) -> str | None:
     return None
 
 
+def internal_name(text: str, tools: frozenset[str]) -> str | None:
+    """The first record id or tool name the reply shows the person, or None. The card names the record."""
+    if (found := _RECORD_ID.search(text)) is not None:
+        return found.group(0)
+    return next((t for t in sorted(tools) if re.search(rf"\b{re.escape(t)}\b", text)), None)
+
+
 def ends_in_question(text: str) -> bool:
     return bool(_QUESTION.search(text.rstrip()))
 
 
-def defects(text: str, *, needs_citation: bool, all_reads_succeeded: bool) -> list[str]:
+def defects(
+    text: str, *, needs_citation: bool, all_reads_succeeded: bool, tools: frozenset[str] = frozenset()
+) -> list[str]:
     """What is wrong with a finished answer, as phrases for the correction prompt; empty when it is clean.
 
     `needs_citation`: the turn had knowledge passages and called no tool, so its facts come from the passages.
     `all_reads_succeeded`: the turn called tools, every one a read and every one ok, so a question back is one the
-    tools could have answered."""
+    tools could have answered. `tools`: the names the turn offered, none of which a reply may show."""
     found: list[str] = []
     if (code := error_code(text)) is not None:
         found.append(f"repeats an error code ({code}): say what happened in plain words and the next step, no code")
+    if (name := internal_name(text, tools)) is not None:
+        found.append(f"shows an internal name ({name}): name the record by its title and never a tool")
     if (tail := stray_ending(text)) is not None:
         found.append(f"ends on a stray {tail!r}: end on a full sentence")
     if all_reads_succeeded and ends_in_question(text):

@@ -127,6 +127,8 @@ class _TurnState:
     # Calls to the kernel's own tools this turn, against the agent's max_builtin_calls; set once one is refused.
     builtin_calls: int = 0
     builtins_refused: bool = False
+    # Calls being made now, by (tool, input hash): the same call made twice in one step waits for the first.
+    inflight: dict[tuple[str, str], asyncio.Event] = field(default_factory=dict[tuple[str, str], asyncio.Event])
 
     def last_step(self, step: int) -> bool:
         """The last step of a turn with more than one offers no tool, so the turn always keeps a step to answer in."""
@@ -350,6 +352,9 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
     async def call(ctx: RunContext[None], **arguments: Any) -> Any:
         tool_call_id = ctx.tool_call_id or f"call_{len(state.order)}"
         asked = input_hash(arguments)
+        if (running := state.inflight.get((grant.name, asked))) is not None:
+            # The same call twice in one step: the library runs a step's calls together, so the first is still out.
+            await running.wait()
         same = next(
             (r for r in state.records.values() if r.tool == grant.name and r.input_hash == asked and r.status in DONE),
             None,
@@ -360,7 +365,8 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
             # it with no answer.
             state.tools_closed = True
             rec = state.record(tool_call_id, grant.name, arguments)
-            rec.status, rec.output = same.status, same.output
+            # Its card names the call it repeats, which already shows the result, so nothing is drawn twice.
+            rec.status, rec.output = same.status, {"repeatOf": same.tool_call_id}
             return {"note": REPEATED_CALL, "result": same.output}
         # The agent's tool-call budget counts the calls that reach a system; the built-in present tool reaches none
         # and is bounded by the step limit instead, so an agent with no tool calls can still answer with a widget.
@@ -369,33 +375,38 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
             raise ToolLimitExceeded(f"The agent may make {cap} tool calls a reply.")
         state.granted_calls += 1
         rec = state.record(tool_call_id, grant.name, arguments)
-        started = time.monotonic()
-        # A call a person approved carries the token: a gated write's, or one the gateway sent for review.
-        approved = grant.gated or ctx.tool_call_approved
-        outcome = await ports.tools.execute(
-            grant.name, arguments, key=rec.key, approval_token=token if approved else None
-        )
-        if outcome.needs_review is not None and not ctx.tool_call_approved:
-            # The gateway would not send it without a person: the turn pauses for approval with the reason.
-            rec.status = "gated"
-            raise ApprovalRequired(metadata={"reason": outcome.needs_review})
-        rec.duration_ms = int((time.monotonic() - started) * 1000)
-        rec.status = "ok" if outcome.ok else "error"
-        rec.output = outcome.output
-        rec.view = outcome.view
-        part = (outcome.view or {}).get("part")
-        drawn = [p for r in state.records.values() if r is not rec and (p := (r.view or {}).get("part"))]
-        if part and present.already_shown(part, drawn):
-            # A record or rows an earlier call this turn already drew (a query's row, then the same record read by
-            # id): drawn once.
-            rec.view = None
-        said = outcome.for_model if outcome.for_model is not None else outcome.output
-        if outcome.ok and (outcome.view or {}).get("part"):
-            # Drawn for the person already (a table or a record): told so, the model answers in text instead of
-            # presenting the same rows a second time.
-            return {"note": SHOWN, "result": said}
-        # Errors go back to the model as information so it can explain or try other arguments (spec 15 4.2).
-        return said if outcome.ok else {"error": said}
+        done = state.inflight[(grant.name, asked)] = asyncio.Event()
+        try:
+            started = time.monotonic()
+            # A call a person approved carries the token: a gated write's, or one the gateway sent for review.
+            approved = grant.gated or ctx.tool_call_approved
+            outcome = await ports.tools.execute(
+                grant.name, arguments, key=rec.key, approval_token=token if approved else None
+            )
+            if outcome.needs_review is not None and not ctx.tool_call_approved:
+                # The gateway would not send it without a person: the turn pauses for approval with the reason.
+                rec.status = "gated"
+                raise ApprovalRequired(metadata={"reason": outcome.needs_review})
+            rec.duration_ms = int((time.monotonic() - started) * 1000)
+            rec.status = "ok" if outcome.ok else "error"
+            rec.output = outcome.output
+            rec.view = outcome.view
+            part = (outcome.view or {}).get("part")
+            drawn = [p for r in state.records.values() if r is not rec and (p := (r.view or {}).get("part"))]
+            if part and present.already_shown(part, drawn):
+                # A record or rows an earlier call this turn already drew (a query's row, then the same record read by
+                # id): drawn once.
+                rec.view = None
+            said = outcome.for_model if outcome.for_model is not None else outcome.output
+            if outcome.ok and (outcome.view or {}).get("part"):
+                # Drawn for the person already (a table or a record): told so, the model answers in text instead of
+                # presenting the same rows a second time.
+                return {"note": SHOWN, "result": said}
+            # Errors go back to the model as information so it can explain or try other arguments (spec 15 4.2).
+            return said if outcome.ok else {"error": said}
+        finally:
+            done.set()
+            state.inflight.pop((grant.name, asked), None)
 
     tool = Tool[None].from_schema(
         cast(Callable[..., Awaitable[Any]], call), grant.name, grant.description, grant.input_schema, takes_ctx=True
@@ -509,7 +520,10 @@ async def _end_check(
         if (r := state.records[i]).server != UNGRANTED and r.tool not in (present.NAME, search.NAME, skillset.NAME)
     ]
     reads_ok = bool(systems) and all(r.status == "ok" and r.access == "read" for r in systems)
-    found = answer_check.defects(state.text, needs_citation=had_passages and not systems, all_reads_succeeded=reads_ok)
+    offered = frozenset(state.grants)
+    found = answer_check.defects(
+        state.text, needs_citation=had_passages and not systems, all_reads_succeeded=reads_ok, tools=offered
+    )
     if not found:
         return None, TokenUsage()
     try:
@@ -524,7 +538,9 @@ async def _end_check(
     corrected = again.output.strip()
     if not corrected:
         return None, spent
-    still = answer_check.defects(corrected, needs_citation=had_passages and not systems, all_reads_succeeded=reads_ok)
+    still = answer_check.defects(
+        corrected, needs_citation=had_passages and not systems, all_reads_succeeded=reads_ok, tools=offered
+    )
     return (corrected if len(still) < len(found) else None), spent
 
 
