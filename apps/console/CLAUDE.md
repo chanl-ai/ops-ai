@@ -41,8 +41,9 @@ Check every changed route headless with Playwright before calling the change don
 | Loading, error and empty states | On the mock (`pnpm dev`), add `?mock=slow`, `?mock=error` or `?mock=empty` to the route |
 | Developer pages | `/dev/*` (the widget gallery and others) answer only under `next dev` or with `OPS_ALLOW_PREVIEW_PAGES=1` (`src/proxy.ts:10`) |
 
-Before the browser, call the routes the screen uses as the same person: `make api GET <path> AS=<role> SVC=<service>`
-([Calling the API as a person](../../CLAUDE.md#calling-the-api-as-a-person)). A screen that shows the wrong data
+Before the browser, call the routes the screen uses as the same person: `make api GET <path> AS=<role> SVC=<service>`,
+or the area's own targets (`chat`, `kb-*`, `apps-*`, `tools-*`, `runs-*`, `tasks-*`, `memories-*`), never an ad-hoc
+script or SQL; `make test-data-clean` removes what they made ([make/CLAUDE.md](../../make/CLAUDE.md)). A screen that shows the wrong data
 because the route returns it is fixed in the service, never in the hook or component.
 
 ## Where things live

@@ -55,8 +55,9 @@ policy in the OPA it is given.
 ## Try it as a person
 
 ```bash
-make api GET /v1/apps AS=builder SVC=tools
-make api GET /v1/executions AS=builder SVC=tools Q='pageSize=5'   # the call log
+make apps-list AS=builder                                          # the Apps page's cards
+make tools-calls AS=builder LIMIT=5                                # the call log
+make tools-run APP=plugin:acme.ticketdesk TOOL=ticketdesk_get_ticket INPUT='{"number": 1}' AS=builder
 make api GET /v1/egress/hosts AS=security SVC=tools
 make chat-calls THREAD=th_… AS=james                              # one chat thread's tool calls
 ```

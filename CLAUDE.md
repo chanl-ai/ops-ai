@@ -94,7 +94,7 @@ How the make files are laid out and every variable they read: `docs/architecture
 | Whole stack in the background (database, every service, worker, console :3016, embed :3020) | `make up`; `make health`; `make logs SVC=<svc> FOLLOW=0`; `make ports` |
 | Run someone's branch on the same stack | `make review BRANCH=<name>`; `make up` in your checkout moves the stack back |
 | Console on the mock, no services | `make dev` → http://localhost:3016 (foreground; not while `make up` holds :3016) |
-| Call a route as a seeded person | `make api GET /v1/me AS=viewer` ([Calling the API as a person](#calling-the-api-as-a-person)) |
+| Call a route or drive an area as a seeded person | `make api GET /v1/me AS=viewer`, `make kb-search …`, `make chat …` ([Calling the API as a person](#calling-the-api-as-a-person)) |
 | Tests for what you changed | `make test PKG=services/<x> T=tests/<file>`; `make test` runs what changed since `origin/main` |
 | One use case | `make usecase-test UC=<id> LAYER=api\|sdk\|cli\|ui` |
 | Console gate | `pnpm verify` |
@@ -233,22 +233,10 @@ gotchas: `docs/architecture/make.md`.
 
 ### Calling the API as a person
 
-Before opening a browser, exercise a change through the same routes the console calls, signed in for real as a
-seeded person. The targets are in `make/dev.mk`; the full reference is `make/CLAUDE.md`.
-
-| Target | Example |
-|---|---|
-| `make api` | `make api GET /v1/me AS=viewer`; `make api GET /v1/chat/threads AS=james SVC=agents Q='pageSize=2'` |
-| `make sdk-call` | `make sdk-call CALL='ops.raw.platform.me_me()' AS=builder` |
-| `make chat` | `make chat AS=james AGENT='Ops Assistant' SAY='What cases are open?'` |
-| `make chat-script` | `make chat-script FILE=docs/usecases/chat/salesforce-case-helper.json AS=james` |
-| `make chat-show`, `make chat-calls` | `make chat-show THREAD=th_… AS=james` |
-| `make chat-agents`, `make chat-accounts`, `make chat-kbs` | `make chat-agents AS=james` |
-
-`AS=` takes a role from `services/platform-service/seed/dev-roles.json` (`admin`, `builder`, `approver`, `viewer`,
-`security`, `platform`), a seeded person's first name or an email. Always pass it: make's built-in `AS` variable (the
-assembler, `as`) wins over the `AS ?= admin` default in `make/dev.mk:115`, so a call without `AS=` signs in as `as` and
-is refused.
+Test and call the system through the make targets (`api`, `chat`, `kb-*`, `apps-*`, `tools-*`, `runs-*`, `tasks-*`,
+`memories-*`, `test-data-clean`), with `AS=` to act as a person, instead of ad-hoc scripts or SQL; read the database
+only to diagnose. Every target, variable and the test-data rule:
+[make/CLAUDE.md](make/CLAUDE.md#calling-the-api-as-a-person-devmk-climk).
 
 ### Tests
 

@@ -36,7 +36,8 @@ into it before reviewing it.
 | Fragment | Targets | Owns |
 |---|---|---|
 | `make/env.mk` | none | Ports (overridable defaults), `OPS_PORT_OFFSET`, compose project, the stack's state folders in the main checkout, the `OPS_*` the services read derived from the ports, the help formatter |
-| `make/dev.mk` | `up`, `down`, `restart`, `health`, `logs`, `ports` | The local stack through `scripts/stack.sh` |
+| `make/dev.mk` | `up`, `down`, `restart`, `health`, `logs`, `ports`, `api`, `sdk-call` | The local stack through `scripts/stack.sh`; one route or SDK call as a seeded person (`scripts/api_as.py`) |
+| `make/cli.mk` | `<area>-<verb>` (`chat`, `kb-*`, `apps-*`, `tools-*`, `runs-*`, `tasks-*`, `cases-*`, `files-*`, `documents-*`, `people-*`, `models-*`, `memories-*`), `test-data-clean` | The `ops` command (`sdk/python`) as a seeded person (`AS=`); the list: `make/CLAUDE.md` |
 | `make/db.mk` | `db-up`, `db-down`, `db-shell`, `db-reset`, `migrate`, `migration` | Compose (PostgreSQL, OPA) and Alembic |
 | `make/db-scripts.mk` | `db-ddl`, `db-upgrade-sql`, `db-drift`, `db-release`, `db-scripts-proof` | The schema as scripts a DBA applies (`deploy/database/schema.py`, `docs/deploy/database.md`) |
 | `make/services.mk` | `<verb>-<svc>`, generated | `SERVICES`, each service's folder, `SERVICE_VERBS`; one rule template expanded per pair |

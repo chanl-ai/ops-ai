@@ -33,8 +33,8 @@ This folder holds docs and their scripts together, so its agent guidance lives h
 | A ui script | Node, `<service>/scripts/test-uc-NNN-ui.mjs`, with `withUiStack`, `chromium` and `check` from `@ops-ai/usecase-runner/harness`; headless Chromium against a production build of the console (example: `console/scripts/test-uc-047-ui.mjs`) |
 | Run it | `make usecase-test UC=<id> LAYER=<layer>`; stories from the latest runs: `make usecase-report UC=<id>` |
 | Lint | ruff skips `docs/usecases` (`pyproject.toml`, `extend-exclude`); run `uv run ruff check docs/usecases/<service>/scripts/<file>.py` on a script you change |
-| Try a behaviour on the live stack first | `make chat AS=james SAY='…'` and `make api GET <path> AS=<role>` call the routes the console uses, as a seeded person (`make/CLAUDE.md`) |
-| A scripted chat on the live stack | `make chat-script FILE=docs/usecases/chat/<x>.json AS=james` prints PASS or FAIL per turn. These files are not run by `make usecase-test`, and each turn reaches whatever model the stack's aliases point at. `check-docs.mjs` accepts only `.md`, `.html`, `.pdf`, `.png`, `.svg`, `.gif` and `.yaml` names here, so a `.json` file in `chat/` fails `make docs-verify` once it is committed |
+| Try a behaviour on the live stack first | The make targets (`api`, `chat`, `kb-*`, `apps-*`, `tools-*`, `runs-*`, `tasks-*`, `memories-*`) call the routes the console uses, as a seeded person (`AS=`), in place of an ad-hoc script or SQL; `make test-data-clean` removes what they made (`make/CLAUDE.md`) |
+| A scripted chat on the live stack | `make chat-script FILE=docs/usecases/chat/<x>.yaml AS=james` prints PASS or FAIL per turn. These files are not run by `make usecase-test`, and each turn reaches whatever model the stack's aliases point at. They are `.yaml`, since `check-docs.mjs` accepts only `.md`, `.html`, `.pdf`, `.png`, `.svg`, `.gif` and `.yaml` names here |
 
 ## Rules
 

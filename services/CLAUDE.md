@@ -46,6 +46,11 @@ Run one file from the root with `make test PKG=services/<x> T=tests/<file>.py`. 
 tools-service pass `T=` to pytest today; the other Makefiles ignore it and run the whole suite. For those, name the
 files in `PYTEST_ADDOPTS` instead: `PYTEST_ADDOPTS=tests/test_health.py make test PKG=services/kb-service`.
 
+On the live stack, exercise a service through the root's make targets (`api`, `chat`, `kb-*`, `apps-*`, `tools-*`,
+`runs-*`, `tasks-*`, `memories-*`), with `AS=` to act as a person, instead of ad-hoc scripts or SQL; read the database
+only to diagnose, and clear what the targets made with `make test-data-clean`
+([make/CLAUDE.md](../make/CLAUDE.md)).
+
 kb-service, models-service and runner-service include `make/service-stub.mk`, so their `stop`, `logs` and `health`
 answer "not started" even though `make up` runs them; use the root `make logs SVC=kb` and `make health`.
 
