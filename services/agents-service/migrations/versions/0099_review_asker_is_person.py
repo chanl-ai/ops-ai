@@ -21,19 +21,29 @@ depends_on = None
 MARK = " on behalf of "
 SERVICE_ASKED = f"requested_by LIKE '%-service{MARK}%'"
 
+# PostgreSQL rebuilds the body from its keys with json_each and json_object_agg, so no JSONB operator is needed.
 POSTGRES_UP = f"""
-UPDATE registry_publish_requests
-SET requested_by = split_part(requested_by, '{MARK}', 2),
+UPDATE registry_publish_requests AS r
+SET requested_by = split_part(r.requested_by, '{MARK}', 2),
     body = (
-        COALESCE(body::jsonb, '{{}}'::jsonb) || jsonb_build_object('openedBy', split_part(requested_by, '{MARK}', 1))
-    )::json
-WHERE {SERVICE_ASKED}
+        SELECT json_object_agg(k, v)
+        FROM (
+            SELECT e.key AS k, e.value AS v FROM json_each(COALESCE(r.body, '{{}}'::json)) AS e
+            UNION ALL
+            SELECT 'openedBy', to_json(split_part(r.requested_by, '{MARK}', 1))
+        ) AS kept
+    )
+WHERE r.{SERVICE_ASKED}
 """
 POSTGRES_DOWN = f"""
-UPDATE registry_publish_requests
-SET requested_by = (body::jsonb ->> 'openedBy') || '{MARK}' || requested_by,
-    body = (body::jsonb - 'openedBy')::json
-WHERE body::jsonb ? 'openedBy'
+UPDATE registry_publish_requests AS r
+SET requested_by = json_extract_path_text(r.body, 'openedBy') || '{MARK}' || r.requested_by,
+    body = (
+        SELECT COALESCE(json_object_agg(e.key, e.value), '{{}}'::json)
+        FROM json_each(r.body) AS e
+        WHERE e.key <> 'openedBy'
+    )
+WHERE json_extract_path_text(r.body, 'openedBy') IS NOT NULL
 """
 # SQL Server reads every SET expression against the row as it was, so the requester is split before it is replaced.
 MSSQL_UP = f"""
