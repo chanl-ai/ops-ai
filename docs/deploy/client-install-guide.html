@@ -209,16 +209,17 @@ how the platform is secured, how to deploy and run it, and which parts are built
       <li><a href="#build-with-ops-ai"><span class="n">4</span>Build with Ops AI</a></li>
       <li><a href="#workflows"><span class="n">5</span>Workflows</a></li>
       <li><a href="#agents"><span class="n">6</span>Agents</a></li>
-      <li><a href="#apps"><span class="n">7</span>Apps</a></li>
-      <li><a href="#data-and-database"><span class="n">8</span>Data and database</a></li>
-      <li><a href="#security-and-governance"><span class="n">9</span>Security and governance</a></li>
-      <li><a href="#models"><span class="n">10</span>Models</a></li>
-      <li><a href="#deployment-options"><span class="n">11</span>Deployment options</a></li>
-      <li><a href="#install"><span class="n">12</span>Install</a></li>
-      <li><a href="#operate"><span class="n">13</span>Operate</a></li>
-      <li><a href="#azure-sql"><span class="n">14</span>Azure SQL</a></li>
-      <li><a href="#whats-built-today"><span class="n">15</span>What's built today</a></li>
-      <li><a href="#support"><span class="n">16</span>Support</a></li>
+      <li><a href="#ops-assistant"><span class="n">7</span>The Ops Assistant</a></li>
+      <li><a href="#apps"><span class="n">8</span>Apps</a></li>
+      <li><a href="#data-and-database"><span class="n">9</span>Data and database</a></li>
+      <li><a href="#security-and-governance"><span class="n">10</span>Security and governance</a></li>
+      <li><a href="#models"><span class="n">11</span>Models</a></li>
+      <li><a href="#deployment-options"><span class="n">12</span>Deployment options</a></li>
+      <li><a href="#install"><span class="n">13</span>Install</a></li>
+      <li><a href="#operate"><span class="n">14</span>Operate</a></li>
+      <li><a href="#azure-sql"><span class="n">15</span>Azure SQL</a></li>
+      <li><a href="#whats-built-today"><span class="n">16</span>What's built today</a></li>
+      <li><a href="#support"><span class="n">17</span>Support</a></li>
     </ol>
   </nav>
 
@@ -570,8 +571,42 @@ ops.agents.chat(&quot;ag_guide&quot;, &quot;What documents open a business accou
 <p>Coverage: <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/agent-example-coverage.md">agent-example-coverage.md</a>.</p>
 </section>
 
+<section id="ops-assistant" aria-labelledby="ops-assistant-h">
+<h2 id="ops-assistant-h"><span class="n">7</span>The Ops Assistant</h2>
+<p>The Ops Assistant answers in a chat by looking things up in your team&#39;s Apps, then replying with what it read. It acts
+as you, so it reaches only what your own sign-in allows.</p>
+<h3 id="ops-assistant-a-checklist-for-longer-asks">A checklist for longer asks</h3>
+<p>An ask that needs several lookups, more than one App, or a change shows a short checklist above the answer. The assistant
+ticks each step off as it finishes it.</p>
+<h3 id="ops-assistant-when-a-sign-in-is-needed">When a sign-in is needed</h3>
+<p>If a step needs an App you have not connected, the assistant stops at that step and shows a <strong>Connect</strong> card. Press it,
+sign in, and the chat carries on at the same step. Nothing is retyped.</p>
+<h3 id="ops-assistant-think-harder">Think harder</h3>
+<p>A reply that took a plan or several lookups offers <strong>Think harder</strong>. One press answers the same question again on the
+deeper model. Writing &quot;think harder&quot; in a message, alone or with the question, does the same.</p>
+<h3 id="ops-assistant-saving-to-an-app">Saving to an App</h3>
+<p>Before it changes anything in an App, the assistant reads the change back to you. It writes only after you say <strong>Save</strong>.
+Until then nothing in the App has changed.</p>
+<h3 id="ops-assistant-follow-ups">Follow-ups</h3>
+<ul>
+<li><strong>Reused reads.</strong> A chat reuses what it already read from an App for 5 minutes, so a follow-up answers faster. The reply
+says when it used an earlier read. A save to that App clears the reused reads, so the next look reads the App again.</li>
+<li><strong>Suggestion chips.</strong> Under a reply, short chips offer likely next questions. Press one to ask it.</li>
+<li><strong>Memories.</strong> The assistant suggests what to remember and asks first. It keeps nothing silently.</li>
+</ul>
+<h3 id="ops-assistant-which-app-and-which-account">Which App and which account</h3>
+<ul>
+<li>A chat uses the Apps your team turned on. Before your first message, the chat&#39;s connector picker lets you leave an App
+out of that chat.</li>
+<li>With two accounts of the same App connected and no default, the assistant asks which one to use. Your pick becomes the
+default for calls that name no account.</li>
+<li>An App your team has off shows a card with <strong>Ask an admin</strong>.</li>
+</ul>
+<p>See <a href="#apps-connectors">Apps</a> for Connectors, where you manage your sign-ins.</p>
+</section>
+
 <section id="apps" aria-labelledby="apps-h">
-<h2 id="apps-h"><span class="n">7</span>Apps</h2>
+<h2 id="apps-h"><span class="n">8</span>Apps</h2>
 <p>An App is something outside Ops AI that your agents and workflows work with. Each App brings Tools, the actions an agent
 or a workflow step can take with it, and some also bring Resources: agents, skills, workflows and document types your
 team can add as its own copies. An App signs in with an Account: the team&#39;s, or a person&#39;s own.</p>
@@ -593,11 +628,13 @@ team can add as its own copies. An App signs in with an Account: the team&#39;s,
 <tr><td>1. Press <strong>Connect</strong> on the App&#39;s card</td><td>A small window opens</td></tr>
 <tr><td>2. Name the Account, or keep the suggested name (the App and your team)</td><td>Steps and Tools pick an Account by this name</td></tr>
 <tr><td>3. Keep <strong>Team account</strong> ticked for an Account anyone in the team can run Tools as, or untick it to connect your own</td><td>Untick it and the Account is yours alone</td></tr>
-<tr><td>4. Keep <strong>App credential</strong> on Ops AI&#39;s app, and press <strong>Connect</strong></td><td>The App&#39;s own sign-in page opens; allow access there</td></tr>
-<tr><td>5. The window closes</td><td>The App&#39;s page opens with the Account listed as <strong>Default</strong> and <strong>Connected</strong></td></tr>
+<tr><td>4. For an App that asks where you sign in (Salesforce), pick the place: login.salesforce.com, test.salesforce.com, or your company&#39;s address (My Domain), typed as its host</td><td>The sign-in opens there</td></tr>
+<tr><td>5. Keep <strong>Auth config</strong> on Ops AI&#39;s app, and press <strong>Connect</strong></td><td>The App&#39;s own sign-in page opens; allow access there</td></tr>
+<tr><td>6. The window closes</td><td>The App&#39;s page opens with the Account listed as <strong>Default</strong> and <strong>Connected</strong>, and its header reads <strong>Connected · <Account name></strong></td></tr>
 </tbody></table></div>
 <p>An App is <strong>Connected</strong> only once an Account has signed in or a test has passed; saving settings alone does not count.
-A team admin turns an App on.</p>
+Signing in an Account turns its App on for the team, and <strong>Add account</strong> works on an App with no Account yet: the
+first Account becomes the default. A team admin connects an App.</p>
 <h4 id="apps-the-first-time-a-team-turns-on-a-plugin39s-app">The first time a team turns on a plugin&#39;s App</h4>
 <p>An App a plugin brings (<a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/plugins.md">plugins guide</a>) needs two things before its card offers Connect, and its first
 Connect window asks for more than the steps above.</p>
@@ -622,19 +659,43 @@ enough to use it everywhere: test runs and live runs both sign in with the accou
 <p>Without a sandbox account, a test run signs in with the live account. It can read, but every write it makes waits for
 a person to approve it first, so testing never changes live data unseen.</p>
 <ul>
-<li><strong>Connect another account</strong> adds a second Account of the same App, under its own name, for example a second region.
-A step or a call names it to use it.</li>
+<li><strong>Add account</strong> on an auth config adds a second Account of the same App, under its own name, for example a second
+region. It starts from where the default Account signs in. A step or a call names it to use it.</li>
 <li><strong>Make my default</strong> makes one Account the one your own calls use when they name none.</li>
 <li>An Account the App stopped accepting reads <strong>Expired</strong> with <strong>Reconnect</strong>. Reconnect opens the App&#39;s sign-in page
 again; nothing is typed into Ops AI.</li>
 <li>On the App&#39;s <strong>Settings</strong>, <strong>Everyone signs in with their own account</strong> decides whether each person connects their own
 Account. Off, every call runs as the team Account.</li>
 </ul>
-<h3 id="apps-app-credentials-and-secrets">App credentials and Secrets</h3>
-<p><strong>Credentials › App credentials</strong> lists the OAuth app each App signs in with: <strong>Ops AI&#39;s app</strong>, or <strong>Your own app</strong> when
-your team registered its own. <strong>Edit</strong> replaces your own app&#39;s client secret; it is sealed when saved and never shown
-again. To bring your own app, open the App&#39;s <strong>Settings › Use your own app</strong>, enter its client ID and secret, and
-register the return address it shows. Changing the app or its permissions makes everyone connect again.</p>
+<h3 id="apps-connectors">Connectors</h3>
+<p><strong>Connectors</strong> in the sidebar shows your own sign-ins.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Page</th><th>What it holds</th></tr></thead>
+<tbody>
+<tr><td>My connectors</td><td>One card for each App your team turned on: what it can do, who it signs in as, and one action (Connect, Reconnect or Add another account). An App your team has off still has a card, with <strong>Ask an admin</strong></td></tr>
+<tr><td>Team setup</td><td>The admin view of the same Apps. Admins change setup here; members see it read-only</td></tr>
+</tbody></table></div>
+<ul>
+<li><strong>Add another account</strong> signs in through the same setup, so a personal and an office login sit side by side. Signing in
+again as a login already linked updates that account and says <strong>Already connected as ...</strong>.</li>
+<li>With two accounts of one App and no default, the assistant asks which to use. See
+<a href="#ops-assistant">The Ops Assistant</a>.</li>
+<li>In a chat, the connector picker narrows which Apps that chat may use, before its first message.</li>
+</ul>
+<h3 id="apps-auth-configs-and-secrets">Auth configs and Secrets</h3>
+<p>An App&#39;s <strong>Auth configs</strong> tab, and <strong>Auth configs</strong> in the sidebar, list the OAuth app each App signs in with: <strong>Ops AI</strong>,
+kept by Ops AI, or your team&#39;s own app. To bring your own app (a Salesforce connected app, a GitHub OAuth app):</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Step</th><th>Where</th></tr></thead>
+<tbody>
+<tr><td>1. Copy the <strong>Callback URL</strong> Ops AI shows</td><td><strong>New auth config</strong>, <strong>Edit</strong>, and the auth config&#39;s row on the App&#39;s page</td></tr>
+<tr><td>2. Register it as the callback URL of your app at the system</td><td>Salesforce: the connected app&#39;s Callback URL. GitHub: the OAuth app&#39;s Authorization callback URL</td></tr>
+<tr><td>3. Enter the app&#39;s client ID and secret in Ops AI</td><td><strong>New auth config</strong> or <strong>Edit</strong>; the secret is sealed and only its last four characters are shown</td></tr>
+</tbody></table></div>
+<p>A Salesforce app needs the <strong>Manage user data via APIs (api)</strong> and <strong>Perform requests at any time (refresh_token,
+offline_access)</strong> scopes; without the second, people are signed out when the first token ends.</p>
+<p>Ops AI builds the callback URL from its console address (<code>OPS_CONSOLE_URL</code>), so it must match the address people open.
+Changing the client ID or permissions makes the accounts on it sign in again.</p>
 <p><strong>Credentials › Secrets</strong> lists the values Tools send, such as an API key in a header. A value is encrypted, never shown
 again, and removed from whatever an App answers. A Security admin adds, rotates and deletes Secrets.</p>
 <h3 id="apps-tools">Tools</h3>
@@ -695,7 +756,7 @@ that uses its Tools before anything stops. The App&#39;s Accounts and the Resour
 </section>
 
 <section id="data-and-database" aria-labelledby="data-and-database-h">
-<h2 id="data-and-database-h"><span class="n">8</span>Data and database</h2>
+<h2 id="data-and-database-h"><span class="n">9</span>Data and database</h2>
 <p>Ops AI keeps everything in one PostgreSQL database. Each of the seven services owns its own tables, applies its own
 migration history and connects with its own login, which can read and write rows in that service&#39;s tables and nothing
 else. File bytes live outside the database, on a volume or in object storage.</p>
@@ -772,7 +833,7 @@ may not update or delete. A tamper-evident hash chain and export to WORM storage
 </section>
 
 <section id="security-and-governance" aria-labelledby="security-and-governance-h">
-<h2 id="security-and-governance-h"><span class="n">9</span>Security and governance</h2>
+<h2 id="security-and-governance-h"><span class="n">10</span>Security and governance</h2>
 <p>Ops AI is built so that software can draft any change and only a person can let one through. The controls below are
 layered: who you are (sign-in), what you may do in a team (roles), what a single write needs (approvals), where a call
 may go (the gateways and the allow-list), and what is kept as evidence (audit).</p>
@@ -835,7 +896,7 @@ credentials and open no connections of their own.</p>
 <tr><td>Registry</td><td>Operations come from tool modules: imported from OpenAPI 3.0 or 3.1, discovered from an MCP server, or written by a builder. A module&#39;s major change opens a Security review; calls keep the published shape until the new version is published</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Connections</td><td>How the platform signs in to a system, one account at a time: API key, basic or bearer, OAuth client credentials, OAuth authorization code with PKCE, either OAuth kind proving the app with a signed client assertion instead of a secret, a signed service-account JWT grant (DocuSign, Google), client certificate (mutual TLS). The signing key is sealed like a client secret and never read back; reads show the certificate&#39;s thumbprint and expiry. Tokens are stored encrypted and refreshed one at a time</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Each person signing in to a system with their own account</td><td>A run would use only the token of the person it acts for</td><td><span class="b b-plan">Planned</span></td></tr>
-<tr><td>Test and live runs</td><td>Live runs and chats use an app&#39;s default account; test runs use its sandbox account when it has one, and writes in a test always answer from the operation&#39;s mock</td><td><span class="b b-ok">Built</span> sandbox accounts are behind a feature flag</td></tr>
+<tr><td>Test and live runs</td><td>Live runs and chats use an app&#39;s default account; test runs use its test account when it has one. A test run&#39;s write on a live account waits for a person&#39;s approval, and the person running the test does not count as one, whatever their role; on a test account it runs. A test run with a saved mock answer for its input gets that answer instead</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Outbound allow-list</td><td>HTTPS only, to hosts on your tenant&#39;s list. Every address a host resolves to is checked inside the connection, so DNS cannot be used to redirect a call. Private ranges are allowed only when listed; loopback, link-local and cloud metadata addresses never. No redirects are followed and no cookies kept. The list starts empty: nothing is reachable until a Security admin adds a host</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Your internal certificate authority</td><td>Trusted for outbound calls when you provide its certificate</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>MCP for AI assistants</td><td>Your team&#39;s read tools served over MCP through the same gateway, to a person or an API key of that team</td><td><span class="b b-part">Partial</span> reads only, as test runs</td></tr>
@@ -880,7 +941,7 @@ Details and status are in <a href="#data-and-database-the-audit-trail">Data and 
 </section>
 
 <section id="models" aria-labelledby="models-h">
-<h2 id="models-h"><span class="n">10</span>Models</h2>
+<h2 id="models-h"><span class="n">11</span>Models</h2>
 <p>Every model call in Ops AI, from an agent&#39;s turn, a workflow&#39;s AI step or a document read, goes through one internal
 service: the AI gateway (models-service). It knows which key is calling, what that key may still spend, which model a
 name points at, and how sensitive the data is that the model may receive. Services hold a model key; none holds your
@@ -942,7 +1003,7 @@ automated use cases of each release run on it, so no real model call is made in 
 </section>
 
 <section id="deployment-options" aria-labelledby="deployment-options-h">
-<h2 id="deployment-options-h"><span class="n">11</span>Deployment options</h2>
+<h2 id="deployment-options-h"><span class="n">12</span>Deployment options</h2>
 <p>The same images run in every layout. What changes is how they are started, how secrets reach them and where the bytes
 of files are kept. PostgreSQL is always yours, outside the containers.</p>
 <div class="table-wrap"><table>
@@ -992,7 +1053,7 @@ workload and watch the work queue and database load (<a href="#operate-what-to-w
 </section>
 
 <section id="install" aria-labelledby="install-h">
-<h2 id="install-h"><span class="n">12</span>Install</h2>
+<h2 id="install-h"><span class="n">13</span>Install</h2>
 <p>One script installs Ops AI on a machine with Docker from a clone of the repository, asks a few questions, checks the
 result, and later upgrades, backs up, restores and reports on the same install (<a href="#operate">Operate</a>). It pulls the
 published images by default; a release&#39;s offline image file, or a build from source, serves a machine with no
@@ -1172,7 +1233,7 @@ machine: they name the mirror&#39;s file URLs, so do not commit them.</p>
 </section>
 
 <section id="operate" aria-labelledby="operate-h">
-<h2 id="operate-h"><span class="n">13</span>Operate</h2>
+<h2 id="operate-h"><span class="n">14</span>Operate</h2>
 <p>How to check, upgrade, back up, restore and scale an Ops AI install. The install script&#39;s commands come first; the
 manual commands after them are the fallback, and the ones Kubernetes uses.</p>
 <p>Run the script&#39;s commands from the clone the install ran in; they read its settings from <code>ops-ai.env</code> there. In the
@@ -1300,7 +1361,7 @@ own versioning or replication.</p>
 </section>
 
 <section id="azure-sql" aria-labelledby="azure-sql-h">
-<h2 id="azure-sql-h"><span class="n">14</span>Azure SQL</h2>
+<h2 id="azure-sql-h"><span class="n">15</span>Azure SQL</h2>
 <div class="note warn"><p>Ops AI does not run on Azure SQL Database or SQL Server yet. The scripts below are ready for your DBA to review now,
 so the review can run in parallel with the remaining work. Install on PostgreSQL today; Azure Database for
 PostgreSQL Flexible Server is supported.</p>
@@ -1343,7 +1404,7 @@ sqlcmd -b -U ops_migrator -d ops -i grants.sql</code></pre></div>
 </section>
 
 <section id="whats-built-today" aria-labelledby="whats-built-today-h">
-<h2 id="whats-built-today-h"><span class="n">15</span>What's built today</h2>
+<h2 id="whats-built-today-h"><span class="n">16</span>What's built today</h2>
 <h3 id="whats-built-today-agents-and-chat">Agents and chat</h3>
 <div class="table-wrap"><table>
 <thead><tr><th>Capability</th><th>Status</th></tr></thead>
@@ -1458,7 +1519,7 @@ sqlcmd -b -U ops_migrator -d ops -i grants.sql</code></pre></div>
 </section>
 
 <section id="support" aria-labelledby="support-h">
-<h2 id="support-h"><span class="n">16</span>Support</h2>
+<h2 id="support-h"><span class="n">17</span>Support</h2>
 <div class="table-wrap"><table>
 <thead><tr><th>Item</th><th>Detail</th></tr></thead>
 <tbody>

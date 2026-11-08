@@ -482,6 +482,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `packages/ops_signin/overview.md` | Sign-in library: password hashing, OIDC with PKCE, SAML, and a fake identity provider |
 | `sdk/python.md` | Python SDK: connect with an API key, run workflows and decide their tasks, the client's resources and errors |
 | `sdk/typescript.md` | TypeScript SDK: the same client for Node, typed from the API reference |
+| `guide/ops-assistant.md` | The Ops Assistant: checklist, Connect card, Think harder, Save read-back, reused reads, suggestion chips, memories |
 | `guide/whats-new.md` | What's new: every change a person would notice, newest first, built from the changelog |
 | `guide/use-cases/card-disputes.md` | Use case: card disputes, from the request to the approved credit, with SDK code |
 | `guide/use-cases/chat-and-human-tasks.md` | Use case: start the day from the chat home and decide Human Tasks, with SDK code |

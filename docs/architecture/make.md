@@ -188,6 +188,7 @@ data volume.
 | Before committing | `make verify` |
 | One package's or service's tests | `make test PKG=packages/ops_access` or `make test PKG=services/agents-service` |
 | Tests of what changed since `origin/main` | `make test` |
+| Run the core and impacted UI use cases (about 10 minutes, one line per use case) | `make uc-impacted` |
 | Run an experiment | `make experiment E=1` |
 | Stop everything | `make down` (`KEEP_DB=1` keeps PostgreSQL and OPA) |
 
