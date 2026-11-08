@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { CheckCircle2, FolderOpen } from 'lucide-react';
+import { CheckCircle2, FolderOpen, MousePointerClick } from 'lucide-react';
 
 import { EmptyState } from '@/components/shared/empty-state';
 import { isOpen } from '@/components/reviews/review-columns';
@@ -11,8 +11,14 @@ import { Item, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/comp
 import { Kbd } from '@/components/ui/kbd';
 import { Skeleton } from '@/components/ui/skeleton';
 import { money } from '@/lib/format';
+import { ListItem } from '@/components/shared/list-item';
 import { cn } from '@/lib/utils';
 import type { Review } from '@/lib/types/domain';
+
+/** The task pane before a task is open: the queue beside it is where one is picked. */
+export function PickATask() {
+  return <EmptyState icon={MousePointerClick} title="Pick a task" description="Choose one from the queue to see what it asks and decide it." testId="pick-a-task" />;
+}
 
 export function QueueDone() {
   return <EmptyState icon={CheckCircle2} title="Nothing left to decide" description="Every task in this view is decided. New ones appear here as runs pause for a person." testId="queue-done" />;
@@ -102,8 +108,7 @@ export function TaskQueue({
                   <span className="truncate">{r.caseTitle ?? 'Case'}</span>
                 </div>
               )}
-              {/* The group is a list, so each task is a list item holding its button. */}
-              <div role="listitem">
+              <ListItem>
               <Item
                 asChild
                 size="sm"
@@ -126,12 +131,12 @@ export function TaskQueue({
                       <ItemTitle className="line-clamp-2 min-w-0 wrap-break-word" title={r.title}>{r.title}</ItemTitle>
                       {r.amount != null && <span className="shrink-0 text-sm font-medium tabular-nums">{money(r.amount, r.currency)}</span>}
                     </div>
-                    <ItemDescription className="line-clamp-2 wrap-break-word">{[KIND_LABEL[r.kind], r.customer].filter(Boolean).join(' · ')}</ItemDescription>
+                    <ItemDescription className="wrap-break-word line-clamp-none">{[KIND_LABEL[r.kind], r.customer].filter(Boolean).join(' · ')}</ItemDescription>
                     <SlaText minutes={r.slaMinutes} open={isOpen(r)} />
                   </ItemContent>
                 </button>
               </Item>
-              </div>
+              </ListItem>
             </React.Fragment>
           );
         })}

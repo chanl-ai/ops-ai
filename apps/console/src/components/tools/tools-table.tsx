@@ -53,7 +53,7 @@ export function toolColumns<T extends ToolTableRow>({ app = false, kind = false,
       cell: ({ row }) =>
         row.original.app ? (
           <StopRowClick align="start">
-            <Link href={`/integrations/apps/${encodeURIComponent(row.original.app.id)}`} className="text-sm underline-offset-4 hover:underline">
+            <Link href={`/integrations/apps/${encodeURIComponent(row.original.app.id)}`} className="inline-flex min-h-6 items-center text-sm underline-offset-4 hover:underline">
               {row.original.app.name}
             </Link>
           </StopRowClick>

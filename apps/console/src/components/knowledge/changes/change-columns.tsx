@@ -18,7 +18,7 @@ export const changeColumns: ColumnDef<ChangeRow>[] = [
     header: ({ column }) => <DataTableColumnHeader column={column} title="Change" />,
     cell: ({ row }) => (
       <div className="max-w-xs min-w-56">
-        <div className="truncate font-medium" title={row.original.summary}>
+        <div className="font-medium break-words whitespace-normal" title={row.original.summary}>
           {row.original.summary}
         </div>
         <div className="truncate text-xs text-muted-foreground" title={`${row.original.documentTitle} · ${row.original.fromVersion} → ${row.original.toVersion}`}>

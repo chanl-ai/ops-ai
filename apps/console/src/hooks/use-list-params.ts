@@ -3,6 +3,7 @@
 import * as React from 'react';
 import type { ColumnFiltersState } from '@tanstack/react-table';
 
+import { hasEveryWord } from '@/lib/search-words';
 import { type PaginationState, PAGINATION_DEFAULTS } from '@/lib/types/pagination';
 import type { ListParams } from '@/lib/types/query';
 
@@ -66,3 +67,11 @@ export const columnFiltersOf = (filters: Record<string, string[] | undefined>): 
 export const facetFilterFn = (row: { getValue: (id: string) => unknown }, id: string, value: string[]) =>
   !value?.length || value.includes(String(row.getValue(id)));
 
+/**
+ * Column filterFn for a list the server searches: the page it returns is filtered again on the same rule, every word in
+ * any of `fields`, so the table never hides a row the server matched.
+ */
+export const wordsFilterFn =
+  <T extends object>(fields: (keyof T)[]) =>
+  (row: { original: T }, _id: string, value: string) =>
+    !value || hasEveryWord(fields.map((f) => row.original[f] as string | null | undefined), value);

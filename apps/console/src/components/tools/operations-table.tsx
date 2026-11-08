@@ -61,7 +61,7 @@ export function OperationsTable({ operations, onOpen, hrefOf, onToggle, toggling
               <TableCell className={cn('w-72 max-w-72', !o.enabled && 'opacity-60')} title={`${o.name}: ${o.description}${o.method ? ` (${o.method} ${o.path})` : ''}`}>
                 <RowOpen href={hrefOf(o)}>
                   <code className="block truncate font-mono text-[13px] font-medium">{o.name}</code>
-                  <div className="truncate text-xs text-muted-foreground">{o.description}</div>
+                  <div className="text-xs text-muted-foreground break-words whitespace-normal">{o.description}</div>
                   {o.method && (
                     <div className="truncate font-mono text-[11px] text-muted-foreground">
                       {o.method} {o.path}

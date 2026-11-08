@@ -19,6 +19,9 @@ const VIEW: Record<Exclude<AuditView, 'all'>, (e: AuditEntry) => boolean> = {
   publishes: (e) => ['published', 'approved', 'rejected', 'restored'].includes(e.action),
   access: (e) => ['granted', 'revoked'].includes(e.action) || ['access_grant', 'role', 'member', 'api_key'].includes(e.target.type),
   deletions: (e) => e.action === 'deleted',
+  sign_ins: (e) => e.action === 'login',
+  // Everything but sign-ins, as platform-service's Changes view.
+  changes: (e) => e.action !== 'login',
 };
 
 const req = () => `req_${Math.random().toString(36).slice(2, 12)}`;
@@ -115,7 +118,7 @@ export function createGovernanceMock(): { governance: GovernanceApi; settings: S
               value: (e, k) => (k === 'actorKind' ? e.actor.kind : k === 'targetType' ? e.target.type : field(e, k)),
               facetKeys: ['action', 'targetType', 'actorKind', 'teamId'],
             }, m),
-            viewCounts: { all: src.length, publishes: src.filter(VIEW.publishes).length, access: src.filter(VIEW.access).length, deletions: src.filter(VIEW.deletions).length },
+            viewCounts: { all: src.length, ...Object.fromEntries(Object.entries(VIEW).map(([v, test]) => [v, src.filter(test).length])) } as Record<AuditView, number>,
           };
         }),
     },

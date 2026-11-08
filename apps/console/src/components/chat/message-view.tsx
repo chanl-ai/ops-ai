@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { AlertTriangle, BookOpenCheck, Brain, Copy, ListTree, Paperclip, Pencil, RefreshCw, SearchX, ShieldAlert, Square, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { AlertTriangle, Brain, ChevronRight, Copy, ListTree, Paperclip, Pencil, RefreshCw, SearchX, ShieldAlert, Square, ThumbsDown, ThumbsUp } from 'lucide-react';
 
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
@@ -14,17 +14,21 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { bytes } from '@/lib/format';
-import type { ChatMessage, MessageFeedback, WidgetAction } from '@/lib/types/chat';
-import { isLayoutPart } from '@/lib/types/widgets';
+import { foldedLine, orderReply } from '@/lib/reply-order';
+import type { ChatMessage, MessageFeedback, ToolCall, WidgetAction } from '@/lib/types/chat';
+import { isLayoutPart, type MessagePart } from '@/lib/types/widgets';
 
 import { CitationPopover, SourcesList } from './citation-popover';
 import { OpsCallCards, opsCards } from './ops-call-cards';
 import { ToolCallCard } from './tool-call-card';
 import { ConnectionRequiredCard, connectionRequired } from './connection-required-card';
+import { MemorySuggestion } from '@/components/memory/memory-suggestion';
 import { rememberedLine } from '@/components/memory/remembered-line';
+import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion';
 import { LayoutWidget } from './widget-layout';
 import { WidgetView } from './widget-view';
 import { ChatWidgetView } from './widgets';
+import { wasNotRun } from '@/lib/tool-calls';
 
 const FEEDBACK_REASONS = ['Wrong answer', 'Missing from the knowledge base', 'Cited the wrong document', 'Tool returned the wrong data', 'Not what I asked'];
 
@@ -110,8 +114,11 @@ export function AssistantMessage({
   byline,
   onOpenMemory,
   cardsReadOnly,
+  followUps,
 }: {
   message: ChatMessage;
+  /** The turn's next asks as chips; given for the conversation's latest reply only, so older turns offer none. */
+  followUps?: string[];
   /** Draws Ops cards with Open and no buttons: the embedded chat, whose widget API serves no record routes. */
   cardsReadOnly?: boolean;
   /** Set while the reply is in flight and nothing has been written yet. */
@@ -144,6 +151,13 @@ export function AssistantMessage({
     return c ? <CitationPopover citation={c} onOpenDocument={onOpenDocument} onOpenTrace={message.trace && onOpenTrace ? () => onOpenTrace(message.trace!) : undefined} /> : null;
   };
   const settled = !streaming && !phaseLabel;
+  // What the reply suggests keeping asks its own line; what it kept, or anyone else's suggestion, is told in one line.
+  const suggested = (message.remembered ?? []).filter((r) => r.status === 'suggested' && !!r.value);
+  const kept = (message.remembered ?? []).filter((r) => !suggested.includes(r));
+  const isCard = (c: ToolCall) => !!c.gated || !!connectionRequired(c) || !!opsCards(c);
+  const ordered = orderReply((message.toolCalls ?? []).filter((c) => !wasNotRun(c)), message.parts ?? [], isCard);
+  const renderPart = (p: MessagePart) =>
+    isLayoutPart(p) ? <LayoutWidget key={p.id} part={p} onReply={readOnly ? undefined : onReply} /> : <WidgetView key={p.id} part={p} />;
 
   return (
     <div className="group flex flex-col gap-2">
@@ -152,7 +166,11 @@ export function AssistantMessage({
           {byline}
         </span>
       )}
-      {message.toolCalls?.map((c) => {
+      {/* The plan first, the plain calls folded into one quiet line under it, then the cards, then the text. Calls the
+          reply's limits stopped before they ran did nothing; the call log still lists them. */}
+      {ordered.plan && renderPart(ordered.plan)}
+      {ordered.folded.length > 0 && <FoldedCalls calls={ordered.folded} />}
+      {ordered.shown.map((c) => {
         const cards = opsCards(c);
         const need = connectionRequired(c);
         if (need) return <ConnectionRequiredCard key={c.id} call={c} need={need} onReply={readOnly ? undefined : onReply} />;
@@ -161,7 +179,7 @@ export function AssistantMessage({
       {message.widgets?.map((w) => (
         <ChatWidgetView key={w.id} widget={w} onAction={readOnly || !onWidgetAction ? undefined : (a) => onWidgetAction(w.id, a)} />
       ))}
-      {message.parts?.map((p) => (isLayoutPart(p) ? <LayoutWidget key={p.id} part={p} onReply={readOnly ? undefined : onReply} /> : <WidgetView key={p.id} part={p} />))}
+      {ordered.parts.map(renderPart)}
 
       {phaseLabel && !message.content ? (
         <ChatThinking label={phaseLabel} />
@@ -185,17 +203,18 @@ export function AssistantMessage({
         </button>
       )}
 
-      {message.skills?.length && settled ? (
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="loaded-skills">
-          <BookOpenCheck className="size-3" />
-          {message.skills.map((s) => `Loaded skill ${s.name} v${s.version}`).join(' · ')}
-        </p>
-      ) : null}
+      {settled && onReply && !readOnly && !!followUps?.length && (
+        <Suggestions data-testid="follow-ups" className="flex-wrap">
+          {followUps.slice(0, 3).map((f) => (
+            <Suggestion key={f} suggestion={f} onClick={() => onReply(f)} className="h-7 rounded-full px-3 text-xs font-normal" data-testid="follow-up" />
+          ))}
+        </Suggestions>
+      )}
 
-      {message.remembered?.length && settled ? (
+      {kept.length && settled ? (
         <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" data-testid="saved-to-memory">
           <Brain className="size-3" />
-          {rememberedLine(message.remembered)}
+          {rememberedLine(kept)}
           {onOpenMemory && (
             <button type="button" onClick={onOpenMemory} className="underline-offset-4 hover:text-foreground hover:underline" data-testid="open-memory">
               What I remember
@@ -203,6 +222,7 @@ export function AssistantMessage({
           )}
         </p>
       ) : null}
+      {settled && !readOnly && suggested.map((r) => <MemorySuggestion key={r.id} item={r} />)}
 
       {message.guardrail && settled && (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="guardrail-refusal">
@@ -329,5 +349,22 @@ export function AssistantMessage({
         </div>
       </DialogShell>
     </div>
+  );
+}
+
+/** A run of plain calls as one quiet line ("3 steps · Salesforce") that opens to their rows. */
+function FoldedCalls({ calls }: { calls: ToolCall[] }) {
+  return (
+    <Collapsible className="group/fold">
+      <CollapsibleTrigger className="flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-foreground" data-testid="folded-calls">
+        <ChevronRight className="size-3 transition-transform group-data-[state=open]/fold:rotate-90" aria-hidden />
+        {foldedLine(calls)}
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2 flex flex-col gap-2">
+        {calls.map((c) => (
+          <ToolCallCard key={c.id} call={c} />
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

@@ -323,6 +323,9 @@ export interface Lookups {
   workspace: { name: string; environment: string };
 }
 
+/** ApiError's code for a record that exists in the team but is another person's (a conversation). */
+export const SOMEONE_ELSES = 'someone_elses';
+
 export class ApiError extends Error {
   constructor(
     message: string,

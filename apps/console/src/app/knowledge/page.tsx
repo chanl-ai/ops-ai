@@ -249,7 +249,7 @@ export default function KnowledgeBasesPage() {
                 </span>
                 <KbHealthBadge health={k.health} />
               </div>
-              <p className="line-clamp-2 text-xs text-muted-foreground">{k.description}</p>
+              <p className="text-xs text-muted-foreground break-words whitespace-normal">{k.description}</p>
               <dl className="mt-auto grid grid-cols-3 gap-2 text-xs">
                 <div>
                   <dt className="text-muted-foreground">Documents</dt>

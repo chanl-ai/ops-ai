@@ -691,7 +691,7 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
         respond(() => {
           const f = find(fid);
           if (!inTeam(f.team)) return notFound('File');
-          return laidOut.has(f.id) ? layoutOf(f) : notFound('Layout');
+          return laidOut.has(f.id) ? layoutOf(f) : null;
         }),
       read: (fid) =>
         respond(() => {

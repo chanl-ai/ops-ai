@@ -60,7 +60,7 @@ function columns(open: (a: Agent) => void, onDelete: (a: Agent) => void, canBuil
               {row.original.name}
               {row.original.id === defaultId && <Badge variant="secondary">Default</Badge>}
             </div>
-            <div className="truncate text-xs text-muted-foreground">{row.original.role}</div>
+            <div className="text-xs text-muted-foreground break-words whitespace-normal">{row.original.role}</div>
           </div>
         </div>
       ),

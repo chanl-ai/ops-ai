@@ -9,7 +9,8 @@ import { useTeamQuery } from './team-query';
 const KEY = ['sign-in-providers'] as const;
 
 /** The workspace's sign-in providers with each domain's proof (Security team admins). */
-export const useSignInProviders = () => useTeamQuery({ queryKey: KEY, queryFn: () => api.signInProviders.list(), retry: false });
+/** `enabled` false for whoever does not hold settings.view, which platform-service reads providers under. */
+export const useSignInProviders = (enabled = true) => useTeamQuery({ queryKey: KEY, queryFn: () => api.signInProviders.list(), retry: false, enabled });
 
 /** The secret names an OIDC provider may name; values stay in the installation's settings. */
 export const useSignInSecretNames = (enabled: boolean) => useTeamQuery({ queryKey: [...KEY, 'secret-names'], queryFn: () => api.signInProviders.secretNames(), enabled });

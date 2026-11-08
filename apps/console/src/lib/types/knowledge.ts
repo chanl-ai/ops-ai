@@ -455,7 +455,7 @@ export interface SourceDetail extends Source {
 
 export interface KnowledgeBaseInput {
   name: string;
-  /** The person who answers for what it serves, by email; they or a tenant admin may change it. */
+  /** The person who answers for what it serves, by email; they or a team admin may change it. */
   owner: string;
   description: string;
   color: string;

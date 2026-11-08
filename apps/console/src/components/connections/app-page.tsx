@@ -25,9 +25,11 @@ import { PluginUpdatePanel } from '@/components/connections/plugin-update-panel'
 import { useSignInWindow } from '@/components/connections/sign-in';
 import { AppStateBadge } from '@/components/connections/systems-grid';
 import { ToolCallsView } from '@/components/tools/tool-calls-view';
+import { useNavAllows } from '@/hooks/me-queries';
 import { type SystemCard, useApp, useConnectionKinds, useStartSignIn, useTestAccount } from '@/hooks/systems-queries';
 import type { Kinds } from '@/lib/connect-plan';
 import { initials, plural } from '@/lib/format';
+import { TOOL_CALL_LOG } from '@/lib/nav';
 
 
 function Logo({ name, logo }: { name: string; logo?: string | null }) {
@@ -49,6 +51,7 @@ export function AppPageView({ appId }: { appId: string }) {
   const kinds = useConnectionKinds();
   const start = useStartSignIn();
   const router = useRouter();
+  const allows = useNavAllows();
   const [setUp, setSetUp] = React.useState(false);
   // The one Connect: a window that asks the auth config, what it leaves open, test or live and team or mine.
   const [connecting, setConnecting] = React.useState(false);
@@ -82,7 +85,9 @@ export function AppPageView({ appId }: { appId: string }) {
   const configs = (data.authConfigs ?? []).filter((c) => c.type !== 'account');
   // Someone who may not add team accounts connects only their own, and only where the app lets people bring one.
   const ownOnly = !card.mayManage;
-  const mayConnect = card.mayManage || (Boolean(conn) && card.signIn !== 'team');
+  // An app the system no longer has installed is shown for the record: nothing connects, signs in or turns it on.
+  const removed = card.appState === 'removed';
+  const mayConnect = !removed && (card.mayManage || (Boolean(conn) && card.signIn !== 'team'));
 
   const signIn = (account: 'self' | 'team', accountId = conn?.id) => {
     if (!accountId) return;
@@ -97,12 +102,14 @@ export function AppPageView({ appId }: { appId: string }) {
   };
 
   const toolsAdded = data.tools.filter((t) => t.added ?? true).length;
+  const mayReadCalls = allows(TOOL_CALL_LOG) === true;
   const tabs: [string, string][] = [
     ...(builtIn ? [] : ([['accounts', `Accounts · ${accounts.length}`]] as [string, string][])),
     ['tools', card.kind === 'plugin' ? `Tools · ${toolsAdded} of ${data.tools.length} added` : 'Tools'],
     ...(builtIn || !configs.length ? [] : ([['auth', `Auth configs · ${configs.length}`]] as [string, string][])),
     ['resources', 'Resources'],
-    ['logs', 'Logs'],
+    // The call log names who called each tool, so it is offered only with its cell (lib/nav.ts TOOL_CALL_LOG).
+    ...(mayReadCalls ? ([['logs', 'Logs']] as [string, string][]) : []),
     ['settings', 'Settings'],
   ];
   const showAccounts = (id: string) => (setConfig(id), setTab('accounts'));
@@ -116,7 +123,7 @@ export function AppPageView({ appId }: { appId: string }) {
       backHref="/integrations"
       badge={<AppStateBadge card={card} testId="app-status" />}
       actions={
-        builtIn || card.appState === 'removed' ? undefined : mayConnect ? (
+        builtIn || removed ? undefined : mayConnect ? (
           <Button size="sm" onClick={() => setConnecting(true)} data-testid="app-connect">
             <Plug />
             Connect
@@ -127,13 +134,13 @@ export function AppPageView({ appId }: { appId: string }) {
       }
       contentClassName="flex min-w-0 flex-col gap-4"
     >
-      {card.appState === 'removed' && (
-        <Alert variant="destructive" data-testid="app-removed">
-          <AlertTitle>{`${card.name} is no longer installed`}</AlertTitle>
+      {removed && (
+        <Alert data-testid="app-removed">
+          <AlertTitle>{`${card.name} isn’t installed`}</AlertTitle>
           <AlertDescription>{card.appStateReason}</AlertDescription>
         </Alert>
       )}
-      {card.kind === 'plugin' && card.appState !== 'removed' && <PluginUpdatePanel appId={card.id} name={card.name} />}
+      {card.kind === 'plugin' && !removed && <PluginUpdatePanel appId={card.id} name={card.name} />}
       <Tabs value={tab && tabs.some(([v]) => v === tab) ? tab : tabs[0][0]} onValueChange={(v) => (setTab(v), v !== 'accounts' && setConfig(null))} className="min-w-0">
         {/* Six tabs are wider than a phone: the row scrolls sideways inside its box instead of clipping the last. */}
         <ScrollTabsList tabs={tabs.map(([value, label]) => ({ value, label }))} testId="app-tabs-row" triggerTestId={(v) => `app-tab-${v}`} />
@@ -151,7 +158,7 @@ export function AppPageView({ appId }: { appId: string }) {
           </TabsContent>
         )}
         <TabsContent value="resources">
-          <ResourcesTab appName={data.card.name} pluginId={data.card.pluginId} onConnect={() => setConnecting(true)} />
+          <ResourcesTab appName={data.card.name} pluginId={data.card.pluginId} onConnect={mayConnect ? () => setConnecting(true) : undefined} />
         </TabsContent>
         <TabsContent value="logs">
           {/* The same call log as Tool calls, fixed to this app's tools. */}

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Uninstalled apps and chat tables read clearly",
+  "description": "An app the system no longer has installed says your operator installs apps and offers nothing to sign in to. Chat result tables name their columns in words, show dates as dates, leave out empty columns and wrap long text.",
+  "tag": "fix"
+}

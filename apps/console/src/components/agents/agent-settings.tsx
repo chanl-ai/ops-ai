@@ -610,7 +610,7 @@ export function HistoryCard({ versions, loading, onOpen }: { versions?: AgentVer
                 <div className="flex min-w-0 items-center gap-1.5 text-sm">
                   <span className="font-mono text-xs font-medium">v{v.version}</span>
                   {/* w-0 keeps the note's full width out of the rail's min-content, which would push the rail past a phone's width. */}
-                  <span className="w-0 flex-1 truncate">{v.note}</span>
+                  <span className="w-0 flex-1 break-words">{v.note}</span>
                   <AgentVersionBadge state={v.state} />
                 </div>
                 <span className="text-xs text-muted-foreground">{relativeTime(v.savedAt)}</span>

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Chat tables stay readable on a phone",
+  "description": "Long values in a chat table are trimmed to the column with the full value on hover, so the first column no longer runs over the next one on a small screen.",
+  "tag": "fix"
+}

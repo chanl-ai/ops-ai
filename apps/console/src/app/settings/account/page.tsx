@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import { UserCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -81,7 +82,18 @@ export default function AccountPage() {
               )}
             </div>
           </SettingsSection>
-          <SettingsSection title="Workspace" description="Changed by a team admin in Settings → Members.">
+          <SettingsSection
+            title="Workspace"
+            description={
+              <>
+                Changed by a team admin in{' '}
+                <Link href="/access" className="underline underline-offset-4">
+                  Access
+                </Link>
+                .
+              </>
+            }
+          >
             <div className="flex flex-col">
               <FieldRow label="Team" value={p.team} />
               <FieldRow label="Role" value={p.role} />

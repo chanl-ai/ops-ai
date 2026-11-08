@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Activity follows permissions and hides background jobs",
+  "description": "The Activity list opens for people who may read activity, not viewers. Background jobs are listed only when you pick them under Kind, and a finished run says which end it reached.",
+  "tag": "improved"
+}

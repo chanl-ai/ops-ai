@@ -49,7 +49,7 @@ export function ThreadSettingsButton({ threadId, disabled }: { threadId: string;
   return (
     <>
       <Button variant="ghost" size="sm" onClick={() => setOpen(true)} disabled={disabled} aria-label="Thread settings">
-        <SlidersHorizontal className="size-4" /> Settings
+        <SlidersHorizontal className="size-4" /> <span className="sr-only sm:not-sr-only">Settings</span>
       </Button>
       {open && <ThreadSettingsSheet threadId={threadId} open={open} onOpenChange={setOpen} />}
     </>

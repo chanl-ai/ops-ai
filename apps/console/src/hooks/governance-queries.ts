@@ -19,9 +19,11 @@ export const gk = {
   options: ['access', 'options'] as const,
 };
 
-export const useToolCalls = (p: ListParams<ToolCallFilters>) => usePagedQuery({ queryKey: gk.calls(p), queryFn: () => api.governance.toolCalls.list(p) });
+/** `enabled` false while the person does not hold the call log's cell, so nothing is asked that tools-service refuses. */
+export const useToolCalls = (p: ListParams<ToolCallFilters>, enabled = true) => usePagedQuery({ queryKey: gk.calls(p), queryFn: () => api.governance.toolCalls.list(p), enabled });
 export const useToolCall = (id: string | null) => useTeamQuery({ queryKey: gk.call(id ?? ''), queryFn: () => api.governance.toolCalls.get(id!), enabled: !!id });
-export const useAudit = (p: ListParams<AuditFilters> & { view: AuditView }) => usePagedQuery({ queryKey: gk.audit(p), queryFn: () => api.governance.audit.list(p) });
+/** `enabled` false while the person's permissions say the service would refuse, so the page asks nothing it cannot read. */
+export const useAudit = (p: ListParams<AuditFilters> & { view: AuditView }, enabled = true) => usePagedQuery({ queryKey: gk.audit(p), queryFn: () => api.governance.audit.list(p), enabled });
 
 export const useIdentities = (p: ListParams) => usePagedQuery({ queryKey: gk.identities(p), queryFn: () => api.governance.access.identities(p) });
 export const useGrants = (p: ListParams<GrantFilters> & { view: GrantView }) => usePagedQuery({ queryKey: gk.grants(p), queryFn: () => api.governance.access.grants(p) });

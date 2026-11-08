@@ -189,6 +189,8 @@ export interface ChatMessage {
   agentName?: string;
   /** Assistant messages: what this turn saved about the person, shown under the reply. */
   remembered?: RememberedItem[];
+  /** Assistant messages: up to three next asks, filled from the turn's data; a click sends one as the next message. */
+  followUps?: string[];
   attachments?: ChatAttachment[];
   citations?: Citation[];
   /** How the cited passages were found: queries, filters, scores, precedence. */

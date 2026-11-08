@@ -173,7 +173,8 @@ export function AccountsTab({
 /** The row's state, and the one action that fixes a broken sign-in, when the API offers it on the row. */
 function StateCell({ account: a, onSignIn }: { account: ConfigAccount; onSignIn: (account: 'self' | 'team', accountId: string) => void }) {
   const as = a.kind === 'person' || a.owner.kind === 'each' ? 'self' : 'team';
-  const failed = a.test?.status === 'failed' ? a.test.message || 'no reason given' : null;
+  // A test result counts only while the account is signed in; an account signed out since has just the one state.
+  const failed = a.state === 'connected' && a.test?.status === 'failed' ? a.test.message || 'no reason given' : null;
   const can = (x: NonNullable<ConfigAccount['actions']>[number]) => (a.actions ?? []).includes(x);
   return (
     <span className="flex flex-col gap-1">

@@ -143,6 +143,9 @@ export interface ConnectionRequired {
   personFields?: string[];
   connectUrl?: string;
   expiresAt?: string;
+  /** Whether the refused call reads or changes something, and the app's name, for the card's words. */
+  access?: 'read' | 'write';
+  app?: string;
 }
 
 /** Test with my account: whether signing in through the app credential worked, and as whom. */

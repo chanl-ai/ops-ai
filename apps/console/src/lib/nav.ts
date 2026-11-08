@@ -6,10 +6,19 @@ import { IconChecklist, IconCpu, IconDatabase, IconFileSearch, IconFileText, Ico
 export interface NavChild {
   title: string;
   url: string;
-  /** Shown only to a team admin: the page refuses everyone else (the audit log). */
-  adminOnly?: boolean;
+  /**
+   * The roles-grid cell the page's own service checks, so the sidebar, the title switcher and search offer the page
+   * only to who may open it. `everyTeam`: held in every team at once (a `*` role), as an account admin holds it.
+   */
+  needs?: NavNeed;
   /** The sub-row's icon, from the same @tabler set as the items. */
   icon?: Icon;
+}
+
+export interface NavNeed {
+  area: string;
+  action: string;
+  everyTeam?: boolean;
 }
 
 export interface NavItem {
@@ -23,7 +32,18 @@ export interface NavItem {
   tabIcon?: Icon;
   /** Drawn as a row at the top of the sidebar rather than in its group; still matched for crumbs and search. */
   top?: boolean;
+  /** What the parent page itself needs; a person who may open neither it nor any child is not offered the row. */
+  needs?: NavNeed;
 }
+
+/** platform-service reads the audit log for whoever holds audit.view in the team (GET /v1/audit). */
+export const AUDIT_LOG: NavNeed = { area: 'audit', action: 'view' };
+/** The gateway's call log names who called what: tools-service reads it under activity.view (GET /v1/executions). */
+export const TOOL_CALL_LOG: NavNeed = { area: 'activity', action: 'view' };
+/** The Activity list is read under the same cell as the tool-call log (agents-service GET /v1/activity). */
+export const ACTIVITY: NavNeed = { area: 'activity', action: 'view' };
+/** agents-service answers GET /v1/background only for an account admin: access.manage in every team. */
+export const BACKGROUND: NavNeed = { area: 'access', action: 'manage', everyTeam: true };
 
 export interface NavGroup {
   label: string;
@@ -78,7 +98,7 @@ export const NAV: NavGroup[] = [
     label: 'Govern',
     items: [
       // The one Activity list; tool calls keep their own page until they are an Activity kind.
-      { title: 'Activity', tabTitle: 'Everything', url: '/activity', icon: IconListDetails, tabIcon: IconList, children: [{ title: 'Tool calls', url: '/tools/calls', icon: IconTool }, { title: 'Audit log', url: '/logs/audit', adminOnly: true, icon: IconFileSearch }, { title: 'Background', url: '/logs/background', adminOnly: true, icon: IconHeartbeat }] },
+      { title: 'Activity', tabTitle: 'Everything', url: '/activity', needs: ACTIVITY, icon: IconListDetails, tabIcon: IconList, children: [{ title: 'Tool calls', url: '/tools/calls', needs: TOOL_CALL_LOG, icon: IconTool }, { title: 'Audit log', url: '/logs/audit', needs: AUDIT_LOG, icon: IconFileSearch }, { title: 'Background', url: '/logs/background', needs: BACKGROUND, icon: IconHeartbeat }] },
       { title: 'Access', tabTitle: 'Members', url: '/access', icon: IconShieldLock, tabIcon: IconUsers, children: [{ title: 'Roles', url: '/access/roles', icon: IconUserShield }, { title: 'Tool access', url: '/access/tool-access', icon: IconKey }] },
       // Evals holds testing and governance evidence in one place; the model inventory is one view of it.
       { title: 'Evals', tabTitle: 'Suites', url: '/assurance', icon: IconShieldCheck, tabIcon: IconChecklist, children: [{ title: 'Model inventory', url: '/model-risk', icon: IconCpu }] },
@@ -140,8 +160,8 @@ export function crumbsFor(pathname: string): Crumb[] {
 }
 
 /** The pages grouped under one sidebar item, for the title switcher: the item's name, then the parent page and its children. Null when the item has no children. */
-export function sectionFor(pathname: string): { label: string; pages: { href: string; label: string; icon?: Icon }[] } | null {
+export function sectionFor(pathname: string): { label: string; pages: { href: string; label: string; icon?: Icon; needs?: NavNeed }[] } | null {
   const best = navMatch(pathname);
   if (!best?.item.children?.length) return null;
-  return { label: best.item.title, pages: [{ href: best.item.url, label: best.item.tabTitle ?? best.item.title, icon: best.item.tabIcon }, ...best.item.children.map((c) => ({ href: c.url, label: c.title, icon: c.icon }))] };
+  return { label: best.item.title, pages: [{ href: best.item.url, label: best.item.tabTitle ?? best.item.title, icon: best.item.tabIcon, needs: best.item.needs }, ...best.item.children.map((c) => ({ href: c.url, label: c.title, icon: c.icon, needs: c.needs }))] };
 }

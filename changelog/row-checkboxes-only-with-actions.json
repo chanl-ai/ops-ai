@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Row checkboxes appear only when you can act on rows",
+  "description": "A list shows checkboxes on its rows only when there is something you may do with the rows you pick, so a viewer no longer sees checkboxes that lead nowhere.",
+  "tag": "fix"
+}

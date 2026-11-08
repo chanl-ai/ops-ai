@@ -2,14 +2,12 @@
 
 import * as React from 'react';
 
-import { buildCommit, buildTag, changelogSource, releaseSwitches, roadmapSource, uiFeedback } from '@/lib/api';
+import { buildCommit, buildTag, changelogSource, releaseSwitches, roadmapSource } from '@/lib/api';
 import { type ChangelogEntry, hasUnseen, parseChangelog, parseRoadmap } from '@/lib/changelog';
 import { versionLabel } from '@/lib/version';
 
 const SEEN_KEY = 'ops-whats-new-seen';
 const VERSION = versionLabel(buildTag, buildCommit);
-// The dev-only Feedback button (ui-feedback widget.js) loads in development when the collector answers.
-const FEEDBACK_ON = process.env.NODE_ENV !== 'production' && uiFeedback === '1';
 
 function readSeen(): string[] {
   try {
@@ -41,5 +39,5 @@ export function useChangelog() {
       // Storage blocked: the dot comes back next load, which is the honest answer.
     }
   }, [entries]);
-  return { entries, roadmap, unseen, markSeen, version: VERSION, feedbackOn: FEEDBACK_ON };
+  return { entries, roadmap, unseen, markSeen, version: VERSION };
 }

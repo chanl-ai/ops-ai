@@ -15,6 +15,7 @@ import { SampleData } from '@/components/shared/sample-data';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useSignInPolicySettings } from '@/hooks/account-queries';
 import { useRemoveSignInProvider, useSamlMetadataUrl, useSaveSignInProvider, useSignInProviders, useSignInSecretNames, useVerifySignInDomain } from '@/hooks/sign-in-provider-queries';
+import { useCan } from '@/hooks/me-queries';
 import { useTeam } from '@/hooks/use-team';
 import { ApiError } from '@/lib/api/contract';
 import type { SignInProvider } from '@/lib/types/sign-in';
@@ -26,8 +27,10 @@ const newId = () => `sip_${Math.random().toString(36).slice(2, 12)}`;
  * session length and sign-up have no service yet, so they show as sample sections below.
  */
 export default function SignInSettingsPage() {
-  const providers = useSignInProviders();
-  const forbidden = providers.error instanceof ApiError && providers.error.status === 403;
+  // Providers are read under settings.view in the Security team; anyone else is told so without a refused request.
+  const may = useCan('settings', 'view');
+  const providers = useSignInProviders(may === true);
+  const forbidden = may === false || (providers.error instanceof ApiError && providers.error.status === 403);
   const secretNames = useSignInSecretNames(providers.isSuccess);
   const metadataUrl = useSamlMetadataUrl();
   const policy = useSignInPolicySettings();
@@ -50,6 +53,7 @@ export default function SignInSettingsPage() {
   };
 
   const body = (() => {
+    if (forbidden) return <EmptyState icon={KeyRound} title="Sign-in is set by the Security team" description={providers.error instanceof Error ? providers.error.message : 'An admin of the Security team sets how people sign in.'} testId="sign-in-no-access" />;
     if (providers.isPending) {
       return (
         <div className="flex flex-col gap-4" aria-busy="true">
@@ -58,7 +62,6 @@ export default function SignInSettingsPage() {
         </div>
       );
     }
-    if (forbidden) return <EmptyState icon={KeyRound} title="Sign-in is set by the Security team" description={(providers.error as Error).message} testId="sign-in-no-access" />;
     if (providers.isError) return <QueryError what="the sign-in providers" onRetry={() => providers.refetch()} error={providers.error} retrying={providers.isFetching} />;
     const rows = providers.data ?? [];
     return (

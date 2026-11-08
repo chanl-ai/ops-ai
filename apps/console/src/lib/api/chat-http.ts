@@ -1,8 +1,9 @@
+import type { ChatThread } from '@/lib/types/chat';
 import type { ListParams } from '@/lib/types/query';
 
 import type { ChatApi } from './chat-contract';
 import { createChatSettingsHttp } from './chat-settings-http';
-import { ApiError } from './contract';
+import { ApiError, SOMEONE_ELSES } from './contract';
 import { createMemoriesHttp } from './memories-http';
 import { fetchWithIdentity } from './request-identity';
 import { readSse } from './sse';
@@ -22,7 +23,18 @@ export function createChatHttp(get: Get, send: Send, qs: (p: ListParams) => stri
     memories: createMemoriesHttp(get, send),
     threads: {
       list: ({ cursor, ...p }) => get(`/chat/threads?${qs(p)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),
-      get: (id) => get(`/chat/threads/${id}`),
+      // A teammate's conversation answers {id, readable: false}: read as a refusal with its own code, so the page says
+      // whose it is without a failing request.
+      get: async (id) => {
+        const t = await get<ChatThread | { id: string; readable: false; teamId?: string; teamName?: string }>(`/chat/threads/${id}`);
+        if ('readable' in t && t.readable === false) {
+          // The reader's own conversation in another of their teams: refused as another team's record, so the page
+          // offers to switch to it.
+          if (t.teamId) throw new ApiError('This conversation is in another of your teams.', 403, { id: t.teamId, name: t.teamName ?? t.teamId }, 'team_forbidden');
+          throw new ApiError('This conversation is someone else’s.', 403, undefined, SOMEONE_ELSES);
+        }
+        return t as ChatThread;
+      },
       create: (i) => send('POST', '/chat/threads', i),
       update: (id, patch) => send('PATCH', `/chat/threads/${id}`, patch),
       remove: (id) => send('DELETE', `/chat/threads/${id}`),

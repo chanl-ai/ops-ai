@@ -8,16 +8,19 @@ import { SettingsPageLayout } from '@/components/settings/settings-page-layout';
 import { UsageChart, UsageTable } from '@/components/settings/usage-panels';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
-import { QueryError } from '@/components/shared/query-states';
+import { NoAccess, QueryError } from '@/components/shared/query-states';
 import { StatCard, StatCardGrid } from '@/components/shared/stat-card';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { useNavAllows } from '@/hooks/me-queries';
 import { useUsage } from '@/hooks/settings-queries';
 import { count } from '@/lib/format';
+import { USAGE } from '@/lib/settings-tree';
 import type { UsageDays } from '@/lib/types/settings';
 
 export default function UsagePage() {
   const [days, setDays] = React.useState<UsageDays>(30);
-  const query = useUsage(days);
+  const may = useNavAllows()(USAGE);
+  const query = useUsage(days, may === true);
   const r = query.data;
   const all = r?.scope === 'all';
   const trend = r?.totals.costTrendPct ?? 0;
@@ -37,7 +40,9 @@ export default function UsagePage() {
         </ToggleGroup>
       }
     >
-      {query.isPending ? (
+      {may === false ? (
+        <NoAccess what="usage and cost" />
+      ) : query.isPending ? (
         <PageSkeleton statCards={4} showToolbar={false} tableRows={6} />
       ) : query.isError && !r ? (
         <QueryError what="usage" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
@@ -51,10 +56,10 @@ export default function UsagePage() {
               value={cad(r.totals.modelCost)}
               icon={Coins}
               trend={trend ? { value: `${Math.abs(trend)}%`, direction: trend > 0 ? 'up' : 'down', isPositive: trend < 0 } : undefined}
-              footer={{ text: `vs the ${days} days before`, subtext: 'AI gateway, in CAD' }}
+              footer={{ text: `vs the ${days} days before`, subtext: 'Model use, in CAD' }}
             />
-            <StatCard label="Tokens" value={count(r.totals.tokens)} icon={Hash} footer={{ text: 'Input and output', subtext: 'Across every model alias' }} />
-            <StatCard label="Tool calls" value={count(r.totals.toolCalls)} icon={Wrench} footer={{ text: 'Through the data gateway', subtext: 'Reads and approved writes' }} />
+            <StatCard label="Tokens" value={count(r.totals.tokens)} icon={Hash} footer={{ text: 'Input and output', subtext: 'Across every model' }} />
+            <StatCard label="Tool calls" value={count(r.totals.toolCalls)} icon={Wrench} footer={{ text: 'Made by agents and workflows', subtext: 'Reads and approved writes' }} />
             <StatCard label="Runs" value={count(r.totals.runs)} icon={Activity} footer={{ text: `${cad(r.totals.runs ? r.totals.modelCost / r.totals.runs : 0)} per run`, subtext: 'Model cost ÷ runs' }} />
           </StatCardGrid>
 
@@ -62,7 +67,7 @@ export default function UsagePage() {
 
           {all && <UsageTable title="By team" description="What each team is charged back for this period" rows={r.byTeam} />}
           <UsageTable title="By workflow" description={all ? 'Every workflow, with its team' : 'Each workflow in this team'} rows={r.byWorkflow} showTeam={all} />
-          <p className="text-xs text-muted-foreground">Model cost is the AI gateway’s list price for the tokens each run used. Tool calls are counted, not priced.</p>
+          <p className="text-xs text-muted-foreground">Model cost is the model’s list price for the tokens each run used. Tool calls are counted, not priced.</p>
         </div>
       ) : null}
     </SettingsPageLayout>

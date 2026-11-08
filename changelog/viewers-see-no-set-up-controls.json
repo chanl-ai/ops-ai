@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Viewers no longer see buttons they cannot use",
+  "description": "On Channels a viewer no longer sees Connect channel, Connect, Manage or Embed on a page, and a mailbox's settings open read only with a View only note. An agent page no longer offers a viewer the Test panel, Chat no longer suggests starting a workflow to someone who cannot start one, and a model inventory entry hides its tier, condition and validation actions from whoever cannot change the agent or workflow it describes.",
+  "tag": "fix"
+}

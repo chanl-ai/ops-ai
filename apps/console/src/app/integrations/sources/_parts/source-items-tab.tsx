@@ -89,7 +89,7 @@ export function SourceItemsTab({ source, onSync }: { source: SourceDetail; onSyn
                       {ERROR_CLASS_LABEL[row.original.errorClass]}
                     </Badge>
                   )}
-                  <span className="truncate text-xs text-muted-foreground">{row.original.error}</span>
+                  <span className="text-xs text-muted-foreground break-words whitespace-normal">{row.original.error}</span>
                 </span>
               </TooltipTrigger>
               <TooltipContent className="max-w-sm">{row.original.error}</TooltipContent>

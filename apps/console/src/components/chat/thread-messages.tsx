@@ -106,6 +106,7 @@ export function ThreadMessages({
               onWidgetAction={(widgetId, action) => onWidgetAction(m.id, widgetId, action)}
               onReply={streaming ? undefined : (text) => onSend({ content: text })}
               byline={severalAgents ? m.agentName : undefined}
+              followUps={m.id === lastAssistant?.id ? m.followUps : undefined}
               onOpenMemory={onOpenMemory}
               budgetCard={
                 m.budget && (

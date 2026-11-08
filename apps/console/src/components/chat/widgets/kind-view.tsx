@@ -35,6 +35,8 @@ import { EmailPreview } from '@/components/shared/email-preview';
 import { useFilePreviewUrl } from '@/hooks/extraction-queries';
 import { initials, money } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { BriefKind, EntityKind, FormKind } from './app-cards';
+import { dateCell, isEmptyColumn, isIsoDate, readingOrder, shownLabel } from '@/lib/widgets/table-columns';
 import type { Cell, ChartNode, ColumnFormat, KindAction, KindNode, KindStatus, MetricNode, Rows, StepStateKind, TableNode, Tone } from '@/lib/types/widgets';
 
 /** What the thread lets a widget do. Undefined when the conversation is read-only. */
@@ -62,6 +64,7 @@ const ENTER = 'animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-r
 export const cellText = (v: Cell | undefined) => (v === null || v === undefined ? '—' : typeof v === 'boolean' ? (v ? 'Yes' : 'No') : typeof v === 'number' ? v.toLocaleString() : v);
 
 function formatted(v: Cell, format?: ColumnFormat): string {
+  if (isIsoDate(v)) return dateCell(v);
   if (typeof v !== 'number') return cellText(v);
   if (format === 'money') return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (format === 'percent') return `${v.toLocaleString()}%`;
@@ -138,24 +141,57 @@ function MetricKind({ node }: { node: MetricNode }) {
 
 /** Rows on the console's data table, sortable and paged (10 a page); columns named and formatted when given. */
 function TableKind({ node, truncatedFrom }: { node: TableNode; truncatedFrom?: number }) {
-  const cols = React.useMemo(() => node.columns ?? Object.keys(node.rows[0] ?? {}).map((key) => ({ key, label: key, format: undefined as ColumnFormat | undefined })), [node]);
+  // Columns the result named stay as given; inferred ones read name first, with ids behind the View menu.
+  const reading = React.useMemo(() => readingOrder(Object.keys(node.rows[0] ?? {}), node.rows), [node]);
+  // Every column reads in words, and one with nothing in any row is left out, named or inferred.
+  const cols = React.useMemo(
+    () =>
+      (node.columns ?? reading.order.map((key) => ({ key, label: undefined as string | undefined, format: undefined as ColumnFormat | undefined })))
+        .filter((c) => !isEmptyColumn(c.key, node.rows))
+        .map((c) => ({ ...c, label: shownLabel(c.key, c.label) })),
+    [node, reading],
+  );
+  const hidden = React.useMemo(() => (node.columns ? {} : Object.fromEntries(reading.hidden.map((k) => [k, false]))), [node, reading]);
   const columns = React.useMemo<ColumnDef<Rows[number]>[]>(
     () =>
       cols.map((c) => ({
         // Keys can hold dots, which an accessorKey would read as a path.
         id: c.key,
         accessorFn: (r) => r[c.key],
-        header: ({ column }) => <DataTableColumnHeader column={column} title={c.label ?? c.key} />,
+        header: ({ column }) => <DataTableColumnHeader column={column} title={c.label} />,
         cell: ({ row }) => {
           const v = row.original[c.key] ?? null;
-          return <span className={typeof v === 'number' ? 'block text-right text-xs tabular-nums' : 'text-xs whitespace-nowrap'}>{formatted(v, c.format)}</span>;
+          if (typeof v === 'number') return <span className="block text-right text-xs tabular-nums">{formatted(v, c.format)}</span>;
+          // Trimmed to one line with the whole value on hover; the column a phone pins wraps it to two (data-table-column-kinds).
+          // A nowrap span would overflow the pinned column on a phone and draw over the next one.
+          const text = formatted(v, c.format);
+          return (
+            <span className="block max-w-80 truncate text-xs" title={text}>
+              {text}
+            </span>
+          );
         },
       })),
     [cols],
   );
   return (
     <div className="p-2" data-kind="table" data-testid="widget-table">
-      <DataTableWithViews columns={columns} data={node.rows} hideViewSwitcher />
+      {node.rows.length === 1 ? (
+        // One record reads as its fields; a one-row grid has nothing to compare.
+        <dl className="grid grid-cols-[minmax(0,9rem)_1fr] gap-x-4 gap-y-2 px-2 py-2 text-sm" data-testid="widget-record">
+          {cols
+            // Ids are details read once: the record view leaves them out, as the table keeps them behind View.
+            .filter((c) => hidden[c.key] !== false && !reading.hidden.includes(c.key))
+            .map((c) => (
+              <React.Fragment key={c.key}>
+                <dt className="text-muted-foreground">{c.label}</dt>
+                <dd className="min-w-0 break-words">{formatted(node.rows[0][c.key] ?? null, c.format)}</dd>
+              </React.Fragment>
+            ))}
+        </dl>
+      ) : (
+        <DataTableWithViews columns={columns} data={node.rows} hideViewSwitcher hidePaginationOnOnePage initialColumnVisibility={hidden} />
+      )}
       {truncatedFrom && truncatedFrom > node.rows.length && (
         <p className="px-2 pt-1 text-xs text-muted-foreground" data-testid="widget-truncated">
           Showing {node.rows.length.toLocaleString()} of {truncatedFrom.toLocaleString()} rows
@@ -352,49 +388,6 @@ function ReasoningKind({ node }: { node: Extract<KindNode, { type: 'reasoning' }
 }
 
 // ── things and people ──
-
-function EntityKind({ node, onReply }: { node: Extract<KindNode, { type: 'entity' }>; onReply?: (t: string) => void }) {
-  return (
-    <Card className={ENTER} data-kind="entity">
-      <CardHeader className="flex flex-row items-center gap-3">
-        <Avatar className="size-10">
-          <AvatarFallback>{initials(node.title)}</AvatarFallback>
-        </Avatar>
-        <div className="min-w-0 flex-1">
-          {node.category && <p className="text-xs text-muted-foreground">{node.category}</p>}
-          <CardTitle className="truncate">{node.title}</CardTitle>
-          {node.subtitle && <CardDescription className="truncate">{node.subtitle}</CardDescription>}
-        </div>
-        <StatusBadge status={node.status} />
-      </CardHeader>
-      {node.fields.length > 0 && (
-        <CardContent>
-          <dl className="grid grid-cols-[minmax(0,9rem)_1fr] gap-x-4 gap-y-2 text-sm">
-            {node.fields.map((f, i) => (
-              <React.Fragment key={i}>
-                <dt className="text-muted-foreground">{f.label}</dt>
-                <dd className="min-w-0 font-medium break-words tabular-nums">
-                  {f.href ? (
-                    <Link href={f.href} className="underline underline-offset-2">
-                      {cellText(f.value)}
-                    </Link>
-                  ) : (
-                    cellText(f.value)
-                  )}
-                </dd>
-              </React.Fragment>
-            ))}
-          </dl>
-        </CardContent>
-      )}
-      {!!node.actions?.length && (
-        <CardFooter className="justify-end">
-          <ActionButtons actions={node.actions} onReply={onReply} />
-        </CardFooter>
-      )}
-    </Card>
-  );
-}
 
 function CopyLine({ icon: Icon, text }: { icon: typeof Phone; text: string }) {
   const [copied, setCopied] = React.useState(false);
@@ -653,90 +646,6 @@ function QuoteKind({ node, onOpenFile }: { node: Extract<KindNode, { type: 'quot
 
 // ── asking the person ──
 
-function FormKind({ node, actions }: { node: Extract<KindNode, { type: 'form' }>; actions: KindActions }) {
-  const [values, setValues] = React.useState<Record<string, Cell>>(() => Object.fromEntries(node.fields.map((f) => [f.name, f.value ?? (f.type === 'boolean' ? false : '')])));
-  const [state, setState] = React.useState<'open' | 'sending' | 'sent'>('open');
-  const send = actions.onSubmit ?? (actions.onReply && ((v: Record<string, Cell>) => (actions.onReply!(answerText(node, v)), Promise.resolve())));
-  const missing = node.fields.some((f) => f.required && (values[f.name] === '' || values[f.name] === null));
-  const set = (k: string, v: Cell) => setValues((x) => ({ ...x, [k]: v }));
-  const disabled = !send || state !== 'open';
-  return (
-    <Card className={ENTER} data-kind="form">
-      {node.title && (
-        <CardHeader>
-          <CardTitle>{node.title}</CardTitle>
-        </CardHeader>
-      )}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!send) return;
-          setState('sending');
-          send(values).then(() => setState('sent'), () => setState('open'));
-        }}
-      >
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          {node.fields.map((f) => {
-            const id = `wk-${f.name}`;
-            if (f.type === 'boolean')
-              return (
-                <label key={f.name} className="flex items-center gap-2 text-sm sm:col-span-2">
-                  <Switch id={id} checked={values[f.name] === true} disabled={disabled} onCheckedChange={(v) => set(f.name, v)} /> {f.label}
-                </label>
-              );
-            return (
-              <div key={f.name} className={cn('grid gap-1.5', f.type === 'textarea' && 'sm:col-span-2')}>
-                <Label htmlFor={id}>
-                  {f.label}
-                  {f.required ? '' : <span className="font-normal text-muted-foreground"> (optional)</span>}
-                </Label>
-                {f.type === 'select' ? (
-                  <Select value={String(values[f.name] ?? '')} disabled={disabled} onValueChange={(v) => set(f.name, v)}>
-                    <SelectTrigger id={id} className="w-full">
-                      <SelectValue placeholder={f.placeholder ?? 'Choose'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(f.options ?? []).map((o) => (
-                        <SelectItem key={o} value={o}>
-                          {o}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : f.type === 'textarea' ? (
-                  <Textarea id={id} rows={3} placeholder={f.placeholder} value={String(values[f.name] ?? '')} disabled={disabled} onChange={(e) => set(f.name, e.target.value)} />
-                ) : (
-                  <Input
-                    id={id}
-                    type={f.type === 'date' ? 'date' : 'text'}
-                    inputMode={f.type === 'number' ? 'decimal' : undefined}
-                    placeholder={f.placeholder}
-                    value={String(values[f.name] ?? '')}
-                    disabled={disabled}
-                    onChange={(e) => set(f.name, f.type === 'number' && e.target.value !== '' ? Number(e.target.value) : e.target.value)}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </CardContent>
-        <CardFooter className="mt-4 justify-end">
-          <Button type="submit" size="sm" disabled={!send || missing || state !== 'open'}>
-            {state === 'sending' ? <Loader2 className="animate-spin" /> : null}
-            {state === 'sent' ? 'Sent' : node.submit.label}
-          </Button>
-        </CardFooter>
-      </form>
-    </Card>
-  );
-}
-
-/** A form's answers as the message the agent reads: its reply, then each filled field by label. */
-export function answerText(node: Extract<KindNode, { type: 'form' }>, values: Record<string, Cell>): string {
-  const filled = node.fields.filter((f) => values[f.name] !== '' && values[f.name] !== null && values[f.name] !== undefined).map((f) => `${f.label}: ${cellText(values[f.name])}`);
-  return filled.length ? `${node.submit.reply} (${filled.join(', ')})` : node.submit.reply;
-}
-
 function ConfirmKind({ node, actions }: { node: Extract<KindNode, { type: 'confirm' }>; actions: KindActions }) {
   const [answered, setAnswered] = React.useState<'confirmed' | 'cancelled'>();
   const [busy, setBusy] = React.useState(false);
@@ -875,12 +784,14 @@ export function KindView({ node, actions = {}, onOpenFile, truncatedFrom, fieldE
       return <TrackerKind node={node} />;
     case 'entity':
       return <EntityKind node={node} onReply={reply} />;
+    case 'brief':
+      return <BriefKind node={node} />;
     case 'comparison':
       return <ComparisonKind node={node} onReply={reply} />;
     case 'checklist':
       return <ChecklistKind node={node} />;
     case 'form':
-      return <FormKind node={node} actions={actions} />;
+      return <FormKind node={node} onReply={reply} onSubmit={actions.onSubmit} />;
     case 'confirm':
       return <ConfirmKind node={node} actions={actions} />;
     case 'document':

@@ -11,7 +11,9 @@ import { DataTableWithViews } from '@/components/data-table-with-views';
 import { PageLayout } from '@/components/page-layout';
 import { ConfirmActionDialog } from '@/components/shared/confirm-action-dialog';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
-import { ListEmpty, QueryError } from '@/components/shared/query-states';
+import { ListEmpty, NoAccess, QueryError } from '@/components/shared/query-states';
+import { useNavAllows } from '@/hooks/me-queries';
+import { ACTIVITY } from '@/lib/nav';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useActivity } from '@/hooks/activity-queries';
@@ -127,7 +129,8 @@ export default function ActivityPage() {
   }, [params]);
   const list = useListParams<{ kind?: string[]; status?: string[] }>(undefined, undefined, linked);
   const filters = list.params.filters ?? {};
-  const query = useActivity({ page: list.params.page, pageSize: list.params.pageSize, kind: filters.kind, status: filters.status, source: sources.length ? sources : undefined });
+  const may = useNavAllows()(ACTIVITY);
+  const query = useActivity({ page: list.params.page, pageSize: list.params.pageSize, kind: filters.kind, status: filters.status, source: sources.length ? sources : undefined }, may === true);
   const facets = query.data?.facets ?? {};
   const runAgain = useRunSetAsideEmail();
   const [again, setAgain] = React.useState<ActivityRow | null>(null);
@@ -143,7 +146,9 @@ export default function ActivityPage() {
 
   return (
     <PageLayout icon={Activity} title="Activity" description="Everything that happened in the team: runs, chats, emails received and Human Task decisions">
-      {query.isPending ? (
+      {may === false ? (
+        <NoAccess what="the activity list" />
+      ) : query.isPending ? (
         <PageSkeleton statCards={0} tableRows={8} />
       ) : query.isError && !query.data ? (
         <QueryError what="activity" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} testId="activity-error" />

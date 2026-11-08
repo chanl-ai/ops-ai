@@ -84,7 +84,7 @@ export function StepList({ types, open, onOpenChange, onAdd, startTab = 'all' }:
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block text-sm font-medium">{t.label}</span>
-                          <span className="line-clamp-2 text-xs text-muted-foreground">{t.description}</span>
+                          <span className="text-xs text-muted-foreground break-words">{t.description}</span>
                         </span>
                       </CommandItem>
                     );

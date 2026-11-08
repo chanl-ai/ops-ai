@@ -21,11 +21,12 @@ export const sk = {
 
 export const useMembers = (p: ListParams<MemberFilters>) => usePagedQuery({ queryKey: sk.members(p), queryFn: () => api.settings.members.list(p) });
 export const useNotificationSettings = () => useTeamQuery({ queryKey: sk.notifications, queryFn: api.settings.notifications.get });
-export const useWebhooks = (p: ListParams) => usePagedQuery({ queryKey: sk.webhooks(p), queryFn: () => api.settings.webhooks.list(p) });
+/** `enabled` false while the person's roles do not open the page, so nothing is asked that would be refused. */
+export const useWebhooks = (p: ListParams, enabled = true) => usePagedQuery({ queryKey: sk.webhooks(p), queryFn: () => api.settings.webhooks.list(p), enabled });
 export const useWebhookDeliveries = (id: string | null, p: ListParams<DeliveryFilters>) =>
   usePagedQuery({ queryKey: sk.deliveries(id ?? '', p), queryFn: () => api.settings.webhooks.deliveries(id!, p), enabled: !!id });
-export const useApiKeys = (p: ListParams) => usePagedQuery({ queryKey: sk.keys(p), queryFn: () => api.settings.apiKeys.list(p) });
-export const useUsage = (days: UsageDays) => usePagedQuery({ queryKey: sk.usage(days), queryFn: () => api.settings.usage.get(days) });
+export const useApiKeys = (p: ListParams, enabled = true) => usePagedQuery({ queryKey: sk.keys(p), queryFn: () => api.settings.apiKeys.list(p), enabled });
+export const useUsage = (days: UsageDays, enabled = true) => usePagedQuery({ queryKey: sk.usage(days), queryFn: () => api.settings.usage.get(days), enabled });
 export const useSettingsLookups = () => useTeamQuery({ queryKey: sk.lookups, queryFn: api.settings.lookups, staleTime: 5 * 60_000 });
 
 function useSettingsWrite<A, R>(fn: (a: A) => Promise<R>) {

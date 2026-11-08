@@ -19,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { relativeTime } from '@/lib/format';
 import type { ApprovalWidget, ChartWidget, ChatWidget, FormWidget, MetricWidget, RecordWidget, TableWidget, WidgetAction, WidgetKind } from '@/lib/types/chat';
 import { cn } from '@/lib/utils';
+import { dateCell, isEmptyColumn, isIsoDate, shownLabel } from '@/lib/widgets/table-columns';
 
 /**
  * In-chat views of MCP App results. In production each app ships its own UI, rendered in a sandboxed iframe
@@ -61,13 +62,15 @@ function WidgetFrame({ widget, actions, children }: { widget: ChatWidget; action
 }
 
 function TableView({ widget }: WidgetProps<TableWidget>) {
+  // The same reading rules as every result table: labels in words, dates formatted, empty columns left out.
+  const columns = widget.columns.filter((c) => !isEmptyColumn(c.key, widget.rows)).map((c) => ({ ...c, label: shownLabel(c.key, c.label) }));
   return (
     <WidgetFrame widget={widget}>
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              {widget.columns.map((c) => (
+              {columns.map((c) => (
                 <TableHead key={c.key} className={cn('h-8 text-xs', c.align === 'right' && 'text-right')}>
                   {c.label}
                 </TableHead>
@@ -77,9 +80,9 @@ function TableView({ widget }: WidgetProps<TableWidget>) {
           <TableBody>
             {widget.rows.map((r, i) => (
               <TableRow key={i}>
-                {widget.columns.map((c) => (
-                  <TableCell key={c.key} className={cn('py-1.5 text-xs whitespace-nowrap', c.align === 'right' && 'text-right tabular-nums', c.tone && Number(r[c.key]) > 0 && 'font-medium text-destructive-text')}>
-                    {r[c.key]}
+                {columns.map((c) => (
+                  <TableCell key={c.key} className={cn('py-1.5 text-xs', c.align === 'right' || isIsoDate(r[c.key]) ? 'whitespace-nowrap' : 'min-w-32 break-words whitespace-normal', c.align === 'right' && 'text-right tabular-nums', c.tone && Number(r[c.key]) > 0 && 'font-medium text-destructive-text')}>
+                    {isIsoDate(r[c.key]) ? dateCell(r[c.key] as string) : r[c.key]}
                   </TableCell>
                 ))}
               </TableRow>

@@ -170,7 +170,8 @@ export interface AuditEntry {
   requestId: string;
 }
 
-export type AuditView = 'all' | 'publishes' | 'access' | 'deletions';
+/** `changes` is everything but sign-ins, the audit page's first view; `sign_ins` holds them. */
+export type AuditView = 'all' | 'changes' | 'publishes' | 'access' | 'deletions' | 'sign_ins';
 export type AuditFilters = { action?: string[]; targetType?: string[]; actorKind?: string[]; teamId?: string[] };
 export type AuditViewCounts = Record<AuditView, number>;
 

@@ -236,7 +236,7 @@ export function ToolWorkbench(p: ToolWorkbenchProps) {
               <InputSchemaEditor value={d.input} onChange={(input) => set({ input })} boundArg={op.binding?.arg} errors={p.inputErrors} />
             </fieldset>
           </Section>
-          <Section title="Secrets" description="Read from the tenant's secrets. A value typed here is used for this run only and never stored." flush>
+          <Section title="Secrets" description="Read from the team's secrets. A value typed here is used for this run only and never stored." flush>
             {(op.secrets?.length ?? 0) === 0 ? (
               <p className="p-4 text-sm text-muted-foreground">This operation reads no secrets.</p>
             ) : (

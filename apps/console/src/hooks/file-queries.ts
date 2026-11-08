@@ -56,7 +56,7 @@ export const useExportEvidence = () => useFileWrite((i: EvidenceExportInput) => 
 export const useExportAudit = () => useFileWrite((p: ListParams<AuditFilters> & { view: AuditView }) => api.files.exportAudit(p));
 export const useSaveStorage = () => useFileWrite((i: StorageSettingsInput) => api.files.storage.update(i));
 export const useTestStorage = () => useMutation({ mutationFn: (target: StorageTarget) => api.files.storage.test(target) });
-export const useStorageCredentials = () => useTeamQuery({ queryKey: [...fk.storage, 'credentials'], queryFn: api.files.storage.credentials.list });
+export const useStorageCredentials = (enabled = true) => useTeamQuery({ queryKey: [...fk.storage, 'credentials'], queryFn: api.files.storage.credentials.list, enabled });
 export const useSetStorageCredential = () => useFileWrite((i: { name: string; input: StorageCredentialInput }) => api.files.storage.credentials.set(i.name, i.input));
 export const useRemoveStorageCredential = () => useFileWrite((name: string) => api.files.storage.credentials.remove(name));
 

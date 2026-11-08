@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "The demo sign-in lists people by team",
+  "description": "On a local install, Sign in as a demo person lists each team under its name with each person's role there.",
+  "tag": "improved"
+}

@@ -1,4 +1,104 @@
 {
+  "brief": {
+    "additionalProperties": false,
+    "properties": {
+      "app": {
+        "pattern": "^[a-z]+:[A-Za-z0-9._-]{1,80}$",
+        "type": "string"
+      },
+      "open": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "path": {
+            "pattern": "^/(?!/)[A-Za-z0-9/_.~%-]{0,300}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "sections": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "items": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "detail": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "text": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "type": "object"
+              },
+              "maxItems": 8,
+              "minItems": 0,
+              "type": "array"
+            },
+            "note": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "title": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "title",
+            "items"
+          ],
+          "type": "object"
+        },
+        "maxItems": 6,
+        "minItems": 1,
+        "type": "array"
+      },
+      "title": {
+        "maxLength": 2000,
+        "minLength": 1,
+        "type": "string"
+      },
+      "when": {
+        "maxLength": 2000,
+        "minLength": 1,
+        "type": "string"
+      },
+      "who": {
+        "maxLength": 2000,
+        "minLength": 1,
+        "type": "string"
+      }
+    },
+    "required": [
+      "title",
+      "sections"
+    ],
+    "type": "object"
+  },
   "chart": {
     "additionalProperties": false,
     "properties": {
@@ -235,6 +335,14 @@
                 "boolean",
                 "null"
               ]
+            },
+            "was": {
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
             }
           },
           "required": [
@@ -412,6 +520,10 @@
         "minItems": 0,
         "type": "array"
       },
+      "app": {
+        "pattern": "^[a-z]+:[A-Za-z0-9._-]{1,80}$",
+        "type": "string"
+      },
       "category": {
         "maxLength": 2000,
         "minLength": 1,
@@ -433,6 +545,14 @@
                 "boolean",
                 "null"
               ]
+            },
+            "was": {
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
             }
           },
           "required": [
@@ -444,6 +564,24 @@
         "maxItems": 50,
         "minItems": 0,
         "type": "array"
+      },
+      "open": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "path": {
+            "pattern": "^/(?!/)[A-Za-z0-9/_.~%-]{0,300}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
       },
       "status": {
         "additionalProperties": false,
@@ -488,10 +626,39 @@
   "form": {
     "additionalProperties": false,
     "properties": {
+      "app": {
+        "pattern": "^[a-z]+:[A-Za-z0-9._-]{1,80}$",
+        "type": "string"
+      },
+      "edit": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "reply": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "reply"
+        ],
+        "type": "object"
+      },
       "fields": {
         "items": {
           "additionalProperties": false,
           "properties": {
+            "error": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
             "label": {
               "maxLength": 2000,
               "minLength": 1,
@@ -528,6 +695,14 @@
                 "select",
                 "boolean"
               ]
+            },
+            "value": {
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
             }
           },
           "required": [
@@ -540,6 +715,11 @@
         "maxItems": 12,
         "minItems": 1,
         "type": "array"
+      },
+      "note": {
+        "maxLength": 2000,
+        "minLength": 1,
+        "type": "string"
       },
       "submit": {
         "additionalProperties": false,
@@ -560,6 +740,11 @@
           "reply"
         ],
         "type": "object"
+      },
+      "subtitle": {
+        "maxLength": 2000,
+        "minLength": 1,
+        "type": "string"
       },
       "title": {
         "maxLength": 2000,

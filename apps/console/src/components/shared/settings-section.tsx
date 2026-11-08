@@ -9,7 +9,7 @@ interface SettingsSectionProps {
   /** Section title */
   title: string;
   /** Optional description shown below title */
-  description?: string;
+  description?: ReactNode;
   /** Optional help text shown in tooltip */
   helpText?: string;
   /** Optional help link URL */

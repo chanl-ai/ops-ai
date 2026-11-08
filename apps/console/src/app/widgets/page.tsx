@@ -29,6 +29,10 @@ import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = WidgetTemplate & { onRowClick: (w: WidgetTemplate) => void; href: string };
 
+/** When a widget last changed and by whom; the seeded library's widgets ship with Ops AI and carry no edit date. */
+const updatedOf = (w: WidgetTemplate) =>
+  w.updatedAt ? `${relativeTime(w.updatedAt)}${w.updatedBy ? ` · ${w.updatedBy}` : ''}` : w.teamId ? '—' : 'Built in';
+
 const columns: ColumnDef<Row>[] = [
   selectColumn<Row>((w) => w.name),
   idColumn<Row>((w) => w.widgetId),
@@ -38,7 +42,7 @@ const columns: ColumnDef<Row>[] = [
     cell: ({ row }) => (
       <div className="min-w-56 max-w-xl">
         <div className="text-sm font-medium">{row.original.name}</div>
-        <div className="line-clamp-2 text-xs text-muted-foreground">{row.original.useWhen}</div>
+        <div className="text-xs text-muted-foreground break-words whitespace-normal">{row.original.useWhen}</div>
       </div>
     ),
     enableHiding: false,
@@ -49,8 +53,7 @@ const columns: ColumnDef<Row>[] = [
     header: ({ column }) => <DataTableColumnHeader column={column} title="Updated" />,
     cell: ({ row }) => (
       <span className="text-sm whitespace-nowrap text-muted-foreground">
-        {row.original.updatedAt ? relativeTime(row.original.updatedAt) : '—'}
-        {row.original.updatedBy ? ` · ${row.original.updatedBy}` : ''}
+        {updatedOf(row.original)}
       </span>
     ),
   },
