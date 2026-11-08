@@ -1,0 +1,13 @@
+# A save is written only after the person has seen exactly what it writes, as James with the real model: an ask that
+# says to save in the same breath gets the read-back with Save as a quick reply, and nothing is written yet. Needs the
+# demo records (make demo-org-seed AS=james). Run on demand, not in CI.
+as: [james]
+real: [james]
+turns:
+  - say: "Log my meeting with the Okafor Family Trust: Grace wants to add $25,000, we agreed to move it forward a stage, so save it"
+    expect:
+      notTools: [salesforce_save_records]
+      followUps: true
+      says: ["Education savings", "Save"]
+      notWidgets: [form]
+      maxSteps: 4

@@ -81,6 +81,9 @@ kept by Ops AI, or your team's own app. To bring your own app (a Salesforce conn
 | 2. Register it as the callback URL of your app at the system | Salesforce: the connected app's Callback URL. GitHub: the OAuth app's Authorization callback URL |
 | 3. Enter the app's client ID and secret in Ops AI | **New auth config** or **Edit**; the secret is sealed and only its last four characters are shown |
 
+A Salesforce app needs the **Manage user data via APIs (api)** and **Perform requests at any time (refresh_token,
+offline_access)** scopes; without the second, people are signed out when the first token ends.
+
 Ops AI builds the callback URL from its console address (`OPS_CONSOLE_URL`), so it must match the address people open.
 Changing the client ID or permissions makes the accounts on it sign in again.
 

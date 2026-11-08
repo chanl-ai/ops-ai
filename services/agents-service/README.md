@@ -14,12 +14,12 @@ make migrate
 make run         # http://127.0.0.1:8700
 ```
 
-From the repo root, `pnpm dev:runtime` points the console's chat at it.
+From the repo root, `pnpm dev:runtime` points the console's chat at it. Working rules: `CLAUDE.md`.
 
 ## Common tasks
 
 | Task | Command |
 |---|---|
 | Lint, strict types, tests, standards | `make verify` |
-| One test | `uv run pytest tests/api/test_chat.py::<test_name>` |
+| One test | `make test T='tests/api/test_chat.py::<test_name>'` (a bare `uv run pytest` refuses the stack's database) |
 | Regenerate the dependency list | `make sbom` |

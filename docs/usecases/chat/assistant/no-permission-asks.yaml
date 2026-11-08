@@ -1,0 +1,6 @@
+# Reads that fail end in words, not "proceed?": the end check corrects an offer to read more (a live reply read files
+# named "open", "mine" and "recent", then asked to retry).
+as: [dana.whitfield@harborpine.example]
+turns:
+  - say: "Read my open work and my recent runs"
+    expect: {noQuestion: true, noControls: true, noErrorCode: true, endsClean: true, maxSteps: 3}

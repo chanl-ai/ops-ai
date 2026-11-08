@@ -155,7 +155,7 @@ paging, knowledge sources and templates.
 | `headers` | Headers on every request the plugin makes, a Python tool's too; a tool's own `headers` add to them |
 | `egress` | The hosts a tool may reach, usually a setting such as `{instance_url}` |
 | `endpoint` | The base address every request template is relative to |
-| `tools` | Each tool's `name`, `title`, `description`, `access` (`read` or `write`), `input`, `headers`, `amount_max`, `requires_approval`, `rate_limit_per_min` (calls a minute, 60 when left out), `knowledge` (`list_items` or `get_item` for a knowledge source's tools), then either `request` (method, path, `query`, `body` or `form`, `paging`) and an optional Jinja `transform`, or `function` |
+| `tools` | Each tool's `name`, `title`, `description`, `access` (`read` or `write`), `input`, `headers`, `amount_max`, `requires_approval`, `rate_limit_per_min` (calls a minute, 60 when left out), `shape` (how chat draws the result), `knowledge` (`list_items` or `get_item` for a knowledge source's tools), then either `request` (method, path, `query`, `body` or `form`, `paging`) and an optional Jinja `transform`, or `function` |
 | `knowledge_sources` | A source's `list` and `get` tools and its `schedule` |
 | `templates` | Each template's `kind` (`agent`, `skill`, `workflow` or `document_type`), `id`, `version`, `path` (its file, relative to the manifest), and `requires`: `tools` (names without the prefix; validate refuses one the plugin lacks) and `bind` (what a team fills in on its copy, such as `{model_alias: chat}` or `{knowledge_base: "Salesforce articles"}`) |
 | `display` | What the console's App card shows: `logo` (a URL or a `data:` URI), `category`, `description` (one line) and `docs_url` (where an admin reads how to register the system's app or get its key) |
@@ -233,7 +233,7 @@ is the worked example:
 
 ## Headers, forms and sign-in steps
 
-Six fields cover what a system asks for beyond a path and a query. Each is data, checked by `ops plugin validate`
+Seven fields cover what a system asks for beyond a path and a query. Each is data, checked by `ops plugin validate`
 and run by tools-service.
 
 | Field | What it does | Example | What validate refuses, and why |
@@ -244,6 +244,7 @@ and run by tools-service.
 | `connection.client_auth` | How the OAuth client is sent on the token call: `body`, `basic` or `private_key_jwt` | Zoom takes only `basic` | On a plugin with no OAuth kind |
 | `connection.after_sign_in` | One GET with the token just issued, whose value at `read` fills `setting`. `url` is https, or a path on the sign-in host (the origin of `token_url`) | Salesforce: `{url: /services/oauth2/userinfo, read: urls.custom_domain, setting: instance_url}`; Atlassian: `read: "[0].id"` of accessible-resources | A host outside `egress`, a setting not marked `after_sign_in`, an unreadable path, no `token_hosts` |
 | `tools[].amount_max` | The most the tool's `amount` input may be; a call over it, or without an amount, is refused before it leaves | A core-banking transfer | No number input named `amount`, or a paged tool |
+| `tools[].shape` | How chat draws the result: `rows` (a table; one list inside an envelope, such as a query's `records` beside `totalSize` and `done`, is read as the rows), `series`, `record` or `metric`. Left out, chat infers it, and reads such an envelope the same way | A query tool that answers `{totalSize, done, records}` | A value other than the four shapes |
 
 Every request template also refuses a secret reference (`{{NAME}}` in capitals): tools-service resolves those from the
 calling team's secrets, so one in a plugin would send the team's secret to the plugin's host. A team setting that a
@@ -537,7 +538,7 @@ in `app_credentials`, and the accounts that sign in with it point at that row.
 
 | Who | Call | What it does |
 |---|---|---|
-| Platform admin | install config `OPS_PLUGIN_LOCKED='{"opsai.salesforce": {"api_version": "61.0"}}'`, then restart tools-service | Fixes a lockable setting for every team; taking the plugin out of the plugins folder stops every team's calls, which then read "no longer installed" |
+| Platform admin | install config `OPS_PLUGIN_LOCKED='{"opsai.salesforce": {"api_version": "61.0"}}'`, then restart tools-service | Fixes a lockable setting for every team; taking the plugin out of the plugins folder stops every team's calls, which then read "isn't installed on this system" |
 | Team admin (`connections.manage`) | tools-service `PUT /v1/apps/plugin:opsai.salesforce/team` with `{enabled, settings, signIn, kind, credentials, clientId, clientSecret}` | Turns it on for the team and makes the team's default account, whole, for its sign-in kind (below); off again keeps the account and settings |
 | Team admin | `POST /v1/apps/plugin:opsai.salesforce/accounts` with `{name, sandbox: true, ...}` and the same sign-in fields | Adds a sandbox account (a Salesforce sandbox org, for example). Test runs use it; live runs never do. Its sign-in address and the instance its sign-in names are its own |
 | Security | nothing for the plugin's own hosts | The hosts in the manifest's `egress` (rendered with the team's settings) are reached by that plugin's sign-in, token, test and tool requests without listing; no other call reaches them unlisted. Private, loopback, link-local and metadata addresses stay refused |

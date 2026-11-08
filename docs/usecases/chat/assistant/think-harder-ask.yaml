@@ -1,0 +1,14 @@
+# Asking to think harder inside a message, as James with the real model: the message is answered as asked on the
+# deeper model (the reply's settings name think_harder), with advice and no save read-back. The quick reply alone is
+# think-harder.yaml. Needs the demo records (make demo-org-seed AS=james). Run on demand, not in CI.
+as: [james]
+real: [james]
+turns:
+  - say: "What stage is the Education savings opportunity in?"
+    expect:
+      tool: salesforce_query
+      maxSteps: 3
+  - say: "think harder - what should we do next with it?"
+    expect:
+      notTools: [salesforce_save_records]
+      maxSteps: 2

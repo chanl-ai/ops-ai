@@ -24,3 +24,13 @@ make -C services/agents-service db-down
 
 The development file's project name stays `ops-runtime` so its data volume is reused; it uses no env file. The install
 reads only the env file it is given; never commit one.
+
+## Working here
+
+| Task | Command |
+|---|---|
+| Prove the install end to end (own PostgreSQL on :15498, project `ops-compose` on :18890) | `sh deploy/compose/proof.sh` (`KEEP=1` leaves it up, `BUILD=0` skips builds) |
+| Prove the mailbox demo on the release images | `sh deploy/compose/mailbox_proof.sh` |
+
+A setting added to `x-settings` in `app.yaml` reaches Kubernetes only after `uv run python deploy/k8s/generate.py`.
+`compose.yaml` is shared by every checkout's dev stack: change it, then recreate on purpose (`docs/architecture/make.md`). Folder rules: `../CLAUDE.md`.

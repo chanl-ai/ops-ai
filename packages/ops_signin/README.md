@@ -9,6 +9,8 @@ secrets, and what happens to the person afterwards are the calling service's.
 | `password` | `PasswordHasher`: PBKDF2-SHA256, iterations from the caller's settings, rehash when they rise |
 | `oidc` | `OidcClient`: authorization code with PKCE (S256), id_token checked against the issuer's keys |
 | `saml` | `SamlServiceProvider`: SP-initiated sign-in, the response checked with `signxml` against the IdP certificate |
+| `xmlenc` | Decrypts an `EncryptedAssertion` with the service provider's key (RSA-OAEP, AES-GCM or AES-CBC) |
+| `dns` | `TxtResolver`: domain proof by an `ops-ai-verify=<token>` TXT record |
 | `fake_idp` | A local OIDC and SAML identity provider for tests and the dev stack (`python -m ops_signin.fake_idp --port 8790`) |
 
 ```python
@@ -17,4 +19,4 @@ start = await oidc.begin(redirect_uri=callback, login_hint=email)  # keep state,
 who = await oidc.complete(code=code, verifier=start.verifier, nonce=start.nonce, redirect_uri=callback)
 ```
 
-Docs: [docs/packages/ops_signin/overview.md](../../docs/packages/ops_signin/overview.md).
+Tests: `make test PKG=packages/ops_signin`. Docs: [docs/packages/ops_signin/overview.md](../../docs/packages/ops_signin/overview.md).

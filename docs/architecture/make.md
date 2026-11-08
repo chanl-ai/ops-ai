@@ -36,7 +36,8 @@ into it before reviewing it.
 | Fragment | Targets | Owns |
 |---|---|---|
 | `make/env.mk` | none | Ports (overridable defaults), `OPS_PORT_OFFSET`, compose project, the stack's state folders in the main checkout, the `OPS_*` the services read derived from the ports, the help formatter |
-| `make/dev.mk` | `up`, `down`, `restart`, `health`, `logs`, `ports` | The local stack through `scripts/stack.sh` |
+| `make/dev.mk` | `up`, `down`, `restart`, `health`, `logs`, `ports`, `api`, `sdk-call` | The local stack through `scripts/stack.sh`; one route or SDK call as a seeded person (`scripts/api_as.py`) |
+| `make/cli.mk` | `<area>-<verb>` (`chat`, `kb-*`, `apps-*`, `tools-*`, `runs-*`, `tasks-*`, `cases-*`, `files-*`, `documents-*`, `people-*`, `models-*`, `memories-*`), `test-data-clean` | The `ops` command (`sdk/python`) as a seeded person (`AS=`); the list: `make/CLAUDE.md` |
 | `make/db.mk` | `db-up`, `db-down`, `db-shell`, `db-reset`, `migrate`, `migration` | Compose (PostgreSQL, OPA) and Alembic |
 | `make/db-scripts.mk` | `db-ddl`, `db-upgrade-sql`, `db-drift`, `db-release`, `db-scripts-proof` | The schema as scripts a DBA applies (`deploy/database/schema.py`, `docs/deploy/database.md`) |
 | `make/services.mk` | `<verb>-<svc>`, generated | `SERVICES`, each service's folder, `SERVICE_VERBS`; one rule template expanded per pair |
@@ -189,6 +190,41 @@ data volume.
 | Tests of what changed since `origin/main` | `make test` |
 | Run an experiment | `make experiment E=1` |
 | Stop everything | `make down` (`KEEP_DB=1` keeps PostgreSQL and OPA) |
+
+## Salesforce test sign-in
+
+A chat script that needs a person signed in to Salesforce, or signed out and back in, runs with nobody at a browser.
+The test sign-in uses Salesforce's OAuth 2.0 JWT bearer flow (RFC 7523) against an org you own.
+
+| Task | Command |
+|---|---|
+| Sign a person in from keys in `.env` | `make sf-signin-env AS=<person>` |
+| Keep a person's own sign-in, sign them out here, put it back | `make sf-signin-save AS=<person>`, `make sf-signin-remove AS=<person>`, `make sf-signin-restore AS=<person>` |
+| Put the meeting flows' sample records in the org, or take them out | `make demo-org-seed AS=<person>`, `make demo-org-remove AS=<person>` |
+
+`sf-signin-env` reads four keys from the stack's `.env` by name and prints none of their values:
+
+| Key | Holds |
+|---|---|
+| `SF_TEST_CLIENT_ID` | The Consumer Key of an External Client App (or connected app) with the JWT Bearer Flow on |
+| `SF_TEST_USERNAME` | The org user the test acts as: the Username in Setup › Advanced User Details, which is not always the email |
+| `SF_TEST_JWT_KEY_FILE` | The private key whose certificate is uploaded to that app |
+| `SF_TEST_LOGIN_URL` | Optional; `https://login.salesforce.com` by default, `https://test.salesforce.com` for a sandbox |
+
+Setting up the app in Salesforce:
+
+| Step | Where |
+|---|---|
+| 1. Make a key pair and a self-signed certificate | `openssl req -x509 -newkey rsa:2048 -nodes -keyout sf-jwt.key -out sf-jwt.crt -days 365 -subj "/CN=ops-ai-test-signin"`; keep the key outside the repository, mode 600 |
+| 2. Create the app | Setup › External Client App Manager › New External Client App; enable OAuth with any callback URL |
+| 3. Choose scopes | **Manage user data via APIs (api)** and **Perform requests at any time (refresh_token, offline_access)**. Salesforce refuses the JWT flow without the second, though the flow returns no refresh token |
+| 4. Turn on the JWT flow | Flow Enablement › **Enable JWT Bearer Flow**, and upload `sf-jwt.crt` |
+| 5. Pre-authorize the user | Policies › Permitted Users: **Admin approved users are pre-authorized**, then add the user's profile under Select Profiles |
+| 6. Copy the Consumer Key | Settings › OAuth Settings › **Consumer Key and Secret** |
+
+The JWT flow returns no refresh token, so the sign-in lasts as long as the org's session timeout (about an hour); run
+`make sf-signin-env` again after it ends. The person is found the way `ops --as` finds them, so these targets run
+only against a local stack. A chat that saves really writes to the org, so use an org that holds test data only.
 
 ## Departures from the sibling platforms
 

@@ -1,0 +1,14 @@
+# The Salesforce demo: a person asks the case helper about a case; the chat asks them to connect their own Salesforce
+# once, nothing is read before that, then it answers as them. Run as a person with no Salesforce sign-in of their own:
+# make chat-script FILE=docs/usecases/chat/salesforce-case-helper.yaml AS=james
+agent: Case helper
+test: true
+turns:
+  - say: "What is the status of Salesforce case 00001000?"
+    expect: {"card": true}
+  - connected: true
+    expect: {"tool": "salesforce_query", "credential": "person"}
+  - say: "How many Accounts do we have in Salesforce?"
+    expect: {"tool": "salesforce_query", "says": ["2"]}
+  - say: "Thanks, that's all."
+    expect: {"noTool": true}

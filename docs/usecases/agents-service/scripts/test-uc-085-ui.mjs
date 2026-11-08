@@ -43,15 +43,16 @@ await withUiStack(
       const note = await page.getByTestId('guardrail-refusal').last().innerText({ timeout: 15_000 }).catch(() => '');
       check('the blocked question shows the guardrail message and names the guardrail that refused it', refused && /No investment advice v1/.test(note) && /investment advice/.test(note), { refused, note });
 
-      // Step 4 in the chat: a hardship question loads the pinned skill, and the turn says so.
+      // Step 4 in the chat: a hardship question loads the pinned skill and answers from it; loading a skill is the
+      // assistant's own housekeeping, kept in the call log and never shown in the reply.
       await box.fill("My client lost her job and cannot make this month's mortgage payment. What can we do?");
       const sentSkill = armed(page.waitForResponse((r) => r.request().method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url()), { timeout: 120_000 }));
       await page.getByRole('button', { name: 'Send', exact: true }).click();
       const resSkill = await sentSkill;
       await Promise.race([resSkill?.finished().catch(() => undefined), new Promise((r) => setTimeout(r, 60_000))]);
-      const skillLine = await page.getByTestId('loaded-skills').last().innerText({ timeout: 60_000 }).catch(() => '');
-      const skillAnswer = await page.getByText(/hardship request form/).last().isVisible().catch(() => false);
-      check('a hardship question shows "Loaded skill Hardship request triage v1" on the turn', /Loaded skill Hardship request triage v1/.test(skillLine) && skillAnswer, { skillLine, skillAnswer });
+      const skillAnswer = await page.getByText(/hardship request form/).last().isVisible({ timeout: 60_000 }).catch(() => false);
+      const skillLines = await page.getByTestId('loaded-skills').count();
+      check('a hardship question answers from the hardship skill, with no skill line in the reply', skillAnswer && skillLines === 0, { skillAnswer, skillLines });
 
       // Step 1 on the agent page: blocked topics are the pinned guardrail, marked enforced; the settings the runtime
       // does not act on say so.

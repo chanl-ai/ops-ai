@@ -73,9 +73,10 @@ try {
 
   await step('a the hardship skill loads and the comparison cites the product sheet', async () => {
     const reply = await ask(james, "Advisor's Helper", 'My client lost her job. Compare Savings Plus and Money Market for her.');
-    const skill = await reply.getByTestId('loaded-skills').count();
+    // The skill's load stays in the call log; the reply shows no skill line.
+    const skillLines = await reply.getByTestId('loaded-skills').count();
     const text = await reply.innerText();
-    check('a the hardship skill loads and the comparison cites the product sheet', skill > 0 && /Retail Product Sheet/.test(text), { skill, tail: text.slice(-400) });
+    check('a the comparison cites the product sheet, with no skill line in the reply', skillLines === 0 && /Retail Product Sheet/.test(text), { skillLines, tail: text.slice(-400) });
   });
 
   await step('b the Savings Plus rate against Money Market, each cited', async () => {

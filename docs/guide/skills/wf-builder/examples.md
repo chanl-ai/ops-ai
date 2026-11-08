@@ -22,19 +22,19 @@ Customer summary. Summarise a customer for a banker: the bank finds the customer
 | Summarise the customer (`summarise`) | `ops.ai.agent` |
 | Summarised (`done`) | `ops.flow.end` |
 | No summary (`failed`) | `ops.flow.end` |
-| Not found (`not_found`) | `ops.flow.end` |
+| No such customer (`not_found`) | `ops.flow.end` |
 
 | From | Port | To |
 |---|---|---|
 | `start` | payload | `find` |
 | `find` | ok | `found` |
-| `find` | refused | `not_found` |
-| `find` | error | `not_found` |
+| `find` | refused | `failed` |
+| `find` | error | `failed` |
 | `found` | true | `read` |
 | `found` | false | `not_found` |
 | `read` | ok | `summarise` |
-| `read` | refused | `not_found` |
-| `read` | error | `not_found` |
+| `read` | refused | `failed` |
+| `read` | error | `failed` |
 | `summarise` | ok | `done` |
 | `summarise` | error | `failed` |
 
