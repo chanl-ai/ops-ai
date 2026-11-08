@@ -3639,6 +3639,8 @@ export interface components {
             agentId: string;
             /** Agentname */
             agentName: string;
+            /** Skills */
+            skills?: string[];
             /**
              * State
              * @enum {string}

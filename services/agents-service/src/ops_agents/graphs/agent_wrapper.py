@@ -116,6 +116,8 @@ def build(
         source = state["history"] if "history" in state else state["messages"]
         transcript = [TranscriptMessage(m["role"], m["content"]) for m in source]  # pyright: ignore[reportArgumentType]
         carried, reads = _earlier(cast(list[dict[str, Any]], source))
+        replies = [m for m in cast(list[dict[str, Any]], source) if m.get("role") == "assistant"]
+        open_plan = cast(dict[str, Any] | None, replies[-1].get("plan")) if replies else None
         effective = _effective(state)
         grants = _kb_grants(a, deps.model_alias, effective)
         attached = [
@@ -134,6 +136,7 @@ def build(
             transcript=transcript,
             carried_skills=carried,
             earlier_reads=reads,
+            carried_plan=open_plan,
             user_turn=state["message"],
             kb_ids=[*_granted(state, grants), *([ATTACHMENT_KB] if attached else [])],
             attachments=[

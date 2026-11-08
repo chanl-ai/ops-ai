@@ -47,6 +47,7 @@ from pydantic_ai.usage import UsageLimits
 from ops_service_kit.ids import action_id, input_hash
 
 from . import answer_check, guard, pii, present, search
+from . import plan as planner
 from . import skills as skillset
 from .context import UnknownVariableError, assemble, cited_numbers
 from .events import (
@@ -128,6 +129,14 @@ class _TurnState:
     tools_closed: bool = False
     # The step whose calls past max_tool_calls were told to stop and answer; a call in a later step ends the turn.
     cap_told_step: int | None = None
+    # The turn's plan (plan.py) as the last accepted call left it, how many times it was replaced, and the call that
+    # drew it, whose part each change redraws.
+    plan: dict[str, Any] | None = None
+    replans: int = 0
+    plan_call: str | None = None
+    # The loop's request limit, raised by max_steps each time a plan step is done, and the step count it stands at.
+    limits: UsageLimits | None = None
+    step_limit: int = 0
     # Calls to the kernel's own tools this turn, against the agent's max_builtin_calls; set once one is refused.
     builtin_calls: int = 0
     builtins_refused: bool = False
@@ -141,7 +150,7 @@ class _TurnState:
 
     def last_step(self, step: int) -> bool:
         """The last step of a turn with more than one offers no tool, so the turn always keeps a step to answer in."""
-        steps = self.req.settings.max_steps
+        steps = self.step_limit or self.req.settings.max_steps
         return steps > 1 and step >= steps
 
     def offered(self, ctx: RunContext[None], *, builtin: bool) -> bool:
@@ -285,9 +294,14 @@ def _with_skills(system_prompt: str, pinned: list[Skill]) -> str:
     return f"{system_prompt}\n\n{added}" if added else system_prompt
 
 
-def _with_earlier(system_prompt: str, carried: list[Skill], reads: list[str]) -> str:
-    """The bodies of skills an earlier turn loaded and the results earlier turns read, after the skill index."""
+def _with_earlier(
+    system_prompt: str, carried: list[Skill], reads: list[str], plan: dict[str, Any] | None = None
+) -> str:
+    """The bodies of skills an earlier turn loaded, the results earlier turns read and a plan an earlier turn left
+    open, after the skill index."""
     parts = [f"## {s.name} (loaded earlier in this conversation)\n\n{s.instructions}" for s in carried]
+    if plan is not None:
+        parts.append(planner.prompt(plan))
     if reads:
         lines = "\n".join(f"- {r}" for r in reads)
         parts.append(f"## {EARLIER_READS}\n\n{lines}")
@@ -320,6 +334,52 @@ def _replace(state: _TurnState, text: str) -> TextDelta | TextReplaced:
 def _fired(hit: guard.Hit, when: str) -> dict[str, Any]:
     r = hit.rule
     return {"guardrailId": r.guardrail_id, "version": r.version, "name": r.name, "topic": hit.topic, "when": when}
+
+
+def _plan(state: _TurnState) -> Tool[None]:
+    """The built-in plan tool (plan.py): charged to neither the tool cap nor the built-in cap. A step marked done gives
+    the turn a fresh tool-call budget and max_steps more loop steps, so each step of a plan has the room one ask has."""
+    g = state.grants[planner.NAME]
+
+    async def call(ctx: RunContext[None], **arguments: Any) -> Any:
+        rec = state.record(ctx.tool_call_id or f"call_{len(state.order)}", planner.NAME, arguments)
+        new, why = planner.given(arguments)
+        replan = bool(arguments.get("replan"))
+        why = why or planner.check(state.plan, cast(dict[str, Any], new), replan=replan, replans=state.replans)
+        if why is not None:
+            rec.status, rec.output = "error", {"error": why}
+            return {"error": why}
+        assert new is not None
+        if replan and state.plan is not None:
+            state.replans += 1
+        was = {s["title"] for s in (state.plan or {}).get("steps", []) if s["status"] == "done"}
+        newly_done = [s for s in new["steps"] if s["status"] == "done" and s["title"] not in was]
+        if newly_done and state.plan is not None:
+            state.granted_calls, state.cap_told_step = 0, None
+            more = state.req.settings.max_steps * len(newly_done)
+            state.step_limit = (state.step_limit or state.req.settings.max_steps) + more
+            if state.limits is not None and state.limits.request_limit is not None:
+                state.limits.request_limit += more
+        state.plan, state.plan_call = new, rec.tool_call_id
+        said = planner.answer(new)
+        rec.status, rec.output, rec.view = "ok", said, {"part": planner.part(new)}
+        return said
+
+    tool = Tool[None].from_schema(
+        cast(Callable[..., Awaitable[Any]], call), planner.NAME, g.description, g.input_schema, takes_ctx=True
+    )
+    tool.prepare = _offer(state, builtin=True)
+    return tool
+
+
+def _plan_left(state: _TurnState, why: str) -> ToolOutput | None:
+    """A plan the turn stops before finishing: its current step marked blocked with why, redrawn on its part."""
+    if state.plan is None or planner.finished(state.plan) or state.plan_call not in state.records:
+        return None
+    state.plan = planner.paused(state.plan, why)
+    rec = state.records[state.plan_call]
+    rec.view = {"part": planner.part(state.plan)}
+    return ToolOutput(rec)
 
 
 def _load_skill(state: _TurnState, grant: ToolGrant) -> Tool[None]:
@@ -538,6 +598,7 @@ def _interrupt(state: _TurnState, requests: DeferredToolRequests, history: list[
         pending_call=pending,
         history=ModelMessagesTypeAdapter.dump_json(history),
         loaded_skills=[e for s, e in zip(state.loaded, state.loads, strict=True) if s.loading == "on_match"],
+        plan=state.plan,
     )
 
 
@@ -600,7 +661,8 @@ async def _end_check(
     systems = [
         r
         for i in state.order
-        if (r := state.records[i]).server != UNGRANTED and r.tool not in (present.NAME, search.NAME, skillset.NAME)
+        if (r := state.records[i]).server != UNGRANTED
+        and r.tool not in (present.NAME, search.NAME, skillset.NAME, planner.NAME)
     ]
     # A question the model gave its likely answers for (present followUps) is the interview's own, not an offer.
     interviewed = any(
@@ -691,12 +753,18 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         req=req,
         grants={
             **{t.name: t for t in req.tools},
-            **({present.NAME: present.grant(req.settings), search.NAME: search.SEARCH} if builtins else {}),
+            **(
+                {present.NAME: present.grant(req.settings), search.NAME: search.SEARCH, planner.NAME: planner.GRANT}
+                if builtins
+                else {}
+            ),
         },
     )
     tools = [_tool(state, ports, g, deferred=searching) for g in sorted(req.tools, key=lambda t: t.name)] + (
-        [_present(state), *([] if searching else [_search(state)])] if builtins else []
+        [_present(state), _plan(state), *([] if searching else [_search(state)])] if builtins else []
     )
+    # A plan the turn goes on with: kept at its pause (an approval), or left open by an earlier turn (a Connect card).
+    state.plan = (req.resume.interrupt.plan if req.resume else None) or req.carried_plan
     if (load_grant := skillset.grant(req.settings.skills)) is not None:
         state.grants[skillset.NAME] = load_grant
         tools.append(_load_skill(state, load_grant))
@@ -810,7 +878,9 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             )
             results = DeferredToolResults(approvals={call_id: decision})
             system_prompt, user_prompt = "\n\n".join(f.text for f in req.settings.instructions if f.stable), None
-            system_prompt = _with_earlier(_with_skills(system_prompt, req.settings.skills), carried, req.earlier_reads)
+            system_prompt = _with_earlier(
+                _with_skills(system_prompt, req.settings.skills), carried, req.earlier_reads, req.carried_plan
+            )
         else:
             if req.kb_ids and req.user_turn:
                 yield StatusChanged("retrieving")
@@ -836,7 +906,9 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             )
             digest = ctx.digest
             history, results, system_prompt, user_prompt = ctx.history, None, ctx.system_prompt, ctx.user_prompt
-            system_prompt = _with_earlier(_with_skills(system_prompt, req.settings.skills), carried, req.earlier_reads)
+            system_prompt = _with_earlier(
+                _with_skills(system_prompt, req.settings.skills), carried, req.earlier_reads, req.carried_plan
+            )
     except UnknownVariableError as e:
         yield finish("failed", "error", error=str(e))
         return
@@ -878,6 +950,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             return output
 
     limits = UsageLimits(request_limit=req.settings.max_steps)
+    state.limits = limits
     writing = False
     output: Any = None
     try:
@@ -1013,6 +1086,8 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     if isinstance(output, DeferredToolRequests) and output.approvals:
         if (cleared := _withhold(state, guarded)) is not None:
             yield cleared
+        if (held := _plan_left(state, "waiting for your approval")) is not None:
+            yield held
         interrupt = _interrupt(state, output, all_messages)
         rec = state.records[interrupt.pending_call.tool_call_id]
         yield ToolOutput(rec)
@@ -1020,6 +1095,9 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         yield finish("interrupted", "interrupt", interrupt=interrupt)
         return
 
+    if (held := _plan_left(state, "waiting for you")) is not None:
+        # The turn ends with steps left (a Connect card, a question): the next turn goes on from this step.
+        yield held
     if req.settings.end_check and req.output_schema is None and state.text.strip():
         # Checked before any guardrail, so a corrected answer is the one the guardrail checks.
         corrected, spent = await _end_check(state, model, system_prompt, all_messages, len(passages))

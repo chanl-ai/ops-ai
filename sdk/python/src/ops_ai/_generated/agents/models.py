@@ -112,6 +112,7 @@ class AllHrefs(TypedDict, closed=True):
 class AppToolsGiven(TypedDict, closed=True):
     agentId: str
     agentName: str
+    skills: NotRequired[list[str]]
     state: Literal["given", "in_review", "waiting", "already", "none"]
     tools: list[str]
 

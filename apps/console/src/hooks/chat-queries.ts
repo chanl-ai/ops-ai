@@ -6,6 +6,7 @@ import { keepPreviousData, useMutation, useQueryClient, type QueryClient } from 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import { IdleTimeout, withIdleTimeout } from '@/lib/api/idle';
+import { withPart } from '@/lib/chat-parts';
 import { modelRefusalText } from '@/lib/model-refusals';
 import type { BudgetAnswer, ChatFilters, ChatMessage, ChatThreadListParams, ChatThreadInput, ChatThreadPatch, MessageFeedback, SendInput, WidgetAction } from '@/lib/types/chat';
 import type { ListParams } from '@/lib/types/query';
@@ -142,7 +143,7 @@ async function run(qc: QueryClient, threadId: string, input: SendInput, cutFrom?
       else if (ev.type === 'tool_start') patch(threadId, (t) => ({ ...t, assistant: { ...t.assistant, toolCalls: [...(t.assistant.toolCalls ?? []), ev.call] } }));
       else if (ev.type === 'tool_end') patch(threadId, (t) => ({ ...t, assistant: { ...t.assistant, toolCalls: (t.assistant.toolCalls ?? []).map((c) => (c.id === ev.call.id ? ev.call : c)) } }));
       else if (ev.type === 'widget') patch(threadId, (t) => ({ ...t, assistant: { ...t.assistant, widgets: [...(t.assistant.widgets ?? []), ev.widget] } }));
-      else if (ev.type === 'part') patch(threadId, (t) => ({ ...t, assistant: { ...t.assistant, parts: [...(t.assistant.parts ?? []), ev.part] } }));
+      else if (ev.type === 'part') patch(threadId, (t) => ({ ...t, assistant: { ...t.assistant, parts: withPart(t.assistant.parts, ev.part) } }));
       else if (ev.type === 'text') patch(threadId, (t) => ({ ...t, phase: 'writing', assistant: { ...t.assistant, content: t.assistant.content + ev.delta } }));
       else if (ev.type === 'replace') patch(threadId, (t) => ({ ...t, assistant: { ...t.assistant, content: ev.text } }));
       else if (ev.type === 'citations') patch(threadId, (t) => ({ ...t, assistant: { ...t.assistant, citations: ev.citations } }));

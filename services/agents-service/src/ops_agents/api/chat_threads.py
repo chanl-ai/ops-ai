@@ -17,6 +17,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, cast
 
 from ops_access import can
+from ops_agent_kernel.plan import NAME as PLAN_TOOL
 from ops_agent_kernel.search import NAME as SEARCH_TOOL
 from ops_agents.activities.catalog import Catalog
 from ops_agents.activities.tools import fill
@@ -57,6 +58,7 @@ from ..store.events import EventLog
 from ..store.reviews import ReviewStore
 from ..store.tenancy import current_team
 from .auth import Principal, caller_of
+from .chat_history import PLAN_PART
 from .deps import Runtime
 from .event_log import designed_type
 from .memory import fill_remembered
@@ -191,9 +193,15 @@ class AssistantBuilder:
                         # The reply's quick replies: the latest call's stand, at most three.
                         m.follow_ups = [str(r) for r in cast(list[Any], _d(view)["followUps"])][:3]
                     if view and _d(data).get("status") == "ok" and "part" in _d(view):
-                        part = WidgetPart.model_validate({**_d(_d(view)["part"]), "id": f"wp_{call.id}"})
+                        # The plan is one part a turn, above the answer, that each plan call redraws.
+                        planned = call.name == PLAN_TOOL
+                        pid = PLAN_PART if planned else f"wp_{call.id}"
+                        part = WidgetPart.model_validate({**_d(_d(view)["part"]), "id": pid})
                         self.presented.add(part.id)
                         kept = [p for p in m.parts or [] if p.id != part.id]
+                        if planned:
+                            m.parts = [part, *kept]
+                            return [PartEvent(part=part)]
                         if part.kind is not None:
                             # A card the agent built from its reads takes the place of the tables those reads drew;
                             # the stored message the turn ends with (done) drops them from the screen too.

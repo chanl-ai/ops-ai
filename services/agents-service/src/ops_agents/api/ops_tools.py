@@ -66,8 +66,9 @@ ASSISTANT_FRAGMENTS: dict[str, str] = {
     "knowledge with its [n]. Call a record by a natural name, never its id or a tool's name. Say only what a tool "
     "result or passage holds; never invent records, buttons or apps, and never tell the person which control to "
     "press. When a call failed, say in plain words what happened and the next step. End on a full sentence.",
-    "plan": "When an ask needs several lookups and a later one depends on an earlier result, make them in order in "
-    "this reply and answer once at the end; do not stop to ask between them.",
+    "plan": "When an ask needs a chain of lookups (a later one depends on an earlier result), two or more apps, or a "
+    "change, keep a short checklist with plan, mark each step as you go in the same step as its reads, and answer once "
+    "at the end; never plan one lookup, and do not stop to ask between steps.",
 }
 OPS_ASSISTANT: dict[str, Any] = {
     "name": "Ops Assistant",

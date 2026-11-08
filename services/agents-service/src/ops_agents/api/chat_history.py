@@ -7,10 +7,13 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from ops_agent_kernel.plan import from_part as plan_from_part
 from ops_contracts.chat import ChatMessage
 
 # The kernel's own tools: presenting, loading a skill and searching are not reads of a system.
-KERNEL_TOOLS = frozenset({"present", "load_skill", "search_tools", "search_knowledge"})
+KERNEL_TOOLS = frozenset({"present", "load_skill", "search_tools", "search_knowledge", "plan"})
+# The id of a reply's plan part (chat_threads.PLAN_PART).
+PLAN_PART = "wp_plan"
 # A read's line is cut here: enough for the ids and names a follow-up needs, never a whole result set.
 READ_CHARS = 700
 
@@ -35,4 +38,7 @@ def history_entry(m: ChatMessage) -> dict[str, Any]:
     ]
     if reads:
         entry["reads"] = reads
+    drawn = next((p for p in m.parts or [] if p.id == PLAN_PART), None)
+    if drawn is not None and (left := plan_from_part(drawn.wire())) is not None:
+        entry["plan"] = left
     return entry

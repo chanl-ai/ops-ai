@@ -416,6 +416,7 @@ def interrupt_to_state(i: Interrupt) -> dict[str, Any]:
         "input_hash": p.input_hash,
         "history": base64.b64encode(i.history).decode(),
         "loaded_skills": i.loaded_skills,
+        "plan": i.plan,
     }
 
 
@@ -437,4 +438,5 @@ def interrupt_from_state(d: dict[str, Any]) -> Interrupt:
         call,
         base64.b64decode(d["history"]),
         list(d.get("loaded_skills") or []),
+        d.get("plan"),
     )

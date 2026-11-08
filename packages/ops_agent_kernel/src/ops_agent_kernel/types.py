@@ -170,6 +170,8 @@ class Interrupt:
     # On-match skills loaded before the pause ({skillId, version, name, matched}): the resumed turn keeps them loaded,
     # so their guardrails still check the answer and the per-turn caps go on from where they were.
     loaded_skills: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
+    # The plan as it stood at the pause (plan.py), so the resumed turn goes on at the same step.
+    plan: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -217,6 +219,8 @@ class TurnRequest:
     carried_skills: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
     # What earlier turns of the conversation read, one line each, so a follow-up answers from them, not a new read.
     earlier_reads: list[str] = field(default_factory=list[str])
+    # A plan an earlier turn left unfinished (a Connect card paused it): this turn goes on from its first open step.
+    carried_plan: dict[str, Any] | None = None
     deadline_seconds: float = 120.0
     # A JSON Schema the turn's answer must match (a workflow's agent step): the model returns structured output
     # through the call, validated against it, on `TurnResult.output`; a mismatch finishes with `schema_error`.
