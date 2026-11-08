@@ -37,7 +37,9 @@ export function SettingsSidebar({ tree, ...props }: React.ComponentProps<typeof 
   const hits = tree.find(query).filter((h) => allows(h.needs) === true);
   const groups = tree.groups.map((g) => ({ ...g, items: g.items.filter((i) => allows(i.needs) === true).map((i) => ({ ...i, children: i.children?.filter((c) => allows(c.needs) === true) })) }));
   // The longest matching route is the current page, so /settings/team lights for General and not for Webhooks beneath it.
-  const hrefs = groups.flatMap((g) => g.items.flatMap((i) => [i.href, ...(i.children?.map((c) => c.href) ?? [])]));
+  // Matched against every page, offered or not: a row hidden while roles load, or from this reader, never hands its
+  // light to the parent page above it.
+  const hrefs = tree.groups.flatMap((g) => g.items.flatMap((i) => [i.href, ...(i.children?.map((c) => c.href) ?? [])]));
   const current = hrefs.filter((h) => pathname === h || pathname.startsWith(`${h}/`)).sort((a, b) => b.length - a.length)[0];
   const link = (href: string) => (href.includes('#') ? href.split('#')[0] : href);
 

@@ -123,7 +123,10 @@ await withUiStack(
       // One sidebar row is current: Webhooks under /settings/team/webhooks, not General.
       await sam.goto(`${consoleUrl}/settings/team/webhooks`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await sam.getByTestId('page-header').waitFor({ timeout: 120_000 });
-      const current = await sam.locator('[data-sidebar="menu-button"][data-active="true"], [data-sidebar="menu-sub-button"][data-active="true"]').allInnerTexts();
+      const lit = sam.locator('[data-sidebar="menu-button"][data-active="true"], [data-sidebar="menu-sub-button"][data-active="true"]');
+      // Rows that need a role appear once the reader's roles load; an admin holds the one Webhooks needs.
+      await lit.filter({ hasText: 'Webhooks' }).first().waitFor({ timeout: 30_000 }).catch(() => {});
+      const current = await lit.allInnerTexts();
       check('on Team › Webhooks exactly Webhooks is the current sidebar row', current.length === 1 && current[0].trim() === 'Webhooks', current);
 
       // My memory: its own entry in the settings sidebar (the account tabs are gone), the memory list on it, and no Preview
