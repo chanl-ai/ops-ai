@@ -1,7 +1,7 @@
 // uc-087 a banker finds, starts and continues chats, ui layer: docs/usecases/console/chat-find-start-continue.md.
 // Scripted model only; signed in through platform-service as James. Slow and failed replies are made in the browser
 // (a held or refused request), never in the console or the services, so the states shown are the real ones.
-import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const JAMES = 'j.richardson@harborpine.example';
@@ -13,7 +13,7 @@ const MESSAGES = /\/chat\/threads\/[^/]+\/messages$/;
 // A reply streams; wait for its end, but never past 60 s, so a stream that stays open cannot hang the run.
 const settled = async (p) => {
   const res = await p;
-  await Promise.race([res?.finished().catch(() => undefined), new Promise((r) => setTimeout(r, 60_000))]);
+  await replyDone(res, 60_000);
 };
 
 await withUiStack(

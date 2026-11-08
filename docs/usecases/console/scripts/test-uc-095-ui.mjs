@@ -1,6 +1,6 @@
 // uc-095 an agent fills a pinned widget and lays out its own in chat, ui layer:
 // docs/usecases/console/agent-fills-widgets.md. Scripted model only; signed in through platform-service.
-import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
 
 const agentsUrl = `http://127.0.0.1:${AGENTS_PORT}`;
 const TAG = Math.random().toString(36).slice(2, 6);
@@ -74,7 +74,7 @@ await withUiStack(
         const sent = armed(page.waitForResponse((r) => r.request().method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url()), { timeout: 120_000 }));
         await page.getByRole('button', { name: 'Send', exact: true }).click();
         const r = await sent;
-        await Promise.race([r?.finished().catch(() => undefined), new Promise((x) => setTimeout(x, 60_000))]);
+        await replyDone(r, 60_000);
       };
       const layouts = page.locator('[data-testid="widget"][data-shape="layout"]');
 
@@ -91,7 +91,7 @@ await withUiStack(
       const reply = page.getByText('Look up this account. (action: lookup_account, query: CHQ-2219)').first();
       const replied = await reply.waitFor({ timeout: 60_000 }).then(() => true, () => false);
       const actRes = await acted;
-      await Promise.race([actRes?.finished().catch(() => undefined), new Promise((x) => setTimeout(x, 60_000))]);
+      await replyDone(actRes, 60_000);
       // The thread as stored: the reply's turn holds one lookup_account call.
       const stored = await json(await fetch(`${agentsUrl}/chat/threads/${thread}`, { headers: J }));
       const calls = stored.messages.flatMap((m) => m.toolCalls ?? []).filter((c) => c.name === 'lookup_account').length;

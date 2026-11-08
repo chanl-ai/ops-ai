@@ -2,7 +2,7 @@
 // docs/usecases/console/advisor-helper-answers.md. Needs withUiStack's `demo` option: kb-service and models-service with
 // the fake OpenAI (its rules in .run/fake-openai/script.json) on the run's database, with the demo seeds run against
 // the run's ports (ag_advisor wired to Retail products and the bank reads). Signed in through platform-service as James.
-import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const JAMES = 'j.richardson@harborpine.example';
@@ -36,7 +36,7 @@ await withUiStack(
         const sent = armed(page.waitForResponse((r) => r.request().method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url()), { timeout: 120_000 }));
         await page.getByRole('button', { name: 'Send', exact: true }).click();
         const res = await sent;
-        await Promise.race([res?.finished().catch(() => undefined), new Promise((r) => setTimeout(r, 60_000))]);
+        await replyDone(res, 60_000);
       };
       const widget = (shape) => page.locator(`[data-testid="widget"][data-shape="${shape}"]`);
 

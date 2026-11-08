@@ -3,7 +3,7 @@
 // masks her SSN's last four, email, phone and account and keeps her name, and the same holds after a reload, so the
 // stored message is masked too. He turns Redact personal data off on the agent's page and publishes it; asked again,
 // the reply shows what the model wrote. Platform sign-in, the fake model's ai-steps rules; no real model is called.
-import { check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { check, chromium, consoleSignIn, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
 import { AI_STACK, JAMES, PASSWORD, agents, as } from '../../lib/workflow_ui.mjs';
 
 const RAW = ['6789', 'ann.lee@example.com', '555-0147', '4401235567'];
@@ -18,7 +18,7 @@ async function ask(page, consoleUrl, agentId, question) {
   const sent = page.waitForResponse((r) => r.request().method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url()), { timeout: 120_000 }).catch(() => undefined);
   await page.locator('button[aria-label="Send"]').first().click();
   const res = await sent;
-  await Promise.race([res?.finished().catch(() => undefined), new Promise((r) => setTimeout(r, 60_000))]);
+  await replyDone(res, 60_000);
   await page.getByText('Ann Lee').last().waitFor({ timeout: 60_000 }).catch(() => undefined);
   return (await page.getByRole('log').innerText().catch(() => page.locator('main').innerText())).replace(/\s+/g, ' ');
 }

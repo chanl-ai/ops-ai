@@ -1,7 +1,7 @@
 // uc-085 an agent keeps its guardrails, ui layer: docs/usecases/agents-service/agent-guardrails-blocked-topics.md.
 // withUiStack's `demo` stack, whose agents seed beside services/agents-service/seed/guardrails.json, so ag_advisor
 // starts with "No investment advice" v1 pinned. Signed in through platform-service as James.
-import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const JAMES = 'j.richardson@harborpine.example';
@@ -38,7 +38,7 @@ await withUiStack(
       const sent = armed(page.waitForResponse((r) => r.request().method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url()), { timeout: 120_000 }));
       await page.getByRole('button', { name: 'Send', exact: true }).click();
       const res = await sent;
-      await Promise.race([res?.finished().catch(() => undefined), new Promise((r) => setTimeout(r, 60_000))]);
+      await replyDone(res, 60_000);
       const refused = await page.getByText(message.slice(0, 60)).last().waitFor({ timeout: 60_000 }).then(() => true, () => false);
       const note = await page.getByTestId('guardrail-refusal').last().innerText({ timeout: 15_000 }).catch(() => '');
       check('the blocked question shows the guardrail message and names the guardrail that refused it', refused && /No investment advice v1/.test(note) && /investment advice/.test(note), { refused, note });
@@ -49,7 +49,7 @@ await withUiStack(
       const sentSkill = armed(page.waitForResponse((r) => r.request().method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url()), { timeout: 120_000 }));
       await page.getByRole('button', { name: 'Send', exact: true }).click();
       const resSkill = await sentSkill;
-      await Promise.race([resSkill?.finished().catch(() => undefined), new Promise((r) => setTimeout(r, 60_000))]);
+      await replyDone(resSkill, 60_000);
       const skillAnswer = await page.getByText(/hardship request form/).last().isVisible({ timeout: 60_000 }).catch(() => false);
       const skillLines = await page.getByTestId('loaded-skills').count();
       check('a hardship question answers from the hardship skill, with no skill line in the reply', skillAnswer && skillLines === 0, { skillAnswer, skillLines });

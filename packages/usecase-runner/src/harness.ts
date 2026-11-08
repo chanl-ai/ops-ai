@@ -166,6 +166,16 @@ export async function consoleSignIn(browser: import('playwright').Browser, conso
   return page;
 }
 
+/**
+ * Waits for a chat reply to end: the composer shows Stop while it streams. The response object's finished() never
+ * settles on the chat stream, so waiting on it cost the whole `maxMs` each time. In a frame the page's role queries do
+ * not reach (the embed), Stop is never found and this returns at once; the caller's next element wait covers the rest.
+ */
+export async function replyDone(res: import('playwright').Response | null | undefined, maxMs = 60_000): Promise<void> {
+  const page = res?.request().frame()?.page();
+  await page?.getByRole('button', { name: 'Stop', exact: true }).waitFor({ state: 'hidden', timeout: maxMs }).catch(() => undefined);
+}
+
 export function finish(): never {
   if (!checked) console.log('FAIL no checks ran');
   process.exit(!checked || failed ? 1 : 0);
@@ -188,7 +198,7 @@ async function waitFor(url: string, child: ChildProcess, timeoutMs: number): Pro
     } catch {
       // not listening yet
     }
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 100));
   }
   throw new Error(`${url} not ready after ${timeoutMs / 1000}s; see ${LOG_DIR}`);
 }
@@ -236,7 +246,7 @@ function killLeft(): void {
 
 /** Waits up to `ms` for every group sent SIGTERM to exit, then kills what is left. */
 async function settle(ms: number): Promise<void> {
-  for (const end = Date.now() + ms; [...groups].some(groupAlive) && Date.now() < end; ) await new Promise((r) => setTimeout(r, 200));
+  for (const end = Date.now() + ms; [...groups].some(groupAlive) && Date.now() < end; ) await new Promise((r) => setTimeout(r, 50));
   killLeft();
 }
 
@@ -262,7 +272,17 @@ function signalGroup(pgid: number, signal: NodeJS.Signals): void {
   }
 }
 
+/** One `TIME <phase> <seconds>` line per stack phase, so a summary can say where a use case's seconds went. */
+function timed<T>(phase: string, work: Promise<T>): Promise<T> {
+  const t0 = Date.now();
+  return work.finally(() => console.log(`TIME ${phase} ${((Date.now() - t0) / 1000).toFixed(1)}`));
+}
+
 export async function serve(name: string, port: number, argv: string[], cwd: string, env: NodeJS.ProcessEnv, ready: string, timeoutMs: number): Promise<ChildProcess> {
+  return timed(name, serveNow(name, port, argv, cwd, env, ready, timeoutMs));
+}
+
+async function serveNow(name: string, port: number, argv: string[], cwd: string, env: NodeJS.ProcessEnv, ready: string, timeoutMs: number): Promise<ChildProcess> {
   // A stack stopped just before (a script with two stacks) frees its ports a moment after the signal.
   for (let i = 0; i < 40 && (await portBusy(port)); i++) await new Promise((r) => setTimeout(r, 250));
   if (await portBusy(port)) throw new Error(`port ${port} is already in use; stop that process or set OPS_USECASE_*_PORT`);
@@ -286,6 +306,10 @@ function stop(child: ChildProcess): void {
 
 /** Runs a command to its end, its output in the use-case log; rejects on a non-zero exit. */
 function runToEnd(name: string, argv: string[], cwd: string, env: NodeJS.ProcessEnv): Promise<void> {
+  return timed(name, runToEndNow(name, argv, cwd, env));
+}
+
+function runToEndNow(name: string, argv: string[], cwd: string, env: NodeJS.ProcessEnv): Promise<void> {
   mkdirSync(LOG_DIR, { recursive: true });
   const log = openSync(join(LOG_DIR, `${name}.log`), 'a');
   return new Promise((done, fail) => {
@@ -523,6 +547,7 @@ function withBank(bank: Record<string, string>, extra: Record<string, string>): 
 export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) => Promise<T>, given: StackOptions = {}): Promise<T> {
   // The sample team's mailbox signs in to compose's mail servers, so it needs tools-service to reach them.
   const options: StackOptions = given.demo || given.sampleTeam ? { ...given, demo: true, platform: true, tools: { ...given.tools, bank: true, gateway: true, ...(given.sampleTeam ? { mail: true } : {}) } } : given;
+  const stackStart = Date.now();
   const env = stackEnv(process.env);
   const consoleUrl = `http://localhost:${CONSOLE_PORT}`;
   const runDb = pgUrl(DB);
@@ -636,6 +661,9 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
   try {
     const signIn: Record<string, string> = {};
     const toolsUrl: Record<string, string> = {};
+    // tools-service and platform-service start while files, documents and kb do: they share the run's database but not
+    // tables, and nothing below reads them until the seeds. A rejection is held until `await edge`.
+    const edge = (async () => {
     if (options.tools) {
       const toolsDir = join(ROOT, 'services/tools-service');
       const bankSettings: Record<string, string> = {};
@@ -740,6 +768,8 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       }
       Object.assign(signIn, { NEXT_PUBLIC_AUTH_PROVIDER: 'platform', NEXT_PUBLIC_OPS_PLATFORM_API_URL: `http://127.0.0.1:${PLATFORM_PORT}` });
     }
+    })();
+    edge.catch(() => undefined);
     // files-service on the run's database: kb-service stores every upload there, as on the shared stack.
     // Scanning is off, as the owner decided for now; the hook stays for when a scanner is chosen.
     const auth: Record<string, string> = options.platform ? { OPS_AUTH_MODE: 'platform', OPS_PLATFORM_URL: `http://127.0.0.1:${PLATFORM_PORT}`, OPS_PLATFORM_INTERNAL_PORT: String(PLATFORM_INTERNAL_PORT) } : {};
@@ -788,6 +818,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
     });
     await runToEnd('kb-migrate', ['uv', 'run', 'alembic', 'upgrade', 'head'], kbDir, kbEnv);
     kbProc = await serve('kb', KB_PORT, ['uv', 'run', 'python', '-m', 'ops_kb'], kbDir, kbEnv, `http://127.0.0.1:${KB_PORT}/health`, 90_000);
+    await edge;
     const seedArgs = ['--kb', `http://127.0.0.1:${KB_PORT}`, '--files', `http://127.0.0.1:${FILES_PORT}`, ...(options.platform ? ['--platform', `http://127.0.0.1:${PLATFORM_PORT}`] : [])];
     await runToEnd('kb-seed', ['uv', 'run', 'python', join(ROOT, 'docs/usecases/lib/seed_fixture_knowledge.py'), ...seedArgs], ROOT, env);
     // The demo's document types (levy_notice v1 and its samples), which the seeded levy workflows name.
@@ -847,7 +878,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
     if (dev) {
       writeRunTsconfig();
     } else {
-      const build = await ensureConsoleBuild(ROOT, publicEnv, env, LOG_DIR);
+      const build = await timed('console-build', ensureConsoleBuild(ROOT, publicEnv, env, LOG_DIR));
       materializeConsoleBuild(ROOT, build, CONSOLE_DIST_DIR, publicEnv);
       consoleArgv = ['pnpm', 'exec', 'next', 'start', '-p', String(CONSOLE_PORT)];
       // The dev-only pages (/dev, /preview) answer 404 on a production server unless this is set; no deployment sets it.
@@ -891,7 +922,8 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       );
       stack.embedUrl = embedUrl;
     }
-    return await body(consoleUrl, stack);
+    console.log(`TIME stack-ready ${((Date.now() - stackStart) / 1000).toFixed(1)}`);
+    return await timed('body', body(consoleUrl, stack));
   } finally {
     for (const w of workers) if (w.exitCode === null) stop(w);
     if (embedProc) {

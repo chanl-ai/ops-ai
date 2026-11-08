@@ -4,7 +4,7 @@
 // not offered to the model; every turn records the settings it ran on; a PDF attached through Files is cited by its page.
 import { fileURLToPath } from 'node:url';
 
-import { AGENTS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const TEAM = { 'X-Team-Id': 'team_ops' };
@@ -43,7 +43,7 @@ await withUiStack(async (consoleUrl) => {
       const sent = armed(page.waitForResponse((r) => r.request().method() === 'POST' && MESSAGES.test(r.url()), { timeout: 120_000 }));
       await page.getByRole('button', { name: 'Send', exact: true }).click();
       const res = await sent;
-      await Promise.race([res?.finished().catch(() => undefined), new Promise((r) => setTimeout(r, 60_000))]);
+      await replyDone(res, 60_000);
       await page.getByRole('button', { name: 'Regenerate' }).last().waitFor({ timeout: 60_000 }).catch(() => undefined);
     };
     const lookups = () => page.getByTestId('chat-tool-call').filter({ hasText: 'Lookup account' }).count();

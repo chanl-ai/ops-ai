@@ -12,9 +12,10 @@ async function send(page, text) {
   await page.getByRole('textbox', { name: 'Message' }).fill(text);
   const sent = armed(page.waitForResponse((r) => r.request().method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url()), { timeout: 120_000 }));
   await page.getByRole('button', { name: 'Send', exact: true }).click();
-  const res = await sent;
-  // The reply streams; wait for its end, but never past 60 s, so a stream that stays open cannot hang the run.
-  await Promise.race([res?.finished().catch(() => undefined), new Promise((r) => setTimeout(r, 60_000))]);
+  await sent;
+  // The reply streams. The response object's finished() never settles on this stream, so it cost the full 60 s a send;
+  // the composer's Stop button is what shows the reply is still coming.
+  await page.getByRole('button', { name: 'Stop', exact: true }).waitFor({ state: 'hidden', timeout: 60_000 }).catch(() => undefined);
 }
 
 await withUiStack(async (consoleUrl) => {

@@ -1,7 +1,7 @@
 // uc-089 an agent shows a table and a figure in chat with no tool behind them, ui layer:
 // docs/usecases/console/agent-presents-widgets.md. Scripted model only; signed in through platform-service. The model
 // calls the kernel's built-in present tool, which the chat stream turns into widget parts the console draws.
-import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
 
 const agentsUrl = `http://127.0.0.1:${AGENTS_PORT}`;
 const TAG = Math.random().toString(36).slice(2, 6);
@@ -46,7 +46,7 @@ await withUiStack(
         const sent = armed(page.waitForResponse((r) => r.request().method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url()), { timeout: 120_000 }));
         await page.getByRole('button', { name: 'Send', exact: true }).click();
         const res = await sent;
-        await Promise.race([res?.finished().catch(() => undefined), new Promise((r) => setTimeout(r, 60_000))]);
+        await replyDone(res, 60_000);
       };
       const widget = (shape) => page.locator(`[data-testid="widget"][data-shape="${shape}"]`);
 

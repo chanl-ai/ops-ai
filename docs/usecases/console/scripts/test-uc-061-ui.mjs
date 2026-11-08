@@ -2,7 +2,7 @@
 // docs/usecases/console/widgets-through-chat.md. Scripted model only; signed in through platform-service. James imports
 // the fake bank's insights spec (one operation per shape, one declaring x-ops-shape, one that fits no shape), grants
 // them to an agent and asks for each in chat; agents-service shapes each answer and the console draws it.
-import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const agentsUrl = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -61,7 +61,7 @@ await withUiStack(
         const sent = armed(page.waitForResponse((r) => r.request().method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url()), { timeout: 120_000 }));
         await page.getByRole('button', { name: 'Send', exact: true }).click();
         const res = await sent;
-        await Promise.race([res?.finished().catch(() => undefined), new Promise((r) => setTimeout(r, 60_000))]);
+        await replyDone(res, 60_000);
         await page.getByText('Here is what I found.').nth(i).waitFor({ timeout: 60_000 }).catch(() => undefined);
       }
 
