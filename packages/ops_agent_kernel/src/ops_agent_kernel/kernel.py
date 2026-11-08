@@ -372,11 +372,17 @@ def _plan(state: _TurnState) -> Tool[None]:
     return tool
 
 
-def _plan_left(state: _TurnState, why: str) -> ToolOutput | None:
-    """A plan the turn stops before finishing: its current step marked blocked with why, redrawn on its part."""
+def _plan_left(state: _TurnState, why: str, *, answered: bool = False) -> ToolOutput | None:
+    """A plan the turn stops before finishing, redrawn on its part. Stopped for the person (an approval, a sign-in a
+    failed call asked for): its current step is blocked with why. Answered with nothing waiting: the answer finishes
+    the step being worked, and steps never started are skipped."""
     if state.plan is None or planner.finished(state.plan) or state.plan_call not in state.records:
         return None
-    state.plan = planner.paused(state.plan, why)
+    failed = any(
+        r.status == "error" and r.tool not in (present.NAME, search.NAME, skillset.NAME, planner.NAME)
+        for r in state.records.values()
+    )
+    state.plan = planner.closed(state.plan) if answered and not failed else planner.paused(state.plan, why)
     rec = state.records[state.plan_call]
     rec.view = {"part": planner.part(state.plan)}
     return ToolOutput(rec)
@@ -1095,7 +1101,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         yield finish("interrupted", "interrupt", interrupt=interrupt)
         return
 
-    if (held := _plan_left(state, "waiting for you")) is not None:
+    if (held := _plan_left(state, "waiting for you", answered=bool(state.text.strip()))) is not None:
         # The turn ends with steps left (a Connect card, a question): the next turn goes on from this step.
         yield held
     if req.settings.end_check and req.output_schema is None and state.text.strip():

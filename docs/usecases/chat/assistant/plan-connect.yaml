@@ -10,11 +10,11 @@ turns:
       card: true
       plan: blocked
       never: ["token", "password"]
-      maxSteps: 3
+      maxSteps: 4
   - connected: wait
     expect:
       tool: salesforce_query
       notTools: [load_skill]
       plan: done
       says: ["Education savings"]
-      maxSteps: 5
+      maxSteps: 4

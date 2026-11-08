@@ -5,7 +5,7 @@ turns:
   - say: "What stage is the Education savings opportunity in?"
     expect:
       tool: salesforce_query
-      notTools: [plan]
+      plan: none
       says: ["Education savings"]
       noInternalIds: true
       maxSteps: 4

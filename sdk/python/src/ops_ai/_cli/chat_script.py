@@ -29,7 +29,8 @@ A script is YAML or JSON: `agent` (the team's default when left out), `test`, `k
     notWidgets      kinds of card the reply must not draw
     remembers       the reply kept a memory with this status: active (saved at once) or suggested (asks first)
     plan            the reply drew its plan checklist: done (every step finished, "Did N steps") or blocked (a step
-                    waits for the person)
+                    waits for the person); none: it drew no plan (kernel tools never show as tool cards, so notTools
+                    cannot see a plan call)
 A turn may be `connected: wait`: it waits (up to SIGN_IN_WAIT_S) until the person is signed in to the app the last
 Connect card named, so someone can sign in from the card in a browser, then sends the card's follow-up.
 A turn may be `approve: true` instead of `say`: it approves the newest open widget, as the turn's `as` person when
@@ -151,7 +152,11 @@ def reply_checks(want: dict[str, Any], seen: dict[str, Any], message: dict[str, 
         drawn = next((p for p in message.get("parts") or [] if p.get("id") == "wp_plan"), None)
         title = str(((drawn or {}).get("hint") or {}).get("title") or "")
         states = [str(r.get("state")) for r in (drawn or {}).get("data") or []]
-        ok = drawn is not None and (title.startswith("Did ") if want["plan"] == "done" else "failed" in states)
+        if want["plan"] == "none":
+            ok = drawn is None
+        else:
+            ok = drawn is not None and (title.startswith("Did ") if want["plan"] == "done" else "failed" in states)
+
         out.append((f"draws its plan, {want['plan']}", ok, f"{title} {states}" if drawn else "no plan drawn"))
     if "remembers" in want:
         kept = [str(r.get("status")) for r in message.get("remembered") or []]

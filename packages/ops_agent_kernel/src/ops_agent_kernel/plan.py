@@ -34,8 +34,9 @@ GRANT = ToolGrant(
     "depends on an earlier result), more than one app, or a change. Never for one lookup or reads that answer one "
     "question together. Send the whole list every time: a title and 3 to 7 steps, each {title, status, note?} with "
     "status todo, doing, done, blocked or skipped. Mark a step doing when you start it and done when its reads are "
-    "back, in the same step as the next reads; one step doing at a time; a step never goes back. Set replan true to "
-    "replace the steps after a step failed, at most twice.",
+    "back, in the same step as the next reads; one step doing at a time; a step never goes back. Your answer finishes "
+    "the plan: no call is needed after the last reads. Set replan true to replace the steps after one failed, at most "
+    "twice.",
     "read",
     {
         "type": "object",
@@ -153,6 +154,15 @@ def paused(plan: dict[str, Any], why: str) -> dict[str, Any]:
     live = live or next((s for s in steps if s["status"] not in FINISHED), None)
     if live is not None:
         live["status"], live["note"] = "blocked", why
+    return {**plan, "steps": steps}
+
+
+def closed(plan: dict[str, Any]) -> dict[str, Any]:
+    """The plan when the answer came with nothing waiting: the step being worked done, steps never started skipped."""
+    steps: list[dict[str, Any]] = []
+    for s in cast(list[dict[str, Any]], plan["steps"]):
+        status = {"doing": "done", "blocked": "done", "todo": "skipped"}.get(s["status"], s["status"])
+        steps.append({**s, "status": status})
     return {**plan, "steps": steps}
 
 

@@ -136,14 +136,36 @@ async def test_each_finished_step_gets_its_own_budget_and_the_done_plan_reads_di
     assert [s["state"] for s in last.view["part"]["data"]] == ["done", "done", "done"]
 
 
-async def test_a_turn_that_stops_with_steps_left_marks_the_step_blocked() -> None:
-    model, _ = scripted([plan_call("doing", "todo", "todo")], "Connect Salesforce to go on.")
-    result, events = await run(model, TurnRequest("t1", "r1", SETTINGS, [READ], user_turn="Which loan files?"))
+class NeedsSignIn:
+    async def execute(
+        self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
+    ) -> ToolOutcome:
+        return ToolOutcome(False, {"error": {"code": "CONNECTION_NOT_LINKED", "message": "Sign in to Salesforce."}})
+
+
+async def test_a_turn_stopped_by_a_sign_in_marks_the_step_blocked() -> None:
+    model, _ = scripted(
+        [plan_call("doing", "todo", "todo"), ToolCallPart("find_cases", {"q": "open conditions"})],
+        "Connect Salesforce to go on.",
+    )
+    req = TurnRequest("t1", "r1", SETTINGS, [READ], user_turn="Which loan files?")
+    events = [e async for e in run_turn(req, KernelPorts(model=model, tools=NeedsSignIn(), knowledge=NoKnowledge()))]
     last = [e.call for e in events if isinstance(e, ToolOutput) and e.call.tool == "plan"][-1]
     assert last.view is not None
     assert [s["state"] for s in last.view["part"]["data"]] == ["failed", "pending", "pending"]
     assert last.view["part"]["data"][0]["title"].endswith("waiting for you")
-    assert planner.from_part(last.view["part"]) is not None and result.stop_reason == "final"
+    assert planner.from_part(last.view["part"]) is not None
+
+
+async def test_an_answer_with_nothing_waiting_finishes_the_plan() -> None:
+    # A complete answer left its last step drawn as blocked, because the model made no plan call after the last read.
+    model, _ = scripted(
+        [plan_call("done", "done", "doing"), ToolCallPart("find_cases", {"q": "renewals"})],
+        "Two files have open conditions.",
+    )
+    _, events = await run(model, TurnRequest("t1", "r1", SETTINGS, [READ], user_turn="Which loan files?"))
+    last = [e.call for e in events if isinstance(e, ToolOutput) and e.call.tool == "plan"][-1]
+    assert last.view is not None and last.view["part"]["hint"]["title"] == "Did 3 steps", last.view
 
 
 async def test_a_plan_left_open_goes_on_in_the_next_turn() -> None:
