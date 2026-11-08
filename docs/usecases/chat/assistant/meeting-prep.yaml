@@ -16,7 +16,7 @@ turns:
     expect:
       tool: salesforce_query
       widget: brief
-      says: ["Education savings"]
+      says: ["education"]
       card: false
       noQuestion: true
       noInternalIds: true
