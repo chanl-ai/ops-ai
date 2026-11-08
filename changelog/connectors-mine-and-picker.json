@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Connectors replace the accounts and Apps pages",
+  "description": "Connectors has a view of your own sign-ins, one row per app with a details sheet that fits a phone, and Team setup for admins; the chat composer lists the chat's connectors so you can leave one out of a chat.",
+  "tag": "new"
+}

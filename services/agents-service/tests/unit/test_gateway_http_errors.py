@@ -43,3 +43,28 @@ async def test_a_body_that_is_not_json_still_fails_with_its_status() -> None:
     out = await executor(502, body=b"<html>bad gateway</html>").execute("x", {}, key="k", approval_token=None)
     assert out.ok is False and out.output["error"]["status"] == 502
     assert "bad gateway" in out.output["error"]["message"]
+
+
+async def test_a_403_the_chat_draws_as_a_card_keeps_its_code_and_details() -> None:
+    # Which of two accounts to use, or an app the team has off, is refused before the call leaves the gateway; told to
+    # the model as a bare sentence, the chat had no card to draw and the person nothing to press.
+    for code, details in (
+        (
+            "ACCOUNT_CHOICE_NEEDED",
+            {
+                "app": "GitHub",
+                "appId": "plugin:opsai.github",
+                "accounts": [{"connectionId": "a"}, {"connectionId": "b"}],
+            },
+        ),
+        ("APP_OFF_FOR_TEAM", {"app": "Salesforce", "appId": "plugin:opsai.salesforce", "teamId": "team_security"}),
+    ):
+        RUN_CONTEXT.set(RunContext(thread="gth_1"))
+        body = {
+            "success": False,
+            "error": {"code": code, "message": "x", "status": 403, "details": {"callId": "gwc_2", **details}},
+        }
+        out = await executor(403, json=body).execute("github_list_issues", {}, key="k", approval_token=None)
+        assert out.ok is False and out.output["error"]["code"] == code, out.output
+        assert out.output["error"]["details"]["appId"] == details["appId"], out.output
+        assert out.for_model and "card above" in out.for_model, out.for_model

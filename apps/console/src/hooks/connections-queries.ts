@@ -3,6 +3,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
+import { sdk } from '@/lib/api/ops-sdk';
+import type { OpsAI } from '@chanl-ai/ops-ai';
 import type { AccountRef, SignInAccount, SignInReturn } from '@/lib/types/connections';
 import { useTeamQuery } from './team-query';
 
@@ -17,6 +19,13 @@ export const useConnectionKinds = () => useTeamQuery({ queryKey: [...KEY, 'kinds
  */
 export const useMyConnections = (every = false) =>
   useTeamQuery({ queryKey: [...MINE, every], queryFn: () => api.connections.mine(every), refetchOnMount: 'always' });
+
+/** One of the person's connectors on Connectors (Mine): one app that acts as them, joined by tools-service. */
+export type MyConnector = Awaited<ReturnType<OpsAI['raw']['tools']['apps_my_connections']>>[number];
+/** The person's connectors, one row per app (GET /v1/me/connections); asked again whenever the page opens, since a
+ * sign-in finishes in another window. */
+export const useMyConnectors = () =>
+  useTeamQuery({ queryKey: [...MINE, 'connectors'], queryFn: () => sdk((ops) => ops.raw.tools.apps_my_connections()), refetchOnMount: 'always' });
 
 /** Reads the person's connections again, after a sign-in window says they connected. */
 export function useRefreshMine() {
@@ -49,3 +58,7 @@ export const useDisconnect = () => useConnectionMutation((connectionId: string) 
 
 /** Test with my account: where the admin signs in; the return page finishes it (useFinishSignIn). */
 export const useStartCredentialCheck = () => useMutation({ mutationFn: (ref: AccountRef) => api.connections.startCredentialCheck(ref) });
+
+/** Starts the person's sign-in for another account of their own on a connector's app, through the same auth config
+ * (POST /v1/me/accounts/{id}/another); a login already linked updates that account instead. */
+export const useAddOwnAccount = () => useMutation({ mutationFn: (accountId: string) => sdk((ops) => ops.raw.tools.apps_add_own_account({ path: { account_id: accountId } })) });

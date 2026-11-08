@@ -103,6 +103,8 @@ interface DataTableWithViewsProps<TData, TValue> {
   hideViewSwitcher?: boolean;
   /** Leaves out the paging bar when every row fits on one page (a short result in chat). */
   hidePaginationOnOnePage?: boolean;
+  /** What the list holds, for the pager's count ("2 connectors"); rows by default. */
+  rowNoun?: string;
   // Selection callback
   onSelectionChange?: (selectedRows: TData[]) => void;
   /** Bump this number to imperatively clear row selection (e.g. after a bulk
@@ -208,6 +210,7 @@ export function DataTableWithViews<TData, TValue>({
   defaultView = 'table',
   hideViewSwitcher = false,
   hidePaginationOnOnePage = false,
+  rowNoun,
   onSelectionChange,
   selectionResetKey,
   filterResetKey,
@@ -566,7 +569,7 @@ export function DataTableWithViews<TData, TValue>({
       )}
 
       {!(hidePaginationOnOnePage && !serverPagination && table.getPageCount() <= 1) && (
-        <DataTablePagination table={table} serverPagination={serverPaginationProps} />
+        <DataTablePagination table={table} serverPagination={serverPaginationProps} noun={rowNoun} />
       )}
     </div>
   );

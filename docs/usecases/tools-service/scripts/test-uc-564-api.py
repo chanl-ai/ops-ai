@@ -241,11 +241,11 @@ with ExitStack() as stack:
     listed_off = grantable(gw)
     refused_off = call(gw, "salesforce_query", {"q": QUERY})
     check(
-        "9 turned off for the team, its tools leave the list and a call is refused with PLUGIN_DISABLED",
+        "9 turned off for the team, its tools leave the list and a call is refused with APP_OFF_FOR_TEAM",
         off.status_code == 200
         and not any(n.startswith("salesforce_") for n in listed_off)
         and refused_off.status_code == 403
-        and code_of(refused_off) == "PLUGIN_DISABLED",
+        and code_of(refused_off) == "APP_OFF_FOR_TEAM",
         {"off": off.status_code, "refused": refused_off.text[:200]},
     )
 
@@ -376,9 +376,9 @@ with ExitStack() as stack:
     team_back = gw.put(f"/v1/apps/plugin:{PLUGIN}/team", json={"enabled": True}, headers=priya)
     back = call(gw, "salesforce_query", {"q": QUERY})
     check(
-        "11 off for the team, a call is refused with PLUGIN_DISABLED; on again, it runs",
+        "11 off for the team, a call is refused with APP_OFF_FOR_TEAM; on again, it runs",
         team_off.status_code == 200
-        and code_of(stopped) == "PLUGIN_DISABLED"
+        and code_of(stopped) == "APP_OFF_FOR_TEAM"
         and team_back.status_code == 200
         and bool(((data(back) or {}).get("output") or {}).get("records")),
         {

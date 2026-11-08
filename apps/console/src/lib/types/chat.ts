@@ -331,6 +331,27 @@ export interface ThreadLimits {
   widgetsPerTurn?: number;
 }
 
+/**
+ * One connector a chat may use, for the composer's picker (GET /v1/chat/threads/{id}/connectors): an app the agent
+ * holds tools of, with its state for the person, or an app the team has off, which grants no tool.
+ */
+export interface ChatConnector {
+  appId: string;
+  name: string;
+  logo?: string | null;
+  state: 'on' | 'needs_sign_in' | 'off_for_team';
+  /** Whether this chat uses it; every connected connector is on in a new chat. */
+  on: boolean;
+  /** The person signs in with their own account, so Connect is theirs to press. */
+  personal: boolean;
+  tools: string[];
+}
+
+export interface ChatConnectors {
+  threadId: string;
+  connectors: ChatConnector[];
+}
+
 export interface ThreadSettings {
   limits: ThreadLimits;
   overrides?: ChatOverrides;

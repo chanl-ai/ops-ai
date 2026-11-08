@@ -117,7 +117,7 @@ def _approvers(token: str | None) -> list[str]:
 WRITES = {"write"}
 
 
-def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int, str, str, list[Any]] | None:
+def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int, str, str, dict[str, Any]] | None:
     """Registry checks that need no decision from OPA: a hidden operation, an unpublished or drifted module, or input
     that fails the operation's schema, or an amount over its limit, is refused before the policy is asked and before
     anything leaves the gateway."""
@@ -130,35 +130,45 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
         title = str(cast(dict[str, Any], module.get("tool_titles") or {}).get(op["name"]) or op["name"])
         who = "someone who manages the team's apps"
         said = f"{app}'s {title} is not added to this team; {who} adds it from {app}'s Tools tab."
-        return 403, "TOOL_NOT_ADDED", said, []
+        return 403, "TOOL_NOT_ADDED", said, {}
     if module.get("sign_in_needed"):
         # Each person signs in, and the account has no instance yet: the plugin is on. Refused as a
         # missing sign-in, not as the plugin being off, so the tool page does not say the team admin must sign in.
-        return 403, "CONNECTION_NOT_LINKED", str(module["sign_in_needed"]), []
+        return 403, "CONNECTION_NOT_LINKED", str(module["sign_in_needed"]), {}
     if module.get("instance_missing"):
         # The team account has not signed in yet. The plugin is on.
-        return 403, "NOT_SIGNED_IN", str(module["instance_missing"]), []
+        return 403, "NOT_SIGNED_IN", str(module["instance_missing"]), {}
+    if module.get("app_off"):
+        # Installed and off for the caller's team: refused before approval, naming the app and team as
+        # CONNECTION_NOT_LINKED names its account, so the caller can show who turns it on.
+        return 403, "APP_OFF_FOR_TEAM", str(module["plugin_off"]), dict(module["app_off"])
+    if module.get("account_choice"):
+        # The person holds two accounts of the app and chose no default: refused before any sign-in is used, naming the
+        # accounts, so chat asks which and the person may save it as their default.
+        choice = dict(module["account_choice"])
+        said = f"You have {len(choice['accounts'])} {choice['app']} accounts connected; choose which this uses."
+        return 403, "ACCOUNT_CHOICE_NEEDED", said, choice
     if module.get("plugin_off"):
-        # A plugin off for the install or the team: refused before approval, so no write waits for a person.
-        return 403, "PLUGIN_DISABLED", str(module["plugin_off"]), []
+        # A plugin the install does not load: refused before approval, so no write waits for a person.
+        return 403, "PLUGIN_DISABLED", str(module["plugin_off"]), {}
     if module.get("account_missing"):
         # The account a call named is not one of the team's accounts of the app: refused, never defaulted.
-        return 404, "ACCOUNT_NOT_FOUND", str(module["account_missing"]), []
+        return 404, "ACCOUNT_NOT_FOUND", str(module["account_missing"]), {}
     if not op["enabled"]:
         why = op.get("hidden_reason") or f"{op['name']} is hidden in {module['display_name']}"
-        return 403, "operation_hidden", str(why), []
+        return 403, "operation_hidden", str(why), {}
     if module["status"] != "published":
-        return 403, "module_not_published", f"{module['display_name']} is not published", []
+        return 403, "module_not_published", f"{module['display_name']} is not published", {}
     if module["drift"]:
         # The server's tools no longer match what was reviewed; nothing runs until the module is reviewed again.
-        return 403, "module_drifted", f"{module['display_name']} has drifted from its reviewed tool list", []
+        return 403, "module_drifted", f"{module['display_name']} has drifted from its reviewed tool list", {}
     problems = invalid_fields(op["input"], args)
     if problems:
         fields = ", ".join(f"{p['field']} ({p['message']})" for p in problems)
-        return 422, "invalid_input", f"input does not match {op['name']}'s schema: {fields}", problems
+        return 422, "invalid_input", f"input does not match {op['name']}'s schema: {fields}", {"invalid": problems}
     # The amount limit holds before the policy and before any request is built (shared with the test panel).
     if (over := amount_refusal(op, args)) is not None:
-        return over.status, over.code, over.message, []
+        return over.status, over.code, over.message, {}
     return None
 
 
@@ -337,12 +347,12 @@ class GatewayCalls:
                 return Refused(call_id, e.status, e.code, [e.message])
         early = _before_policy(resolved, args)
         if early is not None:
-            status, code, reason, problems = early
+            status, code, reason, details = early
             row.update(decision="deny", reasons=[reason])
             await self.log.record(
                 **row, outcome="refused", latency_ms=elapsed(), error={"code": code, "message": reason}
             )
-            return Refused(call_id, status, code, [reason], {"invalid": problems} if problems else {})
+            return Refused(call_id, status, code, [reason], details)
         policy = await self.registry.policy_for(req.tool, caller.tenant_id, caller.team_id) if resolved else None
         # From the registry and the team's policies, never the caller: whether this write needs an approval token.
         # Approvals are off by default: a write waits only when its tool's switch is on, the team

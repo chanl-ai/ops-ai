@@ -14,10 +14,11 @@ import { AskAnAdmin } from '@/components/connections/ask-an-admin';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { CardDescription } from '@/components/ui/card';
+import { APP_CARD_GRID, AppCard } from '@/components/connections/app-card';
 import { useCan } from '@/hooks/me-queries';
 import { type AppState, type SystemCard, useSystems } from '@/hooks/systems-queries';
 import { facetFilterFn } from '@/hooks/use-list-params';
@@ -70,72 +71,60 @@ const isConnected = (card: SystemCard) => CONNECTED.has(card.appState);
  * The whole card opens the app's page; Connect or Reconnect sits above that link. A connected card has no button and
  * names its accounts; a second account is added on the app's page.
  */
-function AppCard({ system, onConnect }: { system: SystemCard; onConnect: (s: SystemCard, mode: ConnectMode) => void }) {
+function SystemAppCard({ system, onConnect }: { system: SystemCard; onConnect: (s: SystemCard, mode: ConnectMode) => void }) {
   const state = system.appState;
   const failure = state === 'test_failed' ? (system.appStateReason ?? 'no reason given') : null;
   return (
-    <Card className="relative h-full min-h-40 gap-3 transition-all hover:border-primary/40 hover:shadow-md" data-testid={`system-${system.id}`} data-state={state}>
-      <CardHeader className="flex flex-row items-center gap-2.5 px-4">
-        <Avatar className="size-9 rounded-md">
-          {system.logo && <AvatarImage src={system.logo} alt="" />}
-          <AvatarFallback className="rounded-md text-xs font-semibold">{initials(system.name)}</AvatarFallback>
-        </Avatar>
-        <div className="min-w-0">
-          <CardTitle className="truncate text-base">
-            {/* Stretched over the card, so the whole card opens the app's page. */}
-            <Link href={appHref(system)} className="after:absolute after:inset-0 after:rounded-xl focus-visible:outline-none" data-testid={`card-link-${system.id}`}>
-              {system.name}
-            </Link>
-          </CardTitle>
-          <p className="truncate text-xs text-muted-foreground">
-            {plural(system.toolsCount, 'tool')}
-            {system.kindLabel ? ` · ${system.kindLabel}` : ''}
-          </p>
+    <AppCard
+      testId={`system-${system.id}`}
+      state={state}
+      name={system.name}
+      logo={system.logo}
+      href={appHref(system)}
+      linkTestId={`card-link-${system.id}`}
+      subtitle={`${plural(system.toolsCount, 'tool')}${system.kindLabel ? ` · ${system.kindLabel}` : ''}`}
+      footState={
+        state === 'connected' ? (
+          <Badge variant="outline" className={STATE.connected.className} data-testid={`system-${system.id}-state`}>
+            <CircleCheck />
+            Connected · {plural(system.accountsCount, 'account')}
+          </Badge>
+        ) : (
+          <AppStateBadge card={system} testId={`system-${system.id}-state`} />
+        )
+      }
+      action={
+        state === 'connected' || state === 'removed' ? null : !system.mayManage ? (
+          // Only a team admin connects an app; anyone else is told why rather than shown a dead button.
+          <AskAnAdmin testId={`connect-${system.id}-why`} />
+        ) : state === 'test_failed' || (state === 'needs_sign_in' && ENDED.has(String(system.state))) ? (
+          <Button size="sm" variant="outline" onClick={() => onConnect(system, 'reconnect')} data-testid={`reconnect-${system.id}`}>
+            Reconnect
+          </Button>
+        ) : (
+          <Button size="sm" variant="outline" onClick={() => onConnect(system, 'connect')} data-testid={`connect-${system.id}`}>
+            Connect
+          </Button>
+        )
+      }
+    >
+      {system.description && <CardDescription className="break-words line-clamp-none">{system.description}</CardDescription>}
+      {system.category && (
+        <div>
+          <Badge variant="secondary">{system.category}</Badge>
         </div>
-      </CardHeader>
-      <CardContent className="flex flex-1 flex-col gap-3 px-4">
-        {system.description && <CardDescription className="break-words line-clamp-none">{system.description}</CardDescription>}
-        {system.category && (
-          <div>
-            <Badge variant="secondary">{system.category}</Badge>
-          </div>
-        )}
-        {state === 'removed' && (
-          <p className="line-clamp-2 text-xs text-destructive-text" data-testid={`system-${system.id}-removed`}>
-            {system.appStateReason}
-          </p>
-        )}
-        {failure && (
-          <p className="text-xs text-warning-text break-words" data-testid={`system-${system.id}-test-failed`}>
-            Signed in, but a test call failed: {failure}
-          </p>
-        )}
-        <div className="mt-auto flex items-center justify-between gap-2">
-          {state === 'connected' ? (
-            <Badge variant="outline" className={STATE.connected.className} data-testid={`system-${system.id}-state`}>
-              <CircleCheck />
-              Connected · {plural(system.accountsCount, 'account')}
-            </Badge>
-          ) : (
-            <AppStateBadge card={system} testId={`system-${system.id}-state`} />
-          )}
-          {state === 'connected' || state === 'removed' ? null : !system.mayManage ? (
-            // Only a team admin connects an app; anyone else is told why rather than shown a dead button.
-            <span className="relative z-10">
-              <AskAnAdmin testId={`connect-${system.id}-why`} />
-            </span>
-          ) : state === 'test_failed' || (state === 'needs_sign_in' && ENDED.has(String(system.state))) ? (
-            <Button size="sm" variant="outline" className="relative z-10" onClick={() => onConnect(system, 'reconnect')} data-testid={`reconnect-${system.id}`}>
-              Reconnect
-            </Button>
-          ) : (
-            <Button size="sm" variant="outline" className="relative z-10" onClick={() => onConnect(system, 'connect')} data-testid={`connect-${system.id}`}>
-              Connect
-            </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+      )}
+      {state === 'removed' && (
+        <p className="line-clamp-2 text-xs text-destructive-text" data-testid={`system-${system.id}-removed`}>
+          {system.appStateReason}
+        </p>
+      )}
+      {failure && (
+        <p className="text-xs text-warning-text break-words" data-testid={`system-${system.id}-test-failed`}>
+          Signed in, but a test call failed: {failure}
+        </p>
+      )}
+    </AppCard>
   );
 }
 
@@ -219,8 +208,9 @@ export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, m
   return (
     <PageLayout
       icon={Plug}
-      title="Apps"
-      description="Browse and connect the apps your agents and workflows use."
+      title="Connectors"
+      switcher
+      description="Team setup: turn on the apps your agents and workflows use, and choose whose account their tools use."
       contentClassName="flex flex-col gap-4"
       actions={
         <div className="flex flex-wrap items-center gap-2">
@@ -262,8 +252,8 @@ export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, m
               data={rows}
               getRowId={(r) => r.id}
               defaultView="grid"
-              gridClassName="grid grid-cols-1 gap-4 @3xl/main:grid-cols-2 @6xl/main:grid-cols-3"
-              renderGridItem={(s) => <AppCard system={s} onConnect={onConnect} />}
+              gridClassName={APP_CARD_GRID}
+              renderGridItem={(s) => <SystemAppCard system={s} onConnect={onConnect} />}
               searchColumn="name"
               searchPlaceholder="Search apps"
               filters={[

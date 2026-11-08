@@ -726,6 +726,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/accounts/{account_id}/another": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Own Account
+         * @description Add another account of the caller's own on this account's app, through the same auth config: where to
+         *     send the browser. Signing in as an identity the caller already linked updates that account instead.
+         */
+        post: operations["apps_add_own_account"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/accounts/{account_id}/credentials": {
         parameters: {
             query?: never;
@@ -740,6 +761,27 @@ export interface paths {
          *     gave before; answers their row in Your connections, never the values.
          */
         put: operations["apps_give_own_credentials"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My Connections
+         * @description The caller's connectors, Connectors (Mine): one row per app that acts as them, with what it can do, who it
+         *     signs in as, its state and where it is used; an app the team has off is listed as app_off.
+         */
+        get: operations["apps_my_connections"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -2398,6 +2440,59 @@ export interface components {
              */
             status: "draft" | "healthy" | "needs_reconnect" | "expiring" | "revoked" | "error";
         };
+        /** ConnectorAccount */
+        ConnectorAccount: {
+            /** Account */
+            account?: string | null;
+            /** Connectionid */
+            connectionId: string;
+            /** Name */
+            name: string;
+            /**
+             * Primary
+             * @default false
+             */
+            primary: boolean;
+            /** Since */
+            since?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "connected" | "expired" | "not_connected";
+        };
+        /** ConnectorTool */
+        ConnectorTool: {
+            /** Access */
+            access: string;
+            /** Name */
+            name: string;
+            /**
+             * Reviewed
+             * @default false
+             */
+            reviewed: boolean;
+            /** Title */
+            title: string;
+        };
+        /** ConnectorUse */
+        ConnectorUse: {
+            /**
+             * Agents
+             * @default 0
+             */
+            agents: number;
+            /**
+             * Callsthisweek
+             * @default 0
+             */
+            callsThisWeek: number;
+            /**
+             * Workflows
+             * @default 0
+             */
+            workflows: number;
+        };
         /**
          * CredentialAccount
          * @description An account signing in with an app credential, as its page lists it.
@@ -2999,6 +3094,16 @@ export interface components {
         Envelope_list_MyAccount__: {
             /** Data */
             data: components["schemas"]["MyAccount"][];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[list[MyConnector]] */
+        Envelope_list_MyConnector__: {
+            /** Data */
+            data: components["schemas"]["MyConnector"][];
             /**
              * Success
              * @constant
@@ -3866,6 +3971,61 @@ export interface components {
             test?: components["schemas"]["AccountTest"] | null;
         };
         /**
+         * MyConnector
+         * @description One app that acts as the caller, as Connectors (Mine) lists it.
+         */
+        MyConnector: {
+            /** Account */
+            account?: string | null;
+            /**
+             * Accountcount
+             * @default 0
+             */
+            accountCount: number;
+            /** Accounts */
+            accounts: components["schemas"]["ConnectorAccount"][];
+            /** Appid */
+            appId: string;
+            /** Authconfig */
+            authConfig?: string | null;
+            /** Authkind */
+            authKind?: string | null;
+            /** Cando */
+            canDo: string;
+            /** Docsurl */
+            docsUrl?: string | null;
+            /**
+             * Inchat
+             * @default false
+             */
+            inChat: boolean;
+            /** Logo */
+            logo?: string | null;
+            /**
+             * Mayturnon
+             * @default false
+             */
+            mayTurnOn: boolean;
+            /** Method */
+            method?: string | null;
+            /** Name */
+            name: string;
+            /** Personfields */
+            personFields?: string[];
+            /** Primaryaccountid */
+            primaryAccountId?: string | null;
+            /** Since */
+            since?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "connected" | "expired" | "not_connected" | "app_off";
+            /** Tools */
+            tools: components["schemas"]["ConnectorTool"][];
+            used: components["schemas"]["ConnectorUse"];
+        };
+        /**
          * NewAppIn
          * @description A custom app a builder adds, as its first account: by name with a sign-in kind, or an MCP server by its address,
          *     whose sign-in is found from the server.
@@ -4537,6 +4697,8 @@ export interface components {
             account?: components["schemas"]["AccountDetail"] | null;
             /** Accountid */
             accountId: string;
+            /** Alreadyconnectedas */
+            alreadyConnectedAs?: string | null;
             /** Appid */
             appId: string;
             /** Check */
@@ -4693,6 +4855,8 @@ export interface components {
             moduleIds: string[];
             /** Name */
             name: string;
+            /** Ownsignin */
+            ownSignIn?: ("connected" | "expired" | "none") | null;
             plugin?: components["schemas"]["SystemPlugin"] | null;
             /** Pluginid */
             pluginId?: string | null;
@@ -10184,6 +10348,109 @@ export interface operations {
             };
         };
     };
+    apps_add_own_account: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SignInStart_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     apps_give_own_credentials: {
         parameters: {
             query?: never;
@@ -10273,6 +10540,125 @@ export interface operations {
             };
             /** @description Server error */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    apps_my_connections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_MyConnector__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -194,6 +194,8 @@ async def sign_in_with_jwt(  # noqa: PLR0917
     answer = r.json()
     tokens = Tokens(store, credential_store(settings), None, None)
     await tokens.store_answer(tenant, conn, answer, key)
+    # The bearer flow answers no id token, so the account is named by the user it signed in as, as a sign-in names it.
+    await store.name_token(tenant, conn, key, values["SF_TEST_USERNAME"])
     return f"signed {email} in to {label} as {values['SF_TEST_USERNAME']} by the JWT bearer flow (no refresh token)"
 
 

@@ -43,9 +43,9 @@ Service: `tools-service` with platform-service, kb-service and agents-service. L
 | 6 | Test connection | Passes, through the limits call |
 | 7 | Read the connection and the plugin | The client secret appears in neither |
 | 8 | A run calls `salesforce_query` with a SOQL query | 200 at once; the fake received exactly that query |
-| 9 | Priya turns Salesforce off for the team | Its tools leave the grantable list; a call answers 403 `PLUGIN_DISABLED` |
+| 9 | Priya turns Salesforce off for the team | Its tools leave the grantable list; a call answers 403 `APP_OFF_FOR_TEAM` naming the app and team |
 | 10 | Priya turns it on again | The same connection and instance; calls run with no new sign-in |
-| 11 | Priya turns it off for the team, then on | A call answers 403 `PLUGIN_DISABLED`, then runs again; no restart |
+| 11 | Priya turns it off for the team, then on | A call answers 403 `APP_OFF_FOR_TEAM`, then runs again; no restart |
 | 12 | Priya edits and deletes the plugin's module | 403 `plugin_module` to both |
 | 13 | James asks the case helper in chat about case 00044818 | The agent calls `salesforce_query` and shows the case |
 | 14 | James asks it to escalate the case | The approval card names the tool "Update a record", from the plugin's title, and shows the row "Fields · Status: Escalated", never a raw object; `salesforce_update_record` waits in Human Tasks; Salesforce is unchanged |
@@ -73,7 +73,7 @@ Service: `tools-service` with platform-service, kb-service and agents-service. L
 | 45 | With team_ops's publish policy at always, James makes an agent and asks to publish it (the request waits); he grants salesforce_query, saves and asks again; Maya approves; he chats "call salesforce_query …" | The request for the newest draft (201) replaces the one waiting; after Maya approves, the first chat turn calls salesforce_query and reads the case |
 | 51 | Priya reads the app's page right after the team's sign-in in step 5 | The team account reads connected at once; its `test` reads ok once the test that follows the sign-in has run |
 | 50 | James runs `salesforce_list_view` Real from its page | 200; the records shaped once by the tool's transform, no transform error, and the request sent shown |
-| 47 | Sam turns Salesforce on for team_security with `signIn: person` and no team account; a call acting for Sam runs before he signs in | 403 `CONNECTION_NOT_LINKED`, not `PLUGIN_DISABLED` |
+| 47 | Sam turns Salesforce on for team_security with `signIn: person` and no team account; a call acting for Sam runs before he signs in | 403 `CONNECTION_NOT_LINKED`, not `APP_OFF_FOR_TEAM` |
 | 48 | Sam signs in with his own account | 200; the app's page lists the account as his |
 | 49 | The same call acting for Sam | 200 with case 00044818; Salesforce received the query at the address the plugin names, under the instance his sign-in gave |
 | 46 | The console steps for group D (the app page's Tools tab, the tool page's Mock or Real, the chat tool row "title · app, as person") | Written by the console builder with tasks U3 and U6 |

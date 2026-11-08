@@ -305,6 +305,28 @@ class ConnectionRef(TypedDict, closed=True):
     status: Literal["draft", "healthy", "needs_reconnect", "expiring", "revoked", "error"]
 
 
+class ConnectorAccount(TypedDict, closed=True):
+    account: NotRequired[str | None]
+    connectionId: str
+    name: str
+    primary: NotRequired[bool]
+    since: NotRequired[str | None]
+    state: Literal["connected", "expired", "not_connected"]
+
+
+class ConnectorTool(TypedDict, closed=True):
+    access: str
+    name: str
+    reviewed: NotRequired[bool]
+    title: str
+
+
+class ConnectorUse(TypedDict, closed=True):
+    agents: NotRequired[int]
+    callsThisWeek: NotRequired[int]
+    workflows: NotRequired[int]
+
+
 class CredentialAccount(TypedDict, closed=True):
     connectedAt: NotRequired[str | None]
     id: str
@@ -632,6 +654,28 @@ class MyAccount(TypedDict, closed=True):
     since: NotRequired[str | None]
     state: NotRequired[Literal["connected", "expired", "not_connected"]]
     test: NotRequired[AccountTest | None]
+
+
+class MyConnector(TypedDict, closed=True):
+    account: NotRequired[str | None]
+    accountCount: NotRequired[int]
+    accounts: list[ConnectorAccount]
+    appId: str
+    authConfig: NotRequired[str | None]
+    authKind: NotRequired[str | None]
+    canDo: str
+    docsUrl: NotRequired[str | None]
+    inChat: NotRequired[bool]
+    logo: NotRequired[str | None]
+    mayTurnOn: NotRequired[bool]
+    method: NotRequired[str | None]
+    name: str
+    personFields: NotRequired[list[str]]
+    primaryAccountId: NotRequired[str | None]
+    since: NotRequired[str | None]
+    state: Literal["connected", "expired", "not_connected", "app_off"]
+    tools: list[ConnectorTool]
+    used: ConnectorUse
 
 
 class NewAppIn(TypedDict, closed=True):
@@ -1505,6 +1549,11 @@ class EnvelopeListMyAccount(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeListMyConnector(TypedDict, closed=True):
+    data: list[MyConnector]
+    success: Literal[True]
+
+
 class ExecutionList(TypedDict, closed=True):
     data: list[ToolCallRow]
     facets: dict[str, dict[str, int]]
@@ -1731,6 +1780,7 @@ class SecretMeta(TypedDict, closed=True):
 class SignInFinished(TypedDict, closed=True):
     account: NotRequired[AccountDetail | None]
     accountId: str
+    alreadyConnectedAs: NotRequired[str | None]
     appId: str
     check: bool
     health: NotRequired[CheckedCredential | None]
@@ -1990,6 +2040,7 @@ class SystemCard(TypedDict, closed=True):
     mayManage: bool
     moduleIds: list[str]
     name: str
+    ownSignIn: NotRequired[Literal["connected", "expired", "none"] | None]
     plugin: NotRequired[SystemPlugin | None]
     pluginId: NotRequired[str | None]
     sandboxId: NotRequired[str | None]

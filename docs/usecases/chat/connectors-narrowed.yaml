@@ -1,0 +1,18 @@
+# A chat narrowed in the composer's connector picker: Priya leaves Salesforce out of this chat, so no Salesforce tool is
+# offered or called in it, and the chat's other tools still run. A new chat has every connected connector on again
+# (services/agents-service/tests/api/test_chat_connectors.py). Real model, at most four steps in all.
+# make chat-script FILE=docs/usecases/chat/connectors-narrowed.yaml AS=priya
+as: [priya]
+real: [priya]
+connectorsOff: [Salesforce]
+turns:
+  - say: "How many open Salesforce cases do I have?"
+    expect:
+      noErrorCode: true
+      notTools: [salesforce_query, salesforce_find_cases, salesforce_account_cases, salesforce_search,
+                 salesforce_search_by_fields, salesforce_get_record, salesforce_list_view, salesforce_describe]
+      maxSteps: 2
+  - say: "What needs me today?"
+    expect:
+      tool: my_human_tasks
+      maxSteps: 2

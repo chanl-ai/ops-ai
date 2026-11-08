@@ -34,6 +34,11 @@ export interface NavItem {
   top?: boolean;
   /** What the parent page itself needs; a person who may open neither it nor any child is not offered the row. */
   needs?: NavNeed;
+  /**
+   * Two views of one thing reached from different sidebar rows (Connectors: Mine and Team setup): the title switcher
+   * moves between them and the trail names the view, but neither is drawn as a sub-row.
+   */
+  views?: NavChild[];
 }
 
 /** platform-service reads the audit log for whoever holds audit.view in the team (GET /v1/audit). */
@@ -44,6 +49,17 @@ export const TOOL_CALL_LOG: NavNeed = { area: 'activity', action: 'view' };
 export const ACTIVITY: NavNeed = { area: 'activity', action: 'view' };
 /** agents-service answers GET /v1/background only for an account admin: access.manage in every team. */
 export const BACKGROUND: NavNeed = { area: 'access', action: 'manage', everyTeam: true };
+
+/**
+ * Connectors (owner, 8 November): one word for an app that acts for the team or the person, in two views. Mine is each
+ * person's own sign-ins, the sidebar's top row "My connectors"; Team setup is where an admin turns apps on, the Data Hub
+ * row "Connectors".
+ */
+export const CONNECTORS = 'Connectors';
+export const CONNECTOR_VIEWS: NavChild[] = [
+  { title: 'Mine', url: '/integrations/my-accounts', icon: IconUserCheck },
+  { title: 'Team setup', url: '/integrations', icon: IconPlugConnected },
+];
 
 export interface NavGroup {
   label: string;
@@ -59,8 +75,9 @@ export const NAV: NavGroup[] = [
       { title: 'Cases', url: '/cases', icon: IconMail },
       // Reviews is daily work for reviewers, so it sits with Cases and Chat rather than with configuration.
       { title: 'Human Tasks', url: '/reviews', icon: IconUserCheck },
-      // A person's own sign-ins: about the person, not the team's data, and visited whenever one expires.
-      { title: 'My accounts', url: '/integrations/my-accounts', icon: IconUserCheck },
+      // Connectors, Mine: a person's own sign-ins, about the person rather than the team's data, visited whenever one
+      // expires.
+      { title: 'My connectors', url: '/integrations/my-accounts', icon: IconUserCheck, views: CONNECTOR_VIEWS },
       // Every conversation the person has had, searchable, beside the chat itself.
       { title: 'Chat', url: '/chat', icon: IconMessages, tabIcon: IconMessage, top: true, children: [{ title: 'Conversations', url: '/chat/conversations', icon: IconHistory }] },
     ],
@@ -83,9 +100,9 @@ export const NAV: NavGroup[] = [
       // Wiki is hidden from the sidebar; its pages still answer at /wiki.
       // Knowledge bases decide what an agent searches and how; each KB page has its own tabs, so the row is flat.
       { title: 'Knowledge bases', url: '/knowledge', icon: IconDatabase },
-      // The Apps menu: the catalog, the secret values tools send and the tools, each its own item; an app's auth configs
-      // are on its own page.
-      { title: 'Apps', url: '/integrations', icon: IconPlugConnected },
+      // Connectors, Team setup (the catalog), the secret values tools send and the tools, each its own item; an app's
+      // auth configs are on its own page.
+      { title: CONNECTORS, url: '/integrations', icon: IconPlugConnected, views: CONNECTOR_VIEWS },
       { title: 'Secrets', url: '/integrations/credentials', icon: IconKey },
       { title: 'Tools', url: '/tools', icon: IconTool },
       // Every file the platform stores, whatever brought it in (wiki, chat, mail, imports, exports), so it sits beside the Wiki rather than under it.
@@ -154,14 +171,26 @@ export function crumbsFor(pathname: string): Crumb[] {
   if (!best) return [];
   // The first group's pages sit at the top of the sidebar under no heading, so their trail names no group.
   const group: Crumb[] = best.group === NAV[0] ? [] : [{ label: best.group.label }];
-  const crumbs: Crumb[] = [...group, link(best.item.title, best.item.url), ...(best.child ? [link(best.child.title, best.child.url)] : [])];
+  // The top row already names its view (My connectors), so only the Data Hub row's trail adds it (Team setup).
+  const view = best.item.views && best.group !== NAV[0] && viewFor(best.item.views, pathname);
+  const crumbs: Crumb[] = [
+    ...group,
+    link(best.item.title, best.item.url),
+    ...(best.child ? [link(best.child.title, best.child.url)] : view ? [link(view.title, view.url)] : []),
+  ];
   // A group and its item can share a name (Agents › Agents); the trail names it once, keeping the item's link.
   return crumbs.filter((c, i) => c.label !== crumbs[i + 1]?.label);
+}
+
+/** The view a path is in: the longest matching url, so Mine (/integrations/my-accounts) is not also Team setup. */
+function viewFor(views: NavChild[], pathname: string): NavChild | undefined {
+  return [...views].sort((a, b) => b.url.length - a.url.length).find((v) => covers(v.url, pathname));
 }
 
 /** The pages grouped under one sidebar item, for the title switcher: the item's name, then the parent page and its children. Null when the item has no children. */
 export function sectionFor(pathname: string): { label: string; pages: { href: string; label: string; icon?: Icon; needs?: NavNeed }[] } | null {
   const best = navMatch(pathname);
+  if (best?.item.views) return { label: CONNECTORS, pages: best.item.views.map((v) => ({ href: v.url, label: v.title, icon: v.icon, needs: v.needs })) };
   if (!best?.item.children?.length) return null;
   return { label: best.item.title, pages: [{ href: best.item.url, label: best.item.tabTitle ?? best.item.title, icon: best.item.tabIcon, needs: best.item.needs }, ...best.item.children.map((c) => ({ href: c.url, label: c.title, icon: c.icon, needs: c.needs }))] };
 }

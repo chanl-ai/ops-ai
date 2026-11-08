@@ -3,8 +3,9 @@ so the generated layer has none of them; each is declared here as an operation a
 
 A reply streams as server-sent events, each a JSON object with a `type`: `status` (a phase), `text` (a delta),
 `replace` (the whole text so far), `tool_end` (a finished tool call), `widget`, `error` and `done` (the stored
-message). A tool call refused with `CONNECTION_NOT_LINKED` is the Connect card the screen shows; `connect_card`
-reads it."""
+message). A tool call refused with `CONNECTION_NOT_LINKED` is the Connect card the screen shows, and one refused with
+`APP_OFF_FOR_TEAM` the card that asks an admin to turn the app on, and one refused with `ACCOUNT_CHOICE_NEEDED` the
+card that asks which account; `connect_card` reads all three."""
 
 from __future__ import annotations
 
@@ -15,6 +16,11 @@ from ._transport import Operation, page_items
 
 SERVICE = "agents"
 LINKED = "CONNECTION_NOT_LINKED"
+# An app the team has off: the same card, whose action asks a team admin to turn it on.
+APP_OFF = "APP_OFF_FOR_TEAM"
+# Two of the person's accounts fit and none is their default: the card asks which.
+CHOICE = "ACCOUNT_CHOICE_NEEDED"
+REASONS = {APP_OFF: "app_off", CHOICE: "account_choice"}
 ACTIONS = ("approve", "reject", "submit")
 
 
@@ -49,6 +55,8 @@ OPERATIONS: dict[str, Operation] = {
         "widget_id",
     ),
     "budget": _op("POST", "/v1/chat/threads/{thread_id}/budget", "thread_id"),
+    "connectors": _op("GET", "/v1/chat/threads/{thread_id}/connectors", "thread_id"),
+    "set_connectors": _op("PUT", "/v1/chat/threads/{thread_id}/connectors", "thread_id"),
 }
 
 
@@ -81,14 +89,16 @@ def action_body(action: str, *, reason: str | None = None, values: dict[str, str
 
 
 def connect_card(call: dict[str, Any]) -> dict[str, Any] | None:
-    """The Connect card a failed tool call shows: the app to connect, why, and the sign-in link."""
+    """The card a failed tool call shows: the app to connect, why, and the sign-in link; with reason app_off, the app
+    the team has off; with reason account_choice, the accounts to choose from."""
     out = call.get("output")
     error = out.get("error") if isinstance(out, dict) else None
     if isinstance(error, dict) and isinstance(error.get("error"), dict):
         error = error["error"]
-    if call.get("status") != "failed" or not isinstance(error, dict) or error.get("code") != LINKED:
+    if call.get("status") != "failed" or not isinstance(error, dict) or error.get("code") not in (LINKED, *REASONS):
         return None
-    return {**(error.get("details") or {}), "message": error.get("message", "")}
+    reason = {"reason": REASONS[str(error["code"])]} if error.get("code") in REASONS else {}
+    return {**(error.get("details") or {}), **reason, "message": error.get("message", "")}
 
 
 def _data(events: Any) -> Iterator[dict[str, Any]]:
@@ -138,6 +148,16 @@ class Chat:
     def feedback(self, thread: str, message: str, feedback: str | None) -> Any:
         return self._call("feedback", {"thread_id": thread, "message_id": message}, {"feedback": feedback})
 
+    def connectors(self, thread: str) -> list[dict[str, Any]]:
+        """The chat's connectors as its composer picker lists them: each app the agent holds tools of, whether this
+        chat uses it and its state for the person, then the apps the team has off."""
+        return list(cast(dict[str, Any], self._call("connectors", {"thread_id": thread}))["connectors"])
+
+    def set_connectors(self, thread: str, *, off: list[str]) -> list[dict[str, Any]]:
+        """Leaves these apps (by id) out of this chat; every other connector stays on. It only narrows."""
+        made = self._call("set_connectors", {"thread_id": thread}, {"off": list(off)})
+        return list(cast(dict[str, Any], made)["connectors"])
+
     def remove(self, thread: str) -> Any:
         return self._call("delete", {"thread_id": thread})
 
@@ -178,6 +198,13 @@ class AsyncChat:
 
     async def feedback(self, thread: str, message: str, feedback: str | None) -> Any:
         return await self._call("feedback", {"thread_id": thread, "message_id": message}, {"feedback": feedback})
+
+    async def connectors(self, thread: str) -> list[dict[str, Any]]:
+        return list(cast(dict[str, Any], await self._call("connectors", {"thread_id": thread}))["connectors"])
+
+    async def set_connectors(self, thread: str, *, off: list[str]) -> list[dict[str, Any]]:
+        made = await self._call("set_connectors", {"thread_id": thread}, {"off": list(off)})
+        return list(cast(dict[str, Any], made)["connectors"])
 
     async def remove(self, thread: str) -> Any:
         return await self._call("delete", {"thread_id": thread})

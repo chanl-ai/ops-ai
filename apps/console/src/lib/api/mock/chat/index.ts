@@ -280,6 +280,14 @@ export function createChatMock(deps: Deps): ChatApi {
         overridesByThread.set(tid, overrides);
         return settingsOf(tid);
       },
+      // The mock agent holds no app's tools, so the picker lists none; the live service joins them from the apps.
+      newChatConnectors: async () => respond(() => ({ threadId: '', connectors: [] })),
+      connectors: async (tid) => respond(() => ({ threadId: tid, connectors: [] })),
+      setConnectors: async (tid, off) =>
+        respond(() => {
+          if (off.length) refuseOverride('toolsOff', `this chat has no connector ${off[0]} to turn off.`);
+          return { threadId: tid, connectors: [] };
+        }),
     },
     defaultAgent: {
       get: () => respond(() => ({ canChange: true, ...(defaultAgentId ? { agentId: defaultAgentId, agentName: deps.agents().find((a) => a.id === defaultAgentId)?.name } : {}) })),

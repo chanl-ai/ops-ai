@@ -1,0 +1,15 @@
+# Two accounts fit: Priya has two GitHub accounts connected and has saved neither as her default, so the chat asks which
+# with a card naming both, under one sentence and no error code. Real model, at most two steps. Run before she saves a
+# default (Connectors, Mine, Use in chats), which this script then would not see.
+# make chat-script FILE=docs/usecases/chat/github-which-account.yaml AS=priya
+# It skips, not fails, when the person does not hold two different GitHub logins (the API test covers that case).
+needs: {app: GitHub, accounts: 2}
+as: [priya]
+real: [priya]
+turns:
+  - say: "List the open issues in the octo-org/dispatch-api GitHub repository"
+    expect:
+      card: account_choice
+      noErrorCode: true
+      endsClean: true
+      maxSteps: 2

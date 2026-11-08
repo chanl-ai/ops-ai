@@ -10,6 +10,8 @@ import { toast } from 'sonner';
 import { ChatLayout } from '@/components/chat/chat-layout';
 import { ChatHome } from './chat-home';
 import { Composer, KbChips, type KbOption } from '@/components/chat/composer';
+import { ConnectorsPicker } from '@/components/chat/connectors-picker';
+import { useApplyChatConnectors } from '@/hooks/chat-settings-queries';
 import { ThreadSettingsButton } from '@/components/chat/thread-settings';
 import { MemorySheet } from '@/components/memory/memory-sheet';
 import { ThreadMessages, visibleMessages } from '@/components/chat/thread-messages';
@@ -75,6 +77,7 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
     [],
   );
   const create = useCreateThread();
+  const applyConnectors = useApplyChatConnectors();
   const update = useUpdateThread();
   const remove = useDeleteThread();
   const [deleting, setDeleting] = React.useState<Pick<ChatThreadRow, 'id' | 'title'> | null>(null);
@@ -135,9 +138,11 @@ export function ChatWorkspace({ threadId }: { threadId?: string }) {
           initialAgentId={searchParams.get('agent') ?? undefined}
           header={<span className="px-1 text-sm font-semibold">New chat</span>}
           creating={create.isPending}
-          onStart={async (agentId, kbIds, text, attachments) => {
+          onStart={async (agentId, kbIds, text, attachments, connectorsOff) => {
             try {
               const t = await create.mutateAsync({ agentId, kbIds });
+              // The connectors chosen on the home go onto the chat before its first message, so that message uses them.
+              if (connectorsOff.length) await applyConnectors.mutateAsync({ threadId: t.id, off: connectorsOff });
               chat.send(t.id, { content: text, attachments });
               router.push(`/chat/${t.id}`);
             } catch (e) {
@@ -420,6 +425,8 @@ function ThreadView({
             streaming={streaming}
             onStop={onStop}
             onSend={(text, files) => onSend({ content: text, attachments: files.length ? files : undefined })}
+            // The chat's connectors, narrowed for this chat only; offered to its owner while it takes messages.
+            footer={owner && !t.archived ? <ConnectorsPicker threadId={t.id} disabled={streaming} /> : undefined}
             disabledReason={
               pausedOnBudget ? (
                 'This conversation is paused on its budget. Continue it above to send more.'

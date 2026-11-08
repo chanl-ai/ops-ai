@@ -29,7 +29,7 @@ from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
 
 from ..auth.tokens import SIGNED_IN_AS, person_named
-from ..connections.records import account_for, default_sign_in
+from ..connections.records import account_for, choice_needed, default_sign_in
 from ..egress import EgressDenied, EgressPolicy, for_tenant
 from ..modules.seed import blank
 from ..store.connections import ConnectionStore, plugin_app, plugin_of
@@ -734,6 +734,27 @@ class PluginHost:
         pick = default_sign_in(await self.connections.own_sign_ins(tenant_id, person, ids))
         return str(pick["connection_id"]) if pick is not None else None
 
+    async def account_choice(self, tenant_id: str, team_id: str, plugin: Plugin, person: str) -> dict[str, Any] | None:
+        """What a call must ask the person when they hold two or more live accounts of the app and chose no default:
+        the app and each account, named as its sign-in named the person; None when there is nothing to choose."""
+        if self.connections is None:
+            return None
+        found = await self.connections.accounts(tenant_id, team_id, plugin_app(plugin.manifest.id))
+        live = {str(a["id"]): a for a in found if not a.get("sandbox")}
+        mine = await self.connections.own_sign_ins(tenant_id, person, list(live))
+        if not choice_needed(mine):
+            return None
+        accounts = [
+            {
+                "connectionId": str(t["connection_id"]),
+                "name": str(live[str(t["connection_id"])]["name"]),
+                "account": t.get("account"),
+            }
+            for t in mine
+            if t.get("refused_at") is None
+        ]
+        return {"app": plugin.manifest.title, "appId": plugin_app(plugin.manifest.id), "accounts": accounts}
+
     async def for_call(
         self,
         tenant_id: str,
@@ -757,7 +778,16 @@ class PluginHost:
             }
         reason = await self.off_reason(tenant_id, team_id, plugin)
         if reason is not None or team_id is None:
-            return {**module, "plugin_off": reason or "No team.", "connection_id": None, "egress_hosts": []}
+            # Off for this team (installed, not turned on): the refusal names the app and team, so chat draws the card
+            # that asks an admin to turn it on.
+            off = {"app": plugin.manifest.title, "appId": plugin_app(plugin.manifest.id), "teamId": team_id}
+            return {
+                **module,
+                "plugin_off": reason or "No team.",
+                **({"app_off": off} if team_id is not None else {}),
+                "connection_id": None,
+                "egress_hosts": [],
+            }
         b: dict[str, Any] = await self.bindings.get(tenant_id, team_id, plugin.manifest.id) or {}
         module = {**module, **tools_added_view(plugin.manifest, b)}
         if account:
@@ -770,8 +800,12 @@ class PluginHost:
             b = {**b, "connection_id": named["id"]}
         else:
             if person:
-                # A call naming no account, for a person signed in to several: the one they pinned, else their
-                # newest live sign-in; with none of their own, the team's default.
+                # A call naming no account, for a person signed in to several: the one they pinned as their default;
+                # with two or more and none pinned, the call asks which (ACCOUNT_CHOICE_NEEDED); with none of their
+                # own, the team's default.
+                choice = await self.account_choice(tenant_id, team_id, plugin, person)
+                if choice is not None:
+                    return {**module, "account_choice": choice, "connection_id": None, "egress_hosts": []}
                 chosen = await self.person_default(tenant_id, team_id, plugin, person)
                 if chosen is not None:
                     b = {**b, "connection_id": chosen}

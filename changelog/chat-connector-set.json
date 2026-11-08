@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Choose which connectors one chat uses",
+  "description": "Every connected app is on in a new chat, and you can leave some out of one chat; it never adds a tool the assistant was not given, and the next chat starts with all of them on.",
+  "tag": "new"
+}

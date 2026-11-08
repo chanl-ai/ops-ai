@@ -2,12 +2,15 @@
 each person it names and prints a scorecard (`make assistant-evals`, docs/usecases/chat/assistant/).
 
 A script is YAML or JSON: `agent` (the team's default when left out), `test`, `kb` (knowledge bases by name or id),
-`as` (the people `evals` runs it as), `real` (who runs it in the real-model subset), and `turns`, each `say` or
-`connected: true` with `expect`. Expectations a reply is checked against:
+`connectors` (the only connectors the chat uses, as the composer's picker leaves the rest out) or `connectorsOff`
+(the ones it leaves out), `as` (the people
+`evals` runs it as), `real` (who runs it in the real-model subset), and `turns`, each `say` or `connected: true` with
+`expect`. Expectations a reply is checked against:
 
     tool            a tool name, or a list of names, each called
     noTool          no tool called
-    card            a Connect card shown (true) or not (false)
+    card            a Connect card shown (true) or not (false), or a card of one reason (app_off: an app the
+                    team has off, whose card asks an admin)
     says            words the reply holds
     never           words the reply must not hold
     credential      the first call signed in as team or person
@@ -83,6 +86,8 @@ class Outcome:
     calls: int
     thread: str
     failed: list[str] = field(default_factory=list[str])
+    # Why the script did not run: its person lacks what `needs` asks for. A skip is not a failure.
+    skipped: str | None = None
 
 
 def ends_clean(text: str) -> bool:
@@ -105,8 +110,13 @@ def reply_checks(want: dict[str, Any], seen: dict[str, Any], message: dict[str, 
     if want.get("noTool"):
         out.append(("calls no tool", not names, f"called {names}"))
     if "card" in want:
-        shown = "shown" if want["card"] else "not shown"
-        out.append((f"Connect card {shown}", bool(seen["cards"]) == want["card"], f"{seen['cards']}"))
+        if isinstance(want["card"], str):
+            # A card of one reason: app_off (an app the team has off), not_connected, refused...
+            reasons = [str(c.get("reason") or "not_connected") for c in seen["cards"]]
+            out.append((f"{want['card']} card shown", want["card"] in reasons, f"{seen['cards']}"))
+        else:
+            shown = "shown" if want["card"] else "not shown"
+            out.append((f"Connect card {shown}", bool(seen["cards"]) == want["card"], f"{seen['cards']}"))
     for s in want.get("says", []):
         out.append((f"reply says {s!r}", s.lower() in text.lower(), short(text, 200)))
     for s in want.get("never", []):
@@ -234,12 +244,30 @@ def kb_ids(ops: OpsAI, wanted: list[str] | None) -> list[str] | None:
     return [by.get(w) or by[w.lower()] for w in wanted]
 
 
+def unmet(ops: OpsAI, needs: dict[str, Any] | None) -> str | None:
+    """Why the person cannot run a script that `needs` something of their connectors, or None when they can:
+    `{app: GitHub, accounts: 2}` asks for that many different accounts of the app connected."""
+    if not needs:
+        return None
+    app, want = str(needs["app"]), int(needs.get("accounts") or 1)
+    row = next((c for c in ops.me.connectors.list() if str(c["name"]).lower() == app.lower()), None)
+    have = int((row or {}).get("accountCount") or 0)
+    return None if have >= want else f"needs {'two' if want == 2 else want} different {app} logins"
+
+
 def run_script(ns: argparse.Namespace, ops: OpsAI, path: Path) -> Outcome:
-    """One scripted conversation; prints each turn and PASS or FAIL per check."""
+    """One scripted conversation; prints each turn and PASS or FAIL per check, or SKIP when its person lacks what
+    the script `needs`."""
     from .chat import check, followup, line, start_thread, turn  # noqa: PLC0415 - chat imports this module
 
     spec = load_data(path)
+    if why := unmet(ops, spec.get("needs")):
+        line(ns, f"SKIP {path.name}: {why}")
+        return Outcome(True, 0, "", skipped=why)
     ns.agent, ns.test, ns.thread = spec.get("agent"), spec.get("test", False), None
+    # `connectors`: the only connectors the chat uses, as its composer picker leaves the rest out.
+    ns.connector = list(spec.get("connectors") or []) or None
+    ns.connector_off = list(spec.get("connectorsOff") or []) or None
     ns.kb = kb_ids(ops, spec.get("kb"))
     first = next((str(t["say"]) for t in spec["turns"] if t.get("say")), path.stem)
     if spec.get("signedOut"):

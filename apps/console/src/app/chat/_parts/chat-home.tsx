@@ -5,6 +5,7 @@ import { Bot } from 'lucide-react';
 
 import { Suggestion } from '@/components/ai-elements/suggestion';
 import { Composer } from '@/components/chat/composer';
+import { NewChatConnectorsPicker } from '@/components/chat/connectors-picker';
 import { QueryError } from '@/components/shared/query-states';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -48,7 +49,8 @@ export function ChatHome({
   header: React.ReactNode;
   creating: boolean;
   /** `agentId` undefined starts on the team's default, made on the first chat when the team has none. */
-  onStart: (agentId: string | undefined, kbIds: string[], text: string, attachments: ChatAttachment[]) => void;
+  /** `connectorsOff`: the apps the picker left out, which the new chat takes before its first message. */
+  onStart: (agentId: string | undefined, kbIds: string[], text: string, attachments: ChatAttachment[], connectorsOff: string[]) => void;
 }) {
   const list = agents.data ?? [];
   const defaultId = useDefaultAgent().data?.agentId;
@@ -58,7 +60,12 @@ export function ChatHome({
   const hints = hintsFrom(overview.data);
   const canRun = useCan('workflows', 'run') === true;
   const starts = STARTS.filter((s) => !('startsRuns' in s) || canRun);
-  const begin = (text: string, attachments: ChatAttachment[] = []) => onStart(agent?.id, agent?.defaultKbIds ?? [], text, attachments);
+  // The picker's choice is for the agent shown; choosing another agent starts its own list with every connector on.
+  const [connectorsOff, setConnectorsOff] = React.useState<string[]>([]);
+  React.useEffect(() => {
+    setConnectorsOff([]);
+  }, [agent?.id]);
+  const begin = (text: string, attachments: ChatAttachment[] = []) => onStart(agent?.id, agent?.defaultKbIds ?? [], text, attachments, connectorsOff);
   // The agent and its default knowledge bases come from the list, so sending waits for it: a message sent before it
   // arrived started on the team's default agent, whatever ?agent= asked for.
   const busy = creating || agents.isPending;
@@ -98,7 +105,15 @@ export function ChatHome({
               <h1 className="text-2xl font-semibold tracking-tight">{me ? `${greeting()}, ${me.split(' ')[0]}` : greeting()}</h1>
               <p className="text-sm text-muted-foreground">Ask {agent?.name ?? 'Ops Assistant'} anything, start a workflow, or pick up a task.</p>
             </div>
-            <Composer autoFocus draftKey="new" placeholder="Ask, find a case or customer, or start a workflow…" streaming={busy} onStop={() => undefined} onSend={(text, files) => begin(text, files)} />
+            <Composer
+              autoFocus
+              draftKey="new"
+              placeholder="Ask, find a case or customer, or start a workflow…"
+              streaming={busy}
+              onStop={() => undefined}
+              onSend={(text, files) => begin(text, files)}
+              footer={<NewChatConnectorsPicker agentId={agent?.id} off={connectorsOff} onChange={setConnectorsOff} disabled={busy} />}
+            />
             {overview.isPending ? (
               <div className="flex flex-col gap-2" data-testid="home-hints-loading">
                 <Skeleton className="h-14 w-full rounded-lg" />

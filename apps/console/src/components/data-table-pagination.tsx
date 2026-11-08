@@ -2,6 +2,7 @@ import { Table } from '@tanstack/react-table';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { plural } from '@/lib/format';
 import {
   Select,
   SelectContent,
@@ -36,11 +37,14 @@ interface DataTablePaginationProps<TData> {
    * instead of the TanStack table's built-in pagination.
    */
   serverPagination?: ServerPaginationProps;
+  /** What the list holds, for its count ("2 connectors"); rows by default. */
+  noun?: string;
 }
 
 export function DataTablePagination<TData>({
   table,
   serverPagination,
+  noun = 'row',
 }: DataTablePaginationProps<TData>) {
   // Determine if we're using server or client pagination
   const isServerPagination = !!serverPagination;
@@ -118,7 +122,7 @@ export function DataTablePagination<TData>({
             {selectedRows} of {totalRows} selected
           </>
         ) : (
-          <>{totalRows === 1 ? '1 row' : `${totalRows} rows`}</>
+          <>{plural(totalRows, noun)}</>
         )}
       </div>
       <div className="flex shrink-0 items-center gap-2 sm:gap-6 lg:gap-8">

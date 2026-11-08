@@ -302,3 +302,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-628 | tools-service | An admin turns an app on in one window and everyone can use it | api, ui | draft |
 | uc-629 | files-service | A file's page shows its preview or says why not | ui | draft |
 | uc-668 | tools-service | An advisor's meeting log saves the opportunity and its note together, or neither | api | current |
+| uc-671 | tools-service | Connectors for people: one row per app, an app off for the team, a per-chat connector set | api, ui | current |

@@ -116,3 +116,14 @@ test("the resources list is the app's one list, and an update names the copy", a
   await ops.resources.update({ copy: { kind: 'agent', recordId: 'ag_1', source: 'plugin:desk', templateId: 'case-helper' } }, { confirm: true });
   assert.equal(decodeURIComponent(seen.at(-1).url.pathname), '/api/agents/v1/resources/plugin:desk:case-helper/copies/ag_1/update');
 });
+
+test('a connector is disconnected on its primary account, not the app\'s first', async () => {
+  const rows = [{ appId: 'plugin:github', name: 'GitHub', primaryAccountId: 'con_second', accountCount: 2 }];
+  const seen = [];
+  const ops = client({ 'GET me/connections': rows }, seen);
+  assert.deepEqual(await ops.me.connectors.list(), rows);
+  await ops.me.connectors.disconnect('github');
+  assert.equal(seen.at(-1).method, 'DELETE');
+  assert.equal(seen.at(-1).url.pathname, '/api/tools/v1/me/accounts/con_second');
+  await assert.rejects(ops.me.connectors.disconnect('plugin:hubspot'), /not one of your connectors/);
+});

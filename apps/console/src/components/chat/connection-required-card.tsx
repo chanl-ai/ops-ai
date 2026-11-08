@@ -1,15 +1,21 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import { ExternalLink, Plug } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { CONNECTED_MESSAGE, type ConnectedMessage } from '@/components/connections/sign-in';
 import { ChatToolCall } from '@/components/shared/chat-blocks';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { AskAnAdmin } from '@/components/connections/ask-an-admin';
 import { OwnCredentialsForm } from '@/components/connections/own-credentials-form';
-import { useMyConnections } from '@/hooks/connections-queries';
+import { useMyConnections, useRefreshMine } from '@/hooks/connections-queries';
+import { usePinDefault } from '@/hooks/systems-queries';
+import { useCan } from '@/hooks/me-queries';
+import { useTeam } from '@/hooks/use-team';
 import type { ToolCall } from '@/lib/types/chat';
 import { actsAs } from '@/lib/failure-words';
 import type { ConnectionRequired, ConnectionRequiredReason } from '@/lib/types/connections';
@@ -29,7 +35,7 @@ export function connectionRequired(call: ToolCall): (ConnectionRequired & { mess
   const d = e.details;
   return {
     connectionId: e.details.connectionId,
-    connection: d.connection ?? 'This system',
+    connection: d.connection ?? 'This app',
     reason: d.reason ?? 'not_connected',
     authKind: d.authKind,
     personFields: d.personFields,
@@ -171,7 +177,158 @@ export function ConnectionRequiredCard({ call, need, onReply }: { call: ToolCall
               </Button>
             </div>
           )}
-          {!keyed && !need.connectUrl && !connected && <p className="mt-1">Ask again in the chat for a new link, or connect from My accounts under Apps.</p>}
+          {!keyed && !need.connectUrl && !connected && <p className="mt-1">Ask again in the chat for a new link, or connect from Connectors.</p>}
+        </AlertDescription>
+      </Alert>
+    </div>
+  );
+}
+
+/** What a tool call refused with `APP_OFF_FOR_TEAM` carries: the app the team has off, its id and the team. */
+export interface AppOff {
+  app: string;
+  appId: string;
+  teamId?: string;
+  message: string;
+}
+
+/** The app a call found off for the team, from the gateway's error (or the assistant's request_app), or null. */
+export function appOffForTeam(call: ToolCall): AppOff | null {
+  if (call.status !== 'failed' || typeof call.output !== 'object' || call.output === null) return null;
+  let error = (call.output as { error?: unknown }).error;
+  if (error && typeof error === 'object' && 'error' in error) error = (error as { error: unknown }).error;
+  if (!error || typeof error !== 'object') return null;
+  const e = error as { code?: string; message?: string; details?: Partial<AppOff> };
+  if (e.code !== 'APP_OFF_FOR_TEAM' || !e.details?.appId) return null;
+  return { app: e.details.app ?? 'This app', appId: e.details.appId, teamId: e.details.teamId, message: e.message ?? '' };
+}
+
+/**
+ * The card for an app the team has installed but not turned on: who may turn it on is offered Turn on, which opens
+ * the app in Connectors (Team setup); anyone else is shown the team's admins to ask. Not now hides the action.
+ */
+export function AppOffCard({ call, off, readOnly }: { call: ToolCall; off: AppOff; readOnly?: boolean }) {
+  const { team } = useTeam();
+  const mayTurnOn = useCan('connections', 'manage') === true;
+  const [dismissed, setDismissed] = React.useState(false);
+  const teamName = team?.name ?? 'this team';
+  return (
+    <div className="flex flex-col gap-2" data-testid="app-off-card" data-app={off.appId}>
+      <ChatToolCall
+        name={call.label ?? call.name}
+        state="failed"
+        input={call.input}
+        output={call.output}
+        error={off.message || undefined}
+        detail={call.server}
+        badge={
+          <Badge variant="outline" className="rounded-full text-xs">
+            Off for this team
+          </Badge>
+        }
+      />
+      <Alert>
+        <Plug />
+        <AlertTitle className="flex flex-wrap items-center gap-2">
+          {`${off.app} is off for ${teamName}`}
+          <Badge variant="outline">Off for this team</Badge>
+        </AlertTitle>
+        <AlertDescription>
+          <p>{mayTurnOn ? `You can turn it on for ${teamName}; its tools then work in chat.` : 'Only a team admin can turn it on.'}</p>
+          {!readOnly && !dismissed && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {mayTurnOn ? (
+                <Button size="sm" asChild data-testid="app-off-turn-on">
+                  <Link href={`/integrations/${encodeURIComponent(off.appId)}`}>Turn on {off.app}</Link>
+                </Button>
+              ) : (
+                <AskAnAdmin testId="app-off-ask" />
+              )}
+              <Button size="sm" variant="outline" onClick={() => setDismissed(true)} data-testid="app-off-not-now">
+                Not now
+              </Button>
+            </div>
+          )}
+        </AlertDescription>
+      </Alert>
+    </div>
+  );
+}
+
+/** What a tool call refused with `ACCOUNT_CHOICE_NEEDED` carries: the app and the person's accounts that fit. */
+export interface AccountChoice {
+  app: string;
+  appId: string;
+  accounts: { connectionId: string; name: string; account?: string | null }[];
+}
+
+/** The accounts a call asks the person to choose between, from the gateway's error, or null. */
+export function accountChoice(call: ToolCall): AccountChoice | null {
+  if (call.status !== 'failed' || typeof call.output !== 'object' || call.output === null) return null;
+  let error = (call.output as { error?: unknown }).error;
+  if (error && typeof error === 'object' && 'error' in error) error = (error as { error: unknown }).error;
+  if (!error || typeof error !== 'object') return null;
+  const e = error as { code?: string; details?: Partial<AccountChoice> };
+  if (e.code !== 'ACCOUNT_CHOICE_NEEDED' || !e.details?.appId || !e.details.accounts?.length) return null;
+  return { app: e.details.app ?? 'This app', appId: e.details.appId, accounts: e.details.accounts };
+}
+
+/**
+ * Two of the person's accounts fit and none is their default: one question, with each account as an answer. The one
+ * picked becomes their default for calls that name no account (changed on Connectors), and the chat goes on with it.
+ */
+export function AccountChoiceCard({ call, choice, onReply }: { call: ToolCall; choice: AccountChoice; onReply?: (text: string) => void }) {
+  const pin = usePinDefault();
+  const refresh = useRefreshMine();
+  const [picked, setPicked] = React.useState<string | null>(null);
+  const label = (a: AccountChoice['accounts'][number]) => a.account ?? a.name;
+  return (
+    <div className="flex flex-col gap-2" data-testid="account-choice-card" data-app={choice.appId}>
+      <ChatToolCall
+        name={call.label ?? call.name}
+        state="failed"
+        input={call.input}
+        output={call.output}
+        detail={call.server}
+        badge={
+          <Badge variant="outline" className="rounded-full text-xs">
+            Which account
+          </Badge>
+        }
+      />
+      <Alert>
+        <Plug />
+        <AlertTitle>{`You have ${choice.accounts.length} ${choice.app} accounts connected`}</AlertTitle>
+        <AlertDescription>
+          <p>{picked ? `${choice.app} now uses ${picked} unless a call names another. Change it on Connectors.` : `Which ${choice.app} account should this use? Your pick becomes your default; change it on Connectors.`}</p>
+          {!picked && onReply && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {choice.accounts.map((a) => (
+                <Button
+                  key={a.connectionId}
+                  size="sm"
+                  variant="outline"
+                  disabled={pin.isPending}
+                  data-testid={`account-choice-${a.connectionId}`}
+                  onClick={() =>
+                    pin.mutate(
+                      { appId: choice.appId, accountId: a.connectionId },
+                      {
+                        onSuccess: () => {
+                          setPicked(label(a));
+                          refresh();
+                          onReply(`Use my ${label(a)} ${choice.app} account. Please go ahead.`);
+                        },
+                        onError: (e) => toast.error('Couldn’t choose that account', { description: e.message }),
+                      },
+                    )
+                  }
+                >
+                  {label(a)}
+                </Button>
+              ))}
+            </div>
+          )}
         </AlertDescription>
       </Alert>
     </div>

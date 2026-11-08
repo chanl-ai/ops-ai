@@ -122,3 +122,18 @@ async def test_each_skills_index_line_carries_its_apps_state() -> None:
     out = await with_apps(SimpleNamespace(apps=Apps()), settings, "ag")  # type: ignore[arg-type]
     assert out.skills[0].use_when == "A client in Salesforce (needs Salesforce, on · you are signed in)"
     assert out.instructions[-1].text.startswith("Apps for this conversation")
+
+
+def test_an_app_this_chat_left_out_reads_as_left_out_not_as_on() -> None:
+    # The person left Salesforce out of this chat from the composer: read as on, the model went looking for its tools.
+    from ops_agents.api.apps_line import left_out  # noqa: PLC0415
+
+    cards = [card("Salesforce", "connected"), card("GitHub", "connected")]
+    cards[0]["moduleIds"], cards[1]["moduleIds"] = ["mod_sf"], ["mod_gh"]
+    module_of = {"salesforce_query": "mod_sf", "salesforce_get_record": "mod_sf", "github_list_issues": "mod_gh"}
+    held = list(module_of)
+    marked = left_out(cards, held, module_of, {"salesforce_query", "salesforce_get_record"})
+    text = render(marked) or ""
+    assert "Salesforce: left out of this chat" in text and "GitHub: on" in text, text
+    # One of an app's tools switched off in the settings panel leaves the app in the chat.
+    assert "left out" not in (render(left_out(cards, held, module_of, {"salesforce_query"})) or "")

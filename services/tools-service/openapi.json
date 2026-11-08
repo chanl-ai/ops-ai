@@ -3397,6 +3397,113 @@
         "title": "ConnectionRef",
         "type": "object"
       },
+      "ConnectorAccount": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account"
+          },
+          "connectionId": {
+            "title": "Connectionid",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "primary": {
+            "default": false,
+            "title": "Primary",
+            "type": "boolean"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "state": {
+            "enum": [
+              "connected",
+              "expired",
+              "not_connected"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "connectionId",
+          "name",
+          "state"
+        ],
+        "title": "ConnectorAccount",
+        "type": "object"
+      },
+      "ConnectorTool": {
+        "additionalProperties": false,
+        "properties": {
+          "access": {
+            "title": "Access",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reviewed": {
+            "default": false,
+            "title": "Reviewed",
+            "type": "boolean"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "title",
+          "access"
+        ],
+        "title": "ConnectorTool",
+        "type": "object"
+      },
+      "ConnectorUse": {
+        "additionalProperties": false,
+        "properties": {
+          "agents": {
+            "default": 0,
+            "title": "Agents",
+            "type": "integer"
+          },
+          "callsThisWeek": {
+            "default": 0,
+            "title": "Callsthisweek",
+            "type": "integer"
+          },
+          "workflows": {
+            "default": 0,
+            "title": "Workflows",
+            "type": "integer"
+          }
+        },
+        "title": "ConnectorUse",
+        "type": "object"
+      },
       "CredentialAccount": {
         "additionalProperties": false,
         "description": "An account signing in with an app credential, as its page lists it.",
@@ -4825,6 +4932,29 @@
           "data"
         ],
         "title": "Envelope[list[MyAccount]]",
+        "type": "object"
+      },
+      "Envelope_list_MyConnector__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/MyConnector"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[list[MyConnector]]",
         "type": "object"
       },
       "Envelope_list_PluginTemplate__": {
@@ -7526,6 +7656,172 @@
         "title": "MyAccount",
         "type": "object"
       },
+      "MyConnector": {
+        "additionalProperties": false,
+        "description": "One app that acts as the caller, as Connectors (Mine) lists it.",
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account"
+          },
+          "accountCount": {
+            "default": 0,
+            "title": "Accountcount",
+            "type": "integer"
+          },
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorAccount"
+            },
+            "title": "Accounts",
+            "type": "array"
+          },
+          "appId": {
+            "title": "Appid",
+            "type": "string"
+          },
+          "authConfig": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authconfig"
+          },
+          "authKind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authkind"
+          },
+          "canDo": {
+            "title": "Cando",
+            "type": "string"
+          },
+          "docsUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Docsurl"
+          },
+          "inChat": {
+            "default": false,
+            "title": "Inchat",
+            "type": "boolean"
+          },
+          "logo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo"
+          },
+          "mayTurnOn": {
+            "default": false,
+            "title": "Mayturnon",
+            "type": "boolean"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "personFields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Personfields",
+            "type": "array"
+          },
+          "primaryAccountId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primaryaccountid"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "state": {
+            "enum": [
+              "connected",
+              "expired",
+              "not_connected",
+              "app_off"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorTool"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "used": {
+            "$ref": "#/components/schemas/ConnectorUse"
+          }
+        },
+        "required": [
+          "appId",
+          "name",
+          "state",
+          "canDo",
+          "tools",
+          "accounts",
+          "used"
+        ],
+        "title": "MyConnector",
+        "type": "object"
+      },
       "NewAppIn": {
         "additionalProperties": false,
         "description": "A custom app a builder adds, as its first account: by name with a sign-in kind, or an MCP server by its address,\nwhose sign-in is found from the server.",
@@ -9628,6 +9924,17 @@
             "title": "Accountid",
             "type": "string"
           },
+          "alreadyConnectedAs": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alreadyconnectedas"
+          },
           "appId": {
             "title": "Appid",
             "type": "string"
@@ -10107,6 +10414,22 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "ownSignIn": {
+            "anyOf": [
+              {
+                "enum": [
+                  "connected",
+                  "expired",
+                  "none"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ownsignin"
           },
           "plugin": {
             "anyOf": [
@@ -21903,6 +22226,194 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/me/accounts/{account_id}/another": {
+      "post": {
+        "description": "Add another account of the caller's own on this account's app, through the same auth config: where to\nsend the browser. Signing in as an identity the caller already linked updates that account instead.",
+        "operationId": "apps_add_own_account",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SignInStart_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Add Own Account",
+        "tags": [
+          "apps"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/me/accounts/{account_id}/credentials": {
       "put": {
         "description": "The caller's own key, password or token on an account each person signs in to, replacing any they\ngave before; answers their row in Your connections, never the values.",
@@ -22095,6 +22606,205 @@
           }
         },
         "summary": "Give Own Credentials",
+        "tags": [
+          "apps"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/me/connections": {
+      "get": {
+        "description": "The caller's connectors, Connectors (Mine): one row per app that acts as them, with what it can do, who it\nsigns in as, its state and where it is used; an app the team has off is listed as app_off.",
+        "operationId": "apps_my_connections",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_MyConnector__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not available on this service yet"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "The source could not be reached"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "My Connections",
         "tags": [
           "apps"
         ],

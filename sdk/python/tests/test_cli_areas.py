@@ -629,3 +629,95 @@ def test_the_model_and_offer_checks_read_the_stored_reply() -> None:
         for n, ok, _ in chat_script.reply_checks({"ranOn": "thinking", "offers": "Think harder"}, plain, first)
         if not ok
     ] == ["ran on thinking"]
+
+
+CONNECTORS = [
+    {
+        "appId": "plugin:opsai.salesforce",
+        "name": "Salesforce",
+        "state": "on",
+        "on": True,
+        "tools": ["salesforce_query"],
+    },
+    {"appId": "plugin:opsai.github", "name": "GitHub", "state": "on", "on": True, "tools": ["github_list_issues"]},
+    {"appId": "plugin:core", "name": "Core banking", "state": "off_for_team", "on": False, "tools": []},
+]
+
+
+def test_chat_with_connector_leaves_every_other_connector_out_and_refuses_one_it_lacks(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def answer(r: httpx.Request) -> httpx.Response:
+        if r.url.path.endswith("/connectors") and r.method == "GET":
+            return _ok({"threadId": "th_1", "connectors": CONNECTORS})
+        if r.url.path.endswith("/connectors"):
+            off = json.loads(r.content)["off"]
+            return _ok({"threadId": "th_1", "connectors": [{**c, "on": c["appId"] not in off} for c in CONNECTORS]})
+        return _ok({"id": "th_1"}, 201)
+
+    seen: list[httpx.Request] = []
+    _use(monkeypatch, "chat", _client(seen, answer))
+    assert main(["chat", "start", "--connector", "github"]) == 0
+    put = next(r for r in seen if r.method == "PUT")
+    assert put.url.path == "/api/agents/v1/chat/threads/th_1/connectors"
+    # Only the apps the chat holds are turned off; an app the team has off grants nothing to leave out.
+    assert json.loads(put.content) == {"off": ["plugin:opsai.salesforce"]}
+    assert "GitHub on" in capsys.readouterr().out
+    # `--connectors` with a comma list is the same choice.
+    assert main(["chat", "start", "--connectors", "github,salesforce"]) == 0
+    assert json.loads([r for r in seen if r.method == "PUT"][-1].content) == {"off": []}
+    capsys.readouterr()
+    assert main(["chat", "start", "--connector", "Core banking"]) == 1
+    assert "no connector named core banking" in capsys.readouterr().err
+
+
+def test_connectors_list_is_one_row_per_app(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rows = [
+        {"name": "GitHub", "state": "connected", "account": "harbor-ops", "accountCount": 2, "canDo": "Reads: issues"}
+    ]
+    seen: list[httpx.Request] = []
+    _use(monkeypatch, "connectors", _client(seen, lambda r: _ok(rows)))
+    assert main(["connectors", "list"]) == 0
+    assert seen[-1].url.path == "/api/tools/v1/me/connections"
+    assert capsys.readouterr().out.strip() == "GitHub  connected  harbor-ops  2  Reads: issues"
+
+
+def test_the_which_account_card_names_each_account() -> None:
+    from ops_ai._chat import connect_card  # noqa: PLC0415
+
+    call = {
+        "status": "failed",
+        "output": {
+            "error": {
+                "code": "ACCOUNT_CHOICE_NEEDED",
+                "message": "choose",
+                "details": {"app": "GitHub", "accounts": [{"account": "harbor-ops"}, {"account": "harbor-sandbox"}]},
+            }
+        },
+    }
+    card = connect_card(call)
+    assert card is not None and card["reason"] == "account_choice" and len(card["accounts"]) == 2, card
+
+
+def test_a_script_that_expects_the_off_for_team_card_fails_on_a_connect_card() -> None:
+    want = {"card": "app_off"}
+    connect = {**_seen("Connect it above."), "cards": [{"connection": "Salesforce", "reason": "not_connected"}]}
+    off = {**_seen("Ask an admin above."), "cards": [{"app": "Salesforce", "reason": "app_off"}]}
+    assert [n for n, ok, _ in chat_script.reply_checks(want, connect, {}) if not ok] == ["app_off card shown"]
+    assert [n for n, ok, _ in chat_script.reply_checks(want, off, {}) if not ok] == []
+
+
+def test_a_script_whose_person_lacks_two_accounts_skips_without_a_chat(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    rows = [{"appId": "plugin:opsai.github", "name": "GitHub", "accountCount": 1}]
+    seen: list[httpx.Request] = []
+    _use(monkeypatch, "chat", _client(seen, lambda r: _ok(rows)))
+    script = tmp_path / "s.json"
+    needs = {"app": "GitHub", "accounts": 2}
+    script.write_text(json.dumps({"needs": needs, "turns": [{"say": "Issues?", "expect": {"card": "account_choice"}}]}))
+    assert main(["chat", "script", str(script)]) == 0
+    assert "SKIP s.json: needs two different GitHub logins" in capsys.readouterr().out
+    assert not any(r.url.path.endswith("/chat/threads") for r in seen), "no chat is started"

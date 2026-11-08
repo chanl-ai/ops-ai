@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Plug } from 'lucide-react';
 import { toast } from 'sonner';
@@ -83,11 +84,13 @@ export function AppPageView({ appId }: { appId: string }) {
   const builtIn = card.kind === 'builtin' || card.kind === 'module';
   const accounts = data.accounts ?? [];
   const configs = (data.authConfigs ?? []).filter((c) => c.type !== 'account');
-  // Someone who may not add team accounts connects only their own, and only where the app lets people bring one.
+  // Team setup is the team's view: Connect here is managing the team's apps (the roles grid's connections.manage).
+  // Someone who does not hold it signs in as themselves from Connectors (Mine), where the app lets people bring one.
   const ownOnly = !card.mayManage;
   // An app the system no longer has installed is shown for the record: nothing connects, signs in or turns it on.
   const removed = card.appState === 'removed';
-  const mayConnect = !removed && (card.mayManage || (Boolean(conn) && card.signIn !== 'team'));
+  const mayConnect = !removed && card.mayManage;
+  const ownSignIn = !removed && Boolean(conn) && card.signIn !== 'team';
 
   const signIn = (account: 'self' | 'team', accountId = conn?.id) => {
     if (!accountId) return;
@@ -119,7 +122,7 @@ export function AppPageView({ appId }: { appId: string }) {
       icon={<Logo name={card.name} logo={card.logo} />}
       title={card.name}
       description={`${plural(card.toolsCount, 'tool')}${card.kindLabel ? ` · ${card.kindLabel}` : ''}`}
-      breadcrumbs={[{ label: 'Apps', href: '/integrations' }, { label: card.name }]}
+      breadcrumbs={[{ label: 'Connectors', href: '/integrations' }, { label: 'Team setup', href: '/integrations' }, { label: card.name }]}
       backHref="/integrations"
       badge={<AppStateBadge card={card} testId="app-status" />}
       actions={
@@ -127,6 +130,10 @@ export function AppPageView({ appId }: { appId: string }) {
           <Button size="sm" onClick={() => setConnecting(true)} data-testid="app-connect">
             <Plug />
             Connect
+          </Button>
+        ) : ownSignIn ? (
+          <Button size="sm" variant="outline" asChild data-testid="app-own-sign-in">
+            <Link href="/integrations/my-accounts">Sign in from Mine</Link>
           </Button>
         ) : (
           <AskAnAdmin testId="app-admin-connects" />
@@ -140,7 +147,8 @@ export function AppPageView({ appId }: { appId: string }) {
           <AlertDescription>{card.appStateReason}</AlertDescription>
         </Alert>
       )}
-      {card.kind === 'plugin' && !removed && <PluginUpdatePanel appId={card.id} name={card.name} />}
+      {/* Taking an update is managing the team's apps: nobody else is shown it, or asks the route for it. */}
+      {card.kind === 'plugin' && !removed && card.mayManage && <PluginUpdatePanel appId={card.id} name={card.name} />}
       <Tabs value={tab && tabs.some(([v]) => v === tab) ? tab : tabs[0][0]} onValueChange={(v) => (setTab(v), v !== 'accounts' && setConfig(null))} className="min-w-0">
         {/* Six tabs are wider than a phone: the row scrolls sideways inside its box instead of clipping the last. */}
         <ScrollTabsList tabs={tabs.map(([value, label]) => ({ value, label }))} testId="app-tabs-row" triggerTestId={(v) => `app-tab-${v}`} />
