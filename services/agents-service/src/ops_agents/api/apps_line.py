@@ -12,6 +12,7 @@ forgets the team's lines at once (team_assistant.give_app_tools).
 from __future__ import annotations
 
 import time
+from collections.abc import Mapping
 from typing import Any, cast
 
 from langgraph.config import get_config
@@ -55,7 +56,7 @@ def describe(card: dict[str, Any]) -> str | None:
 
 
 def left_out(
-    cards: list[dict[str, Any]], held: list[str], module_of: dict[str, str | None], off: set[str]
+    cards: list[dict[str, Any]], held: list[str], module_of: Mapping[str, str | None], off: set[str]
 ) -> list[dict[str, Any]]:
     """The cards with `leftOut` on each app this chat left out: every tool the agent holds of it is in the chat's
     toolsOff (the composer's connector picker). One tool switched off in the settings panel leaves the app in."""
