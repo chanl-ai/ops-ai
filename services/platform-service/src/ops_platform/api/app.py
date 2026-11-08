@@ -171,19 +171,51 @@ def _seeded_people(seed: FilePath) -> list[dict[str, Any]]:
     ]
 
 
-def _dev_sign_in(app: FastAPI, auth: Auth, demo_password: str, people: list[dict[str, Any]]) -> None:
-    """One-click sign-in for the seeded demo people. Mounted only in dev, where the seeded people share the
-    demo password: elsewhere both routes do not exist. The password is applied here and never sent to the browser,
-    and only a seeded email can be signed in this way."""
-    seeded = {p["email"].lower() for p in people}
+def _sample_team_people(folder: FilePath) -> list[dict[str, Any]]:
+    """The people of each sample team manifest (`make sample-teams` installs them with the dev password), listed as
+    the seed's are: name, email and the team's name with their role. A manifest that does not parse is skipped."""
+    listed: list[dict[str, Any]] = []
+    for manifest in sorted(folder.glob("*.json")) if folder.is_dir() else []:
+        try:
+            data = json.loads(manifest.read_text())
+            team = data["team"]["name"]
+            listed += [
+                {"name": p["name"], "email": p["email"], "teams": [{"team": team, "role": p["role"]}]}
+                for p in data.get("people", [])
+            ]
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    return listed
+
+
+def _dev_sign_in(
+    app: FastAPI,
+    auth: Auth,
+    store: IdentityStore,
+    demo_password: str,
+    people: list[dict[str, Any]],
+    *,
+    sample_teams: FilePath | None,
+) -> None:
+    """One-click sign-in for the seeded demo people and the installed sample teams' people. Mounted only in dev,
+    where they share the demo password: elsewhere both routes do not exist. The password is applied here and never
+    sent to the browser, and only a listed email can be signed in this way. A sample team's person is listed once
+    their account exists, so the page never offers someone `make sample-teams` has not installed."""
+
+    async def listed() -> list[dict[str, Any]]:
+        seeded = {p["email"].lower() for p in people}
+        sample = _sample_team_people(sample_teams) if sample_teams else []
+        extra = [p for p in sample if p["email"].lower() not in seeded]
+        installed = [p for p in extra if await store.users_by_email(p["email"])]
+        return people + installed
 
     @app.get("/v1/auth/dev-people", tags=["auth"], response_model=Envelope[list[DevPerson]], responses=ERRORS)
     async def dev_people() -> Any:  # pyright: ignore[reportUnusedFunction]
-        return ok(people)
+        return ok(await listed())
 
     @app.post("/v1/auth/dev-sign-in", tags=["auth"], response_model=Envelope[SessionOut], responses=ERRORS)
     async def dev_sign_in(body: DevSignInIn) -> Any:  # pyright: ignore[reportUnusedFunction]
-        if body.email.lower() not in seeded:
+        if body.email.lower() not in {p["email"].lower() for p in await listed()}:
             raise NotFound("A seeded demo person with that email")
         return ok(_issued(await auth.sign_in(body.email, demo_password, request_id=new_id("req"))))
 
@@ -199,6 +231,7 @@ def create_public_app(
     demo_password: str | None,
     audiences: list[str],
     dev_people: FilePath | None = None,
+    sample_teams: FilePath | None = None,
     cors_origins: list[str] | None = None,
     token_ttl_s: int = 900,
     step_up_ttl_s: int = STEP_UP_TTL_S,
@@ -280,7 +313,7 @@ def create_public_app(
         return ok(_issued(await auth.sign_in(body.email, body.password, request_id=new_id("req"))))
 
     if demo_password is not None and dev_people is not None:
-        _dev_sign_in(app, auth, demo_password, _seeded_people(dev_people))
+        _dev_sign_in(app, auth, store, demo_password, _seeded_people(dev_people), sample_teams=sample_teams)
 
     @app.get("/v1/auth/session", tags=["auth"], response_model=Envelope[Principal], responses=ERRORS)
     async def session(token: Annotated[str, Depends(_bearer)]) -> Any:  # pyright: ignore[reportUnusedFunction]
@@ -1166,7 +1199,7 @@ def create_public_app(
         actor: Annotated[Actor, Depends(acting)],
         action: Annotated[str | None, Query(max_length=80)] = None,
         kind: Annotated[AuditKind | None, Query()] = None,
-        view: Annotated[Literal["all", "publishes", "access", "deletions"], Query()] = "all",
+        view: Annotated[Literal["all", "changes", "publishes", "access", "deletions", "sign_ins"], Query()] = "all",
         actor_id: Annotated[str | None, Query(alias="actor", max_length=320)] = None,
         target_kind: Annotated[str | None, Query(alias="targetKind", max_length=40)] = None,
         since: Annotated[str | None, Query(alias="from", pattern=ISO_TIME)] = None,

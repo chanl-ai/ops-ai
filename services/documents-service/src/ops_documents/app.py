@@ -141,6 +141,7 @@ async def who(p: CurrentCaller, request: Request) -> Who:
         tenant_id=p.tenant_id,
         team=p.team_id,
         actor=p.email or p.sub,
+        creates=_holds(p, "create"),
         edits=_holds(p, "edit"),
         manages=_holds(p, "manage"),
     )
@@ -278,17 +279,18 @@ def create_documents_app(
         fractions of the page. Read on the first ask and cached by the file's content digest."""
         return ok(await layouts.compute(who, body.file_id, ocr=body.ocr))
 
-    @docs.get("/layout/{file_id}", response_model=Envelope[Layout], dependencies=[service_scope("view")])
+    @docs.get("/layout/{file_id}", response_model=Envelope[Layout | None], dependencies=[service_scope("view")])
     async def get_layout(  # pyright: ignore[reportUnusedFunction]
         file_id: str,
         who: Caller,
         page: int | None = Query(None, ge=1),
         ocr: bool = False,
     ) -> JSONResponse:
-        """The layout already read for the file, or one page of it; 404 until POST /v1/documents/layout reads it."""
+        """The layout already read for the file, or one page of it; null until POST /v1/documents/layout reads it.
+        A file the team cannot see is 404."""
         found = await layouts.cached(who, file_id, ocr=ocr)
         if found is None:
-            raise NotFound("Layout")
+            return ok(None)
         return ok(page_of(found, page) if page is not None else found)
 
     @docs.get("/extractions/{extraction_id}", response_model=Envelope[Extraction], dependencies=[service_scope("view")])
@@ -342,7 +344,7 @@ def create_documents_app(
     @types.get("", response_model=Envelope[DocumentTypeList], dependencies=[service_scope("view")])
     async def list_types(who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The team's types, and whether the caller may add one (the console's New type)."""
-        return ok({"items": await document_types.list(who), "canCreate": who.edits})
+        return ok({"items": await document_types.list(who), "canCreate": who.creates})
 
     @types.get("/{type_id}", response_model=Envelope[DocumentType], dependencies=[service_scope("view")])
     async def get_type(type_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

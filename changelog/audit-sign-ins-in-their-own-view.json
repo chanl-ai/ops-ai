@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Sign-ins have their own view in the audit log",
+  "description": "The audit log opens on Changes, which leaves out sign-ins, so edits to roles, access and settings are no longer buried; sign-ins have their own view saying how the person signed in, and All still lists everything. Each row says what happened once, without a chip repeating it.",
+  "tag": "improved"
+}

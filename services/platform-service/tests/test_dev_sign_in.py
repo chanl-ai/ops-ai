@@ -15,12 +15,13 @@ from ops_platform.api.app import create_public_app
 from .conftest import DEMO_PASSWORD, Platform
 
 
-async def client(platform: Platform, *, dev: bool, seed: Path) -> httpx.AsyncClient:
+async def client(platform: Platform, *, dev: bool, seed: Path, sample_teams: Path | None = None) -> httpx.AsyncClient:
     app = create_public_app(
         platform.store,
         platform.signer,
         demo_password=DEMO_PASSWORD if dev else None,
         dev_people=seed if dev else None,
+        sample_teams=sample_teams,
         audiences=["platform"],
     )
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://platform")
@@ -68,3 +69,33 @@ async def test_outside_dev_neither_route_exists(platform: Platform, tmp_path: Pa
         listed = await c.get("/v1/auth/dev-people")
         signed = await c.post("/v1/auth/dev-sign-in", json={"email": email})
     assert (listed.status_code, signed.status_code) == (404, 404)
+
+
+async def test_an_installed_sample_teams_people_are_listed_and_sign_in(platform: Platform, tmp_path: Path) -> None:
+    """The sample teams' people were missing from the page, so trying a sample team meant typing a password. They are
+    read from the same manifests `make sample-teams` installs, and only someone with an account is offered."""
+    _, seed = await seeded(platform, tmp_path)
+    lead = await platform.person(roles=("admin",), email=f"helena.{uuid4().hex[:8]}@harborpine.example")
+    teams = tmp_path / "teams"
+    teams.mkdir()
+    absent = f"omar.{uuid4().hex[:8]}@harborpine.example"
+    (teams / "wealth.json").write_text(
+        json.dumps(
+            {
+                "team": {"name": "Wealth Advisory"},
+                "people": [
+                    {"key": "lead", "name": "Helena Brooks", "email": lead.email, "role": "admin"},
+                    {"key": "builder", "name": "Omar Haddad", "email": absent, "role": "builder"},
+                ],
+            }
+        )
+    )
+    async with await client(platform, dev=True, seed=seed, sample_teams=teams) as c:
+        listed = (await c.get("/v1/auth/dev-people")).json()["data"]
+        signed = await c.post("/v1/auth/dev-sign-in", json={"email": lead.email})
+        refused = await c.post("/v1/auth/dev-sign-in", json={"email": absent})
+    helena = {"name": "Helena Brooks", "email": lead.email, "teams": [{"team": "Wealth Advisory", "role": "admin"}]}
+    assert helena in listed
+    assert absent not in {p["email"] for p in listed}
+    assert signed.status_code == 200 and signed.json()["data"]["token"]
+    assert refused.status_code == 404

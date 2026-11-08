@@ -10,7 +10,7 @@ from typing import Any
 from ops_access import ANY_TEAM
 from ops_service_kit.errors import Forbidden
 
-from .store.audit import KIND, VIEWS, AuditLog
+from .store.audit import EVERYTHING_BUT, KIND, VIEWS, AuditLog
 from .store.members import Actor, TeamStore
 from .teams import Members
 
@@ -21,6 +21,16 @@ ROLE_LABEL = {"admin": "admin", "builder": "builder", "approver": "reviewer", "v
 def words(key: object) -> str:
     """A catalogue key read as words: `api_keys` is "api keys"."""
     return str(key or "").replace("_", " ")
+
+
+# How a sign-in started (the session's auth_method), as the end of its summary line.
+SIGN_IN_HOW = {
+    "password": " with a password",
+    "oidc": " with single sign-on",
+    "saml": " with single sign-on",
+    "invite": " from an invitation",
+    "dev": " with development sign-in",
+}
 
 
 def summary(row: dict[str, Any]) -> str:
@@ -39,7 +49,7 @@ def summary(row: dict[str, Any]) -> str:
         "member.remove": lambda: f"Removed {target}",
         "key.create": lambda: f"Created API key {target}",
         "key.revoke": lambda: f"Revoked API key {target}",
-        "auth.sign_in": lambda: "Signed in",
+        "auth.sign_in": lambda: f"Signed in{SIGN_IN_HOW.get(str(d.get('authMethod')), '')}",
         "auth.sign_out": lambda: "Signed out",
         "auth.step_up": lambda: "Signed in again to confirm a decision",
         "auth.refresh_reuse": lambda: "A reused sign-in token ended every session",
@@ -112,6 +122,7 @@ class AuditReader:
             kinds[KIND.get(action, "edited")] = kinds.get(KIND.get(action, "edited"), 0) + n
             targets[target] = targets.get(target, 0) + n
         views = {v: sum(n for (a, _), n in counts.items() if a in actions) for v, actions in VIEWS.items()}
+        views |= {v: sum(n for (a, _), n in counts.items() if a not in left) for v, left in EVERYTHING_BUT.items()}
         pages = max(1, ceil(total / size))
         return {
             "data": [shown(r) for r in rows],
