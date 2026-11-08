@@ -271,6 +271,10 @@ class Tool(Strict):
     headers: dict[str, str] = Field(default_factory=dict[str, str])
     # The most its `amount` input may be; the gateway refuses a call over it, or without an amount.
     amount_max: float | None = Field(default=None, ge=0)
+    # How chat draws its result: rows (a table; a list inside an envelope such as a query's `records` is read as the
+    # rows), series, record or metric, or none for a result the agent reports with its own card. Left out, chat infers
+    # it from the result.
+    shape: Literal["rows", "series", "record", "metric", "none"] | None = None
 
     @field_validator("name")
     @classmethod

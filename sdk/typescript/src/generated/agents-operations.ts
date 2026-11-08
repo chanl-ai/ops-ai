@@ -240,6 +240,15 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "agents_give_assistant_app_tools": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/team-assistant/app-tools",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "agents_guardrail_options": {
     "body": null,
     "headers": [],
@@ -1108,6 +1117,17 @@ export const agentsOperations = {
     "method": "GET",
     "path": "/health",
     "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "memory_confirm_memory": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/me/memories/{memory_id}/confirm",
+    "pathParams": [
+      "memory_id"
+    ],
     "query": [],
     "stream": false
   },

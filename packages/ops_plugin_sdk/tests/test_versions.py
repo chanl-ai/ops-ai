@@ -55,3 +55,19 @@ def test_the_digest_follows_what_calls_send_not_the_version_number(tmp_path: Pat
 def test_declarations_read_back_as_the_tools_they_were_taken_from(tmp_path: Path) -> None:
     m = manifest(tmp_path)
     assert tools_of(declarations(m)) == {t.name: t for t in m.tools}
+
+
+def test_a_release_that_changes_only_a_skill_has_a_new_digest(tmp_path: Path) -> None:
+    # 0.3.1 of a plugin changed only a skill's text, so its digest equalled 0.3.0's and no team was offered the update.
+    text = FIELDS + "templates:\n  - { kind: skill, id: s1, version: 1, path: templates/skills/s1.yaml }\n"
+    digests = []
+    for name, body in (
+        ("a", "instructions: six queries\n"),
+        ("b", "instructions: six queries\n"),
+        ("c", "instructions: one query\n"),
+    ):
+        root = plugin(tmp_path / name, text)
+        (root / "templates" / "skills").mkdir(parents=True)
+        (root / "templates" / "skills" / "s1.yaml").write_text(body)
+        digests.append(digest(declarations(read(root / "plugin.yaml"), root)))
+    assert digests[0] == digests[1] != digests[2], digests

@@ -3297,7 +3297,7 @@ export interface components {
             /** Host */
             host: string;
             /** Modules */
-            modules: string[];
+            modules: components["schemas"]["ModuleRef"][];
             /** Note */
             note: string;
             /** Protection */

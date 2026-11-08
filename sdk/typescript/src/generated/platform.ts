@@ -1502,7 +1502,7 @@ export interface components {
             pagination: components["schemas"]["Pagination"];
             /**
              * Viewcounts
-             * @description Entries in each of the audit page's views: all, access, deletions, publishes
+             * @description Entries in each of the audit page's views: all, changes (all but sign-ins), access, deletions, publishes, sign_ins
              */
             viewCounts: {
                 [key: string]: number;
@@ -3734,7 +3734,7 @@ export interface operations {
             query?: {
                 action?: string | null;
                 kind?: ("invited" | "joined" | "role_changed" | "deleted" | "created" | "revoked" | "login" | "edited" | "checked") | null;
-                view?: "all" | "publishes" | "access" | "deletions";
+                view?: "all" | "changes" | "publishes" | "access" | "deletions" | "sign_ins";
                 actor?: string | null;
                 targetKind?: string | null;
                 from?: string | null;
