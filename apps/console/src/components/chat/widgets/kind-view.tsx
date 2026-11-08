@@ -169,7 +169,21 @@ function TableKind({ node, truncatedFrom }: { node: TableNode; truncatedFrom?: n
   );
   return (
     <div className="p-2" data-kind="table" data-testid="widget-table">
-      <DataTableWithViews columns={columns} data={node.rows} hideViewSwitcher initialColumnVisibility={hidden} />
+      {node.rows.length === 1 ? (
+        // One record reads as its fields; a one-row grid has nothing to compare.
+        <dl className="grid grid-cols-[minmax(0,9rem)_1fr] gap-x-4 gap-y-2 px-2 py-2 text-sm" data-testid="widget-record">
+          {cols
+            .filter((c) => hidden[c.key] !== false)
+            .map((c) => (
+              <React.Fragment key={c.key}>
+                <dt className="text-muted-foreground">{c.label}</dt>
+                <dd className="min-w-0 break-words">{formatted(node.rows[0][c.key] ?? null, c.format)}</dd>
+              </React.Fragment>
+            ))}
+        </dl>
+      ) : (
+        <DataTableWithViews columns={columns} data={node.rows} hideViewSwitcher hidePaginationOnOnePage initialColumnVisibility={hidden} />
+      )}
       {truncatedFrom && truncatedFrom > node.rows.length && (
         <p className="px-2 pt-1 text-xs text-muted-foreground" data-testid="widget-truncated">
           Showing {node.rows.length.toLocaleString()} of {truncatedFrom.toLocaleString()} rows
