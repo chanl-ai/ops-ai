@@ -90,3 +90,8 @@ export function mimeLabel(mime: string) {
   if (mime === 'text/plain') return 'TXT';
   return mime.split('/').pop()?.toUpperCase() ?? mime;
 }
+
+/** A section title without a trailing "(n)": the count shows once, in the badge beside it. */
+export function titleWithoutCount(title: string) {
+  return title.replace(/\s*\(\d+\)\s*$/, '').trim();
+}

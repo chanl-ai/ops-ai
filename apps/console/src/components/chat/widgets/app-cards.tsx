@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useCardAppPage } from '@/hooks/systems-queries';
-import { initials } from '@/lib/format';
+import { initials, titleWithoutCount } from '@/lib/format';
 import type { Cell, KindAction, KindNode, KindStatus, Tone } from '@/lib/types/widgets';
 import { cn } from '@/lib/utils';
 
@@ -141,7 +141,7 @@ export function BriefKind({ node }: { node: Extract<KindNode, { type: 'brief' }>
         {node.sections.map((s, i) => (
           <section key={i} className="px-3 py-2" data-testid="brief-section">
             <h4 className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-              <span>{s.title}</span>
+              <span>{titleWithoutCount(s.title)}</span>
               <Badge variant="secondary" className="h-5 px-1.5 tabular-nums">
                 {s.count ?? s.items.length}
               </Badge>

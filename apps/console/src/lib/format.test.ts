@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { initials, money, relativeTime } from './format.ts';
+import { initials, money, relativeTime, titleWithoutCount } from './format.ts';
 
 // A Human Task whose step read no account has an amount but no currency; naming one would be invented.
 test('money shows a bare amount when the currency is unknown', () => {
@@ -29,4 +29,11 @@ test('initials come from the person or app name, or the part of an email before 
   assert.equal(initials('GitHub · Operations'), 'GO');
   assert.equal(initials('r.menon@harborpine.example'), 'RM');
   assert.equal(initials('Salesforce'), 'S');
+});
+
+test('a section title drops the count its badge already shows', () => {
+  assert.equal(titleWithoutCount('Opportunities (1)'), 'Opportunities');
+  assert.equal(titleWithoutCount('Recent activity (12) '), 'Recent activity');
+  assert.equal(titleWithoutCount('Open cases'), 'Open cases');
+  assert.equal(titleWithoutCount('Q3 (draft)'), 'Q3 (draft)');
 });
