@@ -42,6 +42,9 @@ from .runs import graph_store
 log = get_logger("ops_agents.ops_tools")
 
 LIMIT = 5
+# From this many matching cases, find_cases answers with one table instead of a card each: a list reads as rows, and a
+# stack of large cards pushes the answer off screen.
+TABLE_FROM = 3
 # Who the registry records as having made a team's Ops Assistant: the platform.
 SYSTEM = "system:ops-assistant"
 # The built-in read tools tools-service provisions in every team (its BUILT_IN apps): the assistant is granted
@@ -154,7 +157,7 @@ _TEXT = {"type": "string", "maxLength": 200}
 TOOLS: dict[str, tuple[str, dict[str, Any]]] = {
     "find_cases": (
         "Find the team's cases by words in the subject or the customer's name, by status, or assigned to the person "
-        "you are talking with. Answers with up to five cases as cards.",
+        "you are talking with. Answers with up to five cases, as cards or, from three, as one table.",
         {
             "type": "object",
             "properties": {
@@ -204,6 +207,34 @@ def declared_args(tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
 
 def _answer(cards: list[dict[str, str]], summary: str) -> ToolOutcome:
     return ToolOutcome(True, {"cards": cards, "summary": summary})
+
+
+def _brief(row: dict[str, Any], events: list[dict[str, Any]]) -> str:
+    """One case for the model to answer from: subject and status, customer, when it is due, and its notes in order, so
+    a "prep me" names the client and the points the case holds instead of making them up."""
+    notes = [str(e["detail"].get("text")) for e in events if e.get("kind") == "note" and e["detail"].get("text")]
+    parts = [f"{row['subject']} ({row['status']})"]
+    if row.get("customer_name"):
+        parts.append(f"customer {row['customer_name']}")
+    if row.get("resolution_due_at"):
+        parts.append(f"due {str(row['resolution_due_at'])[:16].replace('T', ' ')}")
+    parts.append("notes: " + " | ".join(notes) if notes else "no notes")
+    return "; ".join(parts)
+
+
+def _case_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """The cases as one table part: subject first, the id last, which the chat's table keeps behind its View menu."""
+    data = [
+        {
+            "subject": r["subject"],
+            "customer": r.get("customer_name") or "",
+            "status": str(r["status"]).replace("_", " "),
+            "due": str(r.get("resolution_due_at") or "")[:10],
+            "id": r["id"],
+        }
+        for r in rows
+    ]
+    return {"type": "widget", "id": "", "shape": "rows", "data": data, "hint": {"title": "Cases"}}
 
 
 def _refused(message: str) -> ToolOutcome:
@@ -261,9 +292,16 @@ class OpsReads:
             page=1,
             size=LIMIT,
         )
-        cards = [{"type": "case", "id": str(r["id"])} for r in rows]
         named = "; ".join(f"{r['subject']} ({r['status']})" for r in rows)
-        return _answer(cards, f"{total} case(s) match; showing {len(rows)}: {named}" if rows else "No case matches.")
+        summary = f"{total} case(s) match; showing {len(rows)}: {named}" if rows else "No case matches."
+        if len(rows) == 1:
+            # The one match is the case asked about: its brief saves a get_case call.
+            events = await CaseStore(self.rt.db).events(str(rows[0]["id"]))
+            summary = f"1 case matches: {_brief(rows[0], events)}"
+        if len(rows) >= TABLE_FROM:
+            # The table is drawn in place of the cards, so the cases are shown once.
+            return ToolOutcome(True, {"cards": [], "summary": summary}, {"part": _case_rows(rows)})
+        return _answer([{"type": "case", "id": str(r["id"])} for r in rows], summary)
 
     async def _get_case(self, person: Principal, args: dict[str, Any]) -> ToolOutcome:
         case_id = str(args["caseId"])
@@ -271,7 +309,8 @@ class OpsReads:
             row = await CaseStore(self.rt.db).get(case_id, [str(person.team_id)])
         except CaseNotFound:
             return _refused(f"There is no case {case_id} in this team.")
-        return _answer([{"type": "case", "id": case_id}], f"{row['subject']} ({row['status']})")
+        events = await CaseStore(self.rt.db).events(case_id)
+        return _answer([{"type": "case", "id": case_id}], _brief(row, events))
 
     async def _my_human_tasks(self, person: Principal, args: dict[str, Any]) -> ToolOutcome:
         """`mine`: the open tasks assigned to the person; when none is, the open tasks they may decide. `team`: every
@@ -378,6 +417,9 @@ async def fill_cards(rt: Runtime, me: Principal, messages: list[ChatMessage]) ->
     """Fills each Ops tool call's card references in place as `me`, the person reading the thread, so a card always
     draws its record's current state and only what the reader may see. Called on every thread read."""
     for message in messages:
+        # A record drawn once in a reply is not drawn again when a later call there returns it too (find_cases, then
+        # get_case on the same case).
+        drawn: set[tuple[str, str]] = set()
         for call in message.tool_calls or []:
             raw: object = call.output
             if call.server != OPS_SERVER or not isinstance(raw, dict):
@@ -386,10 +428,10 @@ async def fill_cards(rt: Runtime, me: Principal, messages: list[ChatMessage]) ->
             cards = output.get("cards")
             if not isinstance(cards, list):
                 continue
-            filled = [
-                await _filled(rt, me, cast(dict[str, Any], c)) for c in cast(list[Any], cards) if isinstance(c, dict)
-            ]
-            call.output = {**output, "cards": filled}
+            refs = [cast(dict[str, Any], c) for c in cast(list[Any], cards) if isinstance(c, dict)]
+            fresh = [c for c in refs if (str(c.get("type")), str(c.get("id"))) not in drawn]
+            drawn |= {(str(c.get("type")), str(c.get("id"))) for c in fresh}
+            call.output = {**output, "cards": [await _filled(rt, me, c) for c in fresh]}
 
 
 def team_created_handlers(runtime: Callable[[], Runtime]) -> dict[str, Handler]:
