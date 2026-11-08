@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "One record reads as a card, not a one-row table",
+  "description": "When the assistant reads back a single record, chat shows its fields as a card; the table is still one click away, and two or more records still show as a table.",
+  "tag": "fix"
+}

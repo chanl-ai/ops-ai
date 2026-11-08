@@ -32,6 +32,8 @@ const same = <T>(d: T) => d;
 /** Per shape, its renderers; the first is the default. */
 const REGISTRY: { [S in WidgetShape]: Option<S>[] } = {
   rows: [
+    // One row reads as a record; from two rows on there is something to compare, so the table leads.
+    { id: 'fields', label: 'Fields', from: (d) => (d.length === 1 ? d[0] : null) },
     { id: 'table', label: 'Table', from: same },
     { id: 'line', label: 'Line chart', from: (d, h) => rowsToSeries(d, h) },
     { id: 'bar', label: 'Bar chart', from: (d, h) => rowsToSeries(d, h) },
