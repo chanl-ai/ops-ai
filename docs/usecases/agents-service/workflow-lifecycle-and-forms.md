@@ -34,7 +34,7 @@ stops. No model is called.
 | 5 | `POST /v1/runs` live; open Start run | 409 `not_live`; the dialog offers only a test run |
 | 6 | Publish…, What changed, Request publish | A pending `WFP-` request; the badge says In review and links to it; James's own approval is refused (403); the Workflows list shows In review and "v2 awaiting approval" |
 | 7 | Maya approves `POST /reviews/{id}/decision` | 200; the editor shows Live |
-| 8 | Start a worker; Start run (live) with `{"amount": 42}` on the input's JSON tab | The run page shows the Result: "Ended at Done: refunded" and output 42 |
+| 8 | Start a worker; Start run (live) with `{"amount": 42}` on the input's JSON tab | The run page shows the Result: "Finished at the Done end." and output 42 |
 | 9 | Pause and confirm; `POST /v1/runs` live; Resume and confirm | Badge Paused; 409 `workflow_paused`; badge Live again |
 | 10 | Stop the worker; Start run; Cancel run and confirm; start a worker | The run page says Cancelled; the run stays cancelled with no step |
 | 11 | SDK, as James: `workflows_create_definition`, then `runs.start(mode="live")` | The definition's stage is draft; the start raises 409 `not_live` |
