@@ -48,6 +48,8 @@ export interface SignInFinished {
   check: boolean;
   account?: { id: string; name: string } | null;
   health?: CredentialCheck['health'] | null;
+  /** The sign-in named an identity already linked on this account of the app, which it updated instead of adding one. */
+  alreadyConnectedAs?: string | null;
 }
 
 export interface PersonSignedIn {

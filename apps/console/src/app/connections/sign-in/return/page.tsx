@@ -63,7 +63,7 @@ function SignInReturnPage() {
     </Button>
   ) : (
     <Button asChild variant="outline">
-      <Link href="/integrations">Back to Apps</Link>
+      <Link href="/integrations">Back to Connectors</Link>
     </Button>
   );
   const refused = finish.error as (ApiError & { details?: { who?: string; app?: string } }) | null;
@@ -96,7 +96,9 @@ function SignInReturnPage() {
     );
   if (finish.isSuccess)
     return (
-      <SignInCard testId="sign-in-connected" title={`${finish.data.account?.name ?? 'The account'} is connected`} description={popup ? 'You can close this window.' : 'Go back to Ops AI; it goes on with your account.'} footer={back}>
+      <SignInCard
+        testId="sign-in-connected"
+        title={finish.data.alreadyConnectedAs ? `Already connected as ${finish.data.alreadyConnectedAs}` : `${finish.data.account?.name ?? 'The account'} is connected`} description={popup ? 'You can close this window.' : 'Go back to Ops AI; it goes on with your account.'} footer={back}>
         <CircleCheck className="size-8 text-success-text" />
       </SignInCard>
     );

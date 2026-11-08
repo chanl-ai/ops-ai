@@ -21,7 +21,7 @@ import { isLayoutPart, type MessagePart } from '@/lib/types/widgets';
 import { CitationPopover, SourcesList } from './citation-popover';
 import { OpsCallCards, opsCards } from './ops-call-cards';
 import { ToolCallCard } from './tool-call-card';
-import { ConnectionRequiredCard, connectionRequired } from './connection-required-card';
+import { AccountChoiceCard, AppOffCard, ConnectionRequiredCard, accountChoice, appOffForTeam, connectionRequired } from './connection-required-card';
 import { MemorySuggestion } from '@/components/memory/memory-suggestion';
 import { rememberedLine } from '@/components/memory/remembered-line';
 import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion';
@@ -154,7 +154,7 @@ export function AssistantMessage({
   // What the reply suggests keeping asks its own line; what it kept, or anyone else's suggestion, is told in one line.
   const suggested = (message.remembered ?? []).filter((r) => r.status === 'suggested' && !!r.value);
   const kept = (message.remembered ?? []).filter((r) => !suggested.includes(r));
-  const isCard = (c: ToolCall) => !!c.gated || !!connectionRequired(c) || !!opsCards(c);
+  const isCard = (c: ToolCall) => !!c.gated || !!connectionRequired(c) || !!appOffForTeam(c) || !!accountChoice(c) || !!opsCards(c);
   const ordered = orderReply((message.toolCalls ?? []).filter((c) => !wasNotRun(c)), message.parts ?? [], isCard);
   const renderPart = (p: MessagePart) =>
     isLayoutPart(p) ? <LayoutWidget key={p.id} part={p} onReply={readOnly ? undefined : onReply} /> : <WidgetView key={p.id} part={p} />;
@@ -174,6 +174,10 @@ export function AssistantMessage({
         const cards = opsCards(c);
         const need = connectionRequired(c);
         if (need) return <ConnectionRequiredCard key={c.id} call={c} need={need} onReply={readOnly ? undefined : onReply} />;
+        const off = appOffForTeam(c);
+        if (off) return <AppOffCard key={c.id} call={c} off={off} readOnly={readOnly} />;
+        const choice = accountChoice(c);
+        if (choice) return <AccountChoiceCard key={c.id} call={c} choice={choice} onReply={readOnly ? undefined : onReply} />;
         return cards ? <OpsCallCards key={c.id} call={c} cards={cards} readOnly={cardsReadOnly} /> : <ToolCallCard key={c.id} call={c} />;
       })}
       {message.widgets?.map((w) => (

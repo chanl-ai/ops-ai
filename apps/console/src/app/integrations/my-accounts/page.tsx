@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import type { ColumnDef } from '@tanstack/react-table';
 import { MoreVertical, Plug, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
@@ -17,103 +18,83 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
+import { APP_CARD_GRID, AppCard } from '@/components/connections/app-card';
+import { AskAnAdmin } from '@/components/connections/ask-an-admin';
+import { CONNECTOR_STATE, ConnectorSheet, inChatWords, stateVariant } from '@/components/connections/connector-sheet';
 import { OwnCredentialsForm } from '@/components/connections/own-credentials-form';
 import { useSignInWindow } from '@/components/connections/sign-in';
 import { DialogShell } from '@/components/shared/dialog-shell';
-import { useConnectionKinds, useDisconnect, useMyConnections, useRefreshMine, useStartSignIn } from '@/hooks/connections-queries';
+import { type MyConnector, useAddOwnAccount, useDisconnect, useMyConnectors, useRefreshMine, useStartSignIn } from '@/hooks/connections-queries';
 import { useTestAccount } from '@/hooks/systems-queries';
 import { facetFilterFn } from '@/hooks/use-list-params';
 import { useTeam } from '@/hooks/use-team';
-import { shortDate } from '@/lib/format';
-import type { MyConnection } from '@/lib/types/connections';
-
-/** What a key, password or token kind asks for, named by its last secret field ("key", "password", "token"). */
-function useNoun(c: MyConnection): string {
-  const kinds = useConnectionKinds();
-  const fields = kinds.data?.find((k) => k.id === c.authKind)?.fields ?? [];
-  const secret = [...c.personFields].reverse().find((n) => fields.find((f) => f.name === n)?.secret);
-  return (fields.find((f) => f.name === secret)?.label ?? c.personFields.at(-1) ?? 'key').toLowerCase();
-}
+import { plural, shortDate } from '@/lib/format';
 
 /**
- * An OAuth account the person has not connected: their own sign-in opens in a window, as from the chat. Starting it
- * needs the account's app, so the button waits for a row that names it.
+ * The person's own sign-in at the system, in a window as from the chat; a key kind opens the key form instead. The
+ * window opens in the click, before the call that starts the sign-in, so a pop-up blocker lets it through.
  */
-function ConnectButton({ c, label = 'Connect' }: { c: MyConnection; label?: string }) {
+function useConnect(onKey: (c: MyConnector, accountId: string) => void) {
   const start = useStartSignIn();
+  const another = useAddOwnAccount();
   const refresh = useRefreshMine();
   const signIn = useSignInWindow({
-    onConnected: () => (toast.success(`${c.connection} is connected`), refresh()),
-    onFailed: (why) => toast.error(`Couldn’t connect ${c.connection}`, { description: why }),
+    onConnected: () => (toast.success('Connected'), refresh()),
+    onFailed: (why) => toast.error('Couldn’t connect', { description: why }),
   });
-  return (
-    <Button
-      size="sm"
-      onClick={() => {
-        // Opened in the click, before the call that starts the sign-in, so a pop-up blocker lets it through.
-        if (!c.appId) return;
-        const account = { appId: c.appId, accountId: c.connectionId };
-        const w = signIn.open(c.connection);
+  return {
+    pending: start.isPending || another.isPending,
+    go: (c: MyConnector, more = false) => {
+      if (more) {
+        // Another account of the person's own, through the same auth config as the one they use.
+        if (!c.primaryAccountId) return;
+        const w = signIn.open(c.name);
         if (!w) return;
-        start.mutate({ ...account, account: 'self' }, { onSuccess: (s) => w.go(s, account), onError: (e) => w.fail(e.message) });
-      }}
-      disabled={start.isPending || !c.appId}
-      data-testid={`connect-${c.connectionId}`}
-    >
-      {label}
+        another.mutate(c.primaryAccountId, {
+          onSuccess: (s) => w.go(s, { appId: c.appId, accountId: s.connectionId ?? c.primaryAccountId ?? '' }),
+          onError: (e) => w.fail(e.message),
+        });
+        return;
+      }
+      const target = c.accounts.find((a) => a.connectionId === c.primaryAccountId);
+      if (!target) return;
+      if ((c.personFields ?? []).length > 0) return onKey(c, target.connectionId);
+      const account = { appId: c.appId, accountId: target.connectionId };
+      const w = signIn.open(c.name);
+      if (!w) return;
+      start.mutate({ ...account, account: 'self' }, { onSuccess: (s) => w.go(s, account), onError: (e) => w.fail(e.message) });
+    },
+  };
+}
+
+/** The row's one action by its state: Sign in again, Connect (or Add key), Turn on or the admins to ask; none when connected. */
+function RowAction({ c, connect }: { c: MyConnector; connect: ReturnType<typeof useConnect> }) {
+  if (c.state === 'connected') return null;
+  if (c.state === 'app_off')
+    return c.mayTurnOn ? (
+      <Button size="sm" variant="outline" asChild data-testid={`connector-turn-on-${c.appId}`}>
+        <Link href={`/integrations/${encodeURIComponent(c.appId)}`}>Turn on</Link>
+      </Button>
+    ) : (
+      <AskAnAdmin testId={`connector-ask-${c.appId}`} />
+    );
+  const keyed = (c.personFields ?? []).length > 0;
+  return (
+    <Button size="sm" onClick={() => connect.go(c)} disabled={connect.pending} data-testid={`connector-action-${c.appId}`}>
+      {c.state === 'expired' ? 'Sign in again' : keyed ? 'Add key' : 'Connect'}
     </Button>
   );
 }
 
-/** One row's line under its state: whom it is connected as and since when, or why it ended; never part of a secret. */
-function describe(c: MyConnection): string {
-  if (c.refused) {
-    const when = c.refusedAt ? ` ${shortDate(c.refusedAt)}` : '';
-    return [c.personFields.length ? `Refused${when}` : `Sign-in expired${when}`, c.refusedReason].filter(Boolean).join(' · ');
-  }
-  // Signed in, but the test call after it failed: the account stays connected and says why.
-  if (c.test?.status === 'failed') return `Signed in, but a test call failed: ${c.test.message || 'no reason given'}`;
-  const since = c.since ? `since ${shortDate(c.since)}` : null;
-  return [c.authConfig ? `Through ${c.authConfig}` : c.method, since].filter(Boolean).join(' · ');
-}
-
-/** The row's state, in the words the Accounts tab uses. */
-const STATE_LABEL = { connected: 'Connected', expired: 'Expired', not_connected: 'Not connected' } as const;
-
-/** The row's one action by its state: Connect or Add key while not connected, Reconnect once expired. */
-function MainAction({ c, onGive }: { c: MyConnection; onGive: () => void }) {
-  const noun = useNoun(c);
-  const keyed = c.personFields.length > 0;
-  const state = c.state ?? (c.connected ? 'connected' : 'not_connected');
-  if (state === 'not_connected')
-    return keyed ? (
-      <Button size="sm" onClick={onGive} data-testid={`add-own-${c.connectionId}`}>
-        Add {noun}
-      </Button>
-    ) : (
-      <ConnectButton c={c} />
-    );
-  if (state === 'expired' || c.test?.status === 'failed')
-    return keyed ? (
-      <Button size="sm" onClick={onGive} data-testid={`replace-own-${c.connectionId}`}>
-        Replace {noun}
-      </Button>
-    ) : (
-      <ConnectButton c={c} label="Reconnect" />
-    );
-  return null;
-}
-
-/** A connected row's menu: Test now, Replace the key, Disconnect. */
-function RowMenu({ c, onEnd, onGive }: { c: MyConnection; onEnd: () => void; onGive: () => void }) {
-  const noun = useNoun(c);
+/** A connected row's menu: Test now, Add another account, Disconnect. */
+function RowMenu({ c, onEnd, onAnother }: { c: MyConnector; onEnd: () => void; onAnother: () => void }) {
   const test = useTestAccount();
-  if ((c.state ?? (c.connected ? 'connected' : 'not_connected')) === 'not_connected' || !c.appId) return null;
-  const appId = c.appId;
+  if (c.state !== 'connected' || !c.primaryAccountId) return null;
+  const accountId = c.primaryAccountId;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label={`${c.app} actions`} data-testid={`my-account-menu-${c.connectionId}`}>
+        <Button variant="ghost" size="icon" aria-label={`${c.name} actions`} data-testid={`connector-menu-${c.appId}`}>
           <MoreVertical />
         </Button>
       </DropdownMenuTrigger>
@@ -121,9 +102,9 @@ function RowMenu({ c, onEnd, onGive }: { c: MyConnection; onEnd: () => void; onG
         <DropdownMenuItem
           onClick={() =>
             test.mutate(
-              { appId, accountId: c.connectionId, account: 'self' },
+              { appId: c.appId, accountId, account: 'self' },
               {
-                onSuccess: (r) => (r.health?.status === 'ok' ? toast.success(`${c.app} works`) : toast.error(`${c.app}’s test failed`, { description: r.health?.message ?? undefined })),
+                onSuccess: (r) => (r.health?.status === 'ok' ? toast.success(`${c.name} works`) : toast.error(`${c.name}’s test failed`, { description: r.health?.message ?? undefined })),
                 onError: (e) => toast.error('Couldn’t test it', { description: e.message }),
               },
             )
@@ -131,8 +112,10 @@ function RowMenu({ c, onEnd, onGive }: { c: MyConnection; onEnd: () => void; onG
         >
           Test now
         </DropdownMenuItem>
-        {c.personFields.length > 0 && <DropdownMenuItem onClick={onGive}>Replace {noun}</DropdownMenuItem>}
-        <DropdownMenuItem onClick={onEnd} className="text-destructive-text" data-testid={`disconnect-${c.connectionId}`}>
+        <DropdownMenuItem onClick={onAnother} data-testid={`connector-another-${c.appId}`}>
+          Add another account
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onEnd} className="text-destructive-text" data-testid={`connector-disconnect-${c.appId}`}>
           Disconnect
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -141,133 +124,141 @@ function RowMenu({ c, onEnd, onGive }: { c: MyConnection; onEnd: () => void; onG
 }
 
 /**
- * My accounts (in the sidebar's top rows): every app in the team the person may sign in to with their own account,
- * one row each with whom they are signed in as and its state, and Connect or Reconnect. The list, each state and the
- * auth config come joined from the service.
+ * One connector as a card, as Team setup draws an app: logo and name, what it can do as the person, whom it signs in
+ * as, its state and its one action (Connect, Sign in again, Turn on or the admins to ask; the menu once connected).
+ * The card opens its details; on a phone the cards stack, so the action stays on screen.
  */
-function MyAccountsPage() {
+function ConnectorCard({ c, connect, onOpen, onEnd, onAnother }: { c: MyConnector; connect: ReturnType<typeof useConnect>; onOpen: () => void; onEnd: () => void; onAnother: () => void }) {
+  return (
+    <AppCard
+      testId={`connector-${c.appId}`}
+      state={c.state}
+      name={c.name}
+      logo={c.logo}
+      onOpen={onOpen}
+      linkTestId={`connector-open-${c.appId}`}
+      footState={
+        <Badge variant={stateVariant(c.state)} data-testid={`connector-state-${c.appId}`}>
+          {CONNECTOR_STATE[c.state]}
+        </Badge>
+      }
+      action={c.state === 'connected' ? <RowMenu c={c} onEnd={onEnd} onAnother={onAnother} /> : <RowAction c={c} connect={connect} />}
+    >
+      <p className="text-sm text-muted-foreground" data-testid={`connector-can-do-${c.appId}`}>
+        {c.canDo}
+      </p>
+      <div className="text-sm" data-testid={`connector-signed-in-${c.appId}`}>
+        <SignedInAs c={c} />
+      </div>
+      <p className="text-xs text-muted-foreground">{c.state === 'connected' && c.since ? `${inChatWords(c)} · since ${shortDate(c.since)}` : inChatWords(c)}</p>
+    </AppCard>
+  );
+}
+
+/** Whom it signs in as: the primary account, with the other connected ones as a count. */
+function SignedInAs({ c }: { c: MyConnector }) {
+  if (c.state === 'app_off' || c.state === 'not_connected') return <span className="text-sm text-muted-foreground">—</span>;
+  const more = c.accountCount - 1;
+  return (
+    <span className="flex flex-wrap items-center gap-2 text-sm">
+      <span className="truncate">{c.state === 'expired' ? `Was ${c.account ?? 'your account'}` : (c.account ?? 'Your account')}</span>
+      {more > 0 && (
+        <Badge variant="outline" data-testid={`connector-more-${c.appId}`}>
+          +{plural(more, 'account')}
+        </Badge>
+      )}
+    </span>
+  );
+}
+
+/**
+ * Connectors, Mine (the sidebar's top row): one row per app that acts as the person, with what it can do as them,
+ * whom it signs in as, its state, whether chat uses it and its one action. Rows, states and counts come joined from
+ * tools-service (GET /v1/me/connections). On a phone the state and action join the connector's cell.
+ */
+function ConnectorsPage() {
   const { team } = useTeam();
-  const mine = useMyConnections(true);
+  const mine = useMyConnectors();
   const disconnect = useDisconnect();
-  const [ending, setEnding] = React.useState<MyConnection | null>(null);
-  const [giving, setGiving] = React.useState<MyConnection | null>(null);
-  const columns: ColumnDef<MyConnection>[] = [
-    {
-      accessorKey: 'app',
-      header: ({ column }) => <DataTableColumnHeader column={column} title="App" />,
-      meta: { kind: 'name' },
-      cell: ({ row: { original: c } }) => (
-        <span className="flex min-w-0 items-center gap-3" data-testid={`my-account-${c.connectionId}`}>
-          <Avatar className="size-8 rounded-md">
-            {c.logo && <AvatarImage src={c.logo} alt="" />}
-            <AvatarFallback className="rounded-md text-xs font-semibold">{c.app.slice(0, 2).toUpperCase()}</AvatarFallback>
-          </Avatar>
-          <span className="flex min-w-0 flex-col">
-            <span className="flex flex-wrap items-center gap-2">
-              <span className="truncate">{c.app}</span>
-              {c.sandbox && <Badge variant="outline">Test</Badge>}
-            </span>
-            {c.app !== c.connection && <span className="truncate text-xs text-muted-foreground">{c.connection}</span>}
-          </span>
-        </span>
-      ),
-    },
-    {
-      id: 'account',
-      accessorFn: (c) => c.account ?? '',
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Signed in as" />,
-      // Who the system says signed in. A connected account whose system has not said yet (no id token, no test since)
-      // reads so, apart from one never connected; its next test names it.
-      cell: ({ row: { original: c } }) =>
-        c.account ? (
-          <span className="text-sm">{c.account}</span>
-        ) : (c.state ?? (c.connected ? 'connected' : 'not_connected')) === 'not_connected' ? (
-          <span className="text-sm text-muted-foreground">—</span>
-        ) : (
-          <span className="text-sm text-muted-foreground" title="Test now asks the app who signed in" data-testid={`my-account-unnamed-${c.connectionId}`}>
-            Not named yet
-          </span>
-        ),
-    },
-    {
-      id: 'state',
-      accessorFn: (c) => STATE_LABEL[c.state ?? (c.connected ? 'connected' : 'not_connected')],
-      header: ({ column }) => <DataTableColumnHeader column={column} title="State" />,
-      meta: { kind: 'status' },
-      cell: ({ row: { original: c } }) => {
-        const state = c.state ?? (c.connected ? 'connected' : 'not_connected');
-        return (
-          <span className="flex flex-col gap-1">
-            <span className="flex flex-wrap items-center gap-2">
-              <Badge variant={state === 'connected' ? 'secondary' : state === 'expired' ? 'destructive' : 'outline'} data-testid={`my-account-state-${c.connectionId}`}>
-                {STATE_LABEL[state]}
-              </Badge>
-              <MainAction c={c} onGive={() => setGiving(c)} />
-            </span>
-            {state !== 'not_connected' && <span className="text-xs text-muted-foreground">{describe(c)}</span>}
-          </span>
-        );
-      },
-      filterFn: facetFilterFn,
-    },
-    {
-      id: 'actions',
-      enableHiding: false,
-      cell: ({ row: { original: c } }) => (
-        <StopRowClick>
-          <RowMenu c={c} onEnd={() => setEnding(c)} onGive={() => setGiving(c)} />
-        </StopRowClick>
-      ),
-    },
+  const [ending, setEnding] = React.useState<MyConnector | null>(null);
+  const [giving, setGiving] = React.useState<{ c: MyConnector; accountId: string } | null>(null);
+  const [open, setOpen] = React.useState<string | null>(null);
+  const connect = useConnect((c, accountId) => setGiving({ c, accountId }));
+  const shown = (mine.data ?? []).find((c) => c.appId === open) ?? null;
+  const rows = React.useMemo(() => (mine.data ?? []).map((c) => ({ ...c, onRowClick: () => setOpen(c.appId) })), [mine.data]);
+  // The cards are the list; the columns name what search and the State filter read.
+  const columns: ColumnDef<MyConnector>[] = [
+    { accessorKey: 'name', header: ({ column }) => <DataTableColumnHeader column={column} title="Connector" />, meta: { kind: 'name' } },
+    { id: 'state', accessorFn: (c) => CONNECTOR_STATE[c.state], header: ({ column }) => <DataTableColumnHeader column={column} title="State" />, filterFn: facetFilterFn },
   ];
+  const connected = (mine.data ?? []).filter((c) => c.state === 'connected').length;
 
   const body = mine.isPending ? (
     <PageSkeleton statCards={0} tableRows={4} />
   ) : mine.isError ? (
-    <QueryError what="your accounts" onRetry={() => void mine.refetch()} retrying={mine.isFetching} error={mine.error} testId="my-connections-error" />
+    <QueryError what="your connectors" onRetry={() => void mine.refetch()} retrying={mine.isFetching} error={mine.error} testId="connectors-error" />
   ) : (
-    <div data-testid="my-connections">
+    <div className="flex flex-col gap-2" data-testid="connectors">
       <DataTableWithViews
         columns={columns}
-        data={mine.data ?? []}
-        getRowId={(c) => c.connectionId}
-        searchColumn="app"
-        searchPlaceholder="Search apps…"
+        data={rows}
+        getRowId={(c) => c.appId}
+        defaultView="grid"
+        gridClassName={APP_CARD_GRID}
+        renderGridItem={(c) => (
+          <ConnectorCard c={c} connect={connect} onOpen={() => setOpen(c.appId)} onEnd={() => setEnding(c)} onAnother={() => connect.go(c, true)} />
+        )}
+        searchColumn="name"
+        searchPlaceholder="Search connectors…"
+        hidePaginationOnOnePage
+        rowNoun="connector"
         hideViewSwitcher
-        filters={[{ column: 'state', title: 'State', options: Object.values(STATE_LABEL).map((v) => ({ label: v, value: v })) }]}
+        filters={[{ column: 'state', title: 'State', options: Object.values(CONNECTOR_STATE).map((v) => ({ label: v, value: v })) }]}
         emptyState={
-          <EmptyState icon={Plug} title="No app to sign in to yet" description="Apps your team adds that allow personal accounts show here." testId="my-connections-empty" />
+          <EmptyState
+            icon={Plug}
+            title="No connector needs your sign-in yet"
+            description="Apps your team turns on that act as each person show here. Until then, ask in chat; the first tool that needs you will ask."
+            testId="connectors-empty"
+          />
         }
       />
+      {(mine.data ?? []).length > 0 && (
+        <p className="text-xs text-muted-foreground" data-testid="connectors-count">
+          {plural((mine.data ?? []).length, 'connector')} · {connected} connected
+        </p>
+      )}
     </div>
   );
 
   return (
     <PageLayout
       icon={UserRound}
-      title="My accounts"
-      description={`Apps in ${team?.name ?? 'this team'} you can sign in to with your own account. Tools you run, and agents acting for you, use them.`}
+      title="My connectors"
+      switcher
+      description={`Apps that act as you in chat and in agents working for you, in ${team?.name ?? 'this team'}. Sign in once per team; disconnect here any time.`}
     >
       {body}
+      <ConnectorSheet connector={shown} open={shown !== null} onOpenChange={(o) => !o && setOpen(null)} onConnect={(c, another) => connect.go(c, another)} onDisconnect={(c) => setEnding(c)} />
       <DialogShell
         open={giving !== null}
-        onOpenChange={(open) => !open && setGiving(null)}
+        onOpenChange={(o) => !o && setGiving(null)}
         size="sm"
-        title={giving ? `${giving.connected ? 'Replace' : 'Add'} your ${giving.connection} ${giving.method}` : ''}
-        description={giving ? `${giving.connection} lets each person use their own ${giving.method}. Only your requests use it.` : undefined}
+        title={giving ? `Add your ${giving.c.name} ${giving.c.method ?? 'key'}` : ''}
+        description={giving ? `${giving.c.name} lets each person use their own ${giving.c.method ?? 'key'}. Only your requests use it.` : undefined}
       >
         {giving && (
           <OwnCredentialsForm
-            connectionId={giving.connectionId}
-            connection={giving.connection}
-            authKind={giving.authKind}
-            personFields={giving.personFields}
-            docsUrl={giving.docsUrl}
-            submitLabel={`Save ${giving.method}`}
+            connectionId={giving.accountId}
+            connection={giving.c.name}
+            authKind={giving.c.authKind ?? undefined}
+            personFields={giving.c.personFields ?? []}
+            docsUrl={giving.c.docsUrl}
+            submitLabel={`Save ${giving.c.method ?? 'key'}`}
             cancelLabel="Cancel"
             onCancel={() => setGiving(null)}
             onDone={() => {
-              toast.success(`Saved for ${giving.connection}`);
+              toast.success(`Saved for ${giving.c.name}`);
               setGiving(null);
             }}
           />
@@ -275,18 +266,19 @@ function MyAccountsPage() {
       </DialogShell>
       <DeleteDialog
         open={ending !== null}
-        onOpenChange={(open) => !open && setEnding(null)}
-        entityType="app"
-        entityName={ending?.connection}
+        onOpenChange={(o) => !o && setEnding(null)}
+        entityType="connector"
+        entityName={ending?.name}
         verb="Disconnect"
         testIdPrefix="my-connection"
-        description={`Your tools and agents lose access to ${ending?.connection ?? 'this app'} as you until you reconnect it. The team account does not act for you; it serves only runs nobody started.`}
+        description={`Chat and agents working for you lose ${ending?.name ?? 'this app'} as you until you connect it again. The team account does not act for you; it serves only runs nobody started.`}
         isLoading={disconnect.isPending}
         onConfirm={async () => {
-          if (!ending) return;
-          await disconnect.mutateAsync(ending.connectionId);
-          toast.success(`Disconnected from ${ending.connection}`);
+          if (!ending?.primaryAccountId) return;
+          await disconnect.mutateAsync(ending.primaryAccountId);
+          toast.success(`Disconnected from ${ending.name}`);
           setEnding(null);
+          setOpen(null);
         }}
       />
     </PageLayout>
@@ -294,5 +286,5 @@ function MyAccountsPage() {
 }
 
 export default function Page() {
-  return <MyAccountsPage />;
+  return <ConnectorsPage />;
 }
