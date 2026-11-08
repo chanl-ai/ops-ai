@@ -22,7 +22,7 @@ from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ServiceCallError, ServiceClient
 
 from .shaper import shape_part
-from .tool_directory import ToolDirectory, ToolsUnavailable
+from .tool_directory import OperationRef, ToolDirectory, ToolsUnavailable
 
 
 @dataclass(frozen=True)
@@ -226,9 +226,46 @@ class GatewayClient:
             raise
 
 
+# What the model is told when the chat shows the person a card for the refusal (connection-required-card.tsx): what
+# to ask of them in plain words, never the code, the link or whom it names, which the card already shows.
+CARD_LINES: dict[str, str] = {
+    "not_connected": "Not run: the person has not connected their own {app} account. Reply with one sentence saying "
+    "you carry on with this ask once they connect it from the card above; offer no other steps or help.",
+    "needs_person": "Not run: this tool acts as the person, who has not connected their own {app} account. Reply "
+    "with one sentence saying you carry on with this ask once they connect it from the card above; offer no other "
+    "steps or help.",
+    "refused": "Not run: the person's {app} sign-in has ended. Reply with one sentence saying you carry on with this "
+    "ask once they sign in again from the card above; offer no other steps or help.",
+    "insufficient_scope": "Not run: the person's {app} sign-in does not allow this yet. Reply with one sentence "
+    "saying you carry on with this ask once they connect again from the card above; offer no other steps or help.",
+    "no_person": "Not run: {app} signs in as each person, and this call acts for nobody, so it cannot run here.",
+}
+
+
+def _object(value: Any) -> dict[str, Any] | None:
+    return cast(dict[str, Any], value) if isinstance(value, dict) else None
+
+
+def carded(output: Any) -> str | None:
+    """The plain line for a refusal the chat draws as a card, or None for any other outcome, which the model reads
+    as it is."""
+    error = _object((_object(output) or {}).get("error"))
+    # A refusal relayed whole nests the gateway's error once more.
+    error = _object((error or {}).get("error")) or error
+    if error is None or error.get("code") != "CONNECTION_NOT_LINKED":
+        return None
+    details = _object(error.get("details")) or {}
+    line = CARD_LINES.get(str(details.get("reason") or "not_connected"), CARD_LINES["not_connected"])
+    return line.format(app=str(details.get("app") or details.get("connection") or "this app"))
+
+
 def gateway_error(e: ServiceCallError) -> dict[str, Any]:
     """The gateway's error envelope as a tool outcome: code, message, status and details."""
     return {"code": e.code, "message": str(e), "status": e.status, **({"details": e.details} if e.details else {})}
+
+
+# A declared result shape that draws no card in chat.
+NO_CARD = "none"
 
 
 class GatewayToolExecutor:
@@ -254,22 +291,35 @@ class GatewayToolExecutor:
         except ServiceCallError as e:
             # 422 invalid input and the like: the gateway's error envelope is the outcome, not an exception that
             # would end a graph run or a turn.
-            return ToolOutcome(False, {"error": gateway_error(e)})
+            refused = {"error": gateway_error(e)}
+            return ToolOutcome(False, refused, for_model=carded(refused))
         view = data.get("view")
+        if not data["ok"]:
+            return ToolOutcome(False, data["output"], for_model=carded(data["output"]))
         if data["ok"] and view is None:
             # A shaped result is drawn by the console's widget registry; the chat names it after the call (wp_<id>).
-            part = shape_part(data["output"], part_id="", declared=await self._declared(tool))
+            op = await self._operation(tool)
+            if op is not None and op.output_shape == NO_CARD:
+                # The tool draws no card of its own: a save the agent reports with its own card, for one.
+                return ToolOutcome(True, data["output"], None)
+            part = shape_part(
+                data["output"],
+                part_id="",
+                declared=op.output_shape if op else None,
+                title=(op.title or None) if op else None,
+            )
             view = {"part": part} if part is not None else None
         return ToolOutcome(bool(data["ok"]), data["output"], view)
 
-    async def _declared(self, tool: str) -> str | None:
+    async def _operation(self, tool: str) -> OperationRef | None:
+        """The operation's declared result shape and title, or None without a directory or when it is down."""
         if self._directory is None:
             return None
         try:
             ops = await self._directory.operations()
         except ToolsUnavailable:
             return None
-        return next((o.output_shape for o in ops if o.name == tool), None)
+        return next((o for o in ops if o.name == tool), None)
 
 
 class GatewayReplySender:

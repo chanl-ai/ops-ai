@@ -17,10 +17,13 @@ from ops_engine.store import RUN_PREFIX, RunStore
 from ops_identity import ACTING_FOR_HEADER, ActingForTokens, ServiceClient, service_signer
 from ops_service_kit.settings import Settings
 
-from ..activities.gateway import RunContext
+from ..activities.gateway import GatewayRefused, RunContext
 from ..store.engine import AsyncEngine, EngineTransactions
 from .child_runs import TURN_PERSON
 from .engine_runs import first_run
+from .run_person import RUN_PERSON
+
+PERSON_UNKNOWN = "this chat's person is not known, so the call was not made; ask again in a new message"
 
 
 def person_of(created_by: object) -> str | None:
@@ -42,9 +45,16 @@ class CallPeople:
         return cls(tokens, lambda: RunStore(EngineTransactions(db)))
 
     async def email(self, ctx: RunContext) -> str | None:
+        # A chat thread's run acts for the thread's person, whoever's request runs it: a turn, a recovery after a
+        # restart, or a resume after someone else approved its write.
+        chat = RUN_PERSON.get()
+        if chat is not None and chat.email:
+            return chat.email
         turn = TURN_PERSON.get()
         if turn is not None and not turn.is_key and turn.email:
             return turn.email
+        if chat is not None:
+            return None
         # Only an engine run has a starter to act for; a v1 graph thread's config names its journal run (`run_…`).
         if ctx.run_id is None or not ctx.run_id.startswith(RUN_PREFIX) or self.runs is None:
             return None
@@ -56,6 +66,10 @@ class CallPeople:
         if ctx.team_account:
             return {}
         email = await self.email(ctx)
+        if email is None and RUN_PERSON.get() is not None:
+            # A chat run whose person is not known never falls back to acting for nobody, which an app signed in
+            # with a team account would answer as the team.
+            raise GatewayRefused(PERSON_UNKNOWN, [PERSON_UNKNOWN], code="no_person")
         if email is None or not tenant_id or not team_id:
             return {}
         return {ACTING_FOR_HEADER: await self.tokens.token(tenant_id=tenant_id, email=email, team_id=team_id)}

@@ -70,6 +70,7 @@ class Model:
     def __init__(self, loads: list[str], answer: str, classify: Callable[[str], str] = lambda m: "none") -> None:
         self.loads, self.answer, self.classify = list(loads), answer, classify
         self.instructions: list[str] = []
+        self.offered: list[list[str]] = []
         self.results: list[Any] = []
 
     def respond(self, messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
@@ -79,6 +80,7 @@ class Model:
                 parts=[ToolCallPart("final_result", {"topic": self.classify(prompt.split("Message:\n", 1)[1])})]
             )
         self.instructions.append(str(info.instructions or ""))
+        self.offered.append([t.name for t in info.function_tools])
         last = messages[-1]
         if isinstance(last, ModelRequest):
             self.results += [p.content for p in last.parts if isinstance(p, ToolReturnPart)]
@@ -312,3 +314,36 @@ async def test_load_skill_refuses_a_slug_the_agent_has_not_attached() -> None:
     result, events = await turn(model, [HARDSHIP])
     assert result.skills == [] and not any(isinstance(e, SkillLoaded) for e in events)
     assert "No skill named someone-elses-skill" in json.dumps(model.results)
+
+
+async def test_a_follow_up_keeps_the_skill_an_earlier_turn_loaded_and_the_records_it_read() -> None:
+    # Each turn of a meeting log loaded the same skill and searched the account again: five model calls a turn.
+    model = Model([], "Updating Education savings.")
+    settings = AgentSettings("ag_advisor", 1, [PromptFragment("You help bankers.")], "m", skills=[HARDSHIP])
+    read = 'salesforce_query {"q": "SELECT Id FROM Account"} answered {"records": [{"Id": "001A"}]}'
+    req = TurnRequest(
+        "t2",
+        "r2",
+        settings,
+        [],
+        user_turn="Update Education savings",
+        carried_skills=[{"skillId": "sk_1", "version": 1, "name": HARDSHIP.name, "matched": "cannot pay"}],
+        earlier_reads=[read],
+    )
+    events = [
+        e async for e in run_turn(req, KernelPorts(model=model.build(), tools=NoTools(), knowledge=NoKnowledge()))
+    ]
+    result = events[-1].result  # type: ignore[attr-defined]
+    sent = model.instructions[0]
+    assert HARDSHIP.instructions in sent and read in sent, sent
+    assert result.skills == [{"skillId": "sk_1", "name": HARDSHIP.name, "version": 1, "matched": "cannot pay"}]
+    # After a Connect pause the model loaded the carried skill again, a model call spent on nothing: a carried skill is
+    # neither in the index of skills to load nor among load_skill's slugs.
+    assert "- hardship-request-triage:" not in sent, sent
+    assert "load_skill" not in model.offered[0], model.offered[0]
+
+
+def test_a_skill_carried_from_an_earlier_turn_leaves_room_for_two_loads() -> None:
+    one, two = _skill(1), _skill(2)
+    assert skillset.load([HARDSHIP, one, two], [HARDSHIP, one], "skill-2", [HARDSHIP]) == (two, None)
+    assert skillset.load([HARDSHIP, one, two], [HARDSHIP, one], "skill-2")[0] is None

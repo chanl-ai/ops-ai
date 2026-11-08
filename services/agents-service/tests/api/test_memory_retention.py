@@ -42,8 +42,8 @@ async def aged(rt: object, key: str, days: int) -> None:
 
 async def test_memories_past_the_policy_are_deleted_and_audited_and_the_rest_kept(stack: Stack) -> None:  # noqa: F811
     c, rt = stack
-    await say(c, await chat(c, VIEWER), "My timezone is Eastern.", VIEWER)
-    await say(c, await chat(c, VIEWER), "My preferred account is CHQ-2219.", VIEWER)
+    await say(c, await chat(c, VIEWER), "Remember that my timezone is Eastern.", VIEWER)
+    await say(c, await chat(c, VIEWER), "Remember that my preferred account is CHQ-2219.", VIEWER)
     await aged(rt, "timezone", 40)
     await aged(rt, "preferred account", 10)
     assert await expire_memories(rt, Days(None), NOW) == 0, "no policy keeps everything"

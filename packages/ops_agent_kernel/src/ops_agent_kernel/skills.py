@@ -79,14 +79,17 @@ def loaded_entry(skill: Skill, matched: str) -> dict[str, Any]:
     }
 
 
-def load(skills: list[Skill], loaded: list[Skill], slug: str) -> tuple[Skill | None, str | None]:
-    """The skill to load for `slug`, or why the load is refused."""
+def load(
+    skills: list[Skill], loaded: list[Skill], slug: str, carried: list[Skill] | None = None
+) -> tuple[Skill | None, str | None]:
+    """The skill to load for `slug`, or why the load is refused. `carried` skills, loaded by an earlier turn, are
+    already loaded but count against neither of this turn's caps."""
     skill = next((s for s in skills if s.slug == slug and s.loading == "on_match"), None)
     if skill is None:
         return None, f"No skill named {slug} is attached to this agent."
     if skill in loaded:
         return skill, None
-    on_match = [s for s in loaded if s.loading == "on_match"]
+    on_match = [s for s in loaded if s.loading == "on_match" and s not in (carried or [])]
     if len(on_match) >= MAX_PER_TURN:
         return None, f"At most {MAX_PER_TURN} skills load in one reply; go on without {skill.name}."
     used = sum(s.tokens for s in on_match)

@@ -11,6 +11,7 @@ import asyncio
 import base64
 import json
 import math
+import re
 from collections.abc import AsyncIterator
 from contextlib import aclosing
 from typing import Annotated, Any, TypeAlias, cast
@@ -18,6 +19,7 @@ from typing import Annotated, Any, TypeAlias, cast
 from fastapi import APIRouter, Body, Depends, Query, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import TypeAdapter
+from pydantic_ai import Agent
 from sse_starlette import EventSourceResponse
 
 from ops_access import can
@@ -62,6 +64,8 @@ from ops_service_kit.errors import (
 from ops_service_kit.errors import ServiceUnavailable as Unavailable
 from ops_service_kit.http import Envelope
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.logging import get_logger
+from ops_store import isolation
 
 from ...store.events import EventLog
 from ...store.leases import LeaseHeldError
@@ -73,14 +77,17 @@ from ..agent_registry import definition_of, pinned_definition, refuse_new_turns,
 from ..auth import Principal, caller_of, principal, require_chat_use
 from ..chat_attachments import ChatAttachmentReader
 from ..chat_budget import ensure_budget
+from ..chat_history import COMPACT_AFTER, SUMMARY_PROMPT, compacted, history_entry
 from ..chat_threads import (
     CHAT_GRAPH,
     NEW_TITLE,
+    THINK_HARDER,
     AssistantBuilder,
     assistant_id,
     chat_row,
     chat_rows,
     matching_ids,
+    may_read,
     messages_of,
     store_summary,
     thread_row_view,
@@ -97,7 +104,10 @@ from ..review_text import tool_titles
 from ..runs import config, execute, graph_store, pending, require_graphs, resolve
 from .agents import changeable
 
+log = get_logger("ops_agents.chat")
 router = APIRouter(prefix="/chat", dependencies=[Depends(principal)])
+# A person asking for more thought in the quick reply's words: these two words matched, no reading of intent.
+THINK_HARDER_ASK = re.compile(r"\bthink harder\b", re.IGNORECASE)
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 
@@ -405,7 +415,25 @@ async def create_thread(rt: Rt, me: Me, body: ChatThreadInput) -> JSONResponse:
 
 @router.get("/threads/{thread_id}")
 async def get_thread(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
-    row = await _thread_row(rt, me, thread_id)
+    """The conversation, for whoever may read it. A teammate's conversation that the reader may not read answers
+    `{id, readable: false}` and nothing else, so a link to it says it is someone else's instead of failing; a
+    conversation that does not exist, or is another team's, is not found."""
+    row = await chat_row(rt, thread_id, None)
+    if row is None:
+        # A link opened while acting in another team: the conversation may be in one of the reader's other teams. Its
+        # own conversation there names that team so the console can switch; anyone else's says only that it is not
+        # theirs. A team the reader is not in stays not found.
+        for team in (t for t in me.team_ids if t != isolation.team()):
+            with isolation.scope(isolation.tenant(), team):
+                other = await chat_row(rt, thread_id, None)
+            if other is not None:
+                if not may_read(_meta(other), me):
+                    return ok({"id": thread_id, "readable": False})
+                name = await rt.team_names.name(team) if rt.team_names is not None else None
+                return ok({"id": thread_id, "readable": False, "teamId": team, "teamName": name or team})
+        raise NotFound("Conversation")
+    if not may_read(_meta(row), me):
+        return ok({"id": thread_id, "readable": False})
     # Text a guardrail kept or took back from the person is shown to whoever the roles grid lets view the audit.
     audit = ACCESS.may(caller_of(me), "audit", "view", team=me.team_id)
     messages = (await messages_of(rt, [thread_id], audit=audit, reader=person_of(me)))[thread_id]
@@ -558,6 +586,29 @@ async def _start_run(rt: Runtime, thread_id: str, graph_input: dict[str, Any]) -
     return run_id, row, graph
 
 
+async def _compacted(
+    rt: Runtime, thread_id: str, meta: dict[str, Any], history: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """The history a long thread's turn reads: older turns as one summary, kept on the thread (chat_history.compacted).
+    A summary that cannot be made leaves the history whole."""
+    model = rt.graph_deps.ports.model if rt.graph_deps is not None else None
+    if model is None or len(history) <= COMPACT_AFTER:
+        return history
+
+    async def summarize(text: str) -> str:
+        agent = Agent[None, str](model, deps_type=type(None), output_type=str, instructions=SUMMARY_PROMPT)
+        return (await agent.run(text)).output
+
+    try:
+        shorter, made = await compacted(history, cast(dict[str, Any] | None, meta.get("historySummary")), summarize)
+    except Exception as e:  # a failed summary call: the turn reads the whole history, as before compaction
+        log.warning("history_summary_failed", thread=thread_id, error=type(e).__name__)
+        return history
+    if made is not None:
+        await update_meta(rt, thread_id, historySummary=made)
+    return shorter
+
+
 @router.post("/threads/{thread_id}/messages", response_model=None)
 async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceResponse:
     row = await _thread_row(rt, me, thread_id)
@@ -593,6 +644,18 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
     question = body.content.strip()
     user_message: ChatMessage | None = None
     replaced: list[str] = []
+    # Think harder: alone (the quick reply), the reply before it again on the deeper model, once; inside a message
+    # ("think harder - what should we do next?"), that message answered on the deeper model.
+    last = next((m for m in reversed(current) if m.role == "assistant"), None)
+    alone = question.strip(" .!?").lower() == THINK_HARDER.lower()
+    think = (
+        not body.regenerate
+        and bool(rt.settings.think_harder_alias)
+        and THINK_HARDER_ASK.search(question) is not None
+        and (last is not None or not alone)
+    )
+    if think and alone and last is not None:
+        body = body.model_copy(update={"regenerate": last.id})
     if body.regenerate:
         i = next((n for n, m in enumerate(current) if m.id == body.regenerate), None)
         if i is None:
@@ -618,7 +681,7 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         **({"agent_version": agent.version} if pinned is not None else {}),
         **({"test_agent": agent.model_dump(mode="json")} if test else {}),
         "message": question,
-        "history": [{"role": m.role, "content": m.content} for m in transcript],
+        "history": await _compacted(rt, thread_id, meta, [history_entry(m) for m in transcript]),
         "requested_by": me.email,
     }
     # The settings this turn runs on: the agent's limits, then the thread's overrides, then this message's; a value
@@ -640,6 +703,9 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         graph_input["kb_ids"] = [str(k) for k in cast(list[Any], meta["kbIds"])]
         effective.knowledge_base_ids = graph_input["kb_ids"]
         effective.sources["knowledgeBaseIds"] = "started"
+    if think:
+        # The person chose the deeper model for this one reply; the agent's own allowed models are its builder's.
+        effective.model, effective.sources["model"] = rt.settings.think_harder_alias, "think_harder"
     graph_input["settings"] = effective.model_dump(mode="json", by_alias=True)
     if user_message is not None:
         graph_input["user_message_id"] = user_message.id
@@ -696,7 +762,9 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         agent_id=agent.id,
         agent_name=agent.name,
     )
-    builder = AssistantBuilder(rt.catalog, assistant, titles=await tool_titles(rt))
+    builder = AssistantBuilder(
+        rt.catalog, assistant, titles=await tool_titles(rt), think_alias=rt.settings.think_harder_alias
+    )
 
     # What the person said about themselves is read while the reply is written: the extraction needs only the
     # messages so far, and run after the reply it held the reply's end back by a whole model call.

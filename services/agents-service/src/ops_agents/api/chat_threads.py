@@ -17,6 +17,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, cast
 
 from ops_access import can
+from ops_agent_kernel.plan import NAME as PLAN_TOOL
 from ops_agent_kernel.search import NAME as SEARCH_TOOL
 from ops_agents.activities.catalog import Catalog
 from ops_agents.activities.tools import fill
@@ -57,6 +58,7 @@ from ..store.events import EventLog
 from ..store.reviews import ReviewStore
 from ..store.tenancy import current_team
 from .auth import Principal, caller_of
+from .chat_history import PLAN_PART
 from .deps import Runtime
 from .event_log import designed_type
 from .memory import fill_remembered
@@ -84,6 +86,19 @@ def _d(v: Any) -> dict[str, Any]:
     return cast(dict[str, Any], v) if isinstance(v, dict) else {}
 
 
+# The quick reply that reruns a reply on the deeper model (routers/chat.py), and how many quick replies a reply holds.
+THINK_HARDER = "Think harder"
+# A call answered from what the chat already read, as its label says so in the call log.
+EARLIER = ", from earlier in this chat"
+MAX_FOLLOW_UPS = 3
+
+
+def _worth_more_thought(m: ChatMessage) -> bool:
+    """A reply that made a plan or two or more calls to a system: an ask a deeper model may answer better."""
+    calls = [c for c in m.tool_calls or [] if c.server != "kernel"]
+    return any(p.id == PLAN_PART for p in m.parts or []) or len(calls) >= 2
+
+
 @dataclass
 class AssistantBuilder:
     """One assistant message, built from one run's events."""
@@ -99,6 +114,10 @@ class AssistantBuilder:
     ended: bool = False
     # Plugin tools' titles (review_text.tool_titles), so a card names a tool as the tools list does.
     titles: dict[str, str] = field(default_factory=dict[str, str])
+    # The parts the agent presented itself, as against the tables its tool calls drew.
+    presented: set[str] = field(default_factory=set[str])
+    # The alias Think harder reruns a reply on; a reply that made a plan or two calls, on another model, offers it.
+    think_alias: str = ""
 
     def _call(self, c: dict[str, Any]) -> ToolCall:
         status = str(c.get("status") or "")
@@ -112,7 +131,7 @@ class AssistantBuilder:
         return ToolCall(
             id=str(c["id"]),
             name=str(c.get("tool")),
-            label=call_label(self.catalog, c, self.titles),
+            label=f"{call_label(self.catalog, c, self.titles)}{EARLIER if c.get('cached') else ''}",
             server=str(c.get("server") or ""),
             input=_d(c.get("input")),
             output=output,
@@ -185,9 +204,27 @@ class AssistantBuilder:
                     # The built-in present tool: the answer is the part, so no tool card is shown or kept. A search
                     # of the agent's own tools (search_tools) is shown like any call, so a person sees what it found.
                     view = _d(data).get("view")
+                    if view and _d(data).get("status") == "ok" and isinstance(_d(view).get("followUps"), list):
+                        # The reply's quick replies: the latest call's stand, at most three. A reply that asks or reads
+                        # back for confirmation is answered by a tap, so the tables its reads drew give way, as they do
+                        # for a presented card.
+                        m.follow_ups = [str(r) for r in cast(list[Any], _d(view)["followUps"])][:3]
+                        m.parts = [p for p in m.parts or [] if p.id in self.presented] or None
                     if view and _d(data).get("status") == "ok" and "part" in _d(view):
-                        part = WidgetPart.model_validate({**_d(_d(view)["part"]), "id": f"wp_{call.id}"})
-                        m.parts = [*(p for p in m.parts or [] if p.id != part.id), part]
+                        # The plan is one part a turn, above the answer, that each plan call redraws.
+                        planned = call.name == PLAN_TOOL
+                        pid = PLAN_PART if planned else f"wp_{call.id}"
+                        part = WidgetPart.model_validate({**_d(_d(view)["part"]), "id": pid})
+                        self.presented.add(part.id)
+                        kept = [p for p in m.parts or [] if p.id != part.id]
+                        if planned:
+                            m.parts = [part, *kept]
+                            return [PartEvent(part=part)]
+                        if part.kind is not None:
+                            # A card the agent built from its reads takes the place of the tables those reads drew;
+                            # the stored message the turn ends with (done) drops them from the screen too.
+                            kept = [p for p in kept if p.id in self.presented]
+                        m.parts = [*kept, part]
                         return [PartEvent(part=part)]
                     return []
                 m.tool_calls = [*(c for c in m.tool_calls or [] if c.id != call.id), call]
@@ -242,6 +279,8 @@ class AssistantBuilder:
             case "turn":
                 d = _d(data)
                 m.model = d.get("model")
+                if self.think_alias and m.model != self.think_alias and _worth_more_thought(m):
+                    m.follow_ups = [*(m.follow_ups or [])[: MAX_FOLLOW_UPS - 1], THINK_HARDER]
                 if d.get("noAnswer"):
                     m.no_answer = True
                 if d.get("status") == "failed":
@@ -373,7 +412,15 @@ async def _thread_messages(rt: Runtime, thread_id: str, events: list[Any], *, au
             # Who answered, so a reload after a handover still credits the agent that wrote each reply.
             answered = rt.catalog.agent_in_flight(str(given["agent_id"]))
             reply.agent_id, reply.agent_name = str(given["agent_id"]), answered.name if answered else None
-        builder = AssistantBuilder(rt.catalog, reply, decisions, approvals, audit=audit, titles=titles)
+        builder = AssistantBuilder(
+            rt.catalog,
+            reply,
+            decisions,
+            approvals,
+            audit=audit,
+            titles=titles,
+            think_alias=rt.settings.think_harder_alias,
+        )
         for e in per_run.get(run["id"], []):
             builder.apply(e.type, e.data, e.at)
         if not builder.ended and run["status"] != "running":

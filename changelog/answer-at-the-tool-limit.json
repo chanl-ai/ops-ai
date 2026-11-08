@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Answers from what was read at the tool limit",
+  "description": "A reply that runs out of tool calls now answers from the records it already read, instead of saying only that it reached the limit.",
+  "tag": "fix"
+}

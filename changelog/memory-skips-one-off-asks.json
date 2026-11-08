@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "The assistant no longer offers to remember one-off asks",
+  "description": "An instruction for one reply, a request, a question or an app's connection state is not offered as something to remember, so you only see Remember lines for things about you and how you work.",
+  "tag": "fix"
+}

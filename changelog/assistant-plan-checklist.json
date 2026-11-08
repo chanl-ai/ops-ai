@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "A checklist for asks that take several steps",
+  "description": "For an ask that needs a chain of lookups, several apps or a change, the assistant shows a short checklist and ticks each step off; after a sign-in or an approval it goes on at the same step.",
+  "tag": "new"
+}

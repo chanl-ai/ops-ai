@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "A refused mailbox is not read again until it changes",
+  "description": "When a mailbox's password secret or host is refused, the listener stops reading it after the first refusal and says why once, instead of asking again every few seconds. Changing the mailbox on Channels > Email makes it read again.",
+  "tag": "fix"
+}

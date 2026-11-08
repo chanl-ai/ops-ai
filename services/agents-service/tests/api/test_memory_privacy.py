@@ -29,7 +29,7 @@ def remembered(thread: dict[str, Any]) -> list[dict[str, Any]]:
 async def test_another_reader_of_a_thread_sees_that_something_was_remembered_never_what(stack: Stack) -> None:  # noqa: F811
     c, _ = stack
     thread = await chat(c, VIEWER)
-    await say(c, thread, "Hello. My timezone is Eastern.", VIEWER)
+    await say(c, thread, "Remember that my timezone is Eastern.", VIEWER)
     mine = remembered((await c.get(f"/chat/threads/{thread}", headers=VIEWER)).json()["data"])
     assert [(r.get("key"), r.get("value")) for r in mine] == [("timezone", "Eastern")], "the owner sees it"
     shown = await c.get(f"/chat/threads/{thread}", headers=reader({"chatThreadsOwnerOnly": False}))

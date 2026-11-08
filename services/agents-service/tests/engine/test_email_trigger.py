@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from ops_agents.api.email_trigger import Bound, EmailTriggers, SourceFor, run_again, run_key
+from ops_agents.api.mailbox_gateway import GatewayMailSource
 from ops_agents.store.base import metadata
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.leases import Leases
@@ -522,3 +523,26 @@ async def test_a_message_the_fault_names_fails_to_start_and_the_fault_is_refused
         await listener.poll_all()
     assert await env.runs() == []
     assert [e["outcome"] for e in reversed(await env.events())] == ["start_failed", "start_failed", "set_aside"]
+
+
+async def test_a_mailbox_tools_service_refuses_is_not_read_again_until_it_changes(env: Env) -> None:
+    """A mailbox whose secret tools-service refused was read again every poll and every IDLE wait, hundreds of 403s an
+    hour. Through the real gateway source: one refused read, then nothing until the mailbox record changes."""
+    asked: list[str] = []
+
+    def tools(request: httpx.Request) -> httpx.Response:
+        asked.append(request.url.path)
+        error = {"code": "secret_refused", "message": "The mailbox's secret DEV_IMAP_PASSWORD cannot be used"}
+        return httpx.Response(403, json={"success": False, "error": error})
+
+    http = httpx.AsyncClient(base_url="http://tools", transport=httpx.MockTransport(tools))
+    mail = ServiceClient(http, dev_service_signer(), "agents", "tools", tenant=lambda: TENANT)
+    listener = env.listener(sources=lambda m, folder: GatewayMailSource(mail, m, folder))
+    await env.publish()
+    for _ in range(3):
+        assert await listener.poll_all() == []
+    assert asked == ["/v1/mailboxes/read"], "asked once, not on every pass"
+    with tenant_scope(TENANT):
+        await MailboxStore(env.db).update(f"mbx_{MAILBOX.split('@', maxsplit=1)[0]}", {"updated_at": "later"})
+    await listener.poll_all()
+    assert len(asked) == 2, "a changed mailbox is read again"

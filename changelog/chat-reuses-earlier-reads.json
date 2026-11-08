@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "Follow-ups reuse what the chat already read",
+  "description": "A follow-up in the same chat answers from what the assistant already read from an app for a few minutes, so it answers faster; a save to that app makes the next look read it again, and a reused read is labelled from earlier in this chat.",
+  "tag": "new"
+}

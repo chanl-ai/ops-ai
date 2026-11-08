@@ -14,17 +14,37 @@ from . import kinds, layout
 from .types import AgentSettings, ToolGrant
 
 SHAPES = ("rows", "series", "record", "metric")
+# The quick replies under a reply (ChatMessage.follow_ups): a few short answers, never a menu.
+MAX_FOLLOW_UPS = 3
+FOLLOW_UP_CHARS = 120
+
+
+def follow_ups(arguments: dict[str, Any]) -> tuple[list[str] | None, str | None]:
+    """The call's quick replies, or why they are refused; (None, None) when it gives none."""
+    raw = arguments.get("followUps")
+    if raw is None:
+        return None, None
+    if not isinstance(raw, list) or not raw or len(cast(list[Any], raw)) > MAX_FOLLOW_UPS:
+        return None, f"followUps is a list of one to {MAX_FOLLOW_UPS} short replies."
+    replies = [str(r).strip() for r in cast(list[Any], raw)]
+    if any(not r or len(r) > FOLLOW_UP_CHARS for r in replies):
+        return None, f"Each follow-up is a reply of 1 to {FOLLOW_UP_CHARS} characters."
+    return list(dict.fromkeys(replies)), None
+
+
 NAME = "present"
 SERVER = "kernel"
 
 PRESENT = ToolGrant(
     NAME,
     SERVER,
-    "Show the person a shaped result from facts already in this conversation: a table (rows: a list of flat objects "
-    "with the same keys), a chart (series: rows with one date or ordinal key and numeric values), one record (record: "
-    "a flat object) or one figure (metric: {label, value, unit?, delta?}). Or give kind, a generic widget the same in "
-    "any industry, with data in that kind's fields (* required): " + kinds.describe() + ". Use it for comparisons and "
-    "summaries; it reads nothing and changes nothing.",
+    "Show the person a table, chart, record or figure built from facts already in this conversation; it reads "
+    "nothing and changes nothing. A tool's own result is already shown to the person, so do not present it again; "
+    "use this for comparisons and summaries you put together. Pass data and at most one of: shape (rows: a list of "
+    "flat objects with the same keys; series: rows with one date or ordinal key and numeric values; record: one flat "
+    "object; metric: {label, value, unit?, delta?}) or kind, a generic widget with data in its fields (* required; "
+    "columns may be plain key names): " + kinds.describe() + ". With data alone, a list shows as a table and an "
+    "object as a record.",
     "read",
     {
         "type": "object",
@@ -32,6 +52,13 @@ PRESENT = ToolGrant(
             "shape": {"type": "string", "enum": list(SHAPES)},
             "kind": {"type": "string", "enum": list(kinds.KINDS)},
             "data": {"description": "The rows, record or metric to show, in the shape's form."},
+            "followUps": {
+                "type": "array",
+                "maxItems": MAX_FOLLOW_UPS,
+                "items": {"type": "string", "maxLength": FOLLOW_UP_CHARS},
+                "description": "Up to three short replies the person is likely to send next, such as the answers to "
+                "a question you ask; shown as chips that send the reply. May be given alone, with no data.",
+            },
             "hint": {
                 "type": "object",
                 "description": "Optional: title, x (the series key), y (the value keys), prefer (table, line, bar, "
@@ -44,7 +71,6 @@ PRESENT = ToolGrant(
                 },
             },
         },
-        "required": ["data"],
     },
 )
 
@@ -131,9 +157,7 @@ def grant(settings: AgentSettings) -> ToolGrant:
     props["data"] = {
         "description": "For shape, the rows, record or metric. For widget, an object with that widget's fields."
     }
-    desc = PRESENT.description.replace(
-        "Use it for comparisons", "Give exactly one of shape, kind, widget or layout. Use it for comparisons"
-    )
+    desc = PRESENT.description.replace("at most one of: shape", "at most one of: widget, layout, shape")
     if settings.widgets:
         props["widget"] = {"type": "string", "enum": [w.widget_id for w in settings.widgets]}
         desc += " Or give widget with data matching its fields. Widgets: " + " ".join(
@@ -147,8 +171,103 @@ def grant(settings: AgentSettings) -> ToolGrant:
     return ToolGrant(NAME, SERVER, desc + _BUTTON_LINE, "read", schema)
 
 
+def _rows_of(part: dict[str, Any]) -> list[dict[str, Any]]:
+    data = part.get("data")
+    if part.get("shape") == "rows" and isinstance(data, list):
+        return [cast(dict[str, Any], r) for r in cast(list[Any], data) if isinstance(r, dict)]
+    if part.get("shape") == "record" and isinstance(data, dict):
+        return [cast(dict[str, Any], data)]
+    return []
+
+
+def already_shown(part: dict[str, Any], shown: list[dict[str, Any]]) -> bool:
+    """Whether every row of a presented table or record is one a tool's result already drew this turn, field for
+    field (a presented row may leave fields out). A chart, a metric, a widget or a layout is never a repeat."""
+    rows = _rows_of(part)
+    drawn = [r for p in shown for r in _rows_of(p)]
+    if not rows or not drawn:
+        return False
+
+    def within(row: dict[str, Any]) -> bool:
+        return any(all(str(d.get(k)) == str(v) for k, v in row.items()) for d in drawn)
+
+    return all(within(r) for r in rows)
+
+
 def _ungranted(part: dict[str, Any], granted: set[str]) -> list[str]:
     return [t for t in layout.required_tools(part.get("layout")) if t not in granted]
+
+
+def _columns(value: Any) -> Any:
+    """A table's columns as the catalogue keeps them: a plain key name is the column {key}."""
+    if not isinstance(value, list):
+        return value
+    return [{"key": c} if isinstance(c, str) else c for c in cast(list[Any], value)]
+
+
+def _plain(arguments: dict[str, Any]) -> dict[str, Any]:
+    """A call as a model most often writes it, read as it meant: data alone is a table (a list) or a record (an
+    object), and a table's columns may be plain key names, in a kind's data or in a composed layout's table nodes."""
+    out = dict(arguments)
+    if all(out.get(k) is None for k in ("shape", "kind", "widget", "layout")) and out.get("data") is not None:
+        data = out["data"]
+        out["shape"] = "rows" if isinstance(data, list) else "record" if isinstance(data, dict) else None
+    if out.get("kind") == "table" and isinstance(out.get("data"), dict):
+        data = dict(cast(dict[str, Any], out["data"]))
+        if "columns" in data:
+            data["columns"] = _columns(data["columns"])
+        out["data"] = data
+    if isinstance(out.get("layout"), dict):
+        out["layout"] = _layout_columns(out["layout"])
+    return out
+
+
+def _layout_columns(node: Any) -> Any:
+    if not isinstance(node, dict):
+        return node
+    n = dict(cast(dict[str, Any], node))
+    if n.get("type") == "table" and "columns" in n:
+        n["columns"] = _columns(n["columns"])
+    if isinstance(n.get("children"), list):
+        n["children"] = [_layout_columns(c) for c in cast(list[Any], n["children"])]
+    return n
+
+
+def _without_empty(data: Any, schema: dict[str, Any]) -> Any:
+    """`data` with each optional field the model sent empty ("" or null) left out, at every depth: an empty optional
+    field reads as no value, never as a refusal the model must spend a call fixing. A required field stays, so a
+    missing one is still refused."""
+    unchanged: Any = data
+    if isinstance(data, list):
+        items = cast(dict[str, Any], schema.get("items") or {})
+        return [_without_empty(x, items) for x in cast(list[Any], data)]
+    if not isinstance(data, dict):
+        return unchanged
+    props = cast(dict[str, Any], schema.get("properties") or {})
+    required = set(cast(list[str], schema.get("required") or []))
+    out: dict[str, Any] = {}
+    for key, value in cast(dict[str, Any], data).items():
+        if key not in required and (value is None or (isinstance(value, str) and not value.strip())):
+            continue
+        out[key] = _without_empty(value, cast(dict[str, Any], props.get(key) or {}))
+    return out
+
+
+def _changed_only(data: Any) -> Any:
+    """An entity's fields without those reported as changed to the value they already had: a field with `was` equal to
+    `value` is not a change, so a saved card shows only what the save changed."""
+    unchanged: Any = data
+    record = cast(dict[str, Any], data) if isinstance(data, dict) else None
+    given = record.get("fields") if record is not None else None
+    if record is None or not isinstance(given, list):
+        return unchanged
+    fields: list[Any] = []
+    for raw in cast(list[Any], given):
+        f = cast(dict[str, Any], raw) if isinstance(raw, dict) else None
+        if f is not None and "was" in f and str(f["was"]) == str(f.get("value")):
+            continue
+        fields.append(raw)
+    return {**record, "fields": fields}
 
 
 def run(
@@ -158,16 +277,22 @@ def run(
     one of the agent's widgets filled with data, or a composed layout when the agent may compose. A button whose
     `requires` names a tool this turn was not granted refuses the part, so a widget never offers an action the agent
     cannot take (`granted` None skips the check)."""
+    arguments = _plain(arguments)
     shape, widget, tree = arguments.get("shape"), arguments.get("widget"), arguments.get("layout")
     kind = arguments.get("kind")
     forms = [f for f in (shape, kind, widget, tree) if f is not None]
-    if len(forms) != 1:
-        return None, "Give exactly one of shape, kind, widget or layout."
+    if len(forms) > 1:
+        return None, "Pass data with only one of shape, kind, widget or layout."
+    if not forms:
+        return None, "Pass data: a list of objects shows as a table, an object as a record."
     data = arguments.get("data")
     if kind is not None:
         if kind not in kinds.SCHEMAS:
             return None, f"kind must be one of {', '.join(kinds.KINDS)}."
         schema = kinds.SCHEMAS[str(kind)]
+        if kind == "entity":
+            data = _changed_only(data)
+        data = _without_empty(data, schema)
         try:
             filled = layout.fill(kinds.template(str(kind)), schema, data)
         except layout.LayoutError as e:

@@ -81,6 +81,8 @@ class Settings(BaseSettings):
     port: int = 8700
     # The runtime's alias, which models-service serves; no vendor model is named here (a direct call sets one).
     model_alias: str = "default"
+    # The alias a chat reply reruns on when the person taps Think harder (OPS_THINK_HARDER_ALIAS); empty offers no chip.
+    think_harder_alias: str = "thinking"
     # With the flag tool_search on, an agent with more granted tools than this searches for its tools instead
     # of being sent every schema; 0 means always, None the agent kernel's default (TOOL_SEARCH_ABOVE, 20).
     tool_search_above: int | None = Field(default=None, ge=0)
@@ -286,6 +288,9 @@ class Settings(BaseSettings):
     # Dev only: the one password for every seeded person. Ignored outside dev, where password sign-in is closed.
     platform_demo_password: SecretStr = SecretStr("northfield-demo")
     platform_seed_file: Path = _PLATFORM_SEED
+    # Dev only: the sample teams' manifests (`make sample-teams` installs them). Their people who have an account are
+    # offered on the dev sign-in page beside the seed's; a missing folder offers none.
+    platform_sample_teams_dir: Path = _REPO_ROOT / "scripts" / "sample-team" / "teams"
     # Dev seed only: on, every seeded person also holds Admin in every team, so a person trying the console is never
     # held back by a role. Off by default: the seed's own roles stand, so a viewer is a viewer and a role test
     # means something. Never read by migrations, the bootstrap or any product default.

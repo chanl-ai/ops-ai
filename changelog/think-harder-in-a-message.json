@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "Asking to think harder in a message uses the deeper model",
+  "description": "A message that asks the assistant to think harder alongside a question is answered on the deeper model; the Think harder quick reply on its own still answers the last reply again.",
+  "tag": "fix"
+}

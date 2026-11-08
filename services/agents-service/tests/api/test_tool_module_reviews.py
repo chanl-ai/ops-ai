@@ -220,3 +220,25 @@ async def test_the_workspaces_own_security_team_decides_a_security_change(
     sec2 = person("noor", "team_sec2", "approver")
     approved = await c.post(decision, json={"decision": "approved"}, headers=sec2)
     assert approved.status_code == 200, approved.text
+
+
+async def test_a_security_review_is_a_task_of_security_alone(stack: tuple[AsyncClient, FakeTools]) -> None:
+    """Publish requests were read per tenant, so another team's Human Tasks listed and counted a security review it
+    neither owns nor decides. It is listed in the Security team; the asking team opens it by id; any other team gets
+    not found."""
+    c, _ = stack
+    rid = (await _open(c)).json()["data"]["id"]
+    fraud = person("otto", "team_fraud", "approver")
+
+    async def listed(who: dict[str, str]) -> tuple[bool, int]:
+        r = await c.get("/reviews", params={"view": "open", "pageSize": 100}, headers=who)
+        assert r.status_code == 200, r.text
+        data = r.json()["data"]
+        return rid in {row["id"] for row in data["data"]}, data["viewCounts"]["open"]
+
+    elsewhere, counted = await listed(fraud)
+    assert not elsewhere and counted == 0
+    assert (await listed(SECURITY))[0]
+    assert (await c.get(f"/reviews/{rid}", headers=fraud)).status_code == 404
+    assert (await c.get(f"/v1/publish-requests/{rid}", headers=fraud)).status_code == 404
+    assert (await c.get(f"/v1/publish-requests/{rid}", headers=BUILDER)).status_code == 200

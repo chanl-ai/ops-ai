@@ -25,6 +25,17 @@ TONE: dict[str, Any] = {"enum": ["neutral", "info", "success", "warning", "dange
 STATE: dict[str, Any] = {"enum": ["pending", "active", "done", "failed"]}
 # A file the console opens in its own Files panel: an id, never a URL.
 FILE_ID: dict[str, Any] = {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"}
+# The app a card's data came from, by its id in the team's Apps (`plugin:opsai.salesforce`): the console draws its name
+# and logo from the team's own record of it.
+APP: dict[str, Any] = {"type": "string", "pattern": "^[a-z]+:[A-Za-z0-9._-]{1,80}$"}
+# A record in that app, by its path only. The console opens it on the address the app's account signed in to, so a
+# card can never send anyone to a host the model chose: no scheme, no host, no `//`, no query.
+OPEN: dict[str, Any] = {
+    "type": "object",
+    "properties": {"path": {"type": "string", "pattern": "^/(?!/)[A-Za-z0-9/_.~%-]{0,300}$"}, "label": TEXT},
+    "required": ["path"],
+    "additionalProperties": False,
+}
 
 
 def _obj(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -38,7 +49,8 @@ def _list(item: dict[str, Any], *, least: int = 1, most: int = MAX_ITEMS) -> dic
 # What a button sends back as the person's next message; the only thing any kind can do.
 ACTION = _obj({"label": TEXT, "reply": TEXT}, ["label", "reply"])
 STATUS = _obj({"text": TEXT, "tone": TONE}, ["text"])
-PAIRS = _list(_obj({"label": TEXT, "value": CELL}, ["label", "value"]), least=0)
+# `was`: the value before a change the card reports, drawn as old → new.
+PAIRS = _list(_obj({"label": TEXT, "value": CELL, "was": CELL}, ["label", "value"]), least=0)
 ROWS = _list({"type": "object", "maxProperties": 20, "additionalProperties": CELL})
 STEP = _obj({"label": TEXT, "state": STATE, "detail": TEXT, "at": TEXT}, ["label", "state"])
 
@@ -87,7 +99,7 @@ SCHEMAS: dict[str, dict[str, Any]] = {
     ),
     # The steps of one process: an order, a claim, an application, a shipment.
     "tracker": _obj({"title": TEXT, "reference": TEXT, "steps": _list(STEP, most=20)}, ["steps"]),
-    # One thing with its fields: a person, customer, patient, product or account.
+    # One thing with its fields: a person, customer, patient, product or account; after a write, what changed.
     "entity": _obj(
         {
             "title": TEXT,
@@ -96,8 +108,33 @@ SCHEMAS: dict[str, dict[str, Any]] = {
             "status": STATUS,
             "fields": PAIRS,
             "actions": _list(ACTION, least=0, most=4),
+            "app": APP,
+            "open": OPEN,
         },
         ["title", "fields"],
+    ),
+    # What to know before a meeting or a call: who and when, then a few sections, each with a count and its top items.
+    "brief": _obj(
+        {
+            "title": TEXT,
+            "when": TEXT,
+            "who": TEXT,
+            "sections": _list(
+                _obj(
+                    {
+                        "title": TEXT,
+                        "count": {"type": "integer", "minimum": 0},
+                        "items": _list(_obj({"text": TEXT, "detail": TEXT}, ["text"]), least=0, most=8),
+                        "note": TEXT,
+                    },
+                    ["title", "items"],
+                ),
+                most=6,
+            ),
+            "app": APP,
+            "open": OPEN,
+        },
+        ["title", "sections"],
     ),
     "comparison": _obj(
         {
@@ -140,12 +177,21 @@ SCHEMAS: dict[str, dict[str, Any]] = {
                         "options": _list(TEXT, most=20),
                         "required": {"type": "boolean"},
                         "placeholder": TEXT,
+                        # The value the field opens with, and why the app refused it when the card comes back.
+                        "value": CELL,
+                        "error": TEXT,
                     },
                     ["name", "label", "type"],
                 ),
                 most=12,
             ),
             "submit": ACTION,
+            # A second button beside submit (Edit): it sends its reply, like any action.
+            "edit": ACTION,
+            "subtitle": TEXT,
+            # A line beside the buttons: what submitting writes.
+            "note": TEXT,
+            "app": APP,
         },
         ["fields", "submit"],
     ),

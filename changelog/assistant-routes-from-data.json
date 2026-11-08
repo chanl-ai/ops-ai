@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "The team assistant has its own model and a plainer core",
+  "description": "The team assistant runs on its own model setting and starts from a short, general set of rules; what it can reach comes from the apps your team has turned on.",
+  "tag": "improved"
+}

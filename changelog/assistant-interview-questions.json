@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "The assistant can ask which record you mean",
+  "description": "When logging a meeting, the assistant asks whether to update the client's open opportunity or open a new one, with both as quick replies.",
+  "tag": "fix"
+}

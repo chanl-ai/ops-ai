@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "A failed customer lookup reads Failed",
+  "description": "A customer summary whose customer lookup fails now ends Failed with the error, instead of a successful run that reads Not found. A customer the bank does not have reads Customer not found.",
+  "tag": "fix"
+}

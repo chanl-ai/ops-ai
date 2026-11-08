@@ -24,7 +24,6 @@ from ops_agents.api.runs import graph_store
 from ops_agents.store.events import EventLog
 from ops_agents.store.memories import (
     ACTIVE,
-    CONFLICT,
     EVERY_AGENT,
     FORGOTTEN,
     SUGGESTED,
@@ -74,7 +73,7 @@ def tool_outputs(events: list[dict[str, Any]]) -> str:
 
 async def test_a_memory_follows_its_person_in_the_team(stack: Stack) -> None:  # noqa: F811
     c, rt = stack
-    await say(c, await chat(c, VIEWER), "Hi. My timezone is Eastern.", VIEWER)
+    await say(c, await chat(c, VIEWER), "Remember that my timezone is Eastern.", VIEWER)
     assert [(m["key"], m["value"]) for m in await mine(c, VIEWER, "ag_branch")] == [("timezone", "Eastern")]
     assert "timezone: Eastern" in await profile(rt), "the next chat with the agent knows it"
     assert await mine(c, BUILDER) == [] and await mine(c, OUTSIDER) == [], "no one else sees it"
@@ -108,7 +107,7 @@ async def test_only_the_persons_own_words_are_read_for_memory(stack: Stack) -> N
 
 async def test_a_forget_removes_it_at_once_and_is_recorded(stack: Stack) -> None:  # noqa: F811
     c, rt = stack
-    await say(c, await chat(c, VIEWER), "My preferred account is CHQ-2219.", VIEWER)
+    await say(c, await chat(c, VIEWER), "Remember that my preferred account is CHQ-2219.", VIEWER)
     memory = (await mine(c, VIEWER))[0]
     assert (await c.delete(f"{MINE}/{memory['id']}", headers=BUILDER)).status_code == 404, "not another person's"
     assert (await c.delete(f"{MINE}/{memory['id']}", headers=VIEWER)).status_code == 204
@@ -136,7 +135,7 @@ async def test_memory_off_or_a_kind_off_saves_nothing(stack: Stack) -> None:  # 
 
 async def test_a_correction_replaces_what_is_loaded(stack: Stack) -> None:  # noqa: F811
     c, rt = stack
-    await say(c, await chat(c, VIEWER), "My timezone is Eastern.", VIEWER)
+    await say(c, await chat(c, VIEWER), "Remember that my timezone is Eastern.", VIEWER)
     memory = (await mine(c, VIEWER))[0]
     fixed = await c.patch(f"{MINE}/{memory['id']}", json={"value": "Pacific"}, headers=VIEWER)
     assert fixed.status_code == 200, fixed.text
@@ -157,7 +156,7 @@ async def test_corrections_and_forgets_ask_memory_edit_and_reads_chat_view(stack
     from ops_agents.api.routers import memories as routes  # noqa: PLC0415
 
     c, _ = stack
-    await say(c, await chat(c, VIEWER), "My timezone is Eastern.", VIEWER)
+    await say(c, await chat(c, VIEWER), "Remember that my timezone is Eastern.", VIEWER)
     asked: list[tuple[str, str]] = []
 
     def recording(caller: Any, area: str, action: str, **kw: Any) -> Any:
@@ -234,7 +233,7 @@ async def test_a_quote_the_person_never_wrote_is_not_saved(stack: Stack) -> None
         said("Pacific", quote="your timezone is Pacific"), said("Leeds", key="city", quote="my city is Leeds")
     )
     await say(c, await chat(c, VIEWER), "My timezone is Eastern and my city is Leeds.", VIEWER)
-    assert [m["value"] for m in await mine(c, VIEWER)] == ["Leeds"], "only what the person's own words say"
+    assert await statuses(rt) == [("Leeds", SUGGESTED)], "only what the person's own words say"
 
 
 async def test_an_unsure_memory_waits_as_a_suggestion_and_is_never_used(stack: Stack) -> None:  # noqa: F811
@@ -264,7 +263,7 @@ async def test_remember_that_quoted_whole_saves_one_memory_the_person_asked_for(
     assert [(m["key"], m["source"], m["confidence"]) for m in await mine(c, VIEWER)] == [("answer style", "asked", 1.0)]
 
 
-async def test_a_reworded_same_that_changes_a_confirmed_memory_replaces_it(stack: Stack) -> None:  # noqa: F811
+async def test_a_reworded_same_that_changes_a_confirmed_memory_waits_and_a_yes_replaces_it(stack: Stack) -> None:  # noqa: F811
     c, rt = stack
     rt.memory_extractor = Answering(said("short bullet points", kind="preference", key="answer style"))
     await say(c, await chat(c, VIEWER), "Remember that I prefer short bullet points.", VIEWER)
@@ -273,6 +272,10 @@ async def test_a_reworded_same_that_changes_a_confirmed_memory_replaces_it(stack
         said("short numbered summaries", kind="preference", key="answer style", decision="same", ref=kept)
     )
     await say(c, await chat(c, VIEWER), "These days short numbered summaries suit me better.", VIEWER)
+    waiting = [(r["value"], r["status"]) for r in await rows(rt)]
+    assert waiting == [("short bullet points", ACTIVE), ("short numbered summaries", SUGGESTED)], waiting
+    yes = await c.post(f"{MINE}/{(await rows(rt))[-1]['id']}/confirm", headers=VIEWER)
+    assert yes.status_code == 200, yes.text
     assert [(r["value"], r["status"]) for r in await rows(rt)] == [
         ("short bullet points", SUPERSEDED),
         ("short numbered summaries", ACTIVE),
@@ -286,7 +289,7 @@ async def test_a_key_is_saved_as_words_however_the_model_wrote_it(stack: Stack) 
         said("Leeds", key="home_city"),
     )
     await say(c, await chat(c, VIEWER), "I like short numbered lists, and I live in Leeds.", VIEWER)
-    assert sorted(m["key"] for m in await mine(c, VIEWER)) == ["home city", "summary format preference"]
+    assert sorted(r["key"] for r in await rows(rt)) == ["home city", "summary format preference"]
 
 
 async def test_a_short_turn_is_not_read_for_memory(stack: Stack) -> None:  # noqa: F811
@@ -323,51 +326,57 @@ async def rows(rt: Any) -> list[dict[str, Any]]:
 
 async def test_saying_it_again_confirms_instead_of_saving_twice(stack: Stack) -> None:  # noqa: F811
     c, rt = stack
-    await say(c, await chat(c, VIEWER), "Hello. My timezone is Eastern.", VIEWER)
+    await say(c, await chat(c, VIEWER), "Remember that my timezone is Eastern.", VIEWER)
     await say(c, await chat(c, VIEWER), "As before, my timezone is Eastern.", VIEWER)
     kept = await rows(rt)
     assert [(r["value"], r["status"]) for r in kept] == [("Eastern", ACTIVE)], kept
     assert kept[0]["confirmed_at"], "said twice is confirmed"
 
 
-async def test_a_changed_value_replaces_the_memory_and_keeps_its_history(stack: Stack) -> None:  # noqa: F811
+async def test_a_changed_value_waits_and_a_yes_replaces_the_memory_keeping_its_history(stack: Stack) -> None:  # noqa: F811
+    """A change to a saved memory replaced it at once, though the person never asked; it waits for their yes."""
     c, rt = stack
-    await say(c, await chat(c, VIEWER), "Hello. My timezone is Eastern.", VIEWER)
+    await say(c, await chat(c, VIEWER), "Remember that my timezone is Eastern.", VIEWER)
     await say(c, await chat(c, VIEWER), "I moved, so my timezone is Pacific.", VIEWER)
     old, new = await rows(rt)
+    assert (old["status"], new["value"], new["status"]) == (ACTIVE, "Pacific", SUGGESTED)
+    assert "Eastern" in await profile(rt) and "Pacific" not in await profile(rt), "used only after a yes"
+    assert (await c.post(f"{MINE}/{new['id']}/confirm", headers=BUILDER)).status_code == 404, "not another person's"
+    assert (await c.post(f"{MINE}/{new['id']}/confirm", headers=VIEWER)).status_code == 200
+    old, new = await rows(rt)
     assert (old["value"], old["status"], new["value"], new["status"]) == ("Eastern", SUPERSEDED, "Pacific", ACTIVE)
-    assert new["supersedes_id"] == old["id"] and old["superseded_at"]
+    assert new["supersedes_id"] == old["id"] and old["superseded_at"] and new["confirmed_at"]
 
 
 async def test_the_model_naming_a_memory_it_was_not_shown_changes_nothing_there(stack: Stack) -> None:  # noqa: F811
     c, rt = stack
-    await say(c, await chat(c, BUILDER), "Hello. My timezone is Pacific.", BUILDER)
+    await say(c, await chat(c, BUILDER), "Remember that my timezone is Pacific.", BUILDER)
     theirs = (await mine(c, BUILDER))[0]["id"]
     rt.memory_extractor = Answering(said("Eastern", key="home zone", decision="replaces", ref=theirs))
     await say(c, await chat(c, VIEWER), "My home zone is Eastern, for my records.", VIEWER)
     assert [m["value"] for m in await mine(c, BUILDER)] == ["Pacific"], "another person's memory is untouched"
     new = (await rows(rt))[-1]
-    assert (new["value"], new["status"], new["supersedes_id"]) == ("Eastern", ACTIVE, None), "saved as new"
+    assert (new["value"], new["status"], new["supersedes_id"]) == ("Eastern", SUGGESTED, None), "suggested as new"
 
 
 async def test_an_unasked_contradiction_waits_and_the_confirmed_one_stays(stack: Stack) -> None:  # noqa: F811
     c, rt = stack
-    await say(c, await chat(c, VIEWER), "Hello. My timezone is Eastern.", VIEWER)
+    await say(c, await chat(c, VIEWER), "Remember that my timezone is Eastern.", VIEWER)
     await say(c, await chat(c, VIEWER), "As before, my timezone is Eastern.", VIEWER)
     kept = (await mine(c, VIEWER))[0]["id"]
     rt.memory_extractor = Answering(said("Pacific", decision="conflicts", ref=kept))
     events = await say(c, await chat(c, VIEWER), "The meeting invite showed Pacific times.", VIEWER)
-    assert [(r["value"], r["status"]) for r in await rows(rt)] == [("Eastern", ACTIVE), ("Pacific", CONFLICT)]
+    assert [(r["value"], r["status"]) for r in await rows(rt)] == [("Eastern", ACTIVE), ("Pacific", SUGGESTED)]
     text = await profile(rt)
     assert "Eastern" in text and "Pacific" not in text, text
     done: dict[str, Any] = next(e for e in events if e.get("type") == "done")["message"]
-    assert [(m["value"], m["status"]) for m in done["remembered"]] == [("Pacific", CONFLICT)], done["remembered"]
+    assert [(m["value"], m["status"]) for m in done["remembered"]] == [("Pacific", SUGGESTED)], done["remembered"]
 
 
 async def test_undo_of_a_replacement_puts_the_old_memory_back(stack: Stack) -> None:  # noqa: F811
     c, rt = stack
-    await say(c, await chat(c, VIEWER), "Hello. My timezone is Eastern.", VIEWER)
-    await say(c, await chat(c, VIEWER), "I moved, so my timezone is Pacific.", VIEWER)
+    await say(c, await chat(c, VIEWER), "Remember that my timezone is Eastern.", VIEWER)
+    await say(c, await chat(c, VIEWER), "Remember that my timezone is Pacific.", VIEWER)
     new = (await rows(rt))[-1]
     with tenant_scope(TENANT):
         assert await Memories(graph_store(rt).engine).undo("vera", new["id"], actor="vera")
@@ -378,7 +387,12 @@ async def test_undo_of_a_replacement_puts_the_old_memory_back(stack: Stack) -> N
 async def test_a_reload_reads_what_was_remembered_from_the_memory_not_the_thread(stack: Stack) -> None:  # noqa: F811
     c, rt = stack
     rt.memory_extractor = Answering(
-        said("Answers as bullet points.", kind="procedure", key="answer style", quote="Answers as bullet points")
+        said(
+            "Answers as bullet points.",
+            kind="procedure",
+            key="answer style",
+            quote="Answers as bullet points, as I always do",
+        )
     )
     thread = await chat(c, VIEWER)
     await say(c, thread, "Answers as bullet points, as I always do.", VIEWER)
@@ -462,7 +476,7 @@ async def test_a_turn_records_the_memory_versions_it_used(stack: Stack) -> None:
 
 async def test_a_forget_is_undone_within_its_grace_and_not_after(stack: Stack) -> None:  # noqa: F811
     c, rt = stack
-    await say(c, await chat(c, VIEWER), "Hello. My timezone is Eastern.", VIEWER)
+    await say(c, await chat(c, VIEWER), "Remember that my timezone is Eastern.", VIEWER)
     memory = (await mine(c, VIEWER))[0]
     assert (await c.delete(f"{MINE}/{memory['id']}", headers=VIEWER)).status_code == 204
     assert (await c.post(f"{MINE}/{memory['id']}/undo", headers=BUILDER)).status_code == 404, "not another person's"
@@ -492,8 +506,8 @@ async def test_undo_takes_back_what_a_reply_just_remembered(stack: Stack) -> Non
 async def test_erase_removes_a_memory_and_its_earlier_versions_at_once(stack: Stack) -> None:  # noqa: F811
     c, rt = stack
     thread = await chat(c, VIEWER)
-    await say(c, thread, "Hello. My timezone is Eastern.", VIEWER)
-    await say(c, await chat(c, VIEWER), "I moved, so my timezone is Pacific.", VIEWER)
+    await say(c, thread, "Remember that my timezone is Eastern.", VIEWER)
+    await say(c, await chat(c, VIEWER), "Remember that my timezone is Pacific.", VIEWER)
     current = (await mine(c, VIEWER))[0]
     assert (await c.post(f"{MINE}/{current['id']}/erase", headers=VIEWER)).status_code == 204
     assert await rows(rt) == [], "no version keeps its text"
@@ -534,3 +548,66 @@ async def test_a_turn_makes_one_decision_per_memory(stack: Stack) -> None:  # no
     )
     await say(c, await chat(c, VIEWER), "Hi, my timezone is Eastern, and later Pacific.", VIEWER)
     assert [r["value"] for r in await rows(rt)] == ["Eastern"], "one memory per key from one turn"
+
+
+async def test_a_one_off_ask_is_neither_kept_nor_suggested_however_sure_the_model_is(stack: Stack) -> None:  # noqa: F811
+    """Sure candidates were saved at once, then offered as "Remember 'Reply with the single word ok'?": an account's
+    state, a one-off find, a reply-format command, a question about the assistant, a meeting and a record's state.
+    None is kept or suggested; a suggestion is only for a lasting preference, way of working or fact."""
+    c, rt = stack
+    turns = {
+        "My Salesforce account is connected now, thanks.": said("Salesforce account is connected", key="salesforce"),
+        "Find a customer called Harbor Bakery for me please.": said(
+            "Wants to find a customer", kind="preference", key="search"
+        ),
+        "Reply with the single word ok.": said("Reply with the single word ok", kind="preference", key="reply format"),
+        "Show me the open cases for this week only.": said("Open cases this week", kind="preference", key="cases"),
+        "Can you tell me which apps you can reach?": said("Asks which apps", kind="preference", key="apps"),
+        # An event and a record's state, as a real model worded them (th_59f5828c8972, th_9e52b6374159).
+        "I have a meeting with the Okafor Family Trust tomorrow and want to be ready.": said(
+            "The person has a meeting with the Okafor Family Trust and wants preparation for it.", key="meeting"
+        ),
+        "The education savings plan is at $75,000 in proposal now, with a note on Grace's request.": said(
+            "Education savings plan updated with $75,000 in proposal stage and note about Grace Okafor's request.",
+            key="education savings plan",
+            lasting=False,
+        ),
+    }
+    for message, candidate in turns.items():
+        rt.memory_extractor = Answering(candidate | {"quote": message.rstrip(".")})
+        events = await say(c, await chat(c, VIEWER), message, VIEWER)
+        done: dict[str, Any] = next(e for e in events if e.get("type") == "done")["message"]
+        assert not done.get("remembered"), (message, done.get("remembered"))
+    assert await statuses(rt) == [], "nothing kept, nothing suggested"
+    rt.memory_extractor = Answering(said("Prefers short answers with bullet points", kind="preference", key="style"))
+    await say(c, await chat(c, VIEWER), "Prefers short answers with bullet points", VIEWER)
+    assert await statuses(rt) == [("Prefers short answers with bullet points", SUGGESTED)], "a preference still asks"
+
+
+async def test_always_is_kept_at_once_and_applies_in_a_new_thread(stack: Stack) -> None:  # noqa: F811
+    c, rt = stack
+    asked = "Always show cases as a table"
+    rt.memory_extractor = Answering(said("Show cases as a table", kind="preference", key="case layout", quote=asked))
+    await say(c, await chat(c, VIEWER), f"{asked}, please.", VIEWER)
+    assert [(m["value"], m["source"]) for m in await mine(c, VIEWER)] == [("Show cases as a table", "asked")]
+    assert "Show cases as a table" in await profile(rt, question="open cases"), "the next chat is told"
+
+
+async def test_a_suggestion_confirmed_with_yes_is_used_in_a_new_thread_and_no_drops_it(stack: Stack) -> None:  # noqa: F811
+    c, rt = stack
+    rt.memory_extractor = Answering(
+        said("Prefers amounts in thousands", kind="preference", key="amounts"),
+        said("Works the Leeds branch", key="branch"),
+    )
+    events = await say(c, await chat(c, VIEWER), "Prefers amounts in thousands. Works the Leeds branch", VIEWER)
+    done: dict[str, Any] = next(e for e in events if e.get("type") == "done")["message"]
+    waiting = {m["value"]: m for m in done["remembered"]}
+    assert {m["status"] for m in waiting.values()} == {SUGGESTED} and "thousands" not in await profile(rt)
+    yes = waiting["Prefers amounts in thousands"]["id"]
+    no = waiting["Works the Leeds branch"]["id"]
+    assert (await c.post(f"{MINE}/{yes}/confirm", headers=VIEWER)).status_code == 200
+    assert (await c.post(f"{MINE}/{no}/undo", headers=VIEWER)).status_code == 204
+    assert (await c.post(f"{MINE}/{yes}/confirm", headers=VIEWER)).status_code == 404, "already kept"
+    assert [m["value"] for m in await mine(c, VIEWER)] == ["Prefers amounts in thousands"]
+    text = await profile(rt, question="amounts at the Leeds branch")
+    assert "thousands" in text and "Leeds" not in text, text

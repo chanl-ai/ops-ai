@@ -62,9 +62,12 @@ def started_by_of(run: dict[str, Any]) -> str:
 
 
 def event_name(source_and_event: str) -> str:
-    """`tools/tool_access.requested` as a reader sees it: tool_access.requested from tools."""
+    """A service event as a reader says it: `files/file.deleted` is "File deleted", `tools/tool_access.requested`
+    "Tool access requested". An event's name is dotted lower-case words, the subject first (ops_engine node_types),
+    so every event reads this way without a list to keep; the service it came from is in `id`."""
     source, _, event = source_and_event.partition("/")
-    return f"{event} from {source}" if event else source
+    words = " ".join((event or source).replace(".", " ").replace("_", " ").split())
+    return words[:1].upper() + words[1:]
 
 
 def parse(raw: str) -> Parsed:

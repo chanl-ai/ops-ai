@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Plainer replies, workflow pages and failed calls",
+  "description": "Agents no longer point to results above or below, and a failed tool call says why in words. A workflow page shows its version without a digest, and someone who cannot edit it sees that it is live and who changes it.",
+  "tag": "fix"
+}

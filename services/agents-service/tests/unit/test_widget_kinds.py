@@ -52,6 +52,17 @@ def test_data_outside_the_schema_is_refused_with_the_field_named() -> None:
         ("document", {"name": "a.pdf", "passage": "p", "fileId": "https://evil.example/a.pdf"}),
         ("quote", {"passage": "p", "source": "s", "html": "<script>alert(1)</script>"}),
         ("entity", {"title": "x", "fields": [], "image": "https://evil.example/a.png"}),
+        # A record opens by path on the app account's own address: a host, a scheme or `//` is refused.
+        (
+            "entity",
+            {"title": "x", "fields": [], "app": "plugin:opsai.salesforce", "open": {"path": "https://evil.example"}},
+        ),
+        ("brief", {"title": "x", "sections": [{"title": "s", "items": []}], "open": {"path": "//evil.example/x"}}),
+        (
+            "brief",
+            {"title": "x", "sections": [{"title": "s", "items": [{"text": "t", "href": "https://evil.example"}]}]},
+        ),
+        ("entity", {"title": "x", "fields": [], "app": "javascript:alert(1)//"}),
     ],
 )
 def test_a_kind_carries_no_link_script_html_or_image_source(kind: str, data: dict[str, Any]) -> None:
@@ -88,3 +99,29 @@ def test_a_template_binds_a_kind_like_any_node() -> None:
     schema = {"type": "object", "properties": {"title": {"type": "string"}, "steps": {"type": "array"}}}
     filled = layout.fill(tree, schema, {"title": "Order 1182", "steps": [{"label": "Packed", "state": "done"}]})
     assert filled["children"] == [{"type": "tracker", "steps": [{"label": "Packed", "state": "done"}]}]
+
+
+def test_a_saved_card_shows_only_the_fields_that_changed() -> None:
+    # The saved card listed "Proposal/Price Quote -> Proposal/Price Quote" and "75,000 -> 75,000" as changes.
+    fields = [
+        {"label": "Stage", "value": "Proposal/Price Quote", "was": "Needs Analysis"},
+        {"label": "Amount", "value": "75,000", "was": "75,000"},
+        {"label": "Meeting note", "value": "Grace wants to add $25,000."},
+    ]
+    part, _ = show("entity", {"title": "Education savings", "fields": fields})
+    assert part is not None
+    shown = [f["label"] for f in part["layout"]["fields"]]
+    assert shown == ["Stage", "Meeting note"], shown
+
+
+def test_an_empty_optional_field_is_left_out_not_refused() -> None:
+    # A prep brief with no meeting on the calendar came with when: "" and was refused, costing a retry; a missing
+    # required field is still refused.
+    section = {"title": "Open cases", "items": [{"text": "Case 00001028: Update the beneficiary", "detail": ""}]}
+    part, said = show(
+        "brief", {"title": "Okafor Family Trust", "when": "", "who": "Grace Okafor", "sections": [section]}
+    )
+    assert part is not None, said
+    assert "when" not in part["layout"] and "detail" not in part["layout"]["sections"][0]["items"][0], part["layout"]
+    refused, why = show("brief", {"title": "", "sections": [section]})
+    assert refused is None and "title" in why, why

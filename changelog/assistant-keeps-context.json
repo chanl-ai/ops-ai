@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Follow-ups keep the skill and what was read",
+  "description": "A follow-up in the same chat keeps the skill the assistant loaded and the records it read, so it answers sooner instead of reading them again.",
+  "tag": "fix"
+}

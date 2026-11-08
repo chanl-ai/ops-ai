@@ -83,8 +83,16 @@ class AgentSettings:
     # None: no cap. A real agent may need many; seeds and tests set low ones.
     max_tool_calls: int | None = 6
     # Model requests in one turn (the loop's steps). Always a number: an uncapped loop would spend real calls until
-    # the deadline, so an agent with no cap set runs on the platform default.
+    # the deadline, so an agent with no cap set runs on the platform default. Above one, the last step offers no tool,
+    # so a turn always has a step left to answer in.
     max_steps: int = 8
+    # Calls to the kernel's own tools (present, search_tools, load_skill) in one turn, all kinds together; past it they
+    # answer "answer in text now" and are withdrawn. None: no cap. They reach no system, so max_tool_calls never
+    # charges them, and without this a model can spend every step on them.
+    max_builtin_calls: int | None = 3
+    # Check the finished answer with no model call (answer_check.py): an error code, a stray last word, a question
+    # after reads that all succeeded, uncited knowledge. A defect gets one correction call naming it.
+    end_check: bool = False
     # More granted tools than this and they are searched for, not all offered; 0 means always search. None is
     # off, every tool offered: the install flag tool_search is off by default.
     tool_search_above: int | None = None
@@ -162,6 +170,8 @@ class Interrupt:
     # On-match skills loaded before the pause ({skillId, version, name, matched}): the resumed turn keeps them loaded,
     # so their guardrails still check the answer and the per-turn caps go on from where they were.
     loaded_skills: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
+    # The plan as it stood at the pause (plan.py), so the resumed turn goes on at the same step.
+    plan: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -204,6 +214,13 @@ class TurnRequest:
     knowledge_asked: bool | None = None
     variables: dict[str, str] = field(default_factory=dict[str, str])
     resume: Resume | None = None
+    # On-match skills an earlier turn of the conversation loaded ({skillId, version, name, matched}): this turn keeps
+    # them loaded with their bodies in the system prompt, so a follow-up does not load them again.
+    carried_skills: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
+    # What earlier turns of the conversation read, one line each, so a follow-up answers from them, not a new read.
+    earlier_reads: list[str] = field(default_factory=list[str])
+    # A plan an earlier turn left unfinished (a Connect card paused it): this turn goes on from its first open step.
+    carried_plan: dict[str, Any] | None = None
     deadline_seconds: float = 120.0
     # A JSON Schema the turn's answer must match (a workflow's agent step): the model returns structured output
     # through the call, validated against it, on `TurnResult.output`; a mismatch finishes with `schema_error`.
@@ -223,6 +240,8 @@ class ToolCallRecord:
     output: Any = None
     duration_ms: int = 0
     view: dict[str, Any] | None = None
+    # Answered from what this conversation already read (tool_cache.py); the system was not called.
+    cached: bool = False
 
 
 @dataclass(frozen=True)
