@@ -28,6 +28,10 @@ A script is YAML or JSON: `agent` (the team's default when left out), `test`, `k
     widget          the reply drew a card of this kind (brief, form, entity), or of each kind in a list
     notWidgets      kinds of card the reply must not draw
     remembers       the reply kept a memory with this status: active (saved at once) or suggested (asks first)
+    plan            the reply drew its plan checklist: done (every step finished, "Did N steps") or blocked (a step
+                    waits for the person)
+A turn may be `connected: wait`: it waits (up to SIGN_IN_WAIT_S) until the person is signed in to the app the last
+Connect card named, so someone can sign in from the card in a browser, then sends the card's follow-up.
 A turn may be `approve: true` instead of `say`: it approves the newest open widget, as the turn's `as` person when
 given (an approver), waits for the resumed reply and checks it like any other.
 """
@@ -53,6 +57,8 @@ CODE = re.compile(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b|\bError:")
 STRAY = re.compile(r"(?:^|[.!?]\s+|\n\s*)(ok|okay|done)[.!]?\s*$", re.IGNORECASE)
 # How long an approved write's resumed reply may take.
 APPROVE_WAIT_S = 90.0
+# How long a `connected: wait` turn waits for a person to sign in from the Connect card.
+SIGN_IN_WAIT_S = 300.0
 # How long a reply's memory call may take to write what it kept.
 MEMORY_WAIT_S = 20.0
 CITE = re.compile(r"\[\d+\]")
@@ -141,6 +147,12 @@ def reply_checks(want: dict[str, Any], seen: dict[str, Any], message: dict[str, 
         drawn = [str(p.get("kind")) for p in message.get("parts") or [] if p.get("type") == "widget"]
         bad = [k for k in drawn if k in want["notWidgets"]]
         out.append((f"draws no {', '.join(want['notWidgets'])} card", not bad, f"{drawn}"))
+    if "plan" in want:
+        drawn = next((p for p in message.get("parts") or [] if p.get("id") == "wp_plan"), None)
+        title = str(((drawn or {}).get("hint") or {}).get("title") or "")
+        states = [str(r.get("state")) for r in (drawn or {}).get("data") or []]
+        ok = drawn is not None and (title.startswith("Did ") if want["plan"] == "done" else "failed" in states)
+        out.append((f"draws its plan, {want['plan']}", ok, f"{title} {states}" if drawn else "no plan drawn"))
     if "remembers" in want:
         kept = [str(r.get("status")) for r in message.get("remembered") or []]
         out.append((f"keeps a memory as {want['remembers']}", want["remembers"] in kept, f"{kept}"))
@@ -217,6 +229,11 @@ def run_script(ns: argparse.Namespace, ops: OpsAI, path: Path) -> Outcome:
     for t in spec["turns"]:
         if t.get("approve"):
             seen = approved(ns, ops, thread, t.get("as"))
+        elif t.get("connected") == "wait":
+            app = str((card or {}).get("connection") or "")
+            if not signed_in_to(ns, ops, app):
+                line(ns, f"\nnot signed in to {app or 'the app'} within {SIGN_IN_WAIT_S:.0f} s")
+            seen = turn(ns, ops, thread, followup(app or "the app"))
         else:
             seen = turn(ns, ops, thread, t.get("say") or followup((card or {}).get("connection") or "the app"))
         card = seen["cards"][-1] if seen["cards"] else card
@@ -240,6 +257,19 @@ def run_script(ns: argparse.Namespace, ops: OpsAI, path: Path) -> Outcome:
                 failed.append(name)
     line(ns, f"\n{'PASS' if not failed else 'FAIL'} {path.name}  {thread}")
     return Outcome(not failed, calls, thread, failed)
+
+
+def signed_in_to(ns: argparse.Namespace, ops: OpsAI, app: str) -> bool:
+    """Whether the person signs in to `app` (by name) within SIGN_IN_WAIT_S, checked every few seconds."""
+    from .chat import line  # noqa: PLC0415
+
+    line(ns, f"\nwaiting for a sign-in to {app or 'the app'}: use the Connect card in the chat")
+    end = time.monotonic() + SIGN_IN_WAIT_S
+    while time.monotonic() < end:
+        if any(r.get("app") == app and r.get("connected") for r in ops.accounts.mine()):
+            return True
+        time.sleep(5.0)
+    return False
 
 
 def approved(ns: argparse.Namespace, ops: OpsAI, thread: str, person: str | None) -> dict[str, Any]:

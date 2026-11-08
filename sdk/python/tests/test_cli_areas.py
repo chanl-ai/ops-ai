@@ -582,3 +582,14 @@ def test_the_memory_and_card_checks_read_the_stored_reply() -> None:
     assert all(
         ok for _, ok, _ in chat_script.reply_checks({"notWidgets": ["form"], "remembers": "active"}, plain, kept)
     )
+
+
+def test_the_plan_check_reads_the_checklist_the_reply_drew() -> None:
+    # A multi-step answer with no checklist, or one left open, passed every text check.
+    plain = _seen("Two files need you.")
+    done = {"parts": [{"id": "wp_plan", "hint": {"title": "Did 3 steps"}, "data": [{"state": "done"}] * 3}]}
+    open_ = {"parts": [{"id": "wp_plan", "hint": {"title": "Check"}, "data": [{"state": "done"}, {"state": "failed"}]}]}
+    assert all(ok for _, ok, _ in chat_script.reply_checks({"plan": "done"}, plain, done))
+    assert not all(ok for _, ok, _ in chat_script.reply_checks({"plan": "done"}, plain, open_))
+    assert all(ok for _, ok, _ in chat_script.reply_checks({"plan": "blocked"}, plain, open_))
+    assert not all(ok for _, ok, _ in chat_script.reply_checks({"plan": "done"}, plain, {"parts": []}))

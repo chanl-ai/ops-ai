@@ -1,0 +1,20 @@
+# A plan survives a sign-in, as Priya (no Salesforce sign-in of her own) with the real model: the step that needs
+# Salesforce stops at the Connect card with the plan shown and that step waiting; once she signs in from the card, the
+# follow-up goes on at that step and finishes the plan. The second turn waits up to five minutes for someone to sign in
+# as Priya from the card in a browser. Needs the demo records. Run on demand, not in CI.
+as: [priya]
+real: [priya]
+turns:
+  - say: "Find the client with a High priority task not yet started, then check that client's open opportunities and open cases, and tell me what to raise with them"
+    expect:
+      card: true
+      plan: blocked
+      never: ["token", "password"]
+      maxSteps: 3
+  - connected: wait
+    expect:
+      tool: salesforce_query
+      notTools: [load_skill]
+      plan: done
+      says: ["Education savings"]
+      maxSteps: 5

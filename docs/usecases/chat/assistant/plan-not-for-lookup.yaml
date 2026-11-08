@@ -1,0 +1,11 @@
+# One lookup takes no plan: a plain question about one record is answered from one read, with no checklist.
+as: [james]
+real: [james]
+turns:
+  - say: "What stage is the Education savings opportunity in?"
+    expect:
+      tool: salesforce_query
+      notTools: [plan]
+      says: ["Education savings"]
+      noInternalIds: true
+      maxSteps: 4

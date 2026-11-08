@@ -1,0 +1,14 @@
+# A multi-step ask keeps a plan the person can see, as James with the real model on the Salesforce demo org: a chain
+# where the second read depends on the first (the task names the client) shows a checklist that ticks off each step and reads "Did N steps" at the
+# end. Needs the demo records (make demo-org-seed AS=james). Run on demand, not in CI.
+as: [james]
+real: [james]
+turns:
+  - say: "Find the client with a High priority task not yet started, then check that client's open opportunities and open cases, and tell me what to raise with them"
+    expect:
+      tool: [plan, salesforce_query]
+      plan: done
+      says: ["Education savings"]
+      noInternalIds: true
+      endsClean: true
+      maxSteps: 8
