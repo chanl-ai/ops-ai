@@ -41,6 +41,20 @@ async def test_an_ok_result_with_no_view_is_shaped_and_honours_the_declared_shap
     assert declared.view is not None and declared.view["part"]["shape"] == "rows"
 
 
+class SilentDirectory:
+    async def operations(self) -> list[OperationRef]:
+        return [OperationRef("save", "", "write", {}, False, "mod_1", "CRM", output_shape="none")]
+
+
+async def test_a_result_declared_none_draws_no_card() -> None:
+    # A save drew its raw "object, id, action" table above the saved card the agent shows for it.
+    saved = {"saved": [{"object": "Opportunity", "id": "006A", "action": "updated"}]}
+    out = await GatewayToolExecutor(Gateway({"ok": True, "output": saved}), SilentDirectory()).execute(  # type: ignore[arg-type]
+        "save", {}, key="k", approval_token=None
+    )
+    assert out.ok and out.view is None and out.output == saved
+
+
 async def test_a_failed_call_or_a_legacy_view_is_left_alone() -> None:
     failed = await GatewayToolExecutor(Gateway({"ok": False, "output": ROWS}), None).execute(  # type: ignore[arg-type]
         "daily", {}, key="k", approval_token=None

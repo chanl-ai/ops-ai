@@ -150,8 +150,9 @@ export function BriefKind({ node }: { node: Extract<KindNode, { type: 'brief' }>
               <ul className="mt-1 flex flex-col gap-1 text-sm">
                 {s.items.map((it, j) => (
                   <li key={j} className="flex flex-col gap-x-3 sm:flex-row sm:items-baseline sm:justify-between">
-                    <span className="min-w-0 break-words">{it.text}</span>
-                    {it.detail && <span className="shrink-0 text-xs text-muted-foreground">{it.detail}</span>}
+                    {/* The name keeps at least half the row: a long detail beside it squeezed it to one letter a line. */}
+                    <span className="min-w-0 break-words sm:min-w-[50%] sm:flex-1">{it.text}</span>
+                    {it.detail && <span className="min-w-0 break-words text-xs text-muted-foreground sm:text-right">{it.detail}</span>}
                   </li>
                 ))}
               </ul>

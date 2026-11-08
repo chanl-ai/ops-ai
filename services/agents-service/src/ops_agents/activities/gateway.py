@@ -263,6 +263,10 @@ def gateway_error(e: ServiceCallError) -> dict[str, Any]:
     return {"code": e.code, "message": str(e), "status": e.status, **({"details": e.details} if e.details else {})}
 
 
+# A declared result shape that draws no card in chat.
+NO_CARD = "none"
+
+
 class GatewayToolExecutor:
     def __init__(self, gateway: GatewayClient, directory: ToolDirectory | None = None) -> None:
         """`directory` names each operation's declared result shape (`x-ops-shape`); without it shapes are inferred."""
@@ -294,6 +298,9 @@ class GatewayToolExecutor:
         if data["ok"] and view is None:
             # A shaped result is drawn by the console's widget registry; the chat names it after the call (wp_<id>).
             op = await self._operation(tool)
+            if op is not None and op.output_shape == NO_CARD:
+                # The tool draws no card of its own: a save the agent reports with its own card, for one.
+                return ToolOutcome(True, data["output"], None)
             part = shape_part(
                 data["output"],
                 part_id="",
