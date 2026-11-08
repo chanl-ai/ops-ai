@@ -105,7 +105,7 @@ async function step(name, body, page) {
     await body();
   } catch (e) {
     await page?.screenshot({ path: join(SHOTS, `failed-${name.split(' ')[0]}.png`) }).catch(() => {});
-    check(name, false, `${String(e).slice(0, 300)} at ${page?.url() ?? 'no page'}`);
+    check(name, false, `${String(e).slice(0, 1500)} at ${page?.url() ?? 'no page'}`);
   }
 }
 
@@ -1150,7 +1150,13 @@ try {
           await name.fill(user);
           await popup.locator('input[type=submit], button[type=submit]').first().click();
           await popup.waitForEvent('close', { timeout: 60_000 }).catch(() => {});
-          await page.waitForURL((u) => u.pathname.startsWith('/integrations/apps/'), { timeout: 60_000 });
+          // Turning an app on ends on what is now true, with Done; any other Connect goes straight to the app's page.
+          const done = window_.getByTestId('connect-window-done');
+          await Promise.any([page.waitForURL((u) => u.pathname.startsWith('/integrations/apps/'), { timeout: 60_000 }), done.waitFor({ timeout: 60_000 })]);
+          if (await done.isVisible().catch(() => false)) {
+            await done.click();
+            await page.waitForURL((u) => u.pathname.startsWith('/integrations/apps/'), { timeout: 60_000 });
+          }
           let health = null;
           for (let i = 0; i < 30 && !health; i++) {
             const account = (await sfAccounts()).find((x) => Boolean(x.sandbox) === sandbox);
