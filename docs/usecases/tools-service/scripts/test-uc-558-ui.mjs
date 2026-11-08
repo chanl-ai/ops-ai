@@ -26,7 +26,7 @@ const LOGIN_HOST = 'login.salesforce.test';
 const OURS = [
   {"when": "\\bmove case (?P<case>\\S+) to (?P<status>[^.\\n]+)", "tool": "uc558_update_case", "arguments": {"status": "{status}"}},
   {"when": "\\bI connected (?P<system>[^.\\n]+)\\. Please go ahead", "tool": "uc558_update_case", "arguments": {"status": "Awaiting documents"}},
-  {"after": "uc558_update_case", "result": "CONNECTION_NOT_LINKED", "text": "I did not change the case: Salesforce needs your own account for that. Connect it from the card above and I will go ahead."},
+  {"after": "uc558_update_case", "result": "has not connected their own", "text": "I did not change the case: Salesforce needs your own account for that. Connect it from the card above and I will go ahead."},
   {"after": "uc558_update_case", "text": "The case is now Awaiting documents, changed with your Salesforce account."},
 ];
 const RULES = '.logs/usecase/uc558-model';
