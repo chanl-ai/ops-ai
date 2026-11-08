@@ -11,12 +11,14 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from ops_access import can
+from ops_engine.store import RunStore
 from ops_service_kit.errors import Forbidden, NotFound, Unprocessable
 from ops_service_kit.http import Envelope, ListResult, Out, paged
 
 from ...case_wording import entry
-from ...store.activity import Activity, Filters, Scope
+from ...store.activity import KINDS, Activity, Filters, Scope
 from ...store.cases import CaseNotFound, CaseStore
+from ...store.engine import EngineTransactions
 from ...store.tenancy import current_team
 from ...store.trigger_events import SET_ASIDE_AFTER
 from ..actors import ActorView, actors
@@ -24,7 +26,7 @@ from ..auth import Principal, caller_in, caller_of
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..review_text import describe_calls
-from ..run_story import words
+from ..run_story import outcome_texts, words
 
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(caller_in("workflows"))]  # noqa: UP040
@@ -181,6 +183,7 @@ def row_view(
     who: dict[str, dict[str, Any]],
     titles: dict[str, str] | None = None,
     details: dict[str, dict[str, Any]] | None = None,
+    ended: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     detail = (
         email_detail(str(r["outcome"] or ""), (details or {}).get(str(r["row_id"])) or {})
@@ -193,7 +196,12 @@ def row_view(
         "title": (titles or {}).get(f"{r['kind']}:{r['row_id']}") or r["title"],
         "status": r["status"],
         "outcome": r["outcome"],
-        "outcomeText": words(str(r["outcome"])) if r["outcome"] else None,
+        # A workflow run says which End it reached, as the Runs list does ("Finished at the Not found end.").
+        "outcomeText": (ended or {}).get(str(r["row_id"]))
+        if r["kind"] == "workflow_run" and (ended or {}).get(str(r["row_id"]))
+        else words(str(r["outcome"]))
+        if r["outcome"]
+        else None,
         "detail": detail,
         "teamId": r["team_id"],
         "source": {"type": r["source_type"], "id": r["source_id"] or "", "name": r["source_name"] or ""},
@@ -238,11 +246,14 @@ async def _case(rt: Runtime, scope: Scope, case_id: str) -> tuple[str, str]:
 async def list_activity(rt: Rt, me: Me, q: Annotated[ActivityQuery, Query()]) -> JSONResponse:
     """What happened, newest first, a page at a time, in the selected team (`team=all`: every team the caller is in).
     Each kind is read where the caller may view its area, and a chat only where they may read it: their own while the
-    workspace keeps chats private. `facets.kind` and `facets.status` count the rows under the other filters."""
+    workspace keeps chats private. `facets.kind` and `facets.status` count the rows under the other filters. The list
+    is activity.view (roles grid: not a viewer). Background jobs repeat the runs they start, so they are listed only
+    when the kind filter asks for them; their facet still counts them."""
+    can(caller_of(me), "activity", "view", team=current_team() or me.team_id, what="the activity list")
     scope = scope_of(me, q.team)
     case = await _case(rt, scope, q.case) if q.case else None
     filters = Filters(
-        kinds=tuple(q.kind),
+        kinds=tuple(q.kind) or tuple(k for k in KINDS if k != "background"),
         statuses=tuple(q.status),
         sources=_sources(q.source),
         since=q.since,
@@ -253,5 +264,7 @@ async def list_activity(rt: Rt, me: Me, q: Annotated[ActivityQuery, Query()]) ->
     who = await actors(rt, [str(r["actor"] or "") for r in found.rows if r["kind"] not in ("email", "form")])
     titles = await case_titles(rt, found.rows) | await call_titles(rt, found.rows)
     details = await Activity(rt.db).email_details(found.rows)
-    listed = paged([row_view(r, who, titles, details) for r in found.rows], found.total, q.page, q.pageSize)
+    runs = [str(r["row_id"]) for r in found.rows if r["kind"] == "workflow_run" and r["outcome"]]
+    ended = await outcome_texts(rt, await RunStore(EngineTransactions(rt.db)).many(runs)) if runs else {}
+    listed = paged([row_view(r, who, titles, details, ended) for r in found.rows], found.total, q.page, q.pageSize)
     return ok(listed | {"facets": {"kind": found.by_kind, "status": found.by_status}})

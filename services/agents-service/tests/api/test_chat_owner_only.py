@@ -38,7 +38,8 @@ def reader(policies: dict[str, Any] | None) -> dict[str, str]:
 @pytest.fixture(autouse=True)
 async def chat_reader_role(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fetch(_t: str, _v: int, _ids: list[str]) -> dict[str, Iterable[Grant]]:
-        return {"chat_reader": [("chat", "view", "all")]}
+        # Activity's chat rows are read by this role too, so it holds the activity list's cell.
+        return {"chat_reader": [("chat", "view", "all"), ("activity", "view", "all")]}
 
     monkeypatch.setattr(DEFAULT, "grids", Grids(fetch=fetch))
     await DEFAULT.grids.load(TENANT, 1, ["chat_reader"])

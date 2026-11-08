@@ -151,6 +151,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
     // A lone child reads as the section's only page, so the parent page gets its own sub-row beside it and the row that lights is always a sub-row.
     // A page the person's roles do not open is not offered (lib/nav.ts `needs`).
     const children = item.children?.filter((c) => allows(c.needs) === true);
+    if (allows(item.needs) !== true && !children?.length) return null;
     const parentSubRow = children?.length === 1;
     const subRows = parentSubRow && children ? [{ title: item.tabTitle ?? item.title, url: item.url, icon: item.tabIcon }, ...children] : (children ?? []);
     const active = onParentPage && !parentSubRow;
