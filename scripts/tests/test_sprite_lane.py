@@ -80,7 +80,7 @@ def test_up_wakes_an_existing_box_and_does_not_create_another(tmp_path: Path) ->
     result = run(tmp_path, "up", "ops-ai-box-1", "main", box=("ops-ai-box-1", "cold"))
     assert result.returncode == 0, result.stderr
     assert "create" not in result.log
-    assert "config update -o chanl -s ops-ai-box-1 --url-auth sprite" in result.log
+    assert "config update -o chanl -s ops-ai-box-1 --url-auth public" in result.log
     assert "BRANCH=main OPS_PUBLIC_ORIGIN=https://b-x.sprites.app" in result.log
 
 
