@@ -14,7 +14,7 @@ need = $(if $($(1)),,$(error make $@: give $(1)=, e.g. $(2)))
 	chat-approve chat-reject chat-submit chat-transcript chat-transcripts \
 	kb-bases kb-show kb-documents kb-sources kb-source kb-items kb-add-file kb-add-text kb-sync kb-search kb-changes \
 	kb-change \
-	apps-list apps-show apps-on apps-add-tool apps-accounts apps-mine apps-connect apps-test apps-auth-configs \
+	apps-list apps-show apps-on apps-add-tool apps-accounts apps-mine connectors-list connectors-disconnect apps-connect apps-test apps-auth-configs \
 	tools-list tools-show tools-run tools-calls tools-call \
 	runs-list runs-start runs-show runs-events runs-cancel runs-retry tasks-list tasks-show tasks-decide \
 	cases-list cases-show cases-note files-list files-show files-upload documents-types documents-type \
@@ -24,10 +24,10 @@ need = $(if $($(1)),,$(error make $@: give $(1)=, e.g. $(2)))
 
 ##@ Chat (ops chat)
 
-chat: ## make chat AS=james AGENT='Case helper' SAY='…' [THREAD=th_…] [TEST=1] [KB=kb_…] [CONNECTED=Salesforce]: chat turns streamed, tool calls and the call log printed
+chat: ## make chat AS=james AGENT='Case helper' SAY='…' [THREAD=th_…] [TEST=1] [KB=kb_…] [CONNECTOR=GitHub] [CONNECTED=Salesforce]: chat turns streamed, tool calls and the call log printed
 	@$(if $(SAY)$(CONNECTED),,echo "make chat: give SAY='…' or CONNECTED=<app>" >&2; exit 2)
 	@$(OPS_CLI) chat $(OPS_AS) say $(if $(AGENT),--agent '$(AGENT)') $(if $(THREAD),--thread $(THREAD)) $(if $(TEST),--test) \
-		$(if $(KB),--kb $(KB)) $(if $(SAY),-m '$(SAY)') $(if $(CONNECTED),--connected '$(CONNECTED)')
+		$(if $(KB),--kb $(KB)) $(if $(CONNECTOR),--connector '$(CONNECTOR)') $(if $(SAY),-m '$(SAY)') $(if $(CONNECTED),--connected '$(CONNECTED)')
 chat-script: ## make chat-script FILE=docs/usecases/chat/<x>.yaml AS=james: a scripted conversation, PASS or FAIL per turn
 	$(call need,FILE,FILE=docs/usecases/chat/salesforce-case-helper.yaml)
 	@$(OPS_CLI) chat $(OPS_AS) script '$(FILE)'
@@ -149,8 +149,13 @@ apps-on: ## make apps-on APP=… [PLACE=] [WHOSE=each|team|person] [NO_ASSISTANT
 apps-accounts: ## make apps-accounts APP=… AS=admin: an app's accounts
 	$(call need,APP,APP=plugin:opsai.salesforce)
 	@$(OPS_CLI) apps $(OPS_AS) accounts '$(APP)'
-apps-mine: ## make apps-mine AS=james: My accounts
+apps-mine: ## make apps-mine AS=james: your own sign-ins, one row per account
 	@$(OPS_CLI) apps $(OPS_AS) mine
+connectors-list: ## make connectors-list AS=priya: Connectors › Mine, one row per app that acts as you
+	@$(OPS_CLI) connectors $(OPS_AS) list
+connectors-disconnect: ## make connectors-disconnect APP=GitHub [ACCOUNT=] AS=priya: end your own sign-in on an app
+	$(call need,APP,APP=GitHub)
+	@$(OPS_CLI) connectors $(OPS_AS) disconnect '$(APP)' $(if $(ACCOUNT),--account $(ACCOUNT))
 apps-connect: ## make apps-connect APP=… [ACCOUNT=] [TEAM_ACCOUNT=1] AS=james: print the sign-in link that connects an account
 	$(call need,APP,APP=plugin:opsai.salesforce)
 	@$(OPS_CLI) apps $(OPS_AS) connect '$(APP)' $(if $(ACCOUNT),--account $(ACCOUNT)) $(if $(TEAM_ACCOUNT),--team-account)

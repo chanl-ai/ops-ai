@@ -417,6 +417,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/tools-service/per-person-sign-in.md` | uc-558: people connect their own Salesforce account; a call acts as the person who asked |
 | `usecases/tools-service/agents-query-salesforce-many-ways.md` | uc-581: an agent queries Salesforce seven ways, a page at a time, and nothing it types changes a query |
 | `usecases/tools-service/meeting-log-saves-both-or-neither.md` | uc-668: a meeting log saves the client's opportunity and its note together, or neither |
+| `usecases/tools-service/connectors-for-people.md` | uc-671: connectors for people: one row per app, an app off for the team, a per-chat connector set |
 | `usecases/tools-service/a-team-turns-on-the-salesforce.md` | uc-564: a team turns on the Salesforce plugin; its agents work cases and cite its articles |
 | `usecases/tools-service/plugin-sign-in-methods.md` | uc-588: a developer's plugin signs in every way a system asks (none, API key, password, token, OAuth client, each person, client certificate) |
 | `usecases/tools-service/plugin-sign-in-with-a-certificate.md` | uc-583: a team connects a system that allows only certificate sign-in (an Entra app's signed assertion, a Google or DocuSign signed JWT grant) |

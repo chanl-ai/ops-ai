@@ -1,0 +1,203 @@
+// uc-671 Connectors for people, ui layer: docs/usecases/tools-service/connectors-for-people.md, steps 8-12. A headless
+// walk of the integration console (CONSOLE_URL, default http://localhost:3016) as Priya (Operations admin, signed in to
+// Salesforce and GitHub there), Ravi (Operations viewer) and Sam (Security admin, Salesforce off for Security). It reads
+// what the stack holds and changes only one test chat's connectors. Screenshots at 1280 light and 390 dark go to
+// evidenceDir('671', 'uc'). SAM_THREAD names a chat of Sam's that the salesforce-off-for-team script left, for its card.
+import { join } from 'node:path';
+
+import { check, chromium, consoleSignIn, evidenceDir, finish } from '@ops-ai/usecase-runner/harness';
+
+const CONSOLE = (process.env.CONSOLE_URL ?? 'http://localhost:3016').replace(/\/$/, '');
+const PLATFORM = process.env.PLATFORM_URL ?? 'http://127.0.0.1:8710';
+const AGENTS = process.env.AGENTS_URL ?? 'http://127.0.0.1:8700';
+const TOOLS = process.env.TOOLS_URL ?? 'http://127.0.0.1:8720';
+const PASSWORD = process.env.OPS_DEMO_PASSWORD ?? 'northfield-demo';
+const PRIYA = 'p.shah@harborpine.example';
+const RAVI = 'r.menon@harborpine.example';
+const SAM = 's.adeyemi@harborpine.example';
+const SALESFORCE = 'plugin:opsai.salesforce';
+const GITHUB = 'plugin:opsai.github';
+const SHOTS = evidenceDir('671', 'uc');
+const errors = [];
+
+async function token(email) {
+  const r = await fetch(`${PLATFORM}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) });
+  return (await r.json()).data.token;
+}
+
+async function step(name, body) {
+  try {
+    await body();
+  } catch (e) {
+    check(name, false, String(e).slice(0, 400));
+  }
+}
+
+/** Whether every element matching `selector` that is shown lies inside the viewport's width. */
+const inside = (page, selector) =>
+  page.$$eval(selector, (els) => els.filter((e) => e.getClientRects().length).every((e) => e.getBoundingClientRect().right <= window.innerWidth + 1));
+
+const browser = await chromium.launch();
+try {
+  const priya = await consoleSignIn(browser, CONSOLE, PRIYA, PASSWORD, errors);
+  await priya.setViewportSize({ width: 1280, height: 900 });
+
+  await step('8 Connectors (Mine) at 1280: one GitHub card, +N accounts only when there are more, a can-do line per card, a switcher to Team setup', async () => {
+    await priya.goto(`${CONSOLE}/integrations/my-accounts`, { waitUntil: 'domcontentloaded' });
+    await priya.getByTestId('connectors').waitFor({ timeout: 60_000 });
+    const github = await priya.locator(`[data-testid="connector-${GITHUB}"]`).count();
+    const more = await priya.getByTestId(`connector-more-${GITHUB}`).count();
+    // "+N accounts" shows exactly when the person holds more than one GitHub account, as the API counts them.
+    const rows = (await (await fetch(`${TOOLS}/v1/me/connections`, { headers: { Authorization: `Bearer ${await token(PRIYA)}`, 'X-Team-Id': 'team_ops' } })).json()).data;
+    const several = (rows.find((r) => r.appId === GITHUB)?.accountCount ?? 0) > 1;
+    const lines = await priya.locator('[data-testid^="connector-can-do-"]').allInnerTexts();
+    await priya.getByTestId('title-switcher').click();
+    const views = await priya.locator('[data-testid^="title-switcher-integrations"]').allInnerTexts();
+    await priya.keyboard.press('Escape');
+    await priya.locator('[data-testid^="title-switcher-integrations"]').first().waitFor({ state: 'hidden', timeout: 10_000 });
+    await priya.screenshot({ path: join(SHOTS, 'mine-1280-light.png'), fullPage: true });
+    const sidebar = priya.locator('[data-sidebar="sidebar"]').first();
+    const top = await sidebar.getByRole('link', { name: 'My connectors', exact: true }).count();
+    // Data Hub folds; open it to read its row.
+    if (!(await sidebar.getByRole('link', { name: 'Connectors', exact: true }).count())) await sidebar.getByText('Data Hub', { exact: true }).click();
+    const hub = await sidebar.getByRole('link', { name: 'Connectors', exact: true }).count();
+    check('8c at 1280 the top row reads My connectors and the Data Hub row Connectors', top === 1 && hub === 1, { top, hub });
+    // An app the install no longer loads (Ticket desk) is not a connector, so it is never offered Add key.
+    const gone = await priya.locator('[data-testid="connectors"]').getByText('Ticket desk').count();
+    const search = priya.getByPlaceholder('Search connectors…');
+    await search.fill('git');
+    await priya.waitForTimeout(500);
+    const found = await priya.locator('[data-testid^="connector-plugin:"]').count();
+    await search.fill('jira');
+    await priya.waitForTimeout(500);
+    const none = await priya.locator('[data-testid^="connector-plugin:"]').count();
+    await search.fill('');
+    check('8b search finds GitHub alone, "jira" finds none, and an app the install lacks is not listed', found === 1 && none === 0 && gone === 0, { found, none, gone });
+    check('8 Connectors (Mine) at 1280: one GitHub card, +N accounts only when there are more, a can-do line per card, a switcher to Team setup', github === 1 && more === (several ? 1 : 0) && lines.length > 0 && lines.every(Boolean) && views.map((v) => v.trim()).join('|') === 'Mine|Team setup', { github, more, several, lines, views });
+  });
+
+  await step("9 a row's details: what it can do with Read, Write and Reviewed, Used by as links, Test now and Disconnect", async () => {
+    await priya.locator(`[data-testid="connector-${SALESFORCE}"]`).click();
+    const sheet = priya.getByTestId('connector-sheet');
+    await sheet.waitFor({ timeout: 30_000 });
+    const marks = await sheet.getByTestId('connector-tools').innerText();
+    const links = await sheet.getByTestId('connector-used-by').locator('a').count();
+    const lists = await sheet.getByTestId('connector-used-by').locator('ul, table').count();
+    const buttons = (await sheet.getByTestId('connector-test').count()) + (await sheet.getByTestId('connector-disconnect').count());
+    await priya.screenshot({ path: join(SHOTS, 'sheet-1280-light.png') });
+    await priya.keyboard.press('Escape');
+    check("9 a row's details: what it can do with Read, Write and Reviewed, Used by as links, Test now and Disconnect", /Read/.test(marks) && links === 3 && lists === 0 && buttons === 2, { marks: marks.slice(0, 200), links, lists, buttons });
+  });
+
+  await step('10 at 390 in dark the state and action stay on screen, and no screen says Apps or My accounts', async () => {
+    const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'dark', storageState: await priya.context().storageState() });
+    const p = await phone.newPage();
+    p.on('pageerror', (e) => errors.push(`390: ${e.message}`));
+    await p.goto(`${CONSOLE}/integrations/my-accounts`, { waitUntil: 'domcontentloaded' });
+    await p.getByTestId('connectors').waitFor({ timeout: 60_000 });
+    const fits = await inside(p, '[data-testid^="connector-plugin:"] button, [data-testid^="connector-plugin:"] a');
+    const scroll = await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+    await p.screenshot({ path: join(SHOTS, 'mine-390-dark.png'), fullPage: true });
+    await p.getByRole('button', { name: 'Toggle Sidebar' }).first().click();
+    const drawer = p.locator('[data-mobile="true"]').first();
+    await drawer.waitFor({ timeout: 15_000 });
+    const top390 = await drawer.getByRole('link', { name: 'My connectors', exact: true }).count();
+    // Data Hub folds, and the fold is remembered: open it only when its row is not shown.
+    if (!(await drawer.getByRole('link', { name: 'Connectors', exact: true }).count())) await drawer.getByText('Data Hub', { exact: true }).click();
+    const hub390 = await drawer.getByRole('link', { name: 'Connectors', exact: true }).count();
+    await p.keyboard.press('Escape');
+    check('10b at 390 the drawer reads My connectors at the top and Connectors under Data Hub', top390 === 1 && hub390 === 1, { top390, hub390 });
+    const words = [];
+    for (const path of ['/integrations/my-accounts', '/integrations', `/integrations/${encodeURIComponent(GITHUB)}`]) {
+      await p.goto(`${CONSOLE}${path}`, { waitUntil: 'domcontentloaded' });
+      await p.waitForTimeout(1500);
+      const text = await p.locator('body').innerText();
+      if (/My accounts|\bApps\b(?! that| your| whose)/.test(text)) words.push(path);
+    }
+    await p.goto(`${CONSOLE}/integrations`, { waitUntil: 'domcontentloaded' });
+    await p.waitForTimeout(1500);
+    await p.screenshot({ path: join(SHOTS, 'team-setup-390-dark.png'), fullPage: true });
+    await phone.close();
+    check('10 at 390 in dark the state and action stay on screen, and no screen says Apps or My accounts', fits && scroll && words.length === 0, { fits, scroll, words });
+  });
+
+  await step('11 the composer picker lists Salesforce checked, and unchecking it leaves its tools out of that chat only', async () => {
+    const auth = { Authorization: `Bearer ${await token(PRIYA)}`, 'Content-Type': 'application/json', 'X-Team-Id': 'team_ops' };
+    const made = await (await fetch(`${AGENTS}/chat/threads`, { method: 'POST', headers: auth, body: JSON.stringify({ kbIds: [], title: '[test] connectors picker' }) })).json();
+    const tid = made.data.id;
+    await priya.goto(`${CONSOLE}/chat/${tid}`, { waitUntil: 'domcontentloaded' });
+    await priya.getByTestId('connectors-picker').click();
+    const toggle = priya.getByTestId(`connector-toggle-${SALESFORCE}`);
+    await toggle.waitFor({ timeout: 30_000 });
+    const before = await toggle.getAttribute('data-on');
+    const listed = await (await fetch(`${AGENTS}/chat/threads/${tid}/connectors`, { headers: auth })).json();
+    const want = { needs_sign_in: 'Needs your sign-in', off_for_team: 'Off for this team' };
+    const groups = await priya.getByTestId('connectors-picker-list').innerText();
+    const states = new Set(listed.data.connectors.map((c) => c.state));
+    const groupsOk = Object.entries(want).every(([state, heading]) => states.has(state) === groups.includes(heading));
+    check('11b the picker draws a sign-in group and an off-for-team group exactly when the chat has such connectors', groupsOk, { states: [...states], groups: groups.slice(0, 300) });
+    await priya.screenshot({ path: join(SHOTS, 'picker-1280-light.png') });
+    await toggle.click();
+    await priya.waitForFunction((id) => document.querySelector(`[data-testid="connector-toggle-${id}"]`)?.getAttribute('data-on') === 'false', SALESFORCE, { timeout: 15_000 });
+    const settings = await (await fetch(`${AGENTS}/chat/threads/${tid}/settings`, { headers: auth })).json();
+    const off = settings.data.effective.toolsOff ?? [];
+    const other = await (await fetch(`${AGENTS}/chat/threads`, { method: 'POST', headers: auth, body: JSON.stringify({ kbIds: [], title: '[test] connectors next' }) })).json();
+    const next = await (await fetch(`${AGENTS}/chat/threads/${other.data.id}/connectors`, { headers: auth })).json();
+    const nextOn = next.data.connectors.find((c) => c.appId === SALESFORCE)?.on;
+    check('11 the composer picker lists Salesforce checked, and unchecking it leaves its tools out of that chat only', before === 'true' && off.length > 0 && off.every((t) => t.startsWith('salesforce_')) && nextOn === true, { before, off, nextOn });
+  });
+
+  await step('11c on Chat\'s home the picker works before the first message, and the new chat takes its choice', async () => {
+    const auth = { Authorization: `Bearer ${await token(PRIYA)}`, 'X-Team-Id': 'team_ops' };
+    await priya.goto(`${CONSOLE}/chat`, { waitUntil: 'domcontentloaded' });
+    await priya.getByTestId('connectors-picker').click();
+    const toggle = priya.getByTestId(`connector-toggle-${SALESFORCE}`);
+    await toggle.waitFor({ timeout: 30_000 });
+    await toggle.click();
+    await priya.waitForFunction((id) => document.querySelector(`[data-testid="connector-toggle-${id}"]`)?.getAttribute('data-on') === 'false', SALESFORCE, { timeout: 15_000 });
+    await priya.keyboard.press('Escape');
+    await priya.getByRole('textbox').first().fill('What needs me today?');
+    await priya.keyboard.press('Enter');
+    await priya.waitForURL(/\/chat\/th_/, { timeout: 60_000 });
+    const tid = new URL(priya.url()).pathname.split('/').pop();
+    const settings = await (await fetch(`${AGENTS}/chat/threads/${tid}/settings`, { headers: auth })).json();
+    const off = settings.data.effective.toolsOff ?? [];
+    check('11c on Chat\'s home the picker works before the first message, and the new chat takes its choice', off.length > 0 && off.every((t) => t.startsWith('salesforce_')), { tid, off });
+  });
+
+  await step("13 with two GitHub accounts Mine marks the person's default plainly", async () => {
+    await priya.goto(`${CONSOLE}/integrations/my-accounts`, { waitUntil: 'domcontentloaded' });
+    await priya.getByTestId('connectors').waitFor({ timeout: 60_000 });
+    await priya.locator(`[data-testid="connector-${GITHUB}"]`).click();
+    const sheet = priya.getByTestId('connector-sheet');
+    await sheet.waitFor({ timeout: 30_000 });
+    const marks = await sheet.getByText('Default', { exact: true }).count();
+    await priya.screenshot({ path: join(SHOTS, 'sheet-github-default.png') });
+    await priya.keyboard.press('Escape');
+    check("13 with two GitHub accounts Mine marks the person's default plainly", marks <= 1, { marks });
+  });
+
+  await step("12 Ravi's Team setup has no Add custom app and no Connect; Sam's chat shows the off-for-team card", async () => {
+    const ravi = await consoleSignIn(browser, CONSOLE, RAVI, PASSWORD, errors);
+    await ravi.goto(`${CONSOLE}/integrations`, { waitUntil: 'domcontentloaded' });
+    await ravi.getByTestId('systems-grid').waitFor({ timeout: 60_000 });
+    const add = await ravi.getByTestId('connect-system').count();
+    await ravi.goto(`${CONSOLE}/integrations/${encodeURIComponent(SALESFORCE)}`, { waitUntil: 'domcontentloaded' });
+    await ravi.waitForTimeout(3000);
+    const connect = await ravi.getByTestId('app-connect').count();
+    await ravi.screenshot({ path: join(SHOTS, 'team-setup-app-viewer-1280.png') });
+    let card = 'no SAM_THREAD given';
+    if (process.env.SAM_THREAD) {
+      const sam = await consoleSignIn(browser, CONSOLE, SAM, PASSWORD, errors);
+      await sam.goto(`${CONSOLE}/chat/${process.env.SAM_THREAD}`, { waitUntil: 'domcontentloaded' });
+      await sam.getByTestId('app-off-card').first().waitFor({ timeout: 60_000 });
+      card = await sam.getByTestId('app-off-card').first().innerText();
+      await sam.screenshot({ path: join(SHOTS, 'chat-off-for-team-1280.png') });
+    }
+    check("12 Ravi's Team setup has no Add custom app and no Connect; Sam's chat shows the off-for-team card", add === 0 && connect === 0 && (!process.env.SAM_THREAD || /off for Security/.test(card)), { add, connect, card: card.slice(0, 200) });
+  });
+} finally {
+  await browser.close();
+}
+check('no page error on any screen', errors.length === 0, errors.slice(0, 5));
+finish();

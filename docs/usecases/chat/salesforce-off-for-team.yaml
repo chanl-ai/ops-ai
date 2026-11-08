@@ -1,0 +1,15 @@
+# An app the team has off, in chat: Sam's team (Security) has Salesforce installed and off. Asked for his cases, the
+# assistant draws the card that asks a team admin to turn it on, with one sentence under it and no error code, instead
+# of a sentence with nothing to press. Real model, at most three steps.
+# make chat-script FILE=docs/usecases/chat/salesforce-off-for-team.yaml AS=sam
+as: [sam]
+real: [sam]
+turns:
+  - say: "Show me my open Salesforce cases"
+    expect:
+      card: app_off
+      tool: request_app
+      noErrorCode: true
+      endsClean: true
+      never: ["token", "password"]
+      maxSteps: 3
