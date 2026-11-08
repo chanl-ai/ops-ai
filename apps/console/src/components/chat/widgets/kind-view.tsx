@@ -173,7 +173,8 @@ function TableKind({ node, truncatedFrom }: { node: TableNode; truncatedFrom?: n
         // One record reads as its fields; a one-row grid has nothing to compare.
         <dl className="grid grid-cols-[minmax(0,9rem)_1fr] gap-x-4 gap-y-2 px-2 py-2 text-sm" data-testid="widget-record">
           {cols
-            .filter((c) => hidden[c.key] !== false)
+            // Ids are details read once: the record view leaves them out, as the table keeps them behind View.
+            .filter((c) => hidden[c.key] !== false && !reading.hidden.includes(c.key))
             .map((c) => (
               <React.Fragment key={c.key}>
                 <dt className="text-muted-foreground">{c.label}</dt>
