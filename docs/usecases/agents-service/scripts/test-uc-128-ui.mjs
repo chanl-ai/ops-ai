@@ -1,6 +1,6 @@
 // uc-128 chat starts on the team's default agent, ui layer: docs/usecases/agents-service/team-default-agent.md.
 // The scripted agents service with platform sign-in: James is a builder of team_ops, Priya its admin.
-import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const PASSWORD = 'northfield-demo';
@@ -76,7 +76,7 @@ await withUiStack(
       const sent = armed(priya.waitForResponse((r) => r.request().method() === 'POST' && /\/messages$/.test(r.url()), { timeout: 120_000 }));
       await box.fill('Can I dispute a charge?');
       await priya.getByRole('button', { name: 'Send', exact: true }).click();
-      await Promise.race([(await sent)?.finished().catch(() => undefined), new Promise((r) => setTimeout(r, 60_000))]);
+      await replyDone(await sent, 60_000);
       const credit = await priya.getByTestId('reply-agent').last().innerText({ timeout: 60_000 }).catch(() => '');
       await notice.getByRole('button', { name: 'Back to Branch Concierge' }).click();
       const gone = await notice.waitFor({ state: 'detached', timeout: 30_000 }).then(() => true, () => false);

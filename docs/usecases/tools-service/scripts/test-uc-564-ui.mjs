@@ -13,7 +13,7 @@ import { request } from 'node:https';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, KB_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, KB_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
 import { writeApprovalsOn } from '../../lib/workflow_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -182,7 +182,7 @@ try {
           const sent = armed(page.waitForResponse((r) => r.request().method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url()), { timeout: 120_000 }));
           await page.getByRole('button', { name: 'Send', exact: true }).click();
           const res = await sent;
-          await Promise.race([res?.finished().catch(() => undefined), new Promise((r) => setTimeout(r, 60_000))]);
+          await replyDone(res, 60_000);
         };
         const caseEdits = async () => (await fakeState()).edits.filter((e) => e.id === CASE_ID);
 

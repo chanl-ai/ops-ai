@@ -2,7 +2,7 @@
 // docs/usecases/console/chat-act-in-thread.md. Scripted model only; signed in through platform-service as Maya. The
 // Wire Fraud Sentinel answers from its knowledge with a citation, drafts a wire hold that waits for approval; Maya
 // approves it in the thread after a step-up and the thread resumes; a second hold she rejects with a reason.
-import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const MAYA = 'm.okafor@harborpine.example';
@@ -42,7 +42,7 @@ await withUiStack(
         const sent = armed(page.waitForResponse((r) => r.request().method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url()), { timeout: 120_000 }));
         await page.getByRole('button', { name: 'Send', exact: true }).click();
         const res = await sent;
-        await Promise.race([res?.finished().catch(() => undefined), new Promise((r) => setTimeout(r, 60_000))]);
+        await replyDone(res, 60_000);
       };
 
       await send('What is the daily wire limit for a personal account?');

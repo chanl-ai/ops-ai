@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, chromium, evidenceDir, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const files = `http://127.0.0.1:${FILES_PORT}`;
@@ -77,7 +77,7 @@ await withUiStack(
       const sent = armed(page.waitForResponse((r) => r.request().method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url()), { timeout: 120_000 }));
       await page.getByRole('button', { name: 'Send', exact: true }).click();
       const res = await sent;
-      await Promise.race([res?.finished().catch(() => undefined), new Promise((r) => setTimeout(r, 120_000))]);
+      await replyDone(res, 120_000);
       await page.getByText('SYN-2026-0006').first().waitFor({ timeout: 60_000 }).catch(() => undefined);
       await page.screenshot({ path: join(SHOTS, 'chat-1440.png'), fullPage: true });
 

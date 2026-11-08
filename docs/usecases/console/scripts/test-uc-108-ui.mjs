@@ -2,7 +2,7 @@
 // docs/usecases/console/chat-budget-continue.md. Signed in through platform-service. An agent whose conversations may
 // make one model call: James's second message pauses on a budget card with the server's numbers, he continues and the
 // turn answers; Priya, a team admin, raises the budget on her own chat; the wrong person is refused on each action.
-import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const NAME = `Budget Desk ${Math.random().toString(36).slice(2, 6)}`;
@@ -27,7 +27,7 @@ async function send(page, text) {
   const sent = armed(page.waitForResponse((r) => r.request().method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url()), { timeout: 120_000 }));
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   const res = await sent;
-  await Promise.race([res?.finished().catch(() => undefined), new Promise((r) => setTimeout(r, 60_000))]);
+  await replyDone(res, 60_000);
 }
 
 await withUiStack(

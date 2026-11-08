@@ -3,7 +3,7 @@
 // ag_advisor with the output schema {customerId, summary}; the demo fake-OpenAI rules script both turns. Signed in
 // through platform-service as James. UC084_UNGRANTED=1 drops the workflow from ag_advisor's tools first, so search
 // finds nothing and the checks must fail. A workflow runner worker takes the run.
-import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const JAMES = 'j.richardson@harborpine.example';
@@ -69,7 +69,7 @@ await withUiStack(
       const sent = armed(page.waitForResponse((r) => r.request().method() === 'POST' && /\/chat\/threads\/[^/]+\/messages$/.test(r.url()), { timeout: 120_000 }));
       await page.getByRole('button', { name: 'Send', exact: true }).click();
       const res = await sent;
-      await Promise.race([res?.finished().catch(() => undefined), new Promise((r) => setTimeout(r, 120_000))]);
+      await replyDone(res, 120_000);
 
       const cards = page.getByTestId('chat-tool-call');
       await cards.first().waitFor({ timeout: 60_000 }).catch(() => {});

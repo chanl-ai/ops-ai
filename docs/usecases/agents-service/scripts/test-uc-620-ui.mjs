@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, PLATFORM_PORT, ROOT, check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, ROOT, check, chromium, consoleSignIn, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const JAMES = 'j.richardson@harborpine.example';
@@ -61,7 +61,7 @@ await withUiStack(
         await page.getByRole('button', { name: 'Send', exact: true }).click();
         // The reply streams; its end is waited for at most a minute, as the page shows it on its own.
         const res = await sent;
-        await Promise.race([res.finished().catch(() => undefined), new Promise((r) => setTimeout(r, 60_000))]);
+        await replyDone(res, 60_000);
         const answered = await page.getByText('is Marcus Bell, held for 3,250.00').last().waitFor({ timeout: 60_000 }).then(() => true, () => false);
         const stored = (await data(await call(`${agents}/chat/threads/${tid}`, { headers: J }))).messages;
         const asked = stored.find((m) => m.role === 'user');
@@ -101,7 +101,11 @@ await withUiStack(
       });
 
       await step('11 a type chat cannot read is refused on the chip in plain words', async () => {
+        // The composer refuses a type itself only once the upload limits have loaded; before that the server's refusal shows.
+        const limits = page.waitForResponse((r) => /\/v1\/files\/limits/.test(r.url()), { timeout: 60_000 }).catch(() => undefined);
         await page.goto(`${consoleUrl}/chat/${tid}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await limits;
+        await page.waitForTimeout(500);
         await page.locator('#chat-attach').setInputFiles({ name: 'photo.png', mimeType: 'image/png', buffer: Buffer.from('\x89PNG\r\n\x1a\n') });
         const chip = chips.locator('[data-phase="error"]').first();
         await chip.waitFor({ timeout: 30_000 });

@@ -2,7 +2,7 @@
 // Signed in through platform-service as the seeded people; tools-service reads the fake bank over https, and the agents
 // service (scripted model, no provider) takes its tools from tools-service. Each step is checked on its own, so one
 // failing step still lets the later ones report.
-import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
 import { grantTools, openHeldChatWrite, writeApprovalsOn } from '../../lib/workflow_ui.mjs';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -49,7 +49,7 @@ async function chat(page, consoleUrl, text) {
   await page.locator('button[aria-label="Send"]').click();
   const res = await sent;
   // The reply streams; wait for its end, but never past 60 s, so a stream that stays open cannot hang the run.
-  await Promise.race([res?.finished().catch(() => undefined), new Promise((r) => setTimeout(r, 60_000))]);
+  await replyDone(res, 60_000);
   return res;
 }
 
