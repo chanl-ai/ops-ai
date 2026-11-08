@@ -1,0 +1,14 @@
+# The core UI use cases: one per main journey, run on every change by `make uc-impacted` beside the ones the change
+# touches. One id per line, then what it covers. Keep it near a dozen: each adds two to three minutes.
+uc-021  sign in, session, refresh and sign out
+uc-469  landing on Chat, approving a Human Task from its card and seeing the run go on
+uc-074  a chat answer with citations and a tool call
+uc-057  a chat write held for approval, listed in Reviews and approved there
+uc-558  a Salesforce read that acts as the person who asked
+uc-607  connecting an app from the catalog
+uc-218  a reviewer deciding a publish request
+uc-216  a viewer reading the team's work and changing none of it
+uc-112  the Files page: views, search, download and delete
+uc-152  the settings pages and their sidebar
+uc-139  the cases list and a case's timeline
+uc-018  creating, publishing and chatting with an agent

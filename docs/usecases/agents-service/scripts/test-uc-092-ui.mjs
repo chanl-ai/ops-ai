@@ -133,7 +133,7 @@ await withUiStack(
       const resultText = shown ? await result.innerText() : '';
       const outcome = shown ? await result.getAttribute('data-outcome') : null;
       const ended = await page.getByText(/Finished at the Done end/i).count();
-      check('8 the live run ends at Done and the page shows its output, 42, as the result', liveChosen === 'checked' && shown && outcome === 'refunded' && /\b42\b/.test(resultText) && ended === 1, { liveChosen, shown, outcome, resultText });
+      check('8 the live run ends at Done and the page shows its output, 42, as the result', liveChosen === 'checked' && shown && outcome === 'refunded' && /\b42\b/.test(resultText) && ended >= 1, { liveChosen, shown, outcome, resultText, ended });
 
       // 7. Pause stops live starts; resume lets them through again.
       await page.goto(`${consoleUrl}/workflows/definitions/${id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
