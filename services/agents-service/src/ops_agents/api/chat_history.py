@@ -5,6 +5,7 @@ it made, so a follow-up keeps the skill and answers from the records already rea
 from __future__ import annotations
 
 import json
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from ops_agent_kernel.plan import from_part as plan_from_part
@@ -42,3 +43,35 @@ def history_entry(m: ChatMessage) -> dict[str, Any]:
     if drawn is not None and (left := plan_from_part(drawn.wire())) is not None:
         entry["plan"] = left
     return entry
+
+
+# History compaction: past COMPACT_AFTER messages, the oldest whole tens are summarised into one first message and the
+# rest are sent as they are; the summary is kept on the thread and made again only when ten more messages pass.
+COMPACT_AFTER = 20
+COMPACT_STEP = 10
+SUMMARY_LEAD = "Summary of the earlier conversation:"
+SUMMARY_PROMPT = (
+    "Summarise this conversation for the assistant that continues it: who asked what, what was found and decided, "
+    "and what is still open, in at most 200 words of plain sentences. Keep names and figures; leave out ids, links "
+    "and anything about how the tools were called."
+)
+
+
+async def compacted(
+    history: list[dict[str, Any]],
+    held: dict[str, Any] | None,
+    summarize: Callable[[str], Awaitable[str]],
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    """The history the turn reads, and the summary to keep on the thread when a new one was made (None otherwise). The
+    summary is built from the messages' text only, never their reads, skills or plans."""
+    if len(history) <= COMPACT_AFTER:
+        return history, None
+    upto = (len(history) - COMPACT_STEP) // COMPACT_STEP * COMPACT_STEP
+    made: dict[str, Any] | None = None
+    if held is not None and held.get("upto") == upto and held.get("text"):
+        text = str(held["text"])
+    else:
+        transcript = "\n".join(f"{m['role']}: {m['content']}" for m in history[:upto] if m.get("content"))
+        text = (await summarize(transcript)).strip()
+        made = {"upto": upto, "text": text}
+    return [{"role": "assistant", "content": f"{SUMMARY_LEAD} {text}"}, *history[upto:]], made

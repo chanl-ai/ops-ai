@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "Long chats stay quick",
+  "description": "In a long chat the assistant reads the older turns as a short summary, made again every ten messages, so replies stay quick and the chat keeps its thread.",
+  "tag": "new"
+}

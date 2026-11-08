@@ -18,6 +18,7 @@ from typing import Annotated, Any, TypeAlias, cast
 from fastapi import APIRouter, Body, Depends, Query, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import TypeAdapter
+from pydantic_ai import Agent
 from sse_starlette import EventSourceResponse
 
 from ops_access import can
@@ -62,6 +63,7 @@ from ops_service_kit.errors import (
 from ops_service_kit.errors import ServiceUnavailable as Unavailable
 from ops_service_kit.http import Envelope
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.logging import get_logger
 
 from ...store.events import EventLog
 from ...store.leases import LeaseHeldError
@@ -73,7 +75,7 @@ from ..agent_registry import definition_of, pinned_definition, refuse_new_turns,
 from ..auth import Principal, caller_of, principal, require_chat_use
 from ..chat_attachments import ChatAttachmentReader
 from ..chat_budget import ensure_budget
-from ..chat_history import history_entry
+from ..chat_history import COMPACT_AFTER, SUMMARY_PROMPT, compacted, history_entry
 from ..chat_threads import (
     CHAT_GRAPH,
     NEW_TITLE,
@@ -99,6 +101,7 @@ from ..review_text import tool_titles
 from ..runs import config, execute, graph_store, pending, require_graphs, resolve
 from .agents import changeable
 
+log = get_logger("ops_agents.chat")
 router = APIRouter(prefix="/chat", dependencies=[Depends(principal)])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
@@ -560,6 +563,29 @@ async def _start_run(rt: Runtime, thread_id: str, graph_input: dict[str, Any]) -
     return run_id, row, graph
 
 
+async def _compacted(
+    rt: Runtime, thread_id: str, meta: dict[str, Any], history: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """The history a long thread's turn reads: older turns as one summary, kept on the thread (chat_history.compacted).
+    A summary that cannot be made leaves the history whole."""
+    model = rt.graph_deps.ports.model if rt.graph_deps is not None else None
+    if model is None or len(history) <= COMPACT_AFTER:
+        return history
+
+    async def summarize(text: str) -> str:
+        agent = Agent[None, str](model, deps_type=type(None), output_type=str, instructions=SUMMARY_PROMPT)
+        return (await agent.run(text)).output
+
+    try:
+        shorter, made = await compacted(history, cast(dict[str, Any] | None, meta.get("historySummary")), summarize)
+    except Exception as e:  # a failed summary call: the turn reads the whole history, as before compaction
+        log.warning("history_summary_failed", thread=thread_id, error=type(e).__name__)
+        return history
+    if made is not None:
+        await update_meta(rt, thread_id, historySummary=made)
+    return shorter
+
+
 @router.post("/threads/{thread_id}/messages", response_model=None)
 async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceResponse:
     row = await _thread_row(rt, me, thread_id)
@@ -630,7 +656,7 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         **({"agent_version": agent.version} if pinned is not None else {}),
         **({"test_agent": agent.model_dump(mode="json")} if test else {}),
         "message": question,
-        "history": [history_entry(m) for m in transcript],
+        "history": await _compacted(rt, thread_id, meta, [history_entry(m) for m in transcript]),
         "requested_by": me.email,
     }
     # The settings this turn runs on: the agent's limits, then the thread's overrides, then this message's; a value
