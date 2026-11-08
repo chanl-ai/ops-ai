@@ -53,6 +53,7 @@ export const SITE = [
           { page: 'guide/vendor-onboarding-plugin.md', icon: 'package-plus' },
           { page: 'guide/workflows.md', icon: 'git-branch' },
           { page: 'guide/agents.md', icon: 'bot' },
+          { page: 'guide/ops-assistant.md', icon: 'message-square' },
           { page: 'guide/workflow-example-coverage.md', icon: 'table' },
           { page: 'guide/agent-example-coverage.md', icon: 'table' },
           { page: 'guide/developer-surface-coverage.md', icon: 'table' },

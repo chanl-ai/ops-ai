@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "The assistant reads a save back before it writes",
+  "description": "Before the assistant changes anything in an app it shows the change and writes it only after you say Save; a save also clears what the chat had reused, so the next look reads the app again.",
+  "tag": "improved"
+}

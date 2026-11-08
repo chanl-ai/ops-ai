@@ -70,6 +70,21 @@ a person to approve it first, so testing never changes live data unseen.
 - On the App's **Settings**, **Everyone signs in with their own account** decides whether each person connects their own
   Account. Off, every call runs as the team Account.
 
+## Connectors
+
+**Connectors** in the sidebar shows your own sign-ins.
+
+| Page | What it holds |
+|---|---|
+| My connectors | One card for each App your team turned on: what it can do, who it signs in as, and one action (Connect, Reconnect or Add another account). An App your team has off still has a card, with **Ask an admin** |
+| Team setup | The admin view of the same Apps. Admins change setup here; members see it read-only |
+
+- **Add another account** signs in through the same setup, so a personal and an office login sit side by side. Signing in
+  again as a login already linked updates that account and says **Already connected as ...**.
+- With two accounts of one App and no default, the assistant asks which to use. See
+  [The Ops Assistant](ops-assistant.md).
+- In a chat, the connector picker narrows which Apps that chat may use, before its first message.
+
 ## Auth configs and Secrets
 
 An App's **Auth configs** tab, and **Auth configs** in the sidebar, list the OAuth app each App signs in with: **Ops AI**,
