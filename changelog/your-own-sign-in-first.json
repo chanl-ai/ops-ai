@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Tools you run act as you",
+  "description": "On an app where each person signs in, a tool you start in chat or a run you start now uses your own account, and asks you to connect once if you have none, instead of quietly using the team account. The team account serves only runs nobody started, such as schedules and mailboxes.",
+  "tag": "fix"
+}

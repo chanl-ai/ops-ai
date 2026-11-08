@@ -41,11 +41,6 @@ function stuckParts(reason: string): [string, string] {
 
 /** One run of a v2 workflow, from the runner's journal: its steps with input, output, port, attempts and errors. */
 /** Where the run ended, without repeating the end step's name when its outcome reads the same ("Found: Found"). */
-function endedAt(name: string | null | undefined, outcome: string): string {
-  if (!name) return outcome;
-  return name.trim().toLowerCase() === outcome.trim().toLowerCase() ? `Ended at ${name}` : `Ended at ${name}: ${outcome}`;
-}
-
 const hasValue = (v: unknown): boolean => v != null && !(typeof v === 'object' && Object.keys(v as object).length === 0);
 
 export default function EngineRunPage() {
@@ -177,7 +172,7 @@ export default function EngineRunPage() {
               </Alert>
             )}
             {run.result && (
-              <Section title="Result" description={endedAt(run.result.name, run.outcomeText ?? run.result.outcome)}>
+              <Section title="Result" description={run.outcomeText ?? run.result.outcome}>
                 <div data-testid="run-result" data-outcome={run.result.outcome}>
                   {/* The story below tells what the run did; the result's own fields stay behind Raw. An end with no
                       output shows no value at all rather than "Nothing" above an empty Raw. */}

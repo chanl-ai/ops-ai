@@ -17,6 +17,9 @@ function useMemoryWrite<A, R>(fn: (a: A) => Promise<R>) {
 
 export const useCorrectMemory = () => useMemoryWrite(({ id, value }: { id: string; value: string }) => api.chat.memories.correct(id, value));
 export const useForgetMemory = () => useMemoryWrite((id: string) => api.chat.memories.forget(id));
+/** Yes and No on a suggestion under a reply. */
+export const useConfirmMemory = () => useMemoryWrite((id: string) => api.chat.memories.keep(id));
+export const useDismissMemory = () => useMemoryWrite((id: string) => api.chat.memories.undo(id));
 export const useForgetAgentMemories = () => useMemoryWrite((agentId: string) => api.chat.memories.forgetAgent(agentId));
 /** Export records an audit row, so it is a mutation, not a cached read. */
 export const useExportMemories = () => useMutation({ mutationFn: () => api.chat.memories.exportAll() });

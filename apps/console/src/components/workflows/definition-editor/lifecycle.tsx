@@ -6,9 +6,11 @@ import { Pause, Play, Rocket } from 'lucide-react';
 
 import { LockedReason } from '@/components/shared/locked-reason';
 import { DialogShell } from '@/components/shared/dialog-shell';
+import { CopyId } from '@/components/shared/setting/copy-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { DefinitionStage, DefinitionView } from '@/lib/types/engine';
 import { cn } from '@/lib/utils';
 
@@ -29,7 +31,42 @@ export function StageBadge({ stage, testId }: { stage: DefinitionStage; testId?:
   );
 }
 
-export type Lifecycle = Pick<DefinitionView, 'version' | 'stage' | 'liveVersion' | 'paused' | 'review' | 'startForm'>;
+/**
+ * The version, opening its details for a builder: the digest that pins exactly what runs, which people reading the
+ * page never need in its text.
+ */
+function VersionDetails({ version, digest }: { version: number; digest?: string }) {
+  if (!digest) return <span className="text-muted-foreground">Version {version}</span>;
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button type="button" variant="link" size="sm" className="h-auto p-0 text-muted-foreground" data-testid="definition-version-details">
+          Version {version}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 text-sm" data-testid="definition-version-panel">
+        <p className="font-medium">Version {version}</p>
+        <p className="mt-1 text-xs text-muted-foreground">Runs pin this digest, so a run always replays the exact steps it started on.</p>
+        <div className="mt-2 flex items-center gap-2 text-xs">
+          <span className="text-muted-foreground">Digest</span>
+          <CopyId value={digest} label="digest" />
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** You can view the workflow; the stage shows, and who changes it. */
+export function ViewOnlyLine({ stage }: { stage: DefinitionStage }) {
+  return (
+    <div className="mr-auto flex flex-wrap items-center gap-2 text-sm" data-testid="definition-view-only">
+      <StageBadge stage={stage} testId="definition-stage" />
+      <span className="text-muted-foreground">You can view this workflow; builders change it.</span>
+    </div>
+  );
+}
+
+export type Lifecycle = Pick<DefinitionView, 'version' | 'stage' | 'liveVersion' | 'paused' | 'review' | 'startForm'> & { digest?: string };
 
 /**
  * Where the saved versions stand and what can move them: send the latest draft to Reviews, follow an open request,
@@ -57,7 +94,7 @@ export function LifecycleActions({
   return (
     <>
       <div className="mr-auto flex flex-wrap items-center gap-2 text-sm" data-testid="definition-lifecycle">
-        <span className="text-muted-foreground">Version {version}</span>
+        <VersionDetails version={version} digest={lifecycle.digest} />
         <StageBadge stage={stage} testId="definition-stage" />
         {liveVersion !== null && liveVersion !== version && (
           <span className="text-muted-foreground" data-testid="definition-live-version">

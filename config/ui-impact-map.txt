@@ -1,0 +1,34 @@
+# Which UI use cases a changed path can affect, read by scripts/uc_impacted.py (make uc-impacted).
+#
+#   area | path globs, comma separated | use case ids, space separated (- for none)
+#
+# A path takes the use cases of every area whose glob it matches. An area with `-` names paths that change no UI
+# behaviour (docs, tests, tooling) and wins over the rest; a path no area matches is printed as unmapped, so add it here. The first lists came
+# from the console routes each ui script opens, the most focused scripts first; edit them as scripts change.
+no-ui | docs/**, changelog/**, **/*.md, **/tests/**, **/*.test.ts, scripts/**, make/**, Makefile, deploy/**, sdk/**, examples/**, access-exceptions-allowlist.txt, **/openapi.json, **/uv.lock, pnpm-lock.yaml | -
+access | apps/console/src/app/access/**, apps/console/src/components/access/** | uc-219 uc-143 uc-164
+activity | apps/console/src/app/activity/** | uc-141 uc-403 uc-047
+agents | apps/console/src/app/agents/**, apps/console/src/components/agents/** | uc-018 uc-088 uc-253
+cases | apps/console/src/app/cases/**, apps/console/src/components/cases/** | uc-251 uc-256 uc-460
+channels | apps/console/src/app/channels/**, apps/console/src/components/channels/** | uc-245 uc-136 uc-199
+chat | apps/console/src/app/chat/**, apps/console/src/components/chat/**, apps/console/src/components/ai-elements/**, apps/console/src/lib/reply-order.ts, apps/console/src/lib/chat-*.ts, apps/console/src/lib/widgets/**, services/agents-service/src/ops_agents/api/chat*.py, services/agents-service/src/ops_agents/api/routers/chat.py, services/agents-service/src/ops_agents/graphs/agent_wrapper.py, packages/ops_agent_kernel/** | uc-087 uc-132 uc-074
+connections | apps/console/src/app/connections/**, apps/console/src/components/connections/** | uc-607
+deployments | apps/console/src/app/deployments/**, apps/console/src/components/deployments/** | uc-142
+document-types | apps/console/src/app/document-types/**, apps/console/src/components/document-types/**, services/documents-service/** | uc-243
+files | apps/console/src/app/files/**, apps/console/src/components/files/**, services/files-service/** | uc-112 uc-629 uc-094
+forms | apps/console/src/app/forms/**, apps/console/src/components/forms/** | uc-568
+guardrails | apps/console/src/app/guardrails/**, apps/console/src/components/guardrails/** | uc-104 uc-085 uc-098
+integrations | apps/console/src/app/integrations/**, apps/console/src/components/integrations/** | uc-607 uc-394 uc-590
+knowledge | apps/console/src/app/knowledge/**, apps/console/src/components/knowledge/**, services/kb-service/** | uc-096 uc-129 uc-075
+logs | apps/console/src/app/logs/**, apps/console/src/components/logs/** | uc-025 uc-516
+memory | apps/console/src/components/memory/**, services/agents-service/src/ops_agents/api/memory.py | uc-135
+reviews | apps/console/src/app/reviews/**, apps/console/src/components/reviews/**, apps/console/src/components/tasks/** | uc-460 uc-225 uc-254
+secrets | apps/console/src/components/secrets/** | uc-107
+settings | apps/console/src/app/settings/**, apps/console/src/components/settings/** | uc-152 uc-220 uc-532
+shell | apps/console/src/components/header/**, apps/console/src/components/shell/**, apps/console/src/components/app-sidebar.tsx, apps/console/src/components/site-header.tsx, apps/console/src/app/layout.tsx | uc-264 uc-552
+skills | apps/console/src/app/skills/**, apps/console/src/components/skills/** | uc-106
+tools | apps/console/src/app/tools/**, apps/console/src/components/tools/**, services/tools-service/** | uc-010 uc-628 uc-626
+widgets | apps/console/src/app/widgets/**, apps/console/src/components/widgets/** | uc-103 uc-097 uc-127
+workflows | apps/console/src/app/workflows/**, apps/console/src/components/workflows/** | uc-228 uc-252 uc-400
+platform | services/platform-service/** | uc-023 uc-219
+models | services/models-service/** | uc-532 uc-605

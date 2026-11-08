@@ -86,5 +86,12 @@ def definition_in(source: str | Path | dict[str, Any]) -> Definition:
 def _looks_like_path(source: Any) -> bool:
     if not isinstance(source, str | Path):
         return False
+    # JSON text is data even when it holds a "/" (a date, a ratio); a name the OS cannot stat is never a file.
+    if isinstance(source, str) and source.lstrip().startswith(("{", "[")):
+        return False
     path = Path(source)
-    return path.exists() or (isinstance(source, str) and ("/" in source or source.endswith((".yaml", ".yml", ".json"))))
+    try:
+        exists = path.exists()
+    except OSError:
+        return False
+    return exists or (isinstance(source, str) and ("/" in source or source.endswith((".yaml", ".yml", ".json"))))

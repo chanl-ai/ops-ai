@@ -1,0 +1,18 @@
+# A follow-up reuses what the chat already read, as James with the real model: the same question asked twice makes no
+# second Salesforce read; a read it repeats is answered from the first and its call is labelled "from earlier in this
+# chat". Check the tools-service call log for the thread: one Salesforce read, not two. Asking to check the app again
+# is different: the assistant then reads afresh with a query of its own.
+# Needs the demo records (make demo-org-seed AS=james). Run on demand, not in CI.
+as: [james]
+real: [james]
+turns:
+  - say: "What stage is the Education savings opportunity in?"
+    expect:
+      tool: salesforce_query
+      says: ["Education savings"]
+      maxSteps: 3
+  - say: "What stage is the Education savings opportunity in?"
+    expect:
+      says: ["Education savings"]
+      notTools: [load_skill]
+      maxSteps: 2

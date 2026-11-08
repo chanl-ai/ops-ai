@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Failed app calls explained in plain words",
+  "description": "When a call to an app fails, the assistant says what happened and what to do next instead of repeating an error code. The code stays in the call log for whoever looks into it.",
+  "tag": "improved"
+}

@@ -2,14 +2,15 @@
 set.
 
 When the request offers tools and its last message is the user's, the first rule whose `when` pattern matches that
-message and whose `tool` is offered becomes a tool call with the rule's arguments; a rule with `text` instead answers
-that text (a cited answer, or the not-in-the-knowledge-base reply). A rule with `after` applies once a tool result is
-back: when the assistant's last call was that tool and the result matches `result`, the rule's `tool` call or `text`
-follows, so a turn can chain reads. Named groups in `when` (which sees the knowledge block ahead of the question) and
-`result` fill `{name}` in the text and the arguments: a rule fires only on its evidence and quotes it. With no rule
-matching, the scripted provider's `call <tool> {json}` convention applies. Otherwise the reply is text
-naming the agent from the system prompt (`You are <name>,`) and the gist of the last message, so a caller can tell
-which prompt and which turn produced it. Token counts are word counts, the same as the scripted provider's.
+message and whose `tool` is offered becomes a tool call with the rule's arguments (with `tools`, several calls in
+one answer); a rule with `text` instead answers that text (a cited answer, or the not-in-the-knowledge-base reply).
+A rule with `after` applies once a tool result is back: when the assistant's last call was that tool and the result
+matches `result`, the rule's `tool` call or `text` follows, so a turn can chain reads. Named groups in `when` (which
+sees the knowledge block ahead of the question) and `result` fill `{name}` in the text and the arguments: a rule
+fires only on its evidence and quotes it. With no rule matching, the scripted provider's `call <tool> {json}`
+convention applies. Otherwise the reply is text naming the agent from the system prompt (`You are <name>,`) and the
+gist of the last message, so a caller can tell which prompt and which turn produced it. Token counts are word counts,
+the same as the scripted provider's.
 """
 
 from __future__ import annotations
@@ -50,6 +51,9 @@ class Rule:
     # A pattern an earlier user message must match, its named groups filling `{name}` as `when`'s do: a follow-up such
     # as "I connected Salesforce. Please go ahead." acts on the case the person asked about before it.
     before: str | None = None
+    # Several calls in one answer, each {"tool", "arguments"}, as a model makes independent reads in one step; the rule
+    # applies when every one is offered.
+    calls: list[dict[str, Any]] = field(default_factory=lambda: [])
 
 
 @dataclass(frozen=True)
@@ -74,6 +78,7 @@ def load_script(folder: Path) -> Script:
             str(r["result"]) if r.get("result") else None,
             bool(r.get("force")),
             str(r["before"]) if r.get("before") else None,
+            [dict(c) for c in cast(list[dict[str, Any]], r.get("tools") or [])],
         )
         for r in listed
     ]
@@ -161,6 +166,8 @@ def _rule_for(script: Script, messages: list[dict[str, Any]], offered: set[str])
     for rule in script.rules:
         if rule.tool and rule.tool not in offered and not (rule.force and offered - {ANSWER_TOOL}):
             continue
+        if rule.calls and not all(str(c.get("tool")) in offered for c in rule.calls):
+            continue
         captured: dict[str, str] = {}
         if rule.before:
             hits = (re.search(rule.before, t, re.IGNORECASE | re.DOTALL) for t in reversed(user_said[:-1]))
@@ -204,6 +211,14 @@ async def answer(script: Script, model: str, body: dict[str, Any]) -> Completion
     last = messages[-1] if messages else {}
     if (hit := _rule_for(script, messages, offered | ({native} if native else set()))) is not None:
         matched, captured = hit
+        if matched.calls:
+            several: list[dict[str, Any]] = []
+            for i, c in enumerate(matched.calls):
+                wanted = next((f.get("parameters") for f in functions if f.get("name") == c["tool"]), None)
+                args = _fit(_fill(dict(c.get("arguments") or {}), captured), _declared(wanted))
+                function = {"name": str(c["tool"]), "arguments": json.dumps(args)}
+                several.append({"id": f"call_fake_{len(messages)}_{i}", "type": "function", "function": function})
+            return Completion(None, prompt_tokens, len(several), several)
         if matched.tool and matched.tool == native and native not in offered:
             filled = _fit(_fill(matched.arguments, captured), _declared(schema.get("schema")))
             text = json.dumps(filled)

@@ -94,6 +94,8 @@ ENTRIES: dict[str, set[str]] = {
         "services/documents-service/src/ops_documents/extraction.py",
         "services/agents-service/src/ops_agents/api/publish_reviews.py",
         "services/agents-service/src/ops_agents/api/tenant_tasks.py",
+        # A chat link opened while acting in another team looks in each of the reader's own teams in turn.
+        "services/agents-service/src/ops_agents/api/routers/chat.py",
         # A run, and a write to a thread's state outside one, act as the thread's team, so every checkpoint is
         # in exactly one team whoever started the run.
         "services/agents-service/src/ops_agents/api/runs.py",

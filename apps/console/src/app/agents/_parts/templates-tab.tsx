@@ -46,7 +46,7 @@ const columns: ColumnDef<Row>[] = [
             <div className="flex items-center gap-2 font-medium">
               {row.original.name} <TemplateStatusBadge status={row.original.status} />
             </div>
-            <div className="max-w-md truncate text-xs text-muted-foreground">{row.original.summary}</div>
+            <div className="max-w-md text-xs text-muted-foreground break-words whitespace-normal">{row.original.summary}</div>
           </div>
         </div>
       );
@@ -128,7 +128,7 @@ export function TemplatesTab({ onUse }: { onUse: (templateId: string) => void })
                 {detail.data.versions.map((v) => (
                   <li key={v.version} className="flex gap-2">
                     <span className="font-mono font-medium">v{v.version}</span>
-                    <span className="min-w-0 flex-1 truncate">{v.note}</span>
+                    <span className="min-w-0 flex-1 break-words whitespace-normal">{v.note}</span>
                     <span className="text-muted-foreground">{relativeTime(v.publishedAt)}</span>
                   </li>
                 ))}

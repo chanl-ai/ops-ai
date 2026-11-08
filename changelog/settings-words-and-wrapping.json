@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Plain egress notes; long rules and device names wrap",
+  "description": "Hosts listed for the sample tool sets say so in plain words. A long gate rule and a long device name wrap inside their columns instead of running into the next.",
+  "tag": "improved"
+}

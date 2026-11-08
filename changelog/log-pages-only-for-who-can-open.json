@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Audit log and Background only for who can open them",
+  "description": "The page switcher and search no longer list Audit log and Background to someone their roles keep out, as the sidebar already did, and opening either page without the rights shows why at once instead of asking for data first.",
+  "tag": "fix"
+}

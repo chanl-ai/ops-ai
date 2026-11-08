@@ -1,0 +1,41 @@
+{
+  "$comment": "A first team for the team assistant's scripted chats (docs/usecases/chat/assistant/): `make sample-teams` installs it. Every name, client and figure is invented.",
+  "team": {
+    "name": "Risk Oversight"
+  },
+  "people": [
+    {
+      "key": "lead",
+      "name": "Farah Qureshi",
+      "email": "farah.qureshi@harborpine.example",
+      "role": "admin"
+    },
+    {
+      "key": "builder",
+      "name": "Ben Adler",
+      "email": "ben.adler@harborpine.example",
+      "role": "builder"
+    },
+    {
+      "key": "analyst",
+      "name": "Lena Hoffmann",
+      "email": "lena.hoffmann@harborpine.example",
+      "role": "approver"
+    }
+  ],
+  "knowledge": [
+    {
+      "key": "policy",
+      "name": "Risk and control policies",
+      "source": "Risk manual",
+      "description": "Control testing, overdue reviews and exceptions.",
+      "color": "rose",
+      "documents": [
+        {
+          "name": "control-testing-and-exceptions.md",
+          "text": "# Control testing and exceptions\n\n## Overdue reviews\nA control review not completed by its due date is overdue. An overdue review is escalated to the head of risk after 10 business days, and the control is rated not tested until the review is done.\n\n## Exceptions\nAn exception to a control is approved for at most 90 days. It names a compensating control and an owner, and is reviewed again before it ends.\n\n## Failed tests\nA control that fails testing gets an issue with an owner and a fix date within 5 business days.\n"
+        }
+      ]
+    }
+  ]
+}

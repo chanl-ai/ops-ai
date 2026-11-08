@@ -29,7 +29,8 @@ def main(argv: list[str]) -> int:
 def _login(ns: argparse.Namespace) -> int:
     name = ns.profile or os.environ.get("OPS_PROFILE") or "default"
     if ns.as_role:
-        base, services, session, team = dev_sign_in(ns)
+        # A profile renews its session, so it takes a new sign-in with its own refresh token.
+        base, services, session, team = dev_sign_in(ns, fresh=True)
     else:
         services: dict[str, str] = {}
         base = ns.base_url or os.environ.get("OPS_BASE_URL") or profile_values(name).get("baseUrl")

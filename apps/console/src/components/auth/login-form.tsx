@@ -7,7 +7,8 @@ import { ChevronDown, KeyRound } from 'lucide-react';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { demoPeopleByTeam } from '@/lib/demo-people';
 import { Input } from '@/components/ui/input';
 
 import { AuthError, AuthFormWrapper, AuthHeading } from './auth-form-wrapper';
@@ -105,11 +106,17 @@ export function LoginForm({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="center" className="w-(--radix-dropdown-menu-trigger-width)">
                 <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Development only</DropdownMenuLabel>
-                {demoPeople.map((p) => (
-                  <DropdownMenuItem key={p.email} onSelect={() => onDemo(p.email)} className="flex-col items-start gap-0" data-testid="login-demo-person">
-                    <span className="text-sm">{p.name}</span>
-                    {p.teams.length > 0 && <span className="text-xs text-muted-foreground">{p.teams.map((t) => `${t.role.charAt(0).toUpperCase()}${t.role.slice(1)} · ${t.team}`).join(', ')}</span>}
-                  </DropdownMenuItem>
+                {demoPeopleByTeam(demoPeople).map((g) => (
+                  <DropdownMenuGroup key={g.team} data-testid="login-demo-team">
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>{g.team}</DropdownMenuLabel>
+                    {g.people.map((p) => (
+                      <DropdownMenuItem key={p.email} onSelect={() => onDemo(p.email)} className="justify-between gap-2" data-testid="login-demo-person">
+                        <span className="text-sm">{p.name}</span>
+                        {p.role && <span className="text-xs text-muted-foreground">{`${p.role.charAt(0).toUpperCase()}${p.role.slice(1)}`}</span>}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuGroup>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>

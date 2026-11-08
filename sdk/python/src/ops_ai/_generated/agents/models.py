@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, NotRequired
+from typing import Any, Literal, NotRequired, TypeAlias
 
 from typing_extensions import TypedDict
 
@@ -107,6 +107,21 @@ class AllHrefs(TypedDict, closed=True):
     cases: str | None
     emails: str
     runs: str
+
+
+class AppToolsGiven(TypedDict, closed=True):
+    agentId: str
+    agentName: str
+    skills: NotRequired[list[str]]
+    state: Literal["given", "in_review", "waiting", "already", "none"]
+    tools: list[str]
+
+
+ModuleId: TypeAlias = str
+
+
+class AppToolsIn(TypedDict, closed=True):
+    moduleIds: list[ModuleId]
 
 
 class Approval(TypedDict, closed=True):
@@ -596,6 +611,11 @@ class EngineRunInput(TypedDict, closed=True):
 
 class EnvelopeAiStepOut(TypedDict, closed=True):
     data: AiStepOut
+    success: Literal[True]
+
+
+class EnvelopeAppToolsGiven(TypedDict, closed=True):
+    data: AppToolsGiven
     success: Literal[True]
 
 

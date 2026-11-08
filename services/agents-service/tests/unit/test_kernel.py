@@ -3,6 +3,7 @@ different input or a new key, a rejection the model never hears, and assembly er
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from dataclasses import replace
@@ -276,3 +277,76 @@ async def test_a_write_the_gateway_sends_for_review_pauses_with_the_reason_and_r
     _, result = await run(TurnRequest("t2", "th1", SETTINGS, [at_once], resume=resume), ports(tools))
     assert result.status == "completed", result
     assert [token for *_, token in tools.calls] == [None, "tok"]
+
+
+async def test_the_same_call_twice_in_one_step_reaches_the_system_once() -> None:
+    # A live turn read one case twice: the library runs a step's calls together, so the repeat was not seen as one.
+    class SlowTools(RecordingTools):
+        """Answers after a moment, as a real system does, so the step's two calls overlap."""
+
+        async def execute(
+            self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
+        ) -> ToolOutcome:
+            await asyncio.sleep(0.01)
+            return await super().execute(tool, arguments, key=key, approval_token=approval_token)
+
+    tools = SlowTools()
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        if any(t.name == "get_human_task" for t in info.function_tools) and len(messages) == 1:
+            return ModelResponse(
+                parts=[ToolCallPart("get_human_task", {"taskId": "REV-1"}, tool_call_id=f"c{i}") for i in (1, 2)]
+            )
+        return ModelResponse(parts=[TextPart(ANSWERED)])
+
+    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
+        if any(t.name == "get_human_task" for t in info.function_tools) and len(messages) == 1:
+            yield {
+                i: DeltaToolCall(name="get_human_task", json_args='{"taskId": "REV-1"}', tool_call_id=f"c{i}")
+                for i in (1, 2)
+            }
+        else:
+            yield ANSWERED
+
+    req = TurnRequest("t1", "th1", replace(SETTINGS, max_tool_calls=5), [TASK], user_turn="What is REV-1?")
+    _, result = await run(
+        req,
+        KernelPorts(model=FunctionModel(respond, stream_function=stream), tools=tools, knowledge=FixedKnowledge([])),
+    )
+    assert len(tools.calls) == 1, tools.calls
+    first, second = result.tool_calls
+    assert second.output == {"repeatOf": first.tool_call_id}, result.tool_calls
+
+
+def reading_model(reads: int) -> FunctionModel:
+    """A model that makes `reads` reads in one step, then answers from the results it got."""
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        if len(messages) == 1:
+            return ModelResponse(parts=[ToolCallPart("get_human_task", {"taskId": f"REV-{i}"}) for i in range(reads)])
+        return ModelResponse(parts=[TextPart(ANSWERED)])
+
+    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
+        part = respond(messages, info).parts
+        if isinstance(part[0], TextPart):
+            yield part[0].content
+        else:
+            yield {
+                i: DeltaToolCall(name="get_human_task", json_args=json.dumps({"taskId": f"REV-{i}"}))
+                for i in range(len(part))
+            }
+
+    return FunctionModel(respond, stream_function=stream)
+
+
+async def test_reads_past_the_tool_budget_are_told_to_stop_and_the_reply_answers_from_the_rest() -> None:
+    # A prep turn made six reads in one step under a cap of four and ended with "I reached the most tool calls",
+    # throwing away the four reads that had succeeded.
+    tools = RecordingTools()
+    req = TurnRequest(
+        "t1", "th1", replace(SETTINGS, max_tool_calls=2), [TASK], user_turn="Give me a summary of what waits"
+    )
+    _, result = await run(req, KernelPorts(model=reading_model(3), tools=tools, knowledge=FixedKnowledge([])))
+    assert len(tools.calls) == 2, tools.calls
+    assert result.stop_reason == "final" and result.text == ANSWERED, result
+    assert sorted(r.status for r in result.tool_calls) == ["error", "ok", "ok"], result.tool_calls

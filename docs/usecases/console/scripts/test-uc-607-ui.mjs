@@ -105,7 +105,7 @@ async function step(name, body, page) {
     await body();
   } catch (e) {
     await page?.screenshot({ path: join(SHOTS, `failed-${name.split(' ')[0]}.png`) }).catch(() => {});
-    check(name, false, `${String(e).slice(0, 300)} at ${page?.url() ?? 'no page'}`);
+    check(name, false, `${String(e).slice(0, 1500)} at ${page?.url() ?? 'no page'}`);
   }
 }
 
@@ -245,7 +245,8 @@ try {
           check(
             '3 one Connect window: the auth config, test or team account and Connect; the sign-in window opens at once on the console’s connect page; a refusal shows in both windows and Connect works again',
             // What the account may do is shown once, in the auth config's details, so the window asks only how to sign in.
-            /Auth config/.test(said) && /Add your own app/.test(said) && /Test account/.test(said) && /Team account/.test(said) && button === 'Connect' && !/Authorize with/.test(said) && /More options/.test(said) && folded &&
+            // Turning an app on asks once whose account tools use; the button turns it on with the sign-in.
+            /Auth config/.test(said) && /Add your own app/.test(said) && /Whose account do tools use\?/.test(said) && /Team account/.test(said) && button === 'Sign in and turn on' && !/Authorize with/.test(said) && /More options/.test(said) && folded &&
               new URL(openedAt).pathname === '/connections/connect' && new URL(openedAt).searchParams.get('app') === 'Person desk' &&
               deniedShown && closeOffered && /not given/.test(told) && again,
             { said, button, folded, openedAt, deniedShown, closeOffered, told, again },
@@ -256,6 +257,8 @@ try {
           await page.getByTestId('connect-window-name').fill('Person desk');
           const [popup] = await Promise.all([page.waitForEvent('popup', { timeout: 60_000 }), page.getByTestId('connect-window-authorize').click()]);
           await allow(popup, 'harbor.ops', 'allow');
+          // Turned on, the window says so and Done opens the app's page.
+          await page.getByTestId('connect-window-done').click({ timeout: 60_000 });
           await page.waitForURL((u) => u.pathname.startsWith('/integrations/apps/'), { timeout: 60_000 });
           // The app's page opens on its Accounts tab, the one list of every account that signs in to it.
           await page.getByTestId('account-state-Person desk').waitFor({ timeout: 60_000 });
@@ -406,6 +409,8 @@ try {
         }, james);
 
         // Tools lists single tools, joined by the API: each with its app, kind, status and who uses it.
+        // The team's assistant holds an app's read tools once the app is on, so the row may name it first and Ticket desk
+        // behind "+1"; the tool's page lists both.
         await step('46 Tools lists Read a record as one row with its app, kind, status and Used by Ticket desk; its page says the same', async () => {
           await james.goto(`${consoleUrl}/tools`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           // The installed plugins' tools fill more than a page, so the row is found as a person finds it: by search.
@@ -423,7 +428,7 @@ try {
           const usedBy = await james.locator('#tool-used-by').getByText('Ticket desk').first().waitFor({ timeout: 60_000 }).catch(() => {}).then(async () => ((await james.locator('#tool-used-by').innerText()) ?? '').replace(/\s+/g, ' '), () => '');
           check(
             '46 Tools lists Read a record as one row with its app, kind, status and Used by Ticket desk; its page says the same',
-            tabs.join() === 'All tools,App tools,Custom tools,Logs' && /Read a record/.test(line) && /Person desk/.test(line) && /App tool/.test(line) && /Ready/.test(line) && /Ticket desk/.test(line) && /Ticket desk/.test(usedBy),
+            tabs.join() === 'All tools,App tools,Custom tools,Logs' && /Read a record/.test(line) && /Person desk/.test(line) && /App tool/.test(line) && /Ready/.test(line) && /Ticket desk|\+\d/.test(line) && /Ticket desk/.test(usedBy),
             { tabs, line, usedBy },
           );
         }, james);
@@ -1145,7 +1150,13 @@ try {
           await name.fill(user);
           await popup.locator('input[type=submit], button[type=submit]').first().click();
           await popup.waitForEvent('close', { timeout: 60_000 }).catch(() => {});
-          await page.waitForURL((u) => u.pathname.startsWith('/integrations/apps/'), { timeout: 60_000 });
+          // Turning an app on ends on what is now true, with Done; any other Connect goes straight to the app's page.
+          const done = window_.getByTestId('connect-window-done');
+          await Promise.any([page.waitForURL((u) => u.pathname.startsWith('/integrations/apps/'), { timeout: 60_000 }), done.waitFor({ timeout: 60_000 })]);
+          if (await done.isVisible().catch(() => false)) {
+            await done.click();
+            await page.waitForURL((u) => u.pathname.startsWith('/integrations/apps/'), { timeout: 60_000 });
+          }
           let health = null;
           for (let i = 0; i < 30 && !health; i++) {
             const account = (await sfAccounts()).find((x) => Boolean(x.sandbox) === sandbox);

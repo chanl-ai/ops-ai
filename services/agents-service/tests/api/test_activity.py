@@ -94,8 +94,9 @@ async def test_another_persons_private_chat_never_shows(stack: Stack) -> None:  
     # With chats shared, a reader of every chat in the team sees it: the rule above is the policy, not a missing row.
     shared = await activity(c, reader({"chatThreadsOwnerOnly": False}), kind="chat")
     assert [r["id"] for r in shared["data"]] == [f"chat:{theirs}"]
-    own = await activity(c, VIEWER, kind="chat")
-    assert [(r["id"], r["actor"]["id"]) for r in own["data"]] == [(f"chat:{theirs}", "vera@harborpine.example")]
+    # The chat's own author, a viewer, reads no Activity list at all (activity.view is not a viewer's).
+    refused = await c.get("/v1/activity", params={"kind": "chat"}, headers=VIEWER)
+    assert (refused.status_code, refused.json()["error"]["code"]) == (403, "role_required"), refused.text
 
 
 async def test_facets_count_the_rows_under_the_other_filters(stack: Stack) -> None:  # noqa: F811
@@ -186,22 +187,23 @@ async def test_an_email_and_a_widget_chat_name_their_channel_records(stack: Stac
             }
         )
     await email(stack, "started", subject="Notice")
-    widget_chat = await chat(c, VIEWER)
+    widget_chat = await chat(c, REVIEWER)
     await graph_store(rt).set_deployment(widget_chat, "wd_help")  # what the widget's thread route records
     mailbox = (await activity(c, BUILDER, source="channel:mbx_levy"))["data"]
     assert [r["source"] for r in mailbox] == [{"type": "channel", "id": "mbx_levy", "name": "Levy notices"}]
-    widget = (await activity(c, VIEWER, source="channel:wd_help"))["data"]
+    widget = (await activity(c, REVIEWER, source="channel:wd_help"))["data"]
     assert [(r["id"], r["source"]["name"]) for r in widget] == [(f"chat:{widget_chat}", "Intranet help")]
 
 
 async def test_a_tool_call_in_a_private_chat_lists_for_its_owner_only(stack: Stack) -> None:  # noqa: F811
     c, rt = stack
-    thread = await chat(c, VIEWER)
+    # Its owner reads Activity (activity.view): a reviewer, as a viewer reads no Activity list.
+    thread = await chat(c, REVIEWER)
     call = {"tool": "list_accounts", "status": "ok", "input": {"customerId": "CUS-1002"}}
     await EventLog(rt.db).append(
         thread_id=thread, team_id="team_ops", run_id=None, type_="tool_end", node="agent", data=call
     )
-    [row] = (await activity(c, VIEWER, kind="tool_call"))["data"]
+    [row] = (await activity(c, REVIEWER, kind="tool_call"))["data"]
     # Worded as the run page words a call, never the tool's name.
     assert (row["title"], row["status"], row["ref"]) == (
         "List accounts: customer id CUS-1002",
@@ -274,3 +276,39 @@ async def test_another_teams_case_has_no_activity_to_read(stack: Stack) -> None:
     case = await opened(c, BUILDER, subject="Levy on Marcus Bell")
     r = await c.get("/v1/activity", params={"case": case["id"]}, headers=FRAUD_BUILDER)
     assert r.status_code == 404, r.text
+
+
+async def test_a_viewer_is_refused_the_activity_list(stack: Stack) -> None:  # noqa: F811
+    """A viewer read everyone's activity (tool calls, case notes, decisions); activity.view is not a viewer's cell."""
+    c, _ = stack
+    await started_run(c, BUILDER, "ops_check")
+    refused = await c.get("/v1/activity", headers=VIEWER)
+    assert (refused.status_code, refused.json()["error"]["code"]) == (403, "role_required"), refused.text
+    assert (await activity(c, REVIEWER))["data"], "a reviewer still reads it"
+
+
+async def test_background_jobs_are_listed_only_when_asked_for(stack: Stack) -> None:  # noqa: F811
+    """Each background job row repeated the run it started beside that run; the list leaves them out unless the kind
+    filter names them, and the kind facet still counts them so the filter can offer them."""
+    from tests.api.test_background import _jobs  # noqa: PLC0415  # pyright: ignore[reportPrivateUsage]
+
+    c, _ = stack
+    await _jobs(stack)
+    everything = await activity(c, BUILDER)
+    assert all(r["kind"] != "background" for r in everything["data"]), everything["data"]
+    assert everything["facets"]["kind"].get("background", 0) > 0, everything["facets"]
+    asked = await activity(c, BUILDER, kind="background")
+    assert asked["data"] and all(r["kind"] == "background" for r in asked["data"])
+
+
+async def test_a_finished_run_says_which_end_it_reached(stack: Stack) -> None:  # noqa: F811
+    """A done run read "Not found" beside Done, as if it failed; it names its End as the Runs list does."""
+    c, rt = stack
+    run = await started_run(c, BUILDER, "ops_end")
+    journal = SqlJournal(EngineTransactions(rt.db))
+    with tenant_scope(TENANT):
+        end = StepRow(run, "small", 1, 1, "running", "none", f"{run}:small:1:1", node_type="ops.flow.end")
+        await journal.begin(end)
+        await RunStore(EngineTransactions(rt.db)).update(run, status="succeeded", outcome="small")
+    rows = [r for r in (await activity(c, BUILDER))["data"] if r["id"] == f"workflow_run:{run}"]
+    assert [r["outcomeText"] for r in rows] == ["Finished at the Small end."], rows

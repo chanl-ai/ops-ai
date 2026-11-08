@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Webhooks, usage and storage for who can open them",
+  "description": "Webhooks and Usage and cost are team-admin pages with their own permissions, and the settings list offers them, and Storage, only to people whose roles open them; anyone else is told so at once, with no failed request behind it.",
+  "tag": "fix"
+}

@@ -47,7 +47,7 @@ export default function GeneralSettingsPage() {
         </SettingCard>
         <SettingCard id="owner" title="Owner" description="The group that answers for what this team runs." onSave={() => undefined}>
           <div className="w-full sm:w-1/2">
-            <Combobox options={OWNERS} value={owner} onChange={setOwner} noun="groups" />
+            <Combobox options={OWNERS} value={owner} onChange={setOwner} noun="groups" label="Owner" />
           </div>
         </SettingCard>
       </SampleData>

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "A resumed chat still acts as the person who asked",
+  "description": "A chat reply picked up again after a restart, or after someone approved its change, reads and writes your apps as you, never as the team account; when the chat's person is not known the call is not made.",
+  "tag": "fix"
+}

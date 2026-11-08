@@ -74,8 +74,32 @@ async def test_the_views_and_facets_count_the_teams_entries(platform: Platform) 
     assert {e["action"] for e in page["data"]} == {"member.invite", "member.remove"}, page["data"]
     assert page["facets"]["action"] == {"invited": 2, "deleted": 1, "login": 1}, page["facets"]
     counts = page["viewCounts"]
-    assert counts == {"all": 4, "access": 3, "deletions": 1, "publishes": 0}, counts
+    assert counts == {"all": 4, "changes": 3, "access": 3, "deletions": 1, "publishes": 0, "sign_ins": 1}, counts
     assert [e["action"] for e in (await audit(platform, h, view="deletions"))["data"]] == ["member.remove"]
+
+
+async def test_sign_ins_have_their_own_view_and_stay_out_of_changes(platform: Platform) -> None:
+    """Sign-ins were most of an account's entries and buried the changes; they now read only in their own view."""
+    admin, h = await as_admin(platform)
+    await invite_one(platform, h, "c@bank.test")
+    async with platform.engine.begin() as c:
+        for n, method in enumerate(("password", "oidc")):
+            await record(
+                c,
+                tenant_id=admin.tenant_id,
+                team_id=h["X-Team-Id"],
+                actor=admin.user_id,
+                action="auth.sign_in",
+                target_kind="session",
+                target_id=f"ses_{n}",
+                request_id=f"req_{n}",
+                detail={"authMethod": method},
+            )
+    changes = await audit(platform, h, view="changes")
+    assert "auth.sign_in" not in {e["action"] for e in changes["data"]} and changes["data"], changes["data"]
+    sign_ins = (await audit(platform, h, view="sign_ins"))["data"]
+    assert sorted(e["summary"] for e in sign_ins) == ["Signed in with a password", "Signed in with single sign-on"]
+    assert changes["viewCounts"]["sign_ins"] == 2 and changes["viewCounts"]["changes"] == changes["pagination"]["total"]
 
 
 async def test_only_an_admin_reads_the_audit(platform: Platform) -> None:

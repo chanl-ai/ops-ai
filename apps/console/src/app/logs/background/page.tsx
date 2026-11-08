@@ -12,7 +12,9 @@ import { Note } from '@/components/shared/setting/note';
 import { Section } from '@/components/shared/surface';
 import { Badge } from '@/components/ui/badge';
 import { useBackground } from '@/hooks/activity-queries';
+import { useNavAllows } from '@/hooks/me-queries';
 import { ApiError } from '@/lib/api';
+import { BACKGROUND } from '@/lib/nav';
 import { dateTime, plural, relativeTime } from '@/lib/format';
 import type { BackgroundJob, BackgroundProcess, BackgroundState } from '@/lib/types/activity';
 
@@ -125,14 +127,16 @@ const JOB_COLUMNS: ColumnDef<BackgroundJob>[] = [
  * did and for which team. Read-only, for account admins; agents-service answers anyone else with not found.
  */
 export default function BackgroundPage() {
-  const query = useBackground();
+  // Asked only of an account admin; anyone else is told so without a request agents-service would refuse.
+  const may = useNavAllows()(BACKGROUND);
+  const query = useBackground(may === true);
   const view = query.data;
   return (
     <PageLayout icon={HeartPulse} title="Background" description="Work that runs without a person asking, and what it did for each team">
-      {query.isPending ? (
-        <PageSkeleton statCards={0} tableRows={10} />
-      ) : query.isError && query.error instanceof ApiError && query.error.status === 404 ? (
+      {may === false || (query.isError && query.error instanceof ApiError && query.error.status === 404) ? (
         <EmptyState icon={ShieldCheck} title="Only an account admin sees background processes" description="Each team sees its own background jobs in Activity." testId="background-admin-only" />
+      ) : query.isPending ? (
+        <PageSkeleton statCards={0} tableRows={10} />
       ) : query.isError || !view ? (
         <QueryError what="the background processes" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (

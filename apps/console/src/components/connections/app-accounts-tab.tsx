@@ -59,6 +59,10 @@ export function AccountsTab({
   const rows = app.accounts ?? [];
   const configs = app.authConfigs ?? [];
   const name = app.card.name;
+  // Read through a ref so the columns keep one identity: new column functions remount every cell, which closes an open
+  // row menu whenever the page above re-renders.
+  const latest = React.useRef({ app, configs, onSignIn });
+  latest.current = { app, configs, onSignIn };
   const filtered: ColumnFiltersState = config ? [{ id: 'config', value: [configs.find((c) => c.id === config)?.name ?? config] }] : [];
   const columns = React.useMemo<ColumnDef<ConfigAccount>[]>(
     () => [
@@ -121,7 +125,7 @@ export function AccountsTab({
         accessorFn: (a) => STATE[a.state].label,
         header: ({ column }) => <DataTableColumnHeader column={column} title="State" />,
         meta: { kind: 'status' },
-        cell: ({ row: { original: a } }) => <StateCell account={a} onSignIn={onSignIn} />,
+        cell: ({ row: { original: a } }) => <StateCell account={a} onSignIn={(as, id) => latest.current.onSignIn(as, id)} />,
         filterFn: facetFilterFn,
       },
       {
@@ -129,12 +133,17 @@ export function AccountsTab({
         enableHiding: false,
         cell: ({ row: { original: a } }) => (
           <StopRowClick>
-            <AccountActions app={app} account={a} moveTo={configs.filter((c) => c.id !== a.configId && c.type !== 'account')} onSignIn={onSignIn} />
+            <AccountActions
+              app={latest.current.app}
+              account={a}
+              moveTo={latest.current.configs.filter((c) => c.id !== a.configId && c.type !== 'account')}
+              onSignIn={(as, id) => latest.current.onSignIn(as, id)}
+            />
           </StopRowClick>
         ),
       },
     ],
-    [app, configs, onSignIn],
+    [],
   );
   const facet = (id: 'config' | 'who' | 'run' | 'state', title: string, values: string[]) => ({
     column: id,
@@ -173,7 +182,8 @@ export function AccountsTab({
 /** The row's state, and the one action that fixes a broken sign-in, when the API offers it on the row. */
 function StateCell({ account: a, onSignIn }: { account: ConfigAccount; onSignIn: (account: 'self' | 'team', accountId: string) => void }) {
   const as = a.kind === 'person' || a.owner.kind === 'each' ? 'self' : 'team';
-  const failed = a.test?.status === 'failed' ? a.test.message || 'no reason given' : null;
+  // A test result counts only while the account is signed in; an account signed out since has just the one state.
+  const failed = a.state === 'connected' && a.test?.status === 'failed' ? a.test.message || 'no reason given' : null;
   const can = (x: NonNullable<ConfigAccount['actions']>[number]) => (a.actions ?? []).includes(x);
   return (
     <span className="flex flex-col gap-1">

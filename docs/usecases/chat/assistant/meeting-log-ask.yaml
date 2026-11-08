@@ -1,0 +1,13 @@
+# The meeting log flow when the person leaves something open, as James with the real model: the stage is not fixed by
+# their words, so the reply asks one question with the allowed stages as quick replies and states no plan without it.
+# Needs the demo records (make demo-org-seed AS=james). Run on demand, not in CI.
+as: [james]
+real: [james]
+turns:
+  - say: "Log my meeting with the Okafor Family Trust: Grace wants to add $25,000, and we talked about changing the stage"
+    expect:
+      tool: salesforce_query
+      followUps: true
+      notWidgets: [form]
+      noInternalIds: true
+      maxSteps: 4

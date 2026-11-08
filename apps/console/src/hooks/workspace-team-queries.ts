@@ -11,8 +11,9 @@ import { useTeamQuery } from './team-query';
 const KEY = ['workspace-teams'] as const;
 
 /** Every team of the workspace, one server page at a time (workspace admins). */
-export const useWorkspaceTeams = (params: ListParams<WorkspaceTeamFilters>) =>
-  usePagedQuery({ queryKey: [...KEY, params], queryFn: () => api.workspaceTeams.list(params) });
+/** `enabled` false until the editor's answer says the person may view every team, so no refused request is made. */
+export const useWorkspaceTeams = (params: ListParams<WorkspaceTeamFilters>, enabled = true) =>
+  usePagedQuery({ queryKey: [...KEY, params], queryFn: () => api.workspaceTeams.list(params), enabled });
 
 /** Whether the person is a workspace admin who may list and change teams, from the server's permissions. */
 export const useWorkspaceTeamsEditor = () => useTeamQuery({ queryKey: [...KEY, 'editor'], queryFn: () => api.workspaceTeams.editor() });

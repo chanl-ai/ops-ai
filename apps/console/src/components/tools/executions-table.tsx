@@ -10,6 +10,7 @@ import { DataTableWithViews } from '@/components/data-table-with-views';
 import { ApprovalCell, CallerCell, CallStatusText, OperationBadge } from '@/components/logs/log-meta';
 import { StopRowClick } from '@/components/shared/form-field';
 import { ListEmpty } from '@/components/shared/query-states';
+import { FailureReason } from '@/components/logs/failure-reason';
 import { dateTime, ms, relativeTime } from '@/lib/format';
 import type { ToolCallRow } from '@/lib/types/governance';
 
@@ -30,6 +31,8 @@ const columns: ColumnDef<Row>[] = [
     id: 'target',
     accessorFn: (r) => `${r.title ?? ''} ${r.app ?? ''} ${r.target} ${r.subject?.name ?? ''} ${r.actor?.name ?? ''} ${r.workflowName} ${r.agentName} ${r.runId} ${r.record ?? ''}`,
     header: ({ column }) => <DataTableColumnHeader column={column} title="Operation" />,
+    // The call's name column, pinned so its failure reason stays on screen however wide the table is.
+    meta: { kind: 'name' },
     cell: ({ row }) => (
       <div className="flex min-w-0 flex-col items-start gap-1">
         {row.original.title && row.original.title !== row.original.target ? (
@@ -43,6 +46,7 @@ const columns: ColumnDef<Row>[] = [
           </code>
         )}
         <OperationBadge operation={row.original.operation} />
+        <FailureReason call={row.original} />
       </div>
     ),
     enableHiding: false,
@@ -69,16 +73,7 @@ const columns: ColumnDef<Row>[] = [
   {
     accessorKey: 'status',
     header: 'Status',
-    cell: ({ row }) => (
-      <div className="flex flex-col gap-0.5">
-        <CallStatusText status={row.original.status} replayOf={row.original.replayOf} />
-        {row.original.failureSide && (
-          <span className="text-xs whitespace-nowrap text-muted-foreground" title={row.original.errorMessage}>
-            {row.original.failureSide === 'ours' ? 'Our side' : 'Upstream'} · {row.original.errorCode}
-          </span>
-        )}
-      </div>
-    ),
+    cell: ({ row }) => <CallStatusText status={row.original.status} replayOf={row.original.replayOf} />,
   },
   { accessorKey: 'latencyMs', header: 'Latency', cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground tabular-nums">{ms(row.original.latencyMs)}</span> },
   {

@@ -55,6 +55,10 @@ def test_each_kind_of_personal_data_is_masked(text: str, shown: str) -> None:
         "a levy of 3,250.00 CAD",
         "served 2026-10-14",
         "case NS-2026-GN-01187",
+        # A Salesforce case number is eight digits; named as a case it read as "[account]" in a prep brief.
+        "Case 00045120: Update the beneficiary",
+        "case number 00045120",
+        "Ticket #00045120 and order no. 1234567890",
         "wire W-88213",
         "page 1 of 3, in 2026",
         # Ids carry digit runs glued to letters (uc-233: a run's file id came back as fil_13cf059e[account]...).
@@ -73,6 +77,16 @@ def test_a_number_split_across_chunks_is_never_shown_in_part(cut: int) -> None:
     shown = stream.push(REPLY[:cut]) + stream.push(REPLY[cut:]) + stream.flush()
     assert shown == mask(REPLY)
     assert "6789" not in shown and "ann.lee" not in shown and "4401235567" not in shown and "555-0147" not in shown
+
+
+CASE_REPLY = "Grace has an open request about the trust account, see Case 00045120: Update the beneficiary today."
+
+
+@pytest.mark.parametrize("cut", range(1, len(CASE_REPLY)))
+def test_a_case_number_streamed_apart_from_its_word_stays_readable(cut: int) -> None:
+    stream = StreamMasker()
+    shown = stream.push(CASE_REPLY[:cut]) + stream.push(CASE_REPLY[cut:]) + stream.flush()
+    assert shown == CASE_REPLY
 
 
 class Tools:

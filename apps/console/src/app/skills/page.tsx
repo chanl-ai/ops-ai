@@ -70,7 +70,7 @@ function columns(open: (s: Skill) => void, onExport: (s: Skill) => void): Column
       accessorKey: 'useWhen',
       header: 'Use when',
       cell: ({ row }) => (
-        <p className="line-clamp-2 w-72 text-xs whitespace-normal text-muted-foreground" title={row.original.useWhen}>
+        <p className="w-72 text-xs whitespace-normal text-muted-foreground break-words" title={row.original.useWhen}>
           {row.original.loading === 'always' ? 'Every turn, after the agent’s instructions' : row.original.useWhen}
         </p>
       ),

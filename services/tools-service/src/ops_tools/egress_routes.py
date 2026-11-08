@@ -20,6 +20,7 @@ from ops_service_kit.http import Envelope, ListResult, Out, error_responses, ok,
 
 from .callers import Person, person, security_admin
 from .egress import EgressDenied, listable_host, listable_range
+from .modules.schemas import ModuleRef
 from .store.egress import EgressStore, HostInUseError
 
 
@@ -44,7 +45,8 @@ class ListedHost(Out):
     note: str
     added_by: str
     added_at: str
-    modules: list[str]
+    # The tool sets whose endpoint is on the host, by id and the name a person knows them by.
+    modules: list[ModuleRef]
     template_id: str | None = None
     protection: Literal["system", "managed"] | None = None
 

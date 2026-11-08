@@ -431,7 +431,10 @@ class AuditEntryOut(Out):
 
 class AuditPage(ListResult[AuditEntryOut]):
     view_counts: dict[str, int] = Field(
-        description="Entries in each of the audit page's views: all, access, deletions, publishes"
+        description=(
+            "Entries in each of the audit page's views: all, changes (all but sign-ins), access, deletions, "
+            "publishes, sign_ins"
+        )
     )
 
 

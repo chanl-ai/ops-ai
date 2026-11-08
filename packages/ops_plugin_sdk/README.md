@@ -19,4 +19,4 @@ the requests it will send. How to write a plugin: [docs/guide/plugins.md](../../
 | `uv run ops plugin install <folder>` | Validates, then copies the package into the install's plugins folder (`--into` names another) |
 | `uv run ops plugin remove <id>` | Takes it out of the plugins folder |
 
-Run the kit's own tests with `uv run pytest` in this folder.
+Run the kit's own tests with `make test PKG=packages/ops_plugin_sdk` from the root, or `uv run pytest` in this folder.

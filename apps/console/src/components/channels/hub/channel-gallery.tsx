@@ -11,8 +11,11 @@ import type { ChannelKindSummary } from '@/lib/types/channels';
 
 import { KINDS } from './kinds';
 
-/** One card per kind, with a state read from its channels (never a bare count) and exactly one action. */
-export function ChannelGallery({ kinds }: { kinds: ChannelKindSummary[] }) {
+/**
+ * One card per kind, with a state read from its channels (never a bare count) and at most one action. `canSetUp` is
+ * deployments.create: without it a built kind's card offers no Connect or Manage, and the tabs above open each kind.
+ */
+export function ChannelGallery({ kinds, canSetUp }: { kinds: ChannelKindSummary[]; canSetUp: boolean }) {
   const shown = useFlagged(KINDS);
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="channel-gallery">
@@ -38,13 +41,15 @@ export function ChannelGallery({ kinds }: { kinds: ChannelKindSummary[] }) {
               )}
             </CardHeader>
             <CardContent className="px-4 pb-0">
-              <CardDescription className="line-clamp-2 min-h-10 text-xs">{k.description}</CardDescription>
+              <CardDescription className="text-xs break-words line-clamp-none">{k.description}</CardDescription>
             </CardContent>
-            <CardFooter className="mt-auto justify-end border-t px-4 pb-4 [.border-t]:pt-3">
-              <Button asChild size="sm" variant={built && !s?.total ? 'default' : 'outline'} data-testid={`gallery-action-${k.type}`}>
-                <Link href={k.href}>{!built ? 'Preview' : s?.total ? 'Manage' : 'Connect'}</Link>
-              </Button>
-            </CardFooter>
+            {(!built || canSetUp) && (
+              <CardFooter className="mt-auto justify-end border-t px-4 pb-4 [.border-t]:pt-3">
+                <Button asChild size="sm" variant={built && !s?.total ? 'default' : 'outline'} data-testid={`gallery-action-${k.type}`}>
+                  <Link href={k.href}>{!built ? 'Preview' : s?.total ? 'Manage' : 'Connect'}</Link>
+                </Button>
+              </CardFooter>
+            )}
           </Card>
         );
       })}

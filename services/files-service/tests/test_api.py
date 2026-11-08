@@ -186,6 +186,17 @@ async def test_another_teams_file_is_missing_on_every_route(client: Client) -> N
         assert (await c.get(f"/v1/files/{file_id}", headers=OPS)).status_code == 200
 
 
+async def test_a_file_whose_bytes_are_gone_is_refused_before_any_byte_is_sent(client: Client, tmp_path: Path) -> None:
+    # A cut stream after a sent Content-Length reaches a browser as a fetch with no status, read as an outage.
+    async with client() as c:
+        ticket = await _upload(c)
+        await c.post(f"/v1/files/uploads/{ticket['fileId']}/complete", headers=OPS)
+        for stored in (tmp_path / "objects").rglob(f"{ticket['fileId']}*"):
+            stored.unlink()
+        got = await c.get(f"/v1/files/{ticket['fileId']}/content", headers=OPS)
+        assert got.status_code == 404 and "missing from storage" in got.json()["error"]["message"], got.text
+
+
 async def test_a_file_is_recorded_as_what_its_bytes_are_not_its_declared_type(client: Client) -> None:
     async with client() as c:
         ticket = await _upload(c, b"just some text, not a pdf at all\n")

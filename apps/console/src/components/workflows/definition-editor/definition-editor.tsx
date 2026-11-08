@@ -39,7 +39,7 @@ import { connectionId, definitionNodeData, inPorts, indexTypes, outPorts, typeKe
 import { RoutedLines, routedEdgeTypes } from './routed-edge';
 import { useLayout } from '../layout/use-layout';
 import { applyLayout, layoutDefinition } from '../layout/definition-layout';
-import { LifecycleActions, type Lifecycle } from './lifecycle';
+import { LifecycleActions, ViewOnlyLine, type Lifecycle } from './lifecycle';
 import type { StepRef, StepRefs } from './node-form';
 import { PublishDefinitionDialog } from './publish-dialog';
 import { type RunMode, StartDefinitionRunDialog } from '@/components/workflows/start-run-dialog';
@@ -417,6 +417,7 @@ function EditorBody({ definition: initial, types, validate, publish, publishing,
   const actions = (
     <div className="flex flex-wrap items-center justify-end gap-2">
       {!readOnly && <LifecycleActions lifecycle={lifecycle} dirty={dirty} onPublish={() => setPublishOpen(true)} onSetPaused={setPaused} pausing={pausing} canPublish={canPublish !== false} />}
+      {readOnly && <ViewOnlyLine stage={lifecycle.stage} />}
       {/* Someone who may only read a draft still sees that it waits on a publish, and why they cannot start it. */}
       {readOnly && canPublish === false && lifecycle.stage === 'draft' && !lifecycle.review && <LockedReason area="workflows" action="publish" label="Publish…" />}
       {/* Starting any run is a builder's or admin's step (runs/start); the server refuses the rest, so the

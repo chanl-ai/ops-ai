@@ -35,7 +35,7 @@ else
 endif
 
 # A test never stops, migrates or resets the stack: it runs on its own database (OPS_TEST_DATABASE_URL below).
-STACK_GOALS := up down restart migrate reset-db db-down db-reset review sample-team demo demo-walk demo-model
+STACK_GOALS := up down restart migrate reset-db db-down db-reset review sample-team sample-teams demo demo-walk demo-model
 ifneq ($(filter $(STACK_GOALS),$(MAKECMDGOALS)),)
   ifdef PYTEST_CURRENT_TEST
     $(error refused: a test may not run $(filter $(STACK_GOALS),$(MAKECMDGOALS)) on the stack; tests run on their own database)

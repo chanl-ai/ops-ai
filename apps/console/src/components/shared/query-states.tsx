@@ -39,7 +39,7 @@ export function QueryError({
     case 'signed_out':
       return <SignedOut what={what} />;
     case 'forbidden':
-      return <EmptyState icon={ShieldOff} title="You don’t have access here" description={`Your role in this team doesn’t let you see ${what}. A team admin can change that.`} action={back} testId="query-forbidden" />;
+      return <NoAccess what={what} back={back} />;
     case 'not_found':
       return <NotFound what={what} back={back} />;
     default:
@@ -147,4 +147,12 @@ export function ListEmpty({
       action={createLabel && onCreate ? { label: createLabel, onClick: onCreate } : undefined}
     />
   );
+}
+
+/**
+ * The person's roles do not open `what`: shown by a page that checks the cell before asking, so no refused request is
+ * made, and by QueryError when a service refuses one anyway. One wording for both.
+ */
+export function NoAccess({ what, back }: { what: string; back?: { label: string; href: string } }) {
+  return <EmptyState icon={ShieldOff} title="You don’t have access here" description={`Your role in this team doesn’t let you see ${what}. A team admin can change that.`} action={back} testId="query-forbidden" />;
 }

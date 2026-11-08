@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "Replies read in order: plan, cards, answer",
+  "description": "A reply now shows its plan first, its lookups folded into one quiet line you can open, then its cards and the answer; skill loads no longer show in the reply.",
+  "tag": "fix"
+}

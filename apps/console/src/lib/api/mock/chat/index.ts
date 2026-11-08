@@ -247,6 +247,12 @@ export function createChatMock(deps: Deps): ChatApi {
           memories = [fixed, ...memories.filter((m) => m.id !== mid)];
           return fixed;
         }),
+      keep: async (mid) => respond(() => memoryOf(mid)),
+      undo: async (mid) =>
+        respond(() => {
+          memoryOf(mid);
+          memories = memories.filter((m) => m.id !== mid);
+        }),
       forget: async (mid) =>
         respond(() => {
           memoryOf(mid);

@@ -215,10 +215,28 @@ async def test_a_run_outcome_reads_as_words(stack: Stack) -> None:  # noqa: F811
         await RunStore(EngineTransactions(rt.db)).update(run, status="succeeded", outcome="documents_read")
     detail = (await c.get(f"/v1/runs/{run}", headers=BUILDER)).json()["data"]
     listed = (await c.get("/v1/runs", params={"workflowId": "wording_outcome"}, headers=BUILDER)).json()["data"]
-    assert detail["outcome"] == "documents_read" and detail["outcomeText"] == "Documents read", detail
-    assert [r["outcomeText"] for r in listed["data"]] == ["Documents read"], listed
+    said = "Finished at the Documents read end."
+    assert detail["outcome"] == "documents_read" and detail["outcomeText"] == said, detail
+    assert [r["outcomeText"] for r in listed["data"]] == [said], listed
     rows = [r for r in (await activity(c, BUILDER, kind="workflow_run"))["data"] if r["ref"]["id"] == run]
-    assert [r["outcomeText"] for r in rows] == ["Documents read"], rows
+    # Activity reads the same sentence as the run page, so a finished run never shows a bare key there either.
+    assert [r["outcomeText"] for r in rows] == [said], rows
+
+
+async def test_a_finished_run_says_which_end_it_reached_by_its_name(stack: Stack) -> None:  # noqa: F811
+    """A finished run's outcome read as its End's key ("Not found", "Small"), which looked like a server error. It
+    names the End the run reached, as the workflow names it, on the list and the run page, read once for the page."""
+    c, rt = stack
+    run = await started_run(c, BUILDER, "wording_end")
+    journal = SqlJournal(EngineTransactions(rt.db))
+    with tenant_scope(TENANT):
+        row = StepRow(run, "small", 1, 1, "running", "none", f"{run}:small:1:1", node_type="ops.flow.end")
+        await journal.begin(row)
+        await RunStore(EngineTransactions(rt.db)).update(run, status="failed", outcome="small")
+    detail = (await c.get(f"/v1/runs/{run}", headers=BUILDER)).json()["data"]
+    listed = (await c.get("/v1/runs", params={"workflowId": "wording_end"}, headers=BUILDER)).json()["data"]
+    assert detail["outcomeText"] == "Failed at the Small end.", detail
+    assert [r["outcomeText"] for r in listed["data"]] == ["Failed at the Small end."], listed
 
 
 async def test_a_run_actor_without_a_name_is_not_its_id(stack: Stack) -> None:  # noqa: F811

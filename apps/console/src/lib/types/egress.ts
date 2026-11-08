@@ -1,10 +1,12 @@
-/** A host tool calls may reach (tools-service GET /v1/egress). `modules` are the ids of the tool modules whose endpoint is on it. */
+import type { ModuleRef } from './tool-modules';
+
+/** A host tool calls may reach (tools-service GET /v1/egress). `modules` are the tool sets whose endpoint is on it. */
 export interface ListedHost {
   host: string;
   note: string;
   addedBy: string;
   addedAt: string;
-  modules: string[];
+  modules: ModuleRef[];
 }
 
 /** A private range a listed host may resolve into; loopback, link-local and cloud metadata are never listable. */

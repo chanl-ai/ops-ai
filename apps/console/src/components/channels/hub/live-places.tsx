@@ -15,6 +15,7 @@ import { Item, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/comp
 import { Skeleton } from '@/components/ui/skeleton';
 import { useLivePlaces } from '@/hooks/channel-queries';
 import { useActivityCount } from '@/hooks/activity-queries';
+import { useCan } from '@/hooks/me-queries';
 import { facetFilterFn } from '@/hooks/use-list-params';
 import { plural, relativeTime } from '@/lib/format';
 import type { LivePlaces } from '@/lib/types/channels';
@@ -95,7 +96,9 @@ export function LivePlacesPanel({ kind, id, name, between }: { kind: 'agent' | '
     [q.data],
   );
   const sources = React.useMemo(() => [`${kind}:${id}`, ...(q.data?.rows ?? []).filter((r) => r.where.kind === 'channel').map((r) => `channel:${r.where.id}`)], [kind, id, q.data]);
-  const count = useActivityCount(sources);
+  // Activity is read under activity.view; without it there is no list to link to, so nothing is asked.
+  const readsActivity = useCan('activity', 'view') === true;
+  const count = useActivityCount(sources, readsActivity);
   if (q.isPending) return <Skeleton className="h-64 w-full" />;
   if (q.isError) return <QueryError what={`where ${name} is live`} error={q.error} onRetry={() => q.refetch()} retrying={q.isFetching} />;
   const latest = q.data.latestVersion;
@@ -105,13 +108,15 @@ export function LivePlacesPanel({ kind, id, name, between }: { kind: 'agent' | '
         <CardHeader>
           <CardTitle>Versions live</CardTitle>
           <CardDescription>Published v{latest}. A place follows the latest published version or pins one; publishing never moves a pinned one.</CardDescription>
-          <CardAction>
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/activity?${new URLSearchParams([...sources.map((s) => ['source', s] as [string, string]), ['name', name]])}`}>
-                <Activity className="size-4" /> View activity{count.data != null ? ` · ${count.data.toLocaleString('en-CA')}` : ''}
-              </Link>
-            </Button>
-          </CardAction>
+          {readsActivity && (
+            <CardAction>
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/activity?${new URLSearchParams([...sources.map((s) => ['source', s] as [string, string]), ['name', name]])}`}>
+                  <Activity className="size-4" /> View activity{count.data != null ? ` · ${count.data.toLocaleString('en-CA')}` : ''}
+                </Link>
+              </Button>
+            </CardAction>
+          )}
         </CardHeader>
         <CardContent>
           {q.data.versions.length ? (
@@ -119,7 +124,7 @@ export function LivePlacesPanel({ kind, id, name, between }: { kind: 'agent' | '
               {[...q.data.versions]
                 .sort((a, b) => b.version - a.version)
                 .map((v) => (
-                  <Item key={v.version} variant="outline" size="sm" data-testid={`version-live-${v.version}`}>
+                  <Item key={v.version} role="listitem" variant="outline" size="sm" data-testid={`version-live-${v.version}`}>
                     <ItemContent>
                       <ItemTitle>
                         v{v.version} {v.version === latest ? <Badge variant="secondary">Latest</Badge> : <Badge variant="outline">{plural(latest - v.version, 'version behind', 'versions behind')}</Badge>}

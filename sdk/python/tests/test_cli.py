@@ -12,6 +12,7 @@ from typing import Any
 import httpx
 import pytest
 from ops_ai import OpsAI
+from ops_ai._cli.common import payload
 from ops_ai.cli import main
 
 
@@ -109,3 +110,8 @@ def test_ops_login_keeps_the_session_in_the_profile_and_prints_no_token(
     assert saved["current"] == "default" and (profile["accessToken"], profile["refreshToken"]) == ("t1", "r1")
     assert (profile["baseUrl"], profile["team"]) == ("https://ops.bank.example", "team_ops")
     assert oct(config.stat().st_mode & 0o777) == "0o600"
+
+
+def test_json_input_holding_a_slash_or_long_text_is_read_as_data_not_a_file_name() -> None:
+    body = {"records": [{"fields": {"Description": "Cash is 18% of the portfolio / target 5%. " + "x" * 400}}]}
+    assert payload(json.dumps(body, indent=2)) == body

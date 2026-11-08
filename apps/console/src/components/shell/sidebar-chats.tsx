@@ -113,7 +113,7 @@ export function SidebarChats({ onNavigate }: { onNavigate?: () => void }) {
                     ) : (
                       <SidebarMenuButton asChild isActive={t.id === activeId} tooltip={t.title}>
                         <Link href={`/chat/${t.id}`} onClick={onNavigate} aria-current={t.id === activeId ? 'page' : undefined} data-testid="sidebar-chat">
-                          {streaming.has(t.id) && <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary" aria-label="Answering" />}
+                          {streaming.has(t.id) && <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary" role="img" aria-label="Answering" />}
                           <span className="truncate">{t.title}</span>
                         </Link>
                       </SidebarMenuButton>

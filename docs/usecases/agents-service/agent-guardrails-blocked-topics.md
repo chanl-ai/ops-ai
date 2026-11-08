@@ -38,7 +38,8 @@ anything else is the answering model.
 The ui layer, signed in as James on the demo stack: the blocked question in chat shows the guardrail's message and
 the line naming the guardrail that refused it; the agent page shows the pin checked and marked Enforced, with
 redaction and when-unsure marked "Not enforced yet"; unchecking the pin and saving sends a draft with no pin. The
-hardship question shows "Loaded skill Hardship request triage v1" on the turn, and the agent page lists the skill
+hardship question answers from the hardship skill, whose load stays in the call log and shows no line in the reply,
+and the agent page lists the skill
 from its own request to agents-service (the mock has a skill of the same name). On the Guardrails page a builder
 creates "No tax advice", publishes v1, and the agent page offers it to pin.
 

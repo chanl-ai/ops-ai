@@ -50,6 +50,17 @@ export type AppPage = Data<'apps_get_app'>;
 /** One app's page, joined by tools-service: card, accounts, your own sign-in, tools, skills and latest runs. */
 export const useApp = (appId: string) =>
   useTeamQuery({ queryKey: [...APPS, appId], queryFn: () => sdk((ops) => ops.raw.tools.apps_get_app({ path: { app_id: appId } })) });
+/** The app a chat card names, for its mark and where its records open: a side read, so a card the person may not see
+ * the app of still draws, with the app's id for a name. */
+export const useCardAppPage = (appId?: string) =>
+  useTeamQuery({
+    queryKey: [...APPS, appId ?? ''],
+    queryFn: () => sdk((ops) => ops.raw.tools.apps_get_app({ path: { app_id: appId ?? '' } })),
+    enabled: !!appId,
+    staleTime: 5 * 60_000,
+    retry: false,
+    meta: { side: true },
+  });
 /** Disconnect: ends the caller's own sign-in on an account (DELETE /v1/me/accounts/{id}); the team's stays. */
 export const useSignOutMine = () =>
   useSystemsMutation((accountId: string) => sdk((ops) => ops.raw.tools.apps_disconnect({ path: { account_id: accountId } })));
@@ -154,6 +165,12 @@ export const useDeleteAppCredential = () =>
 
 export const useSetCredentialSecret = () =>
   useSystemsMutation((a: Args<'apps_set_app_credential_secret'>) => sdk((ops) => ops.raw.tools.apps_set_app_credential_secret(a)));
+/**
+ * Gives the team's assistant an app's read tools (POST /v1/team-assistant/app-tools, agents-service), the Turn on
+ * window's choice: which tools, and whether that was published at once, waits on a review or on someone's draft.
+ */
+export const useGiveAssistantAppTools = () =>
+  useSystemsMutation((moduleIds: string[]) => sdk((ops) => ops.raw.agents.agents_give_assistant_app_tools({ body: { moduleIds } })));
 /** Turns a plugin's app on or off for the team (PUT /v1/apps/plugin:{id}/team); answers the app's card. */
 export const useSetTeamApp = () =>
   useSystemsMutation((a: { appId: string; body: TeamAppBody }) => sdk((ops) => ops.raw.tools.apps_set_team_app({ path: { app_id: a.appId }, body: a.body })));

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "The assistant asks before it remembers",
+  "description": "The assistant keeps something at once only when you say remember or set a rule with always or from now on. Anything else it thinks is worth keeping, and any change to what it kept, shows as one line under its reply that you answer Yes or No.",
+  "tag": "improved"
+}

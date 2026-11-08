@@ -210,7 +210,9 @@ export async function grantTools(page, ops, email) {
     if (!offered) throw new Error(`the tools picker never offered ${op}`);
     await picker.getByRole('button', { name: 'Grant tools' }).click({ timeout: 120_000 });
     await page.getByPlaceholder('Search tools by name or system…').fill(op);
-    await page.getByRole('option', { name: new RegExp(`^${op}\\b`) }).first().click({ timeout: 60_000 });
+    // A team's own tool is listed by its name in words ("get_account" reads "Get account"), a plugin's by its title.
+    const named = new RegExp(`^(${op}|${op.replace(/_/g, ' ')})\\b`, 'i');
+    await page.getByRole('option', { name: named }).first().click({ timeout: 60_000 });
     await page.keyboard.press('Escape');
   }
 }

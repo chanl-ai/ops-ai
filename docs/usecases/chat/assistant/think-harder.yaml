@@ -1,0 +1,17 @@
+# Think harder, with the real model, as Farah of Risk Oversight, whose assistant runs on the `assistant` alias: a reply
+# that took two lookups offers Think harder, and tapping it answers the same question again on the deeper alias
+# (OPS_THINK_HARDER_ALIAS, `thinking` by default). Run on demand, not in CI.
+as: [farah.qureshi@harborpine.example]
+real: [farah.qureshi@harborpine.example]
+turns:
+  - say: "What does our policy say about overdue control reviews, and separately about exceptions to the review schedule?"
+    expect:
+      offers: "Think harder"
+      ranOn: assistant
+      noInternalIds: true
+      maxSteps: 2
+  - say: "Think harder"
+    expect:
+      ranOn: thinking
+      noInternalIds: true
+      maxSteps: 2

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "Settings lights the page you are on, not its parent",
+  "description": "On a settings page under Team, such as Webhooks, the sidebar no longer lights Team's General page while your access loads.",
+  "tag": "fix"
+}

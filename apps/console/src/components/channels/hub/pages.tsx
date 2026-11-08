@@ -12,6 +12,7 @@ import { Note } from '@/components/shared/setting/note';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { EmbedDialog } from '@/components/deployments/widget-embed';
+import { useCan, useCanCheck } from '@/hooks/me-queries';
 import { useAgent } from '@/hooks/queries';
 import { useChannels } from '@/hooks/channel-queries';
 import { useFlagged } from '@/hooks/flag-queries';
@@ -25,11 +26,15 @@ import { ChannelTable } from './channel-table';
 import { ChannelTabs } from './channel-tabs';
 import { KINDS, kindInfo } from './kinds';
 
-/** Where a kind is set up; Channels links there instead of keeping a second form. */
-const CONNECT: Partial<Record<ChannelType, { label: string; href: string; note?: string }>> = {
-  email: { label: 'Connect a mailbox', href: '/channels/email/connect' },
-  chat: { label: 'Embed on a page', href: '/channels/chat?embed=1', note: 'An embed serves one published agent. Embed on a page picks the agent; each agent’s Channels tab also lists its embeds, with their snippets and mint keys.' },
-  api: { label: 'Open API keys', href: '/settings/api-keys', note: 'A system calls the API with a key from Settings › API keys; each key acts for its team.' },
+/**
+ * Where a kind is set up; Channels links there instead of keeping a second form. `area` and `action` are the roles-grid
+ * cell the setting-up needs, so the button shows only to who may follow it: a mailbox or an embed is a deployment, an
+ * API key is an access record (Settings › API keys).
+ */
+const CONNECT: Partial<Record<ChannelType, { label: string; href: string; note?: string; area: string; action: string }>> = {
+  email: { label: 'Connect a mailbox', href: '/channels/email/connect', area: 'deployments', action: 'create' },
+  chat: { label: 'Embed on a page', href: '/channels/chat?embed=1', note: 'An embed serves one published agent. Embed on a page picks the agent; each agent’s Channels tab also lists its embeds, with their snippets and mint keys.', area: 'deployments', action: 'create' },
+  api: { label: 'Open API keys', href: '/settings/api-keys', note: 'A system calls the API with a key from Settings › API keys; each key acts for its team.', area: 'access', action: 'create' },
 };
 
 /** Channels: one card per kind, then every connection with what it serves, its health and traffic. */
@@ -39,7 +44,8 @@ export function ChannelsHubPage() {
   const movedAgent = params.get('agent');
   const list = useListParams<Record<string, never>>('name');
   const q = useChannels({ page: list.params.page, pageSize: list.params.pageSize, search: list.params.search });
-  const connectable = ['email', 'chat', 'api'] as const;
+  const can = useCanCheck();
+  const connectable = (['email', 'chat', 'api'] as const).filter((t) => can(CONNECT[t]!.area, CONNECT[t]!.action) === true);
   // The kinds still to come, named from the visible ones, so a kind behind an install flag that is off is not mentioned.
   const soon = new Intl.ListFormat('en', { type: 'conjunction' }).format(useFlagged(KINDS).filter((k) => !(connectable as readonly ChannelType[]).includes(k.type)).map((k) => k.title));
   return (
@@ -49,6 +55,7 @@ export function ChannelsHubPage() {
       description="Where work reaches the team’s agents and workflows: mailboxes, chat on the bank’s pages and the API"
       tabs={<ChannelTabs kinds={q.data?.kinds} />}
       actions={
+        connectable.length > 0 && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button data-testid="connect-channel">
@@ -71,6 +78,7 @@ export function ChannelsHubPage() {
             <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">{soon} are coming soon</DropdownMenuLabel>
           </DropdownMenuContent>
         </DropdownMenu>
+        )
       }
     >
       {q.isPending ? (
@@ -84,7 +92,7 @@ export function ChannelsHubPage() {
             <h2 id="channel-types" className="text-sm font-semibold">
               Channel types
             </h2>
-            <ChannelGallery kinds={q.data.kinds} />
+            <ChannelGallery kinds={q.data.kinds} canSetUp={can('deployments', 'create') === true} />
           </section>
           <section className="flex flex-col gap-3" aria-labelledby="all-connections">
             <h2 id="all-connections" className="text-sm font-semibold">
@@ -105,6 +113,7 @@ export function ChannelKindPage({ type }: { type: ChannelType }) {
   const q = useChannels({ page: list.params.page, pageSize: list.params.pageSize, search: list.params.search, type: [type] });
   const summary = q.data?.kinds.find((s) => s.type === type);
   const connect = CONNECT[type];
+  const mayConnect = useCan(connect?.area ?? 'deployments', connect?.action ?? 'create') === true;
   const rows = q.data?.data ?? [];
   // Embed on a page opens here, from this page's button or the hub's Connect channel menu (?embed=1).
   const scriptUrl = useWidgetScriptUrl();
@@ -118,7 +127,7 @@ export function ChannelKindPage({ type }: { type: ChannelType }) {
       description={k.description}
       tabs={<ChannelTabs kinds={q.data?.kinds} />}
       actions={
-        type === 'chat' ? (
+        !mayConnect ? undefined : type === 'chat' ? (
           <Button onClick={() => setEmbedOpen(true)} data-testid="widget-embed-open">
             <Plus className="size-4" /> {connect!.label}
           </Button>
@@ -148,7 +157,7 @@ export function ChannelKindPage({ type }: { type: ChannelType }) {
           )}
         </div>
       )}
-      {type === 'chat' && <EmbedDialog scriptUrl={scriptUrl} open={embedOpen} onOpenChange={setEmbedOpen} />}
+      {type === 'chat' && mayConnect && <EmbedDialog scriptUrl={scriptUrl} open={embedOpen} onOpenChange={setEmbedOpen} />}
     </PageLayout>
   );
 }

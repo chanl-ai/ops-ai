@@ -117,6 +117,17 @@ async def forget_memory(rt: Rt, me: Me, memory_id: str) -> Response:
     return Response(status_code=204)
 
 
+@router.post("/{memory_id}/confirm", response_model=Envelope[MemoryView])
+async def confirm_memory(rt: Rt, me: Me, memory_id: str) -> JSONResponse:
+    """Keeps a suggested memory: the person said yes under the reply that suggested it, or on the Memory page. It is
+    in use from the next turn and replaces the memory it changes. 404 when nothing of the caller's waits under that
+    id; saying no is /undo."""
+    row = await _store(rt, me, edit=True).accept(person_of(me), memory_id, actor=me.email)
+    if row is None:
+        raise NotFound("Memory")
+    return ok(_view(rt, row))
+
+
 @router.post("/{memory_id}/undo", status_code=204, response_class=Response)
 async def undo_memory(rt: Rt, me: Me, memory_id: str) -> Response:
     """Takes back a memory: one forgotten in the last 30 days is in use again; one a reply just saved is forgotten,

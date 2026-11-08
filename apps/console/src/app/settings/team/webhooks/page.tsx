@@ -13,12 +13,14 @@ import { WebhookDialog } from '@/components/settings/webhook-dialog';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
-import { ListEmpty, QueryError } from '@/components/shared/query-states';
+import { ListEmpty, NoAccess, QueryError } from '@/components/shared/query-states';
 import { idColumn } from '@/components/shared/id-column';
 import { selectColumn } from '@/components/shared/select-column';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useNavAllows } from '@/hooks/me-queries';
 import { useCreateWebhook, useDeleteWebhook, useSetWebhookStatus, useResendDelivery, useSettingsLookups, useWebhookDeliveries, useWebhooks } from '@/hooks/settings-queries';
+import { WEBHOOKS } from '@/lib/settings-tree';
 import { useListParams } from '@/hooks/use-list-params';
 import { useTeam } from '@/hooks/use-team';
 import { count, pct, relativeTime } from '@/lib/format';
@@ -78,7 +80,9 @@ export default function WebhooksPage() {
   const { team } = useTeam();
   const showTeam = team?.scope === 'all';
   const list = useListParams('name');
-  const query = useWebhooks(list.params);
+  // Endpoint addresses and delivery history are team-admin data (webhooks.view); nothing is asked without the cell.
+  const may = useNavAllows()(WEBHOOKS);
+  const query = useWebhooks(list.params, may === true);
   const lookups = useSettingsLookups();
   const create = useCreateWebhook();
   const setStatus = useSetWebhookStatus();
@@ -108,12 +112,16 @@ export default function WebhooksPage() {
       section="Webhooks"
       description="Send events to the bank’s other systems as they happen. Open one to see its deliveries."
       actions={
-        <Button onClick={() => setAddOpen(true)}>
-          <Plus className="size-4" /> Add webhook
-        </Button>
+        may === true && (
+          <Button onClick={() => setAddOpen(true)}>
+            <Plus className="size-4" /> Add webhook
+          </Button>
+        )
       }
     >
-      {query.isPending ? (
+      {may === false ? (
+        <NoAccess what="this team’s webhooks" />
+      ) : query.isPending ? (
         <PageSkeleton statCards={0} tableRows={5} />
       ) : query.isError && !query.data ? (
         <QueryError what="webhooks" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />

@@ -24,6 +24,7 @@ from typing import Any
 import httpx
 
 from ._agents import Agents, AsyncAgents
+from ._chat import AsyncChat, Chat
 from ._config import Config, Session
 from ._generated.agents.operations import AsyncOperations as AsyncAgentsOps
 from ._generated.agents.operations import Operations as AgentsOps
@@ -37,6 +38,7 @@ from ._generated.platform.operations import AsyncOperations as AsyncPlatformOps
 from ._generated.platform.operations import Operations as PlatformOps
 from ._generated.tools.operations import AsyncOperations as AsyncToolsOps
 from ._generated.tools.operations import Operations as ToolsOps
+from ._models import AsyncModels, Models
 from ._transport import AsyncTransport, Transport, _headers, _result, page_items
 from ._words import (
     Accounts,
@@ -97,7 +99,10 @@ def _with_task(run: dict[str, Any]) -> dict[str, Any]:
 def _upload_meta(name: str, content: bytes, mime: str, purpose: str) -> tuple[dict[str, Any], str]:
     digest = hashlib.sha256(content).hexdigest()
     meta = {"name": name, "size": len(content), "mime": mime, "purpose": purpose, "digest": digest}
-    return meta, f"sdk-{digest[:32]}"
+    # The key names the whole upload, not only its bytes: the same bytes under another name or purpose are another
+    # upload, which the files service refuses under a key it has seen.
+    key = hashlib.sha256(f"{digest}\n{purpose}\n{mime}\n{name}".encode()).hexdigest()
+    return meta, f"sdk-{key[:32]}"
 
 
 class Raw:
@@ -303,6 +308,9 @@ class OpsAI:
         self.tools = Tools(self.raw, self.apps, Resource(self.raw, NOUNS["tools"]))
         self.resources = Resources(self.raw)
         self.usage = Usage(self.raw)
+        # The chat screen's routes and the model settings', which the generated layer does not hold.
+        self.chat = Chat(self.raw)
+        self.models = Models(self.raw)
 
     @classmethod
     def sign_in(cls, email: str, password: str, **config: Any) -> OpsAI:
@@ -363,6 +371,8 @@ class AsyncOpsAI:
         self.tools = AsyncTools(self.raw, self.apps, AsyncResource(self.raw, NOUNS["tools"]))
         self.resources = AsyncResources(self.raw)
         self.usage = AsyncUsage(self.raw)
+        self.chat = AsyncChat(self.raw)
+        self.models = AsyncModels(self.raw)
 
     @classmethod
     async def sign_in(cls, email: str, password: str, **config: Any) -> AsyncOpsAI:

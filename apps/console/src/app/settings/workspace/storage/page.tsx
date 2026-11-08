@@ -11,7 +11,7 @@ import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
-import { QueryError } from '@/components/shared/query-states';
+import { NoAccess, QueryError } from '@/components/shared/query-states';
 import { StepList } from '@/components/shared/step-list';
 import { Section } from '@/components/shared/surface';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -24,7 +24,8 @@ import { useRemoveStorageCredential, useSaveStorage, useSetStorageCredential, us
 import { STORED_PURPOSES } from '@/lib/file-purposes';
 import { relativeTime } from '@/lib/format';
 import type { ConnectionTest, FilePurpose, StorageBackendName, StorageCredentialKind, StorageDocument, StorageTarget } from '@/lib/types/files';
-import { useCan } from '@/hooks/me-queries';
+import { useNavAllows } from '@/hooks/me-queries';
+import { STORAGE_SETTINGS } from '@/lib/settings-tree';
 
 const PURPOSES = STORED_PURPOSES;
 const KIND_FIELDS: Record<StorageCredentialKind, { key: string; label: string; secret?: boolean }[]> = {
@@ -126,14 +127,14 @@ function TargetForm({ t, onChange, onRemove, credentials, disabled, error }: { t
             <FormField id={`${p}-encryption`} label={t.backend === 's3' ? 'KMS key alias' : 'Encryption scope'} optional>
               <Input id={`${p}-encryption`} value={t.encryption} disabled={disabled} onChange={(e) => onChange({ ...t, encryption: e.target.value })} placeholder={t.backend === 's3' ? 'e.g. alias/opsai-files' : 'e.g. opsai-cmk'} className="font-mono text-sm" />
             </FormField>
-            <FormField id={`${p}-path`} label="Upload path" hint="Through the files service when the bank’s network blocks browsers from storage.">
+            <FormField id={`${p}-path`} label="Upload path" hint="Through Ops AI’s file storage when the bank’s network blocks browsers from storage.">
               <Select value={t.uploadPath} onValueChange={(v) => onChange({ ...t, uploadPath: v as StorageTarget['uploadPath'] })} disabled={disabled}>
                 <SelectTrigger id={`${p}-path`} className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="direct">Browser to storage</SelectItem>
-                  <SelectItem value="proxy">Through the files service</SelectItem>
+                  <SelectItem value="proxy">Through Ops AI’s file storage</SelectItem>
                 </SelectContent>
               </Select>
             </FormField>
@@ -182,7 +183,7 @@ function CredentialDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
       open={open}
       onOpenChange={onOpenChange}
       title="Add a storage credential"
-      description="Kept encrypted by the files service. After saving, only its name and when it was set are shown."
+      description="Kept encrypted by Ops AI’s file storage. After saving, only its name and when it was set are shown."
       onSubmit={submit}
       footer={
         <>
@@ -230,9 +231,11 @@ function CredentialDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
  * before the version is written.
  */
 export default function StorageSettingsPage() {
-  const admin = useCan('settings', 'manage') === true;
-  const query = useStorageSettings();
-  const creds = useStorageCredentials();
+  // Read and changed under settings.manage (files-service refuses anyone else), so nothing is asked without it.
+  const may = useNavAllows()(STORAGE_SETTINGS);
+  const admin = may === true;
+  const query = useStorageSettings(admin);
+  const creds = useStorageCredentials(admin);
   const removeCred = useRemoveStorageCredential();
   const save = useSaveStorage();
   const s = query.data;
@@ -268,7 +271,9 @@ export default function StorageSettingsPage() {
 
   return (
     <SettingsPageLayout section="Storage" description="Where each kind of file is stored, with which credentials, what may be uploaded and how long files are kept.">
-      {query.isPending ? (
+      {may === false ? (
+        <NoAccess what="storage settings" />
+      ) : query.isPending ? (
         <div className="flex flex-col gap-4">
           <Skeleton className="h-56 w-full" />
           <Skeleton className="h-40 w-full" />
@@ -296,12 +301,12 @@ export default function StorageSettingsPage() {
             </Alert>
           )}
           <p className="text-xs text-muted-foreground" data-testid="storage-version">
-            {s.version ? `Version ${s.version} · saved by ${s.updatedBy} ${relativeTime(s.updatedAt ?? '')}` : 'Not saved yet: every file goes to the files service’s own disk.'}
+            {s.version ? `Version ${s.version} · saved by ${s.updatedBy} ${relativeTime(s.updatedAt ?? '')}` : 'Not saved yet: every file is kept on Ops AI’s own file storage.'}
           </p>
 
           <Section
             title="Credentials"
-            description="Keys the files service signs in to storage with. Their values are never shown after saving."
+            description="Keys Ops AI signs in to storage with. Their values are never shown after saving."
             actions={
               <Button type="button" size="sm" variant="outline" disabled={!admin} onClick={() => setAdding(true)} data-testid="credential-add">
                 <KeyRound className="size-3.5" /> Add credential

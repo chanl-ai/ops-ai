@@ -199,6 +199,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "agents_give_assistant_app_tools": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/team-assistant/app-tools",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "agents_guardrail_options": {
         "body": None,
         "headers": [],
@@ -889,6 +898,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/health",
         "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "memory_confirm_memory": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/me/memories/{memory_id}/confirm",
+        "pathParams": ["memory_id"],
         "query": [],
         "stream": False,
     },
@@ -2296,6 +2314,10 @@ class Operations:
         "Forget Memory"
         return self._t.call(SERVICE, OPERATIONS["memory_forget_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def memory_confirm_memory(self, memory_id: str) -> MemoryView:
+        "Confirm Memory"
+        return self._t.call(SERVICE, OPERATIONS["memory_confirm_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     def memory_erase_memory(self, memory_id: str) -> Any:
         "Erase Memory"
         return self._t.call(SERVICE, OPERATIONS["memory_erase_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -2504,6 +2526,10 @@ class Operations:
     def reviews_get_task(self, task_id: str) -> TaskState:
         "Get Task"
         return self._t.call(SERVICE, OPERATIONS["reviews_get_task"], {"task_id": task_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def agents_give_assistant_app_tools(self, body: AppToolsIn) -> AppToolsGiven:
+        "Give Assistant App Tools"
+        return self._t.call(SERVICE, OPERATIONS["agents_give_assistant_app_tools"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     def workflows_team_usage(self) -> TeamUsage:
         "Team Usage"
@@ -3533,6 +3559,10 @@ class AsyncOperations:
         "Forget Memory"
         return await self._t.call(SERVICE, OPERATIONS["memory_forget_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    async def memory_confirm_memory(self, memory_id: str) -> MemoryView:
+        "Confirm Memory"
+        return await self._t.call(SERVICE, OPERATIONS["memory_confirm_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     async def memory_erase_memory(self, memory_id: str) -> Any:
         "Erase Memory"
         return await self._t.call(SERVICE, OPERATIONS["memory_erase_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -3749,6 +3779,10 @@ class AsyncOperations:
     async def reviews_get_task(self, task_id: str) -> TaskState:
         "Get Task"
         return await self._t.call(SERVICE, OPERATIONS["reviews_get_task"], {"task_id": task_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def agents_give_assistant_app_tools(self, body: AppToolsIn) -> AppToolsGiven:
+        "Give Assistant App Tools"
+        return await self._t.call(SERVICE, OPERATIONS["agents_give_assistant_app_tools"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def workflows_team_usage(self) -> TeamUsage:
         "Team Usage"

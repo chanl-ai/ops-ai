@@ -414,7 +414,8 @@ export interface paths {
         };
         /**
          * Get Layout
-         * @description The layout already read for the file, or one page of it; 404 until POST /v1/documents/layout reads it.
+         * @description The layout already read for the file, or one page of it; null until POST /v1/documents/layout reads it.
+         *     A file the team cannot see is 404.
          */
         get: operations["documents_get_layout"];
         put?: never;
@@ -941,6 +942,15 @@ export interface components {
         /** Envelope[TestRun] */
         Envelope_TestRun_: {
             data: components["schemas"]["TestRun"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[Union[Layout, NoneType]] */
+        Envelope_Union_Layout__NoneType__: {
+            data: components["schemas"]["Layout"] | null;
             /**
              * Success
              * @constant
@@ -3779,7 +3789,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_Layout_"];
+                    "application/json": components["schemas"]["Envelope_Union_Layout__NoneType__"];
                 };
             };
             /** @description Invalid request */

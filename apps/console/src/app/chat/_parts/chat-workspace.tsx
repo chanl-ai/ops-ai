@@ -43,6 +43,7 @@ import {
 import { useKnowledgeBases } from '@/hooks/knowledge-queries';
 import { useSticky } from '@/hooks/use-sticky';
 import { teamOfError } from '@/hooks/use-team';
+import { SOMEONE_ELSES } from '@/lib/api';
 import type { ChatAgent, ChatAttachment, ChatMessage, ChatThread, ChatThreadPatch, ChatThreadRow, MessageFeedback, SendInput, WidgetAction } from '@/lib/types/chat';
 import type { RetrievalTrace } from '@/lib/types/knowledge-retrieval';
 
@@ -228,6 +229,7 @@ function ThreadView({
   const streaming = !!live?.streaming;
 
   const notFound = query.isError && (query.error as { status?: number }).status === 404;
+  const someoneElses = query.isError && (query.error as { code?: string }).code === SOMEONE_ELSES;
   const owner = !!t && !!me && t.owner === me;
   const readOnly = !t || !owner || t.archived;
   // What I remember is the person's own memories with this agent, so only the chat's owner is offered it.
@@ -237,6 +239,25 @@ function ThreadView({
   // Replies name their agent once the conversation has had more than one (a handover).
   const severalAgents = !!t?.startAgentId || new Set(messages.flatMap((m) => (m.role === 'assistant' && m.agentName ? [m.agentName] : []))).size > 1;
   const handTo = (to: { id: string; name: string }, back = false) => onPatch(threadId, { agentId: to.id }, back ? `Back to ${to.name}` : `${to.name} has the chat`);
+
+  if (someoneElses)
+    return (
+      <>
+        <header className="flex min-h-12 items-center gap-2 border-b px-3 py-2">
+          <span className="px-1 text-sm font-semibold">Someone else’s conversation</span>
+        </header>
+        <div className="flex flex-1 items-center justify-center p-6">
+          <EmptyState
+            icon={MessageSquareDashed}
+            title="This conversation is someone else’s"
+            description="Only the person who started it reads it. Pick one of your chats or start a new one."
+            action={{ label: 'New chat', href: '/chat' }}
+            secondaryAction={{ label: 'All conversations', href: '/chat/conversations' }}
+            testId="chat-someone-elses"
+          />
+        </div>
+      </>
+    );
 
   if (notFound)
     return (
@@ -258,7 +279,8 @@ function ThreadView({
 
   return (
     <>
-      <header className="flex min-h-12 flex-wrap items-center gap-2 border-b px-3 py-2">
+      {/* Two lines at any width: the title beside the actions, then the agent and its knowledge. */}
+      <header className="flex min-h-12 items-start gap-2 border-b px-3 py-2">
         <div className="min-w-0 flex-1">
           {t && editingTitle ? (
             <Input
@@ -293,17 +315,17 @@ function ThreadView({
             <Skeleton className="h-5 w-48" />
           )}
           {t && (
-            <div className="mt-1 flex flex-wrap items-center gap-2 px-1">
-              <Link href={`/agents/${t.agentId}`} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline">
-                <Bot className="size-3.5" /> {t.agentName} · v{t.agentVersion}
+            <div className="mt-1 flex min-w-0 items-center gap-2 px-1">
+              <Link href={`/agents/${t.agentId}`} className="inline-flex max-w-[60%] shrink-0 items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline">
+                <Bot className="size-3.5 shrink-0" /> <span className="truncate">{t.agentName} · v{t.agentVersion}</span>
               </Link>
-              {agent && agent.version !== t.agentVersion && <span className="text-[11px] text-muted-foreground">(v{agent.version} is live; new chats use it)</span>}
-              <KbChips kbs={kbs} value={t.kbIds} onChange={(ids) => onPatch(t.id, { kbIds: ids }, 'Knowledge updated for the next answer')} disabled={readOnly} agentName={agent?.name} />
+              {agent && agent.version !== t.agentVersion && <span className="hidden shrink-0 text-[11px] text-muted-foreground sm:inline">(v{agent.version} is live; new chats use it)</span>}
+              <KbChips kbs={kbs} value={t.kbIds} onChange={(ids) => onPatch(t.id, { kbIds: ids }, 'Knowledge updated for the next answer')} disabled={readOnly} agentName={agent?.name} oneLine />
             </div>
           )}
         </div>
         {t && (
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             {owner && !t.archived && <ThreadSettingsButton threadId={t.id} />}
             {owner && (
               <Button variant="ghost" size="sm" onClick={() => setMemoryOpen(true)} data-testid="memory-button">

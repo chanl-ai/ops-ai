@@ -170,7 +170,7 @@ function Item({ n, onOpen, onMarkRead }: { n: OpsNotification; onOpen: () => voi
           <span className={cn('min-w-0 flex-1 text-sm leading-snug', !n.read && 'font-semibold')}>{n.title}</span>
           <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{relativeTime(n.createdAt)}</span>
         </span>
-        <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">{n.body}</span>
+        <span className="mt-0.5 block text-xs text-muted-foreground break-words">{n.body}</span>
         {(n.alsoSentTo.length > 0 || n.handledElsewhere) && (
           <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
             {n.handledElsewhere && (

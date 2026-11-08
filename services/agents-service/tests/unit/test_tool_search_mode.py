@@ -115,7 +115,7 @@ async def turn(model: Model, tools: Tools, grants: list[ToolGrant], **kw: Any) -
 async def test_only_builtins_offered_until_a_search() -> None:
     model = Model([say("I need to look first.")])
     await turn(model, Tools(), [*FILLER, BALANCE], user_turn="What is Priya's balance?")
-    assert model.offered[0] == ["present", "search_tools"], model.offered[0]
+    assert model.offered[0] == ["plan", "present", "search_tools"], model.offered[0]
 
 
 async def test_a_search_reveals_its_matches_for_the_next_step() -> None:
@@ -175,7 +175,7 @@ async def test_at_the_threshold_everything_is_offered() -> None:
     low = replace(SETTINGS, tool_search_above=0)
     lowered = Model([say("Here.")])
     await turn(lowered, Tools(), [BALANCE], user_turn="Balance?", settings=low)
-    assert lowered.offered[0] == ["present", "search_tools"], "0 searches for every agent"
+    assert lowered.offered[0] == ["plan", "present", "search_tools"], "0 searches for every agent"
 
 
 def test_the_catalog_carries_the_deployment_setting() -> None:
@@ -193,4 +193,4 @@ async def test_with_the_flag_off_every_tool_is_offered() -> None:
     model = Model([say("Here.")])
     off = replace(SETTINGS, tool_search_above=None)
     await turn(model, Tools(), [*FILLER, BALANCE], user_turn="What is Priya's balance?", settings=off)
-    assert "get_account_balance" in model.offered[0] and len(model.offered[0]) == len(FILLER) + 3
+    assert "get_account_balance" in model.offered[0] and len(model.offered[0]) == len(FILLER) + 4

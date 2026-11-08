@@ -96,7 +96,7 @@ export function CreateKbDialog({
         <FormField id="kb-name" label="Name" error={errors.name}>
           <Input id="kb-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Card disputes" autoFocus aria-invalid={!!errors.name} />
         </FormField>
-        <FormField id="kb-owner" label="Owner" hint="The person who answers for what it serves. They or a tenant admin can change it." error={errors.owner}>
+        <FormField id="kb-owner" label="Owner" hint="The person who answers for what it serves. They or a team admin can change it." error={errors.owner}>
           <Input id="kb-owner" type="email" value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="e.g. j.richardson@example.com" aria-invalid={!!errors.owner} />
         </FormField>
         <FormField id="kb-desc" label="Description" optional hint={`${description.length} / 500 · agents see this when choosing what to search.`} error={errors.description}>

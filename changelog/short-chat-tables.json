@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "Short results in chat read cleanly",
+  "description": "A single record the assistant reads shows as its fields, and a table that fits on one page no longer shows a paging bar.",
+  "tag": "fix"
+}

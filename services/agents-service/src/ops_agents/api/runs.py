@@ -21,6 +21,7 @@ from ..store.graphs import GraphStore
 from ..store.leases import Heartbeat, Leases
 from .deps import Runtime
 from .event_log import designed_type
+from .run_person import running_for
 
 log = get_logger("ops_agents.api.runs")
 
@@ -180,14 +181,16 @@ async def execute(
     finished = False
     try:
         run = _execute(rt, row, graph, graph_input=graph_input, run_id=run_id, kind=kind)
-        async for e in _in_thread_team(row, run):
-            if deferred is None:
-                await write(e)
-            else:
-                deferred.append(e)
-            if e["event"] == "end":
-                finished = cast(dict[str, Any], e.get("data") or {}).get("status") == "done"
-            yield e
+        # Every path that runs a chat thread (a turn, a recovery, a resume) acts for the thread's person.
+        with running_for(row):
+            async for e in _in_thread_team(row, run):
+                if deferred is None:
+                    await write(e)
+                else:
+                    deferred.append(e)
+                if e["event"] == "end":
+                    finished = cast(dict[str, Any], e.get("data") or {}).get("status") == "done"
+                yield e
     finally:
         for e in deferred or []:
             await write(e)

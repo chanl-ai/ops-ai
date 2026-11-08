@@ -4,19 +4,23 @@ platform-service outage fails every personal call at once, and an acting-for tok
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
 import pytest
 from httpx import AsyncClient
 
-from ops_agents.activities.gateway import GatewayClient, RunContext
+from ops_agents.activities.gateway import GatewayClient, GatewayRefused, RunContext
+from ops_agents.api import runs
 from ops_agents.api.acting_for import CallPeople
 from ops_agents.api.auth import Principal
 from ops_agents.api.child_runs import acting_for
+from ops_agents.api.run_person import running_for
 from ops_identity import ACTING_FOR_HEADER, ActingForTokens, ServiceClient, dev_service_signer
 from ops_policy import mint, verify
 from ops_service_kit.errors import Forbidden, ServiceUnavailable
+from ops_store import isolation
 from tests.api import test_platform_identity
 from tests.api.test_platform_identity import PLATFORM
 
@@ -135,3 +139,54 @@ async def test_an_acting_for_token_does_not_sign_a_person_in(client: AsyncClient
     }
     headers = {"Authorization": f"Bearer {mint(claims, PLATFORM, ttl_s=60)}", "X-Team-Id": "team_a"}
     assert (await client.get("/v1/threads", headers=headers)).status_code == 401
+
+
+async def test_a_recovered_chat_run_acts_for_the_threads_person_and_one_with_no_person_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A chat turn cut off by a restart was recovered with no person, and its Salesforce reads ran as the team account.
+    minted = Minted()
+    who = people(minted)
+    seen: list[object] = []
+
+    async def graph_run(rt: object, row: dict[str, Any], graph: object, **_: Any) -> Any:
+        try:
+            seen.append(
+                await who.headers(RunContext(thread=row["id"], run_id="run_rec"), tenant_id="ten_a", team_id="team_a")
+            )
+        except GatewayRefused as e:
+            seen.append(e.code)
+        yield {"event": "step"}
+
+    monkeypatch.setattr(runs, "_execute", graph_run)
+    rt = SimpleNamespace(
+        graph_store=SimpleNamespace(engine=SimpleNamespace(dialect=SimpleNamespace(name="postgresql")))
+    )
+    chat = {
+        "id": "th_1",
+        "team_id": "team_a",
+        "graph": "agent_wrapper",
+        "meta": {"ownerEmail": "j.richardson@bank.test"},
+    }
+    nobody = {**chat, "id": "th_2", "meta": {}}
+    workflow: dict[str, Any] = {"id": "th_3", "team_id": "team_a", "graph": "complex_workflow", "meta": {}}
+    for row in (chat, nobody, workflow):
+        with isolation.scope("ten_a", None):
+            async for _ in runs.execute(rt, row, None, graph_input=None, run_id="run_rec", kind="recovery"):  # type: ignore[arg-type]
+                pass
+    assert seen == [{ACTING_FOR_HEADER: "token-for-j.richardson@bank.test"}, "no_person", {}], seen
+    assert minted.asked == ["j.richardson@bank.test"]
+
+
+async def test_a_chat_run_resumed_by_someone_else_still_acts_for_the_person_who_asked() -> None:
+    # An approver's decision resumed the chat's write as the approver.
+    who = people(Minted())
+    chat = {
+        "id": "th_1",
+        "team_id": "team_a",
+        "graph": "agent_wrapper",
+        "meta": {"ownerEmail": "j.richardson@bank.test"},
+    }
+    approver = Principal(name="Maya", email="m.okafor@bank.test", team_id="team_a", tenant_id="ten_a", sub="u2")
+    with acting_for(approver), running_for(chat):
+        assert await who.email(RunContext(thread="th_1", run_id="run_resume")) == "j.richardson@bank.test"

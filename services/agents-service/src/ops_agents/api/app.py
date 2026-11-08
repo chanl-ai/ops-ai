@@ -26,6 +26,7 @@ from ops_agents.activities.gateway import GatewayClient, GatewayReplySender, Gat
 from ops_agents.activities.knowledge import KbService, Knowledge, NoKnowledgeService
 from ops_agents.activities.tool_directory import CatalogTools, ToolDirectory, ToolsApps, ToolsOperations
 from ops_agents.activities.tools import LocalReplySender, LocalToolExecutor, ReplySender
+from ops_agents.api.error_words import WordedTools
 from ops_agents.graphs import agent_wrapper
 from ops_agents.graphs.checkpointer import open_checkpointer
 from ops_agents.graphs.common import GraphDeps
@@ -55,6 +56,7 @@ from . import agent_registry, engine_seed, guardrails, skills, workflow_registry
 from .acting_for import CallPeople, acting_for_tokens
 from .agent_calls import AgentCalls
 from .approval_renewal import ApprovalRenewal
+from .apps_line import AppsLine
 from .chat_attachments import ChatAttachmentReader
 from .child_runs import ChildRuns
 from .deps import Runtime
@@ -70,6 +72,7 @@ from .model_ledger import LedgerModel, LedgerSource
 from .ops_tools import OpsReads, catch_up_assistants, team_created_handlers
 from .people_names import PlatformPeopleNames
 from .platform_policies import PlatformPolicies
+from .read_caches import ChatReads
 from .review_sla import PlatformReviewSla
 from .review_text import OneDirectoryRead
 from .routers import (
@@ -110,6 +113,7 @@ from .routers import run_resume as run_resume_routes
 from .routers import skills as skill_routes
 from .routers import task_types as task_type_routes
 from .routers import tasks as task_routes
+from .routers import team_assistant as team_assistant_routes
 from .routers import team_usage as team_usage_routes
 from .routers import timers as timer_routes
 from .routers import tool_uses as tool_uses_routes
@@ -291,7 +295,9 @@ def create_app(
         if gateway_http
         else CatalogTools(catalog)
     )
-    tools = GatewayToolExecutor(gateway_client, directory) if gateway_client else LocalToolExecutor(catalog)
+    # A failed call reaches the model in words, its code kept on the call log (error_words.py).
+    inner = GatewayToolExecutor(gateway_client, directory) if gateway_client else LocalToolExecutor(catalog)
+    tools = WordedTools(inner)
     replies: ReplySender = GatewayReplySender(gateway_client) if gateway_client else LocalReplySender()
     # Every model call of a graph run is one record: the budget sums them, a crashed node's re-run replays them
     # (store/model_calls.py, api/model_ledger.py).
@@ -306,7 +312,9 @@ def create_app(
     if knowledge is None:
         knowledge = KbService(required_client(settings, kb_http, "kb")) if kb_http is not None else NoKnowledgeService()
     ports = (
-        KernelPorts(model=kernel_model, tools=tools, knowledge=knowledge, models=per_alias) if kernel_model else None
+        KernelPorts(model=kernel_model, tools=tools, knowledge=knowledge, models=per_alias, tool_caches=ChatReads())
+        if kernel_model
+        else None
     )
 
     # models-service answers which aliases an agent may name; without it only the runtime's own alias is known.
@@ -382,6 +390,7 @@ def create_app(
                 )
                 channels = ChannelStore(db)
                 rt.channels = channels
+                rt.apps_line = AppsLine(rt)
                 deps = GraphDeps(
                     catalog,
                     ports,
@@ -393,6 +402,7 @@ def create_app(
                     workflows=ChildRuns(rt),
                     agents=AgentCalls(rt),
                     memory=MemoryReads(rt),
+                    apps=rt.apps_line,
                     ops=OpsReads(rt),
                     tools=directory,
                 )
@@ -509,6 +519,7 @@ def create_app(
     mount(workflows.refs_router, "Workflows")
     mount(knowledge_usage_routes.router, "Agents")
     mount(tool_uses_routes.router, "Agents")
+    mount(team_assistant_routes.router, "Agents")
     mount(tool_uses_routes.document_type_router, "Workflows")
     mount(team_usage_routes.router, "Workflows")
     mount(tool_catalog.router, "Agents")

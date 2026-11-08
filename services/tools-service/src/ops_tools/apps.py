@@ -22,7 +22,7 @@ from ops_identity import ActingPerson
 from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.manifest import Setting
 from ops_plugin_sdk.versions import tools_of
-from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, ValidationFailed
+from ops_service_kit.errors import Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import Envelope, Out, ok
 
 from .auth.kinds import BY_ID, kind_of
@@ -42,7 +42,7 @@ from .defaults import ensure_defaults
 from .modules.directory import Directory
 from .modules.routes import ERRORS
 from .modules.schemas import In, ToolCallRow
-from .modules.seed import BUILT_IN, TOOL_ORIGIN, template_of, tool_title
+from .modules.seed import BUILT_IN, TOOL_ORIGIN, name_in_words, template_of, tool_title
 from .modules.service import Caller, ModuleService
 from .modules.tool_users import ToolUsers
 from .plugins.host import (
@@ -138,7 +138,8 @@ class SystemPlugin(Out):
 
 
 AppState = Literal["connected", "test_failed", "needs_sign_in", "not_installed", "removed"]
-REMOVED = "This app is no longer installed, so its tools are off. An admin installs it again to turn them back on."
+# Plugins are installed by the operator on the system, never from a screen, so no person here can put it back.
+REMOVED = "This app isn't installed on this system. Your operator installs apps."
 
 
 class CardCredential(Out):
@@ -860,7 +861,7 @@ class Apps:
         return [
             {
                 "name": m.operation(t.name),
-                "title": t.title or t.name,
+                "title": t.title or name_in_words(t.name),
                 "access": t.access,
                 "added": add,
                 "askedAtSignIn": add and not set(t.scopes) <= granted,
@@ -1541,7 +1542,7 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
             tools.append(
                 {
                     "name": name,
-                    "title": title or name,
+                    "title": title or name_in_words(name),
                     "access": str(op["access"]),
                     "added": added,
                     "askedAtSignIn": asked,
@@ -1561,10 +1562,15 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
                     for k, kind in (("agents", "agent"), ("workflows", "workflow"))
                 }
     if apps.calls is not None and card["moduleIds"]:
-        ran = await apps.calls.executions(
-            who, page=1, page_size=20, tool=None, module_ids=list(card["moduleIds"]), thread_id=None, decision=None
-        )
-        usage = list(ran["data"])
+        # The latest calls name their callers, so they come only to whoever reads the call log (activity.view);
+        # anyone else gets the page without them.
+        try:
+            ran = await apps.calls.executions(
+                who, page=1, page_size=20, tool=None, module_ids=list(card["moduleIds"]), thread_id=None, decision=None
+            )
+            usage = list(ran["data"])
+        except Forbidden:
+            usage = []
     skills: list[dict[str, Any]] = []
     plugin = _plugin(apps, card)
     if plugin is not None:
@@ -1611,6 +1617,8 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
     configs = len(creds) + int(platform)
     plugin = _plugin(apps, card)
     config_names = {str(c["id"]): str(c["name"]) for c in creds} | {f"{OPS_AI}{card['id']}": OPS_AI_APP}
+    # An app the install no longer loads keeps its accounts for the record only: nothing signs in or changes them.
+    removed = card["kind"] == "plugin" and card.get("plugin") is None
     out: list[dict[str, Any]] = []
     for a in stored:
         aid = str(a["id"])
@@ -1702,6 +1710,9 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
                 "test": t.get("test"),
             }
         )
+    if removed:
+        # Read-only, with one state: no action, and no test result from when the app was installed.
+        return [{**r, "actions": [], "test": None, "health": None, "stateReason": None} for r in out]
     return out
 
 

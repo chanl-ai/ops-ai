@@ -9,7 +9,7 @@ from __future__ import annotations
 import operator
 from collections.abc import Mapping
 from dataclasses import replace
-from typing import Annotated, Any, Literal, NotRequired, TypedDict
+from typing import Annotated, Any, Literal, NotRequired, TypedDict, cast
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
@@ -34,8 +34,20 @@ from .common import (
     kernel_turn,
     needs_step_up,
     ports_with_workflows,
+    with_apps,
     with_memory,
 )
+
+# How many earlier lines of reads a turn is given, newest kept.
+EARLIER_READS = 8
+
+
+def _earlier(source: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
+    """The skills the last reply loaded and the reads of the last two replies, for a follow-up to build on."""
+    replies = [m for m in source if m.get("role") == "assistant"]
+    carried = list(cast(list[dict[str, Any]], replies[-1].get("skills") or [])) if replies else []
+    reads = [str(r) for m in replies[-2:] for r in cast(list[Any], m.get("reads") or [])]
+    return carried, reads[-EARLIER_READS:]
 
 
 def turn_environment(state: Mapping[str, Any]) -> str:
@@ -63,7 +75,8 @@ class AgentState(TypedDict):
     tool_results: Annotated[list[dict[str, Any]], operator.add]
     # Set by a chat run: the transcript to answer from (earlier turns minus superseded ones) and who asked, which
     # the approval carries so the reviewer's requester check can refuse the asker.
-    history: NotRequired[list[dict[str, str]]]
+    # Each assistant entry may carry the skills that turn loaded (`skills`) and lines for what it read (`reads`).
+    history: NotRequired[list[dict[str, Any]]]
     requested_by: NotRequired[str]
     # Set by a chat run: the settings the override resolver allowed for this turn, and the raw overrides it
     # resolved them from, kept on the run as they were sent.
@@ -102,6 +115,9 @@ def build(
         ports, offers = await ports_with_workflows(deps, list(a.tools), agent_id=a.id)
         source = state["history"] if "history" in state else state["messages"]
         transcript = [TranscriptMessage(m["role"], m["content"]) for m in source]  # pyright: ignore[reportArgumentType]
+        carried, reads = _earlier(cast(list[dict[str, Any]], source))
+        replies = [m for m in cast(list[dict[str, Any]], source) if m.get("role") == "assistant"]
+        open_plan = cast(dict[str, Any] | None, replies[-1].get("plan")) if replies else None
         effective = _effective(state)
         grants = _kb_grants(a, deps.model_alias, effective)
         attached = [
@@ -113,9 +129,14 @@ def build(
         req = TurnRequest(
             turn_id=new_id("turn"),
             run_id=new_id("run"),
-            settings=await with_memory(deps, deps.catalog.settings_for(a, deps.model_alias, effective), a.id),
+            settings=await with_apps(
+                deps, await with_memory(deps, deps.catalog.settings_for(a, deps.model_alias, effective), a.id), a.id
+            ),
             tools=[*_switched_on(await agent_grants(deps, a), effective), *offers],
             transcript=transcript,
+            carried_skills=carried,
+            earlier_reads=reads,
+            carried_plan=open_plan,
             user_turn=state["message"],
             kb_ids=[*_granted(state, grants), *([ATTACHMENT_KB] if attached else [])],
             attachments=[
@@ -170,7 +191,9 @@ def build(
         req = TurnRequest(
             turn_id=new_id("turn"),
             run_id=new_id("run"),
-            settings=await with_memory(deps, deps.catalog.settings_for(a, deps.model_alias, effective), a.id),
+            settings=await with_apps(
+                deps, await with_memory(deps, deps.catalog.settings_for(a, deps.model_alias, effective), a.id), a.id
+            ),
             tools=[*_switched_on(await agent_grants(deps, a), effective), *offers],
             resume=Resume(
                 interrupt=interrupt_from_state(state.get("pending") or {}),

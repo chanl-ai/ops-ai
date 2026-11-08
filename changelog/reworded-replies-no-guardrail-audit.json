@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "Reworded replies no longer show a guardrail audit",
+  "description": "A reply the assistant only reworded at the end no longer shows what a guardrail took back; that note now appears only when a guardrail refused or replaced the answer.",
+  "tag": "fix"
+}

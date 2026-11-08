@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Viewers no longer add document types",
+  "description": "Adding a document type, or one from a template, now needs permission to create document types, which viewers do not have. Viewers still keep the team's types up to date and run Extract.",
+  "tag": "fix"
+}

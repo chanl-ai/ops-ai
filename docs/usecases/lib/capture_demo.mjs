@@ -310,7 +310,7 @@ async function taskDecided(page) {
   await pause(page, 1500);
   for (let i = 0; i < 20 && (await api('agents', `/v1/runs/${testRun}`, as)).status !== 'succeeded'; i++) await pause(page, 1000);
   await page.goto(`${ORIGIN}/workflows/runs/${testRun}`, { waitUntil: 'domcontentloaded' });
-  await page.getByText('Ended at Credited').first().waitFor({ timeout: 60_000 });
+  await page.getByText('Finished at the Credited end').first().waitFor({ timeout: 60_000 });
   await pause(page, 3500);
   // The test run's case is marked [Test]; it is closed so the team's open cases stay the seeded ones.
   for (const c of rows(await api('agents', '/v1/cases?search=%5BTest%5D&pageSize=50', as))) {

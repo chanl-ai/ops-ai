@@ -18,7 +18,8 @@ cursor, pages = await drain(source, saved_cursor, handle)  # save cursor only af
 await mail.sender().send(OutboundMessage(key, ("customer@example.com",), "Subject", "Body"))
 ```
 
-Consumers: the email trigger (`services/agents-service/src/ops_agents/api/email_trigger.py`), the v1 mailbox channel
-(`api/channels/mailbox/adapter.py`) and the `send_reply` tool (`services/tools-service/src/ops_tools/tools.py`).
-Docs: [docs/packages/ops_email/overview.md](../../docs/packages/ops_email/overview.md). The Graph provider is tested on a mock transport only (unverified
-against a tenant).
+Consumers: the email trigger (`services/agents-service/src/ops_agents/api/email_trigger.py`), the mailbox gateway
+(`api/mailbox_gateway.py`), platform-service's password mail (`ops_platform/passwords.py`) and tools-service's
+`send_reply` tool and mailboxes (`services/tools-service/src/ops_tools/tools.py`, `mailboxes.py`).
+Tests: `make test PKG=packages/ops_email`. Docs: [docs/packages/ops_email/overview.md](../../docs/packages/ops_email/overview.md).
+The Graph provider is tested on a mock transport only (unverified against a tenant).

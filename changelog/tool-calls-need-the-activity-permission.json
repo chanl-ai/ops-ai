@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Tool calls are read only with the activity permission",
+  "description": "The tool-call log names who called each tool, so it is now read only by people whose roles hold Activity: view, which reviewers, builders and admins do and viewers do not. A tool's and an app's call history follow the same rule.",
+  "tag": "fix"
+}

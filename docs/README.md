@@ -366,6 +366,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/files-service/file-lifecycle.md` | uc-093: James stores a PDF through files-service's proxy route; download waits for the scan hook; Priya holds it and delete is refused; released, it deletes |
 | `usecases/files-service/file-team-boundary.md` | uc-094: another team's admin gets 404 on every files-service route for a file it does not own; another tenant's service gets 404 |
 | `usecases/files-service/a-file-is-read-with-detect.md` | uc-331: A file is read with Detect from the Files page |
+| `usecases/files-service/file-page-preview.md` | uc-629: A file's page shows its preview or says why not |
 | `usecases/tools-service/failure-side-and-real-reads.md` | uc-038: a failed tool call says which side failed, and a test call reaches the real system |
 | `usecases/platform-service/sign-in-and-sessions.md` | uc-021: sign in, session, refresh with rotation, sign out |
 | `usecases/platform-service/password-sign-in-and-reset.md` | uc-160: a mailed reset link sets a hashed password once and ends the old sessions |
@@ -415,6 +416,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `usecases/models-service/a-team-connects-azure-openai.md` | uc-605: A team runs its agents on its own Azure OpenAI resource, set on Settings or at install, and calls stay in its region |
 | `usecases/tools-service/per-person-sign-in.md` | uc-558: people connect their own Salesforce account; a call acts as the person who asked |
 | `usecases/tools-service/agents-query-salesforce-many-ways.md` | uc-581: an agent queries Salesforce seven ways, a page at a time, and nothing it types changes a query |
+| `usecases/tools-service/meeting-log-saves-both-or-neither.md` | uc-668: a meeting log saves the client's opportunity and its note together, or neither |
 | `usecases/tools-service/a-team-turns-on-the-salesforce.md` | uc-564: a team turns on the Salesforce plugin; its agents work cases and cite its articles |
 | `usecases/tools-service/plugin-sign-in-methods.md` | uc-588: a developer's plugin signs in every way a system asks (none, API key, password, token, OAuth client, each person, client certificate) |
 | `usecases/tools-service/plugin-sign-in-with-a-certificate.md` | uc-583: a team connects a system that allows only certificate sign-in (an Entra app's signed assertion, a Google or DocuSign signed JWT grant) |
@@ -498,3 +500,4 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/tools-service/sign-in-return-any-window.md` | uc-625: Connect comes back Connected in any window, for every sign-in app |
 | `usecases/tools-service/apps-screens-for-each-role.md` | uc-626: Apps screens offer only what you may do, in plain words |
 | `usecases/tools-service/salesforce-org-address.md` | uc-627: A team connects Salesforce at its company address and its agents query that org |
+| `usecases/tools-service/turn-on-in-one-window.md` | uc-628: An admin turns an app on in one window and everyone can use it |

@@ -70,6 +70,8 @@ class SkillPinRule(_Model):
     tokens: int = 0
     # The skill's own reply when one of its guardrails refuses; absent on versions saved before it.
     refusal: str = ""
+    # The tools the skill names, so a turn can say which app it needs and that app's state.
+    tool_ids: list[str] = Field(default_factory=list[str], alias="toolIds")
 
 
 class WidgetPinRule(_Model):
@@ -253,6 +255,8 @@ class Catalog(_Model):
             temperature=effective.temperature if effective else None,
             max_tool_calls=agent.max_tool_calls,
             max_steps=agent.max_model_calls,
+            # Every chat answer is checked for codes, stray endings and uncited knowledge before it is kept.
+            end_check=True,
             tool_search_above=self.tool_search_above,
             redact_pii=agent.redact_pii,
             guardrails=[

@@ -1,0 +1,27 @@
+# The meeting log flow on a real Salesforce org, as James with the real model, questions first: the assistant finds
+# the one open opportunity that fits, infers the next stage from the allowed stages' order, reads the update back in one line
+# with Save, Change something and Show as form (no question needed here; meeting-log-ask.yaml covers one), and on Save writes the
+# opportunity and the meeting's Task in one save_records call and shows only what changed. No form is drawn. Needs the
+# demo records (make demo-org-seed AS=james) and save_records added to James's team; make demo-org-remove AS=james then
+# make demo-org-seed AS=james puts the opportunity back before a second run. Run on demand, not in CI.
+as: [james]
+real: [james]
+turns:
+  - say: "Log my meeting with the Okafor Family Trust: Grace wants to add $25,000 and we agreed to move it forward a stage"
+    expect:
+      tool: salesforce_query
+      followUps: true
+      says: ["Education savings", "Save"]
+      notWidgets: [form]
+      noInternalIds: true
+      maxSteps: 4
+  - say: "Save"
+    expect:
+      tool: salesforce_save_records
+      notTools: [load_skill, salesforce_query, salesforce_search]
+      widget: entity
+      notWidgets: [form]
+      noQuestion: true
+      noInternalIds: true
+      noErrorCode: true
+      maxSteps: 3

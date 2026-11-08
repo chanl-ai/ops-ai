@@ -101,6 +101,8 @@ interface DataTableWithViewsProps<TData, TValue> {
   defaultView?: 'table' | 'grid';
   /** Hide the table/grid view toggle button (view stays locked to defaultView) */
   hideViewSwitcher?: boolean;
+  /** Leaves out the paging bar when every row fits on one page (a short result in chat). */
+  hidePaginationOnOnePage?: boolean;
   // Selection callback
   onSelectionChange?: (selectedRows: TData[]) => void;
   /** Bump this number to imperatively clear row selection (e.g. after a bulk
@@ -158,7 +160,9 @@ function useRememberedColumns<T, V>(columns: ColumnDef<T, V>[], initial: Visibil
     for (const c of columns) {
       const k = keyOf(c);
       if (!k || k === 'select' || k === 'actions' || k in initial) continue;
-      if (c.enableHiding === false || shown < SHOWN_BY_DEFAULT) shown++;
+      // The record id is a detail: under View until the person turns it on, and never counted among the five.
+      if ((c.meta as ColumnMeta | undefined)?.kind === 'id') out[k] = false;
+      else if (c.enableHiding === false || shown < SHOWN_BY_DEFAULT) shown++;
       else out[k] = false;
     }
     return out;
@@ -190,7 +194,7 @@ function useRememberedColumns<T, V>(columns: ColumnDef<T, V>[], initial: Visibil
 }
 
 export function DataTableWithViews<TData, TValue>({
-  columns,
+  columns: given,
   data,
   searchColumn = 'title',
   searchPlaceholder = 'Filter...',
@@ -203,6 +207,7 @@ export function DataTableWithViews<TData, TValue>({
   gridClassName,
   defaultView = 'table',
   hideViewSwitcher = false,
+  hidePaginationOnOnePage = false,
   onSelectionChange,
   selectionResetKey,
   filterResetKey,
@@ -216,6 +221,10 @@ export function DataTableWithViews<TData, TValue>({
   prependFilters,
   getRowId,
 }: DataTableWithViewsProps<TData, TValue>) {
+  // A row checkbox only where picking rows does something: a bulk action the person may take, or a page that reads the
+  // selection. Without either (a viewer, whose bulk actions are all withheld) the column is left out.
+  const selects = bulkActions.length > 0 || !!onSelectionChange;
+  const columns = React.useMemo(() => (selects ? given : given.filter((c) => c.id !== 'select')), [given, selects]);
   const [rowSelection, setRowSelection] = React.useState({});
   const [columnVisibility, setColumnVisibility] = useRememberedColumns(columns, initialColumnVisibility);
   const [columnFilters, setColumnFilters] =
@@ -556,7 +565,9 @@ export function DataTableWithViews<TData, TValue>({
         </div>
       )}
 
-      <DataTablePagination table={table} serverPagination={serverPaginationProps} />
+      {!(hidePaginationOnOnePage && !serverPagination && table.getPageCount() <= 1) && (
+        <DataTablePagination table={table} serverPagination={serverPaginationProps} />
+      )}
     </div>
   );
 }

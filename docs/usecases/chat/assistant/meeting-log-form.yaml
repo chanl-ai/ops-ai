@@ -1,0 +1,21 @@
+# The meeting log flow for a person who prefers forms, as James with the real model: "I prefer forms" is offered as a
+# memory to confirm, a standing rule ("always ...") is kept at once, and the next log goes straight to the review form instead of asking questions. Remove that
+# memory afterwards (Memory, in the chat header) so the questions-first script runs as written. Needs the demo records.
+as: [james]
+real: [james]
+turns:
+  - say: "I prefer forms"
+    expect:
+      remembers: suggested
+      noTool: true
+      maxSteps: 1
+  - say: "Always show me a form for Salesforce updates"
+    expect:
+      remembers: active
+      noTool: true
+      maxSteps: 1
+  - say: "Log my meeting with the Okafor Family Trust: Grace wants to add $25,000 and we agreed to move to Proposal/Price Quote"
+    expect:
+      widget: form
+      noInternalIds: true
+      maxSteps: 4

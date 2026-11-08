@@ -93,6 +93,8 @@ class Runtime:
     chat_attachments: Any = None
     # People's display names from platform-service (people_names.py); None without a platform URL.
     people_names: Any = None
+    # The apps line kept per team and person (apps_line.AppsLine); set with the graphs, forgotten on a turn-on.
+    apps_line: Any = None
     # API keys from platform-service for the Channels list (key_summaries.py); None without a platform URL.
     key_summaries: Any = None
     # System workflows (service_events.py): the shipped list when None; a test sets its own. Published to a tenant the

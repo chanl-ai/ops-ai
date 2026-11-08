@@ -1,0 +1,22 @@
+# A plan survives a sign-in, with the real model and nobody at a browser: the script signs James out of Salesforce here
+# (make sf-signin-remove, which keeps the sign-in alive at Salesforce), so the step that needs Salesforce stops at the
+# Connect card with the plan shown and that step waiting; then it puts his kept sign-in back (make sf-signin-restore)
+# and sends the card's follow-up, which goes on at that step and finishes the plan. Run `make sf-signin-save AS=james`
+# once while he is signed in. Needs the demo records. Run on demand, not in CI.
+as: [james]
+real: [james]
+signedOut: true
+turns:
+  - say: "Find the client with a High priority task not yet started, then check that client's open opportunities and open cases, and tell me what to raise with them"
+    expect:
+      card: true
+      plan: blocked
+      never: ["token", "password"]
+      maxSteps: 4
+  - connected: restore
+    expect:
+      tool: salesforce_query
+      notTools: [load_skill]
+      plan: done
+      says: ["education"]
+      maxSteps: 4

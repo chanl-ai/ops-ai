@@ -7,6 +7,7 @@ from typing import Any, Protocol
 
 from pydantic_ai.models import Model
 
+from .tool_cache import ToolCaches
 from .types import Passage
 
 
@@ -19,6 +20,9 @@ class ToolOutcome:
     # Why the call must wait for a person before it runs (the gateway's check before sending); the kernel
     # pauses the turn for approval with it, as a gated write's.
     needs_review: str | None = None
+    # What the model is told in place of `output`, when the person is shown the outcome another way (a Connect card):
+    # a plain line with no code, link or address to repeat. `output` stays on the call record for the card.
+    for_model: Any = None
 
 
 class ToolExecutor(Protocol):
@@ -52,3 +56,5 @@ class KernelPorts:
     knowledge: KnowledgePort
     # When set, each turn runs on `models.model_for(settings.model_alias)`; otherwise every turn runs on `model`.
     models: ModelSource | None = None
+    # The reads of the conversation and person a call is made for (tool_cache.py); None reads every time.
+    tool_caches: ToolCaches | None = None

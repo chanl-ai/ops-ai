@@ -24,6 +24,11 @@ _ACCOUNT = re.compile(r"(?<![\w,.])\d{8,17}(?![\w,.])")
 _WORDS = r"(?i)\b(ssn|social security(?: number)?|account|acct|card)\b"
 _BETWEEN = r"((?:\s+(?:number|no\.?|#|ending|ends|in|with))*\s*[:#]?\s*\**)"
 _TAIL = re.compile(_WORDS + _BETWEEN + r"(\d{4,17})\b")
+# A record's number named as one ("Case 00045120", "order no. 1234567890"): eight digits is a Salesforce case number,
+# not an account, so the digits after these words are left as they are.
+_RECORD_WORDS = r"(?i)\b(?:case|ticket|order|invoice)(?:\s+(?:number|no\.?))?\s*#?\s*"
+_RECORD = re.compile(_RECORD_WORDS + r"(?=\d)")
+_OPEN_RECORD = re.compile(_RECORD_WORDS + r"$")
 # The same words still waiting for their digits at the end of released text: a cut must come before them.
 _OPEN_TAIL = re.compile(_WORDS + _BETWEEN + r"$")
 
@@ -36,7 +41,8 @@ def mask(text: str) -> str:
     text = _CARD.sub("[card]", text)
     text = _PHONE.sub("[phone]", text)
     text = _TAIL.sub(lambda m: f"{m.group(1)}{m.group(2)}••••", text)
-    return _ACCOUNT.sub("[account]", text)
+    kept = {m.end() for m in _RECORD.finditer(text)}
+    return _ACCOUNT.sub(lambda m: m.group(0) if m.start() in kept else "[account]", text)
 
 
 class StreamMasker:
@@ -52,7 +58,7 @@ class StreamMasker:
         if limit <= 0:
             return ""
         cut = max((i + 1 for i in range(limit) if self.pending[i].isspace()), default=0)
-        if (opened := _OPEN_TAIL.search(self.pending[:cut])) is not None:
+        if (opened := _OPEN_TAIL.search(self.pending[:cut]) or _OPEN_RECORD.search(self.pending[:cut])) is not None:
             cut = opened.start()
         if cut == 0:
             return ""

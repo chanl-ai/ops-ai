@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "A prep brief shows each count once",
+  "description": "A section of a meeting prep brief shows how many records it holds in its badge only, not again in its title.",
+  "tag": "fix"
+}

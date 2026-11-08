@@ -3,14 +3,14 @@
 import * as React from 'react';
 import Link from 'next/link';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Download, History, KeyRound, Rocket, ShieldCheck, Trash2 } from 'lucide-react';
+import { Download, FileSearch, KeyRound, LogIn, Rocket, ShieldCheck, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { openLink } from '@/components/files/file-actions';
 import { AuditSheet } from '@/components/logs/audit-sheet';
-import { ACTION_LABEL, ActionBadge, ActorCell, options, TARGET_LABEL } from '@/components/logs/log-meta';
+import { ACTION_LABEL, ActorCell, options, TARGET_LABEL } from '@/components/logs/log-meta';
 import { PageLayout } from '@/components/page-layout';
 import { StopRowClick } from '@/components/shared/form-field';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -22,10 +22,11 @@ import { selectColumn } from '@/components/shared/select-column';
 import { Button } from '@/components/ui/button';
 import { useDownloadFile, useExportAudit } from '@/hooks/file-queries';
 import { useAudit } from '@/hooks/governance-queries';
-import { useCan } from '@/hooks/me-queries';
+import { useNavAllows } from '@/hooks/me-queries';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { useTeam } from '@/hooks/use-team';
 import { ApiError } from '@/lib/api';
+import { AUDIT_LOG } from '@/lib/nav';
 import { dateTime, plural, relativeTime } from '@/lib/format';
 import type { AuditEntry, AuditFilters, AuditView } from '@/lib/types/governance';
 import { serverPagination } from '@/components/shared/server-pagination';
@@ -52,14 +53,13 @@ function columns(showTeam: boolean): ColumnDef<Row>[] {
       header: 'What happened',
       cell: ({ row }) => (
         <div className="max-w-sm min-w-56">
-          <div className="flex min-w-0 items-center gap-2">
-            <ActionBadge action={row.original.action} />
-            <span className="truncate text-sm" title={row.original.summary}>
-              {row.original.summary}
-            </span>
+          {/* The summary names the action itself ("Signed in with a password"), so no action chip repeats it; the
+              Action filter groups rows by it. Whole, never cut: it is the row's only words. */}
+          <div className="text-sm break-words whitespace-normal" title={row.original.summary}>
+            {row.original.summary}
           </div>
           {row.original.reason && (
-            <div className="mt-0.5 truncate text-xs text-muted-foreground" title={row.original.reason}>
+            <div className="mt-0.5 text-xs text-muted-foreground break-words whitespace-normal" title={row.original.reason}>
               {row.original.reason}
             </div>
           )}
@@ -99,21 +99,25 @@ function columns(showTeam: boolean): ColumnDef<Row>[] {
   ];
 }
 
+// Changes first: sign-ins are most of an account's entries, so they have their own view and All keeps everything.
 const VIEWS: { id: AuditView; label: string; icon?: typeof Rocket }[] = [
-  { id: 'all', label: 'All' },
+  { id: 'changes', label: 'Changes' },
   { id: 'publishes', label: 'Publishes and approvals', icon: Rocket },
   { id: 'access', label: 'Access changes', icon: KeyRound },
   { id: 'deletions', label: 'Deletions', icon: Trash2 },
+  { id: 'sign_ins', label: 'Sign-ins', icon: LogIn },
+  { id: 'all', label: 'All' },
 ];
 
 export default function AuditPage() {
   const { team, teams } = useTeam();
-  // The service reads the log for admins of the team only, so only an admin is offered the export of it.
-  const canExport = useCan('audit', 'view') === true;
+  // platform-service reads the log for whoever holds audit.view in the team; anyone else is told so without a request.
+  const may = useNavAllows()(AUDIT_LOG);
+  const canExport = may === true;
   const showTeam = team?.scope === 'all';
-  const [view, setView] = React.useState<AuditView>('all');
+  const [view, setView] = React.useState<AuditView>('changes');
   const list = useListParams<AuditFilters>('summary', 20);
-  const query = useAudit({ ...list.params, view });
+  const query = useAudit({ ...list.params, view }, may === true);
   const [activeId, setActiveId] = React.useState<string | null>(null);
 
   const entries = query.data?.data ?? [];
@@ -152,7 +156,7 @@ export default function AuditPage() {
   return (
     <PageLayout
       switcher
-      icon={History}
+      icon={FileSearch}
       title="Audit log"
       description="Who changed what: publishes, approvals, access, settings and sign-ins"
       actions={
@@ -163,10 +167,10 @@ export default function AuditPage() {
         ) : undefined
       }
     >
-      {query.isPending ? (
-        <PageSkeleton tableRows={10} />
-      ) : query.isError && !query.data && query.error instanceof ApiError && query.error.code === 'admin_required' ? (
+      {may === false || (query.isError && !query.data && query.error instanceof ApiError && query.error.code === 'admin_required') ? (
         <EmptyState icon={ShieldCheck} title="Only a team admin reads the audit log" description="Ask an admin of this team for what you need, or for the admin role." testId="audit-admin-only" />
+      ) : query.isPending ? (
+        <PageSkeleton tableRows={10} />
       ) : query.isError && !query.data ? (
         <QueryError what="the audit log" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} />
       ) : (
@@ -204,7 +208,7 @@ export default function AuditPage() {
             serverPagination={serverPagination(list, query)}
             emptyState={
               <ListEmpty
-                icon={History}
+                icon={FileSearch}
                 noun={view === 'all' ? 'entries' : VIEWS.find((v) => v.id === view)!.label.toLowerCase()}
                 filtered={list.isFiltered}
                 description="Changes to workflows, agents, access and settings in this team are recorded here."

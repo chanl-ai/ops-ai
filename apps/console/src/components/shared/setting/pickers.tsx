@@ -35,14 +35,17 @@ function List({ options, selected, onPick, noun }: { options: PickerOption[]; se
   );
 }
 
-/** Pick one of many by searching: a team, an agent, a model alias. */
-export function Combobox({ options, value, onChange, noun, placeholder, id }: { options: PickerOption[]; value: string | null; onChange: (v: string) => void; noun: string; placeholder?: string; id?: string }) {
+/**
+ * Pick one of many by searching: a team, an agent, a model alias. A combobox takes no name from its text, so `label`
+ * names it unless `id` ties it to a visible <label>.
+ */
+export function Combobox({ options, value, onChange, noun, placeholder, id, label }: { options: PickerOption[]; value: string | null; onChange: (v: string) => void; noun: string; placeholder?: string; id?: string; label?: string }) {
   const [open, setOpen] = React.useState(false);
   const current = options.find((o) => o.value === value);
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button id={id} type="button" variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between bg-card font-normal">
+        <Button id={id} type="button" variant="outline" role="combobox" aria-expanded={open} aria-label={id ? undefined : (label ?? `Choose ${noun}`)} className="w-full justify-between bg-card font-normal">
           <span className={cn('truncate', !current && 'text-muted-foreground')}>{current?.label ?? placeholder ?? `Choose ${noun}`}</span>
           <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
         </Button>
@@ -62,15 +65,15 @@ export function Combobox({ options, value, onChange, noun, placeholder, id }: { 
   );
 }
 
-/** Pick several by searching; the choices show as removable chips under the field. */
-export function MultiSelect({ options, value, onChange, noun, placeholder }: { options: PickerOption[]; value: string[]; onChange: (v: string[]) => void; noun: string; placeholder?: string }) {
+/** Pick several by searching; the choices show as removable chips under the field. `label` names it, as for Combobox. */
+export function MultiSelect({ options, value, onChange, noun, placeholder, label }: { options: PickerOption[]; value: string[]; onChange: (v: string[]) => void; noun: string; placeholder?: string; label?: string }) {
   const [open, setOpen] = React.useState(false);
   const toggle = (v: string) => onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v]);
   return (
     <div className="flex flex-col gap-2">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button type="button" variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between bg-card font-normal">
+          <Button type="button" variant="outline" role="combobox" aria-expanded={open} aria-label={label ?? `Choose ${noun}`} className="w-full justify-between bg-card font-normal">
             <span className={cn('truncate', !value.length && 'text-muted-foreground')}>{value.length ? `${value.length} selected` : (placeholder ?? `Choose ${noun}`)}</span>
             <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
           </Button>

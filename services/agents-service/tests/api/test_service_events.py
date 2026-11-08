@@ -114,7 +114,7 @@ async def test_one_event_starts_one_run_and_a_failed_one_is_retried_by_key(stack
     assert first["status"] == "started" and first["runIds"] == again["runIds"] and again["attempts"] == 1, again
     [run_id] = first["runIds"]
     detail = await run(c, run_id)
-    assert detail["startedBy"] == {"kind": "event", "id": "files/file.deleted", "name": "file.deleted from files"}
+    assert detail["startedBy"] == {"kind": "event", "id": "files/file.deleted", "name": "File deleted"}
     async with rt.db.begin() as conn:
         await conn.execute(engine_runs.update().where(engine_runs.c.id == run_id).values(status="failed"))
     retried = await emit(c, "fil_1")
@@ -182,7 +182,7 @@ async def test_a_request_is_the_askers_run_and_says_which_service_carried_it(sta
     [run_id] = (await emit(c, "fil_4", actor="james@harborpine.example"))["runIds"]
     started = (await run(c, run_id))["startedBy"]
     assert (started["kind"], started["id"]) == ("person", "james@harborpine.example"), started
-    assert started["via"] == {"kind": "event", "id": "files/file.deleted", "name": "file.deleted from files"}
+    assert started["via"] == {"kind": "event", "id": "files/file.deleted", "name": "File deleted"}
     # created_by is the asker's own email, so every rule on who started a run (decide, cancel) reads the person.
     async with rt.db.connect() as conn:
         row = (await conn.execute(sa.select(engine_runs).where(engine_runs.c.id == run_id))).mappings().one()

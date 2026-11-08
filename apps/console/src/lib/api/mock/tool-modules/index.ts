@@ -173,7 +173,7 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
   /** A module's latest gateway calls, newest first. */
   recentCalls: (moduleId: string, n: number) => ToolCallRow[];
   /** Each endpoint host and the ids of the modules calling it, for the egress allow-list. */
-  hostsInUse: () => Record<string, string[]>;
+  hostsInUse: () => Record<string, ModuleRef[]>;
   /** Each secret name and the operations whose headers or path read it. */
   secretUsers: () => Record<string, SecretUser[]>;
 } {
@@ -1058,10 +1058,10 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
       return out;
     },
     hostsInUse: () => {
-      const out: Record<string, string[]> = {};
+      const out: Record<string, ModuleRef[]> = {};
       for (const m of mods) {
         try {
-          (out[new URL(m.endpoint).hostname] ??= []).push(m.id);
+          (out[new URL(m.endpoint).hostname] ??= []).push({ id: m.id, name: m.displayName });
         } catch {
           // A draft with no endpoint yet calls no host.
         }
