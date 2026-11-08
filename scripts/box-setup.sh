@@ -4,7 +4,7 @@
 # Safe to run again: it wakes what is stopped and updates what is behind.
 #
 #   BRANCH=main            the branch to check out (a branch that is not on origin is refused)
-#   RESET=1                wipe the database to the seeded state (make reset-db) before the stack starts
+#   BOX_RESET=1            wipe the database to the seeded state (make reset-db) before the stack starts
 #   OPS_DATABASE_URL=...   use this database and start no local PostgreSQL (the setting that moves it outside the box)
 #   OPS_PUBLIC_ORIGIN=...  the box's https address; read from the box itself when not given
 #
@@ -154,13 +154,13 @@ for p in 8181 1025 3025 8745 8081; do wait_port 127.0.0.1 "$p" 60 || wait_port "
 done_step
 
 # ---- the stack -------------------------------------------------------------------------------------------------
-step "stack${RESET:+ (database reset)}"
+step "stack${BOX_RESET:+ (database reset)}"
 export OPS_INFRA=external
 cd "$REPO"
-if [ "${RESET:-}" = 1 ] || [ "$SERVICES_CHANGED" = 1 ]; then
+if [ "${BOX_RESET:-}" = 1 ] || [ "$SERVICES_CHANGED" = 1 ]; then
   make -s down KEEP_DB=1 >/dev/null 2>&1 || true
 fi
-if [ "${RESET:-}" = 1 ]; then
+if [ "${BOX_RESET:-}" = 1 ]; then
   make -s reset-db CONFIRM=yes >"$BOX/reset.log" 2>&1 || { tail -10 "$BOX/reset.log" >&2; die "reset-db failed"; }
 fi
 make -s up AUTH=platform DEMO_MODEL=fake >"$BOX/up.log" 2>&1 || { tail -25 "$BOX/up.log" >&2; die "make up failed (log $BOX/up.log)"; }

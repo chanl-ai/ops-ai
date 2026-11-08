@@ -57,7 +57,7 @@ case "${1:-}" in
     "$(sprite_bin)" config update -o "$org" -s "$sprite" --url-auth sprite >/dev/null
     reset_flag=; [ "$verb" = reset ] && reset_flag=1
     "$(sprite_bin)" exec -o "$org" -s "$sprite" --no-port-forward -- \
-      env "BRANCH=$branch" "OPS_PUBLIC_ORIGIN=$origin" "RESET=$reset_flag" bash -s <"$(dirname "$0")/box-setup.sh"
+      env "BRANCH=$branch" "OPS_PUBLIC_ORIGIN=$origin" "BOX_RESET=$reset_flag" bash -s <"$(dirname "$0")/box-setup.sh"
     ;;
   url)
     sprite=$(sprite_name "${2:?usage: sprite-lane.sh url <name>}")
