@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // One headless pass over a cloud box through its public address, as a person with the link would use it:
 // 1 the box refuses a visitor without the cookie, 2 the one-time link sets the cookie and lands on /login,
-// 3 a demo sign-in lands on chat and stays there, 4 an API call with the app's own token answers 200.
+// 3 a demo sign-in lands on chat and stays there 60 seconds with no reload, no request to /login and no websocket error, 4 an API call with the app's own token answers 200.
 //   BOX_KEY=<key> node scripts/box-check.mjs https://ops-ai-box-1-xxxx.sprites.app
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
@@ -27,6 +27,26 @@ let appAuth = '';
 page.on('request', (r) => {
   const h = r.headers().authorization;
   if (h && r.url().startsWith(`${base}/api/platform/`)) appAuth = h;
+});
+// Each document load adds one to a sessionStorage counter, so a page that reloads itself shows as more than one load.
+await context.addInitScript(() => {
+  try {
+    sessionStorage.setItem('__loads', String(Number(sessionStorage.getItem('__loads') || 0) + 1));
+  } catch {}
+});
+let watching = false;
+const watched = { logins: [], socketErrors: [], navigations: 0 };
+page.on('request', (r) => {
+  if (watching && new URL(r.url()).pathname === '/login') watched.logins.push(r.url());
+});
+page.on('console', (m) => {
+  if (watching && /websocket/i.test(m.text()) && (m.type() === 'error' || m.type() === 'warning')) watched.socketErrors.push(m.text().slice(0, 120));
+});
+page.on('pageerror', (e) => {
+  if (watching && /websocket/i.test(e.message)) watched.socketErrors.push(e.message.slice(0, 120));
+});
+page.on('framenavigated', (f) => {
+  if (watching && f === page.mainFrame()) watched.navigations += 1;
 });
 const failures = [];
 const step = async (name, fn) => {
@@ -58,7 +78,7 @@ await step('link sets the cookie and lands on login', async () => {
   await page.screenshot({ path: join(shots, 'login.png') });
   return 'ops_box set, HttpOnly, Secure';
 });
-await step('demo sign-in stays on chat for 10 seconds', async () => {
+await step('demo sign-in stays on chat for 60 seconds with no reload', async () => {
   await page.getByTestId('login-demo').click();
   const person = page.getByTestId('login-demo-person').first();
   await person.waitFor({ timeout: 30_000 });
@@ -66,10 +86,19 @@ await step('demo sign-in stays on chat for 10 seconds', async () => {
   await person.click();
   await page.waitForURL(/\/chat/, { timeout: 120_000 });
   await page.getByText('Ask Ops Assistant anything').waitFor({ timeout: 120_000 });
-  await page.waitForTimeout(10_000);
-  if (!/\/chat/.test(new URL(page.url()).pathname)) throw new Error(`bounced to ${new URL(page.url()).pathname}`);
+  const loadsBefore = Number(await page.evaluate(() => sessionStorage.getItem('__loads')));
+  watching = true;
+  await page.waitForTimeout(60_000);
+  watching = false;
+  const loadsAfter = Number(await page.evaluate(() => sessionStorage.getItem('__loads')));
+  const path = new URL(page.url()).pathname;
+  if (!/\/chat/.test(path)) throw new Error(`bounced to ${path}`);
+  if (loadsAfter !== loadsBefore) throw new Error(`the page loaded ${loadsAfter - loadsBefore} more time(s) while idle`);
+  if (watched.navigations) throw new Error(`${watched.navigations} navigation(s) while idle`);
+  if (watched.logins.length) throw new Error(`${watched.logins.length} request(s) to /login while idle`);
+  if (watched.socketErrors.length) throw new Error(`websocket error: ${watched.socketErrors[0]}`);
   await page.screenshot({ path: join(shots, 'chat.png') });
-  return `${who} at ${new URL(page.url()).pathname}`;
+  return `${who} at ${path}; 0 reloads, 0 /login requests, 0 websocket errors in 60s`;
 });
 await step('API call with the app token answers 200', async () => {
   if (!appAuth) throw new Error('the console sent no Authorization header');

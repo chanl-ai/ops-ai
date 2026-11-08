@@ -70,7 +70,11 @@ case "${1:-}" in
     ;;
   check)
     sprite=$(sprite_name "${2:?usage: sprite-lane.sh check <name>}")
-    BOX_KEY=$(box_key "$sprite") node "$(dirname "$0")/box-check.mjs" "$(box_url "$sprite")"
+    BOX_KEY=$(box_key "$sprite") node "$(dirname "$0")/box-check.mjs" "$(box_url "$sprite")" || fail=1
+    # The console's memory, so a leak in the served build shows next to the pass or fail.
+    "$(sprite_bin)" exec -o "$org" -s "$sprite" --no-port-forward -- bash -c \
+      'ps -eo rss,args | awk "/next-server|next start/ && !/awk/ {s+=\$1} END {printf \"console memory: %d MB\\n\", s/1024}"' 2>/dev/null || true
+    exit "${fail:-0}"
     ;;
   status)
     sprite=$(sprite_name "${2:?usage: sprite-lane.sh status <name>}")

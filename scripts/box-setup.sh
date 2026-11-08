@@ -194,7 +194,11 @@ done_step
 # ---- the stack -------------------------------------------------------------------------------------------------
 step "stack${BOX_RESET:+ (database reset)}"
 export OPS_INFRA=external
+# The console runs from a production build: the dev server's HMR websocket fails behind the box's proxy and the page
+# reloads in a loop. The build runs on first start of a checkout (scripts/console-prod.sh); a reset forces a new one.
+export OPS_CONSOLE_MODE=prod OPS_READY_TIMEOUT=900
 cd "$REPO"
+[ "${BOX_RESET:-}" = 1 ] && rm -f apps/console/.next/.ops-built
 if [ "${BOX_RESET:-}" = 1 ] || [ "$SERVICES_CHANGED" = 1 ]; then
   make -s down KEEP_DB=1 >/dev/null 2>&1 || true
 fi
