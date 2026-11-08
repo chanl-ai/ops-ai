@@ -26,6 +26,7 @@ import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion';
 import { LayoutWidget } from './widget-layout';
 import { WidgetView } from './widget-view';
 import { ChatWidgetView } from './widgets';
+import { wasNotRun } from '@/lib/tool-calls';
 
 const FEEDBACK_REASONS = ['Wrong answer', 'Missing from the knowledge base', 'Cited the wrong document', 'Tool returned the wrong data', 'Not what I asked'];
 
@@ -156,7 +157,8 @@ export function AssistantMessage({
           {byline}
         </span>
       )}
-      {message.toolCalls?.map((c) => {
+      {/* Calls the reply's limits stopped before they ran did nothing; the call log still lists them. */}
+      {message.toolCalls?.filter((c) => !wasNotRun(c)).map((c) => {
         const cards = opsCards(c);
         const need = connectionRequired(c);
         if (need) return <ConnectionRequiredCard key={c.id} call={c} need={need} onReply={readOnly ? undefined : onReply} />;

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "Calls that never ran no longer show as errors",
+  "description": "When a reply reaches its limit, the calls it skipped are no longer listed under the answer as failed steps; the call log still records them.",
+  "tag": "fix"
+}
