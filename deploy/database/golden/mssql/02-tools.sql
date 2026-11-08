@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- tools-service, stamped at tools_0069_token_person_name
+-- tools-service, stamped at tools_0070_config_setting_modes
 CREATE TABLE gateway_calls (
 	id VARCHAR(64) NOT NULL, 
 	tool VARCHAR(64) NOT NULL, 
@@ -175,6 +175,7 @@ CREATE TABLE app_credentials (
 	scopes VARCHAR(2000) NULL, 
 	secret_name VARCHAR(200) NULL, 
 	settings NVARCHAR(max) NULL, 
+	setting_modes NVARCHAR(max) NULL, 
 	created_by VARCHAR(200) NOT NULL, 
 	created_at DATETIMEOFFSET NOT NULL, 
 	updated_by VARCHAR(200) NOT NULL, 
@@ -307,6 +308,8 @@ CREATE TABLE plugin_bindings (
 	digest VARCHAR(64) NULL, 
 	declarations NVARCHAR(max) NULL, 
 	tools_on NVARCHAR(max) NULL, 
+	config_settings NVARCHAR(max) NULL, 
+	setting_modes NVARCHAR(max) NULL, 
 	CONSTRAINT plugin_bindings_pkey PRIMARY KEY (tenant_id, team_id, plugin_id)
 );
 GO
@@ -545,5 +548,5 @@ CREATE TABLE alembic_version_tools (
     CONSTRAINT alembic_version_tools_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0069_token_person_name');
+INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0070_config_setting_modes');
 GO
