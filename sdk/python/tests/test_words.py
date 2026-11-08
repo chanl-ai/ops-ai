@@ -154,3 +154,15 @@ def test_a_document_types_update_and_a_knowledge_sources_removal_go_to_the_servi
     assert seen[-1].url.path == "/api/documents/v1/resources/plugin:desk:case-letter/copies/dt_1/update"
     ops.resources.remove(copy | {"kind": "knowledge_source", "recordId": "src_1", "templateId": "articles"})
     assert (seen[-1].method, seen[-1].url.path) == ("DELETE", "/api/kb/v1/sources/src_1")
+
+
+def test_a_connector_is_disconnected_on_its_primary_account_not_the_apps_first() -> None:
+    # Connectors are one row per app; disconnecting one names the account the row calls primary.
+    rows = [{"appId": "plugin:github", "name": "GitHub", "primaryAccountId": "con_second", "accountCount": 2}]
+    seen: list[httpx.Request] = []
+    ops = client({("GET", "me/connections"): rows}, seen)
+    assert ops.me.connectors.list() == rows
+    ops.me.connectors.disconnect("github")
+    assert (seen[-1].method, seen[-1].url.path) == ("DELETE", "/api/tools/v1/me/accounts/con_second")
+    with pytest.raises(ValueError, match="not one of your connectors"):
+        ops.me.connectors.disconnect("plugin:hubspot")

@@ -1,5 +1,5 @@
 """`ops apps`: the Apps area. The catalog, one app's page, turning an app on as the Turn on window does, adding its
-tools to the team, its accounts and My accounts,
+tools to the team, its accounts and your own sign-ins,
 the sign-in link to connect an account (printed, for a browser to open), an account's test, and the auth configs
 (the team's own app credentials)."""
 
@@ -33,7 +33,9 @@ def main(argv: list[str]) -> int:
     add.add_argument("app")
     add.add_argument("tools", nargs="+")
     sub.add_parser("accounts", parents=common, help="an app's accounts").add_argument("app")
-    sub.add_parser("mine", parents=common, help="My accounts: your own sign-ins on every app")
+    sub.add_parser(
+        "mine", parents=common, help="your own sign-ins on every app, one row per account (ops connectors: one per app)"
+    )
     for name, text in (("connect", "print the sign-in link that connects an account"), ("test", "test an account")):
         p = sub.add_parser(name, parents=common, help=text)
         p.add_argument("app")

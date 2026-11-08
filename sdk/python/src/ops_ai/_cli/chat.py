@@ -3,6 +3,7 @@ and Connect card printed under it; the call log under the chat says whose sign-i
 
     ops chat say --agent "Case helper" --test -m "Status of case 00001026?"
     ops chat say --thread th_x -m "And its owner?"
+    ops chat say --connector GitHub -m "Open issues?"   # a new chat with only GitHub on
     ops chat connected th_x Salesforce        # the Connect card's follow-up, once the person has signed in
     ops chat approve th_x                     # the newest open approval widget; reject needs --reason
     ops chat script docs/usecases/chat/salesforce-case-helper.yaml
@@ -77,6 +78,15 @@ def _start_options(p: argparse.ArgumentParser) -> None:
     p.add_argument("--agent", help="the agent's id, slug or name; the team's default when left out")
     p.add_argument("--kb", action="append", help="a knowledge base to answer from (repeatable)")
     p.add_argument("--test", action="store_true", help="the agent page's Test panel: its newest version")
+    p.add_argument(
+        "--connector",
+        "--connectors",
+        dest="connector",
+        action="append",
+        metavar="APP",
+        help="use only these connectors in the new chat, by name or id (repeatable, or comma-separated); "
+        "the others are off for it",
+    )
 
 
 def _dispatch(ns: argparse.Namespace) -> int:
@@ -159,7 +169,28 @@ def start_thread(ns: argparse.Namespace, ops: OpsAI, first: str | None = None) -
     thread = str(made.get("id") or made.get("threadId"))
     where = console_url(f"/chat/{thread}")
     line(ns, f"thread {thread}" + (f"  {where}" if where else ""))
+    if getattr(ns, "connector", None) or getattr(ns, "connector_off", None):
+        keep = [n.strip() for v in getattr(ns, "connector", None) or [] for n in str(v).split(",") if n.strip()]
+        narrow(ns, ops, thread, keep=keep or None, leave=getattr(ns, "connector_off", None))
     return thread
+
+
+def narrow(
+    ns: argparse.Namespace, ops: OpsAI, thread: str, *, keep: list[str] | None = None, leave: list[str] | None = None
+) -> None:
+    """As the composer's picker does: leaves every connector the chat holds out but `keep`, or leaves out `leave`
+    (names or ids)."""
+    held = [c for c in ops.chat.connectors(thread) if c["state"] != "off_for_team"]
+
+    def names(c: dict[str, Any]) -> set[str]:
+        return {str(c["appId"]).lower(), str(c["name"]).lower()}
+
+    asked = {k.lower() for k in (keep or leave or [])}
+    if missing := sorted(asked - {n for c in held for n in names(c)}):
+        raise ValueError(f"this chat has no connector named {', '.join(missing)}")
+    off = [str(c["appId"]) for c in held if bool(names(c) & asked) != bool(keep)]
+    rows = ops.chat.set_connectors(thread, off=off)
+    line(ns, "connectors " + ", ".join(f"{c['name']} {'on' if c['on'] else 'off'}" for c in rows))
 
 
 def _say(ns: argparse.Namespace, ops: OpsAI, messages: list[str]) -> int:
@@ -188,7 +219,16 @@ def turn(ns: argparse.Namespace, ops: OpsAI, thread: str, text: str) -> dict[str
             line(ns, f"       → {short(c.get('output'))}")
             if card := connect_card(c):
                 seen["cards"].append(card)
-                line(ns, f"  CARD Connect {card.get('connection')} ({card.get('reason')}): {card.get('message')}")
+                reason = card.get("reason")
+                names = ", ".join(str(a.get("account") or a.get("name")) for a in card.get("accounts") or [])
+                what = (
+                    f"Ask an admin {card.get('app')}"
+                    if reason == "app_off"
+                    else f"Which {card.get('app')} account: {names}"
+                    if reason == "account_choice"
+                    else f"Connect {card.get('connection')}"
+                )
+                line(ns, f"  CARD {what} ({card.get('reason')}): {card.get('message')}")
                 line(ns, f"       open: {card.get('connectUrl')}")
         elif kind == "widget":
             w = e["widget"]

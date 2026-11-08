@@ -23,7 +23,7 @@ import { toolsOperations } from './generated/tools-operations.js';
 import { type CallArgs, type Config, type Operation, pageItems, result, type Service, Transport } from './transport.js';
 import { Agents } from './agents.js';
 import { Workflows } from './workflows.js';
-import { Accounts, Apps, Credentials, Resources, Tools, Usage } from './words.js';
+import { Accounts, Apps, Credentials, Me, Resources, Tools, Usage } from './words.js';
 
 type PathOf<O> = O extends { parameters: { path: infer P } } ? P : never;
 type QueryOf<O> = O extends { parameters: { query?: infer Q } } ? Q : never;
@@ -252,6 +252,7 @@ export class OpsAI {
   readonly accounts: Accounts;
   readonly resources: Resources;
   readonly usage: Usage;
+  readonly me: Me;
 
   /** Options win over OPS_BASE_URL, OPS_API_KEY and OPS_TEAM. */
   constructor(options: Partial<Config> = {}) {
@@ -271,6 +272,7 @@ export class OpsAI {
     this.accounts = new Accounts(this.raw, this.apps);
     this.resources = new Resources(this.raw);
     this.usage = new Usage(this.raw);
+    this.me = new Me(this.raw);
     this.knowledge = new Knowledge(t, this.raw);
     this.files = new Files(t, this.raw);
     this.runs = new Runs(t, this.raw);

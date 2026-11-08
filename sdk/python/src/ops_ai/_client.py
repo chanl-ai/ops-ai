@@ -46,10 +46,12 @@ from ._words import (
     AsyncAccounts,
     AsyncApps,
     AsyncCredentials,
+    AsyncMe,
     AsyncResources,
     AsyncTools,
     AsyncUsage,
     Credentials,
+    Me,
     Resources,
     Tools,
     Usage,
@@ -308,6 +310,7 @@ class OpsAI:
         self.tools = Tools(self.raw, self.apps, Resource(self.raw, NOUNS["tools"]))
         self.resources = Resources(self.raw)
         self.usage = Usage(self.raw)
+        self.me = Me(self.raw)
         # The chat screen's routes and the model settings', which the generated layer does not hold.
         self.chat = Chat(self.raw)
         self.models = Models(self.raw)
@@ -371,6 +374,7 @@ class AsyncOpsAI:
         self.tools = AsyncTools(self.raw, self.apps, AsyncResource(self.raw, NOUNS["tools"]))
         self.resources = AsyncResources(self.raw)
         self.usage = AsyncUsage(self.raw)
+        self.me = AsyncMe(self.raw)
         self.chat = AsyncChat(self.raw)
         self.models = AsyncModels(self.raw)
 

@@ -11,6 +11,7 @@ from collections.abc import Callable, Sequence
 from ._cli.agents import main as agents_main
 from ._cli.apps import main as apps_main
 from ._cli.chat import main as chat_main
+from ._cli.connectors import main as connectors_main
 from ._cli.kb import main as kb_main
 from ._cli.login import main as login_main
 from ._cli.memories import main as memories_main
@@ -49,6 +50,7 @@ AREAS: dict[str, tuple[Area, str]] = {
     ),
     "kb": (kb_main, "knowledge: bases, sources, items, add-file, add-text, sync, search, changes"),
     "apps": (apps_main, "apps: list, show, add-tool, accounts, mine, connect, test, auth-configs"),
+    "connectors": (connectors_main, "your connectors, one row per app that acts as you: list, disconnect"),
     "tools": (tools_main, "tools: list, show, run (mock or real), calls"),
     "runs": (runs_main, "workflow runs: list, start, show, events, cancel, retry"),
     "tasks": (tasks_main, "Human Tasks: list, show, decide"),

@@ -170,6 +170,39 @@ export class Accounts {
   }
 }
 
+/** The caller's connectors, as Connectors › Mine lists them: one row per app that acts as them. */
+export class Connectors {
+  constructor(private readonly raw: Raw) {}
+
+  /** One row per app: what it can do as the caller, whom it signs in as, its state (connected, expired, not_connected
+   * or app_off) and its accounts as a count with a primary. */
+  list(): Promise<Obj[]> {
+    return call(this.raw, 'tools', 'apps_my_connections');
+  }
+
+  async get(app: string): Promise<Obj> {
+    const found = (await this.list()).find((c) => c.appId === app || String(c.name).toLowerCase() === app.toLowerCase());
+    if (!found) throw new TypeError(`${app} is not one of your connectors`);
+    return found;
+  }
+
+  /** Ends the caller's own sign-in on the app's primary account, or on `account`. */
+  async disconnect(app: string, { account }: { account?: string } = {}): Promise<void> {
+    const connector = await this.get(app);
+    const target = account ?? (connector.primaryAccountId as string | null | undefined);
+    if (!target) throw new TypeError(`${connector.name} has no account of yours to disconnect`);
+    await call(this.raw, 'tools', 'apps_disconnect', { path: { account_id: target } });
+  }
+}
+
+/** What belongs to the caller themselves. */
+export class Me {
+  readonly connectors: Connectors;
+  constructor(raw: Raw) {
+    this.connectors = new Connectors(raw);
+  }
+}
+
 /** An app's tools. `get`, and `list` with no app, keep the tool modules' listing as it was. */
 export class Tools {
   constructor(private readonly raw: Raw, private readonly apps: Apps, private readonly modules: Resource) {}

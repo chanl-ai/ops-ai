@@ -20,6 +20,17 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "apps_add_own_account": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/me/accounts/{account_id}/another",
+    "pathParams": [
+      "account_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "apps_add_tools": {
     "body": "json",
     "headers": [],
@@ -262,6 +273,15 @@ export const toolsOperations = {
     "query": [
       "every"
     ],
+    "stream": false
+  },
+  "apps_my_connections": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/me/connections",
+    "pathParams": [],
+    "query": [],
     "stream": false
   },
   "apps_open_connect_link": {

@@ -1,5 +1,6 @@
-"""The Apps area in the words people see on screen: `apps`, `credentials`, `accounts`, `tools`, `resources` and
-`usage`, each a few methods over the generated operations, which call the services' routes as they are.
+"""The Apps area in the words people see on screen: `apps`, `credentials`, `accounts`, `tools`, `resources`,
+`usage` and `me.connectors` (Connectors (Mine)), each a few methods over the generated operations, which call the
+services' routes as they are.
 
 An app is named by its id on the Apps page: `plugin:<plugin id>` for an app a plugin brings, `builtin:<name>` for one
 of ours, or a custom app's id. An app's accounts are the team account and any other named one, a sandbox among them (the
@@ -233,6 +234,39 @@ class Accounts:
         return self._raw.tools.apps_disconnect(account)
 
 
+class Connectors:
+    """The caller's connectors, as Connectors (Mine) lists them: one row per app that acts as them."""
+
+    def __init__(self, raw: Any) -> None:
+        self._raw = raw
+
+    def list(self) -> list[dict[str, Any]]:
+        """One row per app: what it can do as the caller, whom it signs in as, its state (connected, expired,
+        not_connected or app_off) and its accounts as a count with a primary."""
+        return cast(list[dict[str, Any]], self._raw.tools.apps_my_connections())
+
+    def get(self, app: str) -> dict[str, Any]:
+        found = next((c for c in self.list() if c["appId"] == app or str(c["name"]).lower() == app.lower()), None)
+        if found is None:
+            raise ValueError(f"{app} is not one of your connectors")
+        return found
+
+    def disconnect(self, app: str, *, account: str | None = None) -> None:
+        """Ends the caller's own sign-in on the app's primary account, or on `account`."""
+        connector = self.get(app)
+        target = account or connector.get("primaryAccountId")
+        if not target:
+            raise ValueError(f"{connector['name']} has no account of yours to disconnect")
+        self._raw.tools.apps_disconnect(target)
+
+
+class Me:
+    """What belongs to the caller themselves."""
+
+    def __init__(self, raw: Any) -> None:
+        self.connectors = Connectors(raw)
+
+
 class Tools:
     """An app's tools. `list` and `get` with no app keep the tool modules' listing as it was."""
 
@@ -438,6 +472,33 @@ class AsyncAccounts:
 
     async def remove(self, account: str) -> Any:
         return await self._raw.tools.apps_disconnect(account)
+
+
+class AsyncConnectors:
+    def __init__(self, raw: Any) -> None:
+        self._raw = raw
+
+    async def list(self) -> list[dict[str, Any]]:
+        return cast(list[dict[str, Any]], await self._raw.tools.apps_my_connections())
+
+    async def get(self, app: str) -> dict[str, Any]:
+        rows = await self.list()
+        found = next((c for c in rows if c["appId"] == app or str(c["name"]).lower() == app.lower()), None)
+        if found is None:
+            raise ValueError(f"{app} is not one of your connectors")
+        return found
+
+    async def disconnect(self, app: str, *, account: str | None = None) -> None:
+        connector = await self.get(app)
+        target = account or connector.get("primaryAccountId")
+        if not target:
+            raise ValueError(f"{connector['name']} has no account of yours to disconnect")
+        await self._raw.tools.apps_disconnect(target)
+
+
+class AsyncMe:
+    def __init__(self, raw: Any) -> None:
+        self.connectors = AsyncConnectors(raw)
 
 
 class AsyncTools:

@@ -28,6 +28,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "apps_add_own_account": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/me/accounts/{account_id}/another",
+        "pathParams": ["account_id"],
+        "query": [],
+        "stream": False,
+    },
     "apps_add_tools": {
         "body": "json",
         "headers": [],
@@ -224,6 +233,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/me/accounts",
         "pathParams": [],
         "query": ["every"],
+        "stream": False,
+    },
+    "apps_my_connections": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/me/connections",
+        "pathParams": [],
+        "query": [],
         "stream": False,
     },
     "apps_open_connect_link": {
@@ -1009,9 +1027,17 @@ class Operations:
         "Disconnect"
         return self._t.call(SERVICE, OPERATIONS["apps_disconnect"], {"account_id": account_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def apps_add_own_account(self, account_id: str) -> SignInStart:
+        "Add Own Account"
+        return self._t.call(SERVICE, OPERATIONS["apps_add_own_account"], {"account_id": account_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     def apps_give_own_credentials(self, account_id: str, body: PersonCredentialsIn) -> MyAccount:
         "Give Own Credentials"
         return self._t.call(SERVICE, OPERATIONS["apps_give_own_credentials"], {"account_id": account_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def apps_my_connections(self) -> list[MyConnector]:
+        "My Connections"
+        return self._t.call(SERVICE, OPERATIONS["apps_my_connections"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     def plugins_list_plugin_templates(self, *, kind: str | None = None) -> list[PluginTemplate]:
         "List Plugin Templates"
@@ -1525,11 +1551,19 @@ class AsyncOperations:
         "Disconnect"
         return await self._t.call(SERVICE, OPERATIONS["apps_disconnect"], {"account_id": account_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    async def apps_add_own_account(self, account_id: str) -> SignInStart:
+        "Add Own Account"
+        return await self._t.call(SERVICE, OPERATIONS["apps_add_own_account"], {"account_id": account_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     async def apps_give_own_credentials(self, account_id: str, body: PersonCredentialsIn) -> MyAccount:
         "Give Own Credentials"
         return await self._t.call(
             SERVICE, OPERATIONS["apps_give_own_credentials"], {"account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
+
+    async def apps_my_connections(self) -> list[MyConnector]:
+        "My Connections"
+        return await self._t.call(SERVICE, OPERATIONS["apps_my_connections"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def plugins_list_plugin_templates(self, *, kind: str | None = None) -> list[PluginTemplate]:
         "List Plugin Templates"
