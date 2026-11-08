@@ -184,6 +184,8 @@ try {
           await james.getByRole('button', { name: 'Send', exact: true }).click();
           const card = james.getByTestId('connection-required');
           await card.waitFor({ timeout: 120_000 });
+          // Connect is offered once the reply has finished streaming; the card shows before it.
+          await james.getByTestId('connection-connect').waitFor({ timeout: 120_000 });
           const text = (await card.innerText()).replace(/\s+/g, ' ');
           await james.screenshot({ path: join(SHOTS, 'first-chat-connect-card.png'), fullPage: true });
           check('4 James’s first chat with the team’s assistant asks for his own Salesforce account', /Salesforce/.test(text) && /Connect Salesforce/.test(text), text.slice(0, 300));

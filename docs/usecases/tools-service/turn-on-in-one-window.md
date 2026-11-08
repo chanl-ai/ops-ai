@@ -8,8 +8,8 @@ Design: the app set-up design (one Turn on window, two questions and one choice)
 
 | # | Story | Layer | Steps | Proved by |
 |---|---|---|---|---|
-| S1 | An admin turns Salesforce or GitHub on in one window: where the team signs in is asked once and fixed on Ops AI's auth config, tools use each person's own account with the team account for runs nobody started, the app's read tools are added, and the team's assistant gets them when the admin leaves the box ticked; someone without the permission can do none of it | api, ui | 1-4, 7-9 | 1, 2, 8 |
-| S2 | The admin signs the team account in, the org address comes from the token, and a person who has not connected their own account meets the Connect card in chat, never the team account | api, ui | 5-6, 10 | 5, 10 |
+| S1 | An admin turns Salesforce or GitHub on in one window: where the team signs in is asked once and fixed on Ops AI's auth config, tools use each person's own account with the team account for runs nobody started, the app's read tools are added, and the team's assistant gets them when the admin leaves the box ticked; someone without the permission can do none of it | ui | 1-4, 7-9 | 2 |
+| S2 | The admin signs the team account in, the org address comes from the token, and a person who has not connected their own account meets the Connect card in chat, never the team account | api | 5-6, 10 | 5 |
 
 ## Preconditions
 
