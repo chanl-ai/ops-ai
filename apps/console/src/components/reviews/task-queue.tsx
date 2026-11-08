@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { CheckCircle2, FolderOpen } from 'lucide-react';
+import { CheckCircle2, FolderOpen, MousePointerClick } from 'lucide-react';
 
 import { EmptyState } from '@/components/shared/empty-state';
 import { isOpen } from '@/components/reviews/review-columns';
@@ -14,6 +14,11 @@ import { money } from '@/lib/format';
 import { ListItem } from '@/components/shared/list-item';
 import { cn } from '@/lib/utils';
 import type { Review } from '@/lib/types/domain';
+
+/** The task pane before a task is open: the queue beside it is where one is picked. */
+export function PickATask() {
+  return <EmptyState icon={MousePointerClick} title="Pick a task" description="Choose one from the queue to see what it asks and decide it." testId="pick-a-task" />;
+}
 
 export function QueueDone() {
   return <EmptyState icon={CheckCircle2} title="Nothing left to decide" description="Every task in this view is decided. New ones appear here as runs pause for a person." testId="queue-done" />;

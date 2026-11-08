@@ -42,7 +42,7 @@ from .defaults import ensure_defaults
 from .modules.directory import Directory
 from .modules.routes import ERRORS
 from .modules.schemas import In, ToolCallRow
-from .modules.seed import BUILT_IN, TOOL_ORIGIN, template_of, tool_title
+from .modules.seed import BUILT_IN, TOOL_ORIGIN, name_in_words, template_of, tool_title
 from .modules.service import Caller, ModuleService
 from .modules.tool_users import ToolUsers
 from .plugins.host import (
@@ -860,7 +860,7 @@ class Apps:
         return [
             {
                 "name": m.operation(t.name),
-                "title": t.title or t.name,
+                "title": t.title or name_in_words(t.name),
                 "access": t.access,
                 "added": add,
                 "askedAtSignIn": add and not set(t.scopes) <= granted,
@@ -1541,7 +1541,7 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
             tools.append(
                 {
                     "name": name,
-                    "title": title or name,
+                    "title": title or name_in_words(name),
                     "access": str(op["access"]),
                     "added": added,
                     "askedAtSignIn": asked,

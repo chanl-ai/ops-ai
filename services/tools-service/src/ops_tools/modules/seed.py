@@ -10,6 +10,7 @@ agents-service's Reviews.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta
 from typing import Any, Literal, cast
@@ -369,11 +370,19 @@ def tool_title(
     module: Mapping[str, Any], operation: str, plugin_title: Callable[[Mapping[str, Any], str], str | None] | None
 ) -> str | None:
     """What people see in place of a tool's name: a built-in app's title from BUILT_IN, a plugin tool's from its
-    manifest (`plugin_title`, the plugin host's), and none for a team's own tool."""
+    manifest (`plugin_title`, the plugin host's), and for a team's own tool its name in words (`open_case` is "Open
+    case"), so no list shows a bare code name where the rest show titles."""
     built_in = str(module.get("template_id") or "").startswith("builtin:") or module.get("name") in _BUILT_IN_MODULES
     if built_in and (title := _BUILT_IN_TITLES.get(operation)):
         return title
-    return plugin_title(module, operation) if plugin_title is not None else None
+    named = plugin_title(module, operation) if plugin_title is not None else None
+    return named or name_in_words(operation)
+
+
+def name_in_words(name: str) -> str:
+    """A tool's code name as words: `open_case` and `openCase` are "Open case"."""
+    words = " ".join(re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", name).replace("_", " ").replace("-", " ").split()).lower()
+    return words[:1].upper() + words[1:]
 
 
 def template_of(app: dict[str, Any]) -> str:

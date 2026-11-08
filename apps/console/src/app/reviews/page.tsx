@@ -10,7 +10,7 @@ import { KindView } from '@/components/chat/widgets/kind-view';
 import { PageLayout } from '@/components/page-layout';
 import { DecisionPanel } from '@/components/reviews/decision-panel';
 import { type ReadEdits, useReadConfirmations } from '@/components/reviews/document-read';
-import { QueueDone, TaskQueue } from '@/components/reviews/task-queue';
+import { PickATask, TaskQueue } from '@/components/reviews/task-queue';
 import { useReviewDecider } from '@/components/reviews/use-review-decider';
 import { QueryError } from '@/components/shared/query-states';
 import { countLabel, SavedViewTabs } from '@/components/shared/saved-view-tabs';
@@ -171,9 +171,10 @@ export default function HumanTasksPage() {
                 <Skeleton className="h-96 w-full rounded-lg" />
               ) : missing ? (
                 <QueryError what="this task" onRetry={() => fetched.refetch()} error={fetched.error} retrying={fetched.isFetching} testId="task-error" />
-              ) : (
-                <QueueDone />
-              )
+              ) : rows.length ? (
+                // The queue says when nothing is left; the pane only says what to do next.
+                <PickATask />
+              ) : null
             ) : (
               task && (
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">

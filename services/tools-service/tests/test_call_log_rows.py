@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import Any
 
 from ops_tools.modules.executions import call_row
+from ops_tools.modules.seed import tool_title
 
 
 def _row(**over: Any) -> dict[str, Any]:
@@ -34,4 +35,11 @@ def test_a_call_shows_its_tools_title_and_app_never_only_the_slug() -> None:
     row = call_row(_row(tool="salesforce_get_record"), {}, module, "Get a record")
     assert (row["title"], row["app"]) == ("Get a record", "Salesforce"), row
     plain = call_row(_row(), {}, None)
-    assert (plain["title"], plain["app"]) == ("place_hold", ""), plain
+    assert (plain["title"], plain["app"]) == ("Place hold", ""), "a tool with no title reads as words, not its slug"
+
+
+def test_a_teams_own_tool_has_a_title_in_words() -> None:
+    """A custom tool (`open_case`) was listed by its code name where every other tool shows a title."""
+    assert tool_title({"name": "cases"}, "open_case", None) == "Open case"
+    assert tool_title({"name": "cases"}, "openCase", lambda m, op: None) == "Open case"
+    assert tool_title({"name": "cases"}, "open_case", lambda m, op: "Open a case") == "Open a case"
