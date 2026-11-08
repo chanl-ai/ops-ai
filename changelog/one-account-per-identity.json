@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "Signing in again as the same user keeps one account",
+  "description": "Signing in to an app as a user you already linked there updates that account instead of adding a second one, and the window says you are already connected as that user.",
+  "tag": "fix"
+}

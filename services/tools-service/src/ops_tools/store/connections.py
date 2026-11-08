@@ -1118,6 +1118,8 @@ class ConnectionStore:
                 k.team_id == team_id,
                 k.sign_in != "team",
                 k.auth_kind.in_(kinds),
+                # Another person's own second account is theirs alone: listed only to whoever signed in to it.
+                sa.or_(k.origin.is_(None), k.origin != "person", t.person_id.is_not(None)),
                 team_visible(connections),
             )
             .order_by(k.name, k.id)

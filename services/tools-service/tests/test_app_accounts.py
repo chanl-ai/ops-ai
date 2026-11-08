@@ -149,7 +149,7 @@ async def test_a_call_naming_an_account_the_team_does_not_hold_is_refused_not_de
         assert r.module.get("account_missing") and r.module["connection_id"] is None, (name, r.module)
 
 
-async def test_a_persons_call_uses_the_account_they_pinned_else_their_newest_sign_in(world: World, tenant: str) -> None:
+async def test_a_persons_call_asks_which_account_until_they_save_a_default(world: World, tenant: str) -> None:
     first = await connected(world, tenant)
     second = (await another(world, tenant, "EU org")).json()["data"]["id"]
     await signed(world, tenant, first, "https://us.my.desk.test")
@@ -157,21 +157,23 @@ async def test_a_persons_call_uses_the_account_they_pinned_else_their_newest_sig
     await signed(world, tenant, first, "https://us.my.desk.test", "usr_priya")
     await signed(world, tenant, second, "https://eu.my.desk.test", "usr_priya")
 
-    async def used() -> str:
+    async def used() -> dict[str, Any]:
         r = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, run="live", person="usr_priya")
         assert r is not None and r.module is not None
-        return str(r.module["connection_id"])
+        return dict(r.module)
 
     async def shown() -> dict[str, bool | None]:
         """Her accounts on the app page: which one it names as her default."""
         page = (await world.client.get(f"/v1/apps/plugin:{ID}", headers=admin(tenant))).json()["data"]
         return {a["name"]: a["myDefault"] for a in page["accounts"] if a["kind"] == "team" if a["mine"]}
 
-    assert await used() == second  # the newest of her sign-ins
-    assert await shown() == {"Desk": False, "EU org": True}
+    # Two of her sign-ins fit and she saved neither: the call asks which, and the page names no default.
+    asked = await used()
+    assert asked.get("account_choice") is not None and asked["connection_id"] is None, asked
+    assert await shown() == {"Desk": False, "EU org": False}
     pinned = await world.client.put(f"/v1/apps/{APP}/accounts/{first}/default", headers=admin(tenant))
     assert pinned.status_code == 200, pinned.text
-    assert await used() == first
+    assert (await used())["connection_id"] == first
     assert await shown() == {"Desk": True, "EU org": False}
 
 

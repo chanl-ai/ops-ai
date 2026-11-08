@@ -105,6 +105,13 @@ def person_state(token: dict[str, Any], now: datetime) -> str:
     return CONNECTED
 
 
+def choice_needed(mine: Sequence[Row]) -> bool:
+    """Whether a call naming no account must ask the person which to use: two or more live sign-ins of their own to the
+    app's accounts and none pinned as their default. Taking the newest would act in an org the person did not pick."""
+    live = [t for t in mine if t.get("refused_at") is None]
+    return len(live) > 1 and not any(t.get("pinned") for t in live)
+
+
 def default_sign_in(mine: Sequence[Row]) -> Row | None:
     """A person's default among their own sign-ins to one app's accounts, given newest first with sandbox accounts
     left out: the one they pinned, else the newest the system has not refused. Calls naming no account use it."""

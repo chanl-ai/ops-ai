@@ -153,6 +153,13 @@ def mcp_error(res: httpx.Response) -> str | None:
     return None if "result" in answer else "its answer had no result"
 
 
+# An account a person added for a second login of their own (add_own_account): listed to them, not to the rest of the
+# team, and removed when its sign-in turns out to be an identity they already linked.
+PERSON_ORIGIN = "person"
+# Set on a finished sign-in's account when the system named an identity already linked on that account of the app.
+ALREADY = "_alreadyConnectedAs"
+
+
 def _names(conn: dict[str, Any] | None) -> dict[str, str]:
     """An account's secret field to secret name map."""
     return {str(k): str(v) for k, v in cast(dict[Any, Any], (conn or {}).get("secrets") or {}).items()}
@@ -911,6 +918,21 @@ class ConnectionService:
         token = await self.tokens.store_answer(who.tenant_id, connection_id, answer, token_for, requested=requested)
         if isinstance(named, str):
             await self.store.name_token(who.tenant_id, connection_id, token_for, named)
+        identity = named if isinstance(named, str) else token.account
+        same = await self._same_identity(who, conn, token_for, identity)
+        if same is not None:
+            # The system named an identity this person (or the team) already linked on another account of the app:
+            # that account takes the new sign-in, and the one started here is not kept as a duplicate.
+            await self.tokens.store_answer(who.tenant_id, same, answer, token_for, requested=requested)
+            if isinstance(named, str):
+                await self.store.name_token(who.tenant_id, same, token_for, named)
+            await self.tokens.drop(
+                who.tenant_id, await self.store.forget_token(who.tenant_id, connection_id, token_for)
+            )
+            await self._drop_if_unused(who, connection_id)
+            detail = {"account": identity, "already": True, **({"own": True} if token_for != SHARED else {})}
+            await self.store.note(who.tenant_id, same, self._event(who, "signed_in", detail))
+            return {**await self.detail(who, same), ALREADY: str(identity)}
         if token_for != SHARED:
             await self.store.name_person(who.tenant_id, connection_id, token_for, who.name)
         if token_for == SHARED:
@@ -941,6 +963,40 @@ class ConnectionService:
             self._after_sign_in.add(task)
             task.add_done_callback(self._after_sign_in.discard)
         return await self.detail(who, connection_id)
+
+    async def _same_identity(
+        self, who: Caller, conn: dict[str, Any], token_for: str, identity: str | None
+    ) -> str | None:
+        """Another account of the same app on which `token_for` (the person, or the team) is already signed in as
+        `identity`; None when the system named nobody or no other account holds that identity."""
+        if not identity:
+            return None
+        siblings = [
+            str(a["id"])
+            for a in await self.store.accounts(who.tenant_id, str(conn["team_id"]), str(conn["app_id"]))
+            if str(a["id"]) != str(conn["id"])
+        ]
+        held = await self.store.own_sign_ins(who.tenant_id, token_for, siblings) if siblings else []
+        return next(
+            (str(t["connection_id"]) for t in held if str(t.get("account") or "").lower() == identity.lower()),
+            None,
+        )
+
+    async def _drop_if_unused(self, who: Caller, connection_id: str) -> None:
+        """Deletes an account nobody is signed in to (no team sign-in, no person's), as one made only for a sign-in
+        that turned out to be a duplicate; one a module uses, or anyone signed in to, stays."""
+        if await self.store.tokens(who.tenant_id, connection_id):
+            return
+        conn = await self._get(who, connection_id)
+        try:
+            deleted = await self.store.delete(who.tenant_id, connection_id, actor=who.name, at=self.clock())
+        except ConnectionInUse:
+            return
+        if deleted is not None:
+            await self.tokens.drop(who.tenant_id, deleted)
+            names = {k: v for k, v in _names(conn).items() if not (k == "clientSecret" and conn.get("credential_id"))}
+            for name in names.values():
+                await self.secrets.delete(who.tenant_id, str(conn["team_id"]), name, actor=who.name, at=self.clock())
 
     async def finish(
         self, who: Caller, state: str, *, code: str | None, error: str | None, description: str | None
@@ -975,7 +1031,14 @@ class ConnectionService:
         if code is None:
             await self.refuse_sign_in(who, connection_id, state, str(error), description)
         assert code is not None
-        return out | {"account": await self.complete_sign_in(who, connection_id, state, code)}
+        account = await self.complete_sign_in(who, connection_id, state, code)
+        # A sign-in as an identity already linked lands on that account: the answer names it and who it is.
+        already = account.pop(ALREADY, None)
+        return out | {
+            "accountId": str(account["id"]),
+            "account": account,
+            **({"alreadyConnectedAs": already} if already else {}),
+        }
 
     async def refuse_sign_in(
         self, who: Caller, connection_id: str, state: str, error: str, description: str | None
@@ -1250,6 +1313,67 @@ class ConnectionService:
             return str(row["name"]), None
         first = await self.store.get(who.tenant_id, app_id)
         return str((first or row)["name"]), None
+
+    async def add_own_account(self, who: Caller, connection_id: str) -> dict[str, Any]:
+        """Another account of the caller's own on the app of `connection_id`, signed in through the same auth config
+        (the same app credential or Ops AI's app): a personal and an office login side by side. The account is made
+        now and the sign-in starts on it; a sign-in that names an identity the caller already linked lands on that
+        account instead and this one is removed (`complete_sign_in`), so no duplicate is kept. An earlier one the
+        caller started and never signed in to is removed first."""
+        self._can(who, OWN)
+        src = await self._get(who, connection_id)
+        if (src.get("sign_in") or "team") == "team":
+            raise ValidationFailed(
+                f"{src['name']} signs in with the team's account, not each person's own.", code="sign_in_unsupported"
+            )
+        # The client secret of an app credential is the credential's, shared by every account that signs in with it.
+        if any(k != "clientSecret" or not src.get("credential_id") for k in _names(src)):
+            raise ValidationFailed(
+                f"{src['name']} keeps its own key, so another account is added by an admin.",
+                code="sign_in_unsupported",
+            )
+        mine = own_key(who)
+        for a in await self.store.accounts(who.tenant_id, who.team.id, str(src["app_id"])):
+            started = a.get("origin") == PERSON_ORIGIN and a.get("created_by") == who.name
+            if (
+                started
+                and str(a["id"]) != connection_id
+                and not await self.store.own_sign_ins(who.tenant_id, mine, [str(a["id"])])
+            ):
+                await self._drop_if_unused(who, str(a["id"]))
+        now = self.clock()
+        new = new_id("ca")
+        settings = {k: v for k, v in dict(src.get("settings") or {}).items() if k not in ("clientId", "clientSecret")}
+        row: dict[str, Any] = {
+            "tenant_id": who.tenant_id,
+            "id": new,
+            "team_id": who.team.id,
+            "name": f"{src.get('account_name') or src['name']} · {who.name}",
+            "app_id": src["app_id"],
+            "sandbox": False,
+            "account_name": f"{who.name}'s other account",
+            "auth_kind": src["auth_kind"],
+            "sign_in": "person",
+            "team_backup": False,
+            "category": src.get("category"),
+            "description": src.get("description"),
+            "docs_url": src.get("docs_url"),
+            "settings": settings,
+            "secrets": {},
+            "credential_id": src.get("credential_id"),
+            "platform_app": src.get("platform_app"),
+            "origin": PERSON_ORIGIN,
+            "status": src.get("status") or "draft",
+            "status_detail": None,
+            "revision": 1,
+            "created_by": who.name,
+            "created_at": now,
+            "updated_by": who.name,
+            "updated_at": now,
+        }
+        if not await self.store.create(row, actor=who.name, at=now):
+            raise Conflict("Try again; that account id was just taken.")
+        return await self.start_sign_in(who, new, "self")
 
     async def give_own(self, who: Caller, connection_id: str, given: dict[str, str]) -> dict[str, Any]:
         """A person's own key, password or token, sealed in their own row: only on a connection each person

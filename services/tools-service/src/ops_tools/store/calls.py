@@ -338,6 +338,28 @@ class CallLog:
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
             return rows, int((await c.execute(total)).scalar_one())
 
+    async def made_for(
+        self, person: str, module_ids: list[str], since: str, *, tenant_id: str, team_id: str
+    ) -> dict[str, int]:
+        """How many calls ran acting for `person` (their email) in the team since `since`, by module: a person's own
+        count, never another's calls, the team account's runs that named nobody, or calls the gateway refused."""
+        if not module_ids:
+            return {}
+        q = (
+            sa.select(gateway_calls.c.module_id, sa.func.count())
+            .where(
+                gateway_calls.c.tenant_id == tenant_id,
+                gateway_calls.c.team_id == team_id,
+                gateway_calls.c.acting_for == person,
+                gateway_calls.c.module_id.in_(module_ids),
+                gateway_calls.c.created_at >= since,
+                gateway_calls.c.outcome != "refused",
+            )
+            .group_by(gateway_calls.c.module_id)
+        )
+        async with self.engine.connect() as c:
+            return {str(m): int(n) for m, n in (await c.execute(q)).all()}
+
     async def traffic(
         self, module_ids: list[str], since: str, *, tenant_id: str, team_ids: list[str]
     ) -> dict[tuple[str, str | None], dict[str, Any]]:

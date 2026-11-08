@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "Chat asks which account when two fit",
+  "description": "With two accounts of the same app connected and none chosen, chat shows a card to pick one; the pick becomes your default for calls that name no account, and Connectors shows it and lets you change it.",
+  "tag": "new"
+}

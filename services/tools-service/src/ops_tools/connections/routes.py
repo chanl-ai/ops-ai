@@ -122,6 +122,12 @@ def accounts_router(service: ConnectionService, directory: Directory) -> APIRout
         gave before; answers their row in Your connections, never the values."""
         return ok(await service.give_own(who, account_id, body.credentials))
 
+    @r.post("/v1/me/accounts/{account_id}/another", response_model=Envelope[SignInStart])
+    async def add_own_account(account_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Add another account of the caller's own on this account's app, through the same auth config: where to
+        send the browser. Signing in as an identity the caller already linked updates that account instead."""
+        return ok(await service.add_own_account(who, account_id))
+
     @r.delete("/v1/me/accounts/{account_id}", status_code=204, response_class=Response)
     async def disconnect(account_id: str, who: Annotated[Caller, Depends(caller)]) -> Response:  # pyright: ignore[reportUnusedFunction]
         """Disconnect: deletes the caller's own sign-in, revoking it at the system when the account names a revocation

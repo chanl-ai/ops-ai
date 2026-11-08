@@ -213,6 +213,12 @@ def main() -> None:
         client("kb", settings.kb_url, ["knowledge:view"]) if settings.kb_url else None,
     )
     apps = Apps(connection_service, store, plugins, modules, tool_users)
+    # The team's toolWritesNeedApproval and appWritesNeedApproval, read from platform-service on each call so a change
+    # applies at once; the gateway's calls and the connectors' Reviewed marks read the same.
+    write_approvals = (
+        WriteApprovals(client("platform", settings.platform_url, ["settings:view"])) if settings.platform_url else None
+    )
+    apps.write_approvals = write_approvals
     app = create_gateway_app(
         opa=OpaClient(httpx.AsyncClient(base_url=settings.opa_url, timeout=5)),
         registry=ToolRegistry(catalog, store, plugins, connection_store),
@@ -241,10 +247,7 @@ def main() -> None:
         ),
         review_key=settings.review_key.get_secret_value(),
         auth=Auth.from_settings(settings, audience="tools"),
-        # The team's toolWritesNeedApproval, read from platform-service on each call so a change applies at once.
-        write_approvals=WriteApprovals(client("platform", settings.platform_url, ["settings:view"]))
-        if settings.platform_url
-        else None,
+        write_approvals=write_approvals,
         # Check before sending: the team's checkBeforeSend read live, its sending policy here, and the judge on
         # this service's own model key; with no models-service, a team with the setting on has every write wait.
         send_check=SendCheck(

@@ -355,3 +355,6 @@ class SignInFinished(Out):
     check: bool
     account: AccountDetail | None = None
     health: CheckedCredential | None = None
+    # The sign-in named an identity already linked on this account of the app, which it updated instead of adding
+    # another: whom it signed in as ("Already connected as harbor-ops").
+    already_connected_as: str | None = None

@@ -30,7 +30,6 @@ from .callers import caller_in
 from .connections.records import (
     CONNECTED,
     account_state,
-    default_sign_in,
     person_state,
     shown_status,
     state_reason,
@@ -38,8 +37,10 @@ from .connections.records import (
 )
 from .connections.schemas import AccountDetail, AccountIn, AccountTest, ConnectionHealth, NewAppIn
 from .connections.service import OPS_AI_APP, ConnectionService, own_key
+from .connectors import MyConnector, my_connectors
 from .defaults import ensure_defaults
 from .modules.directory import Directory
+from .modules.policy import WriteApprovals
 from .modules.routes import ERRORS
 from .modules.schemas import In, ToolCallRow
 from .modules.seed import BUILT_IN, TOOL_ORIGIN, name_in_words, template_of, tool_title
@@ -190,6 +191,8 @@ class SystemCard(Out):
     credential: CardCredential | None = None
     # Who signs in on the card's account: the team account, each person, or each person with the team's as backup.
     sign_in: Literal["team", "person", "person_or_team"] | None = None
+    # The caller's own sign-in on an app each person signs in to; None where the team's account always signs in.
+    own_sign_in: Literal["connected", "expired", "none"] | None = None
 
 
 # An app credential's status, from the last Test with my account (connections.service check_credential).
@@ -557,6 +560,9 @@ class Apps:
         self.plugin_accounts = PluginAccounts(plugins, connections) if plugins is not None else None
         # The call log, for an app's Usage tab; without it the page lists no runs.
         self.calls = calls
+        # The team's write approval policies, for whether a connector's write is reviewed first; without them each
+        # write follows its own flag.
+        self.write_approvals: WriteApprovals | None = None
 
     async def states(self, tenant_id: str, conns: list[dict[str, Any]]) -> dict[str, tuple[str, str, str | None]]:
         """Each account's (state, status, why) from its team account's token, read in one query."""
@@ -789,6 +795,16 @@ class Apps:
             c["appState"], c["appStateReason"] = app_state(c, conn, token, mine_row)
             c["credential"] = card_credential(conn)
             c["signIn"] = (conn.get("sign_in") or "team") if conn else None
+            # The caller's (or `person`'s) own sign-in on an app each person signs in to: connected, expired or none.
+            c["ownSignIn"] = (
+                None
+                if not conn or (conn.get("sign_in") or "team") == "team"
+                else "none"
+                if mine_row is None
+                else "expired"
+                if mine_row.get("refused_at") is not None
+                else "connected"
+            )
 
     async def card(self, who: Caller, app_id: str) -> dict[str, Any]:
         found = next((c for c in await self.cards(who) if c["id"] == app_id), None)
@@ -1502,19 +1518,11 @@ def _modes_of(values: dict[str, Any], modes: dict[str, Any]) -> dict[str, str]:
     return {**dict.fromkeys(fixed, FIXED_VALUE), **dict.fromkeys(defaults, DEFAULT_VALUE)}
 
 
-async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
-    """An app's page as one answer: a card of the caller's team only, so another team's app is not found."""
-    card = await apps.card(who, app_id)
-    detail = await apps.connections.detail(who, str(card["connectionId"])) if card.get("connectionId") else None
-    mine = own_key(who)
-    signed = [p for p in (detail or {}).get("people", []) if p["personId"] == mine]
-    people = (
-        {str(p["person_id"]) for p in await apps.connections.store.people(who.tenant_id, str(card["connectionId"]))}
-        if card.get("connectionId")
-        else set[str]()
-    )
+async def app_tools(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[str, Any]]:
+    """An app's tools as the team holds them: name, title, access, whether the team added it, whether its
+    permission is still to be asked at the next sign-in, and whether a call waits for approval by its own flag
+    (`waits`; a team policy may make more writes wait)."""
     tools: list[dict[str, Any]] = []
-    usage: list[dict[str, Any]] = []
     app = next((a for a in BUILT_IN if f"builtin:{a['id']}" == card["id"]), None)
     # The tools the team added, for a plugin's app; every tool of any other app is the team's.
     switched = _plugin(apps, card)
@@ -1546,8 +1554,27 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
                     "access": str(op["access"]),
                     "added": added,
                     "askedAtSignIn": asked,
+                    "waits": bool(op.get("requires_approval")),
+                    "moduleId": module_id,
                 }
             )
+    return tools
+
+
+async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
+    """An app's page as one answer: a card of the caller's team only, so another team's app is not found."""
+    card = await apps.card(who, app_id)
+    detail = await apps.connections.detail(who, str(card["connectionId"])) if card.get("connectionId") else None
+    mine = own_key(who)
+    signed = [p for p in (detail or {}).get("people", []) if p["personId"] == mine]
+    people = (
+        {str(p["person_id"]) for p in await apps.connections.store.people(who.tenant_id, str(card["connectionId"]))}
+        if card.get("connectionId")
+        else set[str]()
+    )
+    # The page's Tools tab shows neither a tool's own approval flag nor its module.
+    tools = [{k: v for k, v in t.items() if k not in ("waits", "moduleId")} for t in await app_tools(apps, who, card)]
+    usage: list[dict[str, Any]] = []
     if apps.users is not None and tools:
         try:
             uses = await apps.users.of(who.tenant_id, who.team.id, [t["name"] for t in tools])
@@ -1606,12 +1633,14 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
     may = apps.connections.may_manage(who)
     now = apps.connections.clock()
     sandboxes = {str(a["id"]) for a in stored if a.get("sandbox")}
-    # The caller's default among their own sign-ins, as the call-time pick reads them: newest first, then by account.
+    # The caller's default among their own sign-ins, as the call-time pick reads them.
     own_rows = sorted(
         (t for t in signed.values() if str(t["connection_id"]) not in sandboxes), key=lambda t: str(t["connection_id"])
     )
     own_rows.sort(key=lambda t: t["refreshed_at"], reverse=True)
-    pick = default_sign_in(own_rows) if len([t for t in own_rows if t.get("refused_at") is None]) > 1 else None
+    # With two or more, a call asks which until the caller saves one, so only a saved default is named here.
+    several = len([t for t in own_rows if t.get("refused_at") is None]) > 1
+    pick = next((t for t in own_rows if t.get("pinned") and t.get("refused_at") is None), None) if several else None
     platform = bool(cast(dict[str, Any], card.get("plugin") or {}).get("platformApp"))
     creds = await store.team_credentials(who.tenant_id, who.team.id, str(card["id"]))
     configs = len(creds) + int(platform)
@@ -1674,7 +1703,9 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
                 # Who signed in: the team's sign-in; on an account each person signs in to, the caller's own. A
                 # person's own sign-in on a team account is its own row below.
                 "account": (own or {}).get("account") if alone else (team_tokens.get(aid) or {}).get("account"),
-                "myDefault": None if pick is None or aid in sandboxes else str(pick["connection_id"]) == aid,
+                "myDefault": None
+                if not several or aid in sandboxes
+                else pick is not None and str(pick["connection_id"]) == aid,
                 # On an account each person signs in to, the caller's own sign-in's test; else the team account's.
                 "test": own.get("test") if own is not None and alone else team_test(a, team_tokens.get(aid)),
                 "health": a.get("health"),
@@ -1824,6 +1855,12 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
         person = acting.sub if acting else None
         cards = await apps.cards(who, listed=True, builtins=include == "builtin", person=person)
         return ok([SystemCard(**c).model_dump(by_alias=True) for c in cards])
+
+    @r.get("/v1/me/connections", response_model=Envelope[list[MyConnector]])
+    async def my_connections(who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The caller's connectors, Connectors (Mine): one row per app that acts as them, with what it can do, who it
+        signs in as, its state and where it is used; an app the team has off is listed as app_off."""
+        return ok(await my_connectors(apps, who))
 
     @r.post("/v1/apps", response_model=Envelope[AccountDetail], status_code=201)
     async def add_app(body: NewAppIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
