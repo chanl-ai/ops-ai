@@ -3,6 +3,7 @@
 // name, so a new use case adds data, not a component. The id → component map lives with the renderers.
 // Relative imports: the tests run under `node --test`, which does not resolve the `@/` alias.
 import { recordToRows, rowsToSeries, seriesToRows } from '../../lib/widgets/convert.ts';
+import { isIdColumn } from '../../lib/widgets/table-columns.ts';
 import type { ShapeData, WidgetHint, WidgetPart, WidgetShape } from '../../lib/types/widgets';
 
 export type RendererId = 'table' | 'line' | 'bar' | 'area' | 'fields' | 'stat' | 'form' | 'confirmation' | 'task';
@@ -29,11 +30,17 @@ type Option<S extends WidgetShape> = {
 
 const same = <T>(d: T) => d;
 
+function withoutIds<T extends Record<string, unknown>>(row: T): T {
+  const kept = Object.entries(row).filter(([k]) => !isIdColumn(k, [row]));
+  return (kept.length ? Object.fromEntries(kept) : row) as T;
+}
+
 /** Per shape, its renderers; the first is the default. */
 const REGISTRY: { [S in WidgetShape]: Option<S>[] } = {
   rows: [
     // One row reads as a record; from two rows on there is something to compare, so the table leads.
-    { id: 'fields', label: 'Fields', from: (d) => (d.length === 1 ? d[0] : null) },
+    // Ids are left out as a table keeps them behind View; a row of ids alone keeps them, or nothing would show.
+    { id: 'fields', label: 'Fields', from: (d) => (d.length === 1 ? withoutIds(d[0]) : null) },
     { id: 'table', label: 'Table', from: same },
     { id: 'line', label: 'Line chart', from: (d, h) => rowsToSeries(d, h) },
     { id: 'bar', label: 'Bar chart', from: (d, h) => rowsToSeries(d, h) },

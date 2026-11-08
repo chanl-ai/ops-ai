@@ -48,4 +48,6 @@ test('one row draws as fields by default, with the table still offered; two rows
   assert.deepEqual(pickRenderer(one).data, { name: 'Okafor Family Trust', type: 'Customer' });
   assert.ok(renderersFor(one).some((r) => r.id === 'table'));
   assert.equal(pickRenderer(rows).id, 'table');
+  const withId: WidgetPart = { type: 'widget', id: 'w10', shape: 'rows', data: [{ Id: '001bm00003FyGNtAAN', Name: 'Okafor Family Trust' }] };
+  assert.deepEqual(pickRenderer(withId).data, { Name: 'Okafor Family Trust' });
 });
