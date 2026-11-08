@@ -566,3 +566,19 @@ def test_the_widget_check_names_the_card_kind_the_reply_drew() -> None:
     assert [n for n, ok, _ in chat_script.reply_checks({"widget": ["brief", "form"]}, plain, drew) if not ok] == [
         "draws a form card"
     ]
+
+
+def test_the_memory_and_card_checks_read_the_stored_reply() -> None:
+    # A form drawn on the questions-first log flow, or a standing rule kept only as a suggestion, passed unnoticed.
+    plain = _seen("Which stage did you agree?")
+    drew = {"parts": [{"type": "widget", "kind": "form"}], "remembered": [{"status": "suggested"}]}
+    failed = [
+        n
+        for n, ok, _ in chat_script.reply_checks({"notWidgets": ["form"], "remembers": "active"}, plain, drew)
+        if not ok
+    ]
+    assert failed == ["draws no form card", "keeps a memory as active"], failed
+    kept = {"parts": [], "remembered": [{"status": "active"}]}
+    assert all(
+        ok for _, ok, _ in chat_script.reply_checks({"notWidgets": ["form"], "remembers": "active"}, plain, kept)
+    )

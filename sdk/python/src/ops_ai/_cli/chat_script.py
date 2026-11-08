@@ -26,6 +26,8 @@ A script is YAML or JSON: `agent` (the team's default when left out), `test`, `k
     followUps       the reply offers quick replies (true), or this many
     approval        the reply waits on an approval (a widget still open)
     widget          the reply drew a card of this kind (brief, form, entity), or of each kind in a list
+    notWidgets      kinds of card the reply must not draw
+    remembers       the reply kept a memory with this status: active (saved at once) or suggested (asks first)
 A turn may be `approve: true` instead of `say`: it approves the newest open widget, as the turn's `as` person when
 given (an approver), waits for the resumed reply and checks it like any other.
 """
@@ -51,6 +53,8 @@ CODE = re.compile(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b|\bError:")
 STRAY = re.compile(r"(?:^|[.!?]\s+|\n\s*)(ok|okay|done)[.!]?\s*$", re.IGNORECASE)
 # How long an approved write's resumed reply may take.
 APPROVE_WAIT_S = 90.0
+# How long a reply's memory call may take to write what it kept.
+MEMORY_WAIT_S = 20.0
 CITE = re.compile(r"\[\d+\]")
 # What a sentence or a table may end on, closing quotes included ("... from \u201cthe policy.\u201d").
 RECORD_ID = re.compile(r"\b[a-z]{2,8}_[0-9a-f]{8,}\b|\b[a-z]+(?:_[a-z]+)+\b")
@@ -133,6 +137,13 @@ def reply_checks(want: dict[str, Any], seen: dict[str, Any], message: dict[str, 
         kinds = [str(p.get("kind")) for p in message.get("parts") or [] if p.get("type") == "widget"]
         for kind in [want["widget"]] if isinstance(want["widget"], str) else want["widget"]:
             out.append((f"draws a {kind} card", kind in kinds, f"{kinds}"))
+    if "notWidgets" in want:
+        drawn = [str(p.get("kind")) for p in message.get("parts") or [] if p.get("type") == "widget"]
+        bad = [k for k in drawn if k in want["notWidgets"]]
+        out.append((f"draws no {', '.join(want['notWidgets'])} card", not bad, f"{drawn}"))
+    if "remembers" in want:
+        kept = [str(r.get("status")) for r in message.get("remembered") or []]
+        out.append((f"keeps a memory as {want['remembers']}", want["remembers"] in kept, f"{kept}"))
     if want.get("approval"):
         open_ = [w for w in message.get("widgets") or [] if w.get("state") in ("pending", "awaiting_second", "open")]
         out.append(("waits on an approval", bool(open_), f"{[w.get('state') for w in message.get('widgets') or []]}"))
@@ -165,6 +176,15 @@ def _passages(call: dict[str, Any]) -> list[dict[str, Any]]:
     if call.get("name") != "search_knowledge" or not isinstance(output, dict):
         return []
     return [p for p in output.get("passages") or [] if isinstance(p, dict)]
+
+
+def remembered_reply(ops: OpsAI, thread: str, message: dict[str, Any]) -> dict[str, Any]:
+    """The reply once its memory call has written to it: that call runs beside the turn and may finish after it."""
+    end = time.monotonic() + MEMORY_WAIT_S
+    while not message.get("remembered") and time.monotonic() < end:
+        time.sleep(1.0)
+        message = last_reply(ops, thread)
+    return message
 
 
 def last_reply(ops: OpsAI, thread: str) -> dict[str, Any]:
@@ -201,6 +221,8 @@ def run_script(ns: argparse.Namespace, ops: OpsAI, path: Path) -> Outcome:
             seen = turn(ns, ops, thread, t.get("say") or followup((card or {}).get("connection") or "the app"))
         card = seen["cards"][-1] if seen["cards"] else card
         message = last_reply(ops, thread)
+        if "remembers" in t.get("expect", {}):
+            message = remembered_reply(ops, thread, message)
         calls += int((message.get("usage") or {}).get("calls") or 0)
         want = t.get("expect", {})
         results = reply_checks(want, seen, message)
