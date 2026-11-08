@@ -102,7 +102,10 @@ url_of() {
 
 # AUTH=platform: the services verify platform-service tokens; the console signs in through platform-service.
 auth_env() { [[ "$AUTH" == platform ]] && echo "env OPS_AUTH_MODE=platform OPS_PLATFORM_URL=http://127.0.0.1:$PLATFORM_PORT OPS_PLATFORM_INTERNAL_PORT=$PLATFORM_INTERNAL_PORT " || true; }
-console_auth() { [[ "$AUTH" == platform ]] && echo "NEXT_PUBLIC_AUTH_PROVIDER=platform NEXT_PUBLIC_OPS_PLATFORM_API_URL=http://localhost:$PLATFORM_PORT " || true; }
+# The address the browser reaches a service at: this machine's port, or <OPS_PUBLIC_ORIGIN>/api/<name> when the console
+# is served through a proxy on one public address (a cloud box, deploy/fly/Caddyfile routes).
+api_url() { if [[ -n "${OPS_PUBLIC_ORIGIN:-}" ]]; then echo "$OPS_PUBLIC_ORIGIN/api/$1"; else echo "http://localhost:$2"; fi; }
+console_auth() { [[ "$AUTH" == platform ]] && echo "NEXT_PUBLIC_AUTH_PROVIDER=platform NEXT_PUBLIC_OPS_PLATFORM_API_URL=$(api_url platform "$PLATFORM_PORT") " || true; }
 # The Feedback button shows only when this machine runs the ui-feedback collector at start.
 ui_feedback() { curl -sf -m 1 http://127.0.0.1:4790/health >/dev/null && echo 1 || echo 0; }
 
@@ -204,7 +207,7 @@ cmd_of() {
     # documents-service extracts on its own models-service key, whatever key the root .env hands agents.
     documents) echo "$(auth_env)env OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_extract uv run --directory services/documents-service python -m ops_documents" ;;
     console)
-      echo "env $(console_auth)NEXT_PUBLIC_UI_FEEDBACK=$(ui_feedback) NEXT_PUBLIC_OPS_CHAT_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_CASES_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_REGISTRY_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_TOOLS_API_URL=http://localhost:$TOOLS_PORT NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL=http://localhost:$KB_PORT NEXT_PUBLIC_OPS_FILES_API_URL=http://localhost:$FILES_PORT NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=http://localhost:$DOCUMENTS_PORT NEXT_PUBLIC_OPS_MODELS_API_URL=http://localhost:$MODELS_PORT NEXT_PUBLIC_OPS_EMBED_URL=http://localhost:$EMBED_PORT NODE_OPTIONS=--max-old-space-size=${OPS_CONSOLE_HEAP_MB:-3072} pnpm --filter @ops-ai/console exec next dev -p $CONSOLE_PORT"
+      echo "env $(console_auth)NEXT_PUBLIC_UI_FEEDBACK=$(ui_feedback) NEXT_PUBLIC_OPS_CHAT_API_URL=$(api_url agents "$AGENTS_PORT") NEXT_PUBLIC_OPS_CASES_API_URL=$(api_url agents "$AGENTS_PORT") NEXT_PUBLIC_OPS_REGISTRY_API_URL=$(api_url agents "$AGENTS_PORT") NEXT_PUBLIC_OPS_TOOLS_API_URL=$(api_url tools "$TOOLS_PORT") NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL=$(api_url kb "$KB_PORT") NEXT_PUBLIC_OPS_FILES_API_URL=$(api_url files "$FILES_PORT") NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=$(api_url documents "$DOCUMENTS_PORT") NEXT_PUBLIC_OPS_MODELS_API_URL=$(api_url models "$MODELS_PORT") NEXT_PUBLIC_OPS_EMBED_URL=http://localhost:$EMBED_PORT NODE_OPTIONS=--max-old-space-size=${OPS_CONSOLE_HEAP_MB:-3072} pnpm --filter @ops-ai/console exec next dev -p $CONSOLE_PORT"
       ;;
     # The console's preview frame is the only page it allows to frame it besides a deployment's own sites.
     embed)

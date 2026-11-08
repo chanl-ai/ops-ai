@@ -34,6 +34,8 @@ const commit = (process.env.OPS_COMMIT || git(['rev-parse', '--short', 'HEAD']))
 const nextConfig: NextConfig = {
   // Next's development badge sits over the bottom-left corner, where the Settings sidebar's last row is (PM test 10-29).
   devIndicators: false,
+  // A cloud box serves `next dev` through a proxy on its own host name; Next 16 refuses dev assets from any other origin.
+  ...(process.env.OPS_PUBLIC_ORIGIN ? { allowedDevOrigins: [new URL(process.env.OPS_PUBLIC_ORIGIN).hostname] } : {}),
   env: { OPS_CHANGELOG: JSON.stringify(changelog), OPS_ROADMAP: JSON.stringify(roadmap), NEXT_PUBLIC_OPS_VERSION: version, NEXT_PUBLIC_OPS_COMMIT: commit },
   // The console image ships Next's traced server alone (deploy/fly/Dockerfile, target console). Traced from the
   // workspace root, so packages pnpm links from there are found.
