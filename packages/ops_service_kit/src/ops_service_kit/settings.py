@@ -81,6 +81,8 @@ class Settings(BaseSettings):
     port: int = 8700
     # The runtime's alias, which models-service serves; no vendor model is named here (a direct call sets one).
     model_alias: str = "default"
+    # The alias a chat reply reruns on when the person taps Think harder (OPS_THINK_HARDER_ALIAS); empty offers no chip.
+    think_harder_alias: str = "thinking"
     # With the flag tool_search on, an agent with more granted tools than this searches for its tools instead
     # of being sent every schema; 0 means always, None the agent kernel's default (TOOL_SEARCH_ABOVE, 20).
     tool_search_above: int | None = Field(default=None, ge=0)

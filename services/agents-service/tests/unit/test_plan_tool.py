@@ -26,7 +26,7 @@ from ops_agent_kernel.types import (
 )
 from ops_agents.activities.catalog import load_catalog
 from ops_agents.api.chat_history import history_entry
-from ops_agents.api.chat_threads import AssistantBuilder
+from ops_agents.api.chat_threads import THINK_HARDER, AssistantBuilder
 from ops_agents.graphs.common import interrupt_from_state, interrupt_to_state
 from ops_contracts.chat import ChatMessage
 from tests.conftest import SEED
@@ -179,3 +179,20 @@ def test_the_chat_keeps_one_plan_part_on_top_and_hands_an_open_plan_to_the_next_
         "i", "approval", "Approval", call, b"[]", [], {"title": "Check", "steps": steps("done", "blocked", "todo")}
     )
     assert interrupt_from_state(interrupt_to_state(kept)).plan == kept.plan
+
+
+def test_think_harder_is_offered_on_a_planned_reply_and_not_on_one_already_run_deeper() -> None:
+    def built(model: str) -> list[str]:
+        b = AssistantBuilder(
+            load_catalog(SEED), ChatMessage(id="m", role="assistant", content="", at="t"), think_alias="thinking"
+        )
+        drawn = planner.part({"title": "Check", "steps": steps("done", "done", "done")})
+        b.apply(
+            "tool_call",
+            {"id": "p", "tool": "plan", "server": "kernel", "input": {}, "status": "ok", "view": {"part": drawn}},
+        )
+        b.apply("turn", {"model": model})
+        return list(b.message.follow_ups or [])
+
+    assert built("assistant") == [THINK_HARDER]
+    assert built("thinking") == []

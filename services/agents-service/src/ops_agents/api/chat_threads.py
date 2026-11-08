@@ -86,6 +86,17 @@ def _d(v: Any) -> dict[str, Any]:
     return cast(dict[str, Any], v) if isinstance(v, dict) else {}
 
 
+# The quick reply that reruns a reply on the deeper model (routers/chat.py), and how many quick replies a reply holds.
+THINK_HARDER = "Think harder"
+MAX_FOLLOW_UPS = 3
+
+
+def _worth_more_thought(m: ChatMessage) -> bool:
+    """A reply that made a plan or two or more calls to a system: an ask a deeper model may answer better."""
+    calls = [c for c in m.tool_calls or [] if c.server != "kernel"]
+    return any(p.id == PLAN_PART for p in m.parts or []) or len(calls) >= 2
+
+
 @dataclass
 class AssistantBuilder:
     """One assistant message, built from one run's events."""
@@ -103,6 +114,8 @@ class AssistantBuilder:
     titles: dict[str, str] = field(default_factory=dict[str, str])
     # The parts the agent presented itself, as against the tables its tool calls drew.
     presented: set[str] = field(default_factory=set[str])
+    # The alias Think harder reruns a reply on; a reply that made a plan or two calls, on another model, offers it.
+    think_alias: str = ""
 
     def _call(self, c: dict[str, Any]) -> ToolCall:
         status = str(c.get("status") or "")
@@ -261,6 +274,8 @@ class AssistantBuilder:
             case "turn":
                 d = _d(data)
                 m.model = d.get("model")
+                if self.think_alias and m.model != self.think_alias and _worth_more_thought(m):
+                    m.follow_ups = [*(m.follow_ups or [])[: MAX_FOLLOW_UPS - 1], THINK_HARDER]
                 if d.get("noAnswer"):
                     m.no_answer = True
                 if d.get("status") == "failed":
@@ -392,7 +407,15 @@ async def _thread_messages(rt: Runtime, thread_id: str, events: list[Any], *, au
             # Who answered, so a reload after a handover still credits the agent that wrote each reply.
             answered = rt.catalog.agent_in_flight(str(given["agent_id"]))
             reply.agent_id, reply.agent_name = str(given["agent_id"]), answered.name if answered else None
-        builder = AssistantBuilder(rt.catalog, reply, decisions, approvals, audit=audit, titles=titles)
+        builder = AssistantBuilder(
+            rt.catalog,
+            reply,
+            decisions,
+            approvals,
+            audit=audit,
+            titles=titles,
+            think_alias=rt.settings.think_harder_alias,
+        )
         for e in per_run.get(run["id"], []):
             builder.apply(e.type, e.data, e.at)
         if not builder.ended and run["status"] != "running":

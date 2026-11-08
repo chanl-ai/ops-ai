@@ -56,3 +56,18 @@ async def test_the_models_likely_answers_are_the_reply_follow_ups_after_a_reload
 async def test_more_than_three_replies_are_refused(client: AsyncClient) -> None:
     reply = await ask(client, ["a", "b", "c", "d"])
     assert not reply.get("followUps"), reply
+
+
+async def test_think_harder_reruns_the_last_reply_on_the_deeper_alias(client: AsyncClient) -> None:
+    tid = (await client.post("/chat/threads", json={"agentId": "ag_fraud", "kbIds": []})).json()["data"]["id"]
+    headers = {"Accept": "text/event-stream"}
+    await client.post(f"/chat/threads/{tid}/messages", json={"content": "Hello"}, headers=headers)
+    first = (await client.get(f"/chat/threads/{tid}")).json()["data"]["messages"]
+    res = await client.post(f"/chat/threads/{tid}/messages", json={"content": "Think harder"}, headers=headers)
+    assert res.status_code == 200, res.text
+    after = (await client.get(f"/chat/threads/{tid}")).json()["data"]["messages"]
+    # The reply is answered again, not "Think harder" as a new question: one question, one (new) reply.
+    assert [m["role"] for m in after] == ["user", "assistant"], after
+    assert after[0]["content"] == "Hello" and after[1]["id"] != first[1]["id"]
+    ran = after[1].get("settings") or {}
+    assert ran.get("model") == "thinking" and ran.get("sources", {}).get("model") == "think_harder", ran

@@ -77,6 +77,7 @@ from ..chat_history import history_entry
 from ..chat_threads import (
     CHAT_GRAPH,
     NEW_TITLE,
+    THINK_HARDER,
     AssistantBuilder,
     assistant_id,
     chat_row,
@@ -594,6 +595,16 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
     question = body.content.strip()
     user_message: ChatMessage | None = None
     replaced: list[str] = []
+    # Think harder (a quick reply): the reply before it again, on the deeper model, once.
+    last = next((m for m in reversed(current) if m.role == "assistant"), None)
+    think = (
+        not body.regenerate
+        and bool(rt.settings.think_harder_alias)
+        and question.lower() == THINK_HARDER.lower()
+        and last is not None
+    )
+    if think and last is not None:
+        body = body.model_copy(update={"regenerate": last.id})
     if body.regenerate:
         i = next((n for n, m in enumerate(current) if m.id == body.regenerate), None)
         if i is None:
@@ -641,6 +652,9 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         graph_input["kb_ids"] = [str(k) for k in cast(list[Any], meta["kbIds"])]
         effective.knowledge_base_ids = graph_input["kb_ids"]
         effective.sources["knowledgeBaseIds"] = "started"
+    if think:
+        # The person chose the deeper model for this one reply; the agent's own allowed models are its builder's.
+        effective.model, effective.sources["model"] = rt.settings.think_harder_alias, "think_harder"
     graph_input["settings"] = effective.model_dump(mode="json", by_alias=True)
     if user_message is not None:
         graph_input["user_message_id"] = user_message.id
@@ -697,7 +711,9 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         agent_id=agent.id,
         agent_name=agent.name,
     )
-    builder = AssistantBuilder(rt.catalog, assistant, titles=await tool_titles(rt))
+    builder = AssistantBuilder(
+        rt.catalog, assistant, titles=await tool_titles(rt), think_alias=rt.settings.think_harder_alias
+    )
 
     # What the person said about themselves is read while the reply is written: the extraction needs only the
     # messages so far, and run after the reply it held the reply's end back by a whole model call.
