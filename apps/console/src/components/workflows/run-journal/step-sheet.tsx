@@ -62,7 +62,7 @@ export function StepSheet({ step, nodeName, onOpenChange, navigation }: { step: 
                     {a.key}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{relativeTime(a.startedAt)}</TableCell>
-                  <TableCell className="max-w-48 truncate text-xs text-destructive-text" title={a.error ?? undefined}>
+                  <TableCell className="max-w-48 text-xs text-destructive-text break-words whitespace-normal" title={a.error ?? undefined}>
                     {a.error ?? ''}
                   </TableCell>
                 </TableRow>

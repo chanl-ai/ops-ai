@@ -126,7 +126,7 @@ export function TaskQueue({
                       <ItemTitle className="line-clamp-2 min-w-0 wrap-break-word" title={r.title}>{r.title}</ItemTitle>
                       {r.amount != null && <span className="shrink-0 text-sm font-medium tabular-nums">{money(r.amount, r.currency)}</span>}
                     </div>
-                    <ItemDescription className="line-clamp-2 wrap-break-word">{[KIND_LABEL[r.kind], r.customer].filter(Boolean).join(' · ')}</ItemDescription>
+                    <ItemDescription className="wrap-break-word line-clamp-none">{[KIND_LABEL[r.kind], r.customer].filter(Boolean).join(' · ')}</ItemDescription>
                     <SlaText minutes={r.slaMinutes} open={isOpen(r)} />
                   </ItemContent>
                 </button>

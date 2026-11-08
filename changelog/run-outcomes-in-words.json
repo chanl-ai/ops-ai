@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Runs say how they ended and what started them",
+  "description": "A finished run's outcome names the end it reached, such as \"Finished at the Not found end.\", instead of a bare word that looked like an error. A run a service started says what happened, such as \"File deleted\", instead of the event's code.",
+  "tag": "improved"
+}

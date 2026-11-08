@@ -47,7 +47,7 @@ const columns: ColumnDef<Row>[] = [
           <span className="font-medium">{row.original.name}</span>
         </div>
         {/* A span, not a div: the name column truncates descendant divs to one line, and a trigger is a sentence. */}
-        <span className="line-clamp-2 whitespace-normal text-xs text-muted-foreground" title={row.original.trigger}>
+        <span className="whitespace-normal text-xs text-muted-foreground break-words" title={row.original.trigger}>
           Starts when: {row.original.trigger}
         </span>
       </div>

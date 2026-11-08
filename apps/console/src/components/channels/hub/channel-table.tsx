@@ -40,7 +40,7 @@ const columns = (oneKind: boolean): ColumnDef<Row>[] => [
           <Icon className="size-4 shrink-0 text-muted-foreground" />
           <span className="min-w-0">
             <span className="block truncate font-medium">{row.original.name}</span>
-            <span className="block truncate text-xs text-muted-foreground">{row.original.detail}</span>
+            <span className="block text-xs text-muted-foreground break-words whitespace-normal">{row.original.detail}</span>
           </span>
         </span>
       );

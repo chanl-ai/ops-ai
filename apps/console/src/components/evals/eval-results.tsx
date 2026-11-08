@@ -105,7 +105,7 @@ export function EvalSuiteGrid({ suites }: { suites: EvalSuite[] }) {
               <span className="text-xs text-muted-foreground tabular-nums">{s.passed !== null ? `${s.passed}/${s.total} passed` : `${s.caseCount} cases, not run`}</span>
             </div>
             {!!s.regressions && <span className="text-xs text-destructive-text">{s.regressions === 1 ? '1 regression' : `${s.regressions} regressions`}</span>}
-            <p className="line-clamp-2 text-xs text-muted-foreground">{s.description}</p>
+            <p className="text-xs text-muted-foreground break-words">{s.description}</p>
           </div>
         );
       })}

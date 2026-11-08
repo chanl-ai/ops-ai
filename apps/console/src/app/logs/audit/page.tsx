@@ -55,11 +55,11 @@ function columns(showTeam: boolean): ColumnDef<Row>[] {
         <div className="max-w-sm min-w-56">
           {/* The summary names the action itself ("Signed in with a password"), so no action chip repeats it; the
               Action filter groups rows by it. */}
-          <div className="truncate text-sm" title={row.original.summary}>
+          <div className="text-sm break-words whitespace-normal" title={row.original.summary}>
             {row.original.summary}
           </div>
           {row.original.reason && (
-            <div className="mt-0.5 truncate text-xs text-muted-foreground" title={row.original.reason}>
+            <div className="mt-0.5 text-xs text-muted-foreground break-words whitespace-normal" title={row.original.reason}>
               {row.original.reason}
             </div>
           )}

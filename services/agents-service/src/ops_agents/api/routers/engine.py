@@ -1053,6 +1053,11 @@ def run_failure(run: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, A
     }
 
 
+async def ended_view(rt: Runtime, r: dict[str, Any]) -> dict[str, Any]:
+    """run_view with how the run ended as a sentence (run_story.outcome_texts), for a route that returns one run."""
+    return run_view(r) | {"outcomeText": (await run_story.outcome_texts(rt, [r])).get(str(r["id"]))}
+
+
 def run_view(r: dict[str, Any]) -> dict[str, Any]:
     waiting: dict[str, Any] | None = r.get("waiting")
     return {
@@ -1194,9 +1199,11 @@ async def list_engine_runs(rt: Rt, me: Me, q: Annotated[RunsQuery, Query()]) -> 
         limit=q.pageSize,
     )
     who = await actors(rt, [started_by_of(r) for r in rows])
+    ended = await run_story.outcome_texts(rt, rows)
     views = [
         await for_people(rt, r, run_view(r))
         | {
+            "outcomeText": ended.get(str(r["id"])),
             "canCancel": can_cancel(me, r),
             "canRetry": can_retry(me, r),
             "workflowName": r.get("workflow_name") or UNNAMED_WORKFLOW,
@@ -1218,6 +1225,7 @@ async def get_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     names = await actors(rt, [d["by"] for d in decided if d["by"]])
     told = await run_story.story(rt, run, steps, scope=key_scope(me), masking=False)
     body = run_view(run) | {
+        "outcomeText": (await ended_view(rt, run))["outcomeText"],
         "workflowName": told.pop("workflowName"),
         "failure": run_failure(run, steps),
         "steps": steps,
@@ -1331,7 +1339,7 @@ async def cancel_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     run = await visible_run(rt, run_id, me)
     require_runs_cancel(me, team_id=str(run["team_id"]), started_by=str(run["created_by"]), what=f"run {run_id}")
     if run["status"] == "cancelled":
-        return ok(await for_people(rt, run, run_view(run)))
+        return ok(await for_people(rt, run, await ended_view(rt, run)))
     cancelled, changed = await runs(rt).cancel(run_id, reason="by_user")
     if not changed or cancelled is None:
         raise Conflict(f"Run {run_id} has already {run['status']}.", code="run_finished")
@@ -1339,7 +1347,7 @@ async def cancel_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     await EventLog(rt.db).append(
         thread_id=run_id, team_id=run["team_id"], run_id=run_id, type_="cancelled", node=None, data={"by": me.email}
     )
-    return ok(await for_people(rt, cancelled, run_view(cancelled)))
+    return ok(await for_people(rt, cancelled, await ended_view(rt, cancelled)))
 
 
 @runs_router.post("/{run_id}/retry", response_model=Envelope[RunRow])

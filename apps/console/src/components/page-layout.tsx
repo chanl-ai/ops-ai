@@ -256,7 +256,7 @@ export function PageLayout({
               )}
               {description && (
                 <div
-                  className="text-sm text-muted-foreground sm:line-clamp-2 wrap-break-word mt-0.5 [contain:inline-size]"
+                  className="text-sm text-muted-foreground wrap-break-word mt-0.5 [contain:inline-size]"
                   title={typeof description === 'string' ? description : undefined}
                   data-testid="page-description"
                 >

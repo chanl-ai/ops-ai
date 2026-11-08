@@ -126,7 +126,7 @@ export default function OverviewPage() {
                                 <Link href={r.href} data-testid={`overview-${w.id}-row`}>
                                   <ItemContent className="min-w-0">
                                     <ItemTitle className="w-full truncate">{r.title}</ItemTitle>
-                                    <ItemDescription className="truncate">{r.detail}</ItemDescription>
+                                    <ItemDescription className="break-words line-clamp-none whitespace-normal">{r.detail}</ItemDescription>
                                   </ItemContent>
                                 </Link>
                               </Item>
@@ -135,7 +135,7 @@ export default function OverviewPage() {
                             <Item key={r.id} role="listitem" size="sm" className="rounded-none px-6">
                               <ItemContent className="min-w-0">
                                 <ItemTitle className="w-full truncate">{r.title}</ItemTitle>
-                                <ItemDescription className="truncate">{r.detail}</ItemDescription>
+                                <ItemDescription className="break-words line-clamp-none whitespace-normal">{r.detail}</ItemDescription>
                               </ItemContent>
                             </Item>
                           ),

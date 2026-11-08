@@ -484,6 +484,22 @@ class RunStore:
         async with self.tx.tenant_tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
+    async def ends(self, run_ids: list[str]) -> dict[str, str]:
+        """The End each of these runs finished at, by node id, in one query, so a list of runs names how each ended
+        without reading its steps; a run with no End step (it has not ended, or ended before node types were kept) is
+        left out."""
+        if not run_ids:
+            return {}
+        s = engine_steps
+        q = (
+            sa.select(s.c.run_id, s.c.node_id)
+            .where(s.c.tenant_id == self.tx.tenant(), s.c.node_type == "ops.flow.end", s.c.run_id.in_(run_ids))
+            .order_by(s.c.started_at)
+        )
+        async with self.tx.tenant_tx() as c:
+            # Oldest first, so the last End a run reached wins.
+            return {str(run_id): str(node_id) for run_id, node_id in (await c.execute(q)).all()}
+
     async def resumes(self, run_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
         """Each run's decided Human Tasks, oldest first: the resume payloads the decide route queued, for every run in
         one query, so a list of runs does not read them one run at a time."""

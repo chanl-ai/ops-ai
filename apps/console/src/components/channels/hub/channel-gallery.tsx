@@ -41,7 +41,7 @@ export function ChannelGallery({ kinds, canSetUp }: { kinds: ChannelKindSummary[
               )}
             </CardHeader>
             <CardContent className="px-4 pb-0">
-              <CardDescription className="line-clamp-2 min-h-10 text-xs">{k.description}</CardDescription>
+              <CardDescription className="text-xs break-words line-clamp-none">{k.description}</CardDescription>
             </CardContent>
             {(!built || canSetUp) && (
               <CardFooter className="mt-auto justify-end border-t px-4 pb-4 [.border-t]:pt-3">

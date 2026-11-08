@@ -27,7 +27,7 @@ const COLUMNS: ColumnDef<Row>[] = [
     cell: ({ row }) => (
       <div className="min-w-0">
         <div className="truncate font-medium">{row.original.name}</div>
-        <div className="truncate text-xs text-muted-foreground">{row.original.description}</div>
+        <div className="text-xs text-muted-foreground break-words whitespace-normal">{row.original.description}</div>
       </div>
     ),
     enableHiding: false,

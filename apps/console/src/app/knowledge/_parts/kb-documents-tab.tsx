@@ -83,7 +83,7 @@ export function KbDocumentsTab({ kb }: { kb: KnowledgeBaseDetail }) {
               {row.original.error && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="line-clamp-2 text-xs text-destructive-text">{row.original.error}</span>
+                    <span className="text-xs text-destructive-text break-words whitespace-normal">{row.original.error}</span>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs">{row.original.error}</TooltipContent>
                 </Tooltip>
@@ -95,7 +95,7 @@ export function KbDocumentsTab({ kb }: { kb: KnowledgeBaseDetail }) {
               <ItemStatusBadge status={row.original.status} />
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="line-clamp-2 text-xs text-warning-text">{row.original.warning}</span>
+                  <span className="text-xs text-warning-text break-words whitespace-normal">{row.original.warning}</span>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs">{row.original.warning}</TooltipContent>
               </Tooltip>
