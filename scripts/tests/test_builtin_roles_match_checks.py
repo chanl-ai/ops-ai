@@ -334,7 +334,7 @@ TODAY: dict[tuple[str, str], Verdict] = {
     **{
         (area, "view"): open_to_members
         for area in AREAS
-        if area not in ("settings", "audit", "chat", "memory", "workspace")
+        if area not in ("settings", "audit", "activity", "webhooks", "usage", "chat", "memory", "workspace")
     },
     ("chat", "view"): chat_owner,
     ("memory", "edit"): memory_editor,
@@ -385,6 +385,8 @@ TODAY: dict[tuple[str, str], Verdict] = {
     ("settings", "manage"): files_storage,
     **{("access", action): platform_admin("access", action) for action in ("create", "edit", "delete", "manage")},
     ("audit", "view"): platform_admin("audit", "view"),
+    # tools-service's call log (GET /v1/executions).
+    ("activity", "view"): tools_step("activity", "view"),
 }
 
 CELLS = [(area, action) for area in AREAS for action in ACTIONS]

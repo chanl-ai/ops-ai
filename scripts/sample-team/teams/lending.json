@@ -1,0 +1,41 @@
+{
+  "$comment": "A first team for the team assistant's scripted chats (docs/usecases/chat/assistant/): `make sample-teams` installs it. Every name, client and figure is invented.",
+  "team": {
+    "name": "Small Business Lending"
+  },
+  "people": [
+    {
+      "key": "lead",
+      "name": "Grace Mensah",
+      "email": "grace.mensah@harborpine.example",
+      "role": "admin"
+    },
+    {
+      "key": "builder",
+      "name": "Ivan Petrovic",
+      "email": "ivan.petrovic@harborpine.example",
+      "role": "builder"
+    },
+    {
+      "key": "officer",
+      "name": "Marco Silva",
+      "email": "marco.silva@harborpine.example",
+      "role": "approver"
+    }
+  ],
+  "knowledge": [
+    {
+      "key": "policy",
+      "name": "Small business credit policy",
+      "source": "Credit manual",
+      "description": "What an application needs, and what happens when documents are missing.",
+      "color": "amber",
+      "documents": [
+        {
+          "name": "application-documents.md",
+          "text": "# Application documents\n\n## Required documents\nA small business loan application needs the last two years of business tax returns, the last three months of business bank statements, and a personal guarantee signed by every owner of 20% or more.\n\n## Missing documents\nAn application waiting on documents is paused and the applicant is reminded after 7 days. An application still missing documents after 30 days is withdrawn, and the applicant may apply again.\n\n## Renewals\nA line of credit is reviewed for renewal 60 days before it ends.\n"
+        }
+      ]
+    }
+  ]
+}

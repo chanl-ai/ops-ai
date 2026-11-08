@@ -1,6 +1,6 @@
 # The local stack: compose (PostgreSQL, OPA), migrations, then the agents service, tools service and console in the
 # background. scripts/stack.sh is the process manager: logs in .logs/<svc>.log, pids in .run/<svc>.pid.
-.PHONY: up down restart reset-db health logs ports demo-model sample-team demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
+.PHONY: up down restart reset-db health logs ports demo-model sample-team sample-teams demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
 
 ##@ Stack (one per machine)
 
@@ -75,6 +75,11 @@ health: ## Probe every service, OPA and PostgreSQL; shows port, state and who ow
 sample-team: ## Install the sample team (scripts/sample-team/sample-team.json) as the first admin; a second run finds it (NAME= another team, EXPECT_FOUND=1 fails on anything made)
 	@MODEL=$(DEMO_MODEL) uv run --quiet --project $(ROOT) python $(ROOT)/scripts/sample_team.py install $(if $(NAME),--name "$(NAME)") $(if $(EXPECT_FOUND),--expect-found)
 
+sample-teams: ## Install the first teams (scripts/sample-team/teams/*.json) with their people and knowledge, and each team's assistant; a second run finds them
+	@for f in $(ROOT)/scripts/sample-team/teams/*.json; do \
+		uv run --quiet --project $(ROOT) python $(ROOT)/scripts/sample_team.py install --manifest "$$f" $(if $(EXPECT_FOUND),--expect-found) || exit 1; \
+	done
+
 logs: ## Follow one service's log: make logs SVC=agents|tools|runner|console (FOLLOW=0 to print and exit)
 	@OPS_LOGS_FOLLOW=$(if $(FOLLOW),$(FOLLOW),1) $(STACK) logs $(SVC)
 
@@ -110,17 +115,21 @@ ports: ## Print the ports this stack uses
 # A query string goes in Q=, since make reads any word holding `=` as a variable.
 ifneq ($(filter api,$(firstword $(MAKECMDGOALS))),)
 API_WORDS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
-$(eval $(API_WORDS):;@:)
+# A path's colons (plugin:opsai.salesforce) are escaped, or make reads the path as a rule's target and prerequisites.
+$(eval $(subst :,\:,$(API_WORDS)):;@:)
 endif
-AS ?= admin
+# make's built-in AS (the assembler, `as`) means `AS ?=` never applies; only an unset or built-in AS takes the default.
+ifneq ($(filter default undefined,$(origin AS)),)
+AS := admin
+endif
 ENV ?= local
 
 .PHONY: api sdk-call
-api: ## make api GET /v1/me AS=admin|builder|approver|viewer|security|platform [Q='pageSize=5'] [BODY='{}'] [TEAM=] [SVC=] [ENV=staging]: signs in for real, prints the answer
+api: ## make api GET /v1/me AS=<role>|james|<email> [Q='pageSize=5'] [BODY='{}'] [TEAM=] [SVC=] [ENV=staging]: signs in for real, prints the answer
 	@[ -n "$(word 2,$(API_WORDS))" ] || { echo "make api: name the method and path, e.g. make api GET /v1/me AS=viewer" >&2; exit 2; }
-	@uv run --quiet python scripts/api_as.py api $(word 1,$(API_WORDS)) '$(word 2,$(API_WORDS))$(if $(Q),?$(Q))' --as $(AS) --env $(ENV) \
+	@uv run --quiet python scripts/api_as.py api $(word 1,$(API_WORDS)) '$(word 2,$(API_WORDS))$(if $(Q),?$(Q))' --as '$(AS)' --env $(ENV) \
 		$(if $(BODY),--body '$(BODY)') $(if $(TEAM),--team $(TEAM)) $(if $(SVC),--service $(SVC))
 
 sdk-call: ## make sdk-call CALL='ops.raw.platform.me_me()' AS=<role> [TEAM=] [ENV=staging]: one Python SDK call as that dev user
 	@[ -n "$(CALL)" ] || { echo "make sdk-call: give the call, e.g. CALL='ops.raw.platform.me_me()' (double quotes inside it)" >&2; exit 2; }
-	@uv run --quiet python scripts/api_as.py sdk '$(CALL)' --as $(AS) --env $(ENV) $(if $(TEAM),--team $(TEAM))
+	@uv run --quiet python scripts/api_as.py sdk '$(CALL)' --as '$(AS)' --env $(ENV) $(if $(TEAM),--team $(TEAM))

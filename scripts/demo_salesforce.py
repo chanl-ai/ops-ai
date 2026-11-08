@@ -49,7 +49,15 @@ TEAMS: dict[str, dict[str, str]] = {
         "builder": "jordan.ellis@harborpine.example",
         "approver": "riley.chen@harborpine.example",
     },
+    # A first team (make sample-teams): its people sign in with the dev seed's password.
+    "Wealth Advisory": {
+        "lead": "helena.brooks@harborpine.example",
+        "builder": "omar.haddad@harborpine.example",
+        "approver": "helena.brooks@harborpine.example",
+    },
 }
+# Teams whose people sign in with the dev seed's password rather than the sample team's generated one.
+SEED_PASSWORD_TEAMS = ("Operations", "Wealth Advisory")
 TEAM_NAME = os.environ.get("DEMO_TEAM") or "Operations"
 PEOPLE = TEAMS[TEAM_NAME]
 LEAD, APPROVER = PEOPLE["lead"], PEOPLE["approver"]
@@ -259,12 +267,12 @@ def team_id(token: str) -> str:
 
 def password() -> str:
     """The demo people's password: the dev seed's for its people, the sample team's from .run/demo.env."""
-    return "northfield-demo" if TEAM_NAME == "Operations" else read_env(RUN / "demo.env")["OPS_DEMO_PASSWORD"]
+    return "northfield-demo" if TEAM_NAME in SEED_PASSWORD_TEAMS else read_env(RUN / "demo.env")["OPS_DEMO_PASSWORD"]
 
 
 def how_to_sign_in() -> str:
-    if TEAM_NAME == "Operations":
-        return "pick them under Sign in as a demo person on /login"
+    if TEAM_NAME in SEED_PASSWORD_TEAMS:
+        return "the dev seed's password, northfield-demo"
     return "password OPS_DEMO_PASSWORD in .run/demo.env"
 
 

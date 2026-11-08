@@ -185,7 +185,7 @@ cmd_of() {
     # The fake bank's certificate doubles as the CA tools-service trusts for api.bank.test.
     # A sign-in returns to the console (OPS_CONSOLE_URL); without it tools-service starts none.
     # Its own model key judges writes against a team's sending policy when the team has check before sending on.
-    tools) echo "$(auth_env)env $MAIL_OUT_ENV OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_tools_check $(egress_ca_env) OPS_EGRESS_RESOLVE=$(GM=$GREENMAIL_IMAP MP=$MAILPIT_SMTP FB=$FAKE_BANK_PORT dev_egress_resolve) OPS_RUNNER_URL=http://127.0.0.1:$RUNNER_PORT uv run --directory services/tools-service python -m ops_tools" ;;
+    tools) echo "$(auth_env)env $MAIL_OUT_ENV OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT OPS_KB_URL=http://127.0.0.1:$KB_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_tools_check $(egress_ca_env) OPS_EGRESS_RESOLVE=$(GM=$GREENMAIL_IMAP MP=$MAILPIT_SMTP FB=$FAKE_BANK_PORT dev_egress_resolve) OPS_RUNNER_URL=http://127.0.0.1:$RUNNER_PORT uv run --directory services/tools-service python -m ops_tools" ;;
     # Code tools' functions: Python on WASM, calling back to tools-service. start fetches its Python build first.
     runner) echo "$(auth_env)env OPS_RUNNER_PORT=$RUNNER_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT uv run --directory services/runner-service python -m ops_runner" ;;
     # The worker also reads the workflows' mailboxes (Email received) and stores their attachments in files-service.

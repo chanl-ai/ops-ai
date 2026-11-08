@@ -1,0 +1,41 @@
+{
+  "$comment": "A first team for the team assistant: make sample-teams installs it. Its clients, meetings and opportunities live in the fake Salesforce (docs/usecases/lib/fake_salesforce.py), never as Ops AI records. Every name is invented.",
+  "team": {
+    "name": "Wealth Advisory"
+  },
+  "people": [
+    {
+      "key": "lead",
+      "name": "Helena Brooks",
+      "email": "helena.brooks@harborpine.example",
+      "role": "admin"
+    },
+    {
+      "key": "builder",
+      "name": "Omar Haddad",
+      "email": "omar.haddad@harborpine.example",
+      "role": "builder"
+    },
+    {
+      "key": "adviser",
+      "name": "Dana Whitfield",
+      "email": "dana.whitfield@harborpine.example",
+      "role": "approver"
+    }
+  ],
+  "knowledge": [
+    {
+      "key": "policies",
+      "name": "Wealth advisory policies",
+      "source": "Advisory handbook",
+      "description": "Client reviews, suitability notes and cash holdings.",
+      "color": "emerald",
+      "documents": [
+        {
+          "name": "client-reviews-and-suitability.md",
+          "text": "# Client reviews and suitability\n\n## Annual review\nEvery advisory client has a review meeting at least once every 12 months. Before the meeting the adviser checks the date of the client's risk profile. A risk profile older than 12 months is refreshed in the meeting, and the new answers are recorded before any change to the portfolio.\n\n## Cash holdings\nCash above the client's agreed target by more than 10 percentage points is raised with the client at the next review, with the reason the client gave for holding it.\n\n## Suitability notes\nA suitability note is written within 2 business days of any recommendation. A recommendation without a note may not be acted on.\n"
+        }
+      ]
+    }
+  ]
+}
