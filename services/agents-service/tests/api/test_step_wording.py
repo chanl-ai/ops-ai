@@ -219,7 +219,8 @@ async def test_a_run_outcome_reads_as_words(stack: Stack) -> None:  # noqa: F811
     assert detail["outcome"] == "documents_read" and detail["outcomeText"] == said, detail
     assert [r["outcomeText"] for r in listed["data"]] == [said], listed
     rows = [r for r in (await activity(c, BUILDER, kind="workflow_run"))["data"] if r["ref"]["id"] == run]
-    assert [r["outcomeText"] for r in rows] == ["Documents read"], rows
+    # Activity reads the same sentence as the run page, so a finished run never shows a bare key there either.
+    assert [r["outcomeText"] for r in rows] == [said], rows
 
 
 async def test_a_finished_run_says_which_end_it_reached_by_its_name(stack: Stack) -> None:  # noqa: F811

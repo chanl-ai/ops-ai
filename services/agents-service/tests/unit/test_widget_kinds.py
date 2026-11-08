@@ -43,7 +43,7 @@ def test_data_outside_the_schema_is_refused_with_the_field_named() -> None:
 
 @pytest.mark.parametrize(
     ("kind", "data"),
-    [
+    [  # pyright: ignore[reportUnknownArgumentType] - each case's data differs in shape on purpose
         ("contact", {"name": "Priya", "url": "https://evil.example"}),
         (
             "entity",

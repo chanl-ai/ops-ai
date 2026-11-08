@@ -78,7 +78,7 @@ def load_script(folder: Path) -> Script:
             str(r["result"]) if r.get("result") else None,
             bool(r.get("force")),
             str(r["before"]) if r.get("before") else None,
-            [dict(c) for c in r.get("tools") or []],
+            [dict(c) for c in cast(list[dict[str, Any]], r.get("tools") or [])],
         )
         for r in listed
     ]

@@ -199,7 +199,14 @@ async def test_a_plan_left_open_goes_on_at_its_blocked_step_in_two_model_calls()
 
 def test_the_chat_keeps_one_plan_part_on_top_and_hands_an_open_plan_to_the_next_turn() -> None:
     builder = AssistantBuilder(load_catalog(SEED), ChatMessage(id="m1", role="assistant", content="", at="t"))
-    read = {"id": "c1", "tool": "find_cases", "server": "Ops AI", "input": {}, "status": "ok", "output": [{"a": 1}]}
+    read: dict[str, Any] = {
+        "id": "c1",
+        "tool": "find_cases",
+        "server": "Ops AI",
+        "input": {},
+        "status": "ok",
+        "output": [{"a": 1}],
+    }
     table = {"type": "widget", "id": "", "shape": "rows", "data": [{"a": 1}]}
     builder.apply("tool_call", {**read, "view": {"part": table}})
     for i, statuses in enumerate((("doing", "todo", "todo"), ("done", "blocked", "todo"))):

@@ -7,7 +7,7 @@ lost (F9)."""
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Any
 
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
@@ -57,7 +57,7 @@ def told_to_answer(messages: list[ModelMessage]) -> bool:
     return bool(back) and "answer in text" in json.dumps(back[-1].content)
 
 
-def eager(pick: Any) -> FunctionModel:
+def eager(pick: Callable[[Any, Any], tuple[str, dict[str, Any]] | None]) -> FunctionModel:
     """A model that calls whatever `pick(offered names, messages)` returns while it is offered, else answers, and
     answers once told to; one that ignores the instruction is the step-limit case (tests/api/test_turn_limits.py)."""
 

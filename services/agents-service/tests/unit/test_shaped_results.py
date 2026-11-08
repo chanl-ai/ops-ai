@@ -100,13 +100,20 @@ def test_a_card_the_agent_presents_takes_the_place_of_the_tables_its_reads_drew(
     read: dict[str, Any] = {"id": "c1", "tool": "salesforce_query", "server": "CRM", "input": {}, "status": "ok"}
     table = {"type": "widget", "id": "", "shape": "rows", "data": [{"Name": "Okafor Family Trust"}]}
     builder.apply("tool_call", {**read, "output": [{"Name": "Okafor Family Trust"}], "view": {"part": table}})
-    brief = {
+    brief: dict[str, Any] = {
         "type": "widget",
         "id": "",
         "kind": "brief",
         "layout": {"type": "brief", "title": "Okafor", "sections": []},
     }
-    present = {"id": "c2", "tool": "present", "server": "kernel", "input": {}, "status": "ok", "view": {"part": brief}}
+    present: dict[str, Any] = {
+        "id": "c2",
+        "tool": "present",
+        "server": "kernel",
+        "input": {},
+        "status": "ok",
+        "view": {"part": brief},
+    }
     builder.apply("tool_call", present)
     assert [p.id for p in builder.message.parts or []] == ["wp_c2"]
     # A plain table the agent presents (a shape, not a card) leaves the read's table as it is.

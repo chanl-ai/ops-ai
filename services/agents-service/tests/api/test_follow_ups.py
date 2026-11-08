@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
+from typing import Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -69,7 +70,7 @@ async def test_think_harder_reruns_the_last_reply_on_the_deeper_alias(client: As
     # The reply is answered again, not "Think harder" as a new question: one question, one (new) reply.
     assert [m["role"] for m in after] == ["user", "assistant"], after
     assert after[0]["content"] == "Hello" and after[1]["id"] != first[1]["id"]
-    ran = after[1].get("settings") or {}
+    ran: dict[str, Any] = after[1].get("settings") or {}
     assert ran.get("model") == "thinking" and ran.get("sources", {}).get("model") == "think_harder", ran
 
 
@@ -84,7 +85,7 @@ async def test_asking_to_think_harder_in_a_sentence_answers_it_on_the_deeper_ali
     after = (await client.get(f"/chat/threads/{tid}")).json()["data"]["messages"]
     # A new question, kept as asked, answered on the deeper model; the earlier exchange stays.
     assert [m["content"] for m in after if m["role"] == "user"] == ["Hello", ask], after
-    ran = after[-1].get("settings") or {}
+    ran: dict[str, Any] = after[-1].get("settings") or {}
     assert ran.get("model") == "thinking" and ran.get("sources", {}).get("model") == "think_harder", ran
 
 
@@ -95,4 +96,5 @@ async def test_a_message_that_only_mentions_thinking_is_not_a_think_harder_ask(c
         f"/chat/threads/{tid}/messages", json={"content": "I think the hardware is fine"}, headers=headers
     )
     after = (await client.get(f"/chat/threads/{tid}")).json()["data"]["messages"]
-    assert (after[-1].get("settings") or {}).get("sources", {}).get("model") != "think_harder", after
+    ran: dict[str, Any] = after[-1].get("settings") or {}
+    assert ran.get("sources", {}).get("model") != "think_harder", after

@@ -60,7 +60,7 @@ def test_declarations_read_back_as_the_tools_they_were_taken_from(tmp_path: Path
 def test_a_release_that_changes_only_a_skill_has_a_new_digest(tmp_path: Path) -> None:
     # 0.3.1 of a plugin changed only a skill's text, so its digest equalled 0.3.0's and no team was offered the update.
     text = FIELDS + "templates:\n  - { kind: skill, id: s1, version: 1, path: templates/skills/s1.yaml }\n"
-    digests = []
+    digests: list[str] = []
     for name, body in (
         ("a", "instructions: six queries\n"),
         ("b", "instructions: six queries\n"),

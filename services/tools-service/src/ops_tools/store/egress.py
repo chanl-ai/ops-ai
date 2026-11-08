@@ -65,7 +65,7 @@ def _by_name(modules: list[dict[str, str]]) -> list[dict[str, str]]:
     return sorted(modules, key=lambda m: m["name"].lower())
 
 
-def _users(tenant_id: str) -> sa.Select[tuple[str, str, str | None]]:
+def _users(tenant_id: str) -> sa.Select[str, str, str | None]:
     """Each host's modules with the name a person knows them by, so the allow list never shows a bare module id."""
     return (
         sa.select(module_egress_hosts.c.host, module_egress_hosts.c.module_id, tool_modules.c.display_name)

@@ -340,10 +340,14 @@ async def test_call_with_broken_json_says_so_instead_of_calling() -> None:
 async def test_a_rule_with_several_tools_reads_them_in_one_answer_once_all_are_offered() -> None:
     # The assistant's my-day script reads cases and tasks in one step; a rule could make only one call an answer.
     mod = fake()
-    reads = [{"tool": "find_cases", "arguments": {"assignedToMe": True}}, {"tool": "my_human_tasks", "arguments": {}}]
+    reads: list[dict[str, Any]] = [
+        {"tool": "find_cases", "arguments": {"assignedToMe": True}},
+        {"tool": "my_human_tasks", "arguments": {}},
+    ]
     s = mod.Script([mod.Rule(when="needs me today", calls=reads)], ["default"])
     both = [{"type": "function", "function": {"name": n}} for n in ("find_cases", "my_human_tasks")]
     done = await mod.answer(s, "default", {"messages": [user("Everything that needs me today")], "tools": both})
-    assert [c["function"]["name"] for c in done.tool_calls or []] == ["find_cases", "my_human_tasks"]
+    made: list[dict[str, Any]] = done.tool_calls or []
+    assert [c["function"]["name"] for c in made] == ["find_cases", "my_human_tasks"]
     one = await mod.answer(s, "default", {"messages": [user("Everything that needs me today")], "tools": both[:1]})
     assert not one.tool_calls or [c["function"]["name"] for c in one.tool_calls] != ["find_cases", "my_human_tasks"]

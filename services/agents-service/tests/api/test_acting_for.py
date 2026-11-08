@@ -169,7 +169,7 @@ async def test_a_recovered_chat_run_acts_for_the_threads_person_and_one_with_no_
         "meta": {"ownerEmail": "j.richardson@bank.test"},
     }
     nobody = {**chat, "id": "th_2", "meta": {}}
-    workflow = {"id": "th_3", "team_id": "team_a", "graph": "complex_workflow", "meta": {}}
+    workflow: dict[str, Any] = {"id": "th_3", "team_id": "team_a", "graph": "complex_workflow", "meta": {}}
     for row in (chat, nobody, workflow):
         with isolation.scope("ten_a", None):
             async for _ in runs.execute(rt, row, None, graph_input=None, run_id="run_rec", kind="recovery"):  # type: ignore[arg-type]

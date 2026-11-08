@@ -21,7 +21,7 @@ from pydantic_ai.messages import (
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from ops_agent_kernel import skills as skillset
-from ops_agent_kernel.events import SkillLoaded, TextReplaced
+from ops_agent_kernel.events import SkillLoaded, TextReplaced, TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
 from ops_agent_kernel.types import AgentSettings, PromptFragment, Resume, Skill, ToolGrant, TurnRequest, TurnResult
@@ -333,7 +333,9 @@ async def test_a_follow_up_keeps_the_skill_an_earlier_turn_loaded_and_the_record
     events = [
         e async for e in run_turn(req, KernelPorts(model=model.build(), tools=NoTools(), knowledge=NoKnowledge()))
     ]
-    result = events[-1].result  # type: ignore[attr-defined]
+    last = events[-1]
+    assert isinstance(last, TurnFinished)
+    result = last.result
     sent = model.instructions[0]
     assert HARDSHIP.instructions in sent and read in sent, sent
     assert result.skills == [{"skillId": "sk_1", "name": HARDSHIP.name, "version": 1, "matched": "cannot pay"}]

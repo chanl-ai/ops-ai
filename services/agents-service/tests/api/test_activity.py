@@ -290,7 +290,7 @@ async def test_a_viewer_is_refused_the_activity_list(stack: Stack) -> None:  # n
 async def test_background_jobs_are_listed_only_when_asked_for(stack: Stack) -> None:  # noqa: F811
     """Each background job row repeated the run it started beside that run; the list leaves them out unless the kind
     filter names them, and the kind facet still counts them so the filter can offer them."""
-    from tests.api.test_background import _jobs  # noqa: PLC0415
+    from tests.api.test_background import _jobs  # noqa: PLC0415  # pyright: ignore[reportPrivateUsage]
 
     c, _ = stack
     await _jobs(stack)

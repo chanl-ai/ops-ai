@@ -94,7 +94,7 @@ async def test_a_skill_says_which_app_it_needs_and_whether_the_person_is_signed_
     )
     rt = SimpleNamespace(
         app_states=Cards({"team_a": [sf]}),
-        catalog=SimpleNamespace(agent_in_flight=lambda _id: agent),
+        catalog=SimpleNamespace(agent_in_flight=lambda _id: agent),  # pyright: ignore[reportUnknownLambdaType]
         directory=Ops,
     )
     line = AppsLine(rt)  # type: ignore[arg-type]
