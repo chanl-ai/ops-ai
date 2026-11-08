@@ -1,6 +1,6 @@
 # Warm cloud boxes: a Fly Sprite that holds its own checkout and its own running stack, served at its own address.
 # scripts/sprite-lane.sh does the work; scripts/box-setup.sh runs inside the box. Design: docs/architecture/cloud-boxes.md.
-.PHONY: box-up box-url box-status box-sleep box-reset
+.PHONY: box-up box-url box-status box-check box-sleep box-stop box-reset
 
 ##@ Cloud boxes (NAME=ops-ai-box-1)
 
@@ -12,14 +12,22 @@ box-url: ## Print the box's console address, and require a Fly sign-in to open i
 	@[ -n "$(NAME)" ] || { echo "make box-url: name the box, e.g. NAME=ops-ai-box-1"; exit 2; }
 	@bash $(ROOT)/scripts/sprite-lane.sh url $(NAME)
 
-box-status: ## Awake or asleep, the branch, and the stack's health (does not wake a sleeping box)
+box-status: ## Awake (running or warm) or asleep (cold), the branch, and the stack's health; does not wake a sleeping box
 	@[ -n "$(NAME)" ] || { echo "make box-status: name the box, e.g. NAME=ops-ai-box-1"; exit 2; }
 	@bash $(ROOT)/scripts/sprite-lane.sh status $(NAME)
 
-box-sleep: ## Stop the app and side services, close the session, and confirm within 2 minutes that the box is not running
+box-check: ## Headless from this machine: the box's login page loads and a demo sign-in lands on chat
+	@[ -n "$(NAME)" ] || { echo "make box-check: name the box, e.g. NAME=ops-ai-box-1"; exit 2; }
+	@bash $(ROOT)/scripts/sprite-lane.sh check $(NAME)
+
+box-sleep: ## Close sessions and wait until the box is cold (a few minutes); the stack keeps running inside it for an instant wake
 	@[ -n "$(NAME)" ] || { echo "make box-sleep: name the box, e.g. NAME=ops-ai-box-1"; exit 2; }
 	@bash $(ROOT)/scripts/sprite-lane.sh sleep $(NAME)
 
-box-reset: ## Fresh main and the database back to the seeded state
+box-stop: ## Stop the app and the side services as well, then wait until the box is cold
+	@[ -n "$(NAME)" ] || { echo "make box-stop: name the box, e.g. NAME=ops-ai-box-1"; exit 2; }
+	@bash $(ROOT)/scripts/sprite-lane.sh stop $(NAME)
+
+box-reset: ## Fresh main (or BRANCH=) and the database back to the seeded state
 	@[ -n "$(NAME)" ] || { echo "make box-reset: name the box, e.g. NAME=ops-ai-box-1"; exit 2; }
-	@bash $(ROOT)/scripts/sprite-lane.sh reset $(NAME)
+	@bash $(ROOT)/scripts/sprite-lane.sh reset $(NAME) $(BRANCH)

@@ -33,7 +33,7 @@ def fake_box_sprite(bin_dir: Path, log: Path, existing: str, status: str) -> Non
 def run(tmp_path: Path, *args: str, box: tuple[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     log = tmp_path / "log"
     bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
+    bin_dir.mkdir(parents=True)
     if box is None:
         fake_sprite(bin_dir, log)
     else:
@@ -90,13 +90,17 @@ def test_up_creates_a_missing_box(tmp_path: Path) -> None:
     assert result.log.startswith("create --skip-console -o chanl ops-ai-box-1\n")
 
 
-def test_sleep_fails_when_the_box_stays_running(tmp_path: Path) -> None:
-    result = run(tmp_path, "sleep", "ops-ai-box-1", box=("ops-ai-box-1", "running"))
-    assert result.returncode == 1
-    assert "still running" in result.stderr
-
-
-def test_sleep_confirms_a_box_that_is_not_running(tmp_path: Path) -> None:
+def test_sleep_fails_when_the_box_does_not_go_cold(tmp_path: Path) -> None:
     result = run(tmp_path, "sleep", "ops-ai-box-1", box=("ops-ai-box-1", "warm"))
-    assert result.returncode == 0, result.stderr
-    assert "ops-ai-box-1: warm" in result.stdout
+    assert result.returncode == 1
+    assert "still warm" in result.stderr
+
+
+def test_sleep_leaves_the_stack_running_and_stop_does_not(tmp_path: Path) -> None:
+    slept = run(tmp_path / "a", "sleep", "ops-ai-box-1", box=("ops-ai-box-1", "cold"))
+    assert slept.returncode == 0, slept.stderr
+    assert "ops-ai-box-1: cold" in slept.stdout
+    assert "make -s down" not in slept.log
+    stopped = run(tmp_path / "b", "stop", "ops-ai-box-1", box=("ops-ai-box-1", "cold"))
+    assert stopped.returncode == 0, stopped.stderr
+    assert "make -s down" in stopped.log

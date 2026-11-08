@@ -81,7 +81,10 @@ git clean -fdq -e node_modules -e .venv -e .run -e .logs -e .data -e .next
 done_step
 
 step "install"
-corepack enable >/dev/null 2>&1 || true
+# pnpm comes from the version package.json pins; the shim goes beside the other box programs, since the box's global npm
+# directory is not on a login shell's PATH.
+corepack enable --install-directory "$BIN"
+uv python install -q 3.12
 make -s install >"$BOX/install.log" 2>&1 || { tail -15 "$BOX/install.log" >&2; die "install failed (log $BOX/install.log)"; }
 done_step
 
@@ -98,14 +101,23 @@ sudo sed -i '/# ops-ai-box$/d' /etc/hosts
 done_step
 
 # A service is a small script the box runs and restarts: sprite-env keeps it across a sleep.
+SERVICES_CHANGED=0
 define_service() { # name, script body
-  local name=$1 file=$SVC/$1.sh
-  printf '#!/usr/bin/env bash\nset -e\nexport PATH="%s"\n%s\n' "$PATH" "$2" >"$file"
-  chmod +x "$file"
+  local name=$1 file=$SVC/$1.sh next
+  next=$(mktemp)
+  printf '#!/usr/bin/env bash\nset -e\nexport PATH="%s"\n%s\n' "$PATH" "$2" >"$next"
+  chmod +x "$next"
+  if sprite-env services get "$name" 2>/dev/null | grep -q '"status":"running"' && cmp -s "$next" "$file"; then
+    rm -f "$next"
+    return 0
+  fi
+  mv "$next" "$file"
+  # A restarted side service drops the stack's open connections to it, so the stack starts again below.
+  SERVICES_CHANGED=1
   if sprite-env services get "$name" >/dev/null 2>&1; then
     sprite-env services restart "$name" >/dev/null 2>&1 || sprite-env services start "$name" >/dev/null 2>&1 || true
   else
-    sprite-env services create "$name" --cmd bash --args "$file" --no-stream >/dev/null 2>&1
+    sprite-env services create "$name" --cmd bash --args "$file" --no-stream ${SERVICE_ARGS:-} >/dev/null 2>&1
   fi
 }
 wait_port() { # host port seconds
@@ -121,7 +133,8 @@ if [ "$EXTERNAL_DB" = 0 ]; then
     initdb -D "$BOX/pg" -U ops --pwfile="$BOX/pg.pw" --auth=scram-sha-256 >/dev/null
   fi
   define_service postgres "exec postgres -D $BOX/pg -k $BOX/pg-run -c listen_addresses=127.0.0.1 -c port=5432 -c max_connections=300"
-  wait_port 127.0.0.1 5432 40
+  for _ in $(seq 40); do pg_isready -q -h 127.0.0.1 -p 5432 && break; sleep 1; done
+  pg_isready -q -h 127.0.0.1 -p 5432 || die "postgres did not become ready"
   PGPASSWORD=ops psql -h 127.0.0.1 -U ops -d postgres -tAc "select 1 from pg_database where datname='ops_runtime'" | grep -q 1 \
     || PGPASSWORD=ops createdb -h 127.0.0.1 -U ops ops_runtime
 fi
@@ -134,24 +147,31 @@ mkdir -p "$REPO/.run/fake-bank"
 define_service fakebank "cd $REPO/services/tools-service/scripts
 export FAKE_BANK_BIND=0.0.0.0 FAKE_BANK_PORT=8745 FAKE_BANK_KEY=dev-bank-key FAKE_BANK_WEBHOOK_SECRET=dev-webhook-secret
 exec $REPO/.venv/bin/python -m fake_bank $REPO/.run/fake-bank"
-define_service proxy "export OPS_PUBLIC_PORT=8080
+# The box's public address reaches this service (--http-port); GreenMail already holds Sprite's default port 8080.
+SERVICE_ARGS="--http-port 8081" define_service proxy "export OPS_PUBLIC_PORT=8081
 exec caddy run --config $REPO/deploy/fly/Caddyfile --adapter caddyfile"
-for p in 8181 1025 3025 8745 8080; do wait_port 127.0.0.1 "$p" 60 || wait_port "$BOX_IP" "$p" 5; done
+for p in 8181 1025 3025 8745 8081; do wait_port 127.0.0.1 "$p" 60 || wait_port "$BOX_IP" "$p" 5; done
 done_step
 
 # ---- the stack -------------------------------------------------------------------------------------------------
 step "stack${RESET:+ (database reset)}"
 export OPS_INFRA=external
 cd "$REPO"
-if [ "${RESET:-}" = 1 ]; then
+if [ "${RESET:-}" = 1 ] || [ "$SERVICES_CHANGED" = 1 ]; then
   make -s down KEEP_DB=1 >/dev/null 2>&1 || true
+fi
+if [ "${RESET:-}" = 1 ]; then
   make -s reset-db CONFIRM=yes >"$BOX/reset.log" 2>&1 || { tail -10 "$BOX/reset.log" >&2; die "reset-db failed"; }
 fi
 make -s up AUTH=platform DEMO_MODEL=fake >"$BOX/up.log" 2>&1 || { tail -25 "$BOX/up.log" >&2; die "make up failed (log $BOX/up.log)"; }
 done_step
 
 step "demo data"
-make -s sample-team DEMO_MODEL=fake >"$BOX/sample-team.log" 2>&1 || { tail -10 "$BOX/sample-team.log" >&2; die "sample-team failed"; }
+# The first run right after a start can meet a token issued before the install's roles settled (401 permissions_changed);
+# a second run finds what the first made and finishes.
+make -s sample-team DEMO_MODEL=fake >"$BOX/sample-team.log" 2>&1 \
+  || { sleep 3; make -s sample-team DEMO_MODEL=fake >"$BOX/sample-team.log" 2>&1; } \
+  || { tail -10 "$BOX/sample-team.log" >&2; die "sample-team failed"; }
 done_step
 
 make -s health 2>&1 | tail -20

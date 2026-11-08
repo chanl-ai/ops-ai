@@ -9,9 +9,11 @@
 # ops-ai- is used as given (ops-ai-box-1); any other name becomes ops-ai-lane-<name>.
 #   scripts/sprite-lane.sh up <name> [branch]   create or wake the box and set the stack up in it
 #   scripts/sprite-lane.sh url <name>           print the console address; the address needs a Fly sign-in
+#   scripts/sprite-lane.sh check <name>         headless: the login page loads and a demo sign-in lands on chat
 #   scripts/sprite-lane.sh status <name>        awake or asleep, the branch, the stack's health
-#   scripts/sprite-lane.sh sleep <name>         stop the stack and the side services, then wait for the box to sleep
-#   scripts/sprite-lane.sh reset <name>         fresh main and the seeded database
+#   scripts/sprite-lane.sh sleep <name>         close sessions, leave the stack running, wait for the box to go cold
+#   scripts/sprite-lane.sh stop <name>          stop the stack and the side services too, then wait for cold
+#   scripts/sprite-lane.sh reset <name> [branch]  fresh main (or the branch) and the seeded database
 set -euo pipefail
 
 org=${SPRITE_ORG:-chanl}
@@ -48,7 +50,7 @@ case "${1:-}" in
     verb=$1
     name=${2:?usage: sprite-lane.sh $verb <name>${verb/reset/}}
     sprite=$(sprite_name "$name")
-    if [ "$verb" = reset ]; then branch=main; else branch=${3:-main}; fi
+    branch=${3:-main}
     exists "$sprite" || "$(sprite_bin)" create --skip-console -o "$org" "$sprite"
     origin=$(box_url "$sprite")
     # Only people in the Fly organization can open the address; the app's own sign-in comes after that.
@@ -62,6 +64,25 @@ case "${1:-}" in
     "$(sprite_bin)" config update -o "$org" -s "$sprite" --url-auth sprite >/dev/null
     box_url "$sprite"
     ;;
+  check)
+    sprite=$(sprite_name "${2:?usage: sprite-lane.sh check <name>}")
+    origin=$(box_url "$sprite")
+    # The address refuses a visitor who is not signed in to Fly (a redirect to the Fly sign-in) and answers one who is.
+    # The organization token is read from the CLI's own request headers into a variable; it is never printed.
+    anon=$(curl -s -o /dev/null -w '%{http_code}' -m 30 "$origin/login")
+    [ "$anon" = 302 ] || die "the address answered $anon without a Fly sign-in; expected a 302 to the Fly sign-in"
+    token=$("$(sprite_bin)" api -o "$org" -s "$sprite" / -- -sv -o /dev/null 2>&1 | sed -n 's/^> [Aa]uthorization: Bearer //p' | tr -d '\r')
+    [ -n "$token" ] || die "could not read the organization token from the sprite CLI"
+    signed=$(curl -s -o /dev/null -w '%{http_code}' -m 60 -H "Authorization: Bearer $token" "$origin/login")
+    echo "address: $anon without a Fly sign-in, $signed with one"
+    [ "$signed" = 200 ] || exit 1
+    port=${BOX_TUNNEL_PORT:-18081}
+    "$(sprite_bin)" proxy -o "$org" -s "$sprite" "$port:8081" >/dev/null 2>&1 &
+    proxy_pid=$!
+    trap 'kill "$proxy_pid" 2>/dev/null || true' EXIT
+    for _ in $(seq 30); do (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null && break; sleep 1; done
+    BOX_TUNNEL="http://localhost:$port" node "$(dirname "$0")/box-check.mjs" "$origin"
+    ;;
   status)
     sprite=$(sprite_name "${2:?usage: sprite-lane.sh status <name>}")
     exists "$sprite" || die "no box named $sprite"
@@ -73,25 +94,30 @@ case "${1:-}" in
         'cd ~/ops-ai 2>/dev/null && echo "branch: $(git rev-parse --abbrev-ref HEAD)@$(git rev-parse --short HEAD)" && OPS_INFRA=external make -s health 2>&1 | tail -16'
     fi
     ;;
-  sleep)
-    sprite=$(sprite_name "${2:?usage: sprite-lane.sh sleep <name>}")
+  sleep | stop)
+    verb=$1
+    sprite=$(sprite_name "${2:?usage: sprite-lane.sh $verb <name>}")
     exists "$sprite" || die "no box named $sprite"
-    # The app stops first, then the box's services. Nothing is left holding a connection, so Fly stops the box itself.
-    "$(sprite_bin)" exec -o "$org" -s "$sprite" --no-port-forward -- bash -c \
-      'cd ~/ops-ai 2>/dev/null && OPS_INFRA=external make -s down KEEP_DB=1 >/dev/null 2>&1; for s in $(sprite-env services list 2>/dev/null | grep -o "\"name\": *\"[^\"]*\"" | cut -d\" -f4); do sprite-env services stop "$s" >/dev/null 2>&1; done; true'
+    # stop also stops the app and the box's services. sleep leaves them running: a box with nothing connected is
+    # suspended by Fly with its processes intact (same pids, connections still open), so the next wake is instant.
+    if [ "$verb" = stop ]; then
+      "$(sprite_bin)" exec -o "$org" -s "$sprite" --no-port-forward -- bash -c \
+        'cd ~/ops-ai 2>/dev/null && OPS_INFRA=external make -s down KEEP_DB=1 >/dev/null 2>&1; for s in $(sprite-env services list 2>/dev/null | grep -o "\"name\": *\"[^\"]*\"" | cut -d\" -f4); do sprite-env services stop "$s" >/dev/null 2>&1; done; true'
+    fi
+    # The exec above has ended, so no session is open. Fly suspends the box a few minutes later.
     start=$SECONDS
-    while [ $((SECONDS - start)) -lt "${BOX_SLEEP_WAIT:-120}" ]; do
+    while [ $((SECONDS - start)) -lt "${BOX_SLEEP_WAIT:-420}" ]; do
       state=$(box_state "$sprite")
-      if [ "$state" != running ]; then
+      if [ "$state" = cold ]; then
         echo "$sprite: $state after $((SECONDS - start))s"
         exit 0
       fi
       sleep "${BOX_SLEEP_POLL:-5}"
     done
-    die "$sprite is still running after ${BOX_SLEEP_WAIT:-120}s"
+    die "$sprite is still $state after ${BOX_SLEEP_WAIT:-420}s"
     ;;
   *)
-    sed -n '2,20p' "$0" >&2
+    sed -n '2,24p' "$0" >&2
     exit 2
     ;;
 esac
