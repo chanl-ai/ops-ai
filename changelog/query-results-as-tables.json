@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-06",
+  "title": "Query results show as tables in chat",
+  "description": "A query's records, such as Salesforce cases, now show in chat as a table instead of a Details card listing the query's totals. Agents also stop re-showing a tool's result, so answers come back sooner.",
+  "tag": "fix"
+}

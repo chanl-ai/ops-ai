@@ -63,12 +63,14 @@ async def test_a_removed_plugin_keeps_its_card_and_says_it_is_no_longer_installe
     got = await client.get("/v1/apps", headers=team_admin(tenant))
     cards = got.json()["data"]
     card = next(c for c in cards if c["id"] == f"plugin:{ID}")
-    assert card["appState"] == "removed" and "no longer installed" in card["appStateReason"], card
+    assert card["appState"] == "removed" and "operator installs apps" in card["appStateReason"], card
     assert card["connectionId"] == conn_id and card["name"] == "Desk"
     assert not [c for c in cards if c["kind"] == "connection" and c["connectionId"] == conn_id], "shown twice"
     page = await client.get(f"/v1/apps/plugin:{ID}", headers=team_admin(tenant))
     assert page.status_code == 200, page.text
     assert page.json()["data"]["card"]["appState"] == "removed"
+    rows = page.json()["data"]["accounts"]
+    assert rows and all(r["actions"] == [] and r["test"] is None for r in rows), "read-only, with no stale test"
 
 
 async def test_a_removed_plugins_tool_refuses_with_that_reason(rig: Rig, engine: AsyncEngine, tenant: str) -> None:
@@ -80,4 +82,4 @@ async def test_a_removed_plugins_tool_refuses_with_that_reason(rig: Rig, engine:
     assert module is not None
     host.loaded = []
     seen = await host.for_call(tenant, "team_platform", module, "live")
-    assert "no longer installed" in str(seen["plugin_off"]), seen
+    assert "isn't installed on this system" in str(seen["plugin_off"]), seen

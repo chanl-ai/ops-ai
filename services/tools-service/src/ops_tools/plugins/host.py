@@ -320,6 +320,7 @@ def operation_of(m: Manifest, t: Tool, op_id: str) -> dict[str, Any]:
         "amount_max": t.amount_max,
         "needs_person": t.needs_person,
         "scopes": list(t.scopes),
+        "output_shape": t.shape,
         "stub": {"ok": True},
     }
 
@@ -507,7 +508,7 @@ class PluginHost:
     async def take_installed(self, tenant_id: str, team_id: str, plugin: Plugin) -> bool:
         """Records the installed version as the team's: at a team's first turn-on, and when it takes an
         update. False when the team has no binding."""
-        decl = declarations(plugin.manifest)
+        decl = declarations(plugin.manifest, plugin.root)
         return await self.bindings.take(
             tenant_id, team_id, plugin.manifest.id, version=plugin.manifest.version, digest=digest(decl),
             declarations=decl,
@@ -610,7 +611,7 @@ class PluginHost:
 
     def installed_digest(self, plugin: Plugin) -> str:
         """The installed version's digest, which a team's binding is compared with for an update."""
-        return digest(declarations(plugin.manifest))
+        return digest(declarations(plugin.manifest, plugin.root))
 
     def locked_settings(self, plugin_id: str) -> dict[str, Any]:
         """The settings the install fixes for every team of the plugin; a team's own value never replaces one."""
@@ -751,8 +752,8 @@ class PluginHost:
         if plugin is None:
             return {
                 **module,
-                "plugin_off": f"{module['display_name']} is no longer installed, so its tools are off. An admin "
-                "installs it again to turn them back on.",
+                "plugin_off": f"{module['display_name']} isn't installed on this system, so its tools are off. Your "
+                "operator installs apps.",
             }
         reason = await self.off_reason(tenant_id, team_id, plugin)
         if reason is not None or team_id is None:

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from .seed import name_in_words
+
 # A replay ran nothing, so it is its own status, not a success; a write refused because the same one was running is a
 # denial. Both stay out of a module's call counts (CallLog.traffic) and the 409 counts as denied. A write still running
 # is running, never ok: whether it happened is not known yet.
@@ -58,7 +60,7 @@ def call_row(
         "runId": r["thread_id"] or "",
         "target": r["tool"],
         "system": module["system"] if module else "",
-        "title": title or r["tool"],
+        "title": title or name_in_words(str(r["tool"]).rsplit(".", 1)[-1]),
         "app": module["display_name"] if module else "",
         "operation": r["access"] if r["access"] in ("read", "write") else "read",
         "approval": approval,

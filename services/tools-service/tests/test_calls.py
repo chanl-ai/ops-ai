@@ -277,6 +277,15 @@ async def test_an_approved_write_runs_after_opa_reloads_its_data_and_loses_the_r
     assert "approval token is not signed by the review service" in refused.json()["error"]["details"]["reasons"]
 
 
+async def test_an_agents_read_runs_after_opa_loses_the_registered_identities(gateway: Gateway) -> None:
+    """OPA mounts the policy folder of whichever checkout created it; once that folder is gone its data holds no
+    identities, and every agent's tool call read as an unregistered caller."""
+    async with opa_client() as opa:
+        (await opa.put("/v1/data/ops", json={})).raise_for_status()
+    r = await gateway.call("get_account", {"accountId": "CHQ-2219"}, step="s1")
+    assert r.status_code == 200, r.text
+
+
 async def test_a_write_whose_policy_needs_two_approvers_refuses_a_token_naming_one(
     gateway: Gateway, engine: AsyncEngine, tenant: str
 ) -> None:

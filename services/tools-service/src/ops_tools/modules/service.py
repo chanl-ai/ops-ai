@@ -61,6 +61,7 @@ from .policy import PublishPolicy, RequesterMayDecide, ToolsMode
 from .review_events import ACCESS_REQUESTED, access_event
 from .reviews import ReviewOpener
 from .seed import blank, kind_of, major_of, open_connection, tool_title
+from .tool_users import ToolUsers
 from .workflows import StaticWorkflows, WorkflowDirectory
 
 Traffic = dict[tuple[str, str | None], dict[str, Any]]
@@ -316,6 +317,8 @@ def sign_in_fits(module_sign_in: str, conn: dict[str, Any]) -> None:
 class ModuleService:
     # A plugin tool's display name, set once the plugin host is up (`PluginHost.title_of`); other modules have none.
     titles: Callable[[Mapping[str, Any], str], str | None] | None = None
+    # agents-service's agents and workflows that use each tool, which name the call log's agent and workflow ids.
+    users: ToolUsers | None = None
     # The team's connection for a plugin's module (`PluginHost.team_connection`), set once the plugin host is up.
     team_connections: Callable[[str, str, Aggregate], Awaitable[str | None]] | None = None
     # Whether a plugin tool's address waits for its account's sign-in (`PluginHost.awaits_sign_in`), set once the
@@ -878,7 +881,9 @@ class ModuleService:
         return await self._detail(await self._find(who, module_id), who.team, who)
 
     async def activity(self, who: Caller, module_id: str) -> dict[str, Any]:
-        """Calls per UTC day over the last 14 days from the call log, days without calls at zero."""
+        """Calls per UTC day over the last 14 days from the call log, days without calls at zero, and the latest calls
+        with their callers: the call log's view of one module, so read under activity.view as the log is."""
+        _can(who, "activity", "view", what="the tool-call log")
         m = await self._find(who, module_id)
         today = self.clock().astimezone(UTC).date()
         first = today - timedelta(days=13)
@@ -917,7 +922,9 @@ class ModuleService:
         key: str | None = None,
     ) -> dict[str, Any]:
         """Every call made in the caller's team, newest first, on the modules that team sees. `key` finds the calls
-        sent under one idempotency key: how a workflow run reconciles a write after a crash."""
+        sent under one idempotency key: how a workflow run reconciles a write after a crash. The log names who called
+        what, so it is read under activity.view."""
+        _can(who, "activity", "view", what="the tool-call log")
         mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self._sees(who, m)}
         scope = None if not who.verified and who.team.scope == "all" else list(mods)
         if module_ids is not None:
@@ -938,13 +945,12 @@ class ModuleService:
         )
         pages = max(1, -(-total // page_size))
         names = _workflow_names(list(mods.values()))
+        listed = [
+            call_row(r, names, mods.get(r["module_id"] or ""), self._title(mods.get(r["module_id"] or ""), r["tool"]))
+            for r in rows
+        ]
         return {
-            "data": [
-                call_row(
-                    r, names, mods.get(r["module_id"] or ""), self._title(mods.get(r["module_id"] or ""), r["tool"])
-                )
-                for r in rows
-            ],
+            "data": await self._named(who, listed),
             "pagination": {
                 "page": page,
                 "pageSize": page_size,
@@ -956,9 +962,27 @@ class ModuleService:
             "facets": {},
         }
 
+    async def _named(self, who: Caller, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """The rows with each agent and workflow named as agents-service names them, read once for the tools on the
+        page. Unanswered, the rows keep the ids they hold: the log still lists every call."""
+        if self.users is None or not rows:
+            return rows
+        try:
+            uses = await self.users.of(who.tenant_id, who.team.id, sorted({str(r["target"]) for r in rows}))
+        except ServiceUnavailable:
+            return rows
+        named = {(u["kind"], u["id"]): u["name"] for found in uses.values() for u in found if u.get("name")}
+        for r in rows:
+            if r.get("agentSlug"):
+                r["agentName"] = named.get(("agent", r["agentSlug"]), r["agentName"])
+            if r.get("workflowId"):
+                r["workflowName"] = named.get(("workflow", r["workflowId"]), r["workflowName"])
+        return rows
+
     async def execution(self, who: Caller, call_id: str) -> dict[str, Any]:
         """One call from the gateway's log, so an Activity row opens to its call. The same scope as the list: another
         team's call, or one on a module the caller's team does not see, is not found, never a different answer."""
+        _can(who, "activity", "view", what="the tool-call log")
         row = await self.calls.get(call_id, tenant_id=who.tenant_id, team_ids=self._call_teams(who))
         if row is None:
             raise NotFound("Call")

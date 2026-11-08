@@ -70,8 +70,14 @@ async def test_a_call_on_a_shared_module_is_logged_with_the_calling_team(
     assert await _team_of(engine, tenant, call_id) == LENDING
 
 
+def reader_of(team: str) -> dict[str, str]:
+    """The call log is read under activity.view, which a service's token does not carry; the dev person in the team
+    reads it here, as the console does."""
+    return {"X-Team-Id": team}
+
+
 async def _listed(gw: httpx.AsyncClient, tenant: str, team: str) -> dict[str, dict[str, Any]]:
-    r = await gw.get("/v1/executions", params={"pageSize": 100}, headers=run_of(tenant, team))
+    r = await gw.get("/v1/executions", params={"pageSize": 100}, headers=reader_of(team))
     assert r.status_code == 200, r.text
     return {row["id"]: row for row in r.json()["data"]["data"]}
 
@@ -80,7 +86,7 @@ async def test_usage_never_shows_another_teams_call_on_a_shared_module(gw: httpx
     call_id = await _call(gw, tenant, LENDING, "open_case", "usage")
     assert call_id in await _listed(gw, tenant, LENDING), "the calling team sees its own call"
     assert call_id not in await _listed(gw, tenant, CARDS), "another team sees nothing of it"
-    r = await gw.get(f"/v1/executions/{call_id}", headers=run_of(tenant, CARDS))
+    r = await gw.get(f"/v1/executions/{call_id}", headers=reader_of(CARDS))
     assert r.status_code == 404, r.text
 
 
