@@ -180,18 +180,20 @@ demo-org-seed: ## make demo-org-seed AS=james: the meeting flows' records in the
 	case=$$($(DEMO_ORG_FILL) | jq --arg a "$$acct" --arg g "$$grace" '.case | .fields.AccountId = $$a | .fields.ContactId = $$g | {records: [.]}' \
 		| $(DEMO_ORG_RUN) salesforce_save_records --input - --real --environment live | jq -c '.output.saved // .output'); \
 	echo "MADE   account $$acct, contact $$grace, an opportunity and two Tasks; case $$case"
-demo-org-remove: ## make demo-org-remove AS=james: deletes the [Demo] account; Salesforce deletes its contact, opportunity, Tasks and Case with it
+demo-org-remove: ## make demo-org-remove AS=james: deletes the [Demo] account's cases, then the account; Salesforce deletes its contact, opportunity and Tasks with it
 	$(call need,AS,AS=james)
 	@set -e; found=$$($(DEMO_ORG_FIND)); \
 	if [ -z "$$found" ]; then echo "GONE   no demo account in the org"; exit 0; fi; \
-	jq -n --arg id "$$found" '{object: "Account", id: $$id}' | $(DEMO_ORG_RUN) salesforce_delete_record --input - --real --environment live \
-		| jq -c '{decision, status, output}'; \
-	again=$$($(DEMO_ORG_FIND)); [ -z "$$again" ] && echo "REMOVED the demo account $$found and its records" || { echo "FAIL   $$again is still there"; exit 1; }
-tools-calls: ## make tools-calls AS=admin [TOOL=] [THREAD=] [LIMIT=20]: the tool-call log
-	@$(OPS_CLI) tools $(OPS_AS) calls $(if $(TOOL),--tool $(TOOL)) $(if $(THREAD),--thread $(THREAD)) $(if $(LIMIT),--limit $(LIMIT))
-tools-call: ## make tools-call ID=gwc_… AS=admin: one logged tool call
-	$(call need,ID,ID=gwc_…)
-	@$(OPS_CLI) tools $(OPS_AS) call $(ID)
+	cases=$$(jq -n --arg id "$$found" --arg sq "'" '{q: ("SELECT Id FROM Case WHERE AccountId = " + $$sq + $$id + $$sq)}' \
+		| $(DEMO_ORG_RUN) salesforce_query --input - --real | jq -r '.output.records[]?.Id'); \
+	for id in $$cases $$found; do \
+		object=Account; if [ "$${id#500}" != "$$id" ]; then object=Case; fi; \
+		jq -n --arg o "$$object" --arg id "$$id" '{object: $$o, id: $$id}' \
+			| $(DEMO_ORG_RUN) salesforce_delete_record --input - --real --environment live \
+			| jq -e -c 'if .decision == "allow" and (.output.error == null) then {deleted: "'"$$object"' '"$$id"'"} else error(tostring) end' >/dev/null \
+			|| { echo "FAIL   could not delete $$object $$id"; exit 1; }; \
+	done; \
+	again=$$($(DEMO_ORG_FIND)); [ -z "$$again" ] && echo "REMOVED the demo account $$found, its cases and its records" || { echo "FAIL   $$again is still there"; exit 1; }
 
 ##@ Runs and Human Tasks (ops runs, ops tasks)
 
