@@ -221,7 +221,9 @@ class GatewayClient:
         try:
             return cast(dict[str, Any], await self.tools.post("/v1/calls", body, headers=headers))
         except ServiceCallError as e:
-            if e.status in (403, 409):
+            # A refusal the chat draws as a card keeps its envelope (code and details), so the card can name the app,
+            # the team or the accounts; any other 403 or 409 is a refusal the model reads in words.
+            if e.status in (403, 409) and e.code not in CARD_CODES:
                 raise GatewayRefused(str(e), [str(r) for r in (e.details or {}).get("reasons", [])], code=e.code) from e
             raise
 
@@ -240,6 +242,20 @@ CARD_LINES: dict[str, str] = {
     "saying you carry on with this ask once they connect again from the card above; offer no other steps or help.",
     "no_person": "Not run: {app} signs in as each person, and this call acts for nobody, so it cannot run here.",
 }
+# An app the team has off: the card above asks a team admin to turn it on.
+APP_OFF_LINE = (
+    "Not run: {app} is installed but off for this team. Reply with one sentence saying a team admin can turn it on "
+    "and the person can ask from the card above, and offer to work from details they give you instead."
+)
+APP_OFF = "APP_OFF_FOR_TEAM"
+# Two of the person's accounts fit and none is their default: the card above asks which.
+CHOICE_LINE = (
+    "Not run: the person has {n} {app} accounts connected and has not chosen which this uses. Reply with one sentence "
+    "saying you carry on with this ask once they pick one from the card above; offer no other steps or help."
+)
+CHOICE = "ACCOUNT_CHOICE_NEEDED"
+# The refusals the chat draws as a card (carded).
+CARD_CODES = ("CONNECTION_NOT_LINKED", APP_OFF, CHOICE)
 
 
 def _object(value: Any) -> dict[str, Any] | None:
@@ -247,14 +263,20 @@ def _object(value: Any) -> dict[str, Any] | None:
 
 
 def carded(output: Any) -> str | None:
-    """The plain line for a refusal the chat draws as a card, or None for any other outcome, which the model reads
-    as it is."""
+    """The plain line for a refusal the chat draws as a card (a sign-in to give, an app the team has off, or which of
+    two accounts to use), or None for any other outcome, which the model reads as it is."""
     error = _object((_object(output) or {}).get("error"))
     # A refusal relayed whole nests the gateway's error once more.
     error = _object((error or {}).get("error")) or error
-    if error is None or error.get("code") != "CONNECTION_NOT_LINKED":
+    if error is None or error.get("code") not in CARD_CODES:
         return None
     details = _object(error.get("details")) or {}
+    if error.get("code") == CHOICE:
+        accounts = details.get("accounts")
+        n = len(cast(list[Any], accounts)) if isinstance(accounts, list) else 2
+        return CHOICE_LINE.format(n=n, app=str(details.get("app") or "this app"))
+    if error.get("code") == APP_OFF:
+        return APP_OFF_LINE.format(app=str(details.get("app") or "this app"))
     line = CARD_LINES.get(str(details.get("reason") or "not_connected"), CARD_LINES["not_connected"])
     return line.format(app=str(details.get("app") or details.get("connection") or "this app"))
 

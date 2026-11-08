@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-07",
+  "title": "Chat says when an app is off for your team",
+  "description": "Asking chat for an app your team has installed but not turned on now shows a card naming the app and your team, instead of a sentence with nothing to act on.",
+  "tag": "improved"
+}

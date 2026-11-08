@@ -4,8 +4,9 @@ The assistant routes from data, never from rules in its prompt (docs: assistant-
 are on for the team, which are installed but off, and whether this person is signed in, so the model can say "that
 app is off, an admin turns it on" or expect a Connect card without a rule about any app. It is read from tools-service
 (`GET /v1/apps` acting for the person, the Apps grid's own list), so an app the install lacks is never named, and only
-the person's own sign-in state is shown. Kept for a short time per team and person; turning an app on forgets the
-team's lines at once (team_assistant.give_app_tools).
+the person's own sign-in state is shown. An app the chat left out from the composer's connector picker reads as left
+out, so the model does not go looking for its tools. Kept for a short time per team and person; turning an app on
+forgets the team's lines at once (team_assistant.give_app_tools).
 """
 
 from __future__ import annotations
@@ -39,6 +40,8 @@ def describe(card: dict[str, Any]) -> str | None:
     kind, state, name = card.get("kind"), card.get("appState"), str(card.get("name") or "")
     if not name or kind == "builtin" or state == "removed":
         return None
+    if card.get("leftOut"):
+        return f"{name}: left out of this chat (the person turned it off in the composer's connectors)"
     if state == "not_installed":
         return f"{name}: installed, off for this team (a team admin turns it on)"
     person = card.get("signIn") in ("person", "person_or_team")
@@ -49,6 +52,19 @@ def describe(card: dict[str, Any]) -> str | None:
     if state == "test_failed":
         return f"{name}: on · its last sign-in test failed (a team admin checks it)"
     return f"{name}: on · " + ("you are signed in" if person else "signed in with the team account")
+
+
+def left_out(
+    cards: list[dict[str, Any]], held: list[str], module_of: dict[str, str | None], off: set[str]
+) -> list[dict[str, Any]]:
+    """The cards with `leftOut` on each app this chat left out: every tool the agent holds of it is in the chat's
+    toolsOff (the composer's connector picker). One tool switched off in the settings panel leaves the app in."""
+    out: list[dict[str, Any]] = []
+    for c in cards:
+        modules = set(cast(list[Any], c.get("moduleIds") or []))
+        tools = {t for t in held if module_of.get(t) in modules}
+        out.append({**c, "leftOut": True} if tools and tools <= off else c)
+    return out
 
 
 def render(cards: list[dict[str, Any]]) -> str | None:
@@ -97,8 +113,30 @@ class AppsLine:
 
     async def fragment(self, agent_id: str) -> PromptFragment | None:
         turn = await self._turn(agent_id)
-        text = await self.line(*turn) if turn else None
+        if turn is None:
+            return None
+        cards = await self.cards(*turn)
+        if cards is None:
+            return None
+        text = render(await self._this_chat(agent_id, cards))
         return PromptFragment(text, False) if text else None
+
+    async def _this_chat(self, agent_id: str, cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """The cards as this chat has them: an app the person left out of it reads so (left_out)."""
+        try:
+            thread_id = str((get_config().get("configurable") or {}).get("thread_id") or "")
+        except RuntimeError:
+            return cards
+        thread = await graph_store(self.rt).thread(thread_id) if thread_id else None
+        off = set(cast(list[str], (cast(dict[str, Any], (thread or {}).get("overrides") or {})).get("toolsOff") or []))
+        agent = self.rt.catalog.agent(agent_id)
+        if not off or agent is None:
+            return cards
+        try:
+            ops = await self.rt.directory().operations()
+        except ToolsUnavailable:
+            return cards
+        return left_out(cards, list(agent.tools), {o.name: o.module_id for o in ops}, off)
 
     async def line(self, team: str, email: str, now: float | None = None) -> str | None:
         cards = await self.cards(team, email, now)

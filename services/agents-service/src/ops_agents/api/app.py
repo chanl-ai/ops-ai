@@ -102,6 +102,7 @@ from .routers import (
 from .routers import ai_steps as ai_step_routes
 from .routers import case_types as case_type_routes
 from .routers import channels as channel_routes
+from .routers import chat_connectors as chat_connectors_routes
 from .routers import chat_settings as chat_settings_routes
 from .routers import engine as engine_routes
 from .routers import guardrails as guardrail_routes
@@ -501,6 +502,9 @@ def create_app(
     mount(chat.router, "Chat", include_in_schema=False)
     mount(chat.router, "Chat", prefix="/v1", include_in_schema=False)
     mount(chat_settings_routes.router, "Chat", include_in_schema=False)
+    # A chat's connectors, for the composer's picker and the SDK's chat set_connectors.
+    mount(chat_connectors_routes.router, "Chat", include_in_schema=False)
+    mount(chat_connectors_routes.router, "Chat", prefix="/v1", include_in_schema=False)
     # The widget API reuses the chat facade, so it stays out of the OpenAPI document with it.
     mount(embed_routes.deployments_router, "Widget", include_in_schema=False)
     mount(embed_routes.mint_router, "Widget", include_in_schema=False)

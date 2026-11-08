@@ -14,7 +14,7 @@ from ops_agents.api import ops_tools
 from ops_agents.api.agent_registry import registry
 from ops_agents.api.auth import Principal
 from ops_agents.api.child_runs import acting_for
-from ops_agents.api.ops_tools import TOOLS, OpsReads, declared_args, ensure_ops_assistant
+from ops_agents.api.ops_tools import REQUEST_APP, TOOLS, OpsReads, declared_args, ensure_ops_assistant
 from ops_agents.store.cases import CaseStore
 from ops_contracts.chat import ChatMessage, ToolCall
 from ops_store.isolation import scope
@@ -111,7 +111,9 @@ async def test_only_the_team_default_is_offered_the_tools_and_never_without_a_pe
     ops = OpsReads(rt)
     with scope(TENANT, "team_ops"):
         with acting_for(viewer()):
-            assert {g.name for g in await ops.offers_in("ag_branch", thread)} == set(TOOLS), "the default gets them all"
+            assert {g.name for g in await ops.offers_in("ag_branch", thread)} == set(TOOLS) - {REQUEST_APP}, (
+                "the default gets them all"
+            )
             assert all(g.access == "read" for g in await ops.offers_in("ag_branch", thread)), (
                 "every Ops tool only reads"
             )
@@ -158,11 +160,13 @@ async def test_a_team_with_no_default_gets_one_ops_assistant_and_the_tools_follo
     first = (await start(c, VIEWER))["id"]
     ops = OpsReads(rt)
     with scope(TENANT, "team_ops"), acting_for(viewer()):
-        assert {g.name for g in await ops.offers_in("ag_ops_team_ops", first)} == set(TOOLS), "the default gets them"
+        assert {g.name for g in await ops.offers_in("ag_ops_team_ops", first)} == set(TOOLS) - {REQUEST_APP}, (
+            "the default gets them"
+        )
     assert (await c.put(URL, json={"agentId": "ag_branch"}, headers=ADMIN)).status_code == 200
     with scope(TENANT, "team_ops"), acting_for(viewer()):
         assert await ops.offers_in("ag_ops_team_ops", first) == [], "a team admin's default takes the tools over"
-        assert {g.name for g in await ops.offers_in("ag_branch", first)} == set(TOOLS)
+        assert {g.name for g in await ops.offers_in("ag_branch", first)} == set(TOOLS) - {REQUEST_APP}
 
 
 async def test_a_call_missing_a_required_argument_is_refused_not_a_failed_turn(stack: Stack) -> None:  # noqa: F811 - the shared fixture

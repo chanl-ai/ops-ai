@@ -208,8 +208,10 @@ async def sync_tool_source(
             elif page.code in RECONNECT:
                 status, stopped = "failed", "The connection refused its sign-in; reconnect it."
                 cfg["paused"] = "needs_reconnect"
-            elif page.code == "PLUGIN_DISABLED":
+            elif page.code == "APP_OFF_FOR_TEAM":
                 status, stopped = "skipped", "The plugin is off for this team."
+            elif page.code == "PLUGIN_DISABLED":
+                status, stopped = "skipped", "The plugin is not installed on this system."
             else:
                 status, stopped = "failed", page.message or page.code
             errors.append({"phase": "list", "errorClass": page.code, "message": page.message or page.code})

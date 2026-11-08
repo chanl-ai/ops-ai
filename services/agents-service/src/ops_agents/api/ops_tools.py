@@ -27,6 +27,7 @@ from ops_service_kit.logging import get_logger
 from ops_store import isolation
 
 from ..activities.catalog import AgentDefinition
+from ..activities.gateway import carded
 from ..graphs.common import OPS_SERVER
 from ..store.cases import CaseNotFound, CaseStore
 from ..store.team_defaults import TeamDefaults
@@ -154,6 +155,10 @@ async def catch_up_assistants(rt: Runtime) -> int:
 
 
 _TEXT = {"type": "string", "maxLength": 200}
+# The card for an app the team has off: offered only while the team has one (apps_line: installed, off).
+REQUEST_APP = "request_app"
+APP_OFF = "APP_OFF_FOR_TEAM"
+OFF_STATE = "not_installed"
 TOOLS: dict[str, tuple[str, dict[str, Any]]] = {
     "find_cases": (
         "Find the team's cases by words in the subject or the customer's name, by status, or assigned to the person "
@@ -195,6 +200,12 @@ TOOLS: dict[str, tuple[str, dict[str, Any]]] = {
     "get_run": (
         "Show one workflow run as a card with its steps, by its id.",
         {"type": "object", "properties": {"runId": _TEXT}, "required": ["runId"]},
+    ),
+    REQUEST_APP: (
+        "When the ask needs an app the apps list says is installed but off for this team, call this with the app's "
+        "name instead of answering that it is off: it shows the person a card to ask a team admin to turn it on. It "
+        "reads nothing and changes nothing.",
+        {"type": "object", "properties": {"app": _TEXT}, "required": ["app"]},
     ),
 }
 
@@ -261,9 +272,24 @@ class OpsReads:
         thread = await graph_store(self.rt).thread(thread_id) if thread_id else None
         if thread is None or await TeamDefaults(self.rt.db).agent(str(thread["team_id"])) != agent_id:
             return []
+        offered = (
+            TOOLS
+            if await self._off_apps(str(thread["team_id"]))
+            else {k: v for k, v in TOOLS.items() if k != REQUEST_APP}
+        )
         return [
-            ToolGrant(name, OPS_SERVER, description, "read", schema) for name, (description, schema) in TOOLS.items()
+            ToolGrant(name, OPS_SERVER, description, "read", schema) for name, (description, schema) in offered.items()
         ]
+
+    async def _off_apps(self, team: str) -> list[dict[str, Any]]:
+        """The installed apps the team has off, as the apps line reads them for the turn's person; none when that list
+        cannot be read, so the card is never offered for an app nobody can see."""
+        person = TURN_PERSON.get()
+        apps_line = self.rt.apps_line
+        if person is None or not person.email or apps_line is None or self.rt.app_states is None:
+            return []
+        cards = cast(list[dict[str, Any]], await apps_line.cards(team, person.email) or [])
+        return [c for c in cards if c.get("appState") == OFF_STATE and c.get("name")]
 
     async def run(self, tool: str, arguments: dict[str, Any]) -> ToolOutcome:
         person = TURN_PERSON.get()
@@ -374,6 +400,24 @@ class OpsReads:
         if workflow not in {str(r["workflow_id"]) for r in await self._startable(person)}:
             return _refused(f"{workflow} is not a workflow you may start by hand.")
         return _answer([{"type": "start", "id": workflow}], f"The start form of {workflow}.")
+
+    async def _request_app(self, person: Principal, args: dict[str, Any]) -> ToolOutcome:
+        """The refusal a call on an app the team has off gets at the gateway, so chat draws the same card: the app, its
+        id and the team, which the card's Ask an admin names."""
+        asked = str(args["app"]).strip().lower()
+        team = str(person.team_id)
+        card = next((c for c in await self._off_apps(team) if str(c["name"]).lower() == asked), None)
+        if card is None:
+            return _refused(
+                f"No app named {args['app']} is installed and off for this team; use its tools if it is on."
+            )
+        name = str(card["name"])
+        error = {
+            "code": APP_OFF,
+            "message": f"{name} is off for this team; a team admin turns it on.",
+            "details": {"app": name, "appId": str(card["id"]), "teamId": team},
+        }
+        return ToolOutcome(False, {"error": error}, for_model=carded({"error": error}))
 
     async def _get_run(self, person: Principal, args: dict[str, Any]) -> ToolOutcome:
         from .routers.engine import visible_run  # noqa: PLC0415 - the router imports this module's neighbours

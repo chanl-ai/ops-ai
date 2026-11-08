@@ -22,7 +22,7 @@ class Words:
     retryable: bool
 
 
-_SIGN_IN_AGAIN = Words("{app} needs you to sign in again", "Sign in to {app} from My accounts, then ask again", True)
+_SIGN_IN_AGAIN = Words("{app} needs you to sign in again", "Sign in to {app} from Connectors, then ask again", True)
 _UNREACHABLE = Words("{app} could not be reached", "Try again shortly; if it keeps happening, ask an admin", True)
 _FAILED = Words("{app} returned an error", "Try again; if it keeps happening, ask an admin", True)
 _NOT_SET_UP = Words("{app} is not set up for this team yet", "Ask an admin to set it up", False)
@@ -68,6 +68,10 @@ WORDS: dict[str, Words] = {
     "SECRET_MISSING": _NOT_SET_UP,
     "SECRET_UNAVAILABLE": _NOT_SET_UP,
     "PLUGIN_DISABLED": _NOT_SET_UP,
+    "APP_OFF_FOR_TEAM": Words("{app} is off for this team", "Ask a team admin to turn it on", False),
+    "ACCOUNT_CHOICE_NEEDED": Words(
+        "Two of your {app} accounts fit", "Pick one on the card shown, then ask again", True
+    ),
     "TOOL_NOT_ADDED": _NOT_SET_UP,
     "WRITE_IN_PROGRESS": Words("The same change is already running in {app}", "Wait a moment, then check", True),
     "CALL_LOST": _LOST,
