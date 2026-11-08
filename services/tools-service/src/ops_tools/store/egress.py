@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_store import Guarantee
 from ops_store.search import contains
+from ops_store.team_scope import team_visible
 
 from .modules import metadata, module_egress_hosts, tool_modules
 
@@ -66,7 +67,8 @@ def _by_name(modules: list[dict[str, str]]) -> list[dict[str, str]]:
 
 
 def _users(tenant_id: str) -> sa.Select[str, str, str | None]:
-    """Each host's modules with the name a person knows them by, so the allow list never shows a bare module id."""
+    """Each host's modules with the name a person knows them by, so the allow list never shows a bare module id. A
+    module of a team the reader is not acting in keeps its id: its name is that team's record."""
     return (
         sa.select(module_egress_hosts.c.host, module_egress_hosts.c.module_id, tool_modules.c.display_name)
         .outerjoin(
@@ -74,6 +76,7 @@ def _users(tenant_id: str) -> sa.Select[str, str, str | None]:
             sa.and_(
                 tool_modules.c.tenant_id == module_egress_hosts.c.tenant_id,
                 tool_modules.c.id == module_egress_hosts.c.module_id,
+                team_visible(tool_modules),
             ),
         )
         .where(module_egress_hosts.c.tenant_id == tenant_id)
