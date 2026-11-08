@@ -33,8 +33,9 @@ GRANT = ToolGrant(
     "Keep a short checklist the person sees while you work, for an ask that needs a chain of lookups (a later one "
     "depends on an earlier result), more than one app, or a change. Never for one lookup or reads that answer one "
     "question together. Send the whole list every time: a title and 3 to 7 steps, each {title, status, note?} with "
-    "status todo, doing, done, blocked or skipped. Mark a step doing when you start it and done when its reads are "
-    "back, in the same step as the next reads; one step doing at a time; a step never goes back. Your answer finishes "
+    "status todo, doing, done, blocked or skipped. Call plan in the same step as that step's reads, never alone: "
+    "the first call with the first reads, each later one marking the last step done and the next doing with its "
+    "reads; one step doing at a time; a step never goes back. Your answer finishes "
     "the plan: no call is needed after the last reads. Set replan true to replace the steps after one failed, at most "
     "twice.",
     "read",
