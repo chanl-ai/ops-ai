@@ -147,10 +147,48 @@ mkdir -p "$REPO/.run/fake-bank"
 define_service fakebank "cd $REPO/services/tools-service/scripts
 export FAKE_BANK_BIND=0.0.0.0 FAKE_BANK_PORT=8745 FAKE_BANK_KEY=dev-bank-key FAKE_BANK_WEBHOOK_SECRET=dev-webhook-secret
 exec $REPO/.venv/bin/python -m fake_bank $REPO/.run/fake-bank"
-# The box's public address reaches this service (--http-port); GreenMail already holds Sprite's default port 8080.
-SERVICE_ARGS="--http-port 8081" define_service proxy "export OPS_PUBLIC_PORT=8081
+# The routing Caddy (deploy/fly/Caddyfile) listens on 8082. The box's public address is open to anyone with the link, and
+# Fly's own sign-in would replace the app's Authorization header on every call, so a second Caddy on 8081 (--http-port)
+# is the gate: it admits only browsers holding the ops_box cookie, which /__box?key= sets. The key stays in $BOX/key.
+define_service console-proxy "export OPS_PUBLIC_PORT=8082
 exec caddy run --config $REPO/deploy/fly/Caddyfile --adapter caddyfile"
-for p in 8181 1025 3025 8745 8081; do wait_port 127.0.0.1 "$p" 60 || wait_port "$BOX_IP" "$p" 5; done
+cat >"$BOX/Caddyfile" <<'GATE'
+{
+	admin off
+	auto_https off
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+:8081 {
+	@enter {
+		path /__box
+		query key={env.BOX_KEY}
+	}
+	handle @enter {
+		header Set-Cookie "ops_box={env.BOX_KEY}; Path=/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax"
+		redir * /login 302
+	}
+	@member header Cookie *ops_box={env.BOX_KEY}*
+	handle @member {
+		reverse_proxy 127.0.0.1:8082 {
+			flush_interval -1
+		}
+	}
+	handle {
+		respond "Open this box from its link" 403
+	}
+}
+GATE
+# The key is made once per box and kept; `make box-url` prints the link that carries it.
+if [ ! -s "$BOX/key" ]; then (umask 077; openssl rand -hex 24 >"$BOX/key"); fi
+chmod 600 "$BOX/key"
+SERVICE_ARGS="--http-port 8081" # The checksum line makes a changed gate file restart the service; define_service compares only the script.
+define_service proxy "# $(cksum <"$BOX/Caddyfile")
+export BOX_KEY=\$(cat $BOX/key)
+exec caddy run --config $BOX/Caddyfile --adapter caddyfile"
+for p in 8181 1025 3025 8745 8082 8081; do wait_port 127.0.0.1 "$p" 60 || wait_port "$BOX_IP" "$p" 5; done
 done_step
 
 # ---- the stack -------------------------------------------------------------------------------------------------

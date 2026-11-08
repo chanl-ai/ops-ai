@@ -8,7 +8,7 @@ box-up: ## Create the box if it is missing, else wake it, and set the stack up i
 	@[ -n "$(NAME)" ] || { echo "make box-up: name the box, e.g. NAME=ops-ai-box-1"; exit 2; }
 	@bash $(ROOT)/scripts/sprite-lane.sh up $(NAME) $(BRANCH)
 
-box-url: ## Print the box's console address, and require a Fly sign-in to open it
+box-url: ## Print the one-time link that opens the box in a browser
 	@[ -n "$(NAME)" ] || { echo "make box-url: name the box, e.g. NAME=ops-ai-box-1"; exit 2; }
 	@bash $(ROOT)/scripts/sprite-lane.sh url $(NAME)
 
@@ -16,7 +16,7 @@ box-status: ## Awake (running or warm) or asleep (cold), the branch, and the sta
 	@[ -n "$(NAME)" ] || { echo "make box-status: name the box, e.g. NAME=ops-ai-box-1"; exit 2; }
 	@bash $(ROOT)/scripts/sprite-lane.sh status $(NAME)
 
-box-check: ## Headless from this machine: the box's login page loads and a demo sign-in lands on chat
+box-check: ## Headless through the public address: gate, link, sign-in, chat, API
 	@[ -n "$(NAME)" ] || { echo "make box-check: name the box, e.g. NAME=ops-ai-box-1"; exit 2; }
 	@bash $(ROOT)/scripts/sprite-lane.sh check $(NAME)
 

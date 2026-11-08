@@ -8,8 +8,8 @@
 # A warm cloud box is the same sprite with the stack set up inside it (scripts/box-setup.sh). A name that starts with
 # ops-ai- is used as given (ops-ai-box-1); any other name becomes ops-ai-lane-<name>.
 #   scripts/sprite-lane.sh up <name> [branch]   create or wake the box and set the stack up in it
-#   scripts/sprite-lane.sh url <name>           print the console address; the address needs a Fly sign-in
-#   scripts/sprite-lane.sh check <name>         headless: the login page loads and a demo sign-in lands on chat
+#   scripts/sprite-lane.sh url <name>           print the one-time link that opens the box in a browser
+#   scripts/sprite-lane.sh check <name>         headless through the public address: gate, link, sign-in, chat, API
 #   scripts/sprite-lane.sh status <name>        awake or asleep, the branch, the stack's health
 #   scripts/sprite-lane.sh sleep <name>         close sessions, leave the stack running, wait for the box to go cold
 #   scripts/sprite-lane.sh stop <name>          stop the stack and the side services too, then wait for cold
@@ -29,6 +29,8 @@ sprite_name() {
 exists() { "$(sprite_bin)" list -o "$org" --prefix "$1" 2>/dev/null | grep -q "^$1 *$"; }
 box_json() { "$(sprite_bin)" api -o "$org" -s "$1" / -- -s 2>/dev/null | sed -n '/^{/p'; }
 box_url() { box_json "$1" | python3 -c 'import json,sys; print(json.load(sys.stdin)["url"].rstrip("/"))'; }
+# Read from the box over the CLI; only `url` and `check` use it, and `check` hands it to node through the environment.
+box_key() { "$(sprite_bin)" exec -o "$org" -s "$1" --no-port-forward -- bash -c 'cat "$HOME/box/key"' 2>/dev/null | tr -d '\r\n'; }
 box_state() { box_json "$1" | python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])'; }
 
 case "${1:-}" in
@@ -53,35 +55,22 @@ case "${1:-}" in
     branch=${3:-main}
     exists "$sprite" || "$(sprite_bin)" create --skip-console -o "$org" "$sprite"
     origin=$(box_url "$sprite")
-    # Only people in the Fly organization can open the address; the app's own sign-in comes after that.
-    "$(sprite_bin)" config update -o "$org" -s "$sprite" --url-auth sprite >/dev/null
+    # The address is public; the box's own gate (scripts/box-setup.sh) admits only browsers that opened the link from
+    # `make box-url`. Fly's org-only setting would strip the app's Authorization header on every call.
+    "$(sprite_bin)" config update -o "$org" -s "$sprite" --url-auth public >/dev/null
     reset_flag=; [ "$verb" = reset ] && reset_flag=1
     "$(sprite_bin)" exec -o "$org" -s "$sprite" --no-port-forward -- \
       env "BRANCH=$branch" "OPS_PUBLIC_ORIGIN=$origin" "BOX_RESET=$reset_flag" bash -s <"$(dirname "$0")/box-setup.sh"
     ;;
   url)
     sprite=$(sprite_name "${2:?usage: sprite-lane.sh url <name>}")
-    "$(sprite_bin)" config update -o "$org" -s "$sprite" --url-auth sprite >/dev/null
-    box_url "$sprite"
+    "$(sprite_bin)" config update -o "$org" -s "$sprite" --url-auth public >/dev/null
+    key=$(box_key "$sprite")
+    echo "$(box_url "$sprite")/__box?key=$key"
     ;;
   check)
     sprite=$(sprite_name "${2:?usage: sprite-lane.sh check <name>}")
-    origin=$(box_url "$sprite")
-    # The address refuses a visitor who is not signed in to Fly (a redirect to the Fly sign-in) and answers one who is.
-    # The organization token is read from the CLI's own request headers into a variable; it is never printed.
-    anon=$(curl -s -o /dev/null -w '%{http_code}' -m 30 "$origin/login")
-    [ "$anon" = 302 ] || die "the address answered $anon without a Fly sign-in; expected a 302 to the Fly sign-in"
-    token=$("$(sprite_bin)" api -o "$org" -s "$sprite" / -- -sv -o /dev/null 2>&1 | sed -n 's/^> [Aa]uthorization: Bearer //p' | tr -d '\r')
-    [ -n "$token" ] || die "could not read the organization token from the sprite CLI"
-    signed=$(curl -s -o /dev/null -w '%{http_code}' -m 60 -H "Authorization: Bearer $token" "$origin/login")
-    echo "address: $anon without a Fly sign-in, $signed with one"
-    [ "$signed" = 200 ] || exit 1
-    port=${BOX_TUNNEL_PORT:-18081}
-    "$(sprite_bin)" proxy -o "$org" -s "$sprite" "$port:8081" >/dev/null 2>&1 &
-    proxy_pid=$!
-    trap 'kill "$proxy_pid" 2>/dev/null || true' EXIT
-    for _ in $(seq 30); do (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null && break; sleep 1; done
-    BOX_TUNNEL="http://localhost:$port" node "$(dirname "$0")/box-check.mjs" "$origin"
+    BOX_KEY=$(box_key "$sprite") node "$(dirname "$0")/box-check.mjs" "$(box_url "$sprite")"
     ;;
   status)
     sprite=$(sprite_name "${2:?usage: sprite-lane.sh status <name>}")
