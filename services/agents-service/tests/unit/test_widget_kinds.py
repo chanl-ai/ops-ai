@@ -99,3 +99,16 @@ def test_a_template_binds_a_kind_like_any_node() -> None:
     schema = {"type": "object", "properties": {"title": {"type": "string"}, "steps": {"type": "array"}}}
     filled = layout.fill(tree, schema, {"title": "Order 1182", "steps": [{"label": "Packed", "state": "done"}]})
     assert filled["children"] == [{"type": "tracker", "steps": [{"label": "Packed", "state": "done"}]}]
+
+
+def test_a_saved_card_shows_only_the_fields_that_changed() -> None:
+    # The saved card listed "Proposal/Price Quote -> Proposal/Price Quote" and "75,000 -> 75,000" as changes.
+    fields = [
+        {"label": "Stage", "value": "Proposal/Price Quote", "was": "Needs Analysis"},
+        {"label": "Amount", "value": "75,000", "was": "75,000"},
+        {"label": "Meeting note", "value": "Grace wants to add $25,000."},
+    ]
+    part, _ = show("entity", {"title": "Education savings", "fields": fields})
+    assert part is not None
+    shown = [f["label"] for f in part["layout"]["fields"]]
+    assert shown == ["Stage", "Meeting note"], shown

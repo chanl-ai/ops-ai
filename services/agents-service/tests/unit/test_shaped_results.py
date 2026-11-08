@@ -92,3 +92,25 @@ def test_a_part_with_a_schema_is_accepted_and_sent_back_as_schema() -> None:
     schema = {"type": "object", "properties": {"amount": {"type": "number"}}}
     sent = {"type": "widget", "id": "wp_1", "shape": "form", "data": {}, "schema": schema}
     assert WidgetPart.model_validate(sent).wire() == sent
+
+
+def test_a_card_the_agent_presents_takes_the_place_of_the_tables_its_reads_drew() -> None:
+    # A prep reply drew the account query's raw table ("1 row", Name, Type, [phone]) above the brief built from it.
+    builder = AssistantBuilder(load_catalog(SEED), ChatMessage(id="m1", role="assistant", content="", at="t"))
+    read: dict[str, Any] = {"id": "c1", "tool": "salesforce_query", "server": "CRM", "input": {}, "status": "ok"}
+    table = {"type": "widget", "id": "", "shape": "rows", "data": [{"Name": "Okafor Family Trust"}]}
+    builder.apply("tool_call", {**read, "output": [{"Name": "Okafor Family Trust"}], "view": {"part": table}})
+    brief = {
+        "type": "widget",
+        "id": "",
+        "kind": "brief",
+        "layout": {"type": "brief", "title": "Okafor", "sections": []},
+    }
+    present = {"id": "c2", "tool": "present", "server": "kernel", "input": {}, "status": "ok", "view": {"part": brief}}
+    builder.apply("tool_call", present)
+    assert [p.id for p in builder.message.parts or []] == ["wp_c2"]
+    # A plain table the agent presents (a shape, not a card) leaves the read's table as it is.
+    other = AssistantBuilder(load_catalog(SEED), ChatMessage(id="m2", role="assistant", content="", at="t"))
+    other.apply("tool_call", {**read, "output": [{"Name": "x"}], "view": {"part": table}})
+    other.apply("tool_call", {**present, "id": "c3", "view": {"part": {**table, "id": ""}}})
+    assert [p.id for p in other.message.parts or []] == ["wp_c1", "wp_c3"]

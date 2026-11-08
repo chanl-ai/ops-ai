@@ -99,6 +99,8 @@ class AssistantBuilder:
     ended: bool = False
     # Plugin tools' titles (review_text.tool_titles), so a card names a tool as the tools list does.
     titles: dict[str, str] = field(default_factory=dict[str, str])
+    # The parts the agent presented itself, as against the tables its tool calls drew.
+    presented: set[str] = field(default_factory=set[str])
 
     def _call(self, c: dict[str, Any]) -> ToolCall:
         status = str(c.get("status") or "")
@@ -190,7 +192,13 @@ class AssistantBuilder:
                         m.follow_ups = [str(r) for r in cast(list[Any], _d(view)["followUps"])][:3]
                     if view and _d(data).get("status") == "ok" and "part" in _d(view):
                         part = WidgetPart.model_validate({**_d(_d(view)["part"]), "id": f"wp_{call.id}"})
-                        m.parts = [*(p for p in m.parts or [] if p.id != part.id), part]
+                        self.presented.add(part.id)
+                        kept = [p for p in m.parts or [] if p.id != part.id]
+                        if part.kind is not None:
+                            # A card the agent built from its reads takes the place of the tables those reads drew;
+                            # the stored message the turn ends with (done) drops them from the screen too.
+                            kept = [p for p in kept if p.id in self.presented]
+                        m.parts = [*kept, part]
                         return [PartEvent(part=part)]
                     return []
                 m.tool_calls = [*(c for c in m.tool_calls or [] if c.id != call.id), call]

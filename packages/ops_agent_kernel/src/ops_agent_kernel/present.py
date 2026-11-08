@@ -233,6 +233,23 @@ def _layout_columns(node: Any) -> Any:
     return n
 
 
+def _changed_only(data: Any) -> Any:
+    """An entity's fields without those reported as changed to the value they already had: a field with `was` equal to
+    `value` is not a change, so a saved card shows only what the save changed."""
+    unchanged: Any = data
+    record = cast(dict[str, Any], data) if isinstance(data, dict) else None
+    given = record.get("fields") if record is not None else None
+    if record is None or not isinstance(given, list):
+        return unchanged
+    fields: list[Any] = []
+    for raw in cast(list[Any], given):
+        f = cast(dict[str, Any], raw) if isinstance(raw, dict) else None
+        if f is not None and "was" in f and str(f["was"]) == str(f.get("value")):
+            continue
+        fields.append(raw)
+    return {**record, "fields": fields}
+
+
 def run(
     arguments: dict[str, Any], settings: AgentSettings, granted: set[str] | None = None
 ) -> tuple[dict[str, Any] | None, str]:
@@ -253,6 +270,8 @@ def run(
         if kind not in kinds.SCHEMAS:
             return None, f"kind must be one of {', '.join(kinds.KINDS)}."
         schema = kinds.SCHEMAS[str(kind)]
+        if kind == "entity":
+            data = _changed_only(data)
         try:
             filled = layout.fill(kinds.template(str(kind)), schema, data)
         except layout.LayoutError as e:

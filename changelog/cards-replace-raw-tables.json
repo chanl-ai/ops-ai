@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "Cards replace the raw tables they came from",
+  "description": "When the assistant shows a brief or a saved card, the table of the records it read no longer shows above it, and a saved card lists only what changed.",
+  "tag": "fix"
+}
