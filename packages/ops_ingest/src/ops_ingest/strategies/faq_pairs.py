@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from ops_ingest.model_client import ModelBudgetSpent, ModelUnavailable
 from ops_ingest.models import Chunk, FaqPair
-from ops_ingest.strategies.base import SplitContext, json_list, json_object
+from ops_ingest.strategies.base import FENCE_RULE, SplitContext, json_list, json_object, unfenced
 from ops_ingest.strategies.faq import piece_digest
 
 MAX_PAIRS = 8
@@ -21,14 +21,16 @@ MAX_TOKENS = 1_200
 
 PROMPT = """Write up to {n} question-and-answer pairs that a customer or a colleague might ask and that the section
 below answers. Answer in one or two sentences in the section's own terms. For each pair, copy into "quote" the exact
-words of the section that hold the answer, unchanged. Use only what the section says.
+words of the section that hold the answer, unchanged. Use only what the section says. {rule}
 Reply with JSON only: {{"pairs": [{{"question": "...", "answer": "...", "quote": "..."}}]}}
 
+<document>
 Document: {title}
 Section: {section}
 
 Section text:
 {text}
+</document>
 """
 
 
@@ -93,7 +95,13 @@ def draft_pairs(chunks: list[Chunk], ctx: SplitContext) -> list[FaqPair]:
             continue
         path = tuple(section[0].section_path)
         text = "\n\n".join(c.text for c in section)
-        prompt = PROMPT.format(n=MAX_PAIRS, title=ctx.title, section=" > ".join(path) or "-", text=text)
+        prompt = PROMPT.format(
+            n=MAX_PAIRS,
+            rule=FENCE_RULE,
+            title=unfenced(ctx.title),
+            section=unfenced(" > ".join(path) or "-"),
+            text=unfenced(text),
+        )
         try:
             reply = ctx.call_model(prompt, max_tokens=MAX_TOKENS)
         except ModelBudgetSpent as e:

@@ -1,0 +1,1 @@
+{"date":"2026-11-09","title":"Document text is fenced as data for AI steps","description":"Pages and files reach the questions and FAQ steps marked as data, so text in a document cannot give the model instructions.","tag":"fix"}

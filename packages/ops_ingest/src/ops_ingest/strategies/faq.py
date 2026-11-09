@@ -14,19 +14,21 @@ import hashlib
 
 from ops_ingest.model_client import ModelBudgetSpent, ModelUnavailable
 from ops_ingest.models import Chunk
-from ops_ingest.strategies.base import SplitContext, json_list, json_object
+from ops_ingest.strategies.base import FENCE_RULE, SplitContext, json_list, json_object, unfenced
 
 MAX_TOKENS = 400
 
 PROMPT = """Write {n} questions that a bank employee might ask and that the passage below answers.
-Use the passage's own terms. Do not answer them.
+Use the passage's own terms. Do not answer them. {rule}
 Reply with JSON only: {{"questions": ["...", "..."]}}
 
+<document>
 Document: {title}
 Section: {section}
 
 Passage:
 {text}
+</document>
 """
 
 
@@ -59,7 +61,10 @@ def add_faq(chunks: list[Chunk], ctx: SplitContext) -> None:
             continue
         if stopped:
             continue
-        prompt = PROMPT.format(n=n, title=ctx.title, section=" > ".join(chunk.section_path) or "-", text=chunk.text)
+        section = " > ".join(chunk.section_path) or "-"
+        prompt = PROMPT.format(
+            n=n, rule=FENCE_RULE, title=unfenced(ctx.title), section=unfenced(section), text=unfenced(chunk.text)
+        )
         try:
             reply = ctx.call_model(prompt, max_tokens=MAX_TOKENS)
         except ModelBudgetSpent as e:
