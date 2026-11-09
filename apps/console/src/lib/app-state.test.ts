@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { APP_STATES, appStateFor, headerActionFor, type AppGroupId, type AppStateId } from './app-state.ts';
+import { APP_STATES, appStateFor, headerActionFor, labelFor, type AppGroupId, type AppStateId } from './app-state.ts';
 
 // The states and groups tools-service can answer, read from its OpenAPI document, so a new one cannot ship without
 // words and an action here.
@@ -44,4 +44,13 @@ test('the app page header: a member on a connected team app has nothing to do; a
   assert.equal(headerActionFor({ appState: 'needs_sign_in', appGroup: 'needs_you', mayManage: false }), 'own_sign_in');
   assert.equal(headerActionFor({ appState: 'auth_config_broken', appGroup: 'needs_admin', mayManage: true }), 'fix_auth_config');
   assert.equal(headerActionFor({ appState: 'removed', appGroup: 'gone', mayManage: true }), null);
+});
+
+test('someone who cannot set an app up reads one line: it is not set up for their team, and to ask', () => {
+  for (const state of ['needs_auth_config', 'off'] as const) {
+    assert.equal(labelFor(state, false), 'Not set up for your team yet');
+    assert.equal(appStateFor(state, 'needs_admin', false).action, 'ask_admin');
+  }
+  assert.equal(labelFor('needs_auth_config', true), 'Needs an auth config');
+  assert.equal(labelFor('connected', false), 'Connected');
 });

@@ -6,9 +6,10 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
+const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 const PASSWORD = 'northfield-demo';
 const SHOTS = process.env.OPS_USECASE_SHOTS || evidenceDir('674', 'uc');
@@ -72,7 +73,11 @@ await withUiStack(
     mkdirSync(SHOTS, { recursive: true });
     const priya = as(await tokenFor('p.shah@harborpine.example'), 'team_ops');
     const on = await fetch(`${tools}/v1/apps/${encodeURIComponent(SF)}/team`, { method: 'PUT', headers: priya, body: JSON.stringify({ enabled: true, signIn: 'person_or_team', settings: { login_url: 'https://login.salesforce.com/services/oauth2' } }) });
-    check('0 Salesforce is on for Operations before the walk', on.status === 200, await on.text());
+    const turnedOn = await on.json();
+    // The team's assistant gets Salesforce's read tools, as the Turn on window's box gives them, so the chat picker
+    // lists Salesforce once it is on.
+    const given = await fetch(`${agents}/v1/team-assistant/app-tools`, { method: 'POST', headers: priya, body: JSON.stringify({ moduleIds: turnedOn.data?.moduleIds ?? [] }) });
+    check('0 Salesforce is on for Operations, its read tools given to the assistant, before the walk', on.status === 200 && given.status < 300, { on: on.status, given: given.status });
     const browser = await chromium.launch();
     const counts = {};
     try {
@@ -84,7 +89,7 @@ await withUiStack(
         const settings = await settingsState(sam);
         await sam.screenshot({ path: join(SHOTS, 'github-needs-auth-config.png') });
         check('1 GitHub with no auth config says to add one, and its page makes no failed call',
-          shown === 'Needs an auth config' && add && settings.state === 'needs_auth_config' && settings.text.includes('Add an auth config for GitHub first.') && errs().length === 0,
+          shown === 'Needs an auth config' && add && settings.state === 'needs_auth_config' && settings.text.includes('GitHub is off, with no auth config yet') && errs().length === 0,
           { shown, add, settings, errors: errs() });
       }, sam);
 
@@ -162,10 +167,11 @@ await withUiStack(
         await settingsState(priyaPage);
         await priyaPage.getByTestId('app-settings-turn-on').click();
         await priyaPage.getByTestId('app-off').waitFor({ timeout: 30_000 });
-        const on = { page: await badge(priyaPage), mine: await mineLabel() };
+        // Read straight after Turn on, with no reload: every surface was refreshed by the change.
+        const on = { page: await badge(priyaPage), mine: await mineLabel(), chat: await pickerLabel() };
         await priyaPage.screenshot({ path: join(SHOTS, 'mine-after-turn-on.png') });
         check('8 Turned off on its page, Salesforce reads the same state on Mine and in the chat picker; on again, Mine matches the page',
-          off.page === 'Available' && off.mine === off.page && off.chat === off.page && on.page !== 'Available' && on.mine === on.page,
+          off.page === 'Available' && off.mine === off.page && off.chat === off.page && on.page !== 'Available' && on.mine === on.page && on.chat === on.page,
           { off, on });
       }, priyaPage);
 
@@ -199,6 +205,21 @@ await withUiStack(
         return { badge: await badge(nadia), ask: await nadia.getByTestId('app-admin-connects').isVisible().catch(() => false), own: await nadia.getByTestId('app-own-sign-in').isVisible().catch(() => false) };
       })();
       check('6 A member reads their own state: GitHub needs their sign-in and offers Sign in from Mine, not the admin actions', member.badge === 'Needs sign-in' && member.own, member);
+      // Someone who cannot set an app up reads one line on Mine and has no Settings tab on its page.
+      await step('9 A viewer reads one line on Mine (not set up, ask an admin) and the app page has no Settings tab', async () => {
+        await ravi.goto(`${consoleUrl}/integrations/my-accounts`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        const card = ravi.getByTestId(`connector-${GH}`);
+        await card.waitFor({ timeout: 60_000 });
+        const text = (await card.innerText()).replace(/\s+/g, ' ');
+        const badgeText = (await ravi.getByTestId(`connector-state-${GH}`).innerText()).trim();
+        await ravi.screenshot({ path: join(SHOTS, 'mine-viewer.png') });
+        await open(ravi, consoleUrl, GH);
+        const settingsTab = await ravi.getByTestId('app-tab-settings').count();
+        check('9 A viewer reads one line on Mine (not set up, ask an admin) and the app page has no Settings tab',
+          badgeText === 'Not set up for your team yet' && /Ask an admin/.test(text) && !/Needs an auth config|No account connected|admin turns it on|sets it up first/.test(text) && settingsTab === 0,
+          { badgeText, text, settingsTab });
+      }, ravi);
+
       // Auth configs are a builder's and an admin's: a viewer's page has no Auth configs tab and no Auth config column.
       await step('7 A viewer sees no auth config, by tab, column or name; an admin sees the tab', async () => {
         const configsOf = async (page) => {

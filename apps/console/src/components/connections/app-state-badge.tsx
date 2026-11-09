@@ -4,7 +4,7 @@ import { CircleAlert, CircleCheck, TriangleAlert } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import type { AppState } from '@/hooks/systems-queries';
-import { APP_STATES, type AppStateShown, type AppTone } from '@/lib/app-state';
+import { APP_STATES, labelFor, type AppStateShown, type AppTone } from '@/lib/app-state';
 
 // The words of each state come from the one table (lib/app-state.ts); this adds only how it looks. Typed by the SDK's
 // AppState, so a state the API adds fails the build until the table has it.
@@ -19,10 +19,11 @@ export const APP_STATE_LOOK = Object.fromEntries(
   (Object.keys(TABLE) as AppState[]).map((k) => [k, { label: TABLE[k].label, ...TONE[TABLE[k].tone], ...(k === 'test_failed' ? { icon: TriangleAlert } : {}) }]),
 ) as Record<AppState, { label: string; className: string; icon?: typeof CircleCheck }>;
 
-/** An app's state as a badge, worded the same on its card, its page, Mine and the chat Connect card. */
-export function AppStateBadge({ card, testId }: { card: { appState: AppState }; testId?: string }) {
+/** An app's state as a badge, worded the same on its card, its page, Mine and the chat Connect card; `manages` false
+ * gives the member's words. */
+export function AppStateBadge({ card, testId, manages = true }: { card: { appState: AppState }; testId?: string; manages?: boolean }) {
   if (!card.appState) return null;
-  const shown = APP_STATE_LOOK[card.appState];
+  const shown = { ...APP_STATE_LOOK[card.appState], label: labelFor(card.appState, manages) };
   const Icon = shown.icon;
   return (
     <Badge variant="outline" className={shown.className} data-testid={testId} data-state={card.appState}>

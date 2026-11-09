@@ -20,10 +20,10 @@ import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { APP_CARD_GRID, AppCard } from '@/components/connections/app-card';
 import { AskAnAdmin } from '@/components/connections/ask-an-admin';
-import { ConnectorSheet, NO_ACCOUNT, NOT_SET_UP, inChatWords, signInEnded } from '@/components/connections/connector-sheet';
+import { ConnectorSheet, NO_ACCOUNT, inChatWords, signInEnded } from '@/components/connections/connector-sheet';
 import { AddAuthConfigButton } from '@/components/connections/app-actions';
 import { AppStateBadge } from '@/components/connections/app-state-badge';
-import { APP_STATES, appStateFor } from '@/lib/app-state';
+import { appStateFor, labelFor } from '@/lib/app-state';
 import { OwnCredentialsForm } from '@/components/connections/own-credentials-form';
 import { useSignInWindow } from '@/components/connections/sign-in';
 import { DialogShell } from '@/components/shared/dialog-shell';
@@ -89,7 +89,7 @@ function RowAction({ c, connect }: { c: MyConnector; connect: ReturnType<typeof 
         <Link href={appPageHref(c.appId, 'auth')}>Fix the auth config</Link>
       </Button>
     );
-  if (action === 'ask_admin') return <AskAnAdmin testId={`connector-ask-${c.appId}`} lead={`${NOT_SET_UP}.`} />;
+  if (action === 'ask_admin') return <AskAnAdmin testId={`connector-ask-${c.appId}`} />;
   if (c.appGroup !== 'needs_you') return null;
   const keyed = (c.personFields ?? []).length > 0;
   return (
@@ -150,25 +150,28 @@ function ConnectorCard({ c, connect, onOpen, onEnd, onAnother }: { c: MyConnecto
       logo={c.logo}
       onOpen={onOpen}
       linkTestId={`connector-open-${c.appId}`}
-      footState={
-        <AppStateBadge card={c} testId={`connector-state-${c.appId}`} />
-      }
+      footState={<AppStateBadge card={c} manages={c.mayManage} testId={`connector-state-${c.appId}`} />}
       action={c.appGroup === 'on' ? <RowMenu c={c} onEnd={onEnd} onAnother={onAnother} /> : <RowAction c={c} connect={connect} />}
     >
       <p className="text-sm text-muted-foreground" data-testid={`connector-can-do-${c.appId}`}>
         {c.canDo}
       </p>
-      <div className="text-sm" data-testid={`connector-signed-in-${c.appId}`}>
-        <SignedInAs c={c} />
-      </div>
-      <p className="text-xs text-muted-foreground">{c.appGroup === 'on' && c.since ? `${inChatWords(c)} · since ${shortDate(c.since)}` : inChatWords(c)}</p>
+      {/* An app the team sets up first has nothing of the person's to show: its state and one action say it all. */}
+      {c.appGroup !== 'needs_admin' && (
+        <>
+          <div className="text-sm" data-testid={`connector-signed-in-${c.appId}`}>
+            <SignedInAs c={c} />
+          </div>
+          <p className="text-xs text-muted-foreground">{c.appGroup === 'on' && c.since ? `${inChatWords(c)} · since ${shortDate(c.since)}` : inChatWords(c)}</p>
+        </>
+      )}
     </AppCard>
   );
 }
 
 /** Whom it signs in as: the primary account, with the other connected ones as a count. */
 function SignedInAs({ c }: { c: MyConnector }) {
-  if (c.appGroup === 'needs_admin' || (c.appGroup === 'needs_you' && !signInEnded(c)))
+  if (c.appGroup === 'needs_you' && !signInEnded(c))
     return (
       <span className="text-sm text-muted-foreground" data-testid={`connector-missing-${c.appId}`}>
         {NO_ACCOUNT}
@@ -205,7 +208,7 @@ function ConnectorsPage() {
   // The cards are the list; the columns name what search and the State filter read.
   const columns: ColumnDef<MyConnector>[] = [
     { accessorKey: 'name', header: ({ column }) => <DataTableColumnHeader column={column} title="Connector" />, meta: { kind: 'name' } },
-    { id: 'state', accessorFn: (c) => APP_STATES[c.appState].label, header: ({ column }) => <DataTableColumnHeader column={column} title="State" />, filterFn: facetFilterFn },
+    { id: 'state', accessorFn: (c) => labelFor(c.appState, c.mayManage), header: ({ column }) => <DataTableColumnHeader column={column} title="State" />, filterFn: facetFilterFn },
   ];
   const connected = (mine.data ?? []).filter((c) => c.appGroup === 'on').length;
 
@@ -229,7 +232,7 @@ function ConnectorsPage() {
         hidePaginationOnOnePage
         rowNoun="connector"
         hideViewSwitcher
-        filters={[{ column: 'state', title: 'State', options: [...new Set((mine.data ?? []).map((c) => APP_STATES[c.appState].label))].map((v) => ({ label: v, value: v })) }]}
+        filters={[{ column: 'state', title: 'State', options: [...new Set((mine.data ?? []).map((c) => labelFor(c.appState, c.mayManage)))].map((v) => ({ label: v, value: v })) }]}
         emptyState={
           <EmptyState
             icon={Plug}

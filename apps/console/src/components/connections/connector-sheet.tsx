@@ -73,7 +73,7 @@ export function ConnectorSheet({
       title={
         <span className="flex flex-wrap items-center gap-2">
           {c.name}
-          <AppStateBadge card={c} testId="connector-sheet-state" />
+          <AppStateBadge card={c} manages={c.mayManage} testId="connector-sheet-state" />
         </span>
       }
       description={connected ? `Acts as you · ${c.account ?? 'your account'}${since}` : c.canDo}

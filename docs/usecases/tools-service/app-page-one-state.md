@@ -12,6 +12,7 @@ Status: current. Id: `uc-674`. Service: `tools-service` with platform-service. L
 | S3 | Anyone who opens an app the install does not hold reads that it isn't installed and who installs apps, with no failed request | ui | 4 | 4 |
 | S4 | Every app page opens with no console error, for an admin and a member of each team, and a member reads their own state | ui | 5-6 | 5 |
 | S6 | A state change on an app's page shows the same words on Mine and in the chat picker | ui | 8 | 8 |
+| S7 | Someone who cannot set an app up reads one line on Mine, not set up and ask an admin, and sees no Settings tab | ui | 9 | 9 |
 | S5 | A viewer sees no auth config on an app's page: no Auth configs tab, no Auth config column, no config name | ui | 7 | 7 |
 
 ## Preconditions
@@ -28,13 +29,14 @@ Status: current. Id: `uc-674`. Service: `tools-service` with platform-service. L
 | # | Step | Expected |
 |---|---|---|
 | 0 | Priya turns Salesforce on for Operations through the API | 200 |
-| 1 | Sam opens GitHub's page | The header reads Needs an auth config with Add an auth config; Settings says "Add an auth config for GitHub first."; no failed call |
+| 1 | Sam opens GitHub's page | The header reads Needs an auth config with Add an auth config; Settings says "GitHub is off, with no auth config yet"; no failed call |
 | 2 | He adds an auth config from the header, then presses Turn on and Turn on in the window | Saving the config opens no window and the header reads Available with Turn on; after Turn on the header reads Needs sign-in and Settings "GitHub is on" |
 | 3 | Priya opens Salesforce › Settings, presses Turn off and confirms, then Turn on in Settings | Off: the header reads Available with Turn on and Settings "Salesforce is off"; on again: Settings "Salesforce is on" in the state it had, no sign-in window |
 | 4 | Priya opens `plugin:acme.ticketdesk`, a plugin the install does not hold | The header reads Not installed and the page says it isn't installed and to ask the person who runs Ops AI at the company; no failed call |
 | 5 | Sam, Nadia, Priya and Ravi each open GitHub, Salesforce and the missing plugin | Zero page errors, console errors and failed /v1 calls on each of the 12 pages |
 | 6 | Nadia opens GitHub | Her own state, Needs sign-in, with Sign in from Mine |
-| 8 | Priya turns Salesforce off on its page, then on | Off: the page, her Mine card and the chat picker all read Available; on again: Mine reads what the page reads |
+| 8 | Priya turns Salesforce off on its page, then on | Off: the page, her Mine card and the chat picker all read Available; on again, read with no reload: Mine and the chat picker read what the page reads |
+| 9 | Ravi (viewer) opens Mine and GitHub's page | His GitHub card reads Not set up for your team yet with Ask an admin and nothing else; the page has no Settings tab |
 | 7 | Ravi (viewer) and Priya (admin) open Salesforce's Accounts | Ravi: no Auth configs tab, no Auth config column, no config named; Priya: both |
 
 ## Acceptance layers

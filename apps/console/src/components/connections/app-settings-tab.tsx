@@ -226,20 +226,27 @@ function DeleteAppDialog({ app, onClose, onDeleted }: { app: AppPage; onClose: (
 function OnForTeam({ app, onTurnOn, onTurnOff }: { app: AppPage; onTurnOn: () => void; onTurnOff: () => void }) {
   const shown = appStateFor(app.card.appState, app.card.appGroup, Boolean(app.card.mayManage));
   return (
-    <SettingsSection title="On for this team">
+    <SettingsSection title="For this team">
+      {/* What is true for the team, in one line, and its one action (lib/app-state.ts). */}
       <div className="flex flex-wrap items-center gap-3" data-testid="app-on-for-team" data-state={app.card.appState}>
         <span className="min-w-0 flex-1 basis-60 text-sm">
           <span className="block font-medium">
-            {shown.on ? `${app.card.name} is on` : shown.action === 'add_auth_config' ? addAuthConfigFirst(app.card.name) : `${app.card.name} is off`}
+            {shown.action === 'fix_auth_config'
+              ? `${app.card.name} is on, and its auth config needs fixing`
+              : shown.on
+                ? `${app.card.name} is on`
+                : shown.action === 'add_auth_config'
+                  ? `${app.card.name} is off, with no auth config yet`
+                  : `${app.card.name} is off`}
           </span>
           <span className="block text-xs text-muted-foreground">
             {shown.action === 'fix_auth_config'
               ? `${app.card.appStateReason ?? ''} Add a working auth config and sign in again, or turn it off.`
               : shown.on
-              ? 'Turned off, its tools stop for this team; its accounts and the tools you added stay.'
-              : shown.action === 'add_auth_config'
-                ? `${app.card.name} signs in through an auth config, and this team has none it can use.`
-                : 'Its tools stop for this team until it is turned on. Turning it on keeps its accounts and the tools you added, and signs nobody in.'}
+                ? 'Turned off, its tools stop for this team; its accounts and the tools you added stay.'
+                : shown.action === 'add_auth_config'
+                  ? `${app.card.name} signs in through an auth config. Add one, then turn it on.`
+                  : 'Turning it on keeps its accounts and the tools you added, and signs nobody in.'}
           </span>
         </span>
         {shown.on ? (

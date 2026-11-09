@@ -148,7 +148,8 @@ export function AppPageView({ appId }: { appId: string }) {
     ['resources', 'Resources'],
     // The call log names who called each tool, so it is offered only with its cell (lib/nav.ts TOOL_CALL_LOG).
     ...(mayReadCalls ? ([['logs', 'Logs']] as [string, string][]) : []),
-    ['settings', 'Settings'],
+    // Settings are the team's to change, so the tab is a builder's and an admin's, as Auth configs is.
+    ...(card.mayManage ? ([['settings', 'Settings']] as [string, string][]) : []),
   ];
   const showAccounts = (id: string) => (setConfig(id), setTab('accounts'));
 
@@ -196,9 +197,11 @@ export function AppPageView({ appId }: { appId: string }) {
             <ToolCallsView fixed={{ moduleId: card.moduleIds }} totals={false} emptyText={`No call of ${card.name}’s tools yet.`} />
           </div>
         </TabsContent>
-        <TabsContent value="settings">
-          <SettingsTab app={data} kinds={all} onSetUp={() => setSetUp(true)} onTurnOn={() => setConnecting(true)} onDeleted={() => router.push('/integrations')} />
-        </TabsContent>
+        {card.mayManage && (
+          <TabsContent value="settings">
+            <SettingsTab app={data} kinds={all} onSetUp={() => setSetUp(true)} onTurnOn={() => setConnecting(true)} onDeleted={() => router.push('/integrations')} />
+          </TabsContent>
+        )}
       </Tabs>
       {setUp && conn && (
         <ConnectSystemDialog

@@ -27,7 +27,10 @@ export type AppAction = 'none' | 'connect' | 'turn_on' | 'add_auth_config' | 'fi
 export type AppTone = 'success' | 'warning' | 'muted' | 'destructive';
 
 export interface AppStateShown {
+  /** The words for someone who manages the team's apps. */
   label: string;
+  /** The words for anyone else, where the state is the team's to act on and theirs is only to ask. */
+  memberLabel?: string;
   tone: AppTone;
   /** On for the team: Settings offers Turn off. */
   on: boolean;
@@ -41,9 +44,9 @@ export const APP_STATES: Record<AppStateId, AppStateShown> = {
   connected: { label: 'Connected', tone: 'success', on: true, admin: 'connect', member: 'none' },
   test_failed: { label: 'Signed in, test failed', tone: 'warning', on: true, admin: 'reconnect', member: 'none' },
   needs_sign_in: { label: 'Needs sign-in', tone: 'warning', on: true, admin: 'sign_in', member: 'sign_in' },
-  auth_config_broken: { label: 'Auth config needs fixing', tone: 'warning', on: true, admin: 'fix_auth_config', member: 'ask_admin' },
-  needs_auth_config: { label: 'Needs an auth config', tone: 'warning', on: false, admin: 'add_auth_config', member: 'ask_admin' },
-  off: { label: 'Available', tone: 'muted', on: false, admin: 'turn_on', member: 'ask_admin' },
+  auth_config_broken: { label: 'Auth config needs fixing', memberLabel: 'Not working for your team yet', tone: 'warning', on: true, admin: 'fix_auth_config', member: 'ask_admin' },
+  needs_auth_config: { label: 'Needs an auth config', memberLabel: 'Not set up for your team yet', tone: 'warning', on: false, admin: 'add_auth_config', member: 'ask_admin' },
+  off: { label: 'Available', memberLabel: 'Not set up for your team yet', tone: 'muted', on: false, admin: 'turn_on', member: 'ask_admin' },
   not_installed: { label: 'Not installed', tone: 'muted', on: false, admin: 'none', member: 'none' },
   removed: { label: 'No longer installed', tone: 'destructive', on: false, admin: 'delete', member: 'none' },
 };
@@ -58,6 +61,13 @@ export function appStateFor(state: AppStateId, group: AppGroupId, manages: boole
   const action = manages ? shown.admin : group === 'needs_admin' ? 'ask_admin' : shown.member;
   return { ...shown, action };
 }
+
+/** A state's words for the caller: the member's words when they do not manage the team's apps and have their own. */
+export const labelFor = (state: AppStateId, manages: boolean): string => {
+  const shown = APP_STATES[state];
+  if (!shown) return '';
+  return manages ? shown.label : (shown.memberLabel ?? shown.label);
+};
 
 /** The sentence that says what to add before an app can sign in. */
 export const addAuthConfigFirst = (name: string) => `Add an auth config for ${name} first.`;
