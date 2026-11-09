@@ -46,5 +46,24 @@ tools:
   - name: reach_out
     access: read
     function: tests.plugin_desk.kb:reach_out
+  - name: list_pages
+    access: read
+    knowledge: list_items
+    function: tests.plugin_desk.kb:list_pages
+    input:
+      source: { type: object }
+      since: { type: string, required: false }
+      cursor: { type: string, required: false }
+  - name: get_page
+    access: read
+    knowledge: get_item
+    function: tests.plugin_desk.kb:get_page
+    input: { source: { type: object }, id: { type: string } }
 knowledge_sources:
   - { name: things, title: Things, list: list_things, get: get_thing }
+  - name: pages
+    title: Pages of a site
+    list: list_pages
+    get: get_page
+    egress_from: start
+    inputs: { start: { type: string } }

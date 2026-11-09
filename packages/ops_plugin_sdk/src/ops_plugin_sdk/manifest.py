@@ -33,7 +33,7 @@ PER_PERSON_KINDS = ("api_key", "basic", "bearer", "oauth2_auth_code")
 OPERATION_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 TOOL_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 PLUGIN_ID = re.compile(r"^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*$")
-KNOWLEDGE_ROLES = ("list_items", "get_item", "list_deleted")
+KNOWLEDGE_ROLES = ("list_items", "get_item", "list_deleted", "list_changes", "list_scopes")
 # The formats a value written into a query can have, each checked and escaped by tools-service (formats.py).
 FORMATS = ("soql_string", "sosl_term", "salesforce_id", "date-time", "date")
 MAX_ITEMS = 50
@@ -260,7 +260,7 @@ class Tool(Strict):
     transform: str | None = None
     # `module:function` for a tool data cannot describe.
     function: str | None = None
-    knowledge: Literal["list_items", "get_item", "list_deleted"] | None = None
+    knowledge: Literal["list_items", "get_item", "list_deleted", "list_changes", "list_scopes"] | None = None
     rate_limit_per_min: int = Field(default=60, ge=1, le=10_000)
     # A write waits for a person's approval only when the plugin says so, or a team's policy turns approval on:
     # approvals are off by default.
@@ -303,12 +303,44 @@ class Schedule(Strict):
 
 
 class KnowledgeSource(Strict):
+    """A kind of knowledge source the plugin offers (the knowledge-source contract, docs/guide/plugins.md). kb-service
+    owns the sync, the snapshots, versions, deletes and schedule; the plugin owns only how to talk to its system:
+
+    - `list` (list_items): items with id, title, updated_at, and optionally url, folder, marker (a version tag such as
+      an ETag, md5 or revision) and metadata, paged by `next_cursor`, with a `watermark` on the last page;
+    - `get` (get_item): one item's content, mime, metadata and `allowed` (who can see it at the source), or
+      `{"unchanged": true}` when the `tag` it is sent matches the item's version tag;
+    - `changes` (list_changes, optional): items added or changed since a cursor and the next cursor, so a sync lists
+      only what changed; without it each sync lists from the watermark;
+    - `deleted` (list_deleted, optional): ids removed since a time; without it the weekly full listing finds deletes;
+    - `scopes` (list_scopes, optional): what a person picks when adding the source (sites and libraries, spaces),
+      searched by `query`.
+
+    `inputs` describes what a source of this kind is set up with (start addresses, rules, sites); kb-service checks a
+    source's values against them and sends them to each of these tools as the `source` input. `egress_from` names an
+    input holding addresses: their hosts are reachable by this source's calls, beside the plugin's own `egress`."""
+
     name: str
     title: str
     list: str
     get: str
     deleted: str | None = None
+    changes: str | None = None
+    scopes: str | None = None
+    inputs: dict[str, InputField] = Field(default_factory=dict[str, InputField])
+    egress_from: str | None = None
     schedule: Schedule = Field(default_factory=Schedule)
+
+    def tools(self) -> list[tuple[str, str]]:
+        """(role, tool name) of each tool the source names."""
+        named = (
+            ("list_items", self.list),
+            ("get_item", self.get),
+            ("list_deleted", self.deleted),
+            ("list_changes", self.changes),
+            ("list_scopes", self.scopes),
+        )
+        return [(role, name) for role, name in named if name is not None]
 
 
 class Requires(Strict):

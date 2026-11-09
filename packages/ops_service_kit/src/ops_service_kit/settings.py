@@ -369,6 +369,7 @@ class Settings(BaseSettings):
             "runner": ["tools:run"],
             # documents:view, documents:run: kb-service indexes each file of a source from its reading in
             # documents-service. audit:create: its relay writes its settings changes to the account's audit log.
+            # knowledge:run: a source's sync reaches the addresses the source names (a crawled site) through tools.
             "kb": [
                 "files:view",
                 "files:create",
@@ -377,6 +378,7 @@ class Settings(BaseSettings):
                 "documents:view",
                 "documents:run",
                 "audit:create",
+                "knowledge:run",
             ],
             # The workflow worker reads a file an Extract from file step names.
             # It also stores the attachments of mail that starts a workflow.

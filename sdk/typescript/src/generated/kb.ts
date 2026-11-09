@@ -676,6 +676,8 @@ export interface components {
             family: string;
             /** Fileid */
             fileId?: string | null;
+            /** Folder */
+            folder?: string | null;
             /** Freshness */
             freshness: string;
             /** Id */
@@ -1028,6 +1030,8 @@ export interface components {
             family: string;
             /** Fileid */
             fileId?: string | null;
+            /** Folder */
+            folder?: string | null;
             /** Id */
             id: string;
             /** Metadata */
@@ -1099,6 +1103,8 @@ export interface components {
             family: string;
             /** Fileid */
             fileId?: string | null;
+            /** Folder */
+            folder?: string | null;
             /** Id */
             id: string;
             /** Metadata */

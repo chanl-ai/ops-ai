@@ -190,6 +190,29 @@ async def test_a_python_tool_reaches_only_the_plugins_hosts(
     assert seen == []
 
 
+async def test_a_source_sync_reaches_its_own_site_and_nothing_else_does(
+    engine: AsyncEngine, store: ModuleStore, tenant: str
+) -> None:
+    seen: list[str] = []
+    ex = plugin_executor(engine, store, seen)
+    args = {"source": {"start": "https://help.northbank.test"}}
+    synced = await ex.run(
+        module_for(tenant), {"name": "desk_list_pages"}, args, actor="t", environment="test", acting_for=None,
+        source_hosts=True,
+    )  # fmt: skip
+    assert synced.ok and seen == ["https://help.northbank.test/index.json"], (synced, seen)
+    other = await ex.run(
+        module_for(tenant), {"name": "desk_list_pages"}, args, actor="t", environment="test", acting_for=None
+    )
+    assert not other.ok and other.output["error"]["code"] == "EGRESS_DENIED", other
+    assert len(seen) == 1
+    service = ToolCaller.of(type("P", (), {"tenant_id": tenant, "team_id": "team_ops", "sub": "service:kb",
+                                         "kind": "service", "scopes": ["knowledge:run"]})())  # fmt: skip
+    person = ToolCaller.of(type("P", (), {"tenant_id": tenant, "team_id": "team_ops", "sub": "usr_1",
+                                        "kind": "person", "scopes": ["knowledge:run"]})())  # fmt: skip
+    assert (service.scopes, person.scopes) == (("knowledge:run",), ())
+
+
 async def test_a_listing_cursor_is_sealed_and_a_forged_one_refused(
     engine: AsyncEngine, store: ModuleStore, tenant: str
 ) -> None:

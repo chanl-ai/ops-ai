@@ -176,6 +176,12 @@ kb_items = sa.Table(
     # search leaves an item out while it names one.
     sa.Column("content_digest", sa.String(80)),
     sa.Column("duplicate_of", sa.String(64)),
+    # Where a fetched item sits at its source (a library folder, a space's page tree), and the fields the source gives
+    # it, which the source's metadata mapping reads (`field:<name>`).
+    sa.Column("folder", sa.String(400)),
+    sa.Column("fields", sa.JSON),
+    # The version tag its last fetch gave (ETag, md5, revision), sent back so the system answers `unchanged`.
+    sa.Column("tag", sa.String(200)),
     sa.ForeignKeyConstraint(
         ["tenant_id", "source_id"],
         ["kb_sources.tenant_id", "kb_sources.id"],
@@ -197,6 +203,8 @@ kb_item_versions = sa.Table(
     sa.Column("file_id", sa.String(64), nullable=False),
     sa.Column("digest", sa.String(64), nullable=False),
     sa.Column("status", sa.String(16), nullable=False),  # current | superseded
+    # The user and group ids the source system lets see this version; stored, enforced once per-item access ships.
+    sa.Column("allowed", sa.JSON),
     sa.Column("created_by", sa.String(200), nullable=False),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.ForeignKeyConstraint(

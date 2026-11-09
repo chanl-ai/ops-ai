@@ -156,7 +156,7 @@ paging, knowledge sources and templates.
 | `egress` | The hosts a tool may reach, usually a setting such as `{instance_url}` |
 | `endpoint` | The base address every request template is relative to |
 | `tools` | Each tool's `name`, `title`, `description`, `access` (`read` or `write`), `input`, `headers`, `amount_max`, `requires_approval`, `rate_limit_per_min` (calls a minute, 60 when left out), `shape` (how chat draws the result), `knowledge` (`list_items` or `get_item` for a knowledge source's tools), then either `request` (method, path, `query`, `body` or `form`, `paging`) and an optional Jinja `transform`, or `function` |
-| `knowledge_sources` | A source's `list` and `get` tools and its `schedule` |
+| `knowledge_sources` | A source's `list` and `get` tools, its optional `changes`, `deleted` and `scopes` tools, its `inputs` and `egress_from`, and its `schedule` (Knowledge sources below) |
 | `templates` | Each template's `kind` (`agent`, `skill`, `workflow` or `document_type`), `id`, `version`, `path` (its file, relative to the manifest), and `requires`: `tools` (names without the prefix; validate refuses one the plugin lacks) and `bind` (what a team fills in on its copy, such as `{model_alias: chat}` or `{knowledge_base: "Salesforce articles"}`) |
 | `display` | What the console's App card shows: `logo` (a URL or a `data:` URI), `category`, `description` (one line) and `docs_url` (where an admin reads how to register the system's app or get its key) |
 
@@ -424,13 +424,35 @@ def test_the_summary_counts_the_open_tickets_of_a_queue() -> None:
 
 ## Knowledge sources
 
-A knowledge source names two read tools. The `list` tool takes `since` and `cursor` and answers
-`{items: [{id, title, updated_at}], next_cursor?, watermark?}`. The `get` tool takes `id` and answers
-`{id, title, updated_at, mime, encoding, content, url, children?}`; `children` are attachments, synced and removed with
-their parent. kb-service calls both through tools-service, so the system's token never leaves tools-service. It
-fetches only items whose `updated_at` moved, saves its place after every page, resumes after a rate limit, and pauses
-the source when the connection needs signing in again. A source can only use a connection the team signs in to as a
-team, since a scheduled sync has no person behind it.
+A knowledge source is one contract every connector follows (`KnowledgeSource` in `ops_plugin_sdk/manifest.py`).
+kb-service owns the sync loop, the stored copy of each item, versions, deletes and the schedule; the plugin owns only
+how to talk to its system. Every tool is a read, called through tools-service, so the system's token never leaves it.
+
+| Role | Manifest | Answers | Required |
+|---|---|---|---|
+| List | `list` (`knowledge: list_items`), takes `since` and `cursor` | `{items: [{id, title, updated_at, url?, folder?, marker?}], next_cursor?, watermark?, cursor?}`; a last page's `cursor` is where the changes tool starts next run | Yes |
+| Fetch | `get` (`get_item`), takes `id` and optionally `tag` | `{id, title, mime, encoding, content, url, folder?, metadata?, allowed?, marker?, children?}`, or `{unchanged: true}` when `tag` is still the item's version tag | Yes |
+| Changes since | `changes` (`list_changes`), takes `cursor` | Items added or changed since the cursor, deleted ones as `{id, deleted: true}`, and the next `cursor` | No: without it each run lists from the watermark |
+| Deleted | `deleted` (`list_deleted`) | Ids removed since a time | No: the weekly full listing finds deletes |
+| Who can see | `allowed` on a fetched item | User and group ids from the system, stored per version, not yet enforced | No |
+| Pickers | `scopes` (`list_scopes`), takes `query` | What a person picks when adding the source: sites and libraries, spaces | No |
+
+`inputs` describes what a source of this kind is set up with (start addresses, sites, spaces); kb-service checks a
+source's values against them (400 `invalid_source_values`) and sends them to each of its tools as the `source` input,
+which every such tool declares. `egress_from` names an input holding addresses: on a sync's calls (a service holding
+`knowledge:run`) their hosts are reachable beside the plugin's own `egress`; a private or link-local address is still
+refused unless the account lists it, and no agent's or person's call reaches them.
+
+kb-service keeps each fetched item as a `knowledge_snapshot` file before reading it, fetches only items whose marker
+moved, sends back the version tag it holds so an unchanged item costs no transfer, saves its place after every page,
+resumes after a rate limit, and pauses the source when the connection needs signing in again. A source can only use a
+connection the team signs in to as a team, since a scheduled sync has no person behind it; a plugin with no sign-in
+needs no connection.
+
+`ops_plugin_sdk.testing.knowledge_contract(plugin, source, fake, settings=, values=, change=, delete=)` checks a
+plugin against its fake system: it lists every item, fetches one, checks a matching tag answers `unchanged`, finds a
+change through the changes tool (or the watermark) and a delete through the deleted tool (or a full listing). It
+returns the problems found; a plugin's own tests assert it returns none.
 
 ## Check and test a plugin
 
@@ -654,4 +676,3 @@ limit to Stripe in test mode.
 | Plugins running out of process | Python tools run inside tools-service |
 | Inbound webhooks a plugin declares | Designed; not built yet |
 | One rate window per connection, Retry-After, and recorded fakes with standard cases | Planned |
-| Knowledge items over 25 MB | Planned |

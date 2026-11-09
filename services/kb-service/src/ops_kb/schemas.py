@@ -238,6 +238,8 @@ class Item(Out):
     warning: str | None = None
     # The newer item with the same cleaned text, which search returns instead of this one.
     duplicate_of: str | None = None
+    # Where a fetched item sits at its source: a library folder, a space's page tree.
+    folder: str | None = None
     chunk_count: int
     tags: list[str]
     metadata: dict[str, str]

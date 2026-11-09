@@ -135,6 +135,17 @@ class KnowledgeSourceView(_Wire):
     list_tool: str
     get_tool: str
     deleted_tool: str | None
+    # The contract's optional tools: changes since a cursor, and the pickers a person chooses scopes with.
+    changes_tool: str | None = None
+    scopes_tool: str | None = None
+    # What a source of this kind is set up with, checked by kb-service and sent to each tool as `source`; and the
+    # input whose addresses the source's sync may reach.
+    inputs: dict[str, Any] = Field(default_factory=dict[str, Any])
+    egress_from: str | None = None
+    # Whether the get tool takes the version tag kb-service holds, to answer `unchanged` without the content.
+    get_takes_tag: bool = False
+    # A plugin that signs in to nothing (a public website) needs no connection for a source.
+    needs_connection: bool = True
     schedule: dict[str, Any]
     connection_id: str | None
     sign_in: str | None
@@ -721,6 +732,12 @@ def plugins_router(
                         list_tool=m.operation(s.list),
                         get_tool=m.operation(s.get),
                         deleted_tool=m.operation(s.deleted) if s.deleted else None,
+                        changes_tool=m.operation(s.changes) if s.changes else None,
+                        scopes_tool=m.operation(s.scopes) if s.scopes else None,
+                        inputs={k: f.model_dump(exclude_none=True) for k, f in s.inputs.items()},
+                        egress_from=s.egress_from,
+                        get_takes_tag=(getter := m.tool(s.get)) is not None and "tag" in getter.input,
+                        needs_connection=m.connection.kinds != ["none"],
                         schedule=s.schedule.model_dump(),
                         connection_id=b.get("connection_id"),
                         sign_in=(conn or {}).get("sign_in"),

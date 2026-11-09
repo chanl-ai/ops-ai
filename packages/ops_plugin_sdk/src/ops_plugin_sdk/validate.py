@@ -438,14 +438,19 @@ def check(manifest: Manifest, root: Path) -> list[Problem]:
             )
     for s in manifest.knowledge_sources:
         where = f"knowledge_sources.{s.name}"
-        for role, name in (("list_items", s.list), ("get_item", s.get), ("list_deleted", s.deleted)):
-            if name is None:
-                continue
+        for n, f in s.inputs.items():
+            out += _inputs(n, f, f"{where}.inputs")
+        if s.egress_from is not None and s.egress_from not in s.inputs:
+            out.append(Problem(where, f"egress_from names {s.egress_from}, which is not one of its inputs"))
+        for role, name in s.tools():
             t = manifest.tool(name)
             if t is None:
                 out.append(Problem(where, f"names no tool {name}"))
             elif t.knowledge != role:
                 out.append(Problem(where, f"{name} is not marked knowledge: {role}"))
+            elif s.inputs and "source" not in t.input:
+                # kb-service sends a source's own settings to each of its tools as `source`.
+                out.append(Problem(where, f"{name} takes no source input, though the source has inputs"))
     for tpl in manifest.templates:
         where = f"templates.{tpl.id}"
         path = (root / tpl.path).resolve()

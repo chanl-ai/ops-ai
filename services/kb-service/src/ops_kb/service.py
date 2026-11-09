@@ -1049,7 +1049,9 @@ class KnowledgeService:
             reason = str(said.get("message") or "the file could not be read")
             return await self._failed(who, s, existing, name=name, found=found, error=("parse", reason), origin=origin)
         cleaning = self.settings_of(s).cleaning
-        doc = parsed_of(answer, furniture=cleaning.furniture, main_content=cleaning.main_content)
+        # A fetched item's fields (from its fetch, or kept on it for a rebuild) feed the metadata mapping.
+        fields = cast(dict[str, str] | None, origin.extra.get("fields") or (existing or {}).get("fields"))
+        doc = parsed_of(answer, fields=fields, furniture=cleaning.furniture, main_content=cleaning.main_content)
         if rebuild and existing is not None:
             return await self._reindex(
                 who, s, existing, name=name, doc=doc, read_with=read_with(answer), title_given=origin.title
@@ -1057,7 +1059,7 @@ class KnowledgeService:
         return await self._index(
             who, s, existing, file_id=found.file_id, name=name, mime=found.mime, doc=doc, size=found.size,
             digest=found.digest, read_with=read_with(answer), path=origin.path, extra=origin.extra,
-            title_given=origin.title,
+            title_given=origin.title, allowed=origin.allowed,
         )  # fmt: skip
 
     async def _mark_reading(
@@ -1142,6 +1144,7 @@ class KnowledgeService:
         path: str | None = None,
         extra: dict[str, Any] | None = None,
         title_given: str | None = None,
+        allowed: list[str] | None = None,
     ) -> dict[str, Any]:
         """The item's next version from its reading's document (`doc`): every file and every fetched item is read by
         documents-service, never here. `path` keys the document in its source (a file's name, or the system's id for
@@ -1193,6 +1196,7 @@ class KnowledgeService:
             "file_id": file_id,
             "digest": digest,
             "status": "current",
+            "allowed": allowed,
             "created_by": who.email,
             "created_at": now,
         }
@@ -1505,6 +1509,7 @@ class KnowledgeService:
             **({"errorClass": i["error_class"], "error": i["error"]} if i["error_class"] else {}),
             **({"warning": i["warning"]} if i.get("warning") else {}),
             **({"duplicateOf": i["duplicate_of"]} if i.get("duplicate_of") else {}),
+            **({"folder": i["folder"]} if i.get("folder") else {}),
             "chunkCount": i["chunk_count"],
             "tags": s["tags"],
             "metadata": {},
@@ -1703,6 +1708,8 @@ class KnowledgeService:
                         "status": v["status"],
                         "digest": v["digest"],
                         "sourceName": s["name"],
+                        # Who the source system lets see this version; stored, not yet enforced.
+                        **({"allowed": v["allowed"]} if v.get("allowed") else {}),
                     }
                     for v in versions
                 ],

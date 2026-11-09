@@ -30,6 +30,8 @@ from ops_plugin_sdk import BadInput, Context, NeedsReconnect, Plugin, PluginErro
 from ops_plugin_sdk import EgressDenied as PluginEgressDenied
 from ops_plugin_sdk import paging as paged
 from ops_plugin_sdk.formats import InputRefused
+from ops_plugin_sdk.knowledge import source_hosts as knowledge_source_hosts
+from ops_plugin_sdk.knowledge import source_of
 from ops_plugin_sdk.manifest import Tool
 
 from ..auth import AuthFailed, Prepared
@@ -74,12 +76,21 @@ class PluginExecutor:
         environment: str,
         acting_for: ActingForPerson | None,
         trial: Trial | None = None,
+        source_hosts: bool = False,
     ) -> ToolOutcome:
-        """`trial` is a tool page's Real run: a data tool's request as sent is kept on it for the page to show."""
+        """`trial` is a tool page's Real run: a data tool's request as sent is kept on it for the page to show. With
+        `source_hosts` (a knowledge source's sync), a source tool's call also reaches the hosts of the addresses its
+        `source` input names under the source's `egress_from`."""
         plugin = self.host.by_module(module)
         if plugin is None:
             return _failure("PLUGIN_DISABLED", f"{module['display_name']} is not installed on this service.")
         name = str(op["name"]).removeprefix(f"{plugin.manifest.short}_")
+        source = source_of(plugin.manifest, name) if source_hosts else None
+        values = args.get("source")
+        if source is not None and isinstance(values, dict):
+            own = list(module.get("egress_hosts") or [])
+            added = [h for h in knowledge_source_hosts(source, cast(dict[str, Any], values)) if h not in own]
+            module = {**module, "egress_hosts": [*own, *added]}
         # The team's version of the tool, so a query or paged tool runs as the team's version declared it.
         tool = self.host.tool_for(module, plugin, name)
         if tool is not None and tool.request is not None:

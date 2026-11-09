@@ -3370,22 +3370,42 @@ export interface components {
         };
         /** KnowledgeSourceView */
         KnowledgeSourceView: {
+            /** Changestool */
+            changesTool?: string | null;
             /** Connectionid */
             connectionId: string | null;
             /** Connectionstatus */
             connectionStatus: string | null;
             /** Deletedtool */
             deletedTool: string | null;
+            /** Egressfrom */
+            egressFrom?: string | null;
+            /**
+             * Gettakestag
+             * @default false
+             */
+            getTakesTag: boolean;
             /** Gettool */
             getTool: string;
+            /** Inputs */
+            inputs?: {
+                [key: string]: unknown;
+            };
             /** Listtool */
             listTool: string;
+            /**
+             * Needsconnection
+             * @default true
+             */
+            needsConnection: boolean;
             /** Plugin */
             plugin: string;
             /** Schedule */
             schedule: {
                 [key: string]: unknown;
             };
+            /** Scopestool */
+            scopesTool?: string | null;
             /** Signin */
             signIn: string | null;
             /** Source */

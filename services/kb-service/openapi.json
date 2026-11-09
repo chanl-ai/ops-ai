@@ -344,6 +344,17 @@
             ],
             "title": "Fileid"
           },
+          "folder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder"
+          },
           "freshness": {
             "title": "Freshness",
             "type": "string"
@@ -1204,6 +1215,17 @@
             ],
             "title": "Fileid"
           },
+          "folder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -1423,6 +1445,17 @@
               }
             ],
             "title": "Fileid"
+          },
+          "folder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder"
           },
           "id": {
             "title": "Id",

@@ -5665,6 +5665,17 @@
       "KnowledgeSourceView": {
         "additionalProperties": false,
         "properties": {
+          "changesTool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changestool"
+          },
           "connectionId": {
             "anyOf": [
               {
@@ -5698,13 +5709,39 @@
             ],
             "title": "Deletedtool"
           },
+          "egressFrom": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Egressfrom"
+          },
+          "getTakesTag": {
+            "default": false,
+            "title": "Gettakestag",
+            "type": "boolean"
+          },
           "getTool": {
             "title": "Gettool",
             "type": "string"
           },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          },
           "listTool": {
             "title": "Listtool",
             "type": "string"
+          },
+          "needsConnection": {
+            "default": true,
+            "title": "Needsconnection",
+            "type": "boolean"
           },
           "plugin": {
             "title": "Plugin",
@@ -5714,6 +5751,17 @@
             "additionalProperties": true,
             "title": "Schedule",
             "type": "object"
+          },
+          "scopesTool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scopestool"
           },
           "signIn": {
             "anyOf": [

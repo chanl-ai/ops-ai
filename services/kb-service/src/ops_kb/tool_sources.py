@@ -97,22 +97,60 @@ async def source_config(reader: ToolReader | None, who: Who, i: dict[str, Any]) 
         raise ValidationFailed(
             f"{plugin or 'That plugin'} offers no source {name or '?'} to this team; turn it on first."
         )
-    if not found.get("connectionId"):
-        raise ValidationFailed(
-            f"{found['title']} needs the team's connection; sign in first.", code="connection_missing"
-        )
-    if found.get("signIn") not in TEAM_SIGN_IN:
-        raise ValidationFailed(
-            "This connection signs in each person. A knowledge source needs a team sign-in.", code="sign_in_not_team"
-        )
+    if found.get("needsConnection", True):
+        if not found.get("connectionId"):
+            raise ValidationFailed(
+                f"{found['title']} needs the team's connection; sign in first.", code="connection_missing"
+            )
+        if found.get("signIn") not in TEAM_SIGN_IN:
+            raise ValidationFailed(
+                "This connection signs in each person. A knowledge source needs a team sign-in.",
+                code="sign_in_not_team",
+            )
     return {
         "plugin": plugin,
         "source": name,
         "listTool": found["listTool"],
         "getTool": found["getTool"],
-        "connectionId": found["connectionId"],
+        "changesTool": found.get("changesTool"),
+        "scopesTool": found.get("scopesTool"),
+        "getTakesTag": bool(found.get("getTakesTag")),
+        "connectionId": found.get("connectionId"),
         "schedule": found.get("schedule") or {"kind": "manual"},
+        # What this source is set up with (start addresses, sites, spaces), checked against what the plugin declares
+        # and sent to each of its tools as `source`.
+        "values": source_values(found, wanted.get("values")),
     }
+
+
+INPUT_TYPES: dict[str, type | tuple[type, ...]] = {
+    "string": str,
+    "integer": int,
+    "number": (int, float),
+    "boolean": bool,
+    "array": list,
+    "object": dict,
+}
+
+
+def source_values(declared: dict[str, Any], given: Any) -> dict[str, Any]:
+    """A source's own settings checked against the inputs its plugin declares: a required one present, each of its
+    declared type, and nothing undeclared."""
+    inputs = cast(dict[str, dict[str, Any]], declared.get("inputs") or {})
+    values = cast(dict[str, Any], given) if isinstance(given, dict) else {}
+    if unknown := sorted(set(values) - set(inputs)):
+        raise ValidationFailed(f"{declared['title']} takes no {', '.join(unknown)}.", code="invalid_source_values")
+    for name, field in inputs.items():
+        if values.get(name) in (None, "", []):
+            if field.get("required", True):
+                raise ValidationFailed(f"{declared['title']} needs {name}.", code="invalid_source_values")
+            continue
+        expected = INPUT_TYPES.get(str(field.get("type") or "string"), str)
+        if not isinstance(values[name], expected):
+            raise ValidationFailed(
+                f"{name} is a {field.get('type') or 'string'} for {declared['title']}.", code="invalid_source_values"
+            )
+    return values
 
 
 def _content(item: dict[str, Any]) -> bytes:
@@ -178,6 +216,14 @@ async def sync_tool_source(
     full = full or not cfg.get("watermark") or not last_full or started - datetime.fromisoformat(last_full) > FULL_EVERY
     since = None if full else cfg.get("watermark")
     cursor = cfg.get("cursor") if trigger != "full" else None
+    # The source's own settings go to every call; an incremental run lists only what changed when the plugin has a
+    # changes tool and a cursor from the last run, else lists from the watermark.
+    given: dict[str, Any] = {"source": cfg["values"]} if cfg.get("values") else {}
+    by_changes = bool(not full and cfg.get("changesTool") and cfg.get("changesCursor"))
+    list_tool = str(cfg["changesTool"] if by_changes else cfg["listTool"])
+    if by_changes and not cursor:
+        cursor = cfg["changesCursor"]
+    removed_at_source: list[str] = []
     known = {str(i["path"]): i for i in await service.store.items(tenant, source_ids=[source_id])}
     counts = {"listed": 0, "unchanged": 0, "upserted": 0, "deleted": 0, "failed": 0, "skipped": 0}
     errors: list[dict[str, Any]] = []
@@ -196,8 +242,8 @@ async def sync_tool_source(
         if pages >= MAX_PAGES:
             status, stopped = "partial", f"Stopped after {MAX_PAGES} pages; the next run continues from here."
             break
-        args = {k: v for k, v in (("since", since), ("cursor", cursor)) if v}
-        page = await reader.call(tenant, team, cfg["listTool"], args, act=act)
+        asked = {k: v for k, v in (("since", None if by_changes else since), ("cursor", cursor)) if v}
+        page = await reader.call(tenant, team, list_tool, {**given, **asked}, act=act)
         pages += 1
         if not page.ok and cursor and not restarted and page.code in STALE_CURSOR:
             restarted, cursor = True, None
@@ -231,6 +277,7 @@ async def sync_tool_source(
             newest = max(newest or "", str(r["updated_at"]))
             marker = str(r.get("marker") or r["updated_at"])
             if r.get("deleted"):
+                removed_at_source.append(item_id)
                 continue
             ex = known.get(item_id)
             if ex is not None and ex.get("marker") == marker and ex["status"] == "indexed":
@@ -249,6 +296,9 @@ async def sync_tool_source(
         await save()
         if not cursor:
             watermark = str(out.get("watermark") or (_less_overlap(newest) if newest else since or ""))
+            # The last page of a listing or of changes names where the next run's changes start.
+            if out.get("cursor"):
+                cfg["changesCursor"] = out["cursor"]
             break
 
     gone = [str(i["path"]) for i in known.values() if not i.get("parent_id")] if full else []
@@ -256,8 +306,11 @@ async def sync_tool_source(
         lock = asyncio.Semaphore(AT_ONCE)
 
         async def fetch(item_id: str) -> Answer:
+            # The version tag held for the item lets the system answer `unchanged` without sending it again.
+            held = known.get(item_id)
+            tag = {"tag": held["tag"]} if cfg.get("getTakesTag") and held and held.get("tag") else {}
             async with lock:
-                return await reader.call(tenant, team, cfg["getTool"], {"id": item_id}, act=act)
+                return await reader.call(tenant, team, cfg["getTool"], {**given, "id": item_id, **tag}, act=act)
 
         answers = await asyncio.gather(*(fetch(str(r["id"])) for r in changed))
         for r, got in zip(changed, answers, strict=True):
@@ -270,6 +323,12 @@ async def sync_tool_source(
                     status = "partial"
                 continue
             item = cast(dict[str, Any], got.output)
+            if item.get("unchanged") is True:
+                held = known.get(str(r["id"]))
+                if held is not None:
+                    await service.store.update_item(tenant, str(held["id"]), {"marker": str(r["marker"])})
+                counts["unchanged"] += 1
+                continue
             await _put(service, who, s, known, item, marker=str(r["marker"]), parent=None, counts=counts, errors=errors)
             for child in cast(list[dict[str, Any]], item.get("children") or []):
                 kid_id = str(child["id"])
@@ -295,13 +354,21 @@ async def sync_tool_source(
                     )
                 else:
                     counts["failed"] += 1
+        if removed_at_source:
+            # Items the system says it deleted (in a changes listing) leave search at once, with their attachments.
+            out_ids = [str(known[p]["id"]) for p in removed_at_source if p in known]
+            out_ids += [str(i["id"]) for i in known.values() if i.get("parent_id") in set(out_ids)]
+            files_out = [str(i["file_id"]) for i in known.values() if str(i["id"]) in set(out_ids)]
+            counts["deleted"] += await service.store.remove_items(tenant, out_ids)
+            await release_snapshots(service, who, s, files_out)
+            log += [f"{known[p]['title']}: deleted at the source, removed" for p in removed_at_source if p in known]
         if full:
             dropped = [p for p in gone if p not in seen]
             removed_ids = [str(known[p]["id"]) for p in dropped]
             # Attachments go with their parent (parent_id holds the parent document's id).
             removed_ids += [str(i["id"]) for i in known.values() if i.get("parent_id") in set(removed_ids)]
             gone_files = [str(i["file_id"]) for i in known.values() if str(i["id"]) in set(removed_ids)]
-            counts["deleted"] = await service.store.remove_items(tenant, removed_ids)
+            counts["deleted"] += await service.store.remove_items(tenant, removed_ids)
             await release_snapshots(service, who, s, gone_files)
             for p in dropped:
                 log.append(f"{known[p]['title']}: no longer listed by the system, removed")
@@ -372,14 +439,22 @@ async def _put(
         await service.store.update_item(tenant, str(ex["id"]), {"marker": marker})
         counts["unchanged"] += 1
         return
-    extra: dict[str, Any] = {"marker": marker, "parent_id": None, "url": item.get("url")}
+    extra: dict[str, Any] = {
+        "marker": marker,
+        "parent_id": None,
+        "url": item.get("url"),
+        "folder": str(item["folder"])[:400] if item.get("folder") else None,
+        "fields": {str(k): str(v) for k, v in cast(dict[str, Any], item.get("metadata") or {}).items()} or None,
+        "tag": str(item["marker"])[:200] if item.get("marker") else None,
+    }
     if parent is not None:
         parent_row = known.get(parent) or next(
             (i for i in await service.store.items(tenant, source_ids=[source_id]) if i["path"] == parent), None
         )
         extra["parent_id"] = parent_row["id"] if parent_row else None
     found = Stored(stored.file_id, name, stored.mime, stored.size, stored.digest, stored.deduplicated)
-    origin = Origin(item_id, str(item.get("title") or item_id), extra)
+    allowed = cast(list[Any], item["allowed"]) if isinstance(item.get("allowed"), list) else None
+    origin = Origin(item_id, str(item.get("title") or item_id), extra, allowed=[str(a) for a in allowed or []] or None)
     done = await service._read_file(who, s, ex, name=name, found=found, rebuild=False, origin=origin)  # pyright: ignore[reportPrivateUsage]
     known[item_id] = done
     if ex is not None and ex.get("file_id") and ex["file_id"] != stored.file_id:

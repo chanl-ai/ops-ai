@@ -133,7 +133,7 @@ def _tools_service(settings: Settings) -> ToolReader | None:
         return None
     http = httpx.AsyncClient(base_url=settings.tools_url, timeout=60)
     client = ServiceClient.for_settings(
-        settings, http, service="kb", audience="tools", scopes=["tools:view", "tools:run"], timeout=60
+        settings, http, service="kb", audience="tools", scopes=["tools:view", "tools:run", "knowledge:run"], timeout=60
     )
     return ToolReader(client)
 

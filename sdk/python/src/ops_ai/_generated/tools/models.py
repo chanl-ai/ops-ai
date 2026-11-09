@@ -494,13 +494,19 @@ class KindField(TypedDict, closed=True):
 
 
 class KnowledgeSourceView(TypedDict, closed=True):
+    changesTool: NotRequired[str | None]
     connectionId: str | None
     connectionStatus: str | None
     deletedTool: str | None
+    egressFrom: NotRequired[str | None]
+    getTakesTag: NotRequired[bool]
     getTool: str
+    inputs: NotRequired[dict[str, Any]]
     listTool: str
+    needsConnection: NotRequired[bool]
     plugin: str
     schedule: dict[str, Any]
+    scopesTool: NotRequired[str | None]
     signIn: str | None
     source: str
     title: str

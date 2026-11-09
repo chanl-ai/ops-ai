@@ -52,6 +52,7 @@ class DocumentRow(TypedDict, closed=True):
     externalId: str
     family: str
     fileId: NotRequired[str | None]
+    folder: NotRequired[str | None]
     freshness: str
     id: str
     metadata: dict[str, str]
@@ -130,6 +131,7 @@ class Item(TypedDict, closed=True):
     externalId: str
     family: str
     fileId: NotRequired[str | None]
+    folder: NotRequired[str | None]
     id: str
     metadata: dict[str, str]
     mimeType: str
@@ -165,6 +167,7 @@ class ItemWithDetail(TypedDict, closed=True):
     externalId: str
     family: str
     fileId: NotRequired[str | None]
+    folder: NotRequired[str | None]
     id: str
     metadata: dict[str, str]
     mimeType: str

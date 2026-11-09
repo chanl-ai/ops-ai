@@ -69,6 +69,10 @@ PYTHON_TYPES: dict[str, tuple[type, ...]] = {
 }
 
 
+# The scope a knowledge source's sync calls with: only those calls reach the hosts the source's own settings name.
+SOURCE_SYNC_SCOPE = "knowledge:run"
+
+
 def invalid_fields(fields: list[dict[str, Any]], args: dict[str, Any]) -> list[dict[str, str]]:
     """Per-field problems with `args` against the operation's input fields; empty when the input is valid. Unknown
     arguments are refused too, so a caller cannot smuggle a field the reviewer never saw."""
@@ -775,8 +779,18 @@ class Executor:
         if resolved.executor == "plugin":
             if self.plugins is None:
                 return _failure("PLUGIN_DISABLED", "This gateway runs no plugins.")
+            # A knowledge source's own addresses (a crawled site) are reachable only on a sync's calls: the service
+            # syncing sources holds knowledge:run, and no agent or person does.
+            syncing = caller.kind == "service" and SOURCE_SYNC_SCOPE in caller.scopes
             return await self.plugins.run(
-                module, op, args, actor=actor, environment=signs_in, acting_for=caller.acting_for, trial=trial
+                module,
+                op,
+                args,
+                actor=actor,
+                environment=signs_in,
+                acting_for=caller.acting_for,
+                trial=trial,
+                source_hosts=syncing,
             )
         return await self.http.run(
             module,

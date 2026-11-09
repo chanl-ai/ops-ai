@@ -14,6 +14,8 @@ class Origin:
     path: str
     title: str | None = None
     extra: dict[str, Any] = field(default_factory=dict[str, Any])
+    # The ids the source system lets see this version, kept on the version.
+    allowed: list[str] | None = None
 
 
 def source_team(s: dict[str, Any]) -> str:
