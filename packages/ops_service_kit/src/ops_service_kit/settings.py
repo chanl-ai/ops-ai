@@ -228,6 +228,11 @@ class Settings(BaseSettings):
     # documents-service: what is read from a file, beside files-service, which keeps the bytes.
     documents_port: int = 8760
     documents_url: str | None = None
+    # The OCR mode files are read with for a knowledge source and for a chat attachment or read_file: "auto" reads
+    # scanned pages and the picture parts of mixed pages, "off" reads text layers only, "always" OCRs every page.
+    # A server without Tesseract reports OCR as missing in documents-service's /health and fails each scanned page.
+    kb_ocr: Literal["off", "auto", "always"] = "auto"
+    attachments_ocr: Literal["off", "auto", "always"] = "auto"
     # runner-service: runs code tools' functions in Python on WASM, with no network and no secrets.
     # tools-service calls it at runner_url; unset, a code operation fails runner_unavailable. The CPython WASI build is
     # fetched by `make -C services/runner-service wasm` from runner_wasm_url into runner_cache_dir, and the runner

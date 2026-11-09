@@ -1,6 +1,7 @@
 """The built-in Files and Document types tools (install flag `file_tools`): `read_file` gives an agent the full
-text of a file its team uploaded, and `read_document` reads one of the team's document types' fields from a file. Both
-are documents-service's own reads (the full-text read asks no model; a type's read is an extraction like any other),
+text of a file its team uploaded, from the file's reading in documents-service (OCR on auto, so a scan is read; no
+model is asked), and `read_document` reads one of the team's document types' fields from a file, an extraction like any
+other. Both are documents-service's own reads,
 called as the calling run's tenant and team, so another team's file or type is never found. They run behind the tool
 gateway as the platform's local tools, so grants, the call log and the team's write rules apply as to any tool.
 """
@@ -13,7 +14,14 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from ops_agent_kernel.ports import ToolOutcome
-from ops_documents_client import READING, DocumentNotFound, DocumentsClient, DocumentsRefused
+from ops_documents_client import (
+    READING,
+    READING_PENDING,
+    DocumentNotFound,
+    DocumentsClient,
+    DocumentsRefused,
+    reading_text,
+)
 from ops_files_client import FileInfo, FileNotFound, FilesClient, FilesRefused
 
 from .modules.seed import FILE_TOOL_NAMES, FILE_TOOL_TIMEOUT_MS
@@ -43,9 +51,11 @@ class FileTools:
         *,
         wait_s: float = WAIT_S,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        ocr: str = "auto",
     ) -> None:
+        """`ocr` is the OCR mode read_file reads with (settings.attachments_ocr)."""
         self.files, self.documents = files, documents
-        self.wait_s, self.sleep = wait_s, sleep
+        self.wait_s, self.sleep, self.ocr = wait_s, sleep, ocr
 
     async def run(self, tool: str, arguments: dict[str, Any], *, tenant: str, team: str | None) -> ToolOutcome:
         if not team:
@@ -103,16 +113,16 @@ class FileTools:
         return answer
 
     async def _text(self, tenant: str, team: str, file: FileInfo) -> ToolOutcome:
-        answer = await self.documents.read_text(
-            tenant, team, file.id, digest=file.digest, wait_s=self.wait_s, poll_s=POLL_S, sleep=self.sleep
+        answer = await self.documents.reading(
+            tenant, team, file.id, ocr=self.ocr, wait_s=self.wait_s, poll_s=POLL_S, sleep=self.sleep
         )
         head = {"fileId": file.id, "name": file.name, "type": file.mime, "sensitivity": file.sensitivity}
-        if answer.get("status") in READING:
+        if answer.get("status") in READING_PENDING:
             return ToolOutcome(False, {**head, "error": "The file is still being read; ask again shortly."})
-        if answer.get("status") != "done":
-            reason = _reason(answer, "it has no text to read")
+        text = reading_text(answer) if answer.get("status") == "done" else ""
+        if not text:
+            reason = _reason(answer, "it has no text to read, even by OCR")
             return ToolOutcome(False, {**head, "error": f"{file.name} could not be read: {reason}"})
-        text = str(answer.get("text") or "")
         out: dict[str, Any] = {**head, "text": text[:TEXT_LIMIT]}
         if len(text) > TEXT_LIMIT:
             out["note"] = f"Cut at {TEXT_LIMIT} of {len(text)} characters."

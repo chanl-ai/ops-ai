@@ -8,18 +8,26 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
 from ops_identity import ServiceCallError, ServiceClient
 from ops_service_kit.settings import Settings
 
-__all__ = ["READING", "DocumentNotFound", "DocumentsClient", "DocumentsRefused"]
+__all__ = ["READING", "READING_PENDING", "DocumentNotFound", "DocumentsClient", "DocumentsRefused", "reading_text"]
 
 # An extraction in these states has not finished: a file over documents-service's synchronous size reads in the
 # background.
 READING = ("queued", "running")
+# A reading in these states has not finished: a scan or a long file is read in the background.
+READING_PENDING = ("queued", "reading")
+
+
+def reading_text(reading: dict[str, Any]) -> str:
+    """A finished reading's text, page after page."""
+    pages = cast(list[dict[str, Any]], reading.get("pages") or [])
+    return "\n\n".join(str(p.get("text") or "") for p in pages if p.get("text"))
 
 
 class DocumentsRefused(Exception):
@@ -85,26 +93,39 @@ class DocumentsClient:
             raise _refused(e) from e
         return answer
 
-    async def read_text(
+    async def reading(
         self,
         tenant: str,
         team: str,
         file_id: str,
         *,
-        digest: str,
-        wait_s: float,
+        ocr: str = "auto",
+        wait_s: float = 0.0,
         poll_s: float = 1.0,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> dict[str, Any]:
-        """The file's full text, every page in reading order (`text`, and `pages` of {number, text, tables}); no model
-        is asked. Keyed by the bytes, so every caller that reads the same file (an agent's read_file tool, a chat
-        attachment) gets the one read already made. A background read is waited for up to `wait_s`; the answer is
-        then the extraction as it is, still queued or running when it took longer."""
-        answer = await self.extract(tenant, team, file_id, {"read": "text"}, idempotency_key=f"text:{digest}")
-        ends = time.monotonic() + wait_s
-        while answer.get("status") in READING and time.monotonic() < ends:
-            await sleep(poll_s)
-            answer = await self.extraction(tenant, team, str(answer["id"]))
+        """The file's reading: every page's text in reading order, with how each page was read, its blocks, words,
+        form fields and OCR quality. Keyed by the file's bytes and the OCR settings, so every caller of the same file
+        (a knowledge base, a chat attachment, an agent's read_file) gets the one reading already made. A reading made
+        in the background is waited for up to `wait_s`; the answer is then the reading as it is, still `queued` or
+        `reading` when it took longer, and documents-service reports `reading.finished` when it ends."""
+        try:
+            answer: dict[str, Any] = await self._documents.request(
+                "POST",
+                "/v1/documents/readings",
+                json={"fileId": file_id, "ocr": ocr},
+                tenant=tenant,
+                team=team,
+                timeout=180,  # a small file is read inside the answer
+            )
+            ends = time.monotonic() + wait_s
+            while answer.get("status") in READING_PENDING and time.monotonic() < ends:
+                await sleep(poll_s)
+                answer = await self._documents.request(
+                    "GET", f"/v1/documents/readings/{file_id}", params={"ocr": ocr}, tenant=tenant, team=team
+                )
+        except ServiceCallError as e:
+            raise _refused(e) from e
         return answer
 
     async def document_type(self, tenant: str, team: str, type_id: str) -> dict[str, Any]:

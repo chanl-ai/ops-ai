@@ -63,6 +63,7 @@ from .deps import Runtime
 from .envelope import install_error_handlers
 from .fencing import ToolsFence
 from .file_names import FilesServiceNames
+from .file_text import ReadingText
 from .key_summaries import PlatformKeySummaries
 from .memory import MemoryReads
 from .memory_retention import PlatformRetention, expire_forever
@@ -367,6 +368,7 @@ def create_app(
                     DocumentsClient.from_settings(
                         settings, service="agents", scopes=["documents:view", "documents:run"]
                     ),
+                    ocr=settings.attachments_ocr,
                 )
         rt.knowledge_bases = knowledge
         if gateway_client is not None:
@@ -398,7 +400,12 @@ def create_app(
                     models,
                     replies,
                     settings.model_alias,
-                    files=channels,
+                    files=ReadingText(
+                        DocumentsClient.from_settings(settings, service="agents", scopes=["documents:run"]),
+                        ocr=settings.attachments_ocr,
+                    )
+                    if settings.documents_url
+                    else None,
                     meter=rt.usage,
                     workflows=ChildRuns(rt),
                     agents=AgentCalls(rt),

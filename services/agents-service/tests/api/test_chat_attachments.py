@@ -72,7 +72,8 @@ async def test_an_attached_files_text_is_read_and_its_page_is_cited(
     assert cited[0]["fileId"] == file["fileId"], cited
     assert "replacement debit card" in cited[0]["snippet"].lower()
     reply = events[-1]["message"]
-    assert reply["citations"][0]["documentId"] == file["fileId"] and "[1]" in reply["content"]
+    first = reply["citations"][0]
+    assert first["documentId"] == file["fileId"] and f"[{first['n']}]" in reply["content"], reply
 
 
 async def test_the_agent_is_told_each_attached_files_name_and_id(
@@ -153,3 +154,18 @@ async def test_a_message_with_files_is_refused_where_files_is_not_run(
     rt.chat_attachments = None
     res = await client.post(f"/chat/threads/{tid}/messages", json={"content": ASK, "attachments": [file]})
     assert res.status_code == 503 and "Files" in res.json()["error"]["message"], res.text
+
+
+async def test_a_long_attached_file_reaches_the_model_whole_and_is_read_with_ocr(
+    stack: tuple[AsyncClient, Runtime],  # noqa: F811
+    rig: Rig,
+) -> None:
+    """Six pages of 2,500 characters: more than the 3 pieces of 2,000 a knowledge search returns, inside the turn's
+    share, so all of it reaches the model. A scan's text exists only when the reading ran OCR."""
+    client, _ = stack
+    pages = [f"Page {n} of the contract. " + "clause " * 350 for n in range(1, 7)]
+    tid, file = await thread_and_file(client, rig, "contract.pdf", pages)
+    _, events = await send(client, tid, {"content": "How many pages did you get?", "attachments": [file]})
+    reply = events[-1]["message"]["content"]
+    assert reply.startswith("6 pages,") and int(reply.split(", ")[1].split()[0]) > 6_000, reply
+    assert {ocr for _, ocr in rig.documents.readings} == {"auto"}, rig.documents.readings

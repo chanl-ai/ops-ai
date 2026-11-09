@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
 
-from .types import AgentSettings, AttachedFile, Passage, ToolGrant, TranscriptMessage
+from .types import ATTACHMENT_KB, AgentSettings, AttachedFile, Passage, ToolGrant, TranscriptMessage
 
 PLATFORM_RULES = (
     "When a <knowledge> block is present, answer from it and cite each fact with its number in square brackets, "
@@ -47,24 +47,31 @@ def _escape(content: str, tag: str) -> str:
     return content.replace(f"</{tag}", f"<\\/{tag}")
 
 
-def knowledge_block(passages: list[Passage]) -> str:
+def knowledge_block(passages: list[Passage], *, first: int = 1) -> str:
     rows = [
         f"[{i}] {p.title} — {p.section} (version {p.version}): {_escape(p.text, 'knowledge')}"
-        for i, p in enumerate(passages, 1)
+        for i, p in enumerate(passages, first)
     ]
     return "<knowledge>\n" + "\n".join(rows) + "\n</knowledge>"
 
 
-def attachments_block(files: Sequence[AttachedFile]) -> str:
-    rows = [
-        f"- {_escape(f.name, 'attachments')} ({f.file_id})"
-        + (f": could not be read: {_escape(f.unread, 'attachments')}" if f.unread else "")
-        for f in files
-    ]
+def attachments_block(files: Sequence[AttachedFile], pages: Sequence[Passage] = ()) -> str:
+    """Each attached file by name and id, then its text page by page, numbered like knowledge so a page is cited."""
+    rows: list[str] = []
+    for f in files:
+        rows.append(
+            f"- {_escape(f.name, 'attachments')} ({f.file_id})"
+            + (f": could not be read: {_escape(f.unread, 'attachments')}" if f.unread else "")
+        )
+        for n, p in enumerate(pages, 1):
+            if p.document_id == f.file_id:
+                where = f"page {p.page}" if p.page else "text"
+                rows.append(f"[{n}] {where}: {_escape(p.text, 'attachments')}")
     # The rule rides with the block, so a turn without attachments keeps the same system prompt.
     head = (
-        "Files the person attached to this conversation, by name and file id. The text of each one that could be read "
-        "is in the <knowledge> block; for one that could not, tell the person why instead of answering from it."
+        "Files the person attached to this conversation, by name and file id, each followed by its text. Cite a page "
+        "by its number as you cite knowledge. For a file that could not be read, tell the person why instead of "
+        "answering from it."
     )
     return "<attachments>\n" + head + "\n" + "\n".join(rows) + "\n</attachments>"
 
@@ -93,8 +100,10 @@ def assemble(
         for m in transcript
         if m.content
     ]
-    files = attachments_block(attachments) + "\n\n" if attachments else ""
-    data = knowledge_block(passages) + "\n\n" if passages else ""
+    attached = [p for p in passages if p.kb_id == ATTACHMENT_KB]
+    found = [p for p in passages if p.kb_id != ATTACHMENT_KB]
+    files = attachments_block(attachments, attached) + "\n\n" if attachments else ""
+    data = knowledge_block(found, first=len(attached) + 1) + "\n\n" if found else ""
     user_prompt = f"{files}{data}{user_turn}"
     digest = {
         "instructions": _sha(system_prompt),

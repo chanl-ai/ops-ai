@@ -927,10 +927,13 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                 _with_skills(system_prompt, loadable), carried, req.earlier_reads, req.carried_plan
             )
         else:
+            # Attached files' pages come first: they are what the person asked about, numbered before knowledge.
+            passages = list(req.attached)
+            state.passages = list(passages)
             if req.kb_ids and req.user_turn:
                 yield StatusChanged("retrieving")
                 try:
-                    passages = await _retrieve(req, ports)
+                    passages = [*req.attached, *await _retrieve(req, ports)]
                     state.passages = list(passages)
                 except KnowledgeUnavailableError:
                     # Asked for knowledge, the turn says it is unavailable; otherwise it goes on without passages
