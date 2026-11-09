@@ -1121,7 +1121,7 @@ class KnowledgeService:
 
     async def _chunks(
         self, who: Who, s: dict[str, Any], doc: ParsedDocument, *, item_id: str, version: int, title: str
-    ) -> list[dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], SplitResult]:
         """The item's pieces under the source's settings, each with its index units and its mapped metadata. With an
         approved AI step the split asks the model in a worker thread, on the run's client and ceiling, and only for
         pieces whose text has no questions yet."""
@@ -1135,11 +1135,124 @@ class KnowledgeService:
                     result = split(doc, settings.model_copy(update={"approval": IngestApproval()}))
                 else:
                     known = await self._known_questions(who.tenant_id, item_id)
+                    drafted = {str(detail_of(d).get("sectionDigest")) for d in await self._drafts(who, item_id)}
                     result = await asyncio.to_thread(
-                        split, doc, settings, model=run.client, known_questions=known, budget=run.budget
+                        split,
+                        doc,
+                        settings,
+                        model=run.client,
+                        known_questions=known,
+                        known_sections=drafted,
+                        budget=run.budget,
                     )
                     run.notes.update(n for n in result.notes if "stopped" in n)
-        return pieces(who.tenant_id, item_id, version, title, result, self._metadata(s, doc))
+        return pieces(who.tenant_id, item_id, version, title, result, self._metadata(s, doc)), result
+
+    async def _drafts(self, who: Who, item_id: str) -> list[dict[str, Any]]:
+        """The item's FAQ drafts that still stand (a superseded one was replaced by a newer draft of its section)."""
+        return [d for d in await self.store.drafts(who.tenant_id, item_id) if d["status"] != "superseded"]
+
+    async def _settle_drafts(
+        self, who: Who, s: dict[str, Any], item_id: str, rows: list[dict[str, Any]], result: SplitResult
+    ) -> None:
+        """After a split: new drafts wait for review; a section whose text changed supersedes its pending drafts and
+        marks its approved ones source_changed for a second look; every approved pair whose quote is still in a live
+        piece is searchable again as a unit of that piece."""
+        if not result.section_digests and not result.pairs:
+            return
+        now = datetime.now(UTC)
+        live = set(result.section_digests)
+        for d in await self._drafts(who, item_id):
+            detail = detail_of(d)
+            if detail.get("sectionDigest") in live:
+                continue
+            if d["status"] == "pending":
+                await self.store.update_change(who.tenant_id, d["id"], {"status": "superseded"})
+            elif d["status"] == "approved":
+                await self.store.update_change(who.tenant_id, d["id"], {"status": "source_changed"})
+        rows_by_index = {int(r["position"]): r for r in rows}
+        drafts = [
+            {
+                "id": new_id("chg"),
+                "item_id": item_id,
+                "source_id": str(s["id"]),
+                "title": str(rows_by_index[p.chunk_index]["title"]),
+                "section": " > ".join(p.section_path)[:400],
+                "from_version": int(rows_by_index[p.chunk_index]["version"]),
+                "to_version": int(rows_by_index[p.chunk_index]["version"]),
+                "before": "",
+                "after": f"Q: {p.question}\nA: {p.answer}",
+                "changed_by": "FAQ drafts",
+                "changed_at": now,
+                "origin": "faq",
+                "status": "pending",
+                "detail": {
+                    "question": p.question,
+                    "answer": p.answer,
+                    "quote": p.quote,
+                    "sectionDigest": p.section_digest,
+                    "sectionPath": p.section_path,
+                },
+            }
+            for p in result.pairs
+        ]
+        await self.store.add_drafts(who.tenant_id, drafts)
+        await self._faq_units(who, item_id)
+
+    async def _faq_units(self, who: Who, item_id: str) -> int:
+        """The item's approved pairs (and those whose source changed) as units of the live piece holding each quote,
+        which search returns and cites; the number made. A pair whose quote is no longer in any piece makes none."""
+        live = await self.store.chunks(who.tenant_id, item_id)
+        units: list[dict[str, Any]] = []
+        for d in await self._drafts(who, item_id):
+            if d["status"] not in ("approved", "source_changed"):
+                continue
+            detail = detail_of(d)
+            quote = " ".join(str(detail.get("quote") or "").split()).lower()
+            holder = next((c for c in live if quote and quote in " ".join(str(c["text"]).split()).lower()), None)
+            if holder is None:
+                continue
+            heading = " ".join(p for p in (str(d["title"]), str(holder["section"] or "")) if p)
+            units.append(
+                {
+                    "id": new_id("unt"),
+                    "chunk_id": holder["id"],
+                    "item_id": item_id,
+                    "kind": "faq",
+                    "position": FAQ_POSITION + len(units),
+                    "heading": heading[:800],
+                    "text": str(detail.get("question") or ""),
+                }
+            )
+        await self.store.replace_faq_units(who.tenant_id, item_id, units)
+        return len(units)
+
+    async def decide_drafts(
+        self, who: Who, ids: list[str], *, decision: str, edit: dict[str, str] | None = None
+    ) -> list[dict[str, Any]]:
+        """Approve, reject or edit FAQ drafts, each by the knowledge owner of its source. An approved pair is
+        searchable at once (embedded with the rest of the tenant's units); an edit keeps it waiting for review."""
+        found = {c["id"]: c for c in await self.store.changes(who.tenant_id) if c["id"] in ids and c["origin"] == "faq"}
+        if missing := [i for i in ids if i not in found]:
+            raise NotFound(f"No FAQ draft {missing[0]}.")
+        items: set[str] = set()
+        for change_id in ids:
+            d = found[change_id]
+            await self._changeable_source(who, str(d["source_id"]))
+            if d["status"] not in DECIDABLE:
+                raise Conflict(f"That draft is {d['status']}; there is nothing to decide.", code="draft_decided")
+            values: dict[str, Any] = {"decided_by": who.email, "decided_at": datetime.now(UTC)}
+            if decision == "edit":
+                detail = {**detail_of(d), **(edit or {})}
+                values = {"detail": detail, "after": f"Q: {detail['question']}\nA: {detail['answer']}"}
+            else:
+                values["status"] = "approved" if decision == "approve" else "rejected"
+            await self.store.update_change(who.tenant_id, change_id, values)
+            items.add(str(d["item_id"]))
+        for item_id in items:
+            await self._faq_units(who, item_id)
+        await self.embed_now(who.tenant_id)
+        return [await self.get_change(who, i) for i in ids]
 
     async def _known_questions(self, tenant: str, item_id: str) -> dict[str, list[str]]:
         """The questions the item's live pieces have, by piece_digest of their text: a piece split again with the same
@@ -1179,7 +1292,9 @@ class KnowledgeService:
         warning: str | None = None
         title, pages = title_given or doc.title or name, doc.source.page_count
         settings = self.settings_of(s)
-        chunks = await self._chunks(who, s, doc, item_id=existing["id"], version=existing["version"], title=title)
+        chunks, result = await self._chunks(
+            who, s, doc, item_id=existing["id"], version=existing["version"], title=title
+        )
         if chunks:
             warning = _unread(doc)
         else:
@@ -1199,6 +1314,7 @@ class KnowledgeService:
             "processed_at": datetime.now(UTC),
         }
         await self.store.reindex(who.tenant_id, existing["id"], values, chunks)
+        await self._settle_drafts(who, s, str(existing["id"]), chunks, result)
         return await self._duplicates(who, s, {**existing, **values})
 
     def built_under_other_settings(self, s: dict[str, Any], item: dict[str, Any]) -> bool:
@@ -1359,7 +1475,7 @@ class KnowledgeService:
         warning: str | None = None
         settings = self.settings_of(s)
         title, pages = title_given or doc.title or name, doc.source.page_count
-        chunks = await self._chunks(who, s, doc, item_id=item_id, version=version, title=title)
+        chunks, result = await self._chunks(who, s, doc, item_id=item_id, version=version, title=title)
         if chunks:
             warning = _unread(doc)
         else:
@@ -1407,6 +1523,7 @@ class KnowledgeService:
             before = await self.store.chunks(who.tenant_id, item_id)
             change = _change(who, s, item, existing["version"], before, chunks, now)
         await self.store.index_version(who.tenant_id, item, version_row, chunks, new=existing is None, change=change)
+        await self._settle_drafts(who, s, item_id, chunks, result)
         return await self._duplicates(who, s, item)
 
     async def _duplicates(self, who: Who, s: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
@@ -1748,6 +1865,9 @@ class KnowledgeService:
         bases = {b["id"]: b for b in await self.store.bases(who.tenant_id)}
         _, by_source = await self._joined(who.tenant_id)
         s = sources.get(ch["source_id"])
+        kbs = [{"id": k, "name": bases[k]["name"]} for k in by_source.get(ch["source_id"], []) if k in bases]
+        if ch["origin"] == "faq":
+            return _draft_out(ch, s, kbs)
         return {
             "id": ch["id"],
             "summary": f"{ch['title']} changed from v{ch['from_version']} to v{ch['to_version']}",
@@ -1759,7 +1879,7 @@ class KnowledgeService:
             "sourceId": ch["source_id"],
             "sourceName": s["name"] if s else "",
             "section": ch["section"],
-            "kbs": [{"id": k, "name": bases[k]["name"]} for k in by_source.get(ch["source_id"], []) if k in bases],
+            "kbs": kbs,
             "fromVersion": f"v{ch['from_version']}",
             "toVersion": f"v{ch['to_version']}",
             "before": ch["before"],
@@ -1789,10 +1909,14 @@ class KnowledgeService:
             for ch in await self.store.changes(who.tenant_id, item_ids=item_ids)
             if _matches(search, ch["title"], ch["section"])
         ]
-        # Source syncs are applied when they run, so every row is resolved; nothing waits on anyone.
-        shown = rows if view in ("resolved", "all") else []
+        # A sync's change is applied when it runs; an FAQ draft waits for the knowledge owner (open) until decided.
+        waiting = [r for r in rows if r["status"] in DECIDABLE]
+        mine = [r for r in waiting if r["owner"] == who.email]
+        done = [r for r in rows if r["status"] not in DECIDABLE]
+        shown = {"open": waiting, "mine": mine, "resolved": done, "all": rows}.get(view, [])
         listed = page_of(shown, page=page, page_size=page_size, facets={"origin": _facet(rows, "origin")})
-        return {**listed, "viewCounts": {"mine": 0, "open": 0, "conflicts": 0, "resolved": len(rows)}}
+        counts = {"mine": len(mine), "open": len(waiting), "conflicts": 0, "resolved": len(done)}
+        return {**listed, "viewCounts": counts}
 
     async def get_change(self, who: Who, change_id: str) -> dict[str, Any]:
         found = [c for c in await self.store.changes(who.tenant_id) if c["id"] == change_id]
@@ -2249,6 +2373,55 @@ class CountingModel:
         self.calls += 1
         self.input_tokens += approx_tokens(prompt)
         return '{"questions": []}'
+
+
+# FAQ units follow a piece's own units, so their positions never meet.
+FAQ_POSITION = 1_000
+# A draft a person may still decide: waiting, or approved before its section changed.
+DECIDABLE = ("pending", "source_changed")
+
+
+def _draft_out(ch: dict[str, Any], s: dict[str, Any] | None, kbs: list[dict[str, Any]]) -> dict[str, Any]:
+    """An FAQ draft as the Changes queue shows it: the pair, the passage it quotes beside it, and its review state."""
+    detail = detail_of(ch)
+    return {
+        "id": ch["id"],
+        "summary": str(detail.get("question") or ""),
+        "origin": "generated_faq",
+        "proposedBy": "FAQ drafts",
+        "rationale": f"Drafted from {ch['title']}, {ch['section'] or 'its text'}.",
+        "documentId": ch["item_id"],
+        "documentTitle": ch["title"],
+        "sourceId": ch["source_id"],
+        "sourceName": s["name"] if s else "",
+        "section": ch["section"],
+        "kbs": kbs,
+        "fromVersion": f"v{ch['from_version']}",
+        "toVersion": f"v{ch['to_version']}",
+        "before": str(detail.get("quote") or ""),
+        "after": ch["after"],
+        "trust": "source_changed" if ch["status"] == "source_changed" else "draft",
+        "freshness": "fresh",
+        "reviewBy": "",
+        "citedBy": [],
+        "owner": s["owner"] if s else "",
+        "canDecide": ch["status"] in DECIDABLE,
+        "status": ch["status"],
+        "createdAt": _iso(ch["changed_at"]),
+        "decidedAt": _iso(ch["decided_at"]) if ch.get("decided_at") else None,
+        "decidedBy": ch.get("decided_by"),
+        "faq": {
+            "question": str(detail.get("question") or ""),
+            "answer": str(detail.get("answer") or ""),
+            "quote": str(detail.get("quote") or ""),
+            "sectionPath": list(detail.get("sectionPath") or []),
+        },
+    }
+
+
+def detail_of(change: dict[str, Any]) -> dict[str, Any]:
+    """A draft's detail (question, answer, quote, section); empty for a sync's change."""
+    return cast(dict[str, Any], change.get("detail") or {})
 
 
 def ai_steps_on(settings: IngestSettings) -> bool:

@@ -318,8 +318,17 @@ kb_changes = sa.Table(
     sa.Column("after", sa.Text, nullable=False),
     sa.Column("changed_by", sa.String(200), nullable=False),
     sa.Column("changed_at", sa.DateTime(timezone=True), nullable=False),
+    # sync: a version a sync applied; faq: a drafted question-and-answer pair waiting for, or past, review.
+    sa.Column("origin", sa.String(16), nullable=False, server_default="sync"),
+    # applied (a sync's); pending, approved, rejected, superseded or source_changed (a draft's).
+    sa.Column("status", sa.String(16), nullable=False, server_default="applied"),
+    # A draft's question, answer and quote, its section path and digest, and where the quote sits in its piece.
+    sa.Column("detail", sa.JSON),
+    sa.Column("decided_by", sa.String(200)),
+    sa.Column("decided_at", sa.DateTime(timezone=True)),
     # No foreign key to the item: the record of who changed what outlives the document's removal.
     sa.Index("ix_kb_changes_at", "tenant_id", "changed_at"),
+    sa.Index("ix_kb_changes_item_origin", "tenant_id", "item_id", "origin"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -942,6 +951,51 @@ class KnowledgeStore:
             q = q.where(kb_runs.c.id == run_id)
         async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q.order_by(kb_runs.c.started_at.desc()))).mappings()]
+
+    async def drafts(self, tenant: str, item_id: str) -> list[dict[str, Any]]:
+        """The item's FAQ drafts in every state, oldest first."""
+        c = kb_changes
+        q = (
+            sa.select(c)
+            .where(c.c.tenant_id == tenant, c.c.item_id == item_id, c.c.origin == "faq", team_visible(c))
+            .order_by(c.c.changed_at, c.c.id)
+        )
+        async with self._tx() as conn:
+            return [dict(r) for r in (await conn.execute(q)).mappings()]
+
+    async def add_drafts(self, tenant: str, rows: list[dict[str, Any]]) -> None:
+        if not rows:
+            return
+        async with self._tx() as conn:
+            team = await self._team_of(conn, kb_items, tenant, str(rows[0]["item_id"]))
+            await conn.execute(sa.insert(kb_changes), [{**r, "tenant_id": tenant, "team_id": team} for r in rows])
+
+    async def update_change(self, tenant: str, change_id: str, values: dict[str, Any]) -> None:
+        c = kb_changes
+        async with self._tx() as conn:
+            await conn.execute(
+                sa.update(c).where(c.c.tenant_id == tenant, c.c.id == change_id, team_visible(c)).values(**values)
+            )
+
+    async def replace_faq_units(self, tenant: str, item_id: str, units: list[dict[str, Any]]) -> None:
+        """The item's approved FAQ pairs as units of its live pieces, in place of the ones it had."""
+        u, ch = kb_units, kb_chunks
+        live = sa.select(ch.c.id).where(
+            ch.c.tenant_id == tenant, ch.c.item_id == item_id, ch.c.withdrawn_at.is_(None), team_visible(ch)
+        )
+        async with self._tx() as conn:
+            await conn.execute(
+                sa.delete(u).where(
+                    u.c.tenant_id == tenant,
+                    u.c.item_id == item_id,
+                    u.c.kind == "faq",
+                    u.c.chunk_id.in_(live),
+                    team_visible(u),
+                )
+            )
+            if units:
+                team = await self._team_of(conn, kb_items, tenant, item_id)
+                await conn.execute(sa.insert(u), [{**x, "tenant_id": tenant, "team_id": team} for x in units])
 
     async def changes(self, tenant: str, *, item_ids: list[str] | None = None) -> list[dict[str, Any]]:
         q = sa.select(kb_changes).where(kb_changes.c.tenant_id == tenant, team_visible(kb_changes))

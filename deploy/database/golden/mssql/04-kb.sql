@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- kb-service, stamped at kb_0021
+-- kb-service, stamped at kb_0022
 -- not on SQL Server yet: table kb_unit_vectors (PostgreSQL only)
 -- not on SQL Server yet: kb_units.tsv (TSVECTOR)
 CREATE TABLE kb_bases (
@@ -74,10 +74,17 @@ CREATE TABLE kb_changes (
 	after VARCHAR(max) NOT NULL, 
 	changed_by VARCHAR(200) NOT NULL, 
 	changed_at DATETIMEOFFSET NOT NULL, 
+	origin VARCHAR(16) NOT NULL DEFAULT 'sync', 
+	status VARCHAR(16) NOT NULL DEFAULT 'applied', 
+	detail NVARCHAR(max) NULL, 
+	decided_by VARCHAR(200) NULL, 
+	decided_at DATETIMEOFFSET NULL, 
 	CONSTRAINT kb_changes_pkey PRIMARY KEY (tenant_id, id)
 );
 GO
 CREATE INDEX ix_kb_changes_at ON kb_changes (tenant_id, changed_at);
+GO
+CREATE INDEX ix_kb_changes_item_origin ON kb_changes (tenant_id, item_id, origin);
 GO
 CREATE TABLE kb_outbox (
 	id VARCHAR(64) NOT NULL, 
@@ -309,5 +316,5 @@ CREATE TABLE alembic_version_kb (
     CONSTRAINT alembic_version_kb_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_kb (version_num) VALUES ('kb_0021');
+INSERT INTO alembic_version_kb (version_num) VALUES ('kb_0022');
 GO

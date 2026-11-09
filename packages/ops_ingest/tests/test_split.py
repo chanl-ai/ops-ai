@@ -199,6 +199,37 @@ def test_questions_are_asked_only_for_changed_pieces_and_stop_at_the_ceiling_or_
     assert all(not c.questions for c in fourth.chunks) and any("did not answer" in n for n in fourth.notes)
 
 
+def test_faq_drafts_cite_text_that_is_there_and_skip_sections_drafted_before() -> None:
+    """A draft whose quote the model made up would cite words the source never said; a section drafted before must not
+    be paid for again."""
+    doc = md("# Recalls\n\nA recall is asked of the receiving bank. It can take ten business days.\n\n# Cut-off\n\n"
+             "Wires sent after four in the afternoon leave the next business day.")  # fmt: skip
+
+    def reply(prompt: str) -> str:
+        if "Section: Recalls" in prompt:
+            pairs = [
+                {"question": "How long does a recall take?", "answer": "Up to ten business days.",
+                 "quote": "It can take   ten business days."},
+                {"question": "Is a recall free?", "answer": "Yes.", "quote": "Recalls are free of charge."},
+            ]  # fmt: skip
+        else:
+            pairs = [{"question": "When is the cut-off?", "answer": "Four in the afternoon.", "quote": "after four"}]
+        return json.dumps({"pairs": pairs})
+
+    on = settings(strategies=["structure", "faq_pairs"], model="ingest-small", approval=approved("faq_pairs"))
+    first = split(doc, on, model=FakeModelClient(respond=reply))
+    assert [(p.question, p.quote) for p in first.pairs] == [
+        ("How long does a recall take?", "It can take ten business days."),
+        ("When is the cut-off?", "after four"),
+    ]
+    recall = first.pairs[0]
+    assert first.chunks[recall.chunk_index].text[recall.start : recall.end] == recall.quote
+    assert any("quoted text not in it" in n for n in first.notes)
+    again = FakeModelClient(respond=reply)
+    second = split(doc, on, model=again, known_sections={recall.section_digest})
+    assert len(again.calls) == 1 and [p.question for p in second.pairs] == ["When is the cut-off?"]
+
+
 def test_ai_step_waits_for_approval() -> None:
     doc = md(f"# Help\n\n{sentences(3)}")
     pending = settings(

@@ -332,6 +332,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/knowledge-changes/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Changes
+         * @description Approves or rejects FAQ drafts, one or many; an approved pair is searchable at once and cites its passage.
+         */
+        post: operations["changes_decide_changes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/knowledge-changes/{change_id}": {
         parameters: {
             query?: never;
@@ -346,7 +366,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Edit Change
+         * @description Edits an FAQ draft's question and answer; it still waits for review. The quote stays the source's.
+         */
+        patch: operations["changes_edit_change"];
         trace?: never;
     };
     "/v1/knowledge/lookups": {
@@ -799,6 +823,16 @@ export interface components {
             /** Resolved */
             resolved: number;
         };
+        /** DecideIn */
+        DecideIn: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "reject";
+            /** Ids */
+            ids: string[];
+        };
         /** DocumentRow */
         DocumentRow: {
             /** Acl */
@@ -871,6 +905,13 @@ export interface components {
             versionStatus: string;
             /** Warning */
             warning?: string | null;
+        };
+        /** DraftEdit */
+        DraftEdit: {
+            /** Answer */
+            answer: string;
+            /** Question */
+            question: string;
         };
         /** Envelope[AddedDocuments] */
         Envelope_AddedDocuments_: {
@@ -1080,6 +1121,16 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[list[KnowledgeChange]] */
+        Envelope_list_KnowledgeChange__: {
+            /** Data */
+            data: components["schemas"]["KnowledgeChange"][];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[list[NamedRef]] */
         Envelope_list_NamedRef__: {
             /** Data */
@@ -1173,6 +1224,17 @@ export interface components {
              * @enum {string}
              */
             status: "handled" | "unhandled";
+        };
+        /** FaqDraft */
+        FaqDraft: {
+            /** Answer */
+            answer: string;
+            /** Question */
+            question: string;
+            /** Quote */
+            quote: string;
+            /** Sectionpath */
+            sectionPath: string[];
         };
         /** FileIdsIn */
         FileIdsIn: {
@@ -1683,6 +1745,7 @@ export interface components {
             documentId: string;
             /** Documenttitle */
             documentTitle: string;
+            faq?: components["schemas"]["FaqDraft"] | null;
             /** Freshness */
             freshness: string;
             /** Fromversion */
@@ -4693,6 +4756,111 @@ export interface operations {
             };
         };
     };
+    changes_decide_changes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_KnowledgeChange__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     changes_get_change: {
         parameters: {
             query?: never;
@@ -4703,6 +4871,113 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_KnowledgeChange_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    changes_edit_change: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                change_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftEdit"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

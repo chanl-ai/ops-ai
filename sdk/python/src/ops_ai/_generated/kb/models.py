@@ -44,6 +44,11 @@ class ChangeViewCounts(TypedDict, closed=True):
     resolved: int
 
 
+class DecideIn(TypedDict):
+    decision: Literal["approve", "reject"]
+    ids: list[str]
+
+
 class DocumentRow(TypedDict, closed=True):
     acl: list[str]
     chunkCount: int
@@ -81,6 +86,11 @@ class DocumentRow(TypedDict, closed=True):
     warning: NotRequired[str | None]
 
 
+class DraftEdit(TypedDict):
+    answer: str
+    question: str
+
+
 class EnvelopeListAddedFile(TypedDict, closed=True):
     data: list[AddedFile]
     success: Literal[True]
@@ -112,6 +122,13 @@ class EventOut(TypedDict, closed=True):
     key: str
     name: str
     status: Literal["handled", "unhandled"]
+
+
+class FaqDraft(TypedDict, closed=True):
+    answer: str
+    question: str
+    quote: str
+    sectionPath: list[str]
 
 
 class FileIdsIn(TypedDict):
@@ -594,6 +611,7 @@ class KnowledgeChange(TypedDict, closed=True):
     decidedBy: NotRequired[str | None]
     documentId: str
     documentTitle: str
+    faq: NotRequired[FaqDraft | None]
     freshness: str
     fromVersion: str
     id: str
@@ -835,6 +853,11 @@ class EnvelopeSourceDetail(TypedDict, closed=True):
 
 class EnvelopeSource(TypedDict, closed=True):
     data: Source
+    success: Literal[True]
+
+
+class EnvelopeListKnowledgeChange(TypedDict, closed=True):
+    data: list[KnowledgeChange]
     success: Literal[True]
 
 

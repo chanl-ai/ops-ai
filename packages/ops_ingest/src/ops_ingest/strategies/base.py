@@ -25,6 +25,10 @@ class SplitContext:
     removed_chars: int = 0
     # Questions written before for a piece of the same text, by piece_digest: reused, never asked for again.
     known_questions: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
+    # Sections whose text had FAQ pairs drafted before, by section digest: not asked for again.
+    known_sections: set[str] = field(default_factory=set[str])
+    # Every section's digest the FAQ drafts step saw.
+    section_digests: list[str] = field(default_factory=list[str])
     # The run's ceiling on model calls; None for no ceiling (a preview's sample).
     budget: ModelBudget | None = None
 

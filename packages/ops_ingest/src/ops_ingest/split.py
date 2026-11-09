@@ -35,6 +35,7 @@ from ops_ingest.strategies.base import SplitContext
 from ops_ingest.strategies.clean import clean_document
 from ops_ingest.strategies.context_headers import add_context_headers
 from ops_ingest.strategies.faq import add_faq
+from ops_ingest.strategies.faq_pairs import draft_pairs
 from ops_ingest.strategies.fixed import split_fixed
 from ops_ingest.strategies.parent_child import add_parent_child
 from ops_ingest.strategies.structure import split_structure
@@ -51,7 +52,7 @@ PRESETS: dict[str, list[IngestStrategy]] = {
     "email_templates": ["structure", "context_headers"],
 }
 
-_STEP_NAMES = {"topic": "Topic grouping", "faq": "FAQ questions"}
+_STEP_NAMES = {"topic": "Topic grouping", "faq": "Likely questions", "faq_pairs": "FAQ drafts"}
 
 
 class InvalidIngestError(ValueError):
@@ -120,6 +121,7 @@ class Pipeline:
         *,
         preview: bool = False,
         known_questions: dict[str, list[str]] | None = None,
+        known_sections: set[str] | None = None,
         budget: ModelBudget | None = None,
     ) -> SplitResult:
         settings = self.settings
@@ -129,6 +131,7 @@ class Pipeline:
             count=self.count_tokens,
             model=self.model,
             known_questions=known_questions or {},
+            known_sections=known_sections or set(),
             budget=budget,
         )
         strategies = settings.strategies
@@ -176,6 +179,8 @@ class Pipeline:
             add_parent_child(chunks, ctx)
         if ai("faq"):
             add_faq(chunks, ctx)
+        # Before context headers, so each quote is matched against the section's own text.
+        pairs = draft_pairs(chunks, ctx) if ai("faq_pairs") else []
         if "context_headers" in strategies:
             add_context_headers(chunks, ctx)
 
@@ -185,6 +190,8 @@ class Pipeline:
             chunks=chunks,
             counts=SplitCounts(),
             notes=ctx.notes,
+            pairs=pairs,
+            section_digests=ctx.section_digests,
         )
         result.counts = SplitCounts(
             chunks=len(chunks),
@@ -205,10 +212,13 @@ def split(
     preview: bool = False,
     count_tokens: TokenCounter = approx_tokens,
     known_questions: dict[str, list[str]] | None = None,
+    known_sections: set[str] | None = None,
     budget: ModelBudget | None = None,
 ) -> SplitResult:
     pipeline = Pipeline(settings, model=model, count_tokens=count_tokens)
-    return pipeline.run(document, preview=preview, known_questions=known_questions, budget=budget)
+    return pipeline.run(
+        document, preview=preview, known_questions=known_questions, known_sections=known_sections, budget=budget
+    )
 
 
 def document_digest(document: ParsedDocument, settings: IngestSettings) -> str:

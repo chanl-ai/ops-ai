@@ -96,6 +96,7 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict deployment_paused 0 state
 * conflict digest_mismatch 0 state
 * conflict domain_taken 0 state
+* conflict draft_decided 0 state
 * conflict file_not_ready 0 state
 * conflict form_needs_inputs 0 state
 * conflict guardrail_pinned 0 state

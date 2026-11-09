@@ -352,6 +352,23 @@ class PlaygroundAnswer(Out):
     shape: str
 
 
+class FaqDraft(Out):
+    question: str
+    answer: str
+    quote: str
+    section_path: list[str]
+
+
+class DecideIn(In):
+    ids: list[str] = Field(min_length=1, max_length=200)
+    decision: Literal["approve", "reject"]
+
+
+class DraftEdit(In):
+    question: str = Field(min_length=1, max_length=500)
+    answer: str = Field(min_length=1, max_length=4000)
+
+
 class KnowledgeChange(Out):
     id: str
     summary: str
@@ -378,6 +395,8 @@ class KnowledgeChange(Out):
     created_at: str
     decided_at: str | None = None
     decided_by: str | None = None
+    # An FAQ draft's pair and the passage it quotes; absent for a sync's change.
+    faq: FaqDraft | None = None
 
 
 class ChangeViewCounts(Out):

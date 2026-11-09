@@ -53,7 +53,9 @@ from .schemas import (
     AiEstimate,
     AttachIn,
     ChangeList,
+    DecideIn,
     DocumentRow,
+    DraftEdit,
     FileIdsIn,
     Item,
     ItemWithDetail,
@@ -541,6 +543,17 @@ def create_kb_app(
         return ok(
             await service.list_changes(who, view=view, kb_id=kb_id, page=page, page_size=page_size, search=search)
         )
+
+    @changes.post("/decide", response_model=Envelope[list[KnowledgeChange]])
+    async def decide_changes(body: DecideIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Approves or rejects FAQ drafts, one or many; an approved pair is searchable at once and cites its passage."""
+        return ok(await service.decide_drafts(who, body.ids, decision=body.decision))
+
+    @changes.patch("/{change_id}", response_model=Envelope[KnowledgeChange])
+    async def edit_change(change_id: str, body: DraftEdit, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Edits an FAQ draft's question and answer; it still waits for review. The quote stays the source's."""
+        [edited] = await service.decide_drafts(who, [change_id], decision="edit", edit=body.model_dump())
+        return ok(edited)
 
     @changes.get("/{change_id}", response_model=Envelope[KnowledgeChange])
     async def get_change(change_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

@@ -126,12 +126,15 @@ class ParsingSettings(_Model):
 # Ingest settings (console: IngestSettings)
 # ---------------------------------------------------------------------------------------------------------
 
-IngestStrategy = Literal["structure", "fixed", "topic", "faq", "context_headers", "parent_child", "table_rows", "clean"]
+IngestStrategy = Literal[
+    "structure", "fixed", "topic", "faq", "faq_pairs", "context_headers", "parent_child", "table_rows", "clean"
+]
 IngestPresetId = Literal["policy_manual", "help_centre", "rate_table", "email_templates", "custom"]
 ColumnRole = Literal["searchable", "metadata", "ignored"]
 
 SPLITTERS: tuple[IngestStrategy, ...] = ("structure", "fixed", "topic")
-AI_STEPS: tuple[IngestStrategy, ...] = ("topic", "faq")
+# `faq` writes likely questions (index units, no review); `faq_pairs` drafts question-and-answer pairs for review.
+AI_STEPS: tuple[IngestStrategy, ...] = ("topic", "faq", "faq_pairs")
 
 
 class TableColumn(_Model):
@@ -204,12 +207,29 @@ class SplitCounts(_Model):
     removed_chars: int = 0
 
 
+class FaqPair(_Model):
+    """A drafted question-and-answer pair (`faq_pairs`) and where its quote sits: the chunk of the split and the span
+    within that chunk's text. A person approves it before it is searchable."""
+
+    chunk_index: int
+    section_path: list[str]
+    section_digest: str
+    question: str
+    answer: str
+    quote: str
+    start: int
+    end: int
+
+
 class SplitResult(_Model):
     title: str
     strategies: list[IngestStrategy]
     chunks: list[Chunk]
     counts: SplitCounts
     notes: list[str] = Field(default_factory=list[str])
+    pairs: list[FaqPair] = Field(default_factory=list[FaqPair])
+    # Every section's digest when FAQ drafts ran, drafted now or before: a draft whose section is not here changed.
+    section_digests: list[str] = Field(default_factory=list[str])
 
     def index_units(self) -> list[IndexUnit]:
         units: list[IndexUnit] = []

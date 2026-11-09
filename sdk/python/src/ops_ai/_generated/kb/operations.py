@@ -10,6 +10,24 @@ from .models import *  # noqa: F403
 
 SERVICE = "kb"
 OPERATIONS: dict[str, Operation] = {
+    "changes_decide_changes": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/knowledge-changes/decide",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "changes_edit_change": {
+        "body": "json",
+        "headers": [],
+        "method": "PATCH",
+        "path": "/v1/knowledge-changes/{change_id}",
+        "pathParams": ["change_id"],
+        "query": [],
+        "stream": False,
+    },
     "changes_get_change": {
         "body": None,
         "headers": [],
@@ -563,9 +581,17 @@ class Operations:
             None,
         )  # type: ignore[no-any-return]
 
+    def changes_decide_changes(self, body: DecideIn) -> list[KnowledgeChange]:
+        "Decide Changes"
+        return self._t.call(SERVICE, OPERATIONS["changes_decide_changes"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     def changes_get_change(self, change_id: str) -> KnowledgeChange:
         "Get Change"
         return self._t.call(SERVICE, OPERATIONS["changes_get_change"], {"change_id": change_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def changes_edit_change(self, change_id: str, body: DraftEdit) -> KnowledgeChange:
+        "Edit Change"
+        return self._t.call(SERVICE, OPERATIONS["changes_edit_change"], {"change_id": change_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     def knowledge_bases_lookups(self) -> Lookups:
         "Lookups"
@@ -837,9 +863,17 @@ class AsyncOperations:
             None,
         )  # type: ignore[no-any-return]
 
+    async def changes_decide_changes(self, body: DecideIn) -> list[KnowledgeChange]:
+        "Decide Changes"
+        return await self._t.call(SERVICE, OPERATIONS["changes_decide_changes"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     async def changes_get_change(self, change_id: str) -> KnowledgeChange:
         "Get Change"
         return await self._t.call(SERVICE, OPERATIONS["changes_get_change"], {"change_id": change_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def changes_edit_change(self, change_id: str, body: DraftEdit) -> KnowledgeChange:
+        "Edit Change"
+        return await self._t.call(SERVICE, OPERATIONS["changes_edit_change"], {"change_id": change_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def knowledge_bases_lookups(self) -> Lookups:
         "Lookups"
