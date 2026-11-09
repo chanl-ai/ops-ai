@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { AskAnAdmin } from '@/components/connections/ask-an-admin';
 import { OwnCredentialsForm } from '@/components/connections/own-credentials-form';
 import { useMyConnections, useRefreshMine } from '@/hooks/connections-queries';
-import { APP_STATES } from '@/lib/app-state';
+import { APP_STATES, labelFor } from '@/lib/app-state';
 import { connectCardState } from '@/lib/connect-card-state';
 import { AppStateBadge } from '@/components/connections/app-state-badge';
 import { usePinDefault } from '@/hooks/systems-queries';
@@ -189,7 +189,12 @@ export interface AppOff {
   appId: string;
   teamId?: string;
   message: string;
+  /** The app's state for the team, from the refusal's code: off, or on with its team account not signed in yet. */
+  appState: 'off' | 'needs_sign_in';
 }
+
+// The refusals for an app the team sets up first, by the app state each means.
+const TEAM_FIRST: Record<string, AppOff['appState']> = { APP_OFF_FOR_TEAM: 'off', NOT_SIGNED_IN: 'needs_sign_in' };
 
 /** The app a call found off for the team, from the gateway's error (or the assistant's request_app), or null. */
 export function appOffForTeam(call: ToolCall): AppOff | null {
@@ -198,21 +203,33 @@ export function appOffForTeam(call: ToolCall): AppOff | null {
   if (error && typeof error === 'object' && 'error' in error) error = (error as { error: unknown }).error;
   if (!error || typeof error !== 'object') return null;
   const e = error as { code?: string; message?: string; details?: Partial<AppOff> };
-  if (e.code !== 'APP_OFF_FOR_TEAM' || !e.details?.appId) return null;
-  return { app: e.details.app ?? 'This app', appId: e.details.appId, teamId: e.details.teamId, message: e.message ?? '' };
+  const appState = TEAM_FIRST[e.code ?? ''];
+  if (!appState || !e.details?.appId) return null;
+  return { app: e.details.app ?? 'This app', appId: e.details.appId, teamId: e.details.teamId, message: e.message ?? '', appState };
 }
 
 /**
- * The card for an app the team has installed but not turned on: who may turn it on is offered Turn on, which opens
- * the app in Connectors (Team setup); anyone else is shown the team's admins to ask. Not now hides the action.
+ * The card for an app the team sets up first: installed but off, or on with its team account not signed in yet. Who
+ * manages the team's apps is offered that step on the app's page (Turn on, or Connect the team account); anyone else is
+ * shown the team's admins to ask. Its words come from the one state table (lib/app-state.ts). Not now hides the action.
  */
 export function AppOffCard({ call, off, readOnly }: { call: ToolCall; off: AppOff; readOnly?: boolean }) {
   const { team } = useTeam();
-  const mayTurnOn = useCan('connections', 'manage') === true;
+  const manages = useCan('connections', 'manage') === true;
   const [dismissed, setDismissed] = React.useState(false);
   const teamName = team?.name ?? 'this team';
+  const signIn = off.appState === 'needs_sign_in';
+  const label = labelFor(off.appState, manages);
+  const title = signIn ? `${off.app} is on for ${teamName}, but its team account is not signed in` : `${off.app} is off for ${teamName}`;
+  const said = manages
+    ? signIn
+      ? `Connect the team account; its tools then work in chat.`
+      : `You can turn it on for ${teamName}; its tools then work in chat.`
+    : signIn
+      ? 'Only a team admin can connect the team account.'
+      : 'Only a team admin can turn it on.';
   return (
-    <div className="flex flex-col gap-2" data-testid="app-off-card" data-app={off.appId}>
+    <div className="flex flex-col gap-2" data-testid="app-off-card" data-app={off.appId} data-state={off.appState}>
       <ChatToolCall
         name={call.label ?? call.name}
         state="failed"
@@ -222,23 +239,23 @@ export function AppOffCard({ call, off, readOnly }: { call: ToolCall; off: AppOf
         detail={call.server}
         badge={
           <Badge variant="outline" className="rounded-full text-xs">
-            Off for this team
+            {label}
           </Badge>
         }
       />
       <Alert>
         <Plug />
         <AlertTitle className="flex flex-wrap items-center gap-2">
-          {`${off.app} is off for ${teamName}`}
-          <Badge variant="outline">Off for this team</Badge>
+          {title}
+          <Badge variant="outline">{label}</Badge>
         </AlertTitle>
         <AlertDescription>
-          <p>{mayTurnOn ? `You can turn it on for ${teamName}; its tools then work in chat.` : 'Only a team admin can turn it on.'}</p>
+          <p>{said}</p>
           {!readOnly && !dismissed && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              {mayTurnOn ? (
+              {manages ? (
                 <Button size="sm" asChild data-testid="app-off-turn-on">
-                  <Link href={appPageHref(off.appId)}>Turn on {off.app}</Link>
+                  <Link href={appPageHref(off.appId)}>{signIn ? 'Connect the team account' : `Turn on ${off.app}`}</Link>
                 </Button>
               ) : (
                 <AskAnAdmin testId="app-off-ask" />

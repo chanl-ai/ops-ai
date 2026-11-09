@@ -137,7 +137,7 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
         return 403, "CONNECTION_NOT_LINKED", str(module["sign_in_needed"]), {}
     if module.get("instance_missing"):
         # The team account has not signed in yet. The plugin is on.
-        return 403, "NOT_SIGNED_IN", str(module["instance_missing"]), {}
+        return 403, "NOT_SIGNED_IN", str(module["instance_missing"]), dict(module.get("team_sign_in") or {})
     if module.get("app_off"):
         # Installed and off for the caller's team: refused before approval, naming the app and team as
         # CONNECTION_NOT_LINKED names its account, so the caller can show who turns it on.

@@ -146,6 +146,39 @@ try {
           errors.push(...page.errors);
           await page.context().close();
         }
+        // Salesforce on with the team's account only, which nobody has signed in yet: chat shows a card naming
+        // Salesforce, offering whoever manages the team's apps Connect the team account and anyone else Ask an admin.
+        const teamCard = async (email, team = 'team_ops') => {
+          const page = await signedIn(browser, consoleUrl, email, 1280);
+          const thread = (await call(agentsUrl, 'POST', '/v1/chat/threads', as(await tokenFor(email), team), { kbIds: [] })).data;
+          await page.goto(`${consoleUrl}/chat/${thread.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          const box = page.getByRole('textbox', { name: 'Message' });
+          await box.waitFor({ timeout: 120_000 });
+          await box.fill('What is the status of Salesforce case 00044818?');
+          await page.getByRole('button', { name: 'Send', exact: true }).click();
+          const card = page.getByTestId('app-off-card');
+          await card.waitFor({ timeout: 120_000 });
+          await page.waitForTimeout(1500);
+          const seen = { state: await card.getAttribute('data-state'), text: (await card.innerText()).replace(/\s+/g, ' '), connect: await page.getByTestId('app-off-turn-on').count(), ask: await page.getByTestId('app-off-ask').count() };
+          await page.screenshot({ path: join(SHOTS, `team-account-card-${email.split('@')[0]}.png`), fullPage: true });
+          errors.push(...page.errors);
+          await page.context().close();
+          return seen;
+        };
+        await step('0c with the team account not signed in, chat offers an admin Connect the team account and a member Ask an admin', async () => {
+          const on = await call(tools, 'PUT', `/v1/apps/${encodeURIComponent(sfId)}/team`, priya, { enabled: true, signIn: 'team', settings: { login_url: sf.info.login_url } });
+          await call(agentsUrl, 'POST', '/v1/team-assistant/app-tools', priya, { moduleIds: on.data?.moduleIds ?? [] });
+          const admin = await teamCard('p.shah@harborpine.example');
+          const member = await teamCard('r.menon@harborpine.example');
+          const ok = (x) => x.state === 'needs_sign_in' && /Salesforce/.test(x.text) && !/this app/i.test(x.text);
+          check('0c with the team account not signed in, chat offers an admin Connect the team account and a member Ask an admin',
+            on.status === 200 && ok(admin) && /Connect the team account/.test(admin.text) && admin.connect === 1 && ok(member) && member.ask === 1 && member.connect === 0,
+            { status: on.status, admin, member });
+          // Back to off with no account, so the next steps meet Salesforce as a first turn-on.
+          const card = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.id === sfId);
+          await call(tools, 'PUT', `/v1/apps/${encodeURIComponent(sfId)}/team`, priya, { enabled: false });
+          if (card?.connectionId) await call(tools, 'DELETE', `/v1/apps/${encodeURIComponent(sfId)}/accounts/${card.connectionId}`, priya);
+        });
         // Salesforce on for the team, each person signing in, and nobody signed in yet (no instance): James's chat still
         // gets a Connect card naming Salesforce, never a bare error (the gateway's refusal names the account and app).
         const james0 = await signedIn(browser, consoleUrl, 'j.richardson@harborpine.example', 1280);

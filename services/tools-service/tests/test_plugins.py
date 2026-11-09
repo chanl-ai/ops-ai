@@ -321,6 +321,22 @@ async def test_a_persons_own_account_with_no_instance_is_not_plugin_disabled(
     assert (details["reason"], details["access"]) == ("not_connected", "read") and details["app"], details
 
 
+async def test_a_team_account_with_no_instance_names_its_app_for_the_chat_card(
+    engine: AsyncEngine, store: ModuleStore, tenant: str
+) -> None:
+    # The team signs in with one account, and nobody has yet: the refusal names the app and team, so chat shows a card
+    # that sends an admin to connect the team account and anyone else to ask one.
+    connections = ConnectionStore(engine)
+    conn = await connection(connections, tenant, "team")
+    await bind(engine, tenant, TEAM, "", conn)
+    h = host(engine, store)
+    h.connections = connections
+    seen = await h.for_call(tenant, TEAM, module_for(tenant), "test", person=JAMES.sub)
+    refused = _before_policy(Resolved("read", "plugin", seen, {"name": "desk_get_case", "enabled": True}), {})
+    assert refused is not None and refused[1] == "NOT_SIGNED_IN", refused
+    assert refused[3]["appId"].startswith("plugin:") and refused[3]["app"] and refused[3]["teamId"] == TEAM, refused
+
+
 async def test_a_plugin_tools_call_keeps_the_plugins_address_not_the_connections_origin(
     local_catalog: Any, engine: AsyncEngine, store: ModuleStore, tenant: str
 ) -> None:

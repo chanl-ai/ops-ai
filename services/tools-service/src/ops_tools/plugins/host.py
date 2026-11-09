@@ -871,6 +871,12 @@ class PluginHost:
                     f"{(conn or {}).get('name') or plugin.manifest.title} has no instance yet; a team admin signs in "
                     "to it first."
                 ),
+                # Named as an app off for the team is, so chat shows who signs the team account in.
+                "team_sign_in": {
+                    "app": plugin.manifest.title,
+                    "appId": plugin_app(plugin.manifest.id),
+                    "teamId": team_id,
+                },
                 "connection_id": None,
                 "egress_hosts": [],
             }
