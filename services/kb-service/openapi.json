@@ -288,6 +288,17 @@
             "title": "Digest",
             "type": "string"
           },
+          "duplicateOf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicateof"
+          },
           "effectiveDate": {
             "title": "Effectivedate",
             "type": "string"
@@ -1137,6 +1148,17 @@
             "title": "Digest",
             "type": "string"
           },
+          "duplicateOf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicateof"
+          },
           "effectiveDate": {
             "title": "Effectivedate",
             "type": "string"
@@ -1345,6 +1367,17 @@
           "digest": {
             "title": "Digest",
             "type": "string"
+          },
+          "duplicateOf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicateof"
           },
           "effectiveDate": {
             "title": "Effectivedate",

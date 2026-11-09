@@ -21,6 +21,7 @@ from ops_ingest import ParsedDocument, SplitResult, parse, split
 from ops_ingest.metadata import resolve_metadata
 from ops_ingest.parsers import TooLargeError, UnsupportedFormatError
 from ops_ingest.rules import ItemFacts, evaluate_rules
+from ops_ingest.split import document_digest
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ValidationFailed
 from ops_service_kit.http import options_page, options_window
 from ops_service_kit.ids import new_id
@@ -29,7 +30,16 @@ from .agents import AgentDirectory, Usage
 from .files import FileIntake, FileMissing, FileNotScanned, Stored
 from .readings import READING_PENDING, Readings, parsed_of, read_with
 from .retrieval import Passage, Retriever
-from .source_settings import InvalidSettings, SourceSettings, index_key, merged, rebuild_for, stored, wire
+from .source_settings import (
+    InvalidSettings,
+    SourceSettings,
+    index_key,
+    merged,
+    rebuild_for,
+    split_settings,
+    stored,
+    wire,
+)
 from .store import KnowledgeStore
 from .tool_sources import ToolReader, source_config, sync_tool_source
 
@@ -551,6 +561,7 @@ class KnowledgeService:
         _, by_source = await self._joined(who.tenant_id)
         readers = [b for b in await self.store.bases(who.tenant_id) if b["id"] in by_source.get(source_id, [])]
         recent = [_run(r) for r in (await self.store.runs(who.tenant_id, source_id=source_id))[:5]]
+        items = await self.store.items(who.tenant_id, source_ids=[source_id])
         return {
             **self._source(s, by_source.get(source_id, [])),
             "readers": [
@@ -570,12 +581,14 @@ class KnowledgeService:
             **({"lastRunDurationSec": recent[0]["durationSec"]} if recent else {}),
             "errorGroups": [],
             "itemCount": sum(s["item_counts"].values()),
-            "reindexNeeded": any(
-                self.built_under_other_settings(s, i)
-                for i in await self.store.items(who.tenant_id, source_ids=[source_id])
-            ),
+            "reindexNeeded": any(self.built_under_other_settings(s, i) for i in items),
             "requiredMetadata": [],
-            "governance": {"excluded": 0, "held": 0, "duplicates": 0, "superseded": 0},
+            "governance": {
+                "excluded": 0,
+                "held": 0,
+                "duplicates": sum(1 for i in items if i.get("duplicate_of") or i["status"] == "skipped"),
+                "superseded": 0,
+            },
             "aiStepsWaiting": [],
         }
 
@@ -937,7 +950,8 @@ class KnowledgeService:
     ) -> list[dict[str, Any]]:
         """The item's pieces under the source's settings, each with its index units and its mapped metadata."""
         settings = self.settings_of(s)
-        return pieces(who.tenant_id, item_id, version, title, split(doc, settings.ingest), self._metadata(s, doc))
+        result = split(doc, split_settings(settings))
+        return pieces(who.tenant_id, item_id, version, title, result, self._metadata(s, doc))
 
     def _metadata(self, s: dict[str, Any], doc: ParsedDocument) -> dict[str, str]:
         mapped = resolve_metadata(
@@ -973,10 +987,11 @@ class KnowledgeService:
             "chunk_count": len(chunks),
             "read_with": read_with,
             "indexed_with": index_key(settings),
+            "content_digest": None if error else document_digest(doc, split_settings(settings)),
             "processed_at": datetime.now(UTC),
         }
         await self.store.reindex(who.tenant_id, existing["id"], values, chunks)
-        return {**existing, **values}
+        return await self._duplicates(who, s, {**existing, **values})
 
     def built_under_other_settings(self, s: dict[str, Any], item: dict[str, Any]) -> bool:
         """Whether an indexed item's pieces were split, or its file read, under settings the source no longer has.
@@ -1011,7 +1026,8 @@ class KnowledgeService:
             said: dict[str, Any] = answer.get("error") or {}
             reason = str(said.get("message") or "the file could not be read")
             return await self._failed(who, s, existing, name=name, found=found, error=("parse", reason))
-        doc = parsed_of(answer)
+        cleaning = self.settings_of(s).cleaning
+        doc = parsed_of(answer, furniture=cleaning.furniture, main_content=cleaning.main_content)
         if rebuild and existing is not None:
             return await self._reindex(who, s, existing, name=name, doc=doc, read_with=read_with(answer))
         return await self._index(
@@ -1110,7 +1126,8 @@ class KnowledgeService:
         settings = self.settings_of(s)
         try:
             if doc is None:
-                doc = parse(data or b"", filename=name, mime_type=mime)
+                # Content a tool gives has no reading yet, so its furniture goes as it is parsed.
+                doc = parse(data or b"", filename=name, mime_type=mime, clean=settings.cleaning.furniture)
             title, pages = title_given or doc.title or name, doc.source.page_count
             chunks = self._chunks(who, s, doc, item_id=item_id, version=version, title=title)
             if chunks:
@@ -1143,6 +1160,8 @@ class KnowledgeService:
             "processed_at": now,
             "read_with": read_with,
             "indexed_with": None if error else index_key(settings),
+            "content_digest": None if error or doc is None else document_digest(doc, split_settings(settings)),
+            "duplicate_of": None,
             **(extra or {}),
         }
         version_row = {
@@ -1161,7 +1180,32 @@ class KnowledgeService:
             before = await self.store.chunks(who.tenant_id, item_id)
             change = _change(who, s, item, existing["version"], before, chunks, now)
         await self.store.index_version(who.tenant_id, item, version_row, chunks, new=existing is None, change=change)
-        return item
+        return await self._duplicates(who, s, item)
+
+    async def _duplicates(self, who: Who, s: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+        """An item whose cleaned text another indexed item in the same knowledge base already holds. Flagged (the
+        default): the older one names the newer and leaves search, and both say so. Skipped: the newer one is kept out
+        of search and says which item holds the text."""
+        digest = item.get("content_digest")
+        if item["status"] != "indexed" or not digest:
+            return item
+        same = await self.store.same_content(who.tenant_id, str(item["id"]), str(digest))
+        if not same:
+            return item
+        names = ", ".join(sorted(str(d["title"]) for d in same))
+        if self.settings_of(s).cleaning.duplicates == "skip":
+            values = {"status": "skipped", "warning": f"Not indexed: the same text is already in {names}."}
+            await self.store.update_item(who.tenant_id, str(item["id"]), values)
+            return {**item, **values}
+        for d in same:
+            await self.store.update_item(
+                who.tenant_id,
+                str(d["id"]),
+                {"duplicate_of": item["id"], "warning": f"Left out of search: {item['title']} has the same text."},
+            )
+        values = {"warning": f"Same text as {names}, which search now leaves out."}
+        await self.store.update_item(who.tenant_id, str(item["id"]), values)
+        return {**item, **values}
 
     # ── Retrieval ────────────────────────────────────────────────────────
 
@@ -1438,6 +1482,7 @@ class KnowledgeService:
             "status": SHOWN_STATUS.get(i["status"], i["status"]),
             **({"errorClass": i["error_class"], "error": i["error"]} if i["error_class"] else {}),
             **({"warning": i["warning"]} if i.get("warning") else {}),
+            **({"duplicateOf": i["duplicate_of"]} if i.get("duplicate_of") else {}),
             "chunkCount": i["chunk_count"],
             "tags": s["tags"],
             "metadata": {},

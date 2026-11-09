@@ -34,12 +34,18 @@ def read_with(answer: dict[str, Any]) -> str:
     return f"{answer.get('readerVersion')}:{settings.get('ocr')}:{settings.get('language')}"
 
 
-def parsed_of(answer: dict[str, Any], *, fields: dict[str, str] | None = None) -> ParsedDocument:
-    """A finished reading as the document `split` takes."""
+def parsed_of(
+    answer: dict[str, Any],
+    *,
+    fields: dict[str, str] | None = None,
+    furniture: bool = False,
+    main_content: bool = False,
+) -> ParsedDocument:
+    """A finished reading as the document `split` takes, with the blocks the source's cleaning drops left out."""
     reading = Reading(
         reader_version=str(answer["readerVersion"]),
         settings=ReadingSettings.model_validate(answer.get("settings") or {}),
         facts=FileFacts.model_validate(answer["facts"]),
         pages=[Page.model_validate(p) for p in cast(list[dict[str, Any]], answer.get("pages") or [])],
     )
-    return to_parsed_document(reading, fields=fields)
+    return to_parsed_document(reading, fields=fields, furniture=furniture, main_content=main_content)

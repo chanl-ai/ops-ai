@@ -662,6 +662,8 @@ export interface components {
             collection: string;
             /** Digest */
             digest: string;
+            /** Duplicateof */
+            duplicateOf?: string | null;
             /** Effectivedate */
             effectiveDate: string;
             /** Error */
@@ -1012,6 +1014,8 @@ export interface components {
             collection: string;
             /** Digest */
             digest: string;
+            /** Duplicateof */
+            duplicateOf?: string | null;
             /** Effectivedate */
             effectiveDate: string;
             /** Error */
@@ -1081,6 +1085,8 @@ export interface components {
             };
             /** Digest */
             digest: string;
+            /** Duplicateof */
+            duplicateOf?: string | null;
             /** Effectivedate */
             effectiveDate: string;
             /** Error */

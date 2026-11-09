@@ -45,6 +45,7 @@ class DocumentRow(TypedDict, closed=True):
     chunkCount: int
     collection: str
     digest: str
+    duplicateOf: NotRequired[str | None]
     effectiveDate: str
     error: NotRequired[str | None]
     errorClass: NotRequired[str | None]
@@ -122,6 +123,7 @@ class Item(TypedDict, closed=True):
     chunkCount: int
     collection: str
     digest: str
+    duplicateOf: NotRequired[str | None]
     effectiveDate: str
     error: NotRequired[str | None]
     errorClass: NotRequired[str | None]
@@ -156,6 +158,7 @@ class ItemWithDetail(TypedDict, closed=True):
     collection: str
     detail: dict[str, Any]
     digest: str
+    duplicateOf: NotRequired[str | None]
     effectiveDate: str
     error: NotRequired[str | None]
     errorClass: NotRequired[str | None]

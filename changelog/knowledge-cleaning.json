@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Menus, footers and duplicate pages stay out of answers",
+  "description": "A source can drop page menus, banners and footers and keep only a page's main content, and when two sources hold the same text only the newer copy is searched.",
+  "tag": "new"
+}

@@ -643,6 +643,11 @@ export interface components {
             caption?: string | null;
             /** Cells */
             cells?: components["schemas"]["Cell"][];
+            /**
+             * Furniture
+             * @default false
+             */
+            furniture: boolean;
             /** Id */
             id: string;
             /**
@@ -654,6 +659,11 @@ export interface components {
             level?: number | null;
             /** Lines */
             lines?: components["schemas"]["Line"][];
+            /**
+             * Main
+             * @default false
+             */
+            main: boolean;
             /**
              * Order
              * @default 0

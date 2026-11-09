@@ -131,6 +131,13 @@ def merged(current: SourceSettings, patch: dict[str, Any]) -> SourceSettings:
     return out
 
 
+def split_settings(s: SourceSettings) -> IngestSettings:
+    """The split as it runs: with page furniture cleaned, the boilerplate lines (`clean`) go too."""
+    if s.cleaning.furniture and "clean" not in s.ingest.strategies:
+        return s.ingest.model_copy(update={"strategies": ["clean", *s.ingest.strategies]})
+    return s.ingest
+
+
 def _digest(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:16]
 

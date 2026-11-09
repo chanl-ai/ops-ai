@@ -16,7 +16,9 @@ class DocumentBuilder:
         self.pages_without_text: list[int] = []
         self.removed_chars = 0
 
-    def heading(self, text: str, level: int, page: int | None = None) -> None:
+    def heading(
+        self, text: str, level: int, page: int | None = None, *, furniture: bool = False, main: bool = False
+    ) -> None:
         text = " ".join(text.split())
         if not text:
             return
@@ -24,12 +26,14 @@ class DocumentBuilder:
         while self._stack and self._stack[-1][0] >= level:
             self._stack.pop()
         self._stack.append((level, text))
-        self._sections.append(Section(heading_path=[t for _, t in self._stack], level=level, blocks=[], page=page))
+        path = [t for _, t in self._stack]
+        section = Section(heading_path=path, level=level, blocks=[], page=page, furniture=furniture, main=main)
+        self._sections.append(section)
 
-    def paragraph(self, text: str, page: int | None = None) -> None:
+    def paragraph(self, text: str, page: int | None = None, *, furniture: bool = False, main: bool = False) -> None:
         text = text.strip()
         if text:
-            self._current(page).blocks.append(Paragraph(text=text, page=page))
+            self._current(page).blocks.append(Paragraph(text=text, page=page, furniture=furniture, main=main))
 
     def table(
         self,
@@ -40,16 +44,20 @@ class DocumentBuilder:
         caption: str | None = None,
         sheet: str | None = None,
         keep_as_table: bool = True,
+        furniture: bool = False,
+        main: bool = False,
     ) -> None:
         headers = [" ".join(h.split()) for h in headers]
         rows = [[" ".join(c.split()) for c in row] for row in rows if any(c.strip() for c in row)]
         if not headers and not rows:
             return
-        table = Table(headers=headers, rows=rows, caption=caption, page=page, sheet=sheet)
+        table = Table(
+            headers=headers, rows=rows, caption=caption, page=page, sheet=sheet, furniture=furniture, main=main
+        )
         if keep_as_table:
             self._current(page).blocks.append(table)
         else:
-            self.paragraph(table.as_text(), page)
+            self.paragraph(table.as_text(), page, furniture=furniture, main=main)
 
     def _current(self, page: int | None) -> Section:
         section = self._sections[-1]

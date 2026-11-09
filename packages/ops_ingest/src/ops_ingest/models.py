@@ -28,6 +28,10 @@ class Paragraph(_Model):
     kind: Literal["paragraph"] = "paragraph"
     text: str
     page: int | None = None
+    #: Inside page furniture (navigation, banners, footers), kept so cleaning decides; set by the HTML reader.
+    furniture: bool = False
+    #: Inside the page's main or article element; set by the HTML reader.
+    main: bool = False
 
 
 class Table(_Model):
@@ -37,6 +41,8 @@ class Table(_Model):
     caption: str | None = None
     page: int | None = None
     sheet: str | None = None
+    furniture: bool = False
+    main: bool = False
 
     def as_text(self) -> str:
         """The table as pipe-separated text, used when a table is chunked as prose."""
@@ -57,6 +63,9 @@ class Section(_Model):
     level: int = 0
     blocks: list[Block] = Field(default_factory=list[Block])
     page: int | None = None
+    #: Whether the section's heading sits in page furniture or in the main element.
+    furniture: bool = False
+    main: bool = False
 
     @property
     def paragraphs(self) -> list[Paragraph]:

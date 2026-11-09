@@ -51,6 +51,9 @@ PNG scan and a two-page TIFF scan, all of a made-up enrolment form.
 | R17 | A form whose fields loop never finishes reading | `test_reading.py::test_form_field_tree_with_a_cycle_is_read_once` |
 | R18 | A truncated image raises out of the read instead of failing its page | `test_reading.py::test_corrupt_image_fails_its_page_with_a_reason` |
 | R14 | A page read on its own after a restart gets other heading levels than in a whole read | `test_reading.py::test_page_read_on_its_own_matches_a_whole_read` |
+| R19 | HTML furniture is lost from the reading, so a cleaning change has to read the page again | `test_reading_marks.py::test_the_reading_keeps_furniture_marked_so_cleaning_needs_no_second_read` |
+| R20 | Furniture is left in after cleaning, or text outside the main element stays with "main content only" | `test_reading_marks.py::test_cleaning_drops_furniture_and_keeps_the_main_content` |
+| R21 | "Main content only" empties a page with no main element | `test_reading_marks.py::test_main_content_only_keeps_a_page_with_no_main_element_whole` |
 
 ## Splitting
 

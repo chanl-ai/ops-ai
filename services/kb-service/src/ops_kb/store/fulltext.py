@@ -38,6 +38,7 @@ _SEARCH = sa.text(
         FROM q, kb_units u
         JOIN kb_chunks c ON c.tenant_id = u.tenant_id AND c.id = u.chunk_id AND c.withdrawn_at IS NULL
         JOIN kb_items i ON i.tenant_id = c.tenant_id AND i.id = c.item_id AND i.status = 'indexed'
+             AND i.duplicate_of IS NULL
         JOIN kb_base_sources l ON l.tenant_id = i.tenant_id AND l.source_id = i.source_id
         WHERE u.tenant_id = :tenant AND l.kb_id = ANY(:kb_ids)
           AND cardinality(q.terms) > 0

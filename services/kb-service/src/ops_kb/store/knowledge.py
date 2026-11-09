@@ -172,6 +172,10 @@ kb_items = sa.Table(
     sa.Column("read_with", sa.String(120)),
     # The digest of the cleaning, splitting and metadata settings its pieces were built under (index_key).
     sa.Column("indexed_with", sa.String(32)),
+    # The digest of its text after cleaning, and the newer item in a base it reads into that holds the same text:
+    # search leaves an item out while it names one.
+    sa.Column("content_digest", sa.String(80)),
+    sa.Column("duplicate_of", sa.String(64)),
     sa.ForeignKeyConstraint(
         ["tenant_id", "source_id"],
         ["kb_sources.tenant_id", "kb_sources.id"],
@@ -179,6 +183,7 @@ kb_items = sa.Table(
         name="fk_kb_item_source",
     ),
     sa.UniqueConstraint("tenant_id", "source_id", "path", name="uq_kb_items_path"),
+    sa.Index("ix_kb_items_content", "tenant_id", "content_digest"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -809,6 +814,28 @@ class KnowledgeStore:
         async with self._tx() as c:
             team = await self._team_of(c, kb_sources, str(row["tenant_id"]), str(row["source_id"]))
             await c.execute(sa.insert(kb_runs).values(**row, team_id=team))
+
+    async def same_content(self, tenant: str, item_id: str, digest: str) -> list[dict[str, Any]]:
+        """Indexed items other than `item_id` with the same cleaned content, in a source read by any knowledge base
+        that reads the item's source."""
+        i, other, link, mine = kb_items, kb_items.alias("other"), kb_base_sources, kb_base_sources.alias("mine")
+        bases = sa.select(mine.c.kb_id).where(mine.c.tenant_id == tenant, mine.c.source_id == other.c.source_id)
+        q = (
+            sa.select(i.c.id, i.c.title, i.c.source_id, i.c.processed_at)
+            .join(link, (link.c.tenant_id == i.c.tenant_id) & (link.c.source_id == i.c.source_id))
+            .join(other, (other.c.tenant_id == i.c.tenant_id) & (other.c.id == item_id))
+            .where(
+                i.c.tenant_id == tenant,
+                i.c.id != item_id,
+                i.c.content_digest == digest,
+                i.c.status == "indexed",
+                link.c.kb_id.in_(bases),
+                team_visible(i),
+            )
+            .distinct()
+        )
+        async with self._tx() as c:
+            return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def update_run(self, tenant: str, run_id: str, values: dict[str, Any]) -> None:
         async with self._tx() as c:
