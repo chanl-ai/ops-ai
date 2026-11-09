@@ -44,7 +44,10 @@ DEMO_PASSWORD = "demo-password-for-tests"
 # The calling service's own key, trusted by the internal app for that service only (I13).
 CALLER = Ed25519Signer.generate("svc-agents-1")
 SERVICES = ServiceAuth(
-    audience="platform", verifiers={CALLER.kid: (CALLER.verifier("platform"), "agents")}, tenant_scoped=False
+    audience="platform",
+    verifiers={CALLER.kid: (CALLER.verifier("platform"), "agents")},
+    tenant_scoped=False,
+    scopes={"agents": ["audit:create"]},
 )
 SERVICE_TOKEN = mint_service_token(CALLER, service="agents", audience="platform", tenant_id=None, ttl_s=3600)
 SERVICE = {"Authorization": f"Bearer {SERVICE_TOKEN}"}

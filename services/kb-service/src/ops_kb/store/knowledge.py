@@ -19,13 +19,15 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.errors import Conflict
 from ops_store import Guarantee, isolation
+from ops_store.audit import record as record_audit
 from ops_store.database import open_database
 from ops_store.dialect import db_now
+from ops_store.outbox import outbox_table
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.search import contains
 from ops_store.team_scope import any_team, team_visible
 
-__all__ = ["ROLE", "SYSTEM_ROLE", "AsyncEngine", "KnowledgeStore", "engine_for", "metadata", "reachable"]
+__all__ = ["ROLE", "SYSTEM_ROLE", "AsyncEngine", "KnowledgeStore", "engine_for", "kb_outbox", "metadata", "reachable"]
 
 metadata = sa.MetaData()
 
@@ -276,6 +278,11 @@ kb_runs = sa.Table(
 )
 
 
+# The audit entries of settings changes, written in the transaction of the change and relayed to platform-service's
+# one audit log (ops_store.audit); read across tenants by the relay as ops_kb_system.
+kb_outbox = outbox_table(metadata, "kb_outbox", info=TENANT_SCOPED)
+
+
 class KnowledgeStore:
     """kb-service's door to its knowledge bases and sources, always inside one tenant. Creating a knowledge base with
     its links, attaching sources and removing a source with its links each land whole."""
@@ -395,11 +402,17 @@ class KnowledgeStore:
             # An id is unique in the tenant; one another team holds is not seen before the insert.
             raise Conflict(f"A knowledge base with id {row['id']} already exists.") from e
 
-    async def update_base(self, tenant: str, kb_id: str, values: dict[str, Any]) -> None:
+    async def update_base(
+        self, tenant: str, kb_id: str, values: dict[str, Any], *, audit: dict[str, Any] | None = None
+    ) -> None:
+        """`audit` is the change's entry for the account's audit log, written in the same transaction."""
         async with self._tx() as c:
             await c.execute(
                 sa.update(kb_bases).where(kb_bases.c.tenant_id == tenant, kb_bases.c.id == kb_id).values(**values)
             )
+            if audit is not None:
+                team = await self._team_of(c, kb_bases, tenant, kb_id)
+                await record_audit(c, kb_outbox, tenant_id=tenant, team_id=team, **audit)
 
     async def attach(self, tenant: str, kb_id: str, source_ids: list[str]) -> None:
         async with self._tx() as c:
@@ -669,13 +682,19 @@ class KnowledgeStore:
                 sa.update(kb_items).where(kb_items.c.tenant_id == tenant, kb_items.c.id == item_id).values(**values)
             )
 
-    async def update_source(self, tenant: str, source_id: str, values: dict[str, Any]) -> None:
+    async def update_source(
+        self, tenant: str, source_id: str, values: dict[str, Any], *, audit: dict[str, Any] | None = None
+    ) -> None:
+        """`audit` is the change's entry for the account's audit log, written in the same transaction."""
         async with self._tx() as c:
             await c.execute(
                 sa.update(kb_sources)
                 .where(kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
                 .values(**values)
             )
+            if audit is not None:
+                team = await self._team_of(c, kb_sources, tenant, source_id)
+                await record_audit(c, kb_outbox, tenant_id=tenant, team_id=team, **audit)
 
     async def detach(self, tenant: str, kb_id: str, source_id: str) -> None:
         async with self._tx() as c:

@@ -1489,6 +1489,30 @@ export interface components {
             /** Teamid */
             teamId: string | null;
         };
+        /**
+         * AuditEventIn
+         * @description One audit entry another service recorded in its outbox (ops_store.audit), as its relay delivers it. The tenant
+         *     and team are the service token's.
+         */
+        AuditEventIn: {
+            /** Actor */
+            actor: string;
+            /** Key */
+            key: string;
+            /**
+             * Name
+             * @constant
+             */
+            name: "audit.recorded";
+            payload: components["schemas"]["AuditPayload"];
+        };
+        /** AuditEventOut */
+        AuditEventOut: {
+            /** Id */
+            id: string;
+            /** Written */
+            written: boolean;
+        };
         /** AuditPage */
         AuditPage: {
             /** Data */
@@ -1507,6 +1531,21 @@ export interface components {
             viewCounts: {
                 [key: string]: number;
             };
+        };
+        /** AuditPayload */
+        AuditPayload: {
+            /** Action */
+            action: string;
+            /** Detail */
+            detail: {
+                [key: string]: unknown;
+            };
+            /** Requestid */
+            requestId?: string | null;
+            /** Targetid */
+            targetId: string;
+            /** Targetkind */
+            targetKind: string;
         };
         /** BackgroundHealthOut */
         BackgroundHealthOut: {
@@ -1625,6 +1664,15 @@ export interface components {
         /** Envelope[ApiKeyOut] */
         Envelope_ApiKeyOut_: {
             data: components["schemas"]["ApiKeyOut"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[AuditEventOut] */
+        Envelope_AuditEventOut_: {
+            data: components["schemas"]["AuditEventOut"];
             /**
              * Success
              * @constant

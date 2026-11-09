@@ -163,6 +163,14 @@ PROCESSES: tuple[Process, ...] = (
         "Reads queued before a restart are resumed for every team, each in its own team.",
     ),
     Process(
+        "kb_relay",
+        "kb",
+        "Knowledge audit hand-off",
+        "Sends knowledge settings changes to the account's audit log.",
+        2.0,
+        "It delivers every team's audit entries, each as its own team.",
+    ),
+    Process(
         "knowledge_schedule",
         "kb",
         "Knowledge schedule",

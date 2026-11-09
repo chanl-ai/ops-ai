@@ -118,7 +118,7 @@ do inside a team; they never open another team's data.
 
 | Record | What it holds | Where |
 |---|---|---|
-| Audit log | Sign-in, sign-out, step-up and refresh-token reuse; invites, role changes and removals; API keys created and revoked; team renames; team policy changes; access checks. Written in the same transaction as the change it records | platform, `audit_entries` |
+| Audit log | Sign-in, sign-out, step-up and refresh-token reuse; invites, role changes and removals; API keys created and revoked; team renames; team policy changes; access checks. Written in the same transaction as the change it records. Knowledge base and source settings changes too, each field before and after: kb-service writes the entry with the change and its relay delivers it (`ops_store.audit`), so the Audit page reads one log | platform, `audit_entries` |
 | Tool call log | Every tool call: who it was for, which agent or workflow made it, the tool, the input's hash, the decision and its reasons, the approvers, the outcome, the environment and connection used | tools, `gateway_calls` |
 | Security changes | Every credential created, rotated, deleted or used; every allow-list change; every connection change, sign-in and failed refresh; every storage settings change | tools and files audit tables |
 | Run journal | Each step of each run with its input, output and outcome; each event of each conversation; each case event | agents |

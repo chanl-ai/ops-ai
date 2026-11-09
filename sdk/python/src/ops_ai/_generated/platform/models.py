@@ -49,6 +49,19 @@ class AuditEntryOut(TypedDict, closed=True):
     teamId: str | None
 
 
+class AuditEventOut(TypedDict, closed=True):
+    id: str
+    written: bool
+
+
+class AuditPayload(TypedDict, closed=True):
+    action: str
+    detail: dict[str, Any]
+    requestId: NotRequired[str | None]
+    targetId: str
+    targetKind: str
+
+
 class BackgroundProcessOut(TypedDict, closed=True):
     does: str
     doneHour: int
@@ -81,6 +94,11 @@ Id: TypeAlias = str
 
 class DeleteIn(TypedDict, closed=True):
     ids: list[Id]
+
+
+class EnvelopeAuditEventOut(TypedDict, closed=True):
+    data: AuditEventOut
+    success: Literal[True]
 
 
 class EnvelopeListStr(TypedDict, closed=True):
@@ -637,6 +655,13 @@ class ApiKeySummary(TypedDict, closed=True):
     status: Literal["active", "revoked", "disabled"]
     target: KeyTarget | None
     teamId: str
+
+
+class AuditEventIn(TypedDict, closed=True):
+    actor: str
+    key: str
+    name: Literal["audit.recorded"]
+    payload: AuditPayload
 
 
 class AuditPage(TypedDict, closed=True):

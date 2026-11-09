@@ -38,6 +38,7 @@ from ops_service_kit.http import (
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.settings import Settings
 from ops_signin import PasswordHasher
+from ops_store.audit import AUDIT_SCOPE
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
 
@@ -52,7 +53,7 @@ from ..roles import Roles
 from ..signin_options import SignInOptions
 from ..signin_settings import SignInSettings
 from ..sso import Sso
-from ..store.audit import AuditLog
+from ..store.audit import AuditLog, record_delivered
 from ..store.holders import HolderStore
 from ..store.identity import IdentityStore
 from ..store.keys import KeyStore
@@ -79,6 +80,8 @@ from .schemas import (
     ApiKeyIn,
     ApiKeyOut,
     ApiKeySummary,
+    AuditEventIn,
+    AuditEventOut,
     AuditKind,
     AuditPage,
     BulkOut,
@@ -1269,6 +1272,32 @@ def create_internal_app(store: IdentityStore, *, services: ServiceAuth, signer: 
         if not caller.tenant_id:
             raise Forbidden("The service token names no tenant.", code="tenant_required")
         return ok({"permissionVersion": await store.permission_version(caller.tenant_id)})
+
+    @app.post(
+        "/v1/audit-events",
+        tags=["audit"],
+        response_model=Envelope[AuditEventOut],
+        responses=ERRORS,
+    )
+    async def receive_audit_event(  # pyright: ignore[reportUnusedFunction]
+        body: AuditEventIn, caller: Annotated[Caller, Depends(services.principal)]
+    ) -> Any:
+        """An audit entry another service recorded with the change it describes (ops_store.audit), delivered by that
+        service's relay, so the Audit page reads one log for the whole account. The token holds `audit:create` and
+        names the tenant and team; the same entry twice is kept once."""
+        if AUDIT_SCOPE not in caller.scopes:
+            raise Forbidden(f"This service token does not hold the {AUDIT_SCOPE} scope.", code="scope_required")
+        if not caller.tenant_id or not caller.team_id:
+            raise Forbidden("An audit entry's token names its workspace and team.", code="team_required")
+        written = await record_delivered(
+            store.db,
+            tenant_id=caller.tenant_id,
+            entry_id=body.key,
+            team_id=caller.team_id,
+            actor=body.actor,
+            payload=body.payload.model_dump(by_alias=True),
+        )
+        return ok({"id": body.key, "written": written})
 
     if signer is not None:
         acting = ActingFor(store, signer)

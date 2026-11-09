@@ -481,7 +481,8 @@ class KnowledgeService:
         if patch.get("retrieval") is not None:
             values["retrieval"] = {**b["retrieval"], **patch["retrieval"]}
         if values:
-            await self.store.update_base(who.tenant_id, kb_id, values)
+            entry = audit_entry(who, "knowledge.base.settings", "knowledge_base", kb_id, b["name"], b, values)
+            await self.store.update_base(who.tenant_id, kb_id, values, audit=entry)
         by_kb, _ = await self._joined(who.tenant_id)
         return self._base({**b, **values}, by_kb.get(kb_id, []), await self._counts(who.tenant_id))
 
@@ -1154,7 +1155,8 @@ class KnowledgeService:
             if patch.get(key) is not None:
                 values[key] = patch[key]
         if values:
-            await self.store.update_source(who.tenant_id, source_id, values)
+            entry = audit_entry(who, "knowledge.source.settings", "knowledge_source", source_id, s["name"], s, values)
+            await self.store.update_source(who.tenant_id, source_id, values, audit=entry)
         _, by_source = await self._joined(who.tenant_id)
         return self._source({**s, **values}, by_source.get(source_id, []))
 
@@ -1475,6 +1477,46 @@ def _change(  # noqa: PLR0917 - one call site, every argument a different part o
         "after": new.get(section, ""),
         "changed_by": who.email,
         "changed_at": at,
+    }
+
+
+# How the audit log names each kind of record a settings change is about.
+AUDITED = {"knowledge_base": "knowledge base", "knowledge_source": "source"}
+
+
+def audit_entry(  # noqa: PLR0917 - each argument a different part of the entry
+    who: Who,
+    action: str,
+    target_kind: str,
+    target_id: str,
+    name: str,
+    before: dict[str, Any],
+    values: dict[str, Any],
+) -> dict[str, Any] | None:
+    """The audit entry for a settings change: who made it, which fields changed, and each field before and after
+    (for a nested setting, its changed keys). None when nothing changed. The seed, with no caller, is not audited."""
+    if who.caller is None:
+        return None
+    changes: dict[str, Any] = {}
+    for key, after in values.items():
+        old = before.get(key)
+        if old == after:
+            continue
+        if isinstance(old, dict) and isinstance(after, dict):
+            was, now = cast(dict[str, Any], old), cast(dict[str, Any], after)
+            keys = sorted(k for k in {*was, *now} if was.get(k) != now.get(k))
+            changes[key] = {k: {"from": was.get(k), "to": now.get(k)} for k in keys}
+        else:
+            changes[key] = {"from": old, "to": after}
+    if not changes:
+        return None
+    return {
+        "actor": who.caller.sub,
+        "action": action,
+        "target_kind": target_kind,
+        "target_id": target_id,
+        "summary": f"Changed the settings of {AUDITED[target_kind]} {name}: {', '.join(sorted(changes))}",
+        "detail": {"name": name, "changes": changes},
     }
 
 

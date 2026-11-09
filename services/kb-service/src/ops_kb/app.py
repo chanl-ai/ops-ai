@@ -34,6 +34,7 @@ from ops_service_kit.http import (
 )
 from ops_service_kit.settings import Settings
 from ops_store import isolation
+from ops_store.audit import AUDIT_SCOPE
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
 from ops_store.team_scope import acting_team_of, set_acting_team
@@ -77,6 +78,7 @@ from .schemas import (
 )
 from .service import KnowledgeService, Who
 from .store import AsyncEngine, KnowledgeStore, reachable
+from .store.audit_relay import keep_relaying
 from .store.fulltext import PostgresFullTextRetriever
 from .tool_sources import ToolReader
 
@@ -136,6 +138,15 @@ def _tools_service(settings: Settings) -> ToolReader | None:
     return ToolReader(client)
 
 
+def _platform_service(settings: Settings) -> ServiceClient | None:
+    """platform-service's internal port, which keeps the account's audit log; None on a stack without it."""
+    if not settings.platform_url:
+        return None
+    internal = settings.platform_internal_url or f"http://127.0.0.1:{settings.platform_internal_port}"
+    http = httpx.AsyncClient(base_url=internal, timeout=10)
+    return ServiceClient.for_settings(settings, http, service="kb", audience="platform", scopes=[AUDIT_SCOPE])
+
+
 def _documents_service(settings: Settings) -> Readings | None:
     """documents-service, which reads every file a source holds; unset, file sources cannot be indexed."""
     if not settings.documents_url:
@@ -177,14 +188,17 @@ def create_kb_app(
     tools: ToolReader | None = None,
     readings: Readings | None = None,
     schedule: bool = True,
+    platform: ServiceClient | None = None,
 ) -> FastAPI:
     """`auth` resolves callers through ops_identity's shared dependency; by default built from Settings for audience
     "kb". An admin administers the knowledge bases and sources of the teams it is admin of, and no others (there is
     no tenant-wide role yet). `files` stores uploads; by default files-service when Settings().files_url names it,
     else under kb_files_dir. `agents` says which agents cite each base; by default agents-service at
-    Settings().agents_url."""
+    Settings().agents_url. `platform` receives the audit entries of settings changes; by default platform-service's
+    internal port when Settings().platform_url names it, else the entries wait in the outbox."""
     reader = tools or _tools_service(Settings())
     readings = readings or _documents_service(Settings())
+    audit_log = platform or _platform_service(Settings())
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
@@ -193,12 +207,14 @@ def create_kb_app(
         stop = asyncio.Event()
         runs = (reader is not None or readings is not None) and schedule
         beat = asyncio.create_task(keep_syncing(service, stop)) if runs else None
+        hand_off = asyncio.create_task(keep_relaying(engine, audit_log, stop)) if audit_log is not None else None
         try:
             yield
         finally:
             stop.set()
-            if beat is not None:
-                await asyncio.wait({beat}, timeout=5)
+            tasks = {t for t in (beat, hand_off) if t is not None}
+            if tasks:
+                await asyncio.wait(tasks, timeout=5)
 
     app = FastAPI(title="kb-service", version="0.1.0", generate_unique_id_function=operation_id, lifespan=lifespan)
     install_error_handlers(app)

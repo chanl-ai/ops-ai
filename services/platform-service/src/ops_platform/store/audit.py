@@ -141,6 +141,36 @@ async def record(
     )
 
 
+async def record_delivered(
+    db: TenantDb, *, tenant_id: str, entry_id: str, team_id: str, actor: str, payload: dict[str, Any]
+) -> bool:
+    """An entry another service recorded in its outbox (ops_store.audit), kept once by its id: a relay delivers at
+    least once, so a second delivery writes nothing. A team this account does not hold (deleted since) is kept in the
+    detail, with the entry held to the account. Returns whether it was written now."""
+    async with db.tenant_tx(tenant_id) as c:
+        if (await c.execute(sa.select(audit_entries.c.id).where(audit_entries.c.id == entry_id))).first():
+            return False
+        known = (await c.execute(sa.select(teams.c.id).where(teams.c.id == team_id))).first() is not None
+        detail = dict(payload.get("detail") or {})
+        if not known:
+            detail["teamId"] = team_id
+        await c.execute(
+            audit_entries.insert().values(
+                id=entry_id,
+                tenant_id=tenant_id,
+                team_id=team_id if known else None,
+                actor=actor,
+                action=str(payload["action"]),
+                target_kind=str(payload["targetKind"]),
+                target_id=str(payload["targetId"]),
+                request_id=str(payload.get("requestId") or entry_id),
+                at=now_iso(),
+                detail=detail,
+            )
+        )
+    return True
+
+
 class TeamNameAudit:
     """Conformance adapter: one tenant and team per entity id, renamed with an audited write."""
 
