@@ -141,7 +141,7 @@ await withUiStack(
         const shown = await badge(priyaPage);
         await priyaPage.screenshot({ path: join(SHOTS, 'not-installed.png') });
         check('4 An app the install does not hold says so, with no failed call',
-          shown === 'Not installed' && alert.includes('isn’t installed') && alert.includes('Your operator installs apps') && errs().length === 0,
+          shown === 'Not installed' && alert.includes('isn’t installed') && alert.includes('runs Ops AI at your company') && errs().length === 0,
           { shown, alert, errors: errs() });
       }, priyaPage);
 
@@ -165,6 +165,19 @@ await withUiStack(
         return { badge: await badge(nadia), ask: await nadia.getByTestId('app-admin-connects').isVisible().catch(() => false), own: await nadia.getByTestId('app-own-sign-in').isVisible().catch(() => false) };
       })();
       check('6 A member reads their own state: GitHub needs their sign-in and offers Sign in from Mine, not the admin actions', member.badge === 'Needs sign-in' && member.own, member);
+      // Auth configs are a builder's and an admin's: a viewer's page has no Auth configs tab and no Auth config column.
+      await step('7 A viewer sees no auth config, by tab, column or name; an admin sees the tab', async () => {
+        const configsOf = async (page) => {
+          await open(page, consoleUrl, SF);
+          await page.getByTestId('app-tab-accounts').click();
+          await page.waitForTimeout(800);
+          const column = await page.getByRole('columnheader', { name: 'Auth config' }).count();
+          return { tab: await page.getByTestId('app-tab-auth').count(), column, named: (await page.locator('main').innerText()).includes('Ops AI’s app') };
+        };
+        const viewer = await configsOf(ravi);
+        const admin = await configsOf(priyaPage);
+        check('7 A viewer sees no auth config, by tab, column or name; an admin sees the tab', viewer.tab === 0 && viewer.column === 0 && !viewer.named && admin.tab === 1 && admin.column === 1, { viewer, admin });
+      }, ravi);
     } finally {
       await browser.close();
     }

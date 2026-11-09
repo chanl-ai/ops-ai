@@ -144,7 +144,7 @@ class SystemPlugin(Out):
 # gone or holds no client secret), needs_sign_in, connected, and test_failed (signed in; its test then failed).
 AppState = Literal["connected", "test_failed", "needs_sign_in", "needs_auth_config", "off", "not_installed", "removed"]
 # Plugins are installed by the operator on the system, never from a screen, so no person here can put it back.
-REMOVED = "This app isn't installed on this system. Your operator installs apps."
+REMOVED = "This app isn't installed. Ask the person who runs Ops AI at your company to install it."
 
 
 class CardCredential(Out):
@@ -1672,7 +1672,8 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
         "me": {"connected": bool(signed), "account": signed[0].get("account") if signed else None},
         "peopleCount": len(people),
         "accounts": accounts,
-        "authConfigs": await _auth_configs(apps, who, card, accounts),
+        # Auth configs are for whoever manages the team's apps (builders and admins): anyone else gets none.
+        "authConfigs": await _auth_configs(apps, who, card, accounts) if apps.connections.may_manage(who) else [],
         "tools": tools,
         "skills": skills,
         "usage": usage,
@@ -1759,8 +1760,9 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
                 "stateReason": why,
                 # Each person signs in to it with their own account, so it is no one person's, whoever made it.
                 "owner": {"kind": "each", "name": who.name} if alone else {"kind": "team", "name": who.team.name},
-                "configId": config,
-                "configName": config_names.get(config) if config else None,
+                # Which auth config an account signs in through is shown only to whoever manages the team's apps.
+                "configId": config if may else None,
+                "configName": config_names.get(config) if config and may else None,
                 "actions": actions,
                 "mine": own is not None,
                 # Who signed in: the team's sign-in; on an account each person signs in to, the caller's own. A

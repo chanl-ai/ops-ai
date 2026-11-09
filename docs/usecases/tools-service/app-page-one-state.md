@@ -11,6 +11,7 @@ Status: current. Id: `uc-674`. Service: `tools-service` with platform-service. L
 | S2 | An admin turns an app off: its header and Settings both read off, and Turn on in Settings puts it back on as it was, with no sign-in | ui | 3 | 3 |
 | S3 | Anyone who opens an app the install does not hold reads that it isn't installed and who installs apps, with no failed request | ui | 4 | 4 |
 | S4 | Every app page opens with no console error, for an admin and a member of each team, and a member reads their own state | ui | 5-6 | 5 |
+| S5 | A viewer sees no auth config on an app's page: no Auth configs tab, no Auth config column, no config name | ui | 7 | 7 |
 
 ## Preconditions
 
@@ -29,9 +30,10 @@ Status: current. Id: `uc-674`. Service: `tools-service` with platform-service. L
 | 1 | Sam opens GitHub's page | The header reads Needs an auth config with Add an auth config; Settings says "Add an auth config for GitHub first."; no failed call |
 | 2 | He adds an auth config from the header, then presses Turn on and Turn on in the window | Saving the config opens no window and the header reads Available with Turn on; after Turn on the header reads Needs sign-in and Settings "GitHub is on" |
 | 3 | Priya opens Salesforce › Settings, presses Turn off and confirms, then Turn on in Settings | Off: the header reads Available with Turn on and Settings "Salesforce is off"; on again: Settings "Salesforce is on" in the state it had, no sign-in window |
-| 4 | Priya opens `plugin:acme.ticketdesk`, a plugin the install does not hold | The header reads Not installed and the page says it isn't installed and that the operator installs apps; no failed call |
+| 4 | Priya opens `plugin:acme.ticketdesk`, a plugin the install does not hold | The header reads Not installed and the page says it isn't installed and to ask the person who runs Ops AI at the company; no failed call |
 | 5 | Sam, Nadia, Priya and Ravi each open GitHub, Salesforce and the missing plugin | Zero page errors, console errors and failed /v1 calls on each of the 12 pages |
 | 6 | Nadia opens GitHub | Her own state, Needs sign-in, with Sign in from Mine |
+| 7 | Ravi (viewer) and Priya (admin) open Salesforce's Accounts | Ravi: no Auth configs tab, no Auth config column, no config named; Priya: both |
 
 ## Acceptance layers
 

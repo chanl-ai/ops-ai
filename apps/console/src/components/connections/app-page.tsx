@@ -106,7 +106,8 @@ export function AppPageView({ appId }: { appId: string }) {
   const tabs: [string, string][] = [
     ...(builtIn ? [] : ([['accounts', `Accounts · ${accounts.length}`]] as [string, string][])),
     ['tools', card.kind === 'plugin' ? `Tools · ${toolsAdded} of ${data.tools.length} added` : 'Tools'],
-    ...(builtIn || !configs.length ? [] : ([['auth', `Auth configs · ${configs.length}`]] as [string, string][])),
+    // Auth configs are a builder's and an admin's (card.mayManage); the API sends no one else any.
+    ...(builtIn || !card.mayManage || !configs.length ? [] : ([['auth', `Auth configs · ${configs.length}`]] as [string, string][])),
     ['resources', 'Resources'],
     // The call log names who called each tool, so it is offered only with its cell (lib/nav.ts TOOL_CALL_LOG).
     ...(mayReadCalls ? ([['logs', 'Logs']] as [string, string][]) : []),
@@ -163,7 +164,7 @@ export function AppPageView({ appId }: { appId: string }) {
         <TabsContent value="tools">
           <ToolsTab app={data} />
         </TabsContent>
-        {!builtIn && configs.length > 0 && (
+        {!builtIn && card.mayManage && configs.length > 0 && (
           <TabsContent value="auth">
             <AuthConfigsTab app={data} onShowAccounts={showAccounts} />
           </TabsContent>
