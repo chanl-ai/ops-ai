@@ -34,8 +34,7 @@ export function createKnowledgeChangesMock(deps: Deps): KnowledgeChangesApi {
   // A team sees changes it owns or that touch passages its workflows cite.
   const visible = () => seeds.filter((s) => s.owner === deps.me || inTeam(s.owner) || inTeam(s.citedBy.map((c) => deps.workflowOwner(c.workflowId)))).map(row);
   const find = (id: string) => seeds.find((s) => s.id === id) ?? notFound('Change');
-  const inView = (c: KnowledgeChange, v: ChangeView) =>
-    v === 'resolved' ? !isOpen(c) : v === 'conflicts' ? isOpen(c) && unresolved(c) : v === 'mine' ? isOpen(c) && c.canDecide : isOpen(c);
+  const inView = (c: KnowledgeChange, v: ChangeView) => (v === 'all' ? true : v === 'resolved' ? !isOpen(c) : v === 'mine' ? isOpen(c) && c.canDecide : isOpen(c));
 
   return {
     list: (p) =>
@@ -57,36 +56,27 @@ export function createKnowledgeChangesMock(deps: Deps): KnowledgeChangesApi {
           viewCounts: {
             mine: src.filter((c) => inView(c, 'mine')).length,
             open: src.filter((c) => inView(c, 'open')).length,
-            conflicts: src.filter((c) => inView(c, 'conflicts')).length,
+            conflicts: src.filter((c) => isOpen(c) && unresolved(c)).length,
             resolved: src.filter((c) => inView(c, 'resolved')).length,
           },
         };
       }),
     get: (id) => respond(() => row(find(id))),
-    decide: (id, input) =>
+    decide: (input) =>
+      respond(() =>
+        input.ids.map((id) => {
+          const s = find(id);
+          const c = row(s);
+          if (!isOpen(c)) throw new ApiError(`That draft is ${c.status}; there is nothing to decide.`, 409);
+          if (!c.canDecide) throw new ApiError(`Only ${s.owner} can decide changes to ${s.documentTitle}.`, 403);
+          Object.assign(s, { status: input.decision === 'approve' ? 'approved' : 'rejected', decidedAt: new Date().toISOString(), decidedBy: deps.me });
+          return row(s);
+        }),
+      ),
+    edit: (id, pair) =>
       respond(() => {
         const s = find(id);
-        const c = row(s);
-        if (!isOpen(c)) throw new ApiError(`${id} was already ${c.status}.`, 409);
-        if (!c.canDecide) throw new ApiError(`Only ${s.owner} can decide changes to ${s.documentTitle}.`, 403);
-        if (!input.reason.trim()) throw new ApiError('Give a reason; it is kept in the document’s history.', 400);
-        if (input.decision === 'approved' && unresolved(c)) throw new ApiError(`Resolve the conflict with ${c.conflict!.documentTitle} before approving.`, 409);
-        Object.assign(s, {
-          status: input.decision,
-          decidedAt: new Date().toISOString(),
-          decidedBy: deps.me,
-          decisionReason: input.reason.trim(),
-          retest: input.decision === 'approved' ? { tests: s.citedBy.reduce((n, x) => n + x.tests, 0), workflows: c.citedBy.map((x) => x.workflowName) } : undefined,
-          trust: input.decision === 'approved' ? 'verified' : s.trust,
-        });
-        return row(s);
-      }),
-    resolveConflict: (id, resolution) =>
-      respond(() => {
-        const s = find(id);
-        if (!s.conflict) throw new ApiError(`${id} has no conflict to resolve.`, 409);
-        if (!canDecide(s.owner)) throw new ApiError(`Only ${s.owner} can resolve this conflict.`, 403);
-        s.conflict.resolution = resolution;
+        if (s.faq) s.faq = { ...s.faq, ...pair };
         return row(s);
       }),
   };

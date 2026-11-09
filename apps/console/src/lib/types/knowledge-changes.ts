@@ -1,9 +1,20 @@
 import type { ListParams } from './query';
 
-/** Where a proposed knowledge edit came from. */
-export type ChangeOrigin = 'curation' | 'agent_fix' | 'source_sync';
-export type ChangeStatus = 'pending' | 'approved' | 'rejected';
-export type TrustState = 'verified' | 'changed' | 'unverified';
+/** Where a proposed knowledge edit came from; `generated_faq` is an FAQ draft a source's FAQ step wrote. */
+export type ChangeOrigin = 'curation' | 'agent_fix' | 'source_sync' | 'generated_faq';
+/** A draft is `pending` until decided; `source_changed` when its section changed after it was drafted or approved. */
+export type ChangeStatus = 'pending' | 'approved' | 'rejected' | 'applied' | 'superseded' | 'source_changed';
+export type TrustState = 'verified' | 'changed' | 'unverified' | 'draft' | 'source_changed';
+
+/** An FAQ draft: the pair, the passage it quotes, and the words of its answer the passage never uses. */
+export interface FaqDraft {
+  question: string;
+  answer: string;
+  quote: string;
+  sectionPath: string[];
+  /** Words of the answer its passage lacks (common words aside): a sign the answer says more than its source. */
+  addsWords?: string[];
+}
 
 /** Another document that says something different about the same thing. */
 export interface ChangeConflict {
@@ -60,9 +71,11 @@ export interface KnowledgeChange {
   decisionReason?: string;
   /** Set on approval: the citing workflows' tests that were queued. */
   retest?: { tests: number; workflows: string[] };
+  /** Set on an FAQ draft. */
+  faq?: FaqDraft | null;
 }
 
-export type ChangeView = 'mine' | 'open' | 'conflicts' | 'resolved';
+export type ChangeView = 'open' | 'mine' | 'resolved' | 'all';
 export type ChangeFilters = { origin?: string[]; kbId?: string[]; owner?: string[] };
 export type ChangeListParams = ListParams<ChangeFilters> & { view: ChangeView; kbId?: string };
 
@@ -73,7 +86,8 @@ export interface ChangeViewCounts {
   resolved: number;
 }
 
+/** Approve or reject FAQ drafts, one or many, as `POST /v1/knowledge-changes/decide` takes it. */
 export interface ChangeDecisionInput {
-  decision: 'approved' | 'rejected';
-  reason: string;
+  ids: string[];
+  decision: 'approve' | 'reject';
 }

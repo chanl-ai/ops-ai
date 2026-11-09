@@ -10,7 +10,7 @@ export function createKnowledgeChangesHttp(get: Get, send: Send, qs: (p: ListPar
   return {
     list: (p) => get(`/knowledge-changes?${qs(p)}${p.kbId ? `&kbId=${encodeURIComponent(p.kbId)}` : ''}`),
     get: (id) => get(`/knowledge-changes/${id}`),
-    decide: (id, input) => send('POST', `/knowledge-changes/${id}/decision`, input),
-    resolveConflict: (id, resolution) => send('POST', `/knowledge-changes/${id}/conflict`, { resolution }),
+    decide: (input) => send('POST', '/knowledge-changes/decide', input),
+    edit: (id, pair) => send('PATCH', `/knowledge-changes/${id}`, pair),
   };
 }

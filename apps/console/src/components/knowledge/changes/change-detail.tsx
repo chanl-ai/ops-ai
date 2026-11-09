@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { count, dateTime, plural } from '@/lib/format';
 import type { KnowledgeChange } from '@/lib/types/knowledge-changes';
 
+import { statusWord } from './change-chips';
 import { PassageDiff } from './diff';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -103,10 +104,11 @@ export function ChangeDetailBody({ change: c }: { change: KnowledgeChange }) {
       {c.status !== 'pending' && (
         <Section title="Decision">
           <div className="flex items-start gap-2 text-sm">
-            {c.status === 'approved' ? <CheckCircle2 className="mt-0.5 size-4 text-success-text" /> : <XCircle className="mt-0.5 size-4 text-destructive-text" />}
+            {c.status === 'approved' || c.status === 'applied' ? <CheckCircle2 className="mt-0.5 size-4 text-success-text" /> : <XCircle className="mt-0.5 size-4 text-destructive-text" />}
             <div>
               <div>
-                {c.status === 'approved' ? 'Approved' : 'Rejected'} by {c.decidedBy} · {dateTime(c.decidedAt)}
+                {statusWord(c.status)}
+                {c.decidedBy ? ` by ${c.decidedBy}` : ''} · {dateTime(c.decidedAt ?? c.createdAt)}
               </div>
               {c.decisionReason && <p className="text-muted-foreground">“{c.decisionReason}”</p>}
               {c.retest && (
