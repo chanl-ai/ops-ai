@@ -1194,6 +1194,17 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "unitsNotEmbedded": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unitsnotembedded"
           }
         },
         "required": [
@@ -2765,6 +2776,39 @@
         "title": "KnowledgeChange",
         "type": "object"
       },
+      "Lanes": {
+        "additionalProperties": false,
+        "properties": {
+          "asked": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Asked",
+            "type": "array"
+          },
+          "ran": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ran",
+            "type": "array"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/SkippedLane"
+            },
+            "title": "Skipped",
+            "type": "array"
+          }
+        },
+        "required": [
+          "asked",
+          "ran",
+          "skipped"
+        ],
+        "title": "Lanes",
+        "type": "object"
+      },
       "ListResult_DocumentRow_": {
         "additionalProperties": false,
         "properties": {
@@ -3142,6 +3186,13 @@
             "title": "Kbid",
             "type": "string"
           },
+          "lanes": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Lanes",
+            "type": "object"
+          },
           "matched": {
             "default": "self",
             "title": "Matched",
@@ -3189,6 +3240,11 @@
             ],
             "title": "Url"
           },
+          "verified": {
+            "default": false,
+            "title": "Verified",
+            "type": "boolean"
+          },
           "version": {
             "title": "Version",
             "type": "string"
@@ -3230,9 +3286,15 @@
             "title": "Citations",
             "type": "array"
           },
+          "cost": {
+            "$ref": "#/components/schemas/SearchCost"
+          },
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "lanes": {
+            "$ref": "#/components/schemas/Lanes"
           },
           "matchers": {
             "items": {
@@ -3251,6 +3313,13 @@
               }
             ],
             "title": "Noanswer"
+          },
+          "passages": {
+            "items": {
+              "$ref": "#/components/schemas/PassageOut"
+            },
+            "title": "Passages",
+            "type": "array"
           },
           "question": {
             "title": "Question",
@@ -3276,6 +3345,9 @@
           "answer",
           "citations",
           "chunks",
+          "passages",
+          "lanes",
+          "cost",
           "retrievalMs",
           "synthesisMs",
           "shape"
@@ -3400,6 +3472,20 @@
         "title": "Reader",
         "type": "object"
       },
+      "SearchCost": {
+        "additionalProperties": false,
+        "properties": {
+          "embeddingTokens": {
+            "title": "Embeddingtokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "embeddingTokens"
+        ],
+        "title": "SearchCost",
+        "type": "object"
+      },
       "SearchIn": {
         "properties": {
           "kbIds": {
@@ -3410,9 +3496,17 @@
             "type": "array"
           },
           "limit": {
-            "default": 8,
-            "title": "Limit",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 20.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
           },
           "question": {
             "title": "Question",
@@ -3429,6 +3523,12 @@
       "SearchOut": {
         "additionalProperties": false,
         "properties": {
+          "cost": {
+            "$ref": "#/components/schemas/SearchCost"
+          },
+          "lanes": {
+            "$ref": "#/components/schemas/Lanes"
+          },
           "passages": {
             "items": {
               "$ref": "#/components/schemas/PassageOut"
@@ -3438,9 +3538,30 @@
           }
         },
         "required": [
-          "passages"
+          "passages",
+          "lanes",
+          "cost"
         ],
         "title": "SearchOut",
+        "type": "object"
+      },
+      "SkippedLane": {
+        "additionalProperties": false,
+        "properties": {
+          "lane": {
+            "title": "Lane",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lane",
+          "reason"
+        ],
+        "title": "SkippedLane",
         "type": "object"
       },
       "Source": {

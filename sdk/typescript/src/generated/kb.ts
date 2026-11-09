@@ -1113,6 +1113,8 @@ export interface components {
             reason?: string | null;
             /** Status */
             status: string;
+            /** Unitsnotembedded */
+            unitsNotEmbedded?: number | null;
         };
         /** Item */
         Item: {
@@ -1637,6 +1639,15 @@ export interface components {
             /** Trust */
             trust: string;
         };
+        /** Lanes */
+        Lanes: {
+            /** Asked */
+            asked: string[];
+            /** Ran */
+            ran: string[];
+            /** Skipped */
+            skipped: components["schemas"]["SkippedLane"][];
+        };
         /** ListResult[DocumentRow] */
         ListResult_DocumentRow_: {
             /** Data */
@@ -1774,6 +1785,10 @@ export interface components {
             itemId: string;
             /** Kbid */
             kbId: string;
+            /** Lanes */
+            lanes?: {
+                [key: string]: number;
+            };
             /**
              * Matched
              * @default self
@@ -1793,6 +1808,11 @@ export interface components {
             title: string;
             /** Url */
             url?: string | null;
+            /**
+             * Verified
+             * @default false
+             */
+            verified: boolean;
             /** Version */
             version: string;
         };
@@ -1808,12 +1828,16 @@ export interface components {
             citations: {
                 [key: string]: unknown;
             }[];
+            cost: components["schemas"]["SearchCost"];
             /** Id */
             id: string;
+            lanes: components["schemas"]["Lanes"];
             /** Matchers */
             matchers: string[];
             /** Noanswer */
             noAnswer?: boolean | null;
+            /** Passages */
+            passages: components["schemas"]["PassageOut"][];
             /** Question */
             question: string;
             /** Retrievalms */
@@ -1868,22 +1892,33 @@ export interface components {
             /** Slug */
             slug: string;
         };
+        /** SearchCost */
+        SearchCost: {
+            /** Embeddingtokens */
+            embeddingTokens: number;
+        };
         /** SearchIn */
         SearchIn: {
             /** Kbids */
             kbIds: string[];
-            /**
-             * Limit
-             * @default 8
-             */
-            limit: number;
+            /** Limit */
+            limit?: number | null;
             /** Question */
             question: string;
         };
         /** SearchOut */
         SearchOut: {
+            cost: components["schemas"]["SearchCost"];
+            lanes: components["schemas"]["Lanes"];
             /** Passages */
             passages: components["schemas"]["PassageOut"][];
+        };
+        /** SkippedLane */
+        SkippedLane: {
+            /** Lane */
+            lane: string;
+            /** Reason */
+            reason: string;
         };
         /** Source */
         Source: {

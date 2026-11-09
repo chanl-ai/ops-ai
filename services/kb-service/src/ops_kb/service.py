@@ -24,14 +24,17 @@ from ops_ingest.split import document_digest
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import options_page, options_window
 from ops_service_kit.ids import new_id
+from ops_service_kit.logging import get_logger
 from ops_store.schedule import next_run
 
 from .agents import AgentDirectory, Usage
+from .embedding import Embedder, EmbedFailed, embed_pending
 from .files import FileIntake, FileMissing, FileNotScanned, Stored
 from .origin import Origin, source_team
 from .readings import READING_PENDING, Readings, parsed_of, read_with
 from .repeats import lines_of, repeated, without
-from .retrieval import Passage, Retriever
+from .retrieval import Found, Lane, Passage, Retriever, Search
+from .search import lanes_for
 from .source_settings import (
     WEB_SCHEDULE,
     InvalidSettings,
@@ -44,12 +47,13 @@ from .source_settings import (
     wire,
 )
 from .store import KnowledgeStore
+from .store.vectors import PgVectorStore
 from .tool_sources import ToolReader, source_config, sync_tool_source
 
-# Keyword search is what the demo adapter runs (Postgres full-text, docs/services/kb-service/overview.md); the other
-# fields are the console's defaults for a new knowledge base.
+# A new knowledge base's retrieval settings. searchMode, hybridWeight, chunkLimit and threshold decide every search of
+# it (retrieval.py); the rest are the console's.
 DEFAULT_RETRIEVAL: dict[str, Any] = {
-    "searchMode": "keyword",
+    "searchMode": "hybrid",
     "hybridWeight": 0.6,
     "rerank": False,
     "reranker": "hosted",
@@ -189,6 +193,9 @@ def _item_counts(s: dict[str, Any]) -> dict[str, int]:
     }
 
 
+logger = get_logger(__name__)
+
+
 class KnowledgeService:
     def __init__(
         self,
@@ -200,6 +207,8 @@ class KnowledgeService:
         *,
         readings: Readings | None = None,
         ocr: str = "auto",
+        embedder: Embedder | None = None,
+        vectors: PgVectorStore | None = None,
     ) -> None:
         """`tools` reads "tool" sources through tools-service's gateway; without it none can be made. `readings` gives
         each file's reading from documents-service, read with OCR mode `ocr` (settings.kb_ocr); without it a file
@@ -211,6 +220,9 @@ class KnowledgeService:
         self.readings = readings
         self.ocr = ocr
         self.tools = tools
+        # The environment's embedding model and the vector store: units a sync settled are embedded at once.
+        self.embedder = embedder
+        self.vectors = vectors
         # Rebuilds running in this process, so stopping the service ends them and their runs say why.
         self.rebuilds: set[asyncio.Task[None]] = set()
 
@@ -856,6 +868,7 @@ class KnowledgeService:
         before = s.get("failing_since")
         in_row = await self.store.mark_synced(who.tenant_id, str(s["id"]), status, activate=activate)
         if status != "failed":
+            await self.embed_now(who.tenant_id)
             return
         long_failing = isinstance(before, datetime) and datetime.now(UTC) - before >= FAILING_AFTER
         if in_row == FAILING_AFTER_RUNS or (long_failing and in_row > FAILING_AFTER_RUNS and in_row % 24 == 0):
@@ -867,6 +880,17 @@ class KnowledgeService:
                 "failingSince": _iso(before) if isinstance(before, datetime) else None,
             }
             await self.store.record_event(who.tenant_id, str(s["id"]), name=FAILING_EVENT, payload=payload)
+
+    async def embed_now(self, tenant: str) -> int:
+        """Embeds the tenant's units that have no vector yet, as a sync settles; a model that cannot answer leaves them
+        to the embedding beat, and the sync is not failed for it."""
+        if self.embedder is None or self.vectors is None:
+            return 0
+        try:
+            return await embed_pending(self.vectors, self.embedder, tenant)
+        except EmbedFailed as e:
+            logger.warning("kb_embed_deferred", tenant=tenant, code=e.code)
+            return 0
 
     async def start_rebuild(self, who: Who, s: dict[str, Any]) -> dict[str, Any] | None:
         """Rebuilds, in the background, every item of the source built under other settings: split again from its
@@ -955,6 +979,7 @@ class KnowledgeService:
             if counts["rebuilt"]:
                 _, by_source = await self._joined(tenant)
                 await self.store.refreshed(tenant, by_source.get(source_id, []))
+                await self.embed_now(tenant)
 
     async def cancel_run(self, who: Who, run_id: str) -> dict[str, Any]:
         """Asks a running rebuild to stop between two items; 409 when it is not running."""
@@ -1376,31 +1401,33 @@ class KnowledgeService:
             return await self.store.bases(who.tenant_id)
         return await self.store.team_bases(who.tenant_id, who.team_id)
 
-    async def search(self, who: Who, kb_ids: list[str], question: str, *, limit: int) -> list[dict[str, Any]]:
-        """M1: passages for `question` across `kb_ids` in the caller's tenant, best first; empty when nothing passes
-        the floor. Unknown ids are refused, never silently searched as empty, and a base a person may not read is
-        unknown to them; a retired base is skipped, so an agent that still names it answers from its other bases."""
+    async def search(self, who: Who, kb_ids: list[str], question: str, *, limit: int | None = None) -> dict[str, Any]:
+        """Passages for `question` across `kb_ids` in the caller's tenant, best first, by the bases' own retrieval
+        settings; empty when nothing reaches the threshold. Unknown ids are refused, never silently searched as empty,
+        and a base a person may not read is unknown to them; a retired base is skipped, so an agent that still names it
+        answers from its other bases. `limit`, when given, caps the pieces below what the bases allow."""
         tenant = who.tenant_id
-        known = {b["id"] for b in await self.readable_bases(who)}
-        retired = await self.store.retired(tenant, [k for k in kb_ids if k not in known])
-        if missing := [k for k in kb_ids if k not in known and k not in retired]:
+        readable = {b["id"]: b for b in await self.readable_bases(who)}
+        retired = await self.store.retired(tenant, [k for k in kb_ids if k not in readable])
+        if missing := [k for k in kb_ids if k not in readable and k not in retired]:
             raise NotFound(f"No knowledge base with id {missing[0]}.")
-        live = [k for k in kb_ids if k in known]
-        if not live:
-            return []
-        return [passage_out(p) for p in await self.retriever.search(tenant, live, question, limit=limit)]
+        live = [k for k in dict.fromkeys(kb_ids) if k in readable]
+        how = search_settings([readable[k] for k in live], limit=limit)
+        found = await self.retriever.search(tenant, live, question, how)
+        return found_out(found)
 
     async def query(self, who: Who, kb_id: str, question: str) -> dict[str, Any]:
-        """K12, as the console's playground reads it: the passages, cited, with the top one quoted as the answer
-        (no model writes an answer in this slice)."""
+        """The query route and the console's Playground: the passages one knowledge base returns for a question, with
+        each lane's score, which lanes ran, and the embedding tokens the question cost. No model writes an answer here;
+        an answer is a kernel turn (agents-service), where the rule that withholds an uncited answer lives."""
         b = await self.store.base(who.tenant_id, kb_id)
         if b is None:
             raise NotFound("No knowledge base with that id.")
         if b["last_refreshed_at"] is None:
             raise Conflict("This knowledge base has not indexed anything yet; sync a source first.", code="not_indexed")
         started = datetime.now(UTC)
-        limit = int(b["retrieval"].get("chunkLimit") or 8)
-        passages = await self.retriever.search(who.tenant_id, [kb_id], question, limit=limit)
+        found = await self.retriever.search(who.tenant_id, [kb_id], question, search_settings([b]))
+        passages = found.passages
         sources = {s["id"]: s for s in await self.store.sources(who.tenant_id)}
         items = {i["id"]: i for i in await self.store.items(who.tenant_id)}
 
@@ -1427,11 +1454,12 @@ class KnowledgeService:
             ],
             "chunks": [
                 {
-                    "chunkId": f"{p.item_id}:{n}",
+                    "chunkId": p.chunk_id or f"{p.item_id}:{n}",
                     "documentId": p.item_id,
                     "documentTitle": p.title,
                     "sourceName": source_name(p),
                     "score": p.score,
+                    "lanes": p.lanes,
                     "location": _location(p.section, p.page),
                     "text": p.text,
                     "rejected": False,
@@ -1440,10 +1468,20 @@ class KnowledgeService:
                 for n, p in enumerate(passages)
             ],
             **({"noAnswer": True} if not passages else {}),
+            **found_out(found),
             "retrievalMs": int((datetime.now(UTC) - started).total_seconds() * 1000),
             "synthesisMs": 0,
             "shape": "chunks",
         }
+
+    async def embedding_coverage(self, who: Who, kb_id: str) -> dict[str, Any] | None:
+        """How many of the base's units have a vector of the environment's model; None without one."""
+        if self.embedder is None or self.vectors is None or not await self.vectors.ready():
+            return None
+        embedded, total = await self.vectors.coverage(
+            who.tenant_id, [kb_id], model=self.embedder.model, width=self.embedder.width
+        )
+        return {"model": self.embedder.model, "width": self.embedder.width, "embedded": embedded, "units": total}
 
     # ── Runs, source settings, refresh ───────────────────────────────────
 
@@ -2075,6 +2113,30 @@ def _location(section: str, page: int | None) -> str:
     return ", ".join(p for p in (f"p. {page}" if page else "", section) if p)
 
 
+def search_settings(bases: list[dict[str, Any]], *, limit: int | None = None) -> Search:
+    """One search over several bases: the lanes any of them asks for, the lowest threshold, the mean weight toward
+    meaning and the largest piece limit, so no base gets less than it asks; `limit` caps the pieces further."""
+    if not bases:
+        return Search(limit=limit or int(DEFAULT_RETRIEVAL["chunkLimit"]))
+    settings = [{**DEFAULT_RETRIEVAL, **dict(b.get("retrieval") or {})} for b in bases]
+    lanes: tuple[Lane, ...] = tuple(dict.fromkeys(lane for r in settings for lane in lanes_for(str(r["searchMode"]))))
+    most = max(int(r["chunkLimit"]) for r in settings)
+    return Search(
+        lanes=lanes,
+        threshold=min(float(r["threshold"]) for r in settings),
+        weight=sum(float(r["hybridWeight"]) for r in settings) / len(settings),
+        limit=min(most, limit) if limit else most,
+    )
+
+
+def found_out(found: Found) -> dict[str, Any]:
+    return {
+        "passages": [passage_out(p) for p in found.passages],
+        "lanes": found.lanes_out(),
+        "cost": {"embeddingTokens": found.embedding_tokens},
+    }
+
+
 def passage_out(p: Passage) -> dict[str, Any]:
     return {
         "kbId": p.kb_id,
@@ -2089,4 +2151,6 @@ def passage_out(p: Passage) -> dict[str, Any]:
         **({"fileId": p.file_id} if p.file_id else {}),
         **({"url": p.url} if p.url else {}),
         "matched": p.matched,
+        "lanes": p.lanes,
+        "verified": p.verified,
     }

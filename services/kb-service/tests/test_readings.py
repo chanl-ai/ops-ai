@@ -22,9 +22,9 @@ from ops_identity.testing import TEST_TOKEN_TTL_S
 from ops_kb.agents import StaticAgents
 from ops_kb.files import KnowledgeFiles
 from ops_kb.schedule import finish_readings
+from ops_kb.search import HybridRetriever
 from ops_kb.service import KnowledgeService
 from ops_kb.store import KnowledgeStore
-from ops_kb.store.fulltext import PostgresFullTextRetriever
 
 from .conftest import kb_client
 from .pdfs import RATES, scanned_pdf
@@ -119,7 +119,7 @@ async def test_an_item_whose_event_never_came_is_indexed_by_the_schedule(
         before = data(await client.get(f"/v1/sources/{src['id']}/items"))["data"][0]
     assert (run["status"], run["counts"]["reading"], before["status"]) == ("success", 1, "processing"), run
     service = KnowledgeService(
-        KnowledgeStore(engine), intake, PostgresFullTextRetriever(engine), StaticAgents(), readings=readings
+        KnowledgeStore(engine), intake, HybridRetriever(engine), StaticAgents(), readings=readings
     )
     assert await finish_readings(service) == 1
     async with kb_client(engine, tenant, files=intake, readings=readings) as client:

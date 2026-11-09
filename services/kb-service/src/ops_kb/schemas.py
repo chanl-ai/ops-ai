@@ -290,7 +290,8 @@ class PageIn(In):
 class SearchIn(In):
     kb_ids: list[str]
     question: str
-    limit: int = 8
+    # At most this many pieces; left out, the bases' own limit (their retrieval settings' chunkLimit) decides.
+    limit: int | None = Field(default=None, ge=1, le=20)
 
 
 class PassageOut(Out):
@@ -308,10 +309,31 @@ class PassageOut(Out):
     url: str | None = None
     # What matched: the piece's own text, a smaller child, or a question written for it.
     matched: str = "self"
+    # Each lane's own score: keyword, the share of the question's terms; meaning, cosine similarity.
+    lanes: dict[str, float] = Field(default_factory=dict[str, float])
+    verified: bool = False
+
+
+class SkippedLane(Out):
+    lane: str
+    # no_embedding_model, no_vector_store, no_vectors, or embedding_unavailable with the model's code.
+    reason: str
+
+
+class Lanes(Out):
+    asked: list[str]
+    ran: list[str]
+    skipped: list[SkippedLane]
+
+
+class SearchCost(Out):
+    embedding_tokens: int
 
 
 class SearchOut(Out):
     passages: list[PassageOut]
+    lanes: Lanes
+    cost: SearchCost
 
 
 class PlaygroundAnswer(Out):
@@ -322,6 +344,9 @@ class PlaygroundAnswer(Out):
     citations: list[Json]
     chunks: list[Json]
     no_answer: bool | None = None
+    passages: list[PassageOut]
+    lanes: Lanes
+    cost: SearchCost
     retrieval_ms: int
     synthesis_ms: int
     shape: str

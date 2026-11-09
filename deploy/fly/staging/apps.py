@@ -184,7 +184,7 @@ APPS: list[App] = [
         public=True,
         python=False,
     ),
-    App("kb", "kb", 256, 8740, "/health", signs_as="KB"),
+    App("kb", "kb", 256, 8740, "/health", signs_as="KB", models_key="OPS_MODELS_KEY_KB"),
     App(
         "files",
         "files",
@@ -446,7 +446,9 @@ def main() -> None:
     s.add_argument("--db", type=Path, required=True, help="a file holding the attach's DATABASE_URL")
     s.add_argument("--admin", type=Path, required=True, help="OPS_BOOTSTRAP_* lines for the first admin")
     s.add_argument("--keep", type=Path, default=Path(os.path.expanduser("~/.config/ops-ai/staging-keys.env")))
-    s.add_argument("--models", type=Path, help="OPS_MODELS_KEY_AGENTS and OPS_MODELS_KEY_DOCUMENTS lines")
+    s.add_argument(
+        "--models", type=Path, help="OPS_MODELS_KEY_AGENTS, OPS_MODELS_KEY_DOCUMENTS and OPS_MODELS_KEY_KB lines"
+    )
     s.add_argument(
         "--logins", type=Path, required=True, help="ops_<service>_runtime=password lines (roles.sql's logins)"
     )

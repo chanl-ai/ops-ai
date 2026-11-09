@@ -2,5 +2,5 @@
   "date": "2026-11-09",
   "title": "The built-in database includes pgvector",
   "description": "The trial database, local stack and CI run PostgreSQL 17 with pgvector, which knowledge search by meaning uses; make db-move-image moves an existing local database onto it.",
-  "tag": "improvement"
+  "tag": "improved"
 }

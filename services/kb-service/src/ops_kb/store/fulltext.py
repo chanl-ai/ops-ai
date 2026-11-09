@@ -1,21 +1,21 @@
-"""The Postgres full-text adapter behind the Retriever port (retrieval.py)."""
+"""The keyword lane of the knowledge search (retrieval.py), on PostgreSQL full-text search."""
 
 from __future__ import annotations
+
+from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store import isolation
 
-from ..retrieval import Passage
 from .knowledge import ROLE
 
-# Below half of the question's terms a passage is not an answer: "mortgage brokers selling travel insurance" shares
-# two of five terms with a rate sheet and is not answered by it. With at least two terms in the question, a passage
-# must also share two, so one common word ("mortgage") never carries a passage on its own. A long prompt (a workflow
-# agent step with its instructions) is scored against a bounded term set, or the answering passage falls under the
-# floor because the extra words drown it.
-FLOOR = 0.5
+# The bases' threshold is the least share of the question's terms a unit holds. At the default, half: "mortgage
+# brokers selling travel insurance" shares two of five terms with a rate sheet and is not answered by it. With at least
+# two terms in the question, a passage must also share two, so one common word ("mortgage") never carries a passage on
+# its own. A long prompt (a workflow agent step with its instructions) is scored against a bounded term set, or the
+# answering passage falls under the floor because the extra words drown it.
 MIN_SHARED_TERMS = 2
 TERM_CAP = 6
 
@@ -29,7 +29,7 @@ _SEARCH = sa.text(
     ),
     hits AS (
         SELECT l.kb_id, c.id AS chunk_id, c.item_id, c.version, c.title, c.section, c.page, c.text,
-               u.kind AS unit_kind, u.text AS unit_text, i.file_id, i.url,
+               u.kind AS unit_kind, u.text AS unit_text, i.file_id, i.url, i.verified,
                (SELECT count(*) FROM unnest(q.terms) t WHERE u.tsv @@ to_tsquery('english', quote_literal(t)))
                    AS shared,
                cardinality(q.terms) AS total,
@@ -55,19 +55,18 @@ _SEARCH = sa.text(
 # Units read per piece asked for: a piece's own text, a child and a question can all match, and each piece is
 # returned once.
 OVERFETCH = 4
-# At most this many pieces from one document, so one long document never fills every passage.
-PER_ITEM = 2
 
 
-def _snippet(text: str, width: int = 280) -> str:
-    return text if len(text) <= width else text[: width - 1].rsplit(" ", 1)[0] + "…"
+class KeywordLane:
+    """The keyword lane: units holding at least `threshold` of the question's terms, best first, each with its share as
+    `lane_score`."""
 
-
-class PostgresFullTextRetriever:
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
 
-    async def search(self, tenant: str, kb_ids: list[str], question: str, *, limit: int) -> list[Passage]:
+    async def hits(
+        self, tenant: str, kb_ids: list[str], question: str, *, threshold: float, limit: int
+    ) -> list[dict[str, Any]]:
         if not kb_ids or not question.strip():
             return []
         params = {
@@ -75,40 +74,11 @@ class PostgresFullTextRetriever:
             "kb_ids": kb_ids,
             "question": question,
             "limit": limit * OVERFETCH,
-            "floor": FLOOR,
+            "floor": threshold,
             "min_shared": MIN_SHARED_TERMS,
             "term_cap": TERM_CAP,
         }
         # As the tenant role, so the team policy keeps another team's chunks out of the search.
         async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             rows = (await c.execute(_SEARCH, params)).mappings().all()
-        seen: set[str] = set()
-        per_item: dict[str, int] = {}
-        out: list[Passage] = []
-        for r in rows:
-            # One passage per piece, by its best unit: a piece read by two of the asked knowledge bases, or matched by
-            # its text and a question, is returned once.
-            if r["chunk_id"] in seen or per_item.get(r["item_id"], 0) >= PER_ITEM:
-                continue
-            seen.add(r["chunk_id"])
-            per_item[r["item_id"]] = per_item.get(r["item_id"], 0) + 1
-            if len(out) == limit:
-                break
-            out.append(
-                Passage(
-                    kb_id=r["kb_id"],
-                    item_id=r["item_id"],
-                    version=r["version"],
-                    title=r["title"],
-                    section=r["section"],
-                    page=r["page"],
-                    text=r["text"],
-                    snippet=_snippet(r["text"]),
-                    score=round(float(r["shared"]) / float(r["total"]), 3),
-                    matched=r["unit_kind"],
-                    matched_text=r["unit_text"],
-                    file_id=r["file_id"] or None,
-                    url=r["url"],
-                )
-            )
-        return out
+        return [{**r, "lane_score": float(r["shared"]) / float(min(r["total"], TERM_CAP))} for r in rows]

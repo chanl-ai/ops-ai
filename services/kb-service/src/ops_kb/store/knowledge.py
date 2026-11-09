@@ -22,10 +22,10 @@ from ops_service_kit.ids import new_id
 from ops_store import Guarantee, isolation
 from ops_store.audit import record as record_audit
 from ops_store.database import open_database
-from ops_store.dialect import db_now
+from ops_store.dialect import Vector, db_now
 from ops_store.outbox import add as add_event
 from ops_store.outbox import outbox_table
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, dialect_indexes, postgres_only
 from ops_store.search import contains
 from ops_store.team_scope import any_team, team_visible
 
@@ -274,9 +274,31 @@ kb_units = sa.Table(
     sa.ForeignKeyConstraint(
         ["tenant_id", "chunk_id"], ["kb_chunks.tenant_id", "kb_chunks.id"], ondelete="CASCADE", name="fk_kb_unit_chunk"
     ),
-    # Its GIN index on tsv is the migration's (kb_0016): PostgreSQL's form only, as search runs there.
     sa.Index("ix_kb_units_chunk", "tenant_id", "chunk_id"),
-    info={**TENANT_SCOPED, **TEAM_OWNED},
+    # Its GIN index on tsv is the migration's (kb_0016): PostgreSQL's form only, as search runs there.
+    info={**TENANT_SCOPED, **TEAM_OWNED, **dialect_indexes("ix_kb_units_tsv")},
+)
+
+
+# Each index unit's embedding, with the model and width it was made with (kb_0021, only where pgvector is installed).
+kb_unit_vectors = sa.Table(
+    "kb_unit_vectors",
+    metadata,
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("team_id", sa.String(64), nullable=False),
+    sa.Column("unit_id", sa.String(64), primary_key=True),
+    sa.Column("chunk_id", sa.String(64), nullable=False),
+    sa.Column("item_id", sa.String(64), nullable=False),
+    sa.Column("model", sa.String(120), nullable=False),
+    sa.Column("width", sa.Integer, nullable=False),
+    sa.Column("embedding", Vector(), nullable=False),
+    sa.Column("embedded_at", sa.DateTime(timezone=True), nullable=False),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "unit_id"], ["kb_units.tenant_id", "kb_units.id"], ondelete="CASCADE", name="fk_kb_vector_unit"
+    ),
+    sa.Index("ix_kb_unit_vectors_chunk", "tenant_id", "chunk_id"),
+    # The HNSW index for the environment's width is made by kb_0021 through ops_store.dialect.
+    info={**TENANT_SCOPED, **TEAM_OWNED, **postgres_only(), **dialect_indexes("ix_kb_unit_vectors_hnsw_")},
 )
 
 

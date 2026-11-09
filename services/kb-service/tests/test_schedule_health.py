@@ -21,10 +21,10 @@ from ops_kb.agents import StaticAgents
 from ops_kb.app import create_kb_app
 from ops_kb.files import KnowledgeFiles
 from ops_kb.schedule import run_due
+from ops_kb.search import HybridRetriever
 from ops_kb.service import KnowledgeService
 from ops_kb.store import KnowledgeStore
 from ops_kb.store.event_relay import relay
-from ops_kb.store.fulltext import PostgresFullTextRetriever
 from ops_kb.tool_sources import Answer
 from ops_service_kit.settings import Settings
 from ops_store import isolation
@@ -53,7 +53,7 @@ async def test_a_scheduled_file_source_syncs_on_its_own_and_a_manual_or_paused_o
         assert bad.status_code == 400 and bad.json()["error"]["code"] == "invalid_settings", bad.text
         shown = data(await client.get(f"/v1/sources/{hourly['id']}"))
         assert shown["schedule"] == {"kind": "hourly", "every": 1} and shown["nextSyncAt"], shown
-        service = KnowledgeService(KnowledgeStore(engine), intake, PostgresFullTextRetriever(engine), StaticAgents(),
+        service = KnowledgeService(KnowledgeStore(engine), intake, HybridRetriever(engine), StaticAgents(),
                                    readings=LocalReadings(intake))  # fmt: skip
         with isolation.tenant_wide("test: the schedule as its background process", tenant_id=tenant):
             ran = await run_due(service, datetime.now(UTC))

@@ -173,10 +173,18 @@ PROCESSES: tuple[Process, ...] = (
     Process(
         "kb_relay",
         "kb",
-        "Knowledge audit hand-off",
-        "Sends knowledge settings changes to the account's audit log.",
+        "Knowledge hand-off",
+        "Sends knowledge settings changes to the account's audit log and failing-source alerts to the agents service.",
         2.0,
-        "It delivers every team's audit entries, each as its own team.",
+        "It delivers every team's entries and alerts, each as its own team.",
+    ),
+    Process(
+        "kb_embed",
+        "kb",
+        "Knowledge embedding",
+        "Embeds knowledge pieces that have no vector of the environment's embedding model yet.",
+        30.0,
+        "Every team's pieces are embedded, each in its own team; a model that is down is tried again next pass.",
     ),
     Process(
         "knowledge_schedule",

@@ -32,6 +32,7 @@ from ops_service_kit.http import (
     ok,
     operation_id,
 )
+from ops_service_kit.model_calls import ModelCalls
 from ops_service_kit.settings import Settings
 from ops_store import isolation
 from ops_store.audit import AUDIT_SCOPE
@@ -40,6 +41,7 @@ from ops_store.background import report as background_report
 from ops_store.team_scope import acting_team_of, set_acting_team
 
 from .agents import AgentDirectory, AgentsUsage
+from .embedding import Backlog, Embedder, ModelsEmbedder, keep_embedding
 from .files import FileIntake, file_intake
 from .readings import DocumentsReadings, Readings
 from .schedule import keep_syncing
@@ -81,16 +83,19 @@ from .schemas import (
     TombstonesIn,
     VerifyIn,
 )
+from .search import HybridRetriever
 from .service import KnowledgeService, Who
 from .store import AsyncEngine, KnowledgeStore, reachable
 from .store.event_relay import keep_relaying
-from .store.fulltext import PostgresFullTextRetriever
+from .store.vectors import PgVectorStore
 from .tool_sources import ToolReader
 
 
 class Health(Out):
     status: str
     reason: str | None = None
+    # Knowledge units with no vector of the environment's embedding model at the last embedding pass, every tenant.
+    units_not_embedded: int | None = None
 
 
 async def who(p: CurrentCaller) -> Who:
@@ -152,6 +157,16 @@ def _platform_service(settings: Settings) -> ServiceClient | None:
     return ServiceClient.for_settings(settings, http, service="kb", audience="platform", scopes=[AUDIT_SCOPE])
 
 
+def _embedder(settings: Settings) -> Embedder | None:
+    """The environment's embedding model through models-service with kb-service's own key; None when this stack has
+    no models-service or no key for kb-service, and search then runs on keywords and says why."""
+    if not settings.models_url or settings.models_key is None:
+        return None
+    http = httpx.AsyncClient(base_url=settings.models_url, timeout=60)
+    calls = ModelCalls(http, settings.models_key.get_secret_value())
+    return ModelsEmbedder(calls, settings.embedding_alias, settings.embedding_width)
+
+
 def _events_service(settings: Settings) -> ServiceClient:
     """agents-service, which runs the workflows that listen to kb-service's events (a source that keeps failing)."""
     http = httpx.AsyncClient(base_url=settings.agents_url or f"http://127.0.0.1:{settings.port}", timeout=10)
@@ -201,6 +216,7 @@ def create_kb_app(
     schedule: bool = True,
     platform: ServiceClient | None = None,
     events_to: ServiceClient | None = None,
+    embedder: Embedder | None = None,
 ) -> FastAPI:
     """`auth` resolves callers through ops_identity's shared dependency; by default built from Settings for audience
     "kb". An admin administers the knowledge bases and sources of the teams it is admin of, and no others (there is
@@ -212,6 +228,9 @@ def create_kb_app(
     readings = readings or _documents_service(Settings())
     audit_log = platform or _platform_service(Settings())
     events = events_to or _events_service(Settings())
+    embedder = embedder or _embedder(Settings())
+    vectors = PgVectorStore(engine)
+    backlog = Backlog()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
@@ -221,13 +240,18 @@ def create_kb_app(
         runs = (reader is not None or readings is not None) and schedule
         beat = asyncio.create_task(keep_syncing(service, stop)) if runs else None
         hand_off = asyncio.create_task(keep_relaying(engine, audit_log, events, stop))
+        embeds = (
+            asyncio.create_task(keep_embedding(service.store, vectors, embedder, backlog, stop))
+            if embedder is not None and schedule
+            else None
+        )
         try:
             yield
         finally:
             stop.set()
             for rebuild in list(service.rebuilds):
                 rebuild.cancel()
-            tasks = {t for t in (beat, hand_off, *service.rebuilds) if t is not None}
+            tasks = {t for t in (beat, hand_off, embeds, *service.rebuilds) if t is not None}
             if tasks:
                 await asyncio.wait(tasks, timeout=5)
 
@@ -248,11 +272,13 @@ def create_kb_app(
     service = KnowledgeService(
         KnowledgeStore(engine),
         files or file_intake(Settings()),
-        PostgresFullTextRetriever(engine),
+        HybridRetriever(engine, embedder),
         agents or _agents_service(Settings()),
         reader,
         readings=readings,
         ocr=Settings().kb_ocr,
+        embedder=embedder,
+        vectors=vectors,
     )
     errors = error_responses()
 
@@ -282,9 +308,11 @@ def create_kb_app(
         response_model_exclude_none=True,
         responses={503: {"model": Health}},
     )
-    async def health() -> dict[str, str] | JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def health() -> dict[str, Any] | JSONResponse:  # pyright: ignore[reportUnusedFunction]
         if not await reachable(engine):
             return JSONResponse({"status": "degraded", "reason": "database"}, status_code=503)
+        if backlog.pending is not None:
+            return {"status": "ok", "unitsNotEmbedded": backlog.pending}
         return {"status": "ok"}
 
     @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
@@ -326,9 +354,7 @@ def create_kb_app(
     async def search_knowledge(body: SearchIn, caller: KnowledgeReader) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Passages for an agent's turn (agents-service sends only the bases the agent is granted) or for a person, who
         searches only bases they may read."""
-        limit = max(1, min(body.limit, 20))
-        passages = await service.search(caller, body.kb_ids, body.question, limit=limit)
-        return ok({"passages": passages})
+        return ok(await service.search(caller, body.kb_ids, body.question, limit=body.limit))
 
     @kbs.get("/{kb_id}", response_model=Envelope[KnowledgeBaseDetail])
     async def get_knowledge_base(kb_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

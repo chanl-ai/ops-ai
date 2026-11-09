@@ -117,6 +117,7 @@ class FileIdsIn(TypedDict):
 class Health(TypedDict, closed=True):
     reason: NotRequired[str | None]
     status: str
+    unitsNotEmbedded: NotRequired[int | None]
 
 
 class Item(TypedDict, closed=True):
@@ -325,6 +326,7 @@ class PassageOut(TypedDict, closed=True):
     fileId: NotRequired[str | None]
     itemId: str
     kbId: str
+    lanes: NotRequired[dict[str, float]]
     matched: NotRequired[str]
     page: NotRequired[int | None]
     score: float
@@ -333,20 +335,8 @@ class PassageOut(TypedDict, closed=True):
     text: str
     title: str
     url: NotRequired[str | None]
+    verified: NotRequired[bool]
     version: str
-
-
-class PlaygroundAnswer(TypedDict, closed=True):
-    answer: str
-    chunks: list[dict[str, Any]]
-    citations: list[dict[str, Any]]
-    id: str
-    matchers: list[str]
-    noAnswer: NotRequired[bool | None]
-    question: str
-    retrievalMs: int
-    shape: str
-    synthesisMs: int
 
 
 class PluginSource(TypedDict, closed=True):
@@ -378,14 +368,19 @@ class Reader(TypedDict, closed=True):
     slug: str
 
 
+class SearchCost(TypedDict, closed=True):
+    embeddingTokens: int
+
+
 class SearchIn(TypedDict):
     kbIds: list[str]
-    limit: NotRequired[int]
+    limit: NotRequired[int | None]
     question: str
 
 
-class SearchOut(TypedDict, closed=True):
-    passages: list[PassageOut]
+class SkippedLane(TypedDict, closed=True):
+    lane: str
+    reason: str
 
 
 class SourceIn(TypedDict):
@@ -530,16 +525,6 @@ class EnvelopeOptionsPage(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopePlaygroundAnswer(TypedDict, closed=True):
-    data: PlaygroundAnswer
-    success: Literal[True]
-
-
-class EnvelopeSearchOut(TypedDict, closed=True):
-    data: SearchOut
-    success: Literal[True]
-
-
 class EnvelopeSourcePreview(TypedDict, closed=True):
     data: SourcePreview
     success: Literal[True]
@@ -602,6 +587,12 @@ class KnowledgeChange(TypedDict, closed=True):
     trust: str
 
 
+class Lanes(TypedDict, closed=True):
+    asked: list[str]
+    ran: list[str]
+    skipped: list[SkippedLane]
+
+
 class ListResultDocumentRow(TypedDict, closed=True):
     data: list[DocumentRow]
     facets: dict[str, dict[str, int]]
@@ -624,6 +615,28 @@ class ListResultSyncRun(TypedDict, closed=True):
     data: list[SyncRun]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
+
+
+class PlaygroundAnswer(TypedDict, closed=True):
+    answer: str
+    chunks: list[dict[str, Any]]
+    citations: list[dict[str, Any]]
+    cost: SearchCost
+    id: str
+    lanes: Lanes
+    matchers: list[str]
+    noAnswer: NotRequired[bool | None]
+    passages: list[PassageOut]
+    question: str
+    retrievalMs: int
+    shape: str
+    synthesisMs: int
+
+
+class SearchOut(TypedDict, closed=True):
+    cost: SearchCost
+    lanes: Lanes
+    passages: list[PassageOut]
 
 
 class Source(TypedDict, closed=True):
@@ -777,6 +790,16 @@ class EnvelopeListResultKnowledgeBaseRow(TypedDict, closed=True):
 
 class EnvelopeListResultSyncRun(TypedDict, closed=True):
     data: ListResultSyncRun
+    success: Literal[True]
+
+
+class EnvelopePlaygroundAnswer(TypedDict, closed=True):
+    data: PlaygroundAnswer
+    success: Literal[True]
+
+
+class EnvelopeSearchOut(TypedDict, closed=True):
+    data: SearchOut
     success: Literal[True]
 
 

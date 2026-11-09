@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from ops_identity import Auth, CurrentPrincipal
 from ops_kb.agents import AgentDirectory, StaticAgents
 from ops_kb.app import create_kb_app, who
+from ops_kb.embedding import Embedder
 from ops_kb.files import FileIntake, KnowledgeFiles
 from ops_kb.readings import Readings
 from ops_kb.service import Who
@@ -63,6 +64,7 @@ def kb_client(
     admin: bool = False,
     agents: AgentDirectory | None = None,
     readings: Readings | None = None,
+    embedder: Embedder | None = None,
 ) -> httpx.AsyncClient:
     """kb-service as the dev user `email` in `tenant`; each test runs on its own tenant's rows and its own files."""
     auth = Auth.for_dev(Settings(), audience="kb", name=email.split("@", maxsplit=1)[0], email=email, tenant_id=tenant)
@@ -73,6 +75,7 @@ def kb_client(
         files=intake,
         agents=agents or StaticAgents(),
         readings=readings or LocalReadings(intake),
+        embedder=embedder,
     )
     if admin:
         # Dev sign-in carries no roles, and `can()` passes the dev caller as it would a team admin.
