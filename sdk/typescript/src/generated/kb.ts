@@ -2090,6 +2090,8 @@ export interface components {
              * @default 5
              */
             aiCeiling: number;
+            /** Aistepswaiting */
+            aiStepsWaiting: string[];
             /** Cleaning */
             cleaning: {
                 [key: string]: unknown;
@@ -2122,6 +2124,8 @@ export interface components {
             itemsPending: number;
             /** Kind */
             kind: string;
+            /** Kindlabel */
+            kindLabel: string;
             /** Lastrunstatus */
             lastRunStatus?: string | null;
             /** Lastsyncat */
@@ -2229,6 +2233,8 @@ export interface components {
             itemsPending: number;
             /** Kind */
             kind: string;
+            /** Kindlabel */
+            kindLabel: string;
             /** Lastrundurationsec */
             lastRunDurationSec?: number | null;
             /** Lastrunstatus */
@@ -2478,6 +2484,8 @@ export interface components {
              * @default 5
              */
             aiCeiling: number;
+            /** Aistepswaiting */
+            aiStepsWaiting: string[];
             /** Cleaning */
             cleaning: {
                 [key: string]: unknown;
@@ -2510,6 +2518,8 @@ export interface components {
             itemsPending: number;
             /** Kind */
             kind: string;
+            /** Kindlabel */
+            kindLabel: string;
             /** Lastrunstatus */
             lastRunStatus?: string | null;
             /** Lastsyncat */

@@ -3824,6 +3824,13 @@
             "title": "Aiceiling",
             "type": "number"
           },
+          "aiStepsWaiting": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aistepswaiting",
+            "type": "array"
+          },
           "cleaning": {
             "additionalProperties": true,
             "title": "Cleaning",
@@ -3874,6 +3881,10 @@
           },
           "kind": {
             "title": "Kind",
+            "type": "string"
+          },
+          "kindLabel": {
+            "title": "Kindlabel",
             "type": "string"
           },
           "lastRunStatus": {
@@ -4005,12 +4016,14 @@
           "id",
           "type",
           "kind",
+          "kindLabel",
           "name",
           "scopeSummary",
           "config",
           "parsing",
           "cleaning",
           "ingest",
+          "aiStepsWaiting",
           "rules",
           "metadataMapping",
           "tags",
@@ -4148,6 +4161,10 @@
           },
           "kind": {
             "title": "Kind",
+            "type": "string"
+          },
+          "kindLabel": {
+            "title": "Kindlabel",
             "type": "string"
           },
           "lastRunDurationSec": {
@@ -4328,12 +4345,14 @@
           "id",
           "type",
           "kind",
+          "kindLabel",
           "name",
           "scopeSummary",
           "config",
           "parsing",
           "cleaning",
           "ingest",
+          "aiStepsWaiting",
           "rules",
           "metadataMapping",
           "tags",
@@ -4358,8 +4377,7 @@
           "itemCount",
           "reindexNeeded",
           "requiredMetadata",
-          "governance",
-          "aiStepsWaiting"
+          "governance"
         ],
         "title": "SourceDetail",
         "type": "object"
@@ -4844,6 +4862,13 @@
             "title": "Aiceiling",
             "type": "number"
           },
+          "aiStepsWaiting": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aistepswaiting",
+            "type": "array"
+          },
           "cleaning": {
             "additionalProperties": true,
             "title": "Cleaning",
@@ -4894,6 +4919,10 @@
           },
           "kind": {
             "title": "Kind",
+            "type": "string"
+          },
+          "kindLabel": {
+            "title": "Kindlabel",
             "type": "string"
           },
           "lastRunStatus": {
@@ -5036,12 +5065,14 @@
           "id",
           "type",
           "kind",
+          "kindLabel",
           "name",
           "scopeSummary",
           "config",
           "parsing",
           "cleaning",
           "ingest",
+          "aiStepsWaiting",
           "rules",
           "metadataMapping",
           "tags",

@@ -21,22 +21,15 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
-import { kk, useAddDocuments, useAddPage, useAttachSources, useDetachSource, useSource, useSourceKinds, useSourcesList, useSyncSource } from '@/hooks/knowledge-queries';
+import { kk, useAddDocuments, useAddPage, useAttachSources, useDetachSource, useSource, useSourcesList, useSyncSource } from '@/hooks/knowledge-queries';
 import { facetFilterFn } from '@/hooks/use-list-params';
 import { AddSourceWizard } from '@/components/sources/add-source-wizard';
 import { useSticky } from '@/hooks/use-sticky';
 import { count, plural, relativeTime } from '@/lib/format';
-import type { KbSourceView, KnowledgeBaseDetail, Source, SourceHealth, SourceKindOption, SyncRun } from '@/lib/types/knowledge';
+import type { KbSourceView, KnowledgeBaseDetail, Source, SourceHealth, SyncRun } from '@/lib/types/knowledge';
 import { cn } from '@/lib/utils';
 
 type Row = KbSourceView & { onRowClick: (r: KbSourceView) => void };
-
-/** The kind's own title from the kinds the team may add; a kind no longer offered reads as what it is. */
-function kindTitle(s: Source, kinds: SourceKindOption[] | undefined) {
-  const cfg = s.config as { plugin?: string; source?: string };
-  const k = s.type === 'file' ? kinds?.find((x) => x.type === 'file') : kinds?.find((x) => x.plugin === cfg.plugin && x.source === cfg.source);
-  return k?.title ?? (s.kind === 'file' ? 'Files' : s.kind === 'web' ? 'Website' : 'App source');
-}
 
 /** Likely questions are "Questions", FAQ drafts are "drafts"; a step waiting for the knowledge owner says so. */
 function faqLabel(s: Source) {
@@ -84,7 +77,6 @@ export function KbSourcesTab({ kb }: { kb: KnowledgeBaseDetail }) {
   const router = useRouter();
   const addDocuments = useAddDocuments(kb.id);
   const addPage = useAddPage(kb.id);
-  const kinds = useSourceKinds();
   const [docsOpen, setDocsOpen] = React.useState(false);
   const [pageOpen, setPageOpen] = React.useState(false);
   const attach = useAttachSources(kb.id);
@@ -132,13 +124,13 @@ export function KbSourcesTab({ kb }: { kb: KnowledgeBaseDetail }) {
       },
       {
         id: 'kind',
-        accessorFn: (r) => kindTitle(r.source, kinds.data),
+        accessorFn: (r) => r.source.kindLabel,
         filterFn: facetFilterFn,
         header: 'Kind',
         cell: ({ row }) => (
           <span className="flex items-center gap-1.5 whitespace-nowrap">
             <SourceKindIcon kind={row.original.source.kind} />
-            {kindTitle(row.original.source, kinds.data)}
+            {row.original.source.kindLabel}
           </span>
         ),
       },
@@ -204,13 +196,13 @@ export function KbSourcesTab({ kb }: { kb: KnowledgeBaseDetail }) {
         enableHiding: false,
       },
     ],
-    [openSource, syncNow, kinds.data, watched.run, watched.sourceId],
+    [openSource, syncNow, watched.run, watched.sourceId],
   );
 
   const lastWithPublicLink = kb.sources.length === 1 && kb.access.publicLink.enabled;
   const candidateRows = candidates.data?.data ?? [];
   // Facet values come from the base's own detail, which lists every source it reads, so nothing is fetched to fill them.
-  const kindOptions = [...new Set(rows.map((r) => kindTitle(r.source, kinds.data)))].map((t) => ({ label: t, value: t }));
+  const kindOptions = [...new Set(rows.map((r) => r.source.kindLabel))].map((t) => ({ label: t, value: t }));
 
   return (
     <div className="flex flex-col gap-3">

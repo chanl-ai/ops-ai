@@ -153,43 +153,6 @@ export function KbDot({ color, className }: { color: string; className?: string 
   return <span className={cn('inline-block size-2.5 shrink-0 rounded-full', KB_COLORS[color] ?? 'bg-muted-foreground', className)} />;
 }
 
-export interface SourceTypeMeta {
-  type: SourceType;
-  label: string;
-  short: string;
-  description: string;
-  group: 'Content you provide' | 'Connected apps';
-  icon: LucideIcon;
-  connected: boolean;
-  supportsInherit: boolean;
-  supportsWebhook: boolean;
-  changeDetection: string;
-  scopeLabel: string;
-}
-
-export const SOURCE_TYPES: SourceTypeMeta[] = [
-  { type: 'file', label: 'File upload', short: 'Files', description: 'PDF, DOCX, XLSX, PPTX, CSV, TXT, MD, HTML. 50 MB each.', group: 'Content you provide', icon: FileUp, connected: false, supportsInherit: false, supportsWebhook: false, changeDetection: 'Replace or upload a new version', scopeLabel: 'Files' },
-  { type: 'url', label: 'Single URL', short: 'URL', description: 'One or more page URLs, one per line. Optional header auth for intranets.', group: 'Content you provide', icon: Link2, connected: false, supportsInherit: false, supportsWebhook: false, changeDetection: 'ETag, then content hash', scopeLabel: 'URLs' },
-  { type: 'crawl', label: 'Website crawl or sitemap', short: 'Crawl', description: 'Start URL or sitemap, depth, page limit, path patterns, robots respected.', group: 'Content you provide', icon: Globe, connected: false, supportsInherit: false, supportsWebhook: false, changeDetection: 'Sitemap lastmod, ETag, content hash', scopeLabel: 'Start URL' },
-  { type: 'text', label: 'Plain text or table', short: 'Text', description: 'Paste Markdown, or a CSV where each row becomes a chunk and headers become fields.', group: 'Content you provide', icon: Type, connected: false, supportsInherit: false, supportsWebhook: false, changeDetection: 'Edit in place creates a revision', scopeLabel: 'Content' },
-  { type: 'sharepoint', label: 'SharePoint / OneDrive', short: 'SharePoint', description: 'Sites, then libraries or folders. Office and PDF. App-only or delegated auth.', group: 'Connected apps', icon: Cloud, connected: true, supportsInherit: true, supportsWebhook: true, changeDetection: 'Drive delta queries; webhook subscriptions', scopeLabel: 'Site and libraries' },
-  { type: 'confluence', label: 'Confluence', short: 'Confluence', description: 'Site, spaces, optional parent page, attachments.', group: 'Connected apps', icon: BookOpen, connected: true, supportsInherit: true, supportsWebhook: false, changeDetection: 'Last-modified since cursor', scopeLabel: 'Spaces' },
-  { type: 'gdrive', label: 'Google Drive', short: 'Drive', description: 'Shared drives and folders. Docs, Sheets and Slides exported.', group: 'Connected apps', icon: HardDrive, connected: true, supportsInherit: true, supportsWebhook: true, changeDetection: 'Changes feed with page token', scopeLabel: 'Drives and folders' },
-  { type: 'github', label: 'GitHub', short: 'GitHub', description: 'Installation, repos, branch and path globs.', group: 'Connected apps', icon: Github, connected: true, supportsInherit: true, supportsWebhook: true, changeDetection: 'Head commit compare; push webhooks', scopeLabel: 'Repos and paths' },
-  { type: 'notion', label: 'Notion', short: 'Notion', description: 'Pages and databases, with child pages.', group: 'Connected apps', icon: StickyNote, connected: true, supportsInherit: false, supportsWebhook: false, changeDetection: 'Last-edited since cursor', scopeLabel: 'Pages' },
-  { type: 'zendesk', label: 'Zendesk', short: 'Zendesk', description: 'Help centre categories and sections, locales, published only.', group: 'Connected apps', icon: LifeBuoy, connected: true, supportsInherit: false, supportsWebhook: false, changeDetection: 'Incremental articles API', scopeLabel: 'Categories' },
-  { type: 'salesforce', label: 'Salesforce Knowledge', short: 'Salesforce', description: 'Org, article types, data categories, language, published channel.', group: 'Connected apps', icon: Building2, connected: true, supportsInherit: false, supportsWebhook: false, changeDetection: 'LastModifiedDate since cursor', scopeLabel: 'Article types' },
-];
-
-/**
- * A source read through an installed plugin's list and get tools. Not in SOURCE_TYPES: the add dialogs offer
- * those, and a plugin source is made through kb-service's API until a Plugins page exists.
- */
-const PLUGIN_SOURCE: SourceTypeMeta = { type: 'tool', label: 'Plugin source', short: 'Plugin', description: "Read through an installed plugin's list and get tools.", group: 'Connected apps', icon: Puzzle, connected: true, supportsInherit: false, supportsWebhook: false, changeDetection: 'Each item\'s last-changed time since the last sync', scopeLabel: 'Source' };
-
-/** A type this console does not know reads as a plugin source with its own name, so its pages still open. */
-export const sourceTypeMeta = (type: SourceType): SourceTypeMeta => SOURCE_TYPES.find((t) => t.type === type) ?? (type === 'tool' ? PLUGIN_SOURCE : { ...PLUGIN_SOURCE, type, label: type, short: type });
-
 const KIND_ICON: Record<SourceKind, LucideIcon> = { file: FileUp, web: Globe, tool: Puzzle };
 
 /** The icon for what a source is: files, a website, or an app's knowledge source. The console keeps only icons by kind. */
@@ -225,11 +188,6 @@ export function SourceHealthText({ health }: { health?: SourceHealth }) {
       <CheckCircle2 className="size-3.5" /> Healthy{removed}
     </span>
   );
-}
-
-export function SourceTypeIcon({ type, className }: { type: SourceType; className?: string }) {
-  const Icon = sourceTypeMeta(type).icon;
-  return <Icon className={className ?? 'size-4 shrink-0 text-muted-foreground'} />;
 }
 
 export const WEEKDAY_LABEL: Record<Weekday, string> = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };

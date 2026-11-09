@@ -162,8 +162,11 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
       .map((r) => r.replace(/^\d+ items? failed to parse/, n(k.stats.failures, 'item', 'items') + ' failed to parse').replace(/^\d+ items? older than/, n(k.stats.stale, 'item', 'items') + ' older than'))
       .filter((r) => !/^0 items (failed|older)/.test(r));
   }
+  /** The AI steps kb-service reports waiting: chosen, and not covered by the knowledge owner's approval. */
+  const waitingSteps = ({ ingest, metadataMapping }: Source) => aiSteps(ingest, metadataMapping).filter((x) => !ingest.approval.approvedSteps.includes(x));
   const sourceRow = (s: Source): SourceRow => ({
     ...s,
+    aiStepsWaiting: waitingSteps({ ...s }),
     connection: deps.connection(s.connectionId),
     usedBy: kbs.filter((k) => k.sources.some((l) => l.sourceId === s.id)).map((k) => ({ id: k.id, name: k.name })),
     running: !!runningRun(s.id),
@@ -575,7 +578,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
             itemCount: items.filter((i) => i.sourceId === sid).length,
             reindexNeeded: s.status !== 'draft' && settingsDigest({ ...s }) !== s.indexedSettingsDigest,
             requiredMetadata: Array.from(new Set(kbs.filter((k) => k.sources.some((l) => l.sourceId === sid)).flatMap((k) => k.metadataProfile.required))).filter((k) => !['owner', 'effective_date', 'version'].includes(k)),
-            aiStepsWaiting: aiSteps(s.ingest, s.metadataMapping).filter((x) => !s.ingest.approval.approvedSteps.includes(x)),
+            aiStepsWaiting: waitingSteps({ ...s }),
             approval: s.ingest.approval.status === 'pending' ? approvalView(sourceOr404(sid)) : undefined,
             governance: {
               excluded: items.filter((i) => i.sourceId === sid && i.status === 'excluded').length,
@@ -607,6 +610,8 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
             collection: 'General',
             ...rest,
             kind,
+            kindLabel: kind === 'file' ? 'Files' : kind === 'web' ? 'Website' : 'App source',
+            aiStepsWaiting: [],
             scopeSummary: input.type === 'file' ? `${fileIds?.length ?? 0} uploaded files` : input.name,
             titleFrom: 'source',
             permissions: { mode: 'workspace' },

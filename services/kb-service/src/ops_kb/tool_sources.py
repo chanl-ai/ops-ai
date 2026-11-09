@@ -115,6 +115,8 @@ async def source_config(reader: ToolReader | None, who: Who, i: dict[str, Any]) 
     return {
         "plugin": plugin,
         "source": name,
+        # The plugin's name for this kind of source, which the source shows as its kind.
+        "title": str(found.get("title") or ""),
         "listTool": found["listTool"],
         "getTool": found["getTool"],
         "changesTool": found.get("changesTool"),

@@ -303,11 +303,22 @@ class KnowledgeService:
             "name": s["name"],
             # The kind its defaults and its label come from: file, web (a plugin source of one site's pages) or tool.
             "kind": kind_of(s),
+            "kindLabel": kind_label(s),
             "scopeSummary": scope_summary(s),
             "config": (
                 {
                     k: cfg.get(k)
-                    for k in ("plugin", "source", "listTool", "getTool", "connectionId", "paused", "site", "values")
+                    for k in (
+                        "plugin",
+                        "source",
+                        "title",
+                        "listTool",
+                        "getTool",
+                        "connectionId",
+                        "paused",
+                        "site",
+                        "values",
+                    )
                 }
                 if tool
                 else {"fileIds": s["file_ids"]}
@@ -319,6 +330,7 @@ class KnowledgeService:
             "rules": applied["rules"],
             "metadataMapping": applied["metadataMapping"],
             "aiCeiling": applied["aiCeiling"],
+            "aiStepsWaiting": ai_steps_waiting(self.settings_of(s).ingest),
             "tags": s["tags"],
             "titleFrom": "heading",
             "permissions": {"mode": "workspace"},
@@ -683,7 +695,6 @@ class KnowledgeService:
                 "duplicates": sum(1 for i in items if i.get("duplicate_of") or i["status"] == "skipped"),
                 "superseded": 0,
             },
-            "aiStepsWaiting": [],
         }
 
     async def create_source(self, who: Who, i: dict[str, Any]) -> dict[str, Any]:
@@ -2468,6 +2479,23 @@ def scope_summary(s: dict[str, Any]) -> str:
         first = str(start[0]).split("://", 1)[-1].rstrip("/")
         return first if len(start) == 1 else f"{first} and {len(start) - 1} more"
     return f"{cfg.get('plugin')} {cfg.get('source')}"
+
+
+# A source's kind in words, when its plugin's own title for it is not kept (a source made before titles were).
+KIND_LABEL = {"file": "Files", "web": "Website", "tool": "App source"}
+
+
+def kind_label(s: dict[str, Any]) -> str:
+    """What the source is, as the Add source dialog named it: Files, or the plugin's title for the source."""
+    title = dict(s.get("config") or {}).get("title")
+    return str(title) if s["type"] == "tool" and title else KIND_LABEL.get(kind_of(s), str(s["type"]))
+
+
+def ai_steps_waiting(settings: IngestSettings) -> list[str]:
+    """The AI steps chosen and not yet approved by the knowledge owner; syncs run without them until then."""
+    return [
+        step for step in settings.strategies if step in AI_STEPS and not ai_step_allowed(settings, step, preview=False)
+    ]
 
 
 def kind_of(s: dict[str, Any]) -> str:

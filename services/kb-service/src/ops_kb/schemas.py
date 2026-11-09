@@ -123,6 +123,8 @@ class Source(Out):
     type: str
     # file, web (a plugin source of one site's pages) or tool.
     kind: str
+    # The kind in words: Files, or the plugin's title for the source (what Add source offered it as).
+    kind_label: str
     name: str
     scope_summary: str
     config: Json
@@ -131,6 +133,8 @@ class Source(Out):
     ingest: Json
     # The most one sync may spend on model calls for its AI steps.
     ai_ceiling: float = 5.0
+    # The AI steps chosen and not yet approved by the knowledge owner; syncs run without them until then.
+    ai_steps_waiting: list[str]
     rules: list[Json]
     metadata_mapping: list[Json]
     tags: list[str]
@@ -220,7 +224,6 @@ class SourceDetail(Source):
     reindex_needed: bool
     required_metadata: list[str]
     governance: Json
-    ai_steps_waiting: list[str]
     # What the caller may do with it, from the write routes' own check.
     can_edit: bool | None = None
     can_delete: bool | None = None

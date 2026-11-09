@@ -697,6 +697,7 @@ class SearchOut(TypedDict, closed=True):
 
 class Source(TypedDict, closed=True):
     aiCeiling: NotRequired[float]
+    aiStepsWaiting: list[str]
     cleaning: dict[str, Any]
     collection: str
     config: dict[str, Any]
@@ -709,6 +710,7 @@ class Source(TypedDict, closed=True):
     itemsIndexed: int
     itemsPending: int
     kind: str
+    kindLabel: str
     lastRunStatus: NotRequired[str | None]
     lastSyncAt: NotRequired[str | None]
     metadataMapping: list[dict[str, Any]]
@@ -752,6 +754,7 @@ class SourceDetail(TypedDict, closed=True):
     itemsIndexed: int
     itemsPending: int
     kind: str
+    kindLabel: str
     lastRunDurationSec: NotRequired[float | None]
     lastRunStatus: NotRequired[str | None]
     lastSyncAt: NotRequired[str | None]
@@ -782,6 +785,7 @@ class SourceDetail(TypedDict, closed=True):
 
 class SourceRow(TypedDict, closed=True):
     aiCeiling: NotRequired[float]
+    aiStepsWaiting: list[str]
     cleaning: dict[str, Any]
     collection: str
     config: dict[str, Any]
@@ -794,6 +798,7 @@ class SourceRow(TypedDict, closed=True):
     itemsIndexed: int
     itemsPending: int
     kind: str
+    kindLabel: str
     lastRunStatus: NotRequired[str | None]
     lastSyncAt: NotRequired[str | None]
     metadataMapping: list[dict[str, Any]]

@@ -82,6 +82,8 @@ export interface Source {
   id: string;
   type: SourceType;
   kind: SourceKind;
+  /** What the source is, as kb-service names it: Files, or its plugin's own title for the source. */
+  kindLabel: string;
   name: string;
   /** The integration this source reads through; its status shows read-only on the source. */
   connectionId?: string;
@@ -93,6 +95,8 @@ export interface Source {
   parsing: ParsingSettings;
   cleaning: CleaningSettings;
   ingest: IngestSettings;
+  /** AI ingest steps chosen and still waiting for the knowledge owner's approval; syncs run without them. */
+  aiStepsWaiting: string[];
   /** Digest of the ingestion settings the current chunks were built with; differs from the settings when a re-index is needed. */
   indexedSettingsDigest?: string;
   rules: Rule[];
@@ -558,8 +562,6 @@ export interface SourceDetail extends Source {
   requiredMetadata: string[];
   /** Items excluded by a rule, held for metadata, or indexed once elsewhere. */
   governance: { excluded: number; held: number; duplicates: number; superseded: number };
-  /** AI ingest steps still waiting for approval; syncs and re-indexes run without them. */
-  aiStepsWaiting: string[];
   /** Whether the current user may approve the waiting steps, and what approving starts. */
   approval?: { canApprove: boolean; blockedReason?: string; modelCalls: number; estimatedCost: string; items: number };
 }

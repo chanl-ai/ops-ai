@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { ChevronDown, CircleDashed, Layers, Pause, Play, RefreshCw, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { SensitivityBadge, SourceStatusBadge, SourceTypeIcon, sourceTypeMeta } from '@/components/knowledge/knowledge-meta';
+import { SensitivityBadge, SourceKindIcon, SourceStatusBadge } from '@/components/knowledge/knowledge-meta';
 import { ConnectionChip } from '@/components/integrations/integration-meta';
 import { PageLayout } from '@/components/page-layout';
 import { PageTabPanel, PageTabs } from '@/components/shared/page-tabs';
@@ -35,7 +35,6 @@ import { appPageHref } from '@/lib/app-links';
 
 /** Lower-cases a label for use inside a sentence, leaving acronyms such as FAQ alone. */
 const midSentence = (l: string) => (/^[A-Z]{2}/.test(l) ? l : l.charAt(0).toLowerCase() + l.slice(1));
-const AI_STEPS: IngestStrategy[] = ['topic', 'faq', 'faq_pairs'];
 
 const TABS = ['overview', 'items', 'history', 'settings'] as const;
 type Tab = (typeof TABS)[number];
@@ -66,7 +65,6 @@ export default function SourcePage() {
     );
 
   const s = query.data;
-  const meta = sourceTypeMeta(s.type);
   const running = !!s.running;
   const fail = (what: string) => (e: Error) => toast.error(`Couldn’t ${what}`, { description: e.message });
   const startSync = (opts: SyncOptions | undefined, done: string) => sync.mutate({ id: s.id, opts }, { onSuccess: () => toast.success(done), onError: fail('start the sync') });
@@ -74,18 +72,18 @@ export default function SourcePage() {
     pause.mutate({ id: s.id, paused: s.status !== 'paused' }, { onSuccess: (x) => toast.success(x.status === 'paused' ? 'Schedule paused' : 'Schedule resumed', { description: s.name }), onError: fail('change the schedule') });
   const tabHref = (t: string, q?: string) => `/integrations/sources/${s.id}?tab=${t}${q ? `&${q}` : ''}`;
   const syncBlocked = running || s.status === 'revoked' || s.status === 'draft';
-  // The AI steps chosen and not yet covered by the knowledge owner's approval, from the source's own approval record.
-  const waits = s.ingest.approval.status === 'pending' ? s.ingest.strategies.filter((x) => AI_STEPS.includes(x) && !s.ingest.approval.approvedSteps.includes(x)).map((x) => midSentence(STRATEGY_LABEL[x])) : [];
+  // The AI steps kb-service reports waiting for the knowledge owner's approval.
+  const waits = s.aiStepsWaiting.map((x) => midSentence(STRATEGY_LABEL[x as IngestStrategy] ?? x));
 
   return (
     <PageTabs value={tab} onValueChange={(t) => setTab(t as Tab)}>
       <PageLayout
-        icon={<SourceTypeIcon type={s.type} className="size-5 text-muted-foreground" />}
+        icon={<SourceKindIcon kind={s.kind} className="size-5 text-muted-foreground" />}
         title={s.name}
         badge={<SourceStatusBadge status={s.status} />}
         description={
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>{meta.label}</span>
+            <span>{s.kindLabel}</span>
             {s.connection && <ConnectionChip connection={s.connection} />}
             <SensitivityBadge level={s.sensitivity} />
             <span>Collection {s.collection}</span>
@@ -138,7 +136,7 @@ export default function SourcePage() {
             {s.status === 'revoked' && (
               <Alert variant="destructive">
                 <ShieldAlert className="size-4" />
-                <AlertTitle>The {meta.short} connection was revoked</AlertTitle>
+                <AlertTitle>The {s.connection?.name ?? s.kindLabel} connection was revoked</AlertTitle>
                 <AlertDescription className="flex flex-col items-start gap-2">
                   <p>Syncs stop until it is reconnected in Integrations. Indexed items stay searchable but will not update.</p>
                   {s.connection && (

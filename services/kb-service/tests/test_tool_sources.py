@@ -317,3 +317,9 @@ async def test_a_listing_longer_than_a_run_fetches_what_it_found_and_finishes_ov
     cycle = [await sync(kb, src["id"]) for _ in range(4)]
     assert sum(r["counts"]["deleted"] for r in cycle) == 1, [r["counts"] for r in cycle]
     assert "Article 7" not in set(await items(kb, src["id"])), "a whole listing read over runs removes what left it"
+
+
+async def test_a_source_names_its_kind_as_its_plugin_titles_it(kb: httpx.AsyncClient) -> None:
+    """The console kept its own list of source kinds, so an app's source showed a label nobody declared."""
+    src = await source(kb)
+    assert data(await kb.get(f"/v1/sources/{src['id']}"))["kindLabel"] == "Salesforce Knowledge articles"

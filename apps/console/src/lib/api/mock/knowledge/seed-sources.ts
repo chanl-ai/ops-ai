@@ -33,7 +33,7 @@ const ingest = (preset: IngestSettings["preset"], strategies: IngestStrategy[], 
   ...extra,
 })
 
-export const sources: Source[] = [
+const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting">[] = [
   {
     id: "src_hr_sharepoint",
     type: "sharepoint",
@@ -359,6 +359,20 @@ export const sources: Source[] = [
     createdAt: daysAgo(100),
   },
 ]
+
+/** What kb-service names each seeded kind: Files, or the plugin's own title for its source. */
+const MOCK_KIND_LABEL: Partial<Record<Source["type"], string>> = {
+  file: "Files",
+  crawl: "Website",
+  text: "Plain text",
+  sharepoint: "SharePoint documents",
+  confluence: "Confluence pages",
+  github: "GitHub files",
+  notion: "Notion pages",
+  zendesk: "Zendesk help centre articles",
+}
+
+export const sources: Source[] = seedRows.map((s) => ({ ...s, kindLabel: MOCK_KIND_LABEL[s.type] ?? "App source", aiStepsWaiting: [] }))
 
 // ---- Items ----------------------------------------------------------------
 

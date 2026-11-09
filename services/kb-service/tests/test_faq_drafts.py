@@ -85,6 +85,16 @@ async def drafted(client: httpx.AsyncClient) -> tuple[dict[str, Any], dict[str, 
     return src, kb
 
 
+async def test_the_source_says_which_ai_steps_wait_for_approval(client: httpx.AsyncClient) -> None:
+    """The source page worked out the waiting steps itself while the API said none waited."""
+    src = await file_source(client)
+    data(await client.patch(f"/v1/sources/{src['id']}", json={"ingest": {"strategies": ["structure", "faq_pairs"]}}))
+    waiting = data(await client.get(f"/v1/sources/{src['id']}"))
+    assert waiting["aiStepsWaiting"] == ["faq_pairs"] and waiting["kindLabel"] == "Files", waiting
+    data(await client.post(f"/v1/sources/{src['id']}/ai-approval", json={"decision": "approve"}))
+    assert data(await client.get(f"/v1/sources/{src['id']}"))["aiStepsWaiting"] == []
+
+
 async def queue(client: httpx.AsyncClient, view: str = "open") -> list[dict[str, Any]]:
     return data(await client.get("/v1/knowledge-changes", params={"view": view}))["data"]
 
