@@ -6,7 +6,6 @@ in each person, which a sync with nobody behind it cannot use; and two syncs of 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import mkdtemp
 from typing import Any
@@ -19,7 +18,6 @@ from ops_identity import Auth
 from ops_kb.agents import StaticAgents
 from ops_kb.app import _tools_service, create_kb_app  # pyright: ignore[reportPrivateUsage]
 from ops_kb.files import KnowledgeFiles
-from ops_kb.schedule import due
 from ops_kb.tool_sources import Answer
 from ops_service_kit.settings import Settings
 
@@ -278,15 +276,6 @@ async def test_a_connection_that_signs_in_each_person_cannot_be_a_source(
     body = {"type": "tool", "name": "Mine", "config": {"plugin": "opsai.salesforce", "source": "articles"}}
     r = await kb.post("/v1/sources", json=body)
     assert r.status_code == 400 and "needs a team sign-in" in r.text, r.text
-
-
-def test_a_daily_source_is_due_once_its_time_has_passed() -> None:
-    s = {"status": "active", "config": {"schedule": {"kind": "daily", "time": "02:00"}}}
-    now = datetime(2026, 10, 29, 3, 0, tzinfo=UTC)
-    assert due({**s, "last_sync_at": None}, now)
-    assert due({**s, "last_sync_at": datetime(2026, 10, 28, 3, 0, tzinfo=UTC)}, now)
-    assert not due({**s, "last_sync_at": datetime(2026, 10, 29, 2, 30, tzinfo=UTC)}, now)
-    assert not due({**s, "status": "paused", "last_sync_at": None}, now)
 
 
 def test_on_an_install_without_plugins_kb_reaches_no_tool(tmp_path: Path) -> None:

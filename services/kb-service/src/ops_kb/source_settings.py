@@ -21,6 +21,7 @@ from ops_ingest.metadata import MappingError, MetadataMapping, validate_mapping
 from ops_ingest.models import AI_STEPS
 from ops_ingest.rules import Rule
 from ops_ingest.split import preset_for
+from ops_store.schedule import InvalidSchedule, checked
 
 OcrMode = Literal["off", "auto", "always"]
 
@@ -53,6 +54,8 @@ class SourceSettings(_Model):
     ingest: IngestSettings
     rules: list[Rule] = Field(default_factory=list[Rule])
     metadata_mapping: list[MetadataMapping] = Field(default_factory=list[MetadataMapping])
+    # When it syncs on its own (ops_store.schedule); None: the kind's default (a plugin's own schedule for its source).
+    schedule: dict[str, Any] | None = None
 
 
 class InvalidSettings(ValueError):
@@ -99,13 +102,20 @@ def wire(s: SourceSettings) -> dict[str, Any]:
     return s.model_dump(by_alias=True, mode="json")
 
 
+# A website is checked once a day by default; files sync when someone asks.
+WEB_SCHEDULE: dict[str, Any] = {"kind": "daily", "time": "02:00", "tz": "UTC"}
+
+
 def merged(current: SourceSettings, patch: dict[str, Any]) -> SourceSettings:
     """`current` with the parts `patch` names replaced (a nested part merged key by key), validated as a whole.
     The AI-step approval is the knowledge owner's decision on its own route, so a settings save never changes it;
     an AI step added since the approval waits for it again."""
     data = wire(current)
     for key, value in patch.items():
-        if isinstance(value, dict) and isinstance(data.get(key), dict):
+        if key == "schedule":
+            # A schedule is replaced whole: a daily one's time means nothing to an hourly one.
+            data[key] = value
+        elif isinstance(value, dict) and isinstance(data.get(key), dict):
             data[key] = {**cast(dict[str, Any], data[key]), **cast(dict[str, Any], value)}
         else:
             data[key] = value
@@ -123,7 +133,9 @@ def merged(current: SourceSettings, patch: dict[str, Any]) -> SourceSettings:
         validate_settings(out.ingest)
         for m in out.metadata_mapping:
             validate_mapping(m)
-    except (InvalidIngestError, MappingError) as e:
+        if out.schedule is not None:
+            out.schedule = checked(out.schedule)
+    except (InvalidIngestError, MappingError, InvalidSchedule) as e:
         raise InvalidSettings(str(e)) from e
     added = [s for s in out.ingest.strategies if s in AI_STEPS and s not in out.ingest.approval.approved_steps]
     if added and out.ingest.approval.status != "pending":

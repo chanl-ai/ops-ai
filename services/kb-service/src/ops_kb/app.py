@@ -77,11 +77,13 @@ from .schemas import (
     SourceRow,
     SyncIn,
     SyncRun,
+    Tombstone,
+    TombstonesIn,
     VerifyIn,
 )
 from .service import KnowledgeService, Who
 from .store import AsyncEngine, KnowledgeStore, reachable
-from .store.audit_relay import keep_relaying
+from .store.event_relay import keep_relaying
 from .store.fulltext import PostgresFullTextRetriever
 from .tool_sources import ToolReader
 
@@ -150,6 +152,12 @@ def _platform_service(settings: Settings) -> ServiceClient | None:
     return ServiceClient.for_settings(settings, http, service="kb", audience="platform", scopes=[AUDIT_SCOPE])
 
 
+def _events_service(settings: Settings) -> ServiceClient:
+    """agents-service, which runs the workflows that listen to kb-service's events (a source that keeps failing)."""
+    http = httpx.AsyncClient(base_url=settings.agents_url or f"http://127.0.0.1:{settings.port}", timeout=10)
+    return ServiceClient.for_settings(settings, http, service="kb", audience="agents", scopes=["events:emit"])
+
+
 def _documents_service(settings: Settings) -> Readings | None:
     """documents-service, which reads every file a source holds; unset, file sources cannot be indexed."""
     if not settings.documents_url:
@@ -192,6 +200,7 @@ def create_kb_app(
     readings: Readings | None = None,
     schedule: bool = True,
     platform: ServiceClient | None = None,
+    events_to: ServiceClient | None = None,
 ) -> FastAPI:
     """`auth` resolves callers through ops_identity's shared dependency; by default built from Settings for audience
     "kb". An admin administers the knowledge bases and sources of the teams it is admin of, and no others (there is
@@ -202,6 +211,7 @@ def create_kb_app(
     reader = tools or _tools_service(Settings())
     readings = readings or _documents_service(Settings())
     audit_log = platform or _platform_service(Settings())
+    events = events_to or _events_service(Settings())
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
@@ -210,7 +220,7 @@ def create_kb_app(
         stop = asyncio.Event()
         runs = (reader is not None or readings is not None) and schedule
         beat = asyncio.create_task(keep_syncing(service, stop)) if runs else None
-        hand_off = asyncio.create_task(keep_relaying(engine, audit_log, stop)) if audit_log is not None else None
+        hand_off = asyncio.create_task(keep_relaying(engine, audit_log, events, stop))
         try:
             yield
         finally:
@@ -401,6 +411,15 @@ def create_kb_app(
         """What a plugin source with these settings would take in (a site's pages, each with its outcome), asked of
         the plugin's preview tool. Nothing is stored."""
         return ok(await service.preview_source(who, body.model_dump(by_alias=True)))
+
+    @sources.get("/{source_id}/tombstones", response_model=Envelope[list[Tombstone]])
+    async def list_tombstones(source_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Addresses removed after answering gone twice at their source; a sync leaves them out until lifted."""
+        return ok(await service.tombstones(who, source_id))
+
+    @sources.post("/{source_id}/tombstones/lift", response_model=Envelope[list[Tombstone]])
+    async def lift_tombstones(source_id: str, body: TombstonesIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        return ok(await service.lift_tombstones(who, source_id, body.ids))
 
     @sources.post("/{source_id}/files", response_model=Envelope[list[AddedFile]])
     async def add_files(source_id: str, body: FileIdsIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

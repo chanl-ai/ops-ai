@@ -400,6 +400,7 @@ class SourceIn(TypedDict):
     owner: NotRequired[str | None]
     parsing: NotRequired[dict[str, Any] | None]
     rules: NotRequired[list[dict[str, Any]] | None]
+    schedule: NotRequired[dict[str, Any] | None]
     sensitivity: NotRequired[str]
     status: NotRequired[str | None]
     sync: NotRequired[bool]
@@ -430,6 +431,7 @@ class SourcePatch(TypedDict):
     owner: NotRequired[str | None]
     parsing: NotRequired[dict[str, Any] | None]
     rules: NotRequired[list[dict[str, Any]] | None]
+    schedule: NotRequired[dict[str, Any] | None]
     sensitivity: NotRequired[str | None]
     tags: NotRequired[list[str] | None]
 
@@ -459,6 +461,16 @@ class SyncRun(TypedDict, closed=True):
     startedAt: str
     status: str
     trigger: str
+
+
+class Tombstone(TypedDict, closed=True):
+    at: NotRequired[str | None]
+    id: str
+    reason: NotRequired[str | None]
+
+
+class TombstonesIn(TypedDict):
+    ids: list[str]
 
 
 class ValidationError(TypedDict):
@@ -553,6 +565,11 @@ class EnvelopeListSourceKind(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeListTombstone(TypedDict, closed=True):
+    data: list[Tombstone]
+    success: Literal[True]
+
+
 class HTTPValidationError(TypedDict):
     detail: NotRequired[list[ValidationError]]
 
@@ -615,6 +632,7 @@ class Source(TypedDict, closed=True):
     config: dict[str, Any]
     createdAt: str
     deletedAtSource: str
+    health: NotRequired[dict[str, Any]]
     id: str
     ingest: dict[str, Any]
     itemsFailed: int
@@ -624,6 +642,7 @@ class Source(TypedDict, closed=True):
     lastSyncAt: NotRequired[str | None]
     metadataMapping: list[dict[str, Any]]
     name: str
+    nextSyncAt: NotRequired[str | None]
     notifyOnFailure: bool
     owner: str
     parsing: dict[str, Any]
@@ -653,6 +672,7 @@ class SourceDetail(TypedDict, closed=True):
     deletedAtSource: str
     errorGroups: list[dict[str, Any]]
     governance: dict[str, Any]
+    health: NotRequired[dict[str, Any]]
     id: str
     ingest: dict[str, Any]
     itemCount: int
@@ -664,6 +684,7 @@ class SourceDetail(TypedDict, closed=True):
     lastSyncAt: NotRequired[str | None]
     metadataMapping: list[dict[str, Any]]
     name: str
+    nextSyncAt: NotRequired[str | None]
     notifyOnFailure: bool
     owner: str
     parsing: dict[str, Any]
@@ -692,6 +713,7 @@ class SourceRow(TypedDict, closed=True):
     config: dict[str, Any]
     createdAt: str
     deletedAtSource: str
+    health: NotRequired[dict[str, Any]]
     id: str
     ingest: dict[str, Any]
     itemsFailed: int
@@ -701,6 +723,7 @@ class SourceRow(TypedDict, closed=True):
     lastSyncAt: NotRequired[str | None]
     metadataMapping: list[dict[str, Any]]
     name: str
+    nextSyncAt: NotRequired[str | None]
     notifyOnFailure: bool
     owner: str
     parsing: dict[str, Any]

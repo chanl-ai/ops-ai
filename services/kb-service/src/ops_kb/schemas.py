@@ -64,6 +64,7 @@ class SourceIn(In):
     # values: the console's Add source sends its whole draft config for every type, and only a tool source reads it.
     config: dict[str, Any] | None = None
     # Each stage's settings (source_settings.py), over the kind's defaults; validated as a whole.
+    schedule: Json | None = None
     parsing: Json | None = None
     cleaning: Json | None = None
     ingest: Json | None = None
@@ -146,6 +147,9 @@ class Source(Out):
     created_at: str
     # On a settings save: the rebuild it started in the background, when items were built under other settings.
     rebuild: SyncRun | None = None
+    # When the schedule next syncs it, and its health in one place (state, last good sync, days failing, tombstones).
+    next_sync_at: str | None = None
+    health: Json = Field(default_factory=dict[str, Any])
 
 
 class NamedRef(Out):
@@ -389,6 +393,16 @@ class SourceKind(Out):
     inputs: Json = Field(default_factory=dict[str, Any])
 
 
+class Tombstone(Out):
+    id: str
+    at: str | None = None
+    reason: str | None = None
+
+
+class TombstonesIn(In):
+    ids: list[str] = Field(min_length=1, max_length=200)
+
+
 class PreviewIn(In):
     # The plugin, its source and the source's own settings, as a create would send them.
     config: dict[str, Any]
@@ -416,6 +430,7 @@ class SourcePatch(In):
     sensitivity: str | None = None
     tags: list[str] | None = None
     # Each stage's settings; a part sent is merged into the saved one key by key and validated as a whole.
+    schedule: Json | None = None
     parsing: Json | None = None
     cleaning: Json | None = None
     ingest: Json | None = None

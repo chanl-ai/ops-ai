@@ -320,6 +320,17 @@ export const kbOperations = {
     "query": [],
     "stream": false
   },
+  "sources_lift_tombstones": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/sources/{source_id}/tombstones/lift",
+    "pathParams": [
+      "source_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "sources_list_items": {
     "body": null,
     "headers": [],
@@ -371,6 +382,17 @@ export const kbOperations = {
       "pageSize",
       "search"
     ],
+    "stream": false
+  },
+  "sources_list_tombstones": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/sources/{source_id}/tombstones",
+    "pathParams": [
+      "source_id"
+    ],
+    "query": [],
     "stream": false
   },
   "sources_pause_source": {

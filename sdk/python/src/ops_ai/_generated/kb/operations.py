@@ -271,6 +271,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "sources_lift_tombstones": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/sources/{source_id}/tombstones/lift",
+        "pathParams": ["source_id"],
+        "query": [],
+        "stream": False,
+    },
     "sources_list_items": {
         "body": None,
         "headers": [],
@@ -305,6 +314,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/sources",
         "pathParams": [],
         "query": ["page", "pageSize", "search"],
+        "stream": False,
+    },
+    "sources_list_tombstones": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/sources/{source_id}/tombstones",
+        "pathParams": ["source_id"],
+        "query": [],
         "stream": False,
     },
     "sources_pause_source": {
@@ -618,6 +636,14 @@ class Operations:
         "Sync Source"
         return self._t.call(SERVICE, OPERATIONS["sources_sync_source"], {"source_id": source_id}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def sources_list_tombstones(self, source_id: str) -> list[Tombstone]:
+        "List Tombstones"
+        return self._t.call(SERVICE, OPERATIONS["sources_list_tombstones"], {"source_id": source_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def sources_lift_tombstones(self, source_id: str, body: TombstonesIn) -> list[Tombstone]:
+        "Lift Tombstones"
+        return self._t.call(SERVICE, OPERATIONS["sources_lift_tombstones"], {"source_id": source_id}, {}, {}, body)  # type: ignore[no-any-return]
+
     def sources_get_run(self, run_id: str) -> SyncRun:
         "Get Run"
         return self._t.call(SERVICE, OPERATIONS["sources_get_run"], {"run_id": run_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -875,6 +901,18 @@ class AsyncOperations:
     async def sources_sync_source(self, source_id: str, body: SyncIn) -> SyncRun:
         "Sync Source"
         return await self._t.call(SERVICE, OPERATIONS["sources_sync_source"], {"source_id": source_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def sources_list_tombstones(self, source_id: str) -> list[Tombstone]:
+        "List Tombstones"
+        return await self._t.call(
+            SERVICE, OPERATIONS["sources_list_tombstones"], {"source_id": source_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def sources_lift_tombstones(self, source_id: str, body: TombstonesIn) -> list[Tombstone]:
+        "Lift Tombstones"
+        return await self._t.call(
+            SERVICE, OPERATIONS["sources_lift_tombstones"], {"source_id": source_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
 
     async def sources_get_run(self, run_id: str) -> SyncRun:
         "Get Run"

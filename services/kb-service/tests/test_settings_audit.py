@@ -11,7 +11,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity import ServiceClient, dev_service_signer
-from ops_kb.store.audit_relay import relay
+from ops_kb.store.event_relay import relay
 from ops_store.audit import AUDIT_ROUTE
 
 from .test_bases_and_sources import data

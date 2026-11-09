@@ -62,7 +62,8 @@ class WebPlugin:
         if tool == LIST:
             rows: list[dict[str, Any]] = []
             for url, body in self.pages.items():
-                row: dict[str, Any] = {"id": url, "title": url, "updated_at": "2026-11-09T00:00:00Z", "url": url}
+                # A page with no sitemap date: its listing time moves with its text, as a sitemap's lastmod would.
+                row: dict[str, Any] = {"id": url, "title": url, "url": url, "updated_at": f"2026-11-09T{len(body):06d}"}
                 if url in self.refused:
                     row["skipped"] = self.refused[url]
                 elif url in self.inline:

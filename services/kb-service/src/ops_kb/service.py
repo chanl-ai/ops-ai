@@ -24,6 +24,7 @@ from ops_ingest.split import document_digest
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import options_page, options_window
 from ops_service_kit.ids import new_id
+from ops_store.schedule import next_run
 
 from .agents import AgentDirectory, Usage
 from .files import FileIntake, FileMissing, FileNotScanned, Stored
@@ -32,6 +33,7 @@ from .readings import READING_PENDING, Readings, parsed_of, read_with
 from .repeats import lines_of, repeated, without
 from .retrieval import Passage, Retriever
 from .source_settings import (
+    WEB_SCHEDULE,
     InvalidSettings,
     SourceSettings,
     index_key,
@@ -150,7 +152,11 @@ def _matches(search: str | None, *texts: str) -> bool:
 
 
 # The settings a source's patch may change, each validated and applied by its stage (source_settings.py).
-SETTINGS_KEYS = ("parsing", "cleaning", "ingest", "rules", "metadataMapping")
+SETTINGS_KEYS = ("parsing", "cleaning", "ingest", "rules", "metadataMapping", "schedule")
+# The service event a source raises when it keeps failing, so a workflow can tell its owner.
+FAILING_EVENT = "knowledge.source.failing"
+FAILING_AFTER_RUNS = 2
+FAILING_AFTER = timedelta(days=1)
 
 
 # An item's status as the console names it: an item waiting for its file's reading is processing there.
@@ -215,6 +221,17 @@ class KnowledgeService:
         source whose items are a website's pages starts with a website's defaults."""
         return stored(kind_of(s), s.get("settings"), ocr=self.ocr)
 
+    def schedule_of(self, s: dict[str, Any]) -> dict[str, Any]:
+        """When the source syncs on its own: its saved schedule, else its plugin's for its kind of source, else a
+        website's daily check, else manual."""
+        saved = self.settings_of(s).schedule
+        if saved is not None:
+            return saved
+        cfg = dict(s.get("config") or {})
+        if kind_of(s) == "web":
+            return WEB_SCHEDULE
+        return cast(dict[str, Any], cfg.get("schedule") or {"kind": "manual"})
+
     def key_of(self, s: dict[str, Any]) -> str:
         """The digest an item built now under the source's settings records (`indexed_with`)."""
         return index_key(self.settings_of(s), repeats_of(s))
@@ -244,7 +261,13 @@ class KnowledgeService:
             "tags": s["tags"],
             "titleFrom": "heading",
             "permissions": {"mode": "workspace"},
-            "schedule": cfg.get("schedule") or {"kind": "manual"},
+            "schedule": (schedule := self.schedule_of(s)),
+            **(
+                {"nextSyncAt": _iso(n)}
+                if s["status"] == "active" and (n := next_run(schedule, s.get("last_sync_at"), datetime.now(UTC)))
+                else {}
+            ),
+            "health": health_of(s),
             "deletedAtSource": "remove",
             "staleAfterDays": 365,
             "notifyOnFailure": True,
@@ -779,13 +802,21 @@ class KnowledgeService:
             return await self.sync_tool(who, s, full=full, trigger="full" if full else "manual")
         return await self._held_sync(who, s, full=full, retry=retry)
 
-    async def _held_sync(self, who: Who, s: dict[str, Any], *, full: bool, retry: bool) -> dict[str, Any]:
+    async def scheduled_sync(self, who: Who, s: dict[str, Any]) -> dict[str, Any]:
+        """A sync the schedule starts, of either kind, recorded with trigger `schedule`."""
+        if s["type"] == "tool":
+            return await self.sync_tool(who, s, full=False, trigger="schedule")
+        return await self._held_sync(who, s, full=False, retry=False, trigger="schedule")
+
+    async def _held_sync(
+        self, who: Who, s: dict[str, Any], *, full: bool, retry: bool, trigger: str | None = None
+    ) -> dict[str, Any]:
         """A file source's sync under its lease, so a rebuild, the schedule and a manual sync never run it at once."""
         source_id = str(s["id"])
         if not await self.store.claim(who.tenant_id, source_id, until=datetime.now(UTC) + LEASE):
             raise Conflict(f"{s['name']} is syncing or rebuilding now; wait for that run to end.", code="sync_running")
         try:
-            return await self._sync(who, s, full=full, retry=retry)
+            return await self._sync(who, s, full=full, retry=retry, trigger=trigger)
         finally:
             await self.store.release(who.tenant_id, source_id)
 
@@ -818,6 +849,24 @@ class KnowledgeService:
         cfg["repeats"] = found
         await self.store.update_source(who.tenant_id, source_id, {"config": cfg})
         await self.start_rebuild(who, {**s, "config": cfg})
+
+    async def settle_run(self, who: Who, s: dict[str, Any], status: str, *, activate: bool) -> None:
+        """Records a run's outcome on the source; the second failure in a row, or a failure a day into a failing
+        streak, raises the failing event once, with the source and its last error."""
+        before = s.get("failing_since")
+        in_row = await self.store.mark_synced(who.tenant_id, str(s["id"]), status, activate=activate)
+        if status != "failed":
+            return
+        long_failing = isinstance(before, datetime) and datetime.now(UTC) - before >= FAILING_AFTER
+        if in_row == FAILING_AFTER_RUNS or (long_failing and in_row > FAILING_AFTER_RUNS and in_row % 24 == 0):
+            payload = {
+                "sourceId": s["id"],
+                "sourceName": s["name"],
+                "owner": s["owner"],
+                "failedRuns": in_row,
+                "failingSince": _iso(before) if isinstance(before, datetime) else None,
+            }
+            await self.store.record_event(who.tenant_id, str(s["id"]), name=FAILING_EVENT, payload=payload)
 
     async def start_rebuild(self, who: Who, s: dict[str, Any]) -> dict[str, Any] | None:
         """Rebuilds, in the background, every item of the source built under other settings: split again from its
@@ -917,7 +966,9 @@ class KnowledgeService:
             raise Conflict("This run is not running.", code="run_not_running")
         return _run((await self.store.runs(who.tenant_id, run_id=run_id))[0])
 
-    async def _sync(self, who: Who, s: dict[str, Any], *, full: bool, retry: bool) -> dict[str, Any]:
+    async def _sync(
+        self, who: Who, s: dict[str, Any], *, full: bool, retry: bool, trigger: str | None = None
+    ) -> dict[str, Any]:
         """Reads every file of the source and indexes what changed: a new name is a new document, a known name with
         different content is its next version, identical content is unchanged. `full` rebuilds every document from its
         content and `retry` rebuilds the failed ones, both keeping their version. One file failing does not stop the
@@ -1005,7 +1056,7 @@ class KnowledgeService:
         # A draft activates on its first sync that indexes something, as the source page promises; a sync that
         # indexed nothing (no files, or all failed) leaves it draft so its setup is finished first.
         indexed = counts["upserted"] > 0 or counts["unchanged"] > 0
-        await self.store.mark_synced(who.tenant_id, source_id, status, activate=indexed)
+        await self.settle_run(who, s, status, activate=indexed)
         _, by_source = await self._joined(who.tenant_id)
         if counts["upserted"] or counts["deleted"]:
             await self.store.refreshed(who.tenant_id, by_source.get(source_id, []))
@@ -1013,7 +1064,7 @@ class KnowledgeService:
             "tenant_id": who.tenant_id,
             "id": new_id("run"),
             "source_id": source_id,
-            "trigger": "full" if full else "retry" if retry else "manual",
+            "trigger": trigger or ("full" if full else "retry" if retry else "manual"),
             "started_at": started,
             "duration_sec": round((datetime.now(UTC) - started).total_seconds(), 2),
             "status": status,
@@ -1206,7 +1257,7 @@ class KnowledgeService:
             if done["status"] != "reading":
                 settled += 1
                 if done["status"] == "indexed":
-                    await self.store.mark_synced(who.tenant_id, str(source["id"]), "success", activate=True)
+                    await self.settle_run(who, source, "success", activate=True)
                     _, by_source = await self._joined(who.tenant_id)
                     await self.store.refreshed(who.tenant_id, by_source.get(str(source["id"]), []))
         return settled
@@ -1438,6 +1489,23 @@ class KnowledgeService:
         if given and rebuild_for(before, self.settings_of(after)) != "none":
             rebuild = await self.start_rebuild(who, after)
         return {**self._source(after, by_source.get(source_id, [])), "rebuild": rebuild}
+
+    async def tombstones(self, who: Who, source_id: str) -> list[dict[str, Any]]:
+        """The addresses removed after answering gone twice, with when and why; the next sync leaves them out."""
+        s = await self._source_row(who, source_id)
+        marks = cast(dict[str, dict[str, Any]], dict(s.get("config") or {}).get("tombstones") or {})
+        return [{"id": k, "at": v.get("at"), "reason": v.get("reason")} for k, v in sorted(marks.items())]
+
+    async def lift_tombstones(self, who: Who, source_id: str, ids: list[str]) -> list[dict[str, Any]]:
+        """Lets the next sync take those addresses in again, if the source still lists them."""
+        s = await self._changeable_source(who, source_id)
+        cfg = dict(s.get("config") or {})
+        marks = cast(dict[str, Any], dict(cfg.get("tombstones") or {}))
+        if missing := [i for i in ids if i not in marks]:
+            raise NotFound(f"No tombstone for {missing[0]}.")
+        cfg["tombstones"] = {k: v for k, v in marks.items() if k not in ids}
+        await self.store.update_source(who.tenant_id, source_id, {"config": cfg})
+        return await self.tombstones(who, source_id)
 
     @staticmethod
     def _merged(current: SourceSettings, given: dict[str, Any]) -> SourceSettings:
@@ -1927,6 +1995,32 @@ def _run(r: dict[str, Any]) -> dict[str, Any]:
         "log": r["log"],
         **({"finishedAt": _iso(r["finished_at"])} if r.get("finished_at") else {}),
         **({"cancelledBy": r["cancelled_by"]} if r.get("cancelled_by") else {}),
+    }
+
+
+def health_of(s: dict[str, Any]) -> dict[str, Any]:
+    """A source's health in one place: never synced, healthy, failing (since when, for how many days) or waiting for
+    its connection to be signed in again."""
+    cfg = dict(s.get("config") or {})
+    since: datetime | None = s.get("failing_since")
+    good: datetime | None = s.get("last_good_sync_at")
+    reconnect = cfg.get("paused") == "needs_reconnect"
+    state = (
+        "needs_reconnect"
+        if reconnect
+        else "failing"
+        if since
+        else "healthy"
+        if good or s.get("last_sync_at")
+        else "never"
+    )
+    return {
+        "state": state,
+        **({"lastGoodSyncAt": _iso(good)} if good else {}),
+        **({"failingSince": _iso(since)} if since else {}),
+        "daysFailing": (datetime.now(UTC) - since).days if since else 0,
+        "failedRuns": int(s.get("failures_in_row") or 0),
+        "tombstoned": len(cast(dict[str, Any], cfg.get("tombstones") or {})),
     }
 
 

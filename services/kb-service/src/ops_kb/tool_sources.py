@@ -37,6 +37,8 @@ MAX_PAGES = 200
 # longer opens it. The run starts the listing again from the watermark instead of failing every run on it.
 STALE_CURSOR = {"INVALID_INPUT", "INVALID_ARGUMENTS"}
 FULL_EVERY = timedelta(days=7)
+# Syncs in a row an item must answer gone (404 or 410) before it is removed: one miss may be the site's hiccup.
+GONE_TWICE = 2
 # A tool that gives no watermark: the next run lists from the newest change seen, less this, so a record saved during
 # a run is listed again rather than missed.
 OVERLAP = timedelta(minutes=5)
@@ -235,6 +237,8 @@ async def sync_tool_source(
     if by_changes and not cursor:
         cursor = cfg["changesCursor"]
     removed_at_source: list[str] = []
+    tombstones = cast(dict[str, Any], cfg.setdefault("tombstones", {}))
+    gone_now: list[str] = []
     # Only a listing read from its first page in this run sees every item, so only then is an unseen item removed.
     from_start = cursor is None
     known = {str(i["path"]): i for i in await service.store.items(tenant, source_ids=[source_id])}
@@ -292,6 +296,11 @@ async def sync_tool_source(
             if r.get("deleted"):
                 removed_at_source.append(item_id)
                 continue
+            if item_id in tombstones:
+                # Removed after answering gone twice: a link elsewhere does not bring it back until it is lifted.
+                seen.discard(item_id)
+                counts["skipped"] += 1
+                continue
             if r.get("skipped"):
                 # Listed but not to be taken in (refused by robots.txt, excluded by a rule): not seen, so an indexed
                 # copy leaves search.
@@ -339,6 +348,19 @@ async def sync_tool_source(
             await _put(service, who, s, known, r, marker=str(r["marker"]), parent=None, counts=counts, errors=errors)
         answers = await asyncio.gather(*(fetch(str(r["id"])) for r in changed))
         for r, got in zip(changed, answers, strict=True):
+            if not got.ok and got.code == "NOT_FOUND" and (held := known.get(str(r["id"]))) is not None:
+                # Gone at the source: removed on the second sync in a row that finds it gone, then tombstoned.
+                count = int(held.get("gone_count") or 0) + 1
+                await service.store.update_item(tenant, str(held["id"]), {"gone_count": count})
+                if count >= GONE_TWICE:
+                    gone_now.append(str(r["id"]))
+                    tombstones[str(r["id"])] = {
+                        "at": started.isoformat(),
+                        "reason": got.message or "Gone at the source",
+                    }
+                else:
+                    log.append(f"{held['title']}: answered gone once; removed if it answers so again")
+                continue
             if not got.ok:
                 counts["failed"] += 1
                 errors.append(
@@ -379,6 +401,12 @@ async def sync_tool_source(
                     )
                 else:
                     counts["failed"] += 1
+        if gone_now:
+            gone_ids = [str(known[p]["id"]) for p in gone_now]
+            gone_files = [str(known[p]["file_id"]) for p in gone_now]
+            counts["deleted"] += await service.store.remove_items(tenant, gone_ids)
+            await release_snapshots(service, who, s, gone_files)
+            log += [f"{known[p]['title']}: gone at the source twice, removed and tombstoned" for p in gone_now]
         if removed_at_source:
             # Items the system says it deleted (in a changes listing) leave search at once, with their attachments.
             out_ids = [str(known[p]["id"]) for p in removed_at_source if p in known]
@@ -409,7 +437,7 @@ async def sync_tool_source(
     if status == "skipped":
         run_status = "skipped"
     indexed = counts["upserted"] > 0 or counts["unchanged"] > 0
-    await service.store.mark_synced(tenant, source_id, run_status, activate=indexed)
+    await service.settle_run(who, s, run_status, activate=indexed)
     if counts["upserted"] or counts["deleted"]:
         _, by_source = await service._joined(tenant)  # pyright: ignore[reportPrivateUsage]
         await service.store.refreshed(tenant, by_source.get(source_id, []))
@@ -471,6 +499,7 @@ async def _put(
         "folder": str(item["folder"])[:400] if item.get("folder") else None,
         "fields": {str(k): str(v) for k, v in cast(dict[str, Any], item.get("metadata") or {}).items()} or None,
         "tag": str(item["marker"])[:200] if item.get("marker") else None,
+        "gone_count": 0,
     }
     if parent is not None:
         parent_row = known.get(parent) or next(

@@ -379,6 +379,8 @@ class Settings(BaseSettings):
                 "documents:run",
                 "audit:create",
                 "knowledge:run",
+                # events:emit: it reports a source that keeps failing as a service event.
+                "events:emit",
             ],
             # The workflow worker reads a file an Extract from file step names.
             # It also stores the attachments of mail that starts a workflow.

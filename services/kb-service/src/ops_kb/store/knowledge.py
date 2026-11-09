@@ -18,10 +18,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.errors import Conflict
+from ops_service_kit.ids import new_id
 from ops_store import Guarantee, isolation
 from ops_store.audit import record as record_audit
 from ops_store.database import open_database
 from ops_store.dialect import db_now
+from ops_store.outbox import add as add_event
 from ops_store.outbox import outbox_table
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.search import contains
@@ -97,6 +99,10 @@ kb_sources = sa.Table(
     sa.Column("lease_until", sa.DateTime(timezone=True)),
     # Reading, cleaning, splitting, rules and metadata (source_settings.py); null: the kind's defaults.
     sa.Column("settings", sa.JSON),
+    # Its health: when a sync last indexed or kept its items, since when its syncs have failed, and how many in a row.
+    sa.Column("last_good_sync_at", sa.DateTime(timezone=True)),
+    sa.Column("failing_since", sa.DateTime(timezone=True)),
+    sa.Column("failures_in_row", sa.Integer, nullable=False, server_default="0"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -184,6 +190,8 @@ kb_items = sa.Table(
     sa.Column("tag", sa.String(200)),
     # A short digest of each paragraph of its cleaned text, which a website source counts across its pages.
     sa.Column("lines", sa.JSON),
+    # Syncs in a row the item answered gone (404 or 410) at its source; at two it is removed and tombstoned.
+    sa.Column("gone_count", sa.Integer, nullable=False, server_default="0"),
     sa.ForeignKeyConstraint(
         ["tenant_id", "source_id"],
         ["kb_sources.tenant_id", "kb_sources.id"],
@@ -645,9 +653,19 @@ class KnowledgeStore:
                 await c.execute(sa.insert(kb_changes).values(**change))
             return replaced
 
-    async def mark_synced(self, tenant: str, source_id: str, status: str, *, activate: bool = False) -> None:
-        """Records the run's outcome; `activate` moves a draft source to active in the same statement."""
-        values: dict[str, Any] = {"last_sync_at": sa.func.now(), "last_run_status": status}
+    async def mark_synced(self, tenant: str, source_id: str, status: str, *, activate: bool = False) -> int:
+        """Records the run's outcome and the source's health: a success or partial run is a good sync and ends a
+        failing streak; a failed one starts or lengthens it. `activate` moves a draft source to active in the same
+        statement. Returns how many runs in a row have now failed."""
+        good = status in ("success", "partial")
+        src = kb_sources
+        values: dict[str, Any] = {
+            "last_sync_at": db_now(),
+            "last_run_status": status,
+            "last_good_sync_at": db_now() if good else src.c.last_good_sync_at,
+            "failing_since": None if good else sa.func.coalesce(src.c.failing_since, db_now()),
+            "failures_in_row": 0 if good else src.c.failures_in_row + 1,
+        }
         if activate:
             values["status"] = sa.case((kb_sources.c.status == "draft", "active"), else_=kb_sources.c.status)
         async with self._tx() as c:
@@ -656,6 +674,16 @@ class KnowledgeStore:
                 .where(kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
                 .values(**values)
             )
+            q = sa.select(src.c.failures_in_row).where(
+                src.c.tenant_id == tenant, src.c.id == source_id, team_visible(src)
+            )
+            return int((await c.execute(q)).scalar_one_or_none() or 0)
+
+    async def record_event(self, tenant: str, source_id: str, *, name: str, payload: dict[str, Any]) -> None:
+        """A service event about the source (it keeps failing), relayed to agents-service so a workflow can act."""
+        async with self._tx() as c:
+            team = await self._team_of(c, kb_sources, tenant, source_id)
+            await add_event(c, kb_outbox, tenant_id=tenant, team_id=team, name=name, key=new_id("evt"), payload=payload)
 
     async def add_file(self, tenant: str, source_id: str, file_id: str, name: str) -> None:
         async with self._tx() as c:

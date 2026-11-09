@@ -572,6 +572,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/sources/{source_id}/tombstones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tombstones
+         * @description Addresses removed after answering gone twice at their source; a sync leaves them out until lifted.
+         */
+        get: operations["sources_list_tombstones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sources/{source_id}/tombstones/lift": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Lift Tombstones */
+        post: operations["sources_lift_tombstones"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sync-runs/{run_id}": {
         parameters: {
             query?: never;
@@ -990,6 +1027,16 @@ export interface components {
         Envelope_list_SourceKind__: {
             /** Data */
             data: components["schemas"]["SourceKind"][];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[list[Tombstone]] */
+        Envelope_list_Tombstone__: {
+            /** Data */
+            data: components["schemas"]["Tombstone"][];
             /**
              * Success
              * @constant
@@ -1854,6 +1901,10 @@ export interface components {
             createdAt: string;
             /** Deletedatsource */
             deletedAtSource: string;
+            /** Health */
+            health?: {
+                [key: string]: unknown;
+            };
             /** Id */
             id: string;
             /** Ingest */
@@ -1876,6 +1927,8 @@ export interface components {
             }[];
             /** Name */
             name: string;
+            /** Nextsyncat */
+            nextSyncAt?: string | null;
             /** Notifyonfailure */
             notifyOnFailure: boolean;
             /** Owner */
@@ -1946,6 +1999,10 @@ export interface components {
             governance: {
                 [key: string]: unknown;
             };
+            /** Health */
+            health?: {
+                [key: string]: unknown;
+            };
             /** Id */
             id: string;
             /** Ingest */
@@ -1972,6 +2029,8 @@ export interface components {
             }[];
             /** Name */
             name: string;
+            /** Nextsyncat */
+            nextSyncAt?: string | null;
             /** Notifyonfailure */
             notifyOnFailure: boolean;
             /** Owner */
@@ -2069,6 +2128,10 @@ export interface components {
             rules?: {
                 [key: string]: unknown;
             }[] | null;
+            /** Schedule */
+            schedule?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Sensitivity
              * @default internal
@@ -2162,6 +2225,10 @@ export interface components {
             rules?: {
                 [key: string]: unknown;
             }[] | null;
+            /** Schedule */
+            schedule?: {
+                [key: string]: unknown;
+            } | null;
             /** Sensitivity */
             sensitivity?: string | null;
             /** Tags */
@@ -2194,6 +2261,10 @@ export interface components {
             createdAt: string;
             /** Deletedatsource */
             deletedAtSource: string;
+            /** Health */
+            health?: {
+                [key: string]: unknown;
+            };
             /** Id */
             id: string;
             /** Ingest */
@@ -2216,6 +2287,8 @@ export interface components {
             }[];
             /** Name */
             name: string;
+            /** Nextsyncat */
+            nextSyncAt?: string | null;
             /** Notifyonfailure */
             notifyOnFailure: boolean;
             /** Owner */
@@ -2307,6 +2380,20 @@ export interface components {
             status: string;
             /** Trigger */
             trigger: string;
+        };
+        /** Tombstone */
+        Tombstone: {
+            /** At */
+            at?: string | null;
+            /** Id */
+            id: string;
+            /** Reason */
+            reason?: string | null;
+        };
+        /** TombstonesIn */
+        TombstonesIn: {
+            /** Ids */
+            ids: string[];
         };
         /** ValidationError */
         ValidationError: {
@@ -6069,6 +6156,216 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_SyncRun_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    sources_list_tombstones: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_Tombstone__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    sources_lift_tombstones: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TombstonesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_Tombstone__"];
                 };
             };
             /** @description Invalid request */
