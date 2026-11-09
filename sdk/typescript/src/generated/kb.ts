@@ -1119,10 +1119,18 @@ export interface components {
             processedAt?: string | null;
             /** Queries30D */
             queries30d: number;
+            /** Reading */
+            reading?: {
+                [key: string]: unknown;
+            } | null;
             /** Reviewby */
             reviewBy: string;
             /** Sensitivity */
             sensitivity: string;
+            /** Settingsused */
+            settingsUsed?: {
+                [key: string]: unknown;
+            } | null;
             /** Sizebytes */
             sizeBytes: number;
             /** Sourceid */

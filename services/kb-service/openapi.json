@@ -1477,6 +1477,18 @@
             "title": "Queries30D",
             "type": "integer"
           },
+          "reading": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reading"
+          },
           "reviewBy": {
             "title": "Reviewby",
             "type": "string"
@@ -1484,6 +1496,18 @@
           "sensitivity": {
             "title": "Sensitivity",
             "type": "string"
+          },
+          "settingsUsed": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settingsused"
           },
           "sizeBytes": {
             "title": "Sizebytes",

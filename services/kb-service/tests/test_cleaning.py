@@ -53,6 +53,11 @@ async def test_furniture_is_left_out_and_turning_it_back_on_reads_nothing_again(
         cleaned = await texts(client, src["id"])
         assert "30 day window" in cleaned
         assert "cookies" not in cleaned and "Contact" not in cleaned and "claims line" not in cleaned, cleaned
+        [item] = data(await client.get(f"/v1/sources/{src['id']}/items"))["data"]
+        detail = data(await client.get(f"/v1/items/{item['id']}"))
+        [page] = detail["reading"]["pages"]
+        assert page["readBy"] == "text" and page["removedChars"] > 40, page
+        assert detail["reading"]["readerVersion"] == "reading-2" and detail["settingsUsed"]["current"] is True
         reads = len(readings.reads)
         saved = data(
             await client.patch(

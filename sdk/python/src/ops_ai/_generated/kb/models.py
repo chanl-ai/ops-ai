@@ -174,8 +174,10 @@ class ItemWithDetail(TypedDict, closed=True):
     path: str
     processedAt: NotRequired[str | None]
     queries30d: int
+    reading: NotRequired[dict[str, Any] | None]
     reviewBy: str
     sensitivity: str
+    settingsUsed: NotRequired[dict[str, Any] | None]
     sizeBytes: int
     sourceId: str
     sourceName: str

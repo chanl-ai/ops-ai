@@ -266,6 +266,10 @@ class ItemWithDetail(Item):
     source_name: str
     source_type: str
     detail: Json
+    # How the file was read and what cleaning removed, page by page, from its stored reading.
+    reading: Json | None = None
+    # The splitting it was built under, and whether that is still the source's.
+    settings_used: Json | None = None
 
 
 class QueryIn(In):

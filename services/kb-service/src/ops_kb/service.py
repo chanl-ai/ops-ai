@@ -1591,6 +1591,47 @@ class KnowledgeService:
         ]
         return page_of(rows, page=page, page_size=page_size, facets={"status": _facet(rows, "status")})
 
+    async def _reading_summary(self, who: Who, s: dict[str, Any], i: dict[str, Any]) -> dict[str, Any] | None:
+        """How the item's file was read and what cleaning removed, page by page, from its stored reading; None for an
+        item with no file or while documents-service has no finished reading for it."""
+        if self.readings is None or not i.get("file_id"):
+            return None
+        settings = self.settings_of(s)
+        ocr = settings.parsing.ocr
+        try:
+            answer = await self.readings.reading(who.tenant_id, source_team(s), str(i["file_id"]), ocr=ocr)
+        except (DocumentsRefused, ServiceUnreachable):
+            return None
+        if answer.get("status") != "done":
+            return None
+        cleaning = settings.cleaning
+        pages = cast(list[dict[str, Any]], answer.get("pages") or [])
+        blocks_of = [cast(list[dict[str, Any]], p.get("blocks") or []) for p in pages]
+        has_main = cleaning.main_content and any(b.get("main") for blocks in blocks_of for b in blocks)
+
+        def dropped(b: dict[str, Any]) -> bool:
+            if cleaning.furniture and b.get("furniture"):
+                return True
+            return has_main and not b.get("main") and b.get("kind") != "title"
+
+        out: list[dict[str, Any]] = []
+        for page, blocks in zip(pages, blocks_of, strict=True):
+            kinds: dict[str, int] = {}
+            for b in blocks:
+                if not dropped(b):
+                    kinds[str(b.get("kind"))] = kinds.get(str(b.get("kind")), 0) + 1
+            quality = cast(dict[str, Any], page.get("ocr") or {})
+            out.append(
+                {
+                    "number": page.get("number"),
+                    "readBy": page.get("source"),
+                    "blocks": kinds,
+                    "removedChars": sum(len(str(b.get("text") or "")) for b in blocks if dropped(b)),
+                    **({"ocrConfidence": quality.get("mean")} if quality else {}),
+                }
+            )
+        return {"readerVersion": answer.get("readerVersion"), "ocr": ocr, "pages": out}
+
     async def item(self, who: Who, item_id: str) -> dict[str, Any]:
         found = await self.store.items(who.tenant_id, item_id=item_id)
         if not found:
@@ -1602,8 +1643,16 @@ class KnowledgeService:
         for u in await self.store.units(who.tenant_id, item_id):
             searched.setdefault(str(u["chunk_id"]), []).append({"kind": u["kind"], "text": u["text"]})
         versions = await self.store.versions(who.tenant_id, item_id)
+        settings = self.settings_of(s)
         return {
             **self._item(i, s),
+            "reading": await self._reading_summary(who, s, i),
+            "settingsUsed": {
+                "preset": settings.ingest.preset,
+                "strategies": settings.ingest.strategies,
+                "indexedWith": i.get("indexed_with"),
+                "current": not self.built_under_other_settings(s, i),
+            },
             "sourceName": s["name"],
             "sourceType": s["type"],
             "detail": {
