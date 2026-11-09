@@ -6,7 +6,7 @@ does not list; and a caller forges a next-page address that the team's token is 
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import AsyncIterator, Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from shutil import copytree, ignore_patterns
@@ -402,3 +402,28 @@ async def test_a_declarative_plugin_tool_reaches_its_own_host_with_nothing_liste
         moved, "desk_get_case", {"id": "c1"}, key="k3", caller=caller, environment="test"
     )
     assert not refused.ok and "EGRESS_DENIED" in str(refused.output), refused
+
+
+async def test_an_answer_past_the_byte_cap_is_refused_while_it_streams_in(
+    engine: AsyncEngine, store: ModuleStore, tenant: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The whole answer was read into memory before anything was checked, so one huge or endless page could fill the
+    gateway's memory."""
+    monkeypatch.setattr("ops_tools.plugins.executor.MAX_RESPONSE_BYTES", 1024)
+    sent: list[int] = []
+
+    async def endless() -> AsyncIterator[bytes]:
+        for _ in range(10_000):
+            sent.append(1)
+            yield b"x" * 512
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=endless())
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(answer))
+    ex = PluginExecutor(host(engine, store), HttpExecutor(client, AllowAll()), b"k" * 32)  # type: ignore[arg-type]
+    out = await ex.run(
+        module_for(tenant), {"name": "desk_list_things"}, {}, actor="t", environment="test", acting_for=None
+    )
+    assert not out.ok and out.output["error"]["code"] == "RESPONSE_TOO_LARGE", out
+    assert len(sent) < 10, "reading stopped just past the cap, not at the end of the answer"

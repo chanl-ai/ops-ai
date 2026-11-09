@@ -452,7 +452,7 @@ true` says the items are one website's pages, so a source starts with a website'
 
 A Python tool may set its own `If-None-Match`, `If-Modified-Since`, `Accept` and `Accept-Language` on a request
 (`ctx.http.get(url, headers=...)`); any other header is refused. `Response.content` holds the body's bytes for an
-answer that is not text, and a function raises `NotFound` (NOT_FOUND) for an item gone at its source.
+answer that is not text, and a function raises `NotFound` (NOT_FOUND) for an item gone at its source. The answer to one request is read as it streams in and refused past 25 MB with `RESPONSE_TOO_LARGE` (`TooLarge` in the SDK); redirects are not followed for a tool, which follows them itself (the website plugin follows up to five on its own site).
 
 The Website plugin (`plugins/web` in the plugins repository, pinned in `deploy/plugins.json`) is the first source on
 this contract: a site's pages from its sitemaps and links, robots.txt obeyed, one request a second, a conditional

@@ -26,7 +26,7 @@ import httpx
 
 from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ActingForPerson
-from ops_plugin_sdk import BadInput, Context, NeedsReconnect, Plugin, PluginError, RateLimited, Response
+from ops_plugin_sdk import BadInput, Context, NeedsReconnect, Plugin, PluginError, RateLimited, Response, TooLarge
 from ops_plugin_sdk import EgressDenied as PluginEgressDenied
 from ops_plugin_sdk import paging as paged
 from ops_plugin_sdk.formats import InputRefused
@@ -46,6 +46,9 @@ if TYPE_CHECKING:
 
 OURS = "ours"
 DEADLINE_S = 30.0
+# The most one plugin request's answer may hold: read as it streams in and refused past this, so a huge or endless
+# answer never fills the gateway's memory. 25 MB holds any page, document or listing a source fetches.
+MAX_RESPONSE_BYTES = 25 * 1024 * 1024
 
 
 def _failure(code: str, message: str, status: int | None = None, side: str | None = None) -> ToolOutcome:
@@ -55,6 +58,20 @@ def _failure(code: str, message: str, status: int | None = None, side: str | Non
     if side is not None:
         error["side"] = side
     return ToolOutcome(False, {"error": error})
+
+
+async def capped_body(r: httpx.Response, cap: int) -> bytes:
+    """The answer's body, read as it streams in; TooLarge as soon as it passes `cap` bytes, whatever its
+    Content-Length said."""
+    declared = r.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > cap:
+        raise TooLarge(f"{r.url.host} answered {int(declared):,} bytes; at most {cap:,} are read.")
+    got = bytearray()
+    async for chunk in r.aiter_bytes():
+        got += chunk
+        if len(got) > cap:
+            raise TooLarge(f"{r.url.host} answered more than {cap:,} bytes; at most {cap:,} are read.")
+    return bytes(got)
 
 
 class PluginExecutor:
@@ -141,7 +158,7 @@ class PluginExecutor:
             # connection's, which win over a name they share.
             headers = {**dict(asked or {}), **plugin_headers, **(dict(prepared.headers) if prepared else {})}
             query = {**(dict(params or {})), **(dict(prepared.params) if prepared else {})}
-            r = await client.request(
+            asked_for = client.build_request(
                 method,
                 url,
                 params=query or None,
@@ -150,11 +167,17 @@ class PluginExecutor:
                 timeout=DEADLINE_S,
                 extensions=for_tenant(tenant, prepared.certificate if prepared else None, allowed),
             )
-            if r.status_code == 401:
-                raise NeedsReconnect(f"{urlsplit(url).hostname} refused the connection's sign-in.")
-            if r.status_code == 429:
-                raise RateLimited(f"{urlsplit(url).hostname} answered 429: its rate limit was reached.")
-            return Response(r.status_code, r.text, dict(r.headers), r.content)
+            r = await client.send(asked_for, stream=True)
+            try:
+                if r.status_code == 401:
+                    raise NeedsReconnect(f"{urlsplit(url).hostname} refused the connection's sign-in.")
+                if r.status_code == 429:
+                    raise RateLimited(f"{urlsplit(url).hostname} answered 429: its rate limit was reached.")
+                content = await capped_body(r, MAX_RESPONSE_BYTES)
+            finally:
+                await r.aclose()
+            text = content.decode(r.encoding or "utf-8", errors="replace")
+            return Response(r.status_code, text, dict(r.headers), content)
 
         def send(
             method: str,
