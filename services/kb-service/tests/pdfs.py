@@ -1,10 +1,11 @@
-"""Text PDFs with headings across pages, and a scanned page with no text layer, built in the test."""
+"""Text PDFs with headings across pages, a scanned page with words only in its picture, and a blank scan with no text
+even by OCR, built in the test."""
 
 from __future__ import annotations
 
 import io
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Flowable, PageBreak, Paragraph, SimpleDocTemplate
@@ -43,10 +44,18 @@ def partly_scanned_pdf() -> bytes:
 
 
 def scanned_pdf() -> bytes:
-    image = Image.new("RGB", (620, 877), "white")
-    ImageDraw.Draw(image).text((50, 100), "LATE PAYMENT FEE 25 DOLLARS", fill="black")
+    """A page that is only a picture of printed words: readable by OCR alone."""
+    image = Image.new("L", (1240, 1754), 255)
+    ImageDraw.Draw(image).text((100, 200), "LATE PAYMENT FEE 25 DOLLARS", fill=0, font=ImageFont.load_default(size=56))
     out = io.BytesIO()
-    image.save(out, "PDF", resolution=75.0)
+    image.save(out, "PDF", resolution=150.0)
+    return out.getvalue()
+
+
+def blank_scan_pdf() -> bytes:
+    """A page that is only a blank picture: no text, even by OCR."""
+    out = io.BytesIO()
+    Image.new("L", (620, 877), 255).save(out, "PDF", resolution=75.0)
     return out.getvalue()
 
 

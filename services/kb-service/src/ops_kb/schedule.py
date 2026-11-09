@@ -1,4 +1,6 @@
-"""The knowledge schedule: a beat that syncs each tool source when its schedule says, in the source's team.
+"""The knowledge schedule: a beat that syncs each tool source when its schedule says, in the source's team, and asks
+again for the reading of every file source item still waiting on one, so an item is indexed even when
+documents-service's reading.finished event never arrived.
 
 Every minute it reads each tenant's tool sources, and syncs each one that is due: never synced, or a daily source
 whose time of day has passed since its last sync, or a weekly one a week on. The sync takes the source's lease
@@ -21,6 +23,7 @@ from .service import KnowledgeService, Who
 log = get_logger(__name__)
 
 FIND_DUE = "background process: the knowledge schedule reads each tenant's tool sources to find the due ones"
+FIND_READING = "background process: the knowledge schedule reads each tenant's items waiting for their file's reading"
 
 
 def due(s: dict[str, Any], now: datetime) -> bool:
@@ -59,11 +62,26 @@ async def run_due(service: KnowledgeService, now: datetime) -> list[str]:
     return ran
 
 
+async def finish_readings(service: KnowledgeService) -> int:
+    """Asks documents-service again for each file items still wait on; the number of items settled."""
+    if service.readings is None:
+        return 0
+    settled = 0
+    for tenant in await service.store.tenants():
+        with isolation.tenant_wide(FIND_READING, tenant_id=tenant):
+            waiting = {(str(i["team_id"]), str(i["file_id"])) for i in await service.store.reading_items(tenant)}
+        for team, file_id in sorted(waiting):
+            with isolation.scope(tenant, team):
+                settled += await service.finish_reading(Who(tenant, "knowledge schedule", team), file_id)
+    return settled
+
+
 async def keep_syncing(service: KnowledgeService, stop: asyncio.Event) -> None:
     """The listed `knowledge_schedule` process: one pass a minute through the shared runner, which reports it on
     /health/background and backs off after a failed pass."""
 
     async def once() -> int:
-        return len(await run_due(service, datetime.now(UTC)))
+        synced = len(await run_due(service, datetime.now(UTC))) if service.tools is not None else 0
+        return synced + await finish_readings(service)
 
     await background.run("knowledge_schedule", once, stop=stop, store=background.LOCAL)

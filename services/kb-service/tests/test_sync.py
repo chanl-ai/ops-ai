@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_identity.fastapi import DEV_TEAM
 
 from .conftest import intakes, kb_client
-from .pdfs import HARDSHIP, RATES, partly_scanned_pdf, policy_pdf, scanned_pdf
+from .pdfs import HARDSHIP, RATES, blank_scan_pdf, partly_scanned_pdf, policy_pdf
 from .test_bases_and_sources import data
 
 PDF = {"Content-Type": "application/pdf"}
@@ -47,7 +47,7 @@ async def test_a_synced_pdf_is_indexed_by_page_and_section(client: httpx.AsyncCl
 async def test_a_pdf_without_text_fails_with_a_reason_and_the_rest_index(client: httpx.AsyncClient) -> None:
     src = await file_source(client)
     await upload(client, src["id"], "rates.pdf", RATES)
-    await upload(client, src["id"], "scan.pdf", scanned_pdf())
+    await upload(client, src["id"], "scan.pdf", blank_scan_pdf())
     run = data(await client.post(f"/v1/sources/{src['id']}/sync"))
     assert (run["status"], run["counts"]["upserted"], run["counts"]["failed"]) == ("partial", 1, 1), run
     items = {i["path"]: i for i in data(await client.get(f"/v1/sources/{src['id']}/items"))["data"]}
@@ -60,7 +60,7 @@ async def test_a_source_counts_its_documents_from_what_indexed(client: httpx.Asy
     """The source's counts are its items' statuses, not every uploaded file reported as pending."""
     src = await file_source(client)
     await upload(client, src["id"], "rates.pdf", RATES)
-    await upload(client, src["id"], "scan.pdf", scanned_pdf())
+    await upload(client, src["id"], "scan.pdf", blank_scan_pdf())
     before = data(await client.get(f"/v1/sources/{src['id']}"))
     assert (before["itemsIndexed"], before["itemsFailed"], before["itemsPending"]) == (0, 0, 2), before
     await client.post(f"/v1/sources/{src['id']}/sync")
@@ -175,7 +175,7 @@ async def test_a_partly_scanned_pdf_indexes_its_text_and_says_which_pages_it_cou
     run = data(await client.post(f"/v1/sources/{src['id']}/sync"))
     items = data(await client.get(f"/v1/sources/{src['id']}/items"))["data"]
     assert run["counts"]["upserted"] == 1 and items[0]["status"] == "indexed", (run, items)
-    assert items[0]["warning"].startswith("Page 2 has no text layer"), items[0]
+    assert items[0]["warning"].startswith("Page 2 has no text that could be read"), items[0]
 
 
 async def test_a_bases_counts_and_health_come_from_its_documents(client: httpx.AsyncClient) -> None:
@@ -185,7 +185,7 @@ async def test_a_bases_counts_and_health_come_from_its_documents(client: httpx.A
     body = {"name": "Teller", "owner": "maya@harborpine.example", "sourceIds": [src["id"]]}
     kb = data(await client.post("/v1/knowledge-bases", json=body), 201)
     await upload(client, src["id"], "hardship.pdf", HARDSHIP)
-    await upload(client, src["id"], "scan.pdf", scanned_pdf())
+    await upload(client, src["id"], "scan.pdf", blank_scan_pdf())
     data(await client.post(f"/v1/sources/{src['id']}/sync"))
     got = data(await client.get(f"/v1/knowledge-bases/{kb['id']}"))
     chunks = sum(i["chunkCount"] for i in data(await client.get(f"/v1/sources/{src['id']}/items"))["data"])

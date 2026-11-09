@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Scanned PDFs are searchable in knowledge bases",
+  "description": "A scanned or half-scanned PDF added to a knowledge source is now read with OCR and indexed, typed form values are searchable, and an item says which pages were read by OCR.",
+  "tag": "improved"
+}

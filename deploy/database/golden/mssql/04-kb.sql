@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- kb-service, stamped at kb_0012
+-- kb-service, stamped at kb_0013
 -- not on SQL Server yet: kb_chunks.tsv (TSVECTOR)
 -- not on SQL Server yet: index ix_kb_chunks_tsv
 CREATE TABLE kb_bases (
@@ -112,6 +112,7 @@ CREATE TABLE kb_items (
 	marker VARCHAR(120) NULL, 
 	parent_id VARCHAR(64) NULL, 
 	url VARCHAR(max) NULL, 
+	read_with VARCHAR(120) NULL, 
 	CONSTRAINT kb_items_pkey PRIMARY KEY (tenant_id, id), 
 	CONSTRAINT fk_kb_item_source FOREIGN KEY(tenant_id, source_id) REFERENCES kb_sources (tenant_id, id) ON DELETE CASCADE, 
 	CONSTRAINT uq_kb_items_path UNIQUE (tenant_id, source_id, path)
@@ -236,5 +237,5 @@ CREATE TABLE alembic_version_kb (
     CONSTRAINT alembic_version_kb_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_kb (version_num) VALUES ('kb_0012');
+INSERT INTO alembic_version_kb (version_num) VALUES ('kb_0013');
 GO

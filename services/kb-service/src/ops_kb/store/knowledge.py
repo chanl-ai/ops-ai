@@ -144,7 +144,7 @@ kb_items = sa.Table(
     sa.Column("file_id", sa.String(64), nullable=False),
     sa.Column("digest", sa.String(64), nullable=False),
     sa.Column("version", sa.Integer, nullable=False),
-    sa.Column("status", sa.String(16), nullable=False),  # pending | indexed | failed
+    sa.Column("status", sa.String(16), nullable=False),  # pending | reading | indexed | failed
     sa.Column("error_class", sa.String(32)),
     sa.Column("error", sa.Text),
     # Indexed, with pages left unread (no text layer, or past the page limit), and why.
@@ -163,6 +163,9 @@ kb_items = sa.Table(
     sa.Column("marker", sa.String(120)),
     sa.Column("parent_id", sa.String(64)),
     sa.Column("url", sa.Text),
+    # How a file source's item was read: the reader version and its OCR settings (reading-1:auto:eng), so a change
+    # to either asks for a new reading while a chunk-settings change splits the stored one again.
+    sa.Column("read_with", sa.String(120)),
     sa.ForeignKeyConstraint(
         ["tenant_id", "source_id"],
         ["kb_sources.tenant_id", "kb_sources.id"],
@@ -643,6 +646,22 @@ class KnowledgeStore:
             )
             if chunks:
                 await c.execute(sa.insert(kb_chunks), chunks)
+
+    async def add_item(self, tenant: str, item: dict[str, Any]) -> None:
+        """An item with no version yet (waiting for its reading, or failed before one), in its source's team."""
+        async with self._tx() as c:
+            team = await self._team_of(c, kb_sources, tenant, str(item["source_id"]))
+            await c.execute(sa.insert(kb_items).values(**{**item, "team_id": team}))
+
+    async def reading_items(self, tenant: str, *, file_id: str | None = None) -> list[dict[str, Any]]:
+        """The visible items waiting for their file's reading, one file's or all of them."""
+        q = sa.select(kb_items).where(
+            kb_items.c.tenant_id == tenant, kb_items.c.status == "reading", team_visible(kb_items)
+        )
+        if file_id is not None:
+            q = q.where(kb_items.c.file_id == file_id)
+        async with self._tx() as c:
+            return [dict(r) for r in (await c.execute(q.order_by(kb_items.c.created_at))).mappings()]
 
     async def update_item(self, tenant: str, item_id: str, values: dict[str, Any]) -> None:
         async with self._tx() as c:

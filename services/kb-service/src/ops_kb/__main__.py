@@ -15,7 +15,7 @@ from ops_store import isolation
 from ops_store.schema_version import require_current_schema
 
 from .agents import StaticAgents
-from .app import create_kb_app
+from .app import _documents_service, create_kb_app  # pyright: ignore[reportPrivateUsage]
 from .files import KnowledgeFiles, file_intake, move_files
 from .seed import TENANT, seed_demo
 from .service import KnowledgeService, source_team
@@ -37,7 +37,12 @@ async def _seed(settings: Settings) -> None:
     """The demo's two knowledge bases, in dev only; "used by" is not read while seeding, so no agents call is made."""
     engine = engine_for(settings.database_url)
     service = KnowledgeService(
-        KnowledgeStore(engine), file_intake(settings), PostgresFullTextRetriever(engine), StaticAgents()
+        KnowledgeStore(engine),
+        file_intake(settings),
+        PostgresFullTextRetriever(engine),
+        StaticAgents(),
+        readings=_documents_service(settings),
+        ocr=settings.kb_ocr,
     )
     try:
         await _files_ready(settings)

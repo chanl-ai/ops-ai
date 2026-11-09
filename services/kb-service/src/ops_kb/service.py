@@ -8,22 +8,23 @@ docs/services/kb-service/overview.md gives the designed surface and says which p
 
 from __future__ import annotations
 
-import hashlib
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from ops_access import can, require_provisioner
-from ops_identity import Principal
-from ops_ingest import IngestSettings, parse, split
+from ops_documents_client import DocumentsRefused
+from ops_identity import Principal, ServiceUnreachable
+from ops_ingest import IngestSettings, ParsedDocument, parse, split
 from ops_ingest.parsers import TooLargeError, UnsupportedFormatError
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ValidationFailed
 from ops_service_kit.http import options_page, options_window
 from ops_service_kit.ids import new_id
 
 from .agents import AgentDirectory, Usage
-from .files import FileIntake, FileMissing, FileNotScanned
+from .files import FileIntake, FileMissing, FileNotScanned, Stored
+from .readings import READING_PENDING, Readings, parsed_of, read_with
 from .retrieval import Passage, Retriever
 from .store import KnowledgeStore
 from .tool_sources import ToolReader, source_config, sync_tool_source
@@ -149,6 +150,10 @@ def _matches(search: str | None, *texts: str) -> bool:
 INGEST = IngestSettings(preset="policy_manual", strategies=["structure", "context_headers"], size=400, overlap=40)
 
 
+# A file source's item when no documents-service is configured: kb-service reads no file itself.
+NO_READER = ("parse", "Files are read by documents-service, which this installation does not run.")
+
+
 def _no_text(error: str) -> tuple[str, str]:
     return "parse", f"no_text_layer: {error}"
 
@@ -181,12 +186,19 @@ class KnowledgeService:
         retriever: Retriever,
         agents: AgentDirectory,
         tools: ToolReader | None = None,
+        *,
+        readings: Readings | None = None,
+        ocr: str = "auto",
     ) -> None:
-        """`tools` reads "tool" sources through tools-service's gateway; without it none can be made."""
+        """`tools` reads "tool" sources through tools-service's gateway; without it none can be made. `readings` gives
+        each file's reading from documents-service, read with OCR mode `ocr` (settings.kb_ocr); without it a file
+        source's items fail with the reason."""
         self.store = store
         self.files = files
         self.retriever = retriever
         self.agents = agents
+        self.readings = readings
+        self.ocr = ocr
         self.tools = tools
 
     # ── Serialising ──────────────────────────────────────────────────────
@@ -206,7 +218,8 @@ class KnowledgeService:
                 if tool
                 else {"fileIds": s["file_ids"]}
             ),
-            "parsing": {"ocr": False, "tables": False, "vision": False},
+            # What reading applies to every file source: the OCR mode configured, tables kept, no vision.
+            "parsing": {"ocr": self.ocr != "off", "tables": True, "vision": False},
             "ingest": DEFAULT_INGEST,
             "rules": [],
             "metadataMapping": [],
@@ -711,12 +724,13 @@ class KnowledgeService:
         log: list[str] = []
         # Each document is read from the last file uploaded under its name; an earlier file under the same name (left
         # by uploads before add_file replaced them) is dropped from the source, so it is neither indexed nor pending.
-        latest: dict[str, tuple[str, str, bytes]] = {}
+        latest: dict[str, Stored] = {}
         superseded: set[str] = set()
         uploaded: dict[str, str] = s.get("file_names") or {}
+        counts["reading"] = 0
         for file_id in s["file_ids"]:
             try:
-                stored_name, mime, data = await self.files.read(who.tenant_id, source_team(s), file_id)
+                found = await self.files.describe(who.tenant_id, source_team(s), file_id)
             except FileMissing:
                 counts["listed"] += 1
                 counts["failed"] += 1
@@ -729,29 +743,25 @@ class KnowledgeService:
                 log.append(f"{uploaded.get(file_id, file_id)}: not scanned yet, so not read")
                 continue
             # Indexed under the name it was uploaded under in this source (kb_0005), not the blob's first name.
-            name = uploaded.get(file_id) or stored_name
+            name = uploaded.get(file_id) or found.name
             if name in latest:
-                superseded.add(latest[name][0])
-            latest[name] = (file_id, mime, data)
+                superseded.add(latest[name].file_id)
+            latest[name] = found
         await self.store.drop_files(who.tenant_id, source_id, superseded)
-        for name, (file_id, mime, data) in latest.items():
+        for name, found in latest.items():
             counts["listed"] += 1
-            digest = hashlib.sha256(data).hexdigest()
             existing = items.get(name)
-            if existing is not None and existing["digest"] == digest:
-                if full or (retry and existing["status"] == "failed"):
-                    item = await self._reindex(who, s, existing, name=name, mime=mime, data=data)
-                    items[name] = item
-                    counts["failed" if item["status"] == "failed" else "upserted"] += 1
-                else:
-                    counts["unchanged"] += 1
+            # files-service's digest, the key documents-service keeps the file's reading under.
+            same = existing is not None and existing["digest"] == found.digest and existing["status"] != "reading"
+            if same and existing is not None and not (full or (retry and existing["status"] == "failed")):
+                counts["unchanged"] += 1
                 continue
-            if any(i["digest"] == digest for i in items.values()):
+            if not same and any(i["digest"] == found.digest and i is not existing for i in items.values()):
                 # The same content under another name in this source: indexed once.
                 counts["skipped"] += 1
                 log.append(f"{name}: the same content is already indexed in this source")
                 continue
-            item = await self._index(who, s, existing, file_id=file_id, name=name, mime=mime, data=data, digest=digest)
+            item = await self._read_file(who, s, existing, name=name, found=found, rebuild=same)
             items[name] = item
             if item["status"] == "failed":
                 counts["failed"] += 1
@@ -764,6 +774,9 @@ class KnowledgeService:
                         "message": item["error"],
                     }
                 )
+            elif item["status"] == "reading":
+                counts["reading"] += 1
+                log.append(f"{name}: being read (scanned pages take a while); it is indexed when the reading ends")
             else:
                 counts["upserted"] += 1
         status = (
@@ -810,27 +823,18 @@ class KnowledgeService:
         ]
 
     async def _reindex(
-        self, who: Who, s: dict[str, Any], existing: dict[str, Any], *, name: str, mime: str, data: bytes
+        self, who: Who, s: dict[str, Any], existing: dict[str, Any], *, name: str, doc: ParsedDocument, read_with: str
     ) -> dict[str, Any]:
-        """The same content parsed and split again under its current version: no new version, no change row."""
+        """The same content split again from its stored reading under its current version: no new version, no change
+        row, and the file's bytes are not read again."""
         error: tuple[str, str] | None = None
         warning: str | None = None
-        chunks: list[dict[str, Any]] = []
-        title, pages = existing["title"], existing["page_count"]
-        try:
-            doc = parse(data, filename=name, mime_type=mime)
-            title, pages = doc.title or name, doc.source.page_count
-            chunks = self._chunks(who, existing["id"], existing["version"], title, split(doc, INGEST))
-            if chunks:
-                warning = _unread(doc.pages_without_text, doc.warnings)
-            if not chunks and doc.pages_without_text:
-                error = _no_text(f"{len(doc.pages_without_text)} pages have no text layer and OCR is not available.")
-            elif not chunks:
-                error = ("parse", "The document has no text to index.")
-        except (UnsupportedFormatError, TooLargeError) as e:
-            error = ("parse", str(e))
-        except Exception as e:
-            error = ("parse", f"The file could not be read: {type(e).__name__}.")
+        title, pages = doc.title or name, doc.source.page_count
+        chunks = self._chunks(who, existing["id"], existing["version"], title, split(doc, INGEST))
+        if chunks:
+            warning = _unread(doc)
+        else:
+            error = self._empty(doc)
         values = {
             "title": title,
             "page_count": pages,
@@ -839,10 +843,107 @@ class KnowledgeService:
             "error": error[1] if error else None,
             "warning": None if error else warning,
             "chunk_count": len(chunks),
+            "read_with": read_with,
             "processed_at": datetime.now(UTC),
         }
         await self.store.reindex(who.tenant_id, existing["id"], values, chunks)
         return {**existing, **values}
+
+    def _empty(self, doc: ParsedDocument) -> tuple[str, str]:
+        """Why a read document gave nothing to index."""
+        if doc.pages_without_text:
+            how = "OCR is off for knowledge sources" if self.ocr == "off" else "not even by OCR"
+            return _no_text(f"{len(doc.pages_without_text)} pages have no text that could be read ({how}).")
+        return ("parse", "The document has no text to index.")
+
+    async def _read_file(
+        self, who: Who, s: dict[str, Any], existing: dict[str, Any] | None, *, name: str, found: Stored, rebuild: bool
+    ) -> dict[str, Any]:
+        """One file of a source from its reading: indexed when the reading is ready, marked reading while
+        documents-service reads it in the background (or is out of reach), failed with the reader's reason."""
+        if self.readings is None:
+            return await self._failed(who, s, existing, name=name, found=found, error=NO_READER)
+        try:
+            answer = await self.readings.reading(who.tenant_id, source_team(s), found.file_id, ocr=self.ocr)
+        except DocumentsRefused as e:
+            return await self._failed(who, s, existing, name=name, found=found, error=("parse", e.message))
+        except ServiceUnreachable:
+            # The owner's rule: a sync waits for documents-service while it is down; the item stays queued.
+            return await self._mark_reading(who, s, existing, name=name, found=found)
+        status = answer.get("status")
+        if status in READING_PENDING:
+            return await self._mark_reading(who, s, existing, name=name, found=found)
+        if status != "done":
+            said: dict[str, Any] = answer.get("error") or {}
+            reason = str(said.get("message") or "the file could not be read")
+            return await self._failed(who, s, existing, name=name, found=found, error=("parse", reason))
+        doc = parsed_of(answer)
+        if rebuild and existing is not None:
+            return await self._reindex(who, s, existing, name=name, doc=doc, read_with=read_with(answer))
+        return await self._index(
+            who, s, existing, file_id=found.file_id, name=name, mime=found.mime, doc=doc, size=found.size,
+            digest=found.digest, read_with=read_with(answer),
+        )  # fmt: skip
+
+    async def _mark_reading(
+        self, who: Who, s: dict[str, Any], existing: dict[str, Any] | None, *, name: str, found: Stored
+    ) -> dict[str, Any]:
+        """The item waits for its reading; an indexed version keeps answering until the new one is indexed."""
+        values = {"status": "reading", "digest": found.digest, "file_id": found.file_id, "mime": found.mime,
+                  "size": found.size, "error_class": None, "error": None}  # fmt: skip
+        if existing is not None:
+            await self.store.update_item(who.tenant_id, existing["id"], values)
+            return {**existing, **values}
+        item = self._placeholder(who, s, name, found) | values
+        await self.store.add_item(who.tenant_id, item)
+        return item
+
+    async def _failed(
+        self,
+        who: Who,
+        s: dict[str, Any],
+        existing: dict[str, Any] | None,
+        *,
+        name: str,
+        found: Stored,
+        error: tuple[str, str],
+    ) -> dict[str, Any]:
+        values = {"status": "failed", "error_class": error[0], "error": error[1], "digest": found.digest,
+                  "file_id": found.file_id, "processed_at": datetime.now(UTC)}  # fmt: skip
+        if existing is not None:
+            await self.store.update_item(who.tenant_id, existing["id"], values)
+            return {**existing, **values}
+        item = self._placeholder(who, s, name, found) | values
+        await self.store.add_item(who.tenant_id, item)
+        return item
+
+    def _placeholder(self, who: Who, s: dict[str, Any], name: str, found: Stored) -> dict[str, Any]:
+        """An item with no version yet: its first indexed version is 1."""
+        return {
+            "tenant_id": who.tenant_id, "id": new_id("itm"), "source_id": s["id"], "path": name, "title": name,
+            "mime": found.mime, "size": found.size, "file_id": found.file_id, "digest": found.digest, "version": 0,
+            "status": "reading", "chunk_count": 0, "owner": s["owner"], "created_at": datetime.now(UTC),
+        }  # fmt: skip
+
+    async def finish_reading(self, who: Who, file_id: str) -> int:
+        """Indexes the source items waiting on this file's reading, once documents-service has it (its
+        reading.finished event, or the knowledge schedule asking again); the number of items it settled."""
+        settled = 0
+        for item in await self.store.reading_items(who.tenant_id, file_id=file_id):
+            found_sources = await self.store.sources(who.tenant_id, [str(item["source_id"])])
+            if not found_sources:
+                continue
+            source = found_sources[0]
+            found = Stored(str(item["file_id"]), str(item["path"]), str(item["mime"]), int(item["size"]),
+                           str(item["digest"]), False)  # fmt: skip
+            done = await self._read_file(who, source, item, name=str(item["path"]), found=found, rebuild=False)
+            if done["status"] != "reading":
+                settled += 1
+                if done["status"] == "indexed":
+                    await self.store.mark_synced(who.tenant_id, str(source["id"]), "success", activate=True)
+                    _, by_source = await self._joined(who.tenant_id)
+                    await self.store.refreshed(who.tenant_id, by_source.get(str(source["id"]), []))
+        return settled
 
     async def _index(
         self,
@@ -853,14 +954,18 @@ class KnowledgeService:
         file_id: str,
         name: str,
         mime: str,
-        data: bytes,
         digest: str,
+        data: bytes | None = None,
+        doc: ParsedDocument | None = None,
+        size: int | None = None,
+        read_with: str | None = None,
         path: str | None = None,
         extra: dict[str, Any] | None = None,
         title_given: str | None = None,
     ) -> dict[str, Any]:
-        """`path` keys the document in its source (a file's name, or the system's id for a tool source), `extra`
-        adds a tool source's marker, parent and address, and `title_given` is the system's own title for it."""
+        """A file source gives its reading's document (`doc`); a tool source gives the content it read (`data`),
+        parsed here. `path` keys the document in its source (a file's name, or the system's id for a tool source),
+        `extra` adds a tool source's marker, parent and address, and `title_given` is the system's own title for it."""
         now = datetime.now(UTC)
         item_id = existing["id"] if existing else new_id("itm")
         version = (existing["version"] + 1) if existing else 1
@@ -869,7 +974,8 @@ class KnowledgeService:
         warning: str | None = None
         title, pages = title_given or name, None
         try:
-            doc = parse(data, filename=name, mime_type=mime)
+            if doc is None:
+                doc = parse(data or b"", filename=name, mime_type=mime)
             title, pages = title_given or doc.title or name, doc.source.page_count
             result = split(doc, INGEST)
             for n, c in enumerate(result.chunks):
@@ -888,11 +994,9 @@ class KnowledgeService:
                     }
                 )
             if chunks:
-                warning = _unread(doc.pages_without_text, doc.warnings)
-            if not chunks and doc.pages_without_text:
-                error = _no_text(f"{len(doc.pages_without_text)} pages have no text layer and OCR is not available.")
-            elif not chunks:
-                error = ("parse", "The document has no text to index.")
+                warning = _unread(doc)
+            else:
+                error = self._empty(doc)
         except (UnsupportedFormatError, TooLargeError) as e:
             error = ("parse", str(e))
         except Exception as e:
@@ -904,7 +1008,7 @@ class KnowledgeService:
             "path": path or name,
             "title": title,
             "mime": mime,
-            "size": len(data),
+            "size": size if size is not None else len(data or b""),
             "file_id": file_id,
             "digest": digest,
             "version": version,
@@ -917,6 +1021,7 @@ class KnowledgeService:
             "owner": s["owner"],
             "created_at": existing["created_at"] if existing else now,
             "processed_at": now,
+            "read_with": read_with,
             **(extra or {}),
         }
         version_row = {
@@ -930,7 +1035,8 @@ class KnowledgeService:
             "created_at": now,
         }
         change = None
-        if existing is not None:
+        # An item that was only waiting for its first reading (version 0) has nothing to compare.
+        if existing is not None and existing["version"] > 0:
             before = await self.store.chunks(who.tenant_id, item_id)
             change = _change(who, s, item, existing["version"], before, chunks, now)
         await self.store.index_version(who.tenant_id, item, version_row, chunks, new=existing is None, change=change)
@@ -1384,17 +1490,24 @@ def _run(r: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _unread(pages: list[int], warnings: list[str]) -> str | None:
-    """What an indexed document left unread: its pages with no text layer, and a page limit it ran past."""
+def _pages(pages: list[int]) -> str:
+    listed = ", ".join(str(p) for p in pages[:10]) + (f" and {len(pages) - 10} more" if len(pages) > 10 else "")
+    return f"Page{'s' if len(pages) > 1 else ''} {listed}"
+
+
+def _unread(doc: ParsedDocument) -> str | None:
+    """What an indexed document left unread (pages with no text that could be read), and which pages were read by
+    OCR, so a person checks those against the file."""
     said: list[str] = []
+    pages = doc.pages_without_text
     if pages:
-        listed = ", ".join(str(p) for p in pages[:10]) + (f" and {len(pages) - 10} more" if len(pages) > 10 else "")
         many = len(pages) > 1
-        said.append(
-            f"Page{'s' if many else ''} {listed} {'have' if many else 'has'} no text layer and OCR is not available, "
-            f"so agents cannot cite {'them' if many else 'it'}."
-        )
-    said += [w for w in warnings if "no text layer" not in w]
+        said.append(f"{_pages(pages)} {'have' if many else 'has'} no text that could be read, so agents cannot cite "
+                    f"{'them' if many else 'it'}.")  # fmt: skip
+    if doc.ocr_pages:
+        said.append(f"{_pages(doc.ocr_pages)} {'were' if len(doc.ocr_pages) > 1 else 'was'} read by OCR; check "
+                    "a citation from it against the file.")  # fmt: skip
+    said += [w for w in doc.warnings if "was not read" not in w]
     return " ".join(said) or None
 
 

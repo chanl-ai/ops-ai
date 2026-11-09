@@ -5,8 +5,9 @@ Status: current.
 The knowledge service (`ops_kb`, :8740) owns department knowledge bases, their sources (uploaded files, pasted
 pages, and sources read through a connection's tools), sync runs, documents and their versions, chunks with page and
 section, change rows, and cited retrieval. An agent granted a knowledge base cites passages from it by document,
-version, page and section. Parsing and splitting come from `packages/ops_ingest`; file bytes live in files-service
-and kb-service holds file ids, writing bytes itself only for pasted pages and the dev seed.
+version, page and section. A file source's files are read by documents-service (their reading, OCR on auto by
+`kb_ocr`), which kb-service splits with `packages/ops_ingest`; file bytes live in files-service and kb-service holds file
+ids, writing bytes itself only for pasted pages and the dev seed.
 
 It does not own agents or their grants: "used by" asks agents-service (`agents.py`). Shared service rules:
 [services/CLAUDE.md](../CLAUDE.md). Cross-folder rules: [root guide](../../CLAUDE.md#folder-guides).
@@ -19,6 +20,7 @@ It does not own agents or their grants: "used by" asks agents-service (`agents.p
 | `src/ops_kb/service.py` | Bases and sources as the console reads them, joined and counted on the server |
 | `src/ops_kb/retrieval.py`, `store/fulltext.py` | The `Retriever` port and its one adapter, PostgreSQL full-text search with a score floor |
 | `src/ops_kb/files.py` | Where a source's files are kept, through files-service |
+| `src/ops_kb/readings.py` | A file's reading from documents-service and its split; `POST /v1/events` takes `reading.finished` and `reading.failed`, and the knowledge schedule asks again for items still `reading` |
 | `src/ops_kb/tool_sources.py`, `schedule.py` | Knowledge read through a connection's tools, and the beat that syncs them on schedule |
 | `src/ops_kb/seed.py`, `seed/` | The banker demo's two knowledge bases (markdown rendered to PDFs), seeded when a dev kb-service starts |
 | `src/ops_kb/store/` | All database code; `store/knowledge.py:34` names the tenant role `ops_kb_tenant` |
