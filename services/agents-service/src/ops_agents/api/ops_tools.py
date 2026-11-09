@@ -158,8 +158,7 @@ _TEXT = {"type": "string", "maxLength": 200}
 # The card for an app the team has off: offered only while the team has one (apps_line: installed, off).
 REQUEST_APP = "request_app"
 APP_OFF = "APP_OFF_FOR_TEAM"
-# Off for the team, or off with no auth config yet: either way a team admin turns it on.
-OFF_STATES = ("off", "needs_auth_config")
+
 TOOLS: dict[str, tuple[str, dict[str, Any]]] = {
     "find_cases": (
         "Find the team's cases by words in the subject or the customer's name, by status, or assigned to the person "
@@ -293,7 +292,8 @@ class OpsReads:
         return [
             c
             for c in cards
-            if c.get("appState") in OFF_STATES
+            # Off for the team (with or without an auth config yet): a team admin turns it on.
+            if c.get("appGroup") == "needs_admin"
             and not cast(dict[str, Any], c.get("plugin") or {}).get("teamOn")
             and c.get("name")
         ]

@@ -194,11 +194,11 @@ async def test_an_app_off_for_the_team_is_listed_off_and_one_the_install_lacks_i
     off = rows.get(SITES)
     # Security has no auth config for the app and this install has no app of its own for it, so it reads that.
     assert off is not None and off["appState"] == "needs_auth_config" and off["accounts"] == [], rows
-    assert off["mayTurnOn"] is True and off["inChat"] is False and off["canDo"] == "Reads: Read a record", off
+    assert off["mayManage"] is True and off["inChat"] is False and off["canDo"] == "Reads: Read a record", off
     # The team-only desk acts as the team, never as a person, so it is no connector of Sam's.
     assert "plugin:test.fields" not in rows, rows
     viewer = person(tenant, "Ravi Menon", {"team_security": "viewer"})
-    assert next(r for r in await _mine(c, viewer) if r["appId"] == SITES)["mayTurnOn"] is False
+    assert next(r for r in await _mine(c, viewer) if r["appId"] == SITES)["mayManage"] is False
 
 
 async def test_an_apps_card_says_the_callers_own_sign_in_beside_the_teams(

@@ -144,3 +144,23 @@ async def test_each_persons_own_sign_in_is_its_own_row_seen_by_admins_and_by_tha
     assert not own[0]["actions"], own[0]
     seen = (await _page(world, person(tenant, *VIEWER)))["accounts"]
     assert not [a for a in seen if a["kind"] == "person"], seen
+
+
+async def test_a_viewer_reads_no_auth_config_on_the_card_mine_or_their_accounts(
+    world: World,  # noqa: F811
+    tenant: str,
+) -> None:
+    await connected(world, tenant)
+    viewer = person(tenant, *VIEWER)
+    card = next(c for c in (await world.client.get("/v1/apps", headers=viewer)).json()["data"] if c["id"] == APP)
+    assert card["credential"] is not None and card["credential"]["id"] is None, card["credential"]
+    shown = next(
+        c for c in (await world.client.get("/v1/apps", headers=admin(tenant))).json()["data"] if c["id"] == APP
+    )
+    assert shown["credential"]["id"], shown["credential"]
+    mine = await world.client.get("/v1/me/connections", headers=viewer)
+    assert mine.status_code == 200, mine.text
+    assert all(r["authConfig"] is None for r in mine.json()["data"]), mine.json()["data"]
+    accounts = await world.client.get("/v1/me/accounts?every=true", headers=viewer)
+    assert accounts.status_code == 200, accounts.text
+    assert all(a["authConfig"] is None for a in accounts.json()["data"]), accounts.json()["data"]

@@ -7683,6 +7683,16 @@
             "title": "Accounts",
             "type": "array"
           },
+          "appGroup": {
+            "enum": [
+              "on",
+              "needs_you",
+              "needs_admin",
+              "gone"
+            ],
+            "title": "Appgroup",
+            "type": "string"
+          },
           "appId": {
             "title": "Appid",
             "type": "string"
@@ -7692,6 +7702,7 @@
               "connected",
               "test_failed",
               "needs_sign_in",
+              "auth_config_broken",
               "needs_auth_config",
               "off",
               "not_installed",
@@ -7764,9 +7775,9 @@
             ],
             "title": "Logo"
           },
-          "mayTurnOn": {
+          "mayManage": {
             "default": false,
-            "title": "Mayturnon",
+            "title": "Maymanage",
             "type": "boolean"
           },
           "method": {
@@ -7828,6 +7839,7 @@
           "appId",
           "name",
           "appState",
+          "appGroup",
           "canDo",
           "tools",
           "accounts",
@@ -10275,11 +10287,22 @@
             "title": "Accountscount",
             "type": "integer"
           },
+          "appGroup": {
+            "enum": [
+              "on",
+              "needs_you",
+              "needs_admin",
+              "gone"
+            ],
+            "title": "Appgroup",
+            "type": "string"
+          },
           "appState": {
             "enum": [
               "connected",
               "test_failed",
               "needs_sign_in",
+              "auth_config_broken",
               "needs_auth_config",
               "off",
               "not_installed",
@@ -10547,7 +10570,8 @@
           "toolsCount",
           "moduleIds",
           "mayManage",
-          "appState"
+          "appState",
+          "appGroup"
         ],
         "title": "SystemCard",
         "type": "object"
@@ -22630,7 +22654,7 @@
     },
     "/v1/me/connections": {
       "get": {
-        "description": "The caller's connectors, Connectors (Mine): one row per app that acts as them, with what it can do, who it\nsigns in as, its state and where it is used; an app the team has off is listed as app_off.",
+        "description": "The caller's connectors, Connectors (Mine): one row per app that acts as them, with what it can do, who it\nsigns in as, its appState and appGroup, and where it is used; an app the team has off is listed when each\nperson signs in to it.",
         "operationId": "apps_my_connections",
         "parameters": [
           {

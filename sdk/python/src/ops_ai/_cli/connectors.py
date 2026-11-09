@@ -30,6 +30,6 @@ def main(argv: list[str]) -> int:
 
 def _dispatch(ns: argparse.Namespace, ops: OpsAI) -> int:
     if ns.verb == "list":
-        return table(ns, ops.me.connectors.list(), "name", "state", "account", "accountCount", "canDo")
+        return table(ns, ops.me.connectors.list(), "name", "appState", "account", "accountCount", "canDo")
     ops.me.connectors.disconnect(ns.app, account=ns.account)
     return emit(ns, {"disconnected": ns.app}, text=f"disconnected {ns.app}")

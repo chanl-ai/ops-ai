@@ -97,3 +97,8 @@ async def test_a_plugin_the_install_does_not_hold_and_the_team_never_had_answers
     assert (card["appState"], card["appStateReason"]) == ("not_installed", REMOVED), card
     assert page.json()["data"]["accounts"] == [] and page.json()["data"]["tools"] == []
     assert (await client.get("/v1/apps/con_unknown", headers=team_admin(tenant))).status_code == 404
+    # Only the page reads a missing plugin's card; an auth config for it is refused as an app the team lacks.
+    made = await client.post(
+        "/v1/app-credentials", json={"app": "plugin:acme.ticketdesk", "clientId": "x"}, headers=team_admin(tenant)
+    )
+    assert made.status_code == 404, made.text

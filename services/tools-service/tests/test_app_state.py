@@ -60,6 +60,8 @@ async def test_a_team_account_needs_its_sign_in_then_is_connected(world: World, 
     before = await card(world, tenant)
     shown = before["credential"]
     assert before["appState"] == "needs_sign_in" and shown["type"] == "own" and shown["id"], before
+    # The team account's sign-in is an admin's to do, so the card says who acts next.
+    assert before["appGroup"] == "needs_admin", before
     await signed(world, tenant, conn, "https://acme.my.desk.test")
     assert state(await card(world, tenant)) == ("connected", None)
 
@@ -117,8 +119,8 @@ async def test_a_service_asking_for_a_person_reads_that_persons_own_sign_in(worl
     await signed(world, tenant, conn, "https://acme.my.desk.test", person_id="usr_james")
     james = await card(world, tenant, acting_for(tenant, "usr_james"))
     maya = await card(world, tenant, acting_for(tenant, "usr_maya"))
-    assert (james["appState"], james["signIn"]) == ("connected", "person"), james
-    assert maya["appState"] == "needs_sign_in", maya
+    assert (james["appState"], james["signIn"], james["appGroup"]) == ("connected", "person", "on"), james
+    assert (maya["appState"], maya["appGroup"]) == ("needs_sign_in", "needs_you"), maya
 
 
 async def test_with_the_team_account_as_backup_a_persons_card_is_their_own_and_a_services_the_teams(

@@ -174,8 +174,8 @@ export class Accounts {
 export class Connectors {
   constructor(private readonly raw: Raw) {}
 
-  /** One row per app: what it can do as the caller, whom it signs in as, its state (connected, expired, not_connected
-   * or app_off) and its accounts as a count with a primary. */
+  /** One row per app: what it can do as the caller, whom it signs in as, its app's state for them (appState, as
+   * GET /v1/apps answers it) and who acts next (appGroup), and its accounts as a count with a primary. */
   list(): Promise<Obj[]> {
     return call(this.raw, 'tools', 'apps_my_connections');
   }

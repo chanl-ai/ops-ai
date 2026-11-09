@@ -39,7 +39,7 @@ def describe(card: dict[str, Any]) -> str | None:
     """One app as the model reads it, or None for one it should not hear of: a built-in (its tools are offered as
     they are) or a plugin the install does not load."""
     kind, state, name = card.get("kind"), card.get("appState"), str(card.get("name") or "")
-    if not name or kind == "builtin" or state in ("removed", "not_installed"):
+    if not name or kind == "builtin" or card.get("appGroup") == "gone":
         return None
     if card.get("leftOut"):
         return f"{name}: left out of this chat (the person turned it off in the composer's connectors)"
@@ -47,9 +47,11 @@ def describe(card: dict[str, Any]) -> str | None:
         return f"{name}: installed, off for this team (a team admin turns it on)"
     if state == "needs_auth_config":
         return f"{name}: has no auth config to sign in with (a team admin adds one)"
+    if state == "auth_config_broken":
+        return f"{name}: on · its auth config needs fixing (a team admin does this)"
     person = card.get("signIn") in ("person", "person_or_team")
     if state == "needs_sign_in":
-        if person:
+        if card.get("appGroup") == "needs_you":
             return f"{name}: on · you are not signed in (a call shows a Connect card)"
         return f"{name}: on · the team account needs signing in again (a team admin does this)"
     if state == "test_failed":

@@ -17,6 +17,7 @@ from tests.api.test_chat_settings import LOOKUP, calls, settings
 
 MODULES = {"lookup_account": "mod_crm", "place_wire_hold": "mod_wires"}
 CRM, WIRES, CORE = "plugin:test.crm", "plugin:test.wires", "plugin:test.core"
+LEDGER, GONE = "plugin:test.ledger", "plugin:test.gone"
 
 
 class Modules:
@@ -30,18 +31,30 @@ class Modules:
 
 
 class Cards:
-    """The team's apps for the person: the CRM connected, Wires waiting for their own sign-in, Core banking off."""
+    """The team's apps for the person as tools-service answers them: the CRM connected, Wires waiting for their own
+    sign-in, Core banking off for the team, Ledger on with a broken auth config, and Old desk no longer installed."""
 
     async def cards(self, person: str | None, team: str | None) -> list[dict[str, Any]]:
         return [
-            {"id": CRM, "kind": "plugin", "name": "CRM", "appState": "connected", "moduleIds": ["mod_crm"]},
             {
-                "id": WIRES, "kind": "plugin", "name": "Wires", "appState": "needs_sign_in", "signIn": "person",
-                "moduleIds": ["mod_wires"],
+                "id": CRM, "kind": "plugin", "name": "CRM", "appState": "connected", "appGroup": "on",
+                "moduleIds": ["mod_crm"],
             },
             {
-                "id": CORE, "kind": "plugin", "name": "Core banking", "appState": "off",
+                "id": WIRES, "kind": "plugin", "name": "Wires", "appState": "needs_sign_in", "appGroup": "needs_you",
+                "signIn": "person", "moduleIds": ["mod_wires"],
+            },
+            {
+                "id": CORE, "kind": "plugin", "name": "Core banking", "appState": "off", "appGroup": "needs_admin",
                 "moduleIds": ["mod_core"],
+            },
+            {
+                "id": LEDGER, "kind": "plugin", "name": "Ledger", "appState": "auth_config_broken",
+                "appGroup": "needs_admin", "moduleIds": ["mod_crm"],
+            },
+            {
+                "id": GONE, "kind": "plugin", "name": "Old desk", "appState": "removed", "appGroup": "gone",
+                "moduleIds": ["mod_crm"],
             },
         ]  # fmt: skip
 
@@ -63,10 +76,13 @@ async def test_a_connector_turned_off_is_not_offered_in_that_chat_and_the_next_c
     wire(rt)
     tid = (await new_thread(client))["id"]
     start = await connectors(client, tid)
-    assert {k: (v["appState"], v["on"]) for k, v in start.items()} == {
-        CRM: ("connected", True),
-        WIRES: ("needs_sign_in", True),
-        CORE: ("off", False),
+    # What the person can use is the app's group: on and needs-you apps are on with their tools; an app an admin acts
+    # on first is listed with no tools and off, even one whose tools the agent holds (Ledger); a gone app is not listed.
+    assert {k: (v["on"], v["tools"] != []) for k, v in start.items()} == {
+        CRM: (True, True),
+        WIRES: (True, True),
+        CORE: (False, False),
+        LEDGER: (False, False),
     }, start
     assert start[CRM]["tools"] == ["lookup_account"] and start[CORE]["tools"] == [], start
     narrowed = await client.put(f"/chat/threads/{tid}/connectors", json={"off": [CRM]})
@@ -122,8 +138,8 @@ async def test_a_new_chats_connectors_are_listed_before_it_exists_and_its_first_
     wire(rt)
     listed = await client.get("/chat/connectors", params={"agentId": "ag_fraud"})
     assert listed.status_code == 200, listed.text
-    before = {c["appId"]: (c["appState"], c["on"]) for c in listed.json()["data"]["connectors"]}
-    assert before == {CRM: ("connected", True), WIRES: ("needs_sign_in", True), CORE: ("off", False)}, before
+    before = {c["appId"]: c["on"] for c in listed.json()["data"]["connectors"]}
+    assert before == {CRM: True, WIRES: True, CORE: False, LEDGER: False}, before
     tid = (await new_thread(client))["id"]
     assert (await client.put(f"/chat/threads/{tid}/connectors", json={"off": [CRM]})).status_code == 200
     _, events = await send(client, tid, {"content": LOOKUP})
@@ -148,18 +164,11 @@ async def test_a_run_nobody_started_in_a_chat_ignores_a_chats_connectors(
 async def test_an_app_the_person_has_not_signed_in_to_is_in_the_sign_in_group_not_on(
     stack: tuple[AsyncClient, Runtime],  # noqa: F811
 ) -> None:
-    # tools-service answers the person's own state on an app each person signs in to; the picker shows it as it is,
-    # never the team account's.
+    # tools-service answers the person's own sign-in as needs_you; the chat cannot leave it out, and Connect is theirs.
     client, rt = stack
     wire(rt)
-
-    class Mine(Cards):
-        async def cards(self, person: str | None, team: str | None) -> list[dict[str, Any]]:
-            rows = await super().cards(person, team)
-            rows[0] = {**rows[0], "signIn": "person_or_team", "appState": "needs_sign_in"}
-            return rows
-
-    rt.app_states = Mine()
     tid = (await new_thread(client))["id"]
-    crm = (await connectors(client, tid))[CRM]
-    assert (crm["appState"], crm["personal"]) == ("needs_sign_in", True), crm
+    wires = (await connectors(client, tid))[WIRES]
+    assert (wires["appGroup"], wires["personal"], wires["on"]) == ("needs_you", True, True), wires
+    refused = await client.put(f"/chat/threads/{tid}/connectors", json={"off": [CORE]})
+    assert refused.status_code == 422, refused.text

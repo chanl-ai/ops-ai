@@ -241,8 +241,8 @@ class Connectors:
         self._raw = raw
 
     def list(self) -> list[dict[str, Any]]:
-        """One row per app: what it can do as the caller, whom it signs in as, its state (connected, expired,
-        not_connected or app_off) and its accounts as a count with a primary."""
+        """One row per app: what it can do as the caller, whom it signs in as, its app's state for them (appState,
+        as GET /v1/apps answers it) and who acts next (appGroup), and its accounts as a count with a primary."""
         return cast(list[dict[str, Any]], self._raw.tools.apps_my_connections())
 
     def get(self, app: str) -> dict[str, Any]:

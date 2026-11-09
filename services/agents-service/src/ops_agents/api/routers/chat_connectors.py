@@ -37,10 +37,9 @@ router = APIRouter(prefix="/chat", dependencies=[Depends(principal)])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 
-# tools-service's appState for the person (its card), read as it is: the states in which the app works in this chat,
-# and those in which an admin acts first, listed with no tools.
-ON = ("connected", "test_failed")
-ADMIN_FIRST = ("off", "needs_auth_config")
+# Where tools-service puts the app for the person (its card's appGroup): an app an admin acts on first is listed with
+# no tools, and one that is gone is not listed.
+ADMIN = "needs_admin"
 PERSON = ("person", "person_or_team")
 
 
@@ -48,9 +47,10 @@ class ChatConnector(Out):
     app_id: str
     name: str
     logo: str | None = None
-    # The app card's state for the person, as tools-service answers it (GET /v1/apps appState), and why.
+    # The app card's state for the person, why, and who acts next, as tools-service answers them (GET /v1/apps).
     app_state: str
     app_state_reason: str | None = None
+    app_group: str
     # Whether this chat uses it; always False for an app the team has off, which grants no tool.
     on: bool
     # The sign-in the person gives themselves, so the picker offers Connect; False when the team's account signs in.
@@ -77,12 +77,12 @@ async def _by_app(rt: Runtime, me: Principal, team: str, held: list[str]) -> lis
     module_of = {o.name: o.module_id for o in await rt.directory().operations()}
     out: list[dict[str, Any]] = []
     for card in cards:
-        state = str(card.get("appState"))
-        if card.get("kind") == "builtin" or state not in (*ON, "needs_sign_in", *ADMIN_FIRST):
+        group = str(card.get("appGroup"))
+        if card.get("kind") == "builtin" or group == "gone":
             continue
         modules = set(cast(list[str], card.get("moduleIds") or []))
         tools = [t for t in held if module_of.get(t) in modules]
-        if state in ADMIN_FIRST:
+        if group == ADMIN:
             out.append({**card, "tools": []})
         elif tools:
             out.append({**card, "tools": tools})
@@ -97,7 +97,8 @@ def _view(thread_id: str, apps: list[dict[str, Any]], off: set[str]) -> dict[str
             logo=a.get("logo"),
             app_state=a["appState"],
             app_state_reason=a.get("appStateReason"),
-            on=a["appState"] not in ADMIN_FIRST and not set(a["tools"]) <= off,
+            app_group=a["appGroup"],
+            on=a["appGroup"] != ADMIN and not set(a["tools"]) <= off,
             personal=a.get("signIn") in PERSON,
             tools=a["tools"],
         )
@@ -140,7 +141,7 @@ async def set_connectors(rt: Rt, me: Me, thread_id: str, body: ConnectorsIn) -> 
     on. 422 naming the app for one this chat does not hold."""
     row, agent, limits = await _thread(rt, me, thread_id)
     apps = await _by_app(rt, me, str(row["team_id"]), list(limits.switchable_tool_ids))
-    held = {str(a["id"]): a for a in apps if a["appState"] not in ADMIN_FIRST}
+    held = {str(a["id"]): a for a in apps if a["appGroup"] != ADMIN}
     if unknown := [a for a in body.off if a not in held]:
         raise Unprocessable(
             f"This chat has no connector {unknown[0]} to turn off.",

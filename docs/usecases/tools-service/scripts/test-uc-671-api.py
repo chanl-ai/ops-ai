@@ -101,7 +101,7 @@ with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
     sam = mine(w, "security").get(APP) or {}
     check(
         "4 in Security, where Person desk is off, Sam's row says Security needs an auth config, with no accounts, and may be turned on by him",
-        sam.get("appState") == "needs_auth_config" and sam.get("accounts") == [] and sam.get("mayTurnOn") is True,
+        sam.get("appState") == "needs_auth_config" and sam.get("accounts") == [] and sam.get("mayManage") is True,
         sam,
     )
 

@@ -30,10 +30,16 @@ state, and each state has one next action.
 | Connected (`connected`) | On, and its Account signed in | Nothing to do | Nothing to do |
 | Signed in, test failed (`test_failed`) | On; the test after the sign-in failed | **Reconnect** | The failure |
 | Needs sign-in (`needs_sign_in`) | On; the team's Account, or your own on an App each person signs in to, has not signed in | **Connect** | **Sign in from Mine** |
-| Needs an auth config (`needs_auth_config`) | The App signs in through an auth config and the team has none it can use, or the one its Account used is gone or has no client secret | **Add an auth config**, which opens the new auth config for that App and signs nobody in | Ask an admin |
+| Auth config needs fixing (`auth_config_broken`) | On for the team, but the auth config its Account signs in through is gone or has no client secret, and the team has no other | **Fix the auth config** (add or repair one, then sign in again); **Turn off** stays in Settings | Ask an admin |
+| Needs an auth config (`needs_auth_config`) | Off for the team, and the App signs in through an auth config the team does not have | **Add an auth config**, which opens the new auth config for that App and signs nobody in | Ask an admin |
 | Available (`off`) | Installed, and not on for the team: never turned on, or turned off | **Turn on** | Ask an admin |
 | Not installed (`not_installed`) | The system does not hold this App's plugin and the team never had it on | Nothing; the person who runs Ops AI at your company installs Apps | The same |
 | No longer installed (`removed`) | The team had it on; the system no longer holds its plugin | **Delete app** removes what it left | The same |
+
+Beside `appState`, the API answers `appGroup`, who acts next: `on` (it works), `needs_you` (the caller's own sign-in),
+`needs_admin` (someone who manages the team's apps) or `gone`. The App's page, the Apps tab, My connectors and the chat
+picker group and act on it; none works it out again. On an App each person signs in to, a person's state is their own
+sign-in, and an auth config's name and id are shown only to builders and admins.
 
 Before 9 November 2026 the API answered `not_installed` for an App that was installed and off for the team; that
 state is now `off`, and `not_installed` means the plugin itself is missing. Code that reads `appState` from the SDK

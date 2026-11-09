@@ -12,9 +12,14 @@ from ops_agent_kernel.types import AgentSettings, PromptFragment, Skill
 from ops_agents.api.apps_line import KEEP_S, MAX_CHARS, AppsLine, render
 from ops_agents.graphs.common import with_apps
 
+# Who acts next, as tools-service's app_states.app_group answers it for a person.
+GROUP = {"connected": "on", "test_failed": "on", "not_installed": "gone", "removed": "gone"}
+
 
 def card(name: str, state: str, *, kind: str = "plugin", sign_in: str | None = "person") -> dict[str, Any]:
-    return {"name": name, "kind": kind, "appState": state, "signIn": sign_in}
+    own = sign_in in ("person", "person_or_team")
+    group = GROUP.get(state) or ("needs_you" if state == "needs_sign_in" and own else "needs_admin")
+    return {"name": name, "kind": kind, "appState": state, "appGroup": group, "signIn": sign_in}
 
 
 class Cards:

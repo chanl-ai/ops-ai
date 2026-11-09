@@ -660,11 +660,13 @@ class MyConnector(TypedDict, closed=True):
     account: NotRequired[str | None]
     accountCount: NotRequired[int]
     accounts: list[ConnectorAccount]
+    appGroup: Literal["on", "needs_you", "needs_admin", "gone"]
     appId: str
     appState: Literal[
         "connected",
         "test_failed",
         "needs_sign_in",
+        "auth_config_broken",
         "needs_auth_config",
         "off",
         "not_installed",
@@ -677,7 +679,7 @@ class MyConnector(TypedDict, closed=True):
     docsUrl: NotRequired[str | None]
     inChat: NotRequired[bool]
     logo: NotRequired[str | None]
-    mayTurnOn: NotRequired[bool]
+    mayManage: NotRequired[bool]
     method: NotRequired[str | None]
     name: str
     personFields: NotRequired[list[str]]
@@ -2032,10 +2034,12 @@ class SecretList(TypedDict, closed=True):
 
 class SystemCard(TypedDict, closed=True):
     accountsCount: NotRequired[int]
+    appGroup: Literal["on", "needs_you", "needs_admin", "gone"]
     appState: Literal[
         "connected",
         "test_failed",
         "needs_sign_in",
+        "auth_config_broken",
         "needs_auth_config",
         "off",
         "not_installed",
