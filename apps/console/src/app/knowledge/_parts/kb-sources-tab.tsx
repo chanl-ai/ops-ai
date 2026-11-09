@@ -60,8 +60,8 @@ function runProgress(run: SyncRun) {
 }
 
 /**
- * The source whose run this tab started, read from the source's own detail, which polls while `running` is set. The
- * base's detail carries no running flag per source, so the base is refetched once that run has ended.
+ * The run this tab started, with its progress, read from the source's own detail while it runs; the base is refetched
+ * once that run has ended. Runs started elsewhere (the schedule) show through the base's own polling.
  */
 function useWatchedRun(kbId: string) {
   const qc = useQueryClient();

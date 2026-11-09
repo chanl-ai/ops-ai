@@ -43,7 +43,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/knowledge-changes",
         "pathParams": [],
-        "query": ["page", "pageSize", "search", "view", "kbId"],
+        "query": ["page", "pageSize", "search", "view", "kbId", "origin"],
         "stream": False,
     },
     "health_health": {
@@ -570,13 +570,14 @@ class Operations:
         search: str | None = None,
         view: str | None = None,
         kb_id: str | None = None,
+        origin: list[str] | None = None,
     ) -> ChangeList:
         "List Changes"
         return self._t.call(
             SERVICE,
             OPERATIONS["changes_list_changes"],
             {},
-            {"page": page, "pageSize": page_size, "search": search, "view": view, "kbId": kb_id},
+            {"page": page, "pageSize": page_size, "search": search, "view": view, "kbId": kb_id, "origin": origin},
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -852,13 +853,14 @@ class AsyncOperations:
         search: str | None = None,
         view: str | None = None,
         kb_id: str | None = None,
+        origin: list[str] | None = None,
     ) -> ChangeList:
         "List Changes"
         return await self._t.call(
             SERVICE,
             OPERATIONS["changes_list_changes"],
             {},
-            {"page": page, "pageSize": page_size, "search": search, "view": view, "kbId": kb_id},
+            {"page": page, "pageSize": page_size, "search": search, "view": view, "kbId": kb_id, "origin": origin},
             {},
             None,
         )  # type: ignore[no-any-return]

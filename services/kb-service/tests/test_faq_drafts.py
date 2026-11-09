@@ -22,6 +22,7 @@ from .pdfs import policy_pdf
 from .readings_fake import LocalReadings
 from .test_bases_and_sources import data
 from .test_likely_questions import finished
+from .test_ownership import _signed_in  # pyright: ignore[reportPrivateUsage]
 from .test_sync import file_source, upload
 
 SECTIONS = [
@@ -136,3 +137,20 @@ async def test_a_changed_section_is_drafted_again_and_its_approved_pair_marked_f
         ("pending", "Wires sent after five in the afternoon leave on the next business day."),
         ("source_changed", "Wires sent after four in the afternoon leave on the next business day."),
     ], open_now
+
+
+async def test_the_queue_filters_by_origin_on_the_server_and_offers_decisions_only_to_who_may_make_them(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    """A From filter applied in the browser filters one page only; a viewer offered Approve meets a 403."""
+    await drafted(client)
+    drafts = data(await client.get("/v1/knowledge-changes", params={"view": "open", "origin": "generated_faq"}))
+    syncs = data(await client.get("/v1/knowledge-changes", params={"view": "open", "origin": "source_sync"}))
+    assert len(drafts["data"]) == 2 and syncs["data"] == [], (drafts["pagination"], syncs["pagination"])
+    assert drafts["facets"]["origin"].get("generated_faq") == 2, drafts["facets"]
+    assert all(d["canDecide"] for d in drafts["data"]), "the builder who owns the source may decide"
+    async with _signed_in(engine, tenant, "vera@harborpine.example", "team_ops", {"team_ops": "viewer"}) as vera:
+        seen = data(await vera.get("/v1/knowledge-changes", params={"view": "open"}))["data"]
+        refused = await vera.post("/v1/knowledge-changes/decide", json={"ids": [seen[0]["id"]], "decision": "approve"})
+    assert seen and not any(d["canDecide"] for d in seen), seen
+    assert refused.status_code == 403, refused.text

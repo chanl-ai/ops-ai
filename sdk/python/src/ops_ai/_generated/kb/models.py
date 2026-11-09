@@ -878,6 +878,7 @@ class EnvelopeListKnowledgeChange(TypedDict, closed=True):
 class KbSourceView(TypedDict, closed=True):
     itemsContributed: int
     rules: list[dict[str, Any]]
+    running: NotRequired[bool]
     source: Source
     sourceId: str
 

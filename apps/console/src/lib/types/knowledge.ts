@@ -427,6 +427,8 @@ export interface KnowledgeBaseRow extends KnowledgeBase {
 /** One attached source as the knowledge base page shows it. */
 export interface KbSourceView extends KbSourceLink {
   source: Source;
+  /** A sync or rebuild holds the source now; the base's detail polls while any does. */
+  running?: boolean;
 }
 
 /** How many of a base's search units have a vector in the base's embedding model; null with no embedding model. */

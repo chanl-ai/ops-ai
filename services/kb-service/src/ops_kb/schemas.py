@@ -174,6 +174,8 @@ class SourceRow(Source):
 
 class KbSourceView(KbSourceLink):
     source: Source
+    # A sync or rebuild holds the source now.
+    running: bool = False
 
 
 class EmbeddingCoverage(Out):

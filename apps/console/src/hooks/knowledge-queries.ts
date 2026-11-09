@@ -44,7 +44,7 @@ const pollWhile = (running: boolean) => (running ? POLL_MS : false);
 export const useKnowledgeBases = (p: ListParams<KbFilters>) =>
   usePagedQuery({ queryKey: kk.kbs(p), queryFn: () => api.knowledge.kbs.list(p), refetchInterval: (q) => pollWhile(!!q.state.data?.data.some((k) => k.indexing)) });
 export const useKnowledgeBase = (id: string) =>
-  useTeamQuery({ queryKey: kk.kb(id), queryFn: () => api.knowledge.kbs.get(id), refetchInterval: (q) => pollWhile(!!q.state.data?.indexing) });
+  useTeamQuery({ queryKey: kk.kb(id), queryFn: () => api.knowledge.kbs.get(id), refetchInterval: (q) => pollWhile(!!q.state.data?.indexing || !!q.state.data?.attached.some((a) => a.running)) });
 export const useAddPage = (id: string) => useWrite((i: { title: string; text: string }) => api.knowledge.kbs.addPage(id, i));
 export const useAddDocuments = (id: string) => useWrite((fileIds: string[]) => api.knowledge.kbs.addDocuments(id, fileIds), ['files']);
 export const useKbDocuments = (id: string, p: ListParams<DocumentFilters>, polling = false) =>

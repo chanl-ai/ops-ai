@@ -42,7 +42,8 @@ export const kbOperations = {
       "pageSize",
       "search",
       "view",
-      "kbId"
+      "kbId",
+      "origin"
     ],
     "stream": false
   },

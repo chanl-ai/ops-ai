@@ -322,7 +322,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Changes */
+        /**
+         * List Changes
+         * @description The Changes queue: `view` open, mine, resolved or all; `origin` (source_sync, generated_faq) filters on the
+         *     server, and the origin facet counts the view before that filter.
+         */
         get: operations["changes_list_changes"];
         put?: never;
         post?: never;
@@ -1441,6 +1445,11 @@ export interface components {
             rules: {
                 [key: string]: unknown;
             }[];
+            /**
+             * Running
+             * @default false
+             */
+            running: boolean;
             source: components["schemas"]["Source"];
             /** Sourceid */
             sourceId: string;
@@ -4687,6 +4696,7 @@ export interface operations {
                 search?: string | null;
                 view?: string;
                 kbId?: string | null;
+                origin?: string[] | null;
             };
             header?: never;
             path?: never;

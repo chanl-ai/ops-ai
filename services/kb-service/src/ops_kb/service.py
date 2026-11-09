@@ -426,6 +426,7 @@ class KnowledgeService:
             raise NotFound("No knowledge base with that id.")
         by_kb, by_source = await self._joined(who.tenant_id)
         attached = await self.store.sources(who.tenant_id, by_kb.get(kb_id, []))
+        running = await self.store.running_sources(who.tenant_id)
         using = await self.agents.usage(who.tenant_id, who.team_id)
         return {
             **self._base(b, by_kb.get(kb_id, []), await self._counts(who.tenant_id)),
@@ -437,6 +438,8 @@ class KnowledgeService:
                     "itemsContributed": s["item_counts"].get("indexed", 0),
                     "rules": [],
                     "source": self._source(s, by_source.get(s["id"], [])),
+                    # A sync or rebuild holds it now, so the base's Sources tab polls while it runs.
+                    "running": s["id"] in running,
                 }
                 for s in attached
             ],
@@ -1914,7 +1917,9 @@ class KnowledgeService:
         s = sources.get(ch["source_id"])
         kbs = [{"id": k, "name": bases[k]["name"]} for k in by_source.get(ch["source_id"], []) if k in bases]
         if ch["origin"] == "faq":
-            return _draft_out(ch, s, kbs)
+            # Deciding a draft is changing the source, so it takes the right the decide route checks.
+            allowed = s is not None and self._rights(who, s["team_id"], s["name"], None)["canEdit"]
+            return {**_draft_out(ch, s, kbs), "canDecide": allowed and ch["status"] in DECIDABLE}
         return {
             "id": ch["id"],
             "summary": f"{ch['title']} changed from v{ch['from_version']} to v{ch['to_version']}",
@@ -1945,7 +1950,15 @@ class KnowledgeService:
         }
 
     async def list_changes(
-        self, who: Who, *, view: str, kb_id: str | None, page: int, page_size: int, search: str | None
+        self,
+        who: Who,
+        *,
+        view: str,
+        kb_id: str | None,
+        page: int,
+        page_size: int,
+        search: str | None,
+        origin: list[str] | None = None,
     ) -> dict[str, Any]:
         item_ids: list[str] | None = None
         if kb_id is not None:
@@ -1961,7 +1974,11 @@ class KnowledgeService:
         mine = [r for r in waiting if r["owner"] == who.email]
         done = [r for r in rows if r["status"] not in DECIDABLE]
         shown = {"open": waiting, "mine": mine, "resolved": done, "all": rows}.get(view, [])
-        listed = page_of(shown, page=page, page_size=page_size, facets={"origin": _facet(rows, "origin")})
+        # The From facet counts the view before it is filtered by origin, so every origin shows its count.
+        facets = {"origin": _facet(shown, "origin")}
+        if origin:
+            shown = [r for r in shown if r["origin"] in origin]
+        listed = page_of(shown, page=page, page_size=page_size, facets=facets)
         counts = {"mine": len(mine), "open": len(waiting), "conflicts": 0, "resolved": len(done)}
         return {**listed, "viewCounts": counts}
 

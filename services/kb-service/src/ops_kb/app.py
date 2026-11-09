@@ -539,10 +539,14 @@ def create_kb_app(
         search: str | None = None,
         view: str = "resolved",
         kb_id: Annotated[str | None, Query(alias="kbId")] = None,
+        origin: Annotated[list[str] | None, Query(max_length=4)] = None,
     ) -> JSONResponse:
-        return ok(
-            await service.list_changes(who, view=view, kb_id=kb_id, page=page, page_size=page_size, search=search)
+        """The Changes queue: `view` open, mine, resolved or all; `origin` (source_sync, generated_faq) filters on the
+        server, and the origin facet counts the view before that filter."""
+        found = await service.list_changes(
+            who, view=view, kb_id=kb_id, page=page, page_size=page_size, search=search, origin=origin
         )
+        return ok(found)
 
     @changes.post("/decide", response_model=Envelope[list[KnowledgeChange]])
     async def decide_changes(body: DecideIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

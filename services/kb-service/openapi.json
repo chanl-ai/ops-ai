@@ -1975,6 +1975,11 @@
             "title": "Rules",
             "type": "array"
           },
+          "running": {
+            "default": false,
+            "title": "Running",
+            "type": "boolean"
+          },
           "source": {
             "$ref": "#/components/schemas/Source"
           },
@@ -9132,6 +9137,7 @@
     },
     "/v1/knowledge-changes": {
       "get": {
+        "description": "The Changes queue: `view` open, mine, resolved or all; `origin` (source_sync, generated_faq) filters on the\nserver, and the origin facet counts the view before that filter.",
         "operationId": "changes_list_changes",
         "parameters": [
           {
@@ -9197,6 +9203,26 @@
                 }
               ],
               "title": "Kbid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 4,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origin"
             }
           },
           {
