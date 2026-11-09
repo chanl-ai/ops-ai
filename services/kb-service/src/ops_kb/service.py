@@ -66,6 +66,7 @@ DEFAULT_RETRIEVAL: dict[str, Any] = {
     "reranker": "hosted",
     "chunkLimit": 8,
     "threshold": 0.5,
+    "meaningThreshold": 0.3,
     "asOf": "",
     "rewrite": "off",
     "expandCount": 3,
@@ -86,9 +87,9 @@ DEFAULT_RETRIEVAL: dict[str, Any] = {
     "structuredTables": False,
 }
 PRESETS: dict[str, dict[str, Any]] = {
-    "balanced": {"chunkLimit": 8, "threshold": 0.5, "answerShape": "answer_with_citations"},
-    "precise": {"chunkLimit": 5, "threshold": 0.65, "answerShape": "answer_with_citations"},
-    "raw": {"chunkLimit": 10, "threshold": 0.4, "answerShape": "chunks"},
+    "balanced": {"chunkLimit": 8, "threshold": 0.5, "meaningThreshold": 0.3, "answerShape": "answer_with_citations"},
+    "precise": {"chunkLimit": 5, "threshold": 0.65, "meaningThreshold": 0.4, "answerShape": "answer_with_citations"},
+    "raw": {"chunkLimit": 10, "threshold": 0.4, "meaningThreshold": 0.25, "answerShape": "chunks"},
 }
 SOURCE_TYPES_IN_PHASE = ("file", "tool")
 SENSITIVITIES = ("internal", "confidential", "restricted")
@@ -2598,6 +2599,7 @@ def search_settings(bases: list[dict[str, Any]], *, limit: int | None = None) ->
     return Search(
         lanes=lanes,
         threshold=min(float(r["threshold"]) for r in settings),
+        meaning_threshold=min(float(r["meaningThreshold"]) for r in settings),
         weight=sum(float(r["hybridWeight"]) for r in settings) / len(settings),
         limit=min(most, limit) if limit else most,
     )

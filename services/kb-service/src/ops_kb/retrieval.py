@@ -55,7 +55,12 @@ class Search:
     the fusion, and how many pieces return."""
 
     lanes: tuple[Lane, ...] = LANES
+    # The keyword lane's floor: the share of the question's terms a unit holds.
     threshold: float = 0.5
+    # The meaning lane's floor: cosine similarity of the question's vector to the unit's. 0.30 sits below the answering
+    # passages and above unrelated ones for OpenAI's text-embedding-3 models (answering pairs score 0.35 to 0.7);
+    # a base or an environment on another model sets its own.
+    meaning_threshold: float = 0.3
     weight: float = 0.6
     limit: int = 8
 
@@ -65,7 +70,8 @@ class Found:
     passages: list[Passage]
     asked: list[str]
     ran: list[str]
-    # Lane -> why it did not run: no_vectors, embedding_unavailable (with the model's code), no_embedding_model.
+    # Lane -> why it did not run: no_vectors, no_candidates, embedding_unavailable (with the model's code),
+    # no_embedding_model, no_vector_store.
     skipped: dict[str, str]
     # Input tokens the question's embedding cost, charged to kb-service's key at models-service.
     embedding_tokens: int = 0

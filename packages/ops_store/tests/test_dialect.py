@@ -31,6 +31,7 @@ from ops_store.dialect import (
     upsert,
     vector_distance_sql,
     vector_index_ddl,
+    vector_search_setup,
     vector_text,
 )
 from ops_store.search import contains
@@ -228,3 +229,8 @@ def test_vector_search_has_one_body_per_database_and_none_where_it_cannot_run() 
         vector_distance_sql("postgresql", "v.e", "q", "64); DROP TABLE x; --")  # type: ignore[arg-type]
     assert vector_index_ddl("mssql", "t", "e", 64) is None
     assert vector_text([1, 0.5]) == "[1.0,0.5]"
+
+
+def test_a_filtered_vector_search_scans_on_past_the_first_candidates() -> None:
+    assert vector_search_setup("postgresql") == ["SET LOCAL hnsw.iterative_scan = relaxed_order"]
+    assert vector_search_setup("mssql") == []

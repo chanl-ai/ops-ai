@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store import isolation
-from ops_store.dialect import vector_distance_sql, vector_text
+from ops_store.dialect import vector_distance_sql, vector_search_setup, vector_text
 from ops_store.team_scope import team_visible
 
 from .knowledge import ROLE, kb_chunks, kb_unit_vectors, kb_units
@@ -163,4 +163,6 @@ class PgVectorStore:
             "limit": limit * OVERFETCH,
         }
         async with isolation.isolated_tx(self.engine, role=ROLE) as conn:
+            for statement in vector_search_setup(conn.dialect.name):
+                await conn.execute(sa.text(statement))
             return [dict(r) for r in (await conn.execute(_search_sql(width), params)).mappings()]

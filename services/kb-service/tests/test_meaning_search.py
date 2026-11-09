@@ -14,14 +14,18 @@ from typing import Any
 
 import httpx
 import pytest
-from sqlalchemy.ext.asyncio import AsyncEngine
+import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_kb.embedding import Backlog, embed_all
 from ops_kb.files import KnowledgeFiles
+from ops_kb.retrieval import Search
 from ops_kb.schedule import WITHDRAWN_KEPT
+from ops_kb.search import HybridRetriever
 from ops_kb.store import KnowledgeStore
 from ops_kb.store.vectors import PgVectorStore
 from ops_store import isolation
+from ops_store.dialect import vector_index_ddl
 
 from .conftest import kb_client
 from .pdfs import policy_pdf
@@ -141,7 +145,7 @@ async def test_the_bases_own_settings_decide_lanes_threshold_and_limit(stack: St
     _, keyword = await stack.base({"searchMode": "keyword"})
     found = await stack.search(keyword["id"], PARAPHRASE)
     assert found["lanes"]["asked"] == ["keyword"] and found["passages"] == [], found
-    _, strict = await stack.base({"threshold": 0.95})
+    _, strict = await stack.base({"meaningThreshold": 0.95})
     assert (await stack.search(strict["id"], "notifying insurers belatedly about claims"))["passages"]
     assert (await stack.search(strict["id"], PARAPHRASE))["passages"] == [], "0.90 is under a 0.95 threshold"
     _, one = await stack.base({"chunkLimit": 1})
@@ -183,3 +187,62 @@ async def test_a_changed_document_keeps_the_ids_and_vectors_of_its_unchanged_pie
         assert await store.purge_withdrawn(tenant, before=datetime.now(UTC) - WITHDRAWN_KEPT) == 0
         later = datetime.now(UTC) + timedelta(days=1)
         assert await store.purge_withdrawn(tenant, before=later) == 1
+
+
+async def test_the_two_lanes_have_their_own_floors(stack: Stack) -> None:
+    """One threshold for a share of terms and for a cosine similarity let a keyword setting starve the meaning lane:
+    0.5 is a fair share of terms and too high a similarity for most embedding models."""
+    _, kb = await stack.base({"threshold": 0.99, "meaningThreshold": 0.3})
+    found = await stack.search(kb["id"], PARAPHRASE)
+    assert sections(found)[:1] == ["Early repayment"] and found["passages"][0]["lanes"].keys() == {"meaning"}, found
+
+
+async def test_a_small_base_beside_a_large_one_still_gets_its_nearest_piece(
+    stack: Stack, engine: AsyncEngine, tenant: str, database_url: str
+) -> None:
+    """The HNSW scan stops after its first candidates, before the knowledge base filter: a small base beside a large
+    one of the same tenant got nothing back, reported as a meaning lane that ran."""
+    _, kb = await stack.base()
+    # Pieces nearer the question than the small base's answer, so the index's first candidates are all the large one's.
+    crowd = [(f"Note {n}", f"{PARAPHRASE}? Note {n}.") for n in range(80)]
+    src = await file_source(stack.client)
+    body = {"name": "Crowd", "owner": "james@harborpine.example", "sourceIds": [src["id"]]}
+    data(await stack.client.post("/v1/knowledge-bases", json=body), 201)
+    await upload(stack.client, src["id"], "crowd.pdf", policy_pdf("Crowd", crowd))
+    assert data(await stack.client.post(f"/v1/sources/{src['id']}/sync"))["status"] == "success"
+    # The HNSW index for the test model's width (the chain makes the environment's), and a planner made to use it with
+    # few candidates, as it does on a large table.
+    async with engine.begin() as c:
+        await c.execute(sa.text(str(vector_index_ddl("postgresql", "kb_unit_vectors", "embedding", 64))))
+    tight = create_async_engine(
+        database_url, connect_args={"server_settings": {"enable_seqscan": "off", "hnsw.ef_search": "5"}}
+    )
+    try:
+        near = PgVectorStore(tight)
+        vector, _ = await stack.embedder.embed([PARAPHRASE], tenant=tenant)
+        with isolation.tenant_wide("test: the small tenant's search", tenant_id=tenant):
+            rows = await near.nearest(
+                tenant, [kb["id"]], vector[0], model=stack.embedder.model, width=stack.embedder.width, limit=8
+            )
+    finally:
+        await tight.dispose()
+    assert rows and "repay all or part" in rows[0]["text"], rows
+
+
+async def test_a_meaning_lane_with_no_candidate_says_so_instead_of_ran(engine: AsyncEngine, tenant: str) -> None:
+    """The lane was reported as run whenever the base had vectors, even when the index answered nothing."""
+
+    class EmptyIndex(PgVectorStore):
+        async def ready(self) -> bool:
+            return True
+
+        async def coverage(self, *_: Any, **__: Any) -> tuple[int, int]:
+            return 3, 3
+
+        async def nearest(self, *_: Any, **__: Any) -> list[dict[str, Any]]:
+            return []
+
+    retriever = HybridRetriever(engine, ConceptEmbedder())
+    retriever.vectors = EmptyIndex(engine)
+    found = await retriever.search(tenant, ["kb_x"], PARAPHRASE, Search(lanes=("meaning",)))
+    assert (found.ran, found.skipped) == ([], {"meaning": "no_candidates"}), found

@@ -55,7 +55,11 @@ class HybridRetriever:
         rows = await self.vectors.nearest(
             tenant, kb_ids, vector, model=embedder.model, width=embedder.width, limit=how.limit
         )
-        hits = [{**r, "lane_score": float(r["similarity"])} for r in rows if float(r["similarity"]) >= how.threshold]
+        if not rows:
+            # The index answered no candidate in these bases at all: the lane did not run in any useful sense.
+            return "no_candidates", [], tokens
+        floor = how.meaning_threshold
+        hits = [{**r, "lane_score": float(r["similarity"])} for r in rows if float(r["similarity"]) >= floor]
         return None, hits, tokens
 
 

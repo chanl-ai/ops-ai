@@ -346,6 +346,15 @@ def vector_distance_sql(dialect: str, column: str, param: str, width: int) -> st
             raise ValueError(f"{dialect} has no vector distance")
 
 
+def vector_search_setup(dialect: str) -> list[str]:
+    """Statements a transaction runs before a filtered nearest-neighbour search. On PostgreSQL the HNSW index scan goes
+    on past its first `ef_search` candidates until the filters (tenant, knowledge base, model) let enough through
+    (pgvector 0.8's iterative scan), so a small tenant among large ones still gets its nearest pieces."""
+    if dialect == "postgresql":
+        return ["SET LOCAL hnsw.iterative_scan = relaxed_order"]
+    return []
+
+
 def vector_index_ddl(dialect: str, table: str, column: str, width: int) -> str | None:
     """The approximate-nearest-neighbour index for one width (PostgreSQL's HNSW over the cosine distance, on the rows
     of that width); None where the database has none."""
@@ -373,5 +382,6 @@ __all__ = [
     "upsert",
     "vector_distance_sql",
     "vector_index_ddl",
+    "vector_search_setup",
     "vector_text",
 ]

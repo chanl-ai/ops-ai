@@ -230,6 +230,7 @@ EXEMPT: dict[str, str] = {
     "ops_agents.graphs.sla.*": "a review's interrupt loop inside one graph run",
     "ops_agents.store.leases.Heartbeat._loop": "renews one run's lease while the run goes; part of the workflow worker",
     "ops_engine.worker.Worker._heartbeat": "renews one run's claim while a pass runs; part of the workflow worker",
+    "ops_kb.service.Lease._keep": "renews one sync's source lease while the sync or rebuild runs",
     "ops_engine.compiler.*": "waits inside one compiled step",
     "ops_tools.transform.*": "waits on one call's child process",
     "ops_runner.wasm.*": "waits inside one code run, for its guest's pipes and lines, bounded by the run's time limit",
