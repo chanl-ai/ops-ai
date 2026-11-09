@@ -16,8 +16,6 @@ uv run pytest
 
 | # | Failure mode | Test |
 |---|---|---|
-| P1 | A scanned page without OCR yields no text and no signal, so an empty item looks like a short one | `test_parsers.py::test_scanned_page_without_ocr_is_reported` |
-| P2 | A scanned page with OCR on still yields no text | `test_parsers.py::test_scanned_page_is_read_with_ocr` |
 | P3 | OCR is requested but not installed, and the page is indexed as empty | `test_parsers.py::test_ocr_requested_but_missing_fails_loudly` |
 | P4 | A PDF table loses its header row | `test_parsers.py::test_pdf_table_keeps_headers_and_caption` |
 | P5 | A PDF table's cells are also read as prose, so they are indexed twice | `test_parsers.py::test_pdf_table_cells_not_repeated_as_prose` |
@@ -47,7 +45,11 @@ PNG scan and a two-page TIFF scan, all of a made-up enrolment form.
 | R10 | A file over 2,000 pages is read part way instead of failing with `too_many_pages` | `test_reading.py::test_file_over_the_page_limit_is_refused` |
 | R11 | OCR needed but not installed reads the page as empty | `test_reading.py::test_ocr_needed_but_missing_fails_loudly` |
 | R12 | A format with no reader, or a broken file, fails without a reason code | `test_reading.py::test_file_without_a_reader_fails_with_a_reason` |
-| R13 | Splitting a reading loses section paths, paragraph breaks, tables or page numbers that parsing kept | `test_reading.py::test_reading_splits_the_same_as_the_parser` |
+| R13 | Splitting a DOCX, XLSX or HTML reading loses section paths, paragraph breaks or tables, or invents page numbers | `test_reading.py::test_reading_splits_the_same_as_the_parser` |
+| R15 | A PDF splits into other section paths, paragraph breaks, tables or pages than the parser gave before PDFs moved onto the reader | `test_reading.py::test_pdf_splits_into_the_sections_the_parser_gave` |
+| R16 | A huge image, a decompression bomb or a poster-sized page exhausts memory | `test_reading.py::test_decompression_bomb_image_is_refused_before_decoding`, `test_reading.py::test_huge_pdf_page_is_drawn_at_a_bounded_size` |
+| R17 | A form whose fields loop never finishes reading | `test_reading.py::test_form_field_tree_with_a_cycle_is_read_once` |
+| R18 | A truncated image raises out of the read instead of failing its page | `test_reading.py::test_corrupt_image_fails_its_page_with_a_reason` |
 | R14 | A page read on its own after a restart gets other heading levels than in a whole read | `test_reading.py::test_page_read_on_its_own_matches_a_whole_read` |
 
 ## Splitting

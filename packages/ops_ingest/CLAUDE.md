@@ -12,8 +12,8 @@ or embedding of its own. Package rules and test commands: [../CLAUDE.md](../CLAU
 
 | Module | What it is |
 |---|---|
-| `parsers/` | `parse(...)`: PDF (pdfplumber, OCR fallback), DOCX, HTML (`clean` removes page furniture), XLSX and CSV, plain text and Markdown; `builder` assembles the reading-order stream |
-| `reading/` | `read` and `open_file`: one reading of any file into pages (how each page was read, text, blocks with boxes, words with confidence, form fields, OCR quality), OCR `off`, `auto` (scans and the picture areas of mixed pages) or `always`, image files, a 2,000-page limit, one page at a time for resume; `to_parsed_document` turns a reading into what `split` takes. `parsers/pdf.py` and `ops_extract.layout` are still in use beside it until their callers move |
+| `parsers/` | `parse(...)`: PDF and PNG, JPEG and TIFF scans (through `reading`), DOCX, HTML (`clean` removes page furniture), XLSX and CSV, plain text and Markdown; `builder` assembles the reading-order stream |
+| `reading/` | `read` and `open_file`: one reading of any file into pages (how each page was read, text, blocks with boxes, words with confidence, form fields, OCR quality), OCR `off`, `auto` (scans and the picture areas of mixed pages) or `always`, image files, a 2,000-page limit, one page at a time for resume; `to_parsed_document` turns a reading into what `split` takes. Every PDF and image is read here, whoever asks |
 | `split` | `split`, `Pipeline`, `validate_settings`, `InvalidIngestError`: one function from a parsed document and settings to chunks and index units |
 | `strategies/` | `structure`, `fixed`, `parent_child`, `table_rows`, `topic`, `faq`, `context_headers`, `clean`, `summarize` |
 | `metadata` | Mapping source fields and static values onto items, and the required-metadata hold |

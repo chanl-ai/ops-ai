@@ -21,7 +21,8 @@ from pathlib import PurePosixPath
 from typing import Protocol
 
 from ops_ingest.parsers import MAX_FILE_BYTES, UnsupportedFormatError, detect_mime
-from ops_ingest.reading.images import IMAGE_MIMES, LOW_CONFIDENCE, Engines, ImageFile, WordOcr
+from ops_ingest.parsers.ocr import WordOcr
+from ops_ingest.reading.images import IMAGE_MIMES, LOW_CONFIDENCE, Engines, ImageFile
 from ops_ingest.reading.models import (
     READER_VERSION,
     Block,

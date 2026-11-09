@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""Parsers turn a file's bytes into one `ParsedDocument`, whatever the format."""
+"""Parsers turn a file's bytes into one `ParsedDocument`, whatever the format. PDFs and scanned images are read by
+`ops_ingest.reading`, the one reader of page layouts and OCR, and handed back in the same shape."""
 
 from __future__ import annotations
 
@@ -9,8 +10,7 @@ from pathlib import PurePosixPath
 from ops_ingest.models import ParsedDocument, ParsingSettings
 from ops_ingest.parsers.docx import DOCX_MIME, parse_docx
 from ops_ingest.parsers.html import parse_html
-from ops_ingest.parsers.ocr import OcrEngine, OcrUnavailableError
-from ops_ingest.parsers.pdf import parse_pdf
+from ops_ingest.parsers.ocr import OcrUnavailableError, WordOcr
 from ops_ingest.parsers.spreadsheet import XLSX_MIME, parse_csv, parse_xlsx
 from ops_ingest.parsers.text import parse_text
 
@@ -19,6 +19,11 @@ MAX_FILE_BYTES = 50 * 1024 * 1024
 
 _BY_EXTENSION = {
     ".pdf": "application/pdf",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".tif": "image/tiff",
+    ".tiff": "image/tiff",
     ".docx": DOCX_MIME,
     ".xlsx": XLSX_MIME,
     ".csv": "text/csv",
@@ -55,7 +60,7 @@ def parse(
     parsing: ParsingSettings | None = None,
     clean: bool = False,
     fields: dict[str, str] | None = None,
-    ocr_engine: OcrEngine | None = None,
+    ocr_engine: WordOcr | None = None,
 ) -> ParsedDocument:
     """Parse a file. `clean` is the `clean` ingestion strategy: page furniture is removed from HTML."""
     if len(data) > MAX_FILE_BYTES:
@@ -63,8 +68,8 @@ def parse(
     parsing = parsing or ParsingSettings()
     mime = detect_mime(filename, mime_type)
     match mime:
-        case "application/pdf":
-            return parse_pdf(data, filename=filename, parsing=parsing, fields=fields, ocr_engine=ocr_engine)
+        case "application/pdf" | "image/png" | "image/jpeg" | "image/tiff":
+            return _read(data, filename=filename, mime=mime, parsing=parsing, fields=fields, ocr_engine=ocr_engine)
         case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
             return parse_docx(data, filename=filename, parsing=parsing, fields=fields)
         case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
@@ -79,9 +84,30 @@ def parse(
             raise UnsupportedFormatError(f"No parser for {mime}")
 
 
+def _read(
+    data: bytes,
+    *,
+    filename: str,
+    mime: str,
+    parsing: ParsingSettings,
+    fields: dict[str, str] | None,
+    ocr_engine: WordOcr | None,
+) -> ParsedDocument:
+    # Imported here: the reader reads other formats through `parse`, so it imports this module.
+    from ops_ingest.reading import ReadingError, ReadingSettings, read, to_parsed_document  # noqa: PLC0415
+
+    settings = ReadingSettings(ocr="auto" if parsing.ocr else "off")
+    try:
+        reading = read(data, filename=filename, mime_type=mime, settings=settings, ocr_engine=ocr_engine)
+    except ReadingError as e:
+        if e.code == "ocr_unavailable":
+            raise OcrUnavailableError(str(e)) from e
+        raise
+    return to_parsed_document(reading, fields=fields, keep_tables=parsing.tables)
+
+
 __all__ = [
     "MAX_FILE_BYTES",
-    "OcrEngine",
     "OcrUnavailableError",
     "TooLargeError",
     "UnsupportedFormatError",
@@ -90,7 +116,6 @@ __all__ = [
     "parse_csv",
     "parse_docx",
     "parse_html",
-    "parse_pdf",
     "parse_text",
     "parse_xlsx",
 ]

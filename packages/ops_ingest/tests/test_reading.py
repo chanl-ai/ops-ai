@@ -180,11 +180,50 @@ def test_file_without_a_reader_fails_with_a_reason(data: bytes, filename: str, c
     assert caught.value.code == code
 
 
-@pytest.mark.parametrize("name", ["policy.pdf", "procedures.docx", "fees.xlsx", "help.html"])
+@pytest.mark.parametrize("name", ["procedures.docx", "fees.xlsx", "help.html"])
 def test_reading_splits_the_same_as_the_parser(name: str) -> None:
-    """Section paths, paragraph breaks, tables and page numbers survive the switch from parsing to reading."""
+    """Section paths, paragraph breaks and tables of the formats read by their parsers survive the trip through a
+    reading, with no page numbers invented for formats that have no pages."""
     data = fixture_bytes(name)
     assert to_parsed_document(read(data, filename=name, settings=OFF)) == parse(data, filename=name)
+
+
+def test_pdf_splits_into_the_sections_the_parser_gave() -> None:
+    """The section paths, paragraph breaks, table and pages policy.pdf split into before PDFs moved onto the reader."""
+    doc = to_parsed_document(read(fixture_bytes("policy.pdf"), filename="policy.pdf", settings=OFF))
+    shape = [
+        (s.heading_path, s.page, [(b.kind, b.text if b.kind == "paragraph" else b.headers, b.page) for b in s.blocks])
+        for s in doc.sections
+    ]
+    assert shape == [
+        (["Card Fees Policy"], 1, []),
+        (
+            ["1 Annual fees"],
+            1,
+            [
+                (
+                    "paragraph",
+                    "Annual fees are charged on the account opening date and on each anniversary. A fee is refunded "
+                    "in full when the card is closed within 30 days of the charge.",
+                    1,
+                ),
+                ("table", ["Card", "Annual fee", "Foreign transaction fee"], 1),
+            ],
+        ),
+        (
+            ["2 Late payment"],
+            2,
+            [
+                (
+                    "paragraph",
+                    "A late payment fee of $25 applies when the minimum payment is not received by the due date. The "
+                    "fee is waived once in any twelve-month period on request.",
+                    2,
+                )
+            ],
+        ),
+    ]
+    assert doc.tables[0].caption == "Table 1 Annual fees by card"
 
 
 def test_page_read_on_its_own_matches_a_whole_read() -> None:

@@ -13,11 +13,10 @@ import statistics
 import struct
 import time
 import warnings
-from typing import Protocol
 
 from PIL import Image, UnidentifiedImageError
 
-from ops_ingest.parsers.ocr import OcrUnavailableError, OcrWord, TesseractEngine
+from ops_ingest.parsers.ocr import OcrUnavailableError, OcrWord, TesseractEngine, WordOcr
 from ops_ingest.reading.models import (
     Block,
     Box,
@@ -46,10 +45,6 @@ TOO_LARGE = "the image is too large to read"
 UNDECODABLE = "the image could not be decoded"
 #: The most pixels one image frame may hold before it is decoded: an A4 page at 600 DPI is about 35 million.
 MAX_IMAGE_PIXELS = 50_000_000
-
-
-class WordOcr(Protocol):
-    def image_to_words(self, image: object) -> list[OcrWord]: ...
 
 
 class Engines:

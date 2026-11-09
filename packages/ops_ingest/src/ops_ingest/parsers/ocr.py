@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""OCR for pages with no text layer, through Tesseract. Installed with the `ocr` extra."""
+"""OCR through Tesseract, for scanned pages and the picture parts of mixed pages. Installed with the `ocr` extra."""
 
 from __future__ import annotations
 
@@ -16,10 +16,6 @@ class OcrUnavailableError(RuntimeError):
     """OCR was requested but the engine is not installed. The item fails rather than indexing empty."""
 
 
-class OcrEngine(Protocol):
-    def image_to_text(self, image: object) -> str: ...
-
-
 @dataclass(frozen=True)
 class OcrWord:
     text: str
@@ -28,6 +24,12 @@ class OcrWord:
     confidence: float
     # Tesseract's block, paragraph and line numbers: words sharing them sit on one line
     line: tuple[int, int, int]
+
+
+class WordOcr(Protocol):
+    """What reading needs from an OCR engine: each word with its box, confidence and line."""
+
+    def image_to_words(self, image: object) -> list[OcrWord]: ...
 
 
 class TesseractEngine:
@@ -42,10 +44,6 @@ class TesseractEngine:
             raise OcrUnavailableError("OCR needs the tesseract binary on PATH") from exc
         self._tess = pytesseract
         self._lang = lang
-
-    def image_to_text(self, image: object) -> str:
-        text: object = self._tess.image_to_string(self.prepared(image), lang=self._lang)  # pyright: ignore[reportUnknownMemberType]
-        return str(text)
 
     def image_to_words(self, image: object) -> list[OcrWord]:
         """Each recognised word with its box in the given image's pixels, Tesseract's confidence as 0 to 1, and the

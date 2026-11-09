@@ -36,7 +36,7 @@ from ops_agent_kernel.types import Resume, TurnRequest
 from ops_agents.activities.catalog import AgentDefinition
 from ops_agents.activities.tool_directory import CatalogTools
 from ops_agents.activities.tools import fill
-from ops_ingest.parsers.pdf import parse_pdf
+from ops_ingest.parsers import parse
 from ops_service_kit.ids import canonical_json, new_id
 
 from .common import (
@@ -433,7 +433,7 @@ async def attachment_text(deps: GraphDeps, attachment: Mapping[str, Any]) -> str
             data = base64.b64decode(content, validate=True)
         except (ValueError, TypeError):
             data = content.encode()
-        return parse_pdf(data, filename=name).plain_text()
+        return parse(data, filename=name).plain_text()
     return content
 
 

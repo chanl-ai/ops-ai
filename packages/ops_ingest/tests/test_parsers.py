@@ -8,23 +8,7 @@ import pytest
 
 from ops_ingest.models import Paragraph, ParsingSettings
 from ops_ingest.parsers import MAX_FILE_BYTES, OcrUnavailableError, TooLargeError, parse
-from tests.conftest import fixture_bytes, requires_tesseract
-
-
-def test_scanned_page_without_ocr_is_reported() -> None:
-    doc = parse(fixture_bytes("scanned.pdf"), filename="scanned.pdf", parsing=ParsingSettings(ocr=False))
-    assert doc.plain_text() == ""
-    assert doc.pages_without_text == [1]
-    assert any("Page 1" in w and "OCR is off" in w for w in doc.warnings)
-
-
-@requires_tesseract
-def test_scanned_page_is_read_with_ocr() -> None:
-    doc = parse(fixture_bytes("scanned.pdf"), filename="scanned.pdf", parsing=ParsingSettings(ocr=True))
-    assert doc.ocr_pages == [1]
-    text = doc.plain_text().upper()
-    assert "LATE PAYMENT FEE" in text
-    assert "25" in text
+from tests.conftest import fixture_bytes
 
 
 def test_ocr_requested_but_missing_fails_loudly(monkeypatch: pytest.MonkeyPatch) -> None:
