@@ -3,7 +3,10 @@
 name: ops-runtime
 services:
   postgres:
-    image: ${OPS_BASE_IMAGE_PREFIX:-}postgres:17-alpine
+    # PostgreSQL 17 with pgvector, which knowledge search by meaning needs. A stack started on the older alpine image
+    # moves with `make db-move-image` (dump, a fresh volume on this image, restore): its data folder is not reused,
+    # since the two images sort text differently and text indexes would be wrong.
+    image: ${OPS_BASE_IMAGE_PREFIX:-}pgvector/pgvector:pg17
     # One Postgres serves the shared stack, every isolated use-case stack, the QA run and the test suites, each pool up to
     # 15 connections per service; the default of 100 ran out with four isolated stacks up ("too many clients already").
     # Takes effect when the container is recreated.
@@ -15,7 +18,7 @@ services:
     ports:
       - "${OPS_PG_PORT:-5477}:5432"
     volumes:
-      - ops-runtime-pg:/var/lib/postgresql/data
+      - ops-runtime-pgvector:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ops -d ops_runtime"]
       interval: 2s
@@ -49,4 +52,5 @@ services:
       - "${OPS_MAILPIT_SMTP_PORT:-1025}:1025"
       - "${OPS_MAILPIT_HTTP_PORT:-8025}:8025"
 volumes:
-  ops-runtime-pg:
+  # The pgvector image's data; ops-runtime-pg, the alpine image's, is left as it was (db-move-image copies it here).
+  ops-runtime-pgvector:

@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 90
     services:
       postgres:
-        image: postgres:17-alpine
+        image: pgvector/pgvector:pg17
         env: { POSTGRES_USER: ops, POSTGRES_PASSWORD: ops, POSTGRES_DB: ops_runtime }
         ports: ["5477:5432"]
         options: --health-cmd "pg_isready -U ops -d ops_runtime" --health-interval 2s --health-timeout 3s --health-retries 30

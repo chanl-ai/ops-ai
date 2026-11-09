@@ -50,7 +50,7 @@ It asks these questions. Each has a default, a flag, and a key for an answers fi
 | Organisation name | My organisation | `--org` | `ORG_NAME` |
 | First admin's email and name | `admin@example.com`, First Admin | `--admin-email`, `--admin-name` | `ADMIN_EMAIL`, `ADMIN_NAME` |
 | First admin's password (12+ characters) | generated, kept in `ops-ai.env` | `--admin-password-file` | `ADMIN_PASSWORD` |
-| Database | `builtin`: a PostgreSQL 17 container, for a trial | `--database builtin` or `--database postgresql://user:pass@host:5432/db` | `DATABASE` |
+| Database | `builtin`: a PostgreSQL 17 container with pgvector, for a trial | `--database builtin` or `--database postgresql://user:pass@host:5432/db` | `DATABASE` |
 | Database mode (own PostgreSQL only) | `auto`: the migrate job applies the schema with the given login | `--db-mode auto` or `--db-mode dba` | `DB_MODE` |
 | Model | `test`: the built-in test model | `--model test` or `--model <OpenAI-compatible base URL>/v1` with `--model-name` and `--model-key-file` | `MODEL`, `MODEL_NAME`, `MODEL_API_KEY` |
 | Image version | the checkout's version tag, else `deploy/release/version` | `--version` | `VERSION` |

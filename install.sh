@@ -298,7 +298,7 @@ get_images() {
       for s in platform agents tools models kb files documents opa proxy console; do targets="$targets $s"; done
       [ "$DB_MODE" = dba ] && targets="$targets db-scripts"
       TARGETS=$targets IMAGE_PREFIX=$PREFIX sh "$ROOT/deploy/release/images.sh" HEAD "$TAG"
-      if [ "$DB_KIND" = builtin ]; then docker pull -q postgres:17-alpine >/dev/null; fi
+      if [ "$DB_KIND" = builtin ]; then docker pull -q pgvector/pgvector:pg17 >/dev/null; fi
       ;;
     offline)
       step "Images: loading $A_OFFLINE"
@@ -308,7 +308,7 @@ get_images() {
       PREFIX=${s% *}
       TAG=${s#* }
       say "loaded $PREFIX/*:$TAG"
-      if [ "$DB_KIND" = builtin ]; then docker pull -q postgres:17-alpine >/dev/null; fi
+      if [ "$DB_KIND" = builtin ]; then docker pull -q pgvector/pgvector:pg17 >/dev/null; fi
       ;;
   esac
 }

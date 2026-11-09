@@ -58,7 +58,7 @@ fly deploy "$work/src" -c "$work/src/deploy/fly/fly.toml" -a "$app" --image "$im
 step "deploy (release command and machine)"
 
 # grants.sql at REF, built on a throwaway server of the cluster's major version.
-docker run -d --rm --name "$ddl_db" -e POSTGRES_PASSWORD=ddl -p 127.0.0.1::5432 postgres:18-alpine >/dev/null
+docker run -d --rm --name "$ddl_db" -e POSTGRES_PASSWORD=ddl -p 127.0.0.1::5432 pgvector/pgvector:pg18 >/dev/null
 ddl_port=$(docker port "$ddl_db" 5432/tcp | head -1 | sed 's/.*://')
 until docker exec "$ddl_db" pg_isready -U postgres -q 2>/dev/null; do sleep 1; done
 make -s -C "$root" db-ddl SERVER="postgresql://postgres:ddl@127.0.0.1:$ddl_port/postgres" REF="$sha" OUT="$work/ddl" \

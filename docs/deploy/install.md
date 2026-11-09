@@ -20,7 +20,7 @@ to run `make install` and setup again.
 |---|---|---|---|
 | Where does it run | laptop, shared-vm, devcontainer, docker, kubernetes | nothing; it picks the file below | nothing |
 | Is Docker here | yes or no | `docker version` and `docker compose version` against install.sh's `MIN_DOCKER` and `MIN_COMPOSE` | nothing |
-| Database | `builtin` (our container), a PostgreSQL URL (Azure Database for PostgreSQL among them), Azure SQL | it connects, runs PostgreSQL 15 to 17, and has the row policy on for every tenant table it holds; an empty database passes, since the install applies the schema. Azure SQL fails as not supported in this version | `OPS_DATABASE_URL` for a URL; nothing for our container |
+| Database | `builtin` (our container), a PostgreSQL URL (Azure Database for PostgreSQL among them), Azure SQL | it connects, runs PostgreSQL 15 to 17, and has the row policy on for every tenant table it holds; an empty database passes, since the install applies the schema. Knowledge search by meaning needs the `vector` extension (pgvector) available to the migrate login; without it the knowledge chain makes no vector table and search runs on keywords only, saying so in each result. Azure SQL fails as not supported in this version | `OPS_DATABASE_URL` for a URL; nothing for our container |
 | PyPI mirror | an index URL ending in `/simple`, or none | the file `uv.lock` pins for one package (httpx), as `make deps-doctor` checks every package | `UV_DEFAULT_INDEX` |
 | npm mirror | a registry URL, or none | the tarball `pnpm-lock.yaml` pins for one package (next) | `NPM_CONFIG_REGISTRY` |
 | Container registry | a prefix such as `registry.example/dockerhub/`, or none | its `/v2/` route; a 401 from the registry API passes and says to `docker login` | `OPS_BASE_IMAGE_PREFIX` |
@@ -65,7 +65,7 @@ It asks these questions. Each has a default, a flag, and a key for an answers fi
 | Organisation name | My organisation | `--org` | `ORG_NAME` |
 | First admin's email and name | `admin@example.com`, First Admin | `--admin-email`, `--admin-name` | `ADMIN_EMAIL`, `ADMIN_NAME` |
 | First admin's password (12+ characters) | generated, kept in `ops-ai.env` | `--admin-password-file` | `ADMIN_PASSWORD` |
-| Database | `builtin`: a PostgreSQL 17 container, for a trial | `--database builtin` or `--database postgresql://user:pass@host:5432/db` | `DATABASE` |
+| Database | `builtin`: a PostgreSQL 17 container with pgvector, for a trial | `--database builtin` or `--database postgresql://user:pass@host:5432/db` | `DATABASE` |
 | Database mode (own PostgreSQL only) | `auto`: the migrate job applies the schema with the given login | `--db-mode auto` or `--db-mode dba` | `DB_MODE` |
 | Model | `test`: the built-in test model | `--model test` or `--model <OpenAI-compatible base URL>/v1` with `--model-name` and `--model-key-file` | `MODEL`, `MODEL_NAME`, `MODEL_API_KEY` |
 | Image version | the checkout's version tag, else `deploy/release/version` | `--version` | `VERSION` |
@@ -146,6 +146,12 @@ Knowledge search by meaning embeds every piece with one model per environment, s
 | `OPS_EMBEDDING_WIDTH` | `1536` | The width vectors are asked at. Above 1,998 every service stops at start, since no vector index on PostgreSQL or Azure SQL holds it; OpenAI's `text-embedding-3-large` is asked at 1,998 or fewer |
 
 Changing either embeds every piece again from what is stored; no file or page is read again.
+
+Meaning search stores each piece's vector in PostgreSQL with pgvector (`vector` 0.5 or newer, for its HNSW index).
+`builtin`, compose and CI run `pgvector/pgvector:pg17`. A database of your own needs the extension offered
+(`SELECT * FROM pg_available_extensions WHERE name = 'vector'`; Azure Database for PostgreSQL lists it under
+`azure.extensions`); the knowledge chain creates it. A local stack started on the older `postgres:17-alpine` image
+moves with `make db-move-image`, which dumps every database, starts the new image on a new volume and restores.
 
 ## What is proven and what is not
 

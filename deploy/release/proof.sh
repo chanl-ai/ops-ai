@@ -82,7 +82,7 @@ TAG=$(sed -n 's/^OPS_IMAGE_TAG=//p' ops-ai.env.example)
 echo "proof: 3. the database server: PostgreSQL 17 with TLS, an admin that is not a superuser"
 ADMIN_PW=$(secret)
 docker rm -fv $PG >/dev/null 2>&1 || true
-docker run -d --name $PG -e POSTGRES_PASSWORD="$(secret)" -p 127.0.0.1:$PG_PORT:5432 postgres:17 \
+docker run -d --name $PG -e POSTGRES_PASSWORD="$(secret)" -p 127.0.0.1:$PG_PORT:5432 pgvector/pgvector:pg17 \
   -c ssl=on -c ssl_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem -c ssl_key_file=/etc/ssl/private/ssl-cert-snakeoil.key >/dev/null
 until docker exec $PG pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; do sleep 1; done
 docker exec $PG psql -q -U postgres -c "CREATE ROLE opsadmin LOGIN NOSUPERUSER CREATEDB CREATEROLE BYPASSRLS PASSWORD '$ADMIN_PW'"
