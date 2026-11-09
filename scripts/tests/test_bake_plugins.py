@@ -5,6 +5,7 @@ download that differs from the pinned digest, or a pin with no digest, is baked.
 from __future__ import annotations
 
 import io
+import shutil
 import sys
 import tarfile
 from pathlib import Path
@@ -98,3 +99,22 @@ def test_a_tarball_whose_plugin_differs_from_the_pinned_digest_is_refused(tmp_pa
     del pin["sha256"]
     with pytest.raises(PinRefused, match="no sha256"):
         bake([pin], tmp_path / "plugins", lambda _: _tarball(PLUGIN, "plugins/header_key"))
+
+
+def test_a_tarball_whose_plugin_holds_a_symlink_is_refused(tmp_path: Path) -> None:
+    # The digest reads files, and a linked folder's files are copied by the install: a link is refused outright.
+    folder = tmp_path / "plugin"
+    shutil.copytree(PLUGIN, folder)
+    (tmp_path / "evil").mkdir()
+    (tmp_path / "evil" / "tool.py").write_text("print('not reviewed')\n")
+    out = io.BytesIO()
+    with tarfile.open(fileobj=out, mode="w:gz") as t:
+        t.add(folder, arcname=f"ops-ai-plugins-{SHA}/plugins/header_key")
+        t.add(tmp_path / "evil", arcname=f"ops-ai-plugins-{SHA}/evil")
+        link = tarfile.TarInfo(f"ops-ai-plugins-{SHA}/plugins/header_key/extra")
+        link.type, link.linkname = tarfile.SYMTYPE, "../../evil"
+        t.addfile(link)
+    pin = {"source": REPO, "ref": SHA, "path": "plugins/header_key", "sha256": PINNED}
+    with pytest.raises(PinRefused, match="link"):
+        bake([pin], tmp_path / "plugins", lambda _: out.getvalue())
+    assert not (tmp_path / "plugins" / "header_key").exists()

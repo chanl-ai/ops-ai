@@ -73,7 +73,7 @@ def folder_digest(folder: Path) -> str:
     """The sha256 of a plugin folder's content: each file's path inside it and the sha256 of its bytes, in path order,
     so the same files give the same digest however the archive around them was compressed."""
     whole = hashlib.sha256()
-    for item in sorted(p for p in folder.rglob("*") if not p.is_dir()):
+    for item in sorted(p for p in folder.rglob("*") if p.is_symlink() or not p.is_dir()):
         rel = item.relative_to(folder).as_posix()
         body = f"link:{item.readlink()}".encode() if item.is_symlink() else item.read_bytes()
         whole.update(rel.encode() + b"\0" + hashlib.sha256(body).digest())
@@ -87,6 +87,9 @@ def pinned_folder(pin: dict[str, Any], tmp: Path, fetch: Callable[[str], bytes] 
     folder = (top / path).resolve()
     if not folder.is_relative_to(top.resolve()) or not folder.is_dir():
         raise PinRefused(f"{source}@{ref[:12]} has no folder {path!r}")
+    # The digest reads only files, while the install's copy follows a link: a link anywhere in the folder is refused.
+    if links := [p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_symlink()]:
+        raise PinRefused(f"{source}@{ref[:12]} {path} holds a symbolic link ({', '.join(sorted(links))})")
     return folder
 
 

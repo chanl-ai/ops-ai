@@ -70,3 +70,15 @@ def test_a_plugin_found_in_two_places_loads_from_neither_and_names_both(tmp_path
         assert x.error is not None
         assert "demo.desk is in two places" in x.error
         assert str((folder / "demo_desk").resolve()) in x.error and str(root.resolve()) in x.error
+
+
+def test_a_plugin_holding_a_symlink_is_not_copied(tmp_path: Path) -> None:
+    # A link inside the plugin would be followed by the copy, bringing in files from outside the plugin unseen.
+    root = plugin(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "tool.py").write_text("print('not part of the plugin')\n")
+    (root / "extra").symlink_to(outside, target_is_directory=True)
+    folder = into(tmp_path)
+    assert main(["plugin", "install", str(root), "--into", str(folder)]) == 1
+    assert list(folder.iterdir()) == []
