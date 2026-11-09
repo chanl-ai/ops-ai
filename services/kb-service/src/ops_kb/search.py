@@ -6,10 +6,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncEngine
-
 from .embedding import Embedder, EmbedFailed
 from .retrieval import Found, Lane, Search, fuse
+from .store import AsyncEngine
 from .store.fulltext import KeywordLane
 from .store.vectors import PgVectorStore
 
