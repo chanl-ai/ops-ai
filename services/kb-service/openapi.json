@@ -1337,6 +1337,13 @@
       "FaqDraft": {
         "additionalProperties": false,
         "properties": {
+          "addsWords": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Addswords",
+            "type": "array"
+          },
           "answer": {
             "title": "Answer",
             "type": "string"
@@ -4519,6 +4526,11 @@
             "title": "Connected",
             "type": "boolean"
           },
+          "defaults": {
+            "additionalProperties": true,
+            "title": "Defaults",
+            "type": "object"
+          },
           "group": {
             "enum": [
               "built_in",
@@ -4531,6 +4543,10 @@
             "additionalProperties": true,
             "title": "Inputs",
             "type": "object"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
           },
           "needsConnection": {
             "default": false,
@@ -4586,7 +4602,9 @@
         "required": [
           "type",
           "group",
-          "title"
+          "title",
+          "kind",
+          "defaults"
         ],
         "title": "SourceKind",
         "type": "object"

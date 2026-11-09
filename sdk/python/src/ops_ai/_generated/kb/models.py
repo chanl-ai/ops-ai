@@ -132,6 +132,7 @@ class EventOut(TypedDict, closed=True):
 
 
 class FaqDraft(TypedDict, closed=True):
+    addsWords: NotRequired[list[str]]
     answer: str
     question: str
     quote: str
@@ -433,8 +434,10 @@ class SourceIn(TypedDict):
 
 class SourceKind(TypedDict, closed=True):
     connected: NotRequired[bool]
+    defaults: dict[str, Any]
     group: Literal["built_in", "apps"]
     inputs: NotRequired[dict[str, Any]]
+    kind: str
     needsConnection: NotRequired[bool]
     pickers: NotRequired[bool]
     plugin: NotRequired[str | None]

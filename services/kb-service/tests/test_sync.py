@@ -4,6 +4,7 @@ the same file indexed twice, and a document page that cannot show what was index
 
 from __future__ import annotations
 
+import asyncio
 import shutil
 from typing import Any
 
@@ -31,6 +32,23 @@ async def upload(client: httpx.AsyncClient, source_id: str, name: str, body: byt
     stored = await intakes[client].put("t", DEV_TEAM, body, name=name, mime="application/pdf", actor="james")
     added = data(await client.post(f"/v1/sources/{source_id}/files", json={"fileIds": [stored.file_id]}))
     return {**added[0], "deduplicated": stored.deduplicated}
+
+
+async def test_create_and_sync_starts_the_first_run_in_the_background(client: httpx.AsyncClient) -> None:
+    """Add source promises the first sync starts at once; a create that ignored `sync` left the source empty until
+    someone pressed Sync."""
+    stored = await intakes[client].put(
+        "t", DEV_TEAM, HARDSHIP, name="hardship.pdf", mime="application/pdf", actor="james"
+    )
+    body = {"type": "file", "name": "Hardship", "owner": "james@harborpine.example", "fileIds": [stored.file_id]}
+    src = data(await client.post("/v1/sources", json={**body, "sync": True}), 201)
+    runs: list[dict[str, Any]] = []
+    for _ in range(200):
+        runs = data(await client.get(f"/v1/sources/{src['id']}/runs"))["data"]
+        if runs and runs[0]["status"] != "running":
+            break
+        await asyncio.sleep(0.02)
+    assert runs and runs[0]["counts"]["upserted"] == 1, runs
 
 
 async def test_a_synced_pdf_is_indexed_by_page_and_section(client: httpx.AsyncClient) -> None:

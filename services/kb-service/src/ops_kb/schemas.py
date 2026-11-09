@@ -368,6 +368,9 @@ class FaqDraft(Out):
     answer: str
     quote: str
     section_path: list[str]
+    # Words the answer uses that its passage does not (beyond common words): an answer that may say more than its
+    # source. Empty when every word is the passage's.
+    adds_words: list[str] = Field(default_factory=list[str])
 
 
 class DecideIn(In):
@@ -446,6 +449,10 @@ class SourceKind(Out):
     pickers: bool = False
     # What a source of this kind is set up with (start addresses, sites, spaces).
     inputs: Json = Field(default_factory=dict[str, Any])
+    # file, web or tool: the kind its defaults are chosen by.
+    kind: str
+    # The settings and schedule a new source of this kind starts with, as create applies them.
+    defaults: Json
 
 
 class AiApprovalIn(In):

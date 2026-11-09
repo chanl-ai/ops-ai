@@ -104,6 +104,10 @@ async def test_a_draft_answers_only_once_approved_and_cites_its_source_passage(c
         )
     )
     assert edited["status"] == "pending" and edited["faq"]["question"] == "glimmerword how is a recall asked?"
+    assert edited["faq"]["addsWords"] == [], "every word of the answer is the passage's"
+    loose = {"question": "glimmerword how is a recall asked?", "answer": "Of the receiving bank, free of charge."}
+    flagged = data(await client.patch(f"/v1/knowledge-changes/{recall['id']}", json=loose))
+    assert flagged["faq"]["addsWords"] == ["free", "charge"], flagged["faq"]
     cutoff = next(d for d in waiting if "cut-off" in d["faq"]["question"])
     approve = {"ids": [recall["id"]], "decision": "approve"}
     decided = data(await client.post("/v1/knowledge-changes/decide", json=approve))

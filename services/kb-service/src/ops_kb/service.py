@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import Coroutine
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -43,6 +44,7 @@ from .source_settings import (
     WEB_SCHEDULE,
     InvalidSettings,
     SourceSettings,
+    defaults,
     index_key,
     merged,
     rebuild_for,
@@ -688,11 +690,32 @@ class KnowledgeService:
         row["file_ids"] = [f for f, _ in names]
         row["file_names"] = dict(names)
         await self.store.create_source(row, kb_ids)
+        if i.get("sync"):
+            # Add source's Create and sync: the first run starts now, in the background, and shows on the source.
+            self._in_background(self._first_sync(who, row))
         return self._source(row, kb_ids)
+
+    def _in_background(self, work: Coroutine[Any, Any, Any]) -> None:
+        """Work that outlives the request, ended when the service stops (as a rebuild is)."""
+        task = asyncio.create_task(work)
+        self.rebuilds.add(task)
+        task.add_done_callback(self.rebuilds.discard)
+
+    async def _first_sync(self, who: Who, s: dict[str, Any]) -> None:
+        try:
+            if s["type"] == "tool":
+                await self.sync_tool(who, s, full=False, trigger="manual")
+            else:
+                await self._held_sync(who, s, full=False, retry=False)
+        except ApiError as e:
+            # A sync that could not start (the lease is held, the plugin turned off) is recorded on its source.
+            logger.info("kb_first_sync_not_started", source=s["id"], code=e.code)
 
     async def source_kinds(self, who: Who) -> list[dict[str, Any]]:
         """Files, then each knowledge source the team's apps offer (none when this service reads no tools)."""
-        out: list[dict[str, Any]] = [{"type": "file", "group": "built_in", "title": "Files"}]
+        out: list[dict[str, Any]] = [
+            {"type": "file", "kind": "file", "group": "built_in", "title": "Files", **kind_defaults("file", self.ocr)}
+        ]
         if self.tools is None or not who.team_id:
             return out
         for d in await self.tools.declared(who.tenant_id, str(who.team_id)):
@@ -710,6 +733,9 @@ class KnowledgeService:
                     "previews": bool(d.get("previewTool")),
                     "pickers": bool(d.get("scopesTool")),
                     "inputs": d.get("inputs") or {},
+                    # What a new source of this kind starts with, so Add source's Review shows the defaults it applies.
+                    "kind": (kind := "web" if d.get("site") else "tool"),
+                    **kind_defaults(kind, self.ocr, plugin_schedule=d.get("schedule")),
                 }
             )
         return out
@@ -930,9 +956,7 @@ class KnowledgeService:
             "started_by": who.email,
         }
         await self.store.add_run(run)
-        task = asyncio.create_task(self._rebuild(who, s, run, stale))
-        self.rebuilds.add(task)
-        task.add_done_callback(self.rebuilds.discard)
+        self._in_background(self._rebuild(who, s, run, stale))
         return _run(run)
 
     async def _rebuild(self, who: Who, s: dict[str, Any], run: dict[str, Any], stale: list[dict[str, Any]]) -> None:
@@ -2324,6 +2348,12 @@ def health_of(s: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def kind_defaults(kind: str, ocr: str, *, plugin_schedule: Any = None) -> dict[str, Any]:
+    """A new source's settings for its kind and its schedule, as create applies them."""
+    schedule = WEB_SCHEDULE if kind == "web" else plugin_schedule or {"kind": "manual"}
+    return {"defaults": {**wire(defaults(kind, ocr=ocr)), "schedule": schedule}}
+
+
 def scope_summary(s: dict[str, Any]) -> str:
     """What a source takes in, in a few words: a site's start address, or a plugin source's name, or its files."""
     if s["type"] != "tool":
@@ -2446,8 +2476,24 @@ def _draft_out(ch: dict[str, Any], s: dict[str, Any] | None, kbs: list[dict[str,
             "answer": str(detail.get("answer") or ""),
             "quote": str(detail.get("quote") or ""),
             "sectionPath": list(detail.get("sectionPath") or []),
+            "addsWords": adds_words(str(detail.get("answer") or ""), str(detail.get("quote") or "")),
         },
     }
+
+
+_COMMON = frozenset((
+    "a", "an", "and", "are", "as", "at", "be", "by", "can", "do", "does", "for", "from", "has", "have", "how", "i",
+    "if", "in", "is", "it", "its", "my", "of", "on", "or", "our", "so", "that", "the", "their", "there", "this",
+    "to", "was", "we", "what", "when", "where", "which", "who", "will", "with", "you", "your", "yes", "no", "not",
+    "any", "all", "may",
+))  # fmt: skip
+
+
+def adds_words(answer: str, passage: str) -> list[str]:
+    """Words of an answer its passage never uses (common words aside): a sign the answer says more than its source."""
+    words = re.findall(r"[a-z0-9]+(?:'[a-z]+)?", answer.lower())
+    held = set(re.findall(r"[a-z0-9]+(?:'[a-z]+)?", passage.lower()))
+    return list(dict.fromkeys(w for w in words if w not in held and w not in _COMMON and len(w) > 2))
 
 
 def detail_of(change: dict[str, Any]) -> dict[str, Any]:

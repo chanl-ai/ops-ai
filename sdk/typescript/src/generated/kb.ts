@@ -1238,6 +1238,8 @@ export interface components {
         };
         /** FaqDraft */
         FaqDraft: {
+            /** Addswords */
+            addsWords?: string[];
             /** Answer */
             answer: string;
             /** Question */
@@ -2350,6 +2352,10 @@ export interface components {
              * @default false
              */
             connected: boolean;
+            /** Defaults */
+            defaults: {
+                [key: string]: unknown;
+            };
             /**
              * Group
              * @enum {string}
@@ -2359,6 +2365,8 @@ export interface components {
             inputs?: {
                 [key: string]: unknown;
             };
+            /** Kind */
+            kind: string;
             /**
              * Needsconnection
              * @default false

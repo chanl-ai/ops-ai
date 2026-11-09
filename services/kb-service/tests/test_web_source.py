@@ -203,3 +203,7 @@ async def test_source_kinds_list_files_then_each_apps_knowledge_source(kb: httpx
     assert (web_kind["site"], web_kind["needsConnection"], web_kind["connected"], web_kind["previews"]) == (
         True, False, True, True,
     )  # fmt: skip
+    # Add source's Review shows what create applies: a website's cleaning and its daily check, files' manual sync.
+    assert web_kind["kind"] == "web" and web_kind["defaults"]["cleaning"]["furniture"] is True
+    assert web_kind["defaults"]["schedule"] == {"kind": "daily", "time": "02:00", "tz": "UTC"}
+    assert kinds[0]["defaults"]["schedule"] == {"kind": "manual"}
