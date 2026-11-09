@@ -229,3 +229,18 @@ async def test_page_fetches_keep_to_the_slower_of_the_sources_rate_and_its_crawl
     data(await kb.post(f"/v1/sources/{src['id']}/sync"))
     gaps = [b - a for a, b in zip(web.arrived, web.arrived[1:], strict=False)]
     assert len(web.arrived) == 8 and min(gaps) >= 0.18, gaps
+
+
+async def test_a_page_whose_text_did_not_change_keeps_its_version_whatever_its_bytes(
+    kb: httpx.AsyncClient, web: WebPlugin
+) -> None:
+    """A page with no lastmod or ETag is fetched each run; served with a new timestamp in its footer it became a new
+    version every sync, with every piece split, questioned and embedded again."""
+    url = f"{SITE}/lending/fees"
+    web.pages[url] = html("Fees", "An early repayment charge may apply.") + "<footer>Served 10:00</footer>"
+    src, _ = await site_source(kb)
+    data(await kb.post(f"/v1/sources/{src['id']}/sync"))
+    web.pages[url] = html("Fees", "An early repayment charge may apply.") + "<footer>Served 10:00:59 UTC</footer>"
+    again = data(await kb.post(f"/v1/sources/{src['id']}/sync"))
+    item = next(i for i in data(await kb.get(f"/v1/sources/{src['id']}/items"))["data"] if i["path"] == url)
+    assert item["version"] == "v1" and again["counts"]["unchanged"] >= 1, (item["version"], again["counts"])

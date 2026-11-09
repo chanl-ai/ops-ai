@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_kb.embedding import Backlog, embed_all
 from ops_kb.files import KnowledgeFiles
+from ops_kb.schedule import WITHDRAWN_KEPT
 from ops_kb.store import KnowledgeStore
 from ops_kb.store.vectors import PgVectorStore
 from ops_store import isolation
@@ -28,18 +30,16 @@ from .test_bases_and_sources import data
 from .test_sync import file_source, upload
 from .vectors_fake import ConceptEmbedder
 
-HELP = policy_pdf(
-    "Customer help",
-    [
-        (
-            "Reporting a claim late",
-            "If you tell us about a claim after the notification window has closed, we can still accept it when you "
-            "explain the delay.",
-        ),
-        ("Early repayment", "You can repay all or part of your loan at any time; an early repayment charge may apply."),
-        ("Late fees", "A late fee of four percent applies when a payment is more than fifteen days past due."),
-    ],
-)
+SECTIONS = [
+    (
+        "Reporting a claim late",
+        "If you tell us about a claim after the notification window has closed, we can still accept it when you "
+        "explain the delay.",
+    ),
+    ("Early repayment", "You can repay all or part of your loan at any time; an early repayment charge may apply."),
+    ("Late fees", "A late fee of four percent applies when a payment is more than fifteen days past due."),
+]
+HELP = policy_pdf("Customer help", SECTIONS)
 # Shares one word ("loan") with the early repayment section: below the keyword lane's threshold, near it in meaning.
 PARAPHRASE = "what does it cost to clear my loan sooner"
 
@@ -154,3 +154,32 @@ async def test_a_source_taken_out_of_the_base_is_not_found_by_its_vectors(stack:
     data(await stack.client.delete(f"/v1/knowledge-bases/{kb['id']}/sources/{src['id']}"))
     found = await stack.search(kb["id"], PARAPHRASE)
     assert found["passages"] == [], found
+
+
+async def test_a_changed_document_keeps_the_ids_and_vectors_of_its_unchanged_pieces(
+    stack: Stack, engine: AsyncEngine, tenant: str
+) -> None:
+    """Every new version withdrew every piece and wrote new ones, so one changed sentence re-embedded the whole
+    document."""
+    src, _ = await stack.base()
+    [item] = data(await stack.client.get(f"/v1/sources/{src['id']}/items"))["data"]
+    store = KnowledgeStore(engine)
+
+    async def pieces() -> dict[str, str]:
+        with isolation.tenant_wide("test: the item's live pieces", tenant_id=tenant):
+            return {str(c["id"]): str(c["text"]) for c in await store.chunks(tenant, item["id"])}
+
+    before = await pieces()
+    embedded = stack.embedder.texts
+    changed = [*SECTIONS[:2], ("Late fees", "A late fee of five percent applies when a payment is past due.")]
+    await upload(stack.client, src["id"], "help.pdf", policy_pdf("Customer help", changed))
+    data(await stack.client.post(f"/v1/sources/{src['id']}/sync"))
+    after = await pieces()
+    kept = set(before) & set(after)
+    assert len(kept) == len(before) - 1 and len(after) == len(before), (before, after)
+    assert stack.embedder.texts - embedded == 1, "only the changed piece is embedded again"
+    with isolation.tenant_wide("test: withdrawn pieces past their retention", tenant_id=tenant):
+        # The beat purges what was withdrawn before now - WITHDRAWN_KEPT; a day past the retention, this one goes.
+        assert await store.purge_withdrawn(tenant, before=datetime.now(UTC) - WITHDRAWN_KEPT) == 0
+        later = datetime.now(UTC) + timedelta(days=1)
+        assert await store.purge_withdrawn(tenant, before=later) == 1

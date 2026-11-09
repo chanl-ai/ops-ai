@@ -70,6 +70,7 @@ WIDENINGS: dict[str, set[str]] = {
     "FIND_READING": {"services/kb-service/src/ops_kb/schedule.py"},
     # And ends each tenant's runs a stopped process left marked running.
     "FIND_STALE": {"services/kb-service/src/ops_kb/schedule.py"},
+    "PURGE_WITHDRAWN": {"services/kb-service/src/ops_kb/schedule.py"},
     "FIND_PENDING": {"services/kb-service/src/ops_kb/embedding.py"},
     "RELAY": {"packages/ops_store/src/ops_store/outbox.py"},
     # Heartbeats describe a process, which serves every tenant; the Background page reads every team's jobs.

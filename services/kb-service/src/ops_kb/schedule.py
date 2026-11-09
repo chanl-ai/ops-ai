@@ -26,6 +26,11 @@ log = get_logger(__name__)
 FIND_DUE = "background process: the knowledge schedule reads each tenant's tool sources to find the due ones"
 FIND_READING = "background process: the knowledge schedule reads each tenant's items waiting for their file's reading"
 FIND_STALE = "background process: the knowledge schedule ends each tenant's runs left running by a stopped process"
+PURGE_WITHDRAWN = (
+    "background process: the knowledge schedule deletes each tenant's pieces withdrawn past their retention"
+)
+# How long a withdrawn piece is kept after a newer version replaced it, as a knowledge snapshot is.
+WITHDRAWN_KEPT = timedelta(days=30)
 # A run still marked running this long after it started belongs to a process that stopped: the lease it held ran out.
 STALE_AFTER = timedelta(minutes=15)
 
@@ -81,6 +86,15 @@ async def end_stale_runs(service: KnowledgeService, now: datetime) -> int:
     return ended
 
 
+async def purge_withdrawn(service: KnowledgeService, now: datetime) -> int:
+    """Deletes the pieces newer versions withdrew more than WITHDRAWN_KEPT ago; the number deleted."""
+    deleted = 0
+    for tenant in await service.store.tenants():
+        with isolation.tenant_wide(PURGE_WITHDRAWN, tenant_id=tenant):
+            deleted += await service.store.purge_withdrawn(tenant, before=now - WITHDRAWN_KEPT)
+    return deleted
+
+
 async def keep_syncing(service: KnowledgeService, stop: asyncio.Event) -> None:
     """The listed `knowledge_schedule` process: one pass a minute through the shared runner, which reports it on
     /health/background and backs off after a failed pass."""
@@ -88,6 +102,7 @@ async def keep_syncing(service: KnowledgeService, stop: asyncio.Event) -> None:
     async def once() -> int:
         now = datetime.now(UTC)
         synced = len(await run_due(service, now))
-        return synced + await finish_readings(service) + await end_stale_runs(service, now)
+        settled = await finish_readings(service) + await end_stale_runs(service, now)
+        return synced + settled + await purge_withdrawn(service, now)
 
     await background.run("knowledge_schedule", once, stop=stop, store=background.LOCAL)

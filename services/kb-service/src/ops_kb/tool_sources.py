@@ -260,8 +260,13 @@ async def sync_tool_source(
     removed_at_source: list[str] = []
     tombstones = cast(dict[str, Any], cfg.setdefault("tombstones", {}))
     gone_now: list[str] = []
-    # Only a listing read from its first page in this run sees every item, so only then is an unseen item removed.
+    # Only a listing read from its first page sees every item, so only then is an unseen item removed. One longer than a
+    # run's pages carries what it listed so far (`seenSoFar`) into the run that finishes it.
     from_start = cursor is None
+    carried = set(cast(list[str], cfg.get("seenSoFar") or [])) if cursor else set[str]()
+    whole = from_start or "seenSoFar" in cfg
+    if from_start:
+        cfg.pop("seenSoFar", None)
     known = {str(i["path"]): i for i in await service.store.items(tenant, source_ids=[source_id])}
     counts = {"listed": 0, "unchanged": 0, "upserted": 0, "deleted": 0, "failed": 0, "skipped": 0}
     errors: list[dict[str, Any]] = []
@@ -275,14 +280,18 @@ async def sync_tool_source(
     async def save() -> None:
         await service.store.update_source(tenant, source_id, {"config": dict(cfg)})
 
-    pages, restarted = 0, False
+    pages, restarted, resumes = 0, False, False
     # The seconds between two fetches of this source's items: the source's own rate, or the slower pace its listing
     # names (a site's robots.txt Crawl-delay). Each fetch is its own call, so the plugin cannot pace them itself.
     values = cast(dict[str, Any], cfg.get("values") or {})
     pace = 1.0 / float(values["rate"]) if isinstance(values.get("rate"), int | float) and values["rate"] > 0 else 0.0
     while True:
         if pages >= MAX_PAGES:
-            status, stopped = "partial", f"Stopped after {MAX_PAGES} pages; the next run continues from here."
+            # The items listed so far are fetched now; the next run lists on from the saved cursor.
+            status, stopped = "partial", f"Listed {MAX_PAGES} pages; the next run continues the listing from here."
+            resumes = True
+            if whole:
+                cfg["seenSoFar"] = sorted(carried | seen)
             break
         asked = {k: v for k, v in (("since", None if by_changes else since), ("cursor", cursor)) if v}
         page = await reader.call(tenant, team, list_tool, {**given, **asked}, act=act)
@@ -290,6 +299,8 @@ async def sync_tool_source(
         if not page.ok and cursor and not restarted and page.code in STALE_CURSOR:
             restarted, cursor = True, None
             cfg.pop("cursor", None)
+            cfg.pop("seenSoFar", None)
+            carried, whole = set[str](), True
             await save()
             continue
         if not page.ok:
@@ -357,8 +368,11 @@ async def sync_tool_source(
                 cfg["changesCursor"] = out["cursor"]
             break
 
-    gone = [str(i["path"]) for i in known.values() if not i.get("parent_id")] if full and from_start else []
-    if status == "success":
+    if not resumes:
+        seen |= carried
+        cfg.pop("seenSoFar", None)
+    gone = [str(i["path"]) for i in known.values() if not i.get("parent_id")] if full and whole else []
+    if status == "success" or resumes:
         lock = asyncio.Semaphore(int(cfg.get("fetchAtOnce") or AT_ONCE))
         paced = Pacer(pace)
 
@@ -444,7 +458,7 @@ async def sync_tool_source(
             counts["deleted"] += await service.store.remove_items(tenant, out_ids)
             await release_snapshots(service, who, s, files_out)
             log += [f"{known[p]['title']}: deleted at the source, removed" for p in removed_at_source if p in known]
-        if full:
+        if full and not resumes:
             dropped = [p for p in gone if p not in seen]
             removed_ids = [str(known[p]["id"]) for p in dropped]
             # Attachments go with their parent (parent_id holds the parent document's id).
@@ -557,6 +571,8 @@ async def _put(
     elif done["status"] == "reading":
         counts.setdefault("reading", 0)
         counts["reading"] += 1
+    elif done.get("unchanged"):
+        counts["unchanged"] += 1
     else:
         counts["upserted"] += 1
 

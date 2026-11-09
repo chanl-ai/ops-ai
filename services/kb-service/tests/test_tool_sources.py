@@ -6,6 +6,7 @@ in each person, which a sync with nobody behind it cannot use; and two syncs of 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from datetime import timedelta
 from pathlib import Path
 from tempfile import mkdtemp
 from typing import Any
@@ -287,3 +288,32 @@ def test_on_an_install_without_plugins_kb_reaches_no_tool(tmp_path: Path) -> Non
     on = Settings(plugins_dir=tmp_path, tools_url="http://tools.test")
     assert _tools_service(on) is not None
     assert {"tools:view", "tools:run"} <= set(on.service_scopes["kb"])
+
+
+async def test_a_listing_longer_than_a_run_fetches_what_it_found_and_finishes_over_runs(
+    kb: httpx.AsyncClient, tools: FakeTools, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run stopped at the page cap fetched nothing, so a site larger than one run's listing was never taken in;
+    and an item gone from the listing is only removed once a whole listing has been read, across runs."""
+    monkeypatch.setattr("ops_kb.tool_sources.MAX_PAGES", 1)
+    for n in range(4, 8):
+        tools.articles[f"ka{n}"] = {
+            "title": f"Article {n}",
+            "updated_at": f"2026-10-0{n}T09:00:00Z",
+            "body": f"<p>{n}</p>",
+        }
+    src = await source(kb)
+    first = await sync(kb, src["id"], full=True)
+    # The first page's two articles, and the first one's attachment.
+    assert first["status"] == "partial" and first["counts"]["upserted"] == 3, first["counts"]
+    # Each later run lists on from the saved cursor (a run asked to start over would not): four runs read all eight.
+    for _ in range(3):
+        await sync(kb, src["id"])
+    titles = set(await items(kb, src["id"]))
+    assert {"Reset a card PIN", "Travel notices", "Article 4", "Article 7"} <= titles, titles
+    del tools.articles["ka7"]
+    # Every run a full one (as a site that lists whole is), so the next listing's runs look for what left it.
+    monkeypatch.setattr("ops_kb.tool_sources.FULL_EVERY", timedelta(0))
+    cycle = [await sync(kb, src["id"]) for _ in range(4)]
+    assert sum(r["counts"]["deleted"] for r in cycle) == 1, [r["counts"] for r in cycle]
+    assert "Article 7" not in set(await items(kb, src["id"])), "a whole listing read over runs removes what left it"

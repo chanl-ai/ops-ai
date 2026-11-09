@@ -9,6 +9,8 @@ team of the base, source or document they belong to.
 
 from __future__ import annotations
 
+import hashlib
+from datetime import datetime
 from typing import Any, ClassVar, cast
 
 import sqlalchemy as sa
@@ -379,6 +381,69 @@ def _with_team(chunks: list[dict[str, Any]], team: str) -> tuple[list[dict[str, 
     return rows, units
 
 
+# What a kept piece takes from the new split: where it sits and the version it now belongs to.
+MOVED = ("version", "position", "title", "section", "page", "metadata", "tokens")
+
+
+def _piece_key(text: str, units: list[tuple[str, str]]) -> str:
+    """What decides a piece is unchanged: its text and what it is searched as (an approved FAQ unit aside, which
+    belongs to the review, not the split)."""
+    body = "\x1f".join([" ".join(text.split()), *sorted(f"{k}\x1e{t}" for k, t in units if k != "faq")])
+    return hashlib.sha256(body.encode()).hexdigest()
+
+
+async def _keep_unchanged(
+    c: AsyncConnection, tenant: str, item_id: str, chunks: list[dict[str, Any]], units: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Withdraws the item's live pieces a new split does not keep, and keeps those it does: a new piece with the same
+    text and units as a live one takes over that row (its id, units and vectors), with its new place and version, so a
+    changed page re-embeds only the pieces that changed. Returns the pieces and units still to insert."""
+    ch, u = kb_chunks, kb_units
+    live = (
+        await c.execute(
+            sa.select(ch.c.id, ch.c.text).where(
+                ch.c.tenant_id == tenant, ch.c.item_id == item_id, ch.c.withdrawn_at.is_(None), team_visible(ch)
+            )
+        )
+    ).all()
+    held: dict[str, list[tuple[str, str]]] = {}
+    for chunk_id, kind, text in (
+        await c.execute(
+            sa.select(u.c.chunk_id, u.c.kind, u.c.text).where(
+                u.c.tenant_id == tenant, u.c.chunk_id.in_([r[0] for r in live]), team_visible(u)
+            )
+        )
+    ).all():
+        held.setdefault(str(chunk_id), []).append((str(kind), str(text)))
+    free: dict[str, list[str]] = {}
+    for chunk_id, text in live:
+        free.setdefault(_piece_key(str(text), held.get(str(chunk_id), [])), []).append(str(chunk_id))
+    units_of: dict[str, list[dict[str, Any]]] = {}
+    for unit in units:
+        units_of.setdefault(str(unit["chunk_id"]), []).append(unit)
+    insert: list[dict[str, Any]] = []
+    kept: set[str] = set()
+    for row in chunks:
+        mine = units_of.get(str(row["id"]), [])
+        same = free.get(_piece_key(str(row["text"]), [(str(x["kind"]), str(x["text"])) for x in mine]))
+        if same:
+            old = same.pop()
+            kept.add(old)
+            moved = {
+                k: row[k] for k in ("version", "position", "title", "section", "page", "metadata", "tokens") if k in row
+            }
+            await c.execute(sa.update(ch).where(ch.c.tenant_id == tenant, ch.c.id == old).values(**moved))
+        else:
+            insert.append(row)
+    await c.execute(
+        sa.update(ch)
+        .where(ch.c.tenant_id == tenant, ch.c.item_id == item_id, ch.c.withdrawn_at.is_(None), ch.c.id.notin_(kept))
+        .values(withdrawn_at=db_now())
+    )
+    ids = {str(r["id"]) for r in insert}
+    return insert, [x for x in units if str(x["chunk_id"]) in ids]
+
+
 class KnowledgeStore:
     """kb-service's door to its knowledge bases and sources, always inside one tenant. Creating a knowledge base with
     its links, attaching sources and removing a source with its links each land whole."""
@@ -666,15 +731,7 @@ class KnowledgeStore:
                     .where(kb_item_versions.c.tenant_id == tenant, kb_item_versions.c.item_id == item["id"])
                     .values(status="superseded")
                 )
-                await c.execute(
-                    sa.update(kb_chunks)
-                    .where(
-                        kb_chunks.c.tenant_id == tenant,
-                        kb_chunks.c.item_id == item["id"],
-                        kb_chunks.c.withdrawn_at.is_(None),
-                    )
-                    .values(withdrawn_at=sa.func.now())
-                )
+                chunks, units = await _keep_unchanged(c, tenant, str(item["id"]), chunks, units)
             await c.execute(sa.insert(kb_item_versions).values(**version))
             if chunks:
                 await c.execute(sa.insert(kb_chunks), chunks)
@@ -683,6 +740,21 @@ class KnowledgeStore:
             if change is not None:
                 await c.execute(sa.insert(kb_changes).values(**change))
             return replaced
+
+    async def purge_withdrawn(self, tenant: str, *, before: datetime) -> int:
+        """Deletes pieces withdrawn before `before` (their units and vectors go with them); the number deleted. A
+        version's text stays in its change row and its snapshot for as long as those are kept."""
+        ch = kb_chunks
+        async with self._tx() as c:
+            done = await c.execute(
+                sa.delete(ch).where(
+                    ch.c.tenant_id == tenant,
+                    ch.c.withdrawn_at.is_not(None),
+                    ch.c.withdrawn_at < before,
+                    team_visible(ch),
+                )
+            )
+            return int(done.rowcount or 0)  # pyright: ignore[reportAttributeAccessIssue]
 
     async def mark_synced(self, tenant: str, source_id: str, status: str, *, activate: bool = False) -> int:
         """Records the run's outcome and the source's health: a success or partial run is a good sync and ends a
@@ -795,13 +867,7 @@ class KnowledgeStore:
             await c.execute(
                 sa.update(kb_items).where(kb_items.c.tenant_id == tenant, kb_items.c.id == item_id).values(**values)
             )
-            await c.execute(
-                sa.update(kb_chunks)
-                .where(
-                    kb_chunks.c.tenant_id == tenant, kb_chunks.c.item_id == item_id, kb_chunks.c.withdrawn_at.is_(None)
-                )
-                .values(withdrawn_at=sa.func.now())
-            )
+            chunks, units = await _keep_unchanged(c, tenant, item_id, chunks, units)
             if chunks:
                 await c.execute(sa.insert(kb_chunks), chunks)
             if units:

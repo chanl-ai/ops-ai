@@ -1504,6 +1504,23 @@ class KnowledgeService:
         a fetched item), `extra` adds a fetched item's marker, parent and address, and `title_given` is the system's
         own title for it."""
         now = datetime.now(UTC)
+        cleaned = document_digest(doc, split_settings(self.settings_of(s)))
+        if (
+            existing is not None
+            and existing["status"] == "indexed"
+            and existing.get("content_digest") == cleaned
+            and not self.built_under_other_settings(s, existing)
+        ):
+            # The same text after cleaning (a page with no change signal, served with a new timestamp or token): no new
+            # version. It keeps the snapshot just read and its markers, so the next run compares against them.
+            kept = {
+                "file_id": file_id,
+                "digest": digest,
+                "size": size,
+                **{k: v for k, v in (extra or {}).items() if k in KEPT_EXTRA},
+            }
+            await self.store.update_item(who.tenant_id, str(existing["id"]), kept)
+            return {**existing, **kept, "unchanged": True}
         item_id = existing["id"] if existing else new_id("itm")
         version = (existing["version"] + 1) if existing else 1
         chunks: list[dict[str, Any]] = []
@@ -2458,6 +2475,8 @@ class CountingModel:
         return '{"questions": []}'
 
 
+# What an unchanged fetched item takes from its new fetch: its change signals.
+KEPT_EXTRA = ("marker", "tag", "gone_count")
 # FAQ units follow a piece's own units, so their positions never meet.
 FAQ_POSITION = 1_000
 # A draft a person may still decide: waiting, or approved before its section changed.

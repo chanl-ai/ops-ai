@@ -1,0 +1,1 @@
+{"date":"2026-11-09","title":"Re-syncs redo only what changed","description":"A changed page keeps its unchanged passages and their search vectors, a page whose text did not change keeps its version, and a site too large for one sync is taken in over several.","tag":"improved"}
