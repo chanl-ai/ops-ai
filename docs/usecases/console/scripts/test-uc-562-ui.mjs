@@ -306,7 +306,9 @@ await withUiStack(
         await go('/settings/account');
         await page.getByTestId('account-profile').waitFor({ timeout: 30_000 });
         const account = await page.evaluate(() => ({ badge: document.querySelectorAll('[data-testid=preview-badge]').length, hint: /comes from your sign-in/.test(document.querySelector('[data-testid=account-profile]')?.textContent ?? '') }));
-        check('11 a preview page says why in words and its sample parts offer no Save', !!general.reason && !general.sampleActions.length && general.notes <= 1 && account.badge === 0 && account.hint, { general, account });
+        // Why, in words, exactly once: the header's reason or a sample note, never both.
+        check('11 a preview page says why in words and its sample parts offer no Save',
+            (!!general.reason) !== (general.notes === 1) && general.notes <= 1 && !general.sampleActions.length && account.badge === 0 && account.hint, { general, account });
       });
 
       await step('12 every Settings page with sample parts says why and offers no Save there, and nothing covers the Settings sidebar', async () => {
@@ -320,7 +322,7 @@ await withUiStack(
             const gates = [...document.querySelectorAll('[data-testid=sample-data-gate]')];
             if (!gates.length) return null;
             const actions = gates.flatMap((g) => [...g.querySelectorAll('button')]).filter((b) => b.getBoundingClientRect().width > 0 && /^(Save|Upload)/.test(b.textContent?.trim() ?? '')).map((b) => b.textContent.trim());
-            return { reason: !!document.querySelector('[data-testid=preview-reason]'), actions };
+            return { reason: !!document.querySelector('[data-testid=preview-reason]') || !!document.querySelector('[data-testid=sample-data-notice]'), actions };
           });
           if (seen) gated.push(r);
           if (seen && (!seen.reason || seen.actions.length)) bad[r] = seen;

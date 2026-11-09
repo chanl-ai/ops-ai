@@ -31,7 +31,7 @@ DEFAULTS = {
     "OPS_BOOTSTRAP_TENANT_NAME": "Harbor & Pine Bank",
     "OPS_BOOTSTRAP_TEAM_NAME": "Security",
     "OPS_BOOTSTRAP_ADMIN_EMAIL": "dev-admin@harborpine.example",
-    "OPS_BOOTSTRAP_ADMIN_NAME": "Dev Admin",
+    "OPS_BOOTSTRAP_ADMIN_NAME": "Alex Morgan",
 }
 
 

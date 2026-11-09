@@ -32,7 +32,7 @@ state, and each state has one next action.
 | Needs sign-in (`needs_sign_in`) | On; the team's Account, or your own on an App each person signs in to, has not signed in | **Connect** | **Sign in from Mine** |
 | Needs an auth config (`needs_auth_config`) | The App signs in through an auth config and the team has none it can use, or the one its Account used is gone or has no client secret | **Add an auth config**, which opens the new auth config for that App and signs nobody in | Ask an admin |
 | Available (`off`) | Installed, and not on for the team: never turned on, or turned off | **Turn on** | Ask an admin |
-| Not installed (`not_installed`) | The system does not hold this App's plugin and the team never had it on | Nothing; the operator installs Apps | The same |
+| Not installed (`not_installed`) | The system does not hold this App's plugin and the team never had it on | Nothing; the person who runs Ops AI at your company installs Apps | The same |
 | No longer installed (`removed`) | The team had it on; the system no longer holds its plugin | **Delete app** removes what it left | The same |
 
 Before 9 November 2026 the API answered `not_installed` for an App that was installed and off for the team; that

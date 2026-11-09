@@ -24,6 +24,13 @@ export const CONNECTOR_STATE = {
 /** What a member reads on an app the team has not turned on. */
 export const NOT_SET_UP = 'Not set up for your team yet';
 
+/** What is missing where a connected connector names its account, so no row shows a bare dash; the state's own words
+ * (Off for this team, Not connected) sit beside it. */
+export const MISSING_ACCOUNT = {
+  app_off: 'No account connected',
+  not_connected: 'No account connected',
+} as const satisfies Partial<Record<MyConnector['state'], string>>;
+
 /** Whether chat uses it, as the row's In chat column says it. */
 export function inChatWords(c: MyConnector): string {
   if (c.state === 'connected') return 'On in chat';

@@ -46,9 +46,10 @@ export function KbChips({ kbs, value, onChange, disabled, agentName, oneLine = f
       {!disabled && (
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="h-6 gap-1 rounded-full px-2 text-xs">
+            <Button variant="outline" size="sm" className="h-6 gap-1 rounded-full px-2 text-xs" aria-label={value.length ? 'Knowledge' : 'Add knowledge'}>
               {value.length ? <Plus className="size-3" /> : <Database className="size-3" />}
-              {value.length ? 'Knowledge' : 'Add knowledge'}
+              {/* On one header line at phone width the words would be cut; the icon stays, named for screen readers. */}
+              <span className={cn(oneLine && 'max-sm:sr-only')}>{value.length ? 'Knowledge' : 'Add knowledge'}</span>
             </Button>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-72 p-0">

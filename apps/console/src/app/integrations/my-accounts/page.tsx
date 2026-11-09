@@ -20,7 +20,7 @@ import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { APP_CARD_GRID, AppCard } from '@/components/connections/app-card';
 import { AskAnAdmin } from '@/components/connections/ask-an-admin';
-import { CONNECTOR_STATE, ConnectorSheet, NOT_SET_UP, inChatWords, stateVariant } from '@/components/connections/connector-sheet';
+import { CONNECTOR_STATE, ConnectorSheet, MISSING_ACCOUNT, NOT_SET_UP, inChatWords, stateVariant } from '@/components/connections/connector-sheet';
 import { OwnCredentialsForm } from '@/components/connections/own-credentials-form';
 import { useSignInWindow } from '@/components/connections/sign-in';
 import { DialogShell } from '@/components/shared/dialog-shell';
@@ -30,6 +30,7 @@ import { facetFilterFn } from '@/hooks/use-list-params';
 import { useTeam } from '@/hooks/use-team';
 import { plural, shortDate } from '@/lib/format';
 import { appPageHref } from '@/lib/app-links';
+import { MY_CONNECTORS } from '@/lib/nav';
 
 /**
  * The person's own sign-in at the system, in a window as from the chat; a key kind opens the key form instead. The
@@ -158,7 +159,12 @@ function ConnectorCard({ c, connect, onOpen, onEnd, onAnother }: { c: MyConnecto
 
 /** Whom it signs in as: the primary account, with the other connected ones as a count. */
 function SignedInAs({ c }: { c: MyConnector }) {
-  if (c.state === 'app_off' || c.state === 'not_connected') return <span className="text-sm text-muted-foreground">—</span>;
+  if (c.state === 'app_off' || c.state === 'not_connected')
+    return (
+      <span className="text-sm text-muted-foreground" data-testid={`connector-missing-${c.appId}`}>
+        {MISSING_ACCOUNT[c.state]}
+      </span>
+    );
   const more = c.accountCount - 1;
   return (
     <span className="flex flex-wrap items-center gap-2 text-sm">
@@ -235,7 +241,7 @@ function ConnectorsPage() {
   return (
     <PageLayout
       icon={UserRound}
-      title="My connectors"
+      title={MY_CONNECTORS}
       switcher
       description={`Apps that act as you in chat and in agents working for you, in ${team?.name ?? 'this team'}. Sign in once per team; disconnect here any time.`}
     >

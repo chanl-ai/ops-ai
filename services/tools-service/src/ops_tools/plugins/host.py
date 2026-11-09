@@ -773,8 +773,8 @@ class PluginHost:
         if plugin is None:
             return {
                 **module,
-                "plugin_off": f"{module['display_name']} isn't installed on this system, so its tools are off. Your "
-                "operator installs apps.",
+                "plugin_off": f"{module['display_name']} isn't installed, so its tools are off. Ask the person who "
+                "runs Ops AI at your company to install it.",
             }
         reason = await self.off_reason(tenant_id, team_id, plugin)
         if reason is not None or team_id is None:

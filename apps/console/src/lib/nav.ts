@@ -56,6 +56,8 @@ export const BACKGROUND: NavNeed = { area: 'access', action: 'manage', everyTeam
  * row "Connectors".
  */
 export const CONNECTORS = 'Connectors';
+/** Mine's one name, on the sidebar row, its page title and the avatar menu. */
+export const MY_CONNECTORS = 'My connectors';
 export const CONNECTOR_VIEWS: NavChild[] = [
   { title: 'Mine', url: '/integrations/my-accounts', icon: IconUserCheck },
   { title: 'Team setup', url: '/integrations', icon: IconPlugConnected },
@@ -77,7 +79,7 @@ export const NAV: NavGroup[] = [
       { title: 'Human Tasks', url: '/reviews', icon: IconUserCheck },
       // Connectors, Mine: a person's own sign-ins, about the person rather than the team's data, visited whenever one
       // expires.
-      { title: 'My connectors', url: '/integrations/my-accounts', icon: IconUserCheck, views: CONNECTOR_VIEWS },
+      { title: MY_CONNECTORS, url: '/integrations/my-accounts', icon: IconUserCheck, views: CONNECTOR_VIEWS },
       // Every conversation the person has had, searchable, beside the chat itself.
       { title: 'Chat', url: '/chat', icon: IconMessages, tabIcon: IconMessage, top: true, children: [{ title: 'Conversations', url: '/chat/conversations', icon: IconHistory }] },
     ],
