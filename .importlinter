@@ -108,8 +108,6 @@ name = ops_kb.store imports nothing else in ops_kb
 type = forbidden
 source_modules = ops_kb.store
 forbidden_modules = ops_kb.*
-ignore_imports =
-    ops_kb.store.fulltext -> ops_kb.retrieval
 
 [importlinter:contract:models-store-is-bottom]
 name = ops_models.store imports nothing else in ops_models
