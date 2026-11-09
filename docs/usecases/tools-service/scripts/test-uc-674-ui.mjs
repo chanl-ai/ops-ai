@@ -96,9 +96,9 @@ await withUiStack(
         await sam.getByTestId('new-credential-client-secret').fill('gh-team-secret');
         await sam.getByTestId('new-credential-create').click();
         await sam.getByTestId('new-credential').waitFor({ state: 'hidden', timeout: 30_000 });
-        await sam.getByTestId('app-turn-on').waitFor({ timeout: 30_000 });
+        await sam.getByTestId('app-connect').waitFor({ timeout: 30_000 });
         const afterAdd = await badge(sam);
-        await sam.getByTestId('app-turn-on').click();
+        await sam.getByTestId('app-connect').click();
         await sam.getByTestId('connect-window').waitFor({ timeout: 30_000 });
         await sam.getByTestId('connect-window-authorize').click();
         await sam.getByTestId('connect-window-done').waitFor({ timeout: 60_000 });
@@ -122,7 +122,7 @@ await withUiStack(
         await priyaPage.getByTestId('app-settings-turn-on').waitFor({ timeout: 30_000 });
         const offBadge = await badge(priyaPage);
         const off = await settingsState(priyaPage);
-        const headerTurnOn = await priyaPage.getByTestId('app-turn-on').isVisible();
+        const headerTurnOn = await priyaPage.getByTestId('app-connect').isVisible();
         await priyaPage.screenshot({ path: join(SHOTS, 'salesforce-off.png') });
         const pages = priyaPage.context().pages().length;
         await priyaPage.getByTestId('app-settings-turn-on').click();

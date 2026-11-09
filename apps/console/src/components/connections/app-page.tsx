@@ -124,7 +124,7 @@ export function AppPageView({ appId }: { appId: string }) {
       badge={<AppStateBadge card={card} testId="app-status" />}
       actions={
         builtIn || removed ? undefined : next === 'turn_on' ? (
-          <TurnOnButton card={card} onFirstTurnOn={() => setConnecting(true)} />
+          <TurnOnButton card={card} onFirstTurnOn={() => setConnecting(true)} testId="app-connect" />
         ) : next === 'add_auth_config' ? (
           <AddAuthConfigButton appId={card.id} variant="default" />
         ) : next === 'ask_admin' ? (
