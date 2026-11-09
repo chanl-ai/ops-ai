@@ -2,7 +2,12 @@
   "plugins": [
     {
       "source": "https://github.com/chanl-ai/ops-ai-plugins",
-      "ref": "53984716f09de3f672e210b280ccaf1dcc8e9c52",
+      "ref": "e825c9f77690a660e248ac8e08aef01cc9992f29",
+      "path": "plugins/github"
+    },
+    {
+      "source": "https://github.com/chanl-ai/ops-ai-plugins",
+      "ref": "e825c9f77690a660e248ac8e08aef01cc9992f29",
       "path": "plugins/salesforce"
     }
   ]

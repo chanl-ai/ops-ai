@@ -8,7 +8,7 @@ Status: pilot, one box (`ops-ai-box-1`).
 
 | Command | What it does |
 |---|---|
-| `make box-up NAME=ops-ai-box-1 [BRANCH=]` | Creates the box if it is missing, else wakes it, then runs `scripts/box-setup.sh` inside it. |
+| `make box-up NAME=ops-ai-box-1 [BRANCH=]` | Creates the box if it is missing, else wakes it, then runs `scripts/box-setup.sh` inside it, which runs `make plugins-sync` so the box holds the plugins `deploy/plugins.json` pins. |
 | `make box-url NAME=` | Prints the one-time link, `<address>/__box?key=<key>`. Opening it sets the `ops_box` cookie (HttpOnly, Secure, SameSite=Lax) and lands on the login page. Every request without the cookie gets 403. The demo sign-in stays, since the gate keeps strangers out. |
 | `make box-status NAME=` | Awake (`running`, `warm`) or asleep (`cold`), the branch, and `make health`. A cold box is not woken to be asked. |
 | `make box-check NAME=` | Headless, from the laptop, through the public address: no cookie gets 403, the link sets the cookie and lands on login, a demo sign-in stays on chat for 10 seconds, and `GET /api/platform/v1/teams` with the app's token answers 200. |
