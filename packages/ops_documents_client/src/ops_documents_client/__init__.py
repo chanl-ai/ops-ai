@@ -12,7 +12,7 @@ from typing import Any, cast
 
 import httpx
 
-from ops_identity import ServiceCallError, ServiceClient
+from ops_identity import ServiceCallError, ServiceClient, segment
 from ops_service_kit.settings import Settings
 
 __all__ = ["READING", "READING_PENDING", "DocumentNotFound", "DocumentsClient", "DocumentsRefused", "reading_text"]
@@ -122,7 +122,7 @@ class DocumentsClient:
             while answer.get("status") in READING_PENDING and time.monotonic() < ends:
                 await sleep(poll_s)
                 answer = await self._documents.request(
-                    "GET", f"/v1/documents/readings/{file_id}", params={"ocr": ocr}, tenant=tenant, team=team
+                    "GET", f"/v1/documents/readings/{segment(file_id)}", params={"ocr": ocr}, tenant=tenant, team=team
                 )
         except ServiceCallError as e:
             raise _refused(e) from e
@@ -132,7 +132,7 @@ class DocumentsClient:
         """The team's document type with its versions; another team's or an unknown one is DocumentNotFound."""
         try:
             found: dict[str, Any] = await self._documents.request(
-                "GET", f"/v1/document-types/{type_id}", tenant=tenant, team=team
+                "GET", f"/v1/document-types/{segment(type_id)}", tenant=tenant, team=team
             )
         except ServiceCallError as e:
             raise _refused(e) from e
@@ -162,7 +162,7 @@ class DocumentsClient:
         """An extraction as it is now: queued, running, or finished with its answer."""
         try:
             found: dict[str, Any] = await self._documents.request(
-                "GET", f"/v1/documents/extractions/{extraction_id}", tenant=tenant, team=team
+                "GET", f"/v1/documents/extractions/{segment(extraction_id)}", tenant=tenant, team=team
             )
         except ServiceCallError as e:
             raise _refused(e) from e

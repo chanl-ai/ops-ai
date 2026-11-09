@@ -19,7 +19,7 @@ from typing import Any, Protocol, cast
 import httpx
 
 from ops_agent_kernel.ports import ToolOutcome
-from ops_identity import ServiceCallError, ServiceClient
+from ops_identity import ServiceCallError, ServiceClient, segment
 
 from .shaper import shape_part
 from .tool_directory import OperationRef, ToolDirectory, ToolsUnavailable
@@ -131,7 +131,7 @@ class GatewayClient:
         """The tool's access class and write approval policy (`approval`: approvers, stepUp) as
         tools-service's registry has them; access "unknown" and no policy when it is not registered."""
         try:
-            return cast(dict[str, Any], await self.tools.get(f"/v1/tools/{tool}"))
+            return cast(dict[str, Any], await self.tools.get(f"/v1/tools/{segment(tool)}"))
         except ServiceCallError as e:
             if e.status == 404:
                 return {"access": "unknown", "approval": None}
@@ -140,7 +140,7 @@ class GatewayClient:
     async def review_decision(self, module_id: str, decision: dict[str, Any]) -> None:
         """Applies a tool module review's decision in tools-service: publish the reviewed version, or return it
         to draft or withdraw it. Raises on any answer but success, so the request stays marked to apply again."""
-        await self.tools.post(f"/v1/tool-modules/{module_id}/review-decisions", decision)
+        await self.tools.post(f"/v1/tool-modules/{segment(module_id)}/review-decisions", decision)
 
     async def egress_host_decision(self, decision: dict[str, Any]) -> None:
         """Applies an approved host in tools-service: the host joins the tenant's allow-list. Raises on any

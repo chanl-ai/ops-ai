@@ -206,3 +206,22 @@ async def test_every_install_serves_them_and_shows_their_cards(local_catalog: An
     assert all(r is not None and r.access == "read" for r in resolved), resolved
     assert {"read_file", "read_document"} <= {t["name"] for t in await registry.grantable(tenant)}
     assert {"files", "document-types"} <= {str(a["id"]) for a in BUILT_IN}
+
+
+async def test_a_file_named_by_the_model_reaches_only_the_one_file_route(monkeypatch: Any) -> None:
+    asked: list[bytes] = []
+    real = FakeFilesService.handle
+
+    def seen(self: FakeFilesService, request: httpx.Request) -> httpx.Response:
+        asked.append(request.url.raw_path)
+        return real(self, request)
+
+    monkeypatch.setattr(FakeFilesService, "handle", seen)
+    tools, _, documents = await _rig()
+    # A file's text can steer the model's arguments: these would climb out of /v1/files/{id} to another route.
+    for ref in ("../scan-results", "..", "x/content", "x?purpose=chat_attachment"):
+        out = await _call(tools, "read_file", file=ref)
+        assert not out.ok, out.output
+    by_id = [p for p in asked if not p.startswith(b"/v1/files?")]
+    assert by_id == [b"/v1/files/x%3Fpurpose%3Dchat_attachment"], by_id
+    assert documents.reads == 0
