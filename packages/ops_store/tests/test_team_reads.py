@@ -34,6 +34,10 @@ NOT_YET_MARKED = {
     # the call log: Usage reads it by the acting team passed in; the database lock on it comes later
     "gateway_calls",
     # files-service and documents-service: their `team` column
+    # documents-service: one reading per tenant and file content, shared by every team holding the bytes; `team` names
+    # who asked, and each read checks the asking team can see the file
+    "documents_readings",
+    "documents_reading_files",
     # platform-service: identity and administration, read by team and role through platform's own routes
     "members",
     "api_keys",

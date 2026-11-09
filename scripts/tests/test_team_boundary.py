@@ -42,6 +42,10 @@ TENANT_HELD = {
     "service_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
     "files_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
     "documents_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
+    "documents_readings": "one reading per tenant and file content, shared by every team holding those bytes; team "
+    "names who asked first, and every read checks the asking team can see the file",
+    "documents_reading_files": "which of the tenant's files hold a reading's bytes; a read checks the asking team can "
+    "see the file before the reading is returned",
     "platform_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
 }
 # Until each team has its own tool modules (keys per team, its own policies): then this list is empty.
