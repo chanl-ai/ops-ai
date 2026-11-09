@@ -57,11 +57,18 @@ def leaks(text: str, *, home: Path = HOME) -> list[str]:
 
 
 def _is_text(path: Path) -> bool:
+    """UTF-8 with no NUL byte. A compressed PDF can have no NUL byte, so that alone does not make a file text."""
     try:
         data = path.read_bytes()
     except OSError:
         return False
-    return b"\0" not in data
+    if b"\0" in data:
+        return False
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
 
 
 def iter_files(root: Path, named: list[str]) -> list[Path]:
