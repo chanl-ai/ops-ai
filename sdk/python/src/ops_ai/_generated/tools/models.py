@@ -499,12 +499,15 @@ class KnowledgeSourceView(TypedDict, closed=True):
     connectionStatus: str | None
     deletedTool: str | None
     egressFrom: NotRequired[str | None]
+    fetchAtOnce: NotRequired[int]
     getTakesTag: NotRequired[bool]
     getTool: str
     inputs: NotRequired[dict[str, Any]]
     listTool: str
+    listsWhole: NotRequired[bool]
     needsConnection: NotRequired[bool]
     plugin: str
+    previewTool: NotRequired[str | None]
     schedule: dict[str, Any]
     scopesTool: NotRequired[str | None]
     signIn: str | None

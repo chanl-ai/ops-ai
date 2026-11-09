@@ -371,6 +371,26 @@ class SyncIn(BaseModel):
     retry: bool = False
 
 
+class PreviewIn(In):
+    # The plugin, its source and the source's own settings, as a create would send them.
+    config: dict[str, Any]
+
+
+class PreviewPage(Out):
+    id: str
+    # Will fetch, excluded by a rule, refused by robots.txt, needs JavaScript, ...
+    outcome: str
+    will_fetch: bool
+
+
+class SourcePreview(Out):
+    found: int
+    will_fetch: int
+    pages: list[PreviewPage]
+    # The listing stopped at the source's page cap.
+    capped: bool
+
+
 class SourcePatch(In):
     name: str | None = None
     collection: str | None = None

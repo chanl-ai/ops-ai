@@ -64,6 +64,7 @@ from .schemas import (
     PageIn,
     PlaygroundAnswer,
     PluginSource,
+    PreviewIn,
     QueryIn,
     SearchIn,
     SearchOut,
@@ -71,6 +72,7 @@ from .schemas import (
     SourceDetail,
     SourceIn,
     SourcePatch,
+    SourcePreview,
     SourceRow,
     SyncIn,
     SyncRun,
@@ -392,6 +394,12 @@ def create_kb_app(
     @sources.post("", status_code=201, response_model=Envelope[Source])
     async def create_source(body: SourceIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.create_source(who, body.model_dump(by_alias=True)), 201)
+
+    @sources.post("/preview", response_model=Envelope[SourcePreview])
+    async def preview_source(body: PreviewIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """What a plugin source with these settings would take in (a site's pages, each with its outcome), asked of
+        the plugin's preview tool. Nothing is stored."""
+        return ok(await service.preview_source(who, body.model_dump(by_alias=True)))
 
     @sources.post("/{source_id}/files", response_model=Envelope[list[AddedFile]])
     async def add_files(source_id: str, body: FileIdsIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

@@ -316,6 +316,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "sources_preview_source": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/sources/preview",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "sources_remove_source": {
         "body": None,
         "headers": [],
@@ -537,6 +546,10 @@ class Operations:
     def sources_list_plugin_sources(self, *, plugin: str | None = None) -> list[PluginSource]:
         "List Plugin Sources"
         return self._t.call(SERVICE, OPERATIONS["sources_list_plugin_sources"], {}, {"plugin": plugin}, {}, None)  # type: ignore[no-any-return]
+
+    def sources_preview_source(self, body: PreviewIn) -> SourcePreview:
+        "Preview Source"
+        return self._t.call(SERVICE, OPERATIONS["sources_preview_source"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     def sources_get_source(self, source_id: str) -> SourceDetail:
         "Get Source"
@@ -787,6 +800,10 @@ class AsyncOperations:
     async def sources_list_plugin_sources(self, *, plugin: str | None = None) -> list[PluginSource]:
         "List Plugin Sources"
         return await self._t.call(SERVICE, OPERATIONS["sources_list_plugin_sources"], {}, {"plugin": plugin}, {}, None)  # type: ignore[no-any-return]
+
+    async def sources_preview_source(self, body: PreviewIn) -> SourcePreview:
+        "Preview Source"
+        return await self._t.call(SERVICE, OPERATIONS["sources_preview_source"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def sources_get_source(self, source_id: str) -> SourceDetail:
         "Get Source"

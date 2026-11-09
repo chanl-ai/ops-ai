@@ -405,6 +405,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/sources/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Source
+         * @description What a plugin source with these settings would take in (a site's pages, each with its outcome), asked of
+         *     the plugin's preview tool. Nothing is stored.
+         */
+        post: operations["sources_preview_source"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sources/{source_id}": {
         parameters: {
             query?: never;
@@ -881,6 +902,15 @@ export interface components {
         /** Envelope[SourceDetail] */
         Envelope_SourceDetail_: {
             data: components["schemas"]["SourceDetail"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[SourcePreview] */
+        Envelope_SourcePreview_: {
+            data: components["schemas"]["SourcePreview"];
             /**
              * Success
              * @constant
@@ -1726,6 +1756,22 @@ export interface components {
             /** Source */
             source: string;
         };
+        /** PreviewIn */
+        PreviewIn: {
+            /** Config */
+            config: {
+                [key: string]: unknown;
+            };
+        };
+        /** PreviewPage */
+        PreviewPage: {
+            /** Id */
+            id: string;
+            /** Outcome */
+            outcome: string;
+            /** Willfetch */
+            willFetch: boolean;
+        };
         /** QueryIn */
         QueryIn: {
             /** Question */
@@ -2044,6 +2090,17 @@ export interface components {
             sensitivity?: string | null;
             /** Tags */
             tags?: string[] | null;
+        };
+        /** SourcePreview */
+        SourcePreview: {
+            /** Capped */
+            capped: boolean;
+            /** Found */
+            found: number;
+            /** Pages */
+            pages: components["schemas"]["PreviewPage"][];
+            /** Willfetch */
+            willFetch: number;
         };
         /** SourceRow */
         SourceRow: {
@@ -4786,6 +4843,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_list_PluginSource__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    sources_preview_source: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SourcePreview_"];
                 };
             };
             /** @description Invalid request */

@@ -61,19 +61,21 @@ class Fake:
 
 
 def _send(fake: Fake, allowed: list[str], sent_headers: Mapping[str, str] | None = None) -> Any:
-    def send(method: str, url: str, params: Mapping[str, Any] | None, body: Any) -> Response:
+    def send(
+        method: str, url: str, params: Mapping[str, Any] | None, body: Any, asked: Mapping[str, str] | None = None
+    ) -> Response:
         host = urlsplit(url).hostname
         if host not in allowed:
             raise EgressDenied(f"{host} is not one of this plugin's hosts.")
-        # The plugin's and the tool's headers first, then the sign-in, which wins a name they share (paging.headers).
-        out = {**dict(sent_headers or {}), "Authorization": f"Bearer {fake.token}"}
+        # The request's own headers, then the plugin's and the tool's, then the sign-in, which wins a name they share.
+        out = {**dict(asked or {}), **dict(sent_headers or {}), "Authorization": f"Bearer {fake.token}"}
         # No params at all for a followed page address: an empty mapping would replace the query the address carries.
         r = fake.client.request(method, url, params=dict(params) if params else None, json=body, headers=out)
         if r.status_code == 401:
             raise NeedsReconnect("The system refused the sign-in.")
         if r.status_code == 429:
             raise RateLimited("The system's rate limit was reached.")
-        return Response(r.status_code, r.text, dict(r.headers))
+        return Response(r.status_code, r.text, dict(r.headers), r.content)
 
     return send
 
@@ -125,7 +127,7 @@ def call(plugin: Plugin, tool: str, args: Mapping[str, Any], settings: Mapping[s
             params = rest
         else:
             body = rest
-    r = send(method, url, params, body)
+    r = send(method, url, params, body, None)
     if r.status_code >= 400:
         raise RuntimeError(f"{tool} answered {r.status_code}: {r.text[:200]}")
     data: Any = r.json() if r.text else None

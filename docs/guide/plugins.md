@@ -436,12 +436,26 @@ how to talk to its system. Every tool is a read, called through tools-service, s
 | Deleted | `deleted` (`list_deleted`) | Ids removed since a time | No: the weekly full listing finds deletes |
 | Who can see | `allowed` on a fetched item | User and group ids from the system, stored per version, not yet enforced | No |
 | Pickers | `scopes` (`list_scopes`), takes `query` | What a person picks when adding the source: sites and libraries, spaces | No |
+| Preview | `preview` (`preview`), takes `source` | What a source with these settings would take in, before anything is stored: `{found, will_fetch, pages: [{id, outcome, will_fetch}], capped}` | No |
 
 `inputs` describes what a source of this kind is set up with (start addresses, sites, spaces); kb-service checks a
 source's values against them (400 `invalid_source_values`) and sends them to each of its tools as the `source` input,
 which every such tool declares. `egress_from` names an input holding addresses: on a sync's calls (a service holding
 `knowledge:run`) their hosts are reachable beside the plugin's own `egress`; a private or link-local address is still
 refused unless the account lists it, and no agent's or person's call reaches them.
+
+A list item may carry `content` and `mime` when listing had to read it anyway (a crawl following links); kb-service then
+does not fetch it again. A listed item with `skipped: "<reason>"` is not taken in, and an indexed copy leaves search
+with the reason in the run's log. `lists_whole: true` says every listing names every item, so each run finds what
+left the source; `fetch_at_once` (1 to 16, 4) is how many items kb-service fetches from the source at once.
+
+A Python tool may set its own `If-None-Match`, `If-Modified-Since`, `Accept` and `Accept-Language` on a request
+(`ctx.http.get(url, headers=...)`); any other header is refused. `Response.content` holds the body's bytes for an
+answer that is not text, and a function raises `NotFound` (NOT_FOUND) for an item gone at its source.
+
+The Website plugin (`plugins/web` in the plugins repository, pinned in `deploy/plugins.json`) is the first source on
+this contract: a site's pages from its sitemaps and links, robots.txt obeyed, one request a second, a conditional
+fetch per changed page, and a preview that flags pages showing their text only with JavaScript.
 
 kb-service keeps each fetched item as a `knowledge_snapshot` file before reading it, fetches only items whose marker
 moved, sends back the version tag it holds so an unchanged item costs no transfer, saves its place after every page,

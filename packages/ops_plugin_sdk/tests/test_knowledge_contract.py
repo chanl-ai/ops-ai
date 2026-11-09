@@ -14,7 +14,7 @@ import httpx
 import pytest
 from test_validate import problems
 
-from ops_plugin_sdk import EgressDenied, Plugin
+from ops_plugin_sdk import BadInput, Context, EgressDenied, Plugin, Response
 from ops_plugin_sdk.testing import Fake, call, knowledge_contract
 
 MANIFEST = """
@@ -155,3 +155,17 @@ def test_source_tools_without_a_source_input_or_an_unknown_egress_input_are_refu
     found = problems(root / "demo_pages")
     assert any("egress_from names start_urls" in p for p in found), found
     assert any("changed_pages takes no source input" in p for p in found), found
+
+
+def test_a_function_sets_only_conditional_and_accept_headers() -> None:
+    sent: list[dict[str, str]] = []
+
+    def send(method: str, url: str, params: Any, body: Any, headers: Any = None) -> Response:
+        sent.append(dict(headers or {}))
+        return Response(304, "")
+
+    ctx = Context.of({}, send)
+    assert ctx.http.get("https://help.test/a", headers={"If-None-Match": '"x"'}).status_code == 304
+    assert sent == [{"If-None-Match": '"x"'}]
+    with pytest.raises(BadInput, match="not Authorization"):
+        ctx.http.get("https://help.test/a", headers={"Authorization": "Bearer stolen"})

@@ -114,6 +114,9 @@ async def source_config(reader: ToolReader | None, who: Who, i: dict[str, Any]) 
         "getTool": found["getTool"],
         "changesTool": found.get("changesTool"),
         "scopesTool": found.get("scopesTool"),
+        "previewTool": found.get("previewTool"),
+        "listsWhole": bool(found.get("listsWhole")),
+        "fetchAtOnce": int(found.get("fetchAtOnce") or AT_ONCE),
         "getTakesTag": bool(found.get("getTakesTag")),
         "connectionId": found.get("connectionId"),
         "schedule": found.get("schedule") or {"kind": "manual"},
@@ -213,7 +216,13 @@ async def sync_tool_source(
         cfg.pop("paused", None)
     started = clock()
     last_full = cfg.get("lastFullAt")
-    full = full or not cfg.get("watermark") or not last_full or started - datetime.fromisoformat(last_full) > FULL_EVERY
+    full = (
+        full
+        or bool(cfg.get("listsWhole"))
+        or not cfg.get("watermark")
+        or not last_full
+        or started - datetime.fromisoformat(last_full) > FULL_EVERY
+    )
     since = None if full else cfg.get("watermark")
     cursor = cfg.get("cursor") if trigger != "full" else None
     # The source's own settings go to every call; an incremental run lists only what changed when the plugin has a
@@ -224,6 +233,8 @@ async def sync_tool_source(
     if by_changes and not cursor:
         cursor = cfg["changesCursor"]
     removed_at_source: list[str] = []
+    # Only a listing read from its first page in this run sees every item, so only then is an unseen item removed.
+    from_start = cursor is None
     known = {str(i["path"]): i for i in await service.store.items(tenant, source_ids=[source_id])}
     counts = {"listed": 0, "unchanged": 0, "upserted": 0, "deleted": 0, "failed": 0, "skipped": 0}
     errors: list[dict[str, Any]] = []
@@ -279,6 +290,13 @@ async def sync_tool_source(
             if r.get("deleted"):
                 removed_at_source.append(item_id)
                 continue
+            if r.get("skipped"):
+                # Listed but not to be taken in (refused by robots.txt, excluded by a rule): not seen, so an indexed
+                # copy leaves search.
+                seen.discard(item_id)
+                counts["skipped"] += 1
+                log.append(f"{r.get('title') or item_id}: {r['skipped']}")
+                continue
             ex = known.get(item_id)
             if ex is not None and ex.get("marker") == marker and ex["status"] == "indexed":
                 counts["unchanged"] += 1
@@ -301,9 +319,9 @@ async def sync_tool_source(
                 cfg["changesCursor"] = out["cursor"]
             break
 
-    gone = [str(i["path"]) for i in known.values() if not i.get("parent_id")] if full else []
+    gone = [str(i["path"]) for i in known.values() if not i.get("parent_id")] if full and from_start else []
     if status == "success":
-        lock = asyncio.Semaphore(AT_ONCE)
+        lock = asyncio.Semaphore(int(cfg.get("fetchAtOnce") or AT_ONCE))
 
         async def fetch(item_id: str) -> Answer:
             # The version tag held for the item lets the system answer `unchanged` without sending it again.
@@ -312,6 +330,11 @@ async def sync_tool_source(
             async with lock:
                 return await reader.call(tenant, team, cfg["getTool"], {**given, "id": item_id, **tag}, act=act)
 
+        # An item the listing already read (a crawl following links) is not fetched again.
+        listed_whole = [r for r in changed if "content" in r]
+        changed = [r for r in changed if "content" not in r]
+        for r in listed_whole:
+            await _put(service, who, s, known, r, marker=str(r["marker"]), parent=None, counts=counts, errors=errors)
         answers = await asyncio.gather(*(fetch(str(r["id"])) for r in changed))
         for r, got in zip(changed, answers, strict=True):
             if not got.ok:

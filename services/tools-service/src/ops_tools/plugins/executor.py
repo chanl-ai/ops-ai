@@ -128,15 +128,18 @@ class PluginExecutor:
         client = self.http.client
         tenant = str(module["tenant_id"])
 
-        async def request(method: str, url: str, params: Mapping[str, Any] | None, body: Any) -> Response:
+        async def request(
+            method: str, url: str, params: Mapping[str, Any] | None, body: Any, asked: Mapping[str, str] | None
+        ) -> Response:
             if policy is None:
                 raise PluginEgressDenied("This gateway has no egress policy, so it calls no external system.")
             try:
                 await policy.check_url(tenant, url, allowed)
             except EgressDenied as e:
                 raise PluginEgressDenied(str(e)) from e
-            # The plugin's headers first, then the connection's, which win over a name they share.
-            headers = {**plugin_headers, **(dict(prepared.headers) if prepared else {})}
+            # The request's own (conditional and accept headers only, the SDK's check), then the plugin's, then the
+            # connection's, which win over a name they share.
+            headers = {**dict(asked or {}), **plugin_headers, **(dict(prepared.headers) if prepared else {})}
             query = {**(dict(params or {})), **(dict(prepared.params) if prepared else {})}
             r = await client.request(
                 method,
@@ -151,14 +154,21 @@ class PluginExecutor:
                 raise NeedsReconnect(f"{urlsplit(url).hostname} refused the connection's sign-in.")
             if r.status_code == 429:
                 raise RateLimited(f"{urlsplit(url).hostname} answered 429: its rate limit was reached.")
-            return Response(r.status_code, r.text, dict(r.headers))
+            return Response(r.status_code, r.text, dict(r.headers), r.content)
 
-        def send(method: str, url: str, params: Mapping[str, Any] | None, body: Any) -> Response:
+        def send(
+            method: str,
+            url: str,
+            params: Mapping[str, Any] | None,
+            body: Any,
+            asked: Mapping[str, str] | None = None,
+        ) -> Response:
             host = urlsplit(url).hostname
             # Checked here, before the request is built: the module's hosts are the plugin's, from the team's settings.
             if host not in allowed:
                 raise PluginEgressDenied(f"{host} is not one of {plugin.manifest.title}'s hosts.")
-            return asyncio.run_coroutine_threadsafe(request(method, url, params, body), loop).result(DEADLINE_S)
+            pending = request(method, url, params, body, asked)
+            return asyncio.run_coroutine_threadsafe(pending, loop).result(DEADLINE_S)
 
         given = dict(args)
         seal = self._seal(module, op["name"]) if tool.knowledge == "list_items" else None

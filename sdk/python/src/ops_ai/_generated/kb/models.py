@@ -356,6 +356,16 @@ class PluginSource(TypedDict, closed=True):
     source: str
 
 
+class PreviewIn(TypedDict):
+    config: dict[str, Any]
+
+
+class PreviewPage(TypedDict, closed=True):
+    id: str
+    outcome: str
+    willFetch: bool
+
+
 class QueryIn(TypedDict):
     question: str
 
@@ -408,6 +418,13 @@ class SourcePatch(TypedDict):
     rules: NotRequired[list[dict[str, Any]] | None]
     sensitivity: NotRequired[str | None]
     tags: NotRequired[list[str] | None]
+
+
+class SourcePreview(TypedDict, closed=True):
+    capped: bool
+    found: int
+    pages: list[PreviewPage]
+    willFetch: int
 
 
 class SyncIn(TypedDict, closed=True):
@@ -494,6 +511,11 @@ class EnvelopePlaygroundAnswer(TypedDict, closed=True):
 
 class EnvelopeSearchOut(TypedDict, closed=True):
     data: SearchOut
+    success: Literal[True]
+
+
+class EnvelopeSourcePreview(TypedDict, closed=True):
+    data: SourcePreview
     success: Literal[True]
 
 

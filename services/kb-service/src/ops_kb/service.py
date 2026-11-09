@@ -21,7 +21,7 @@ from ops_ingest import ParsedDocument, SplitResult, split
 from ops_ingest.metadata import resolve_metadata
 from ops_ingest.rules import ItemFacts, evaluate_rules
 from ops_ingest.split import document_digest
-from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ValidationFailed
+from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import options_page, options_window
 from ops_service_kit.ids import new_id
 
@@ -637,6 +637,36 @@ class KnowledgeService:
         row["file_names"] = dict(names)
         await self.store.create_source(row, kb_ids)
         return self._source(row, kb_ids)
+
+    async def preview_source(self, who: Who, i: dict[str, Any]) -> dict[str, Any]:
+        """A plugin source's preview before it is made: its settings checked as a create checks them, then the
+        plugin's preview tool asked what they would take in."""
+        who.require_builder(who.team_id, "preview a source", "create")
+        cfg = await source_config(self.tools, who, i)
+        if not cfg.get("previewTool") or self.tools is None:
+            raise ValidationFailed("This kind of source has no preview.", code="preview_unavailable")
+        given = {"source": cfg["values"]} if cfg.get("values") else {}
+        answer = await self.tools.call(
+            who.tenant_id, str(who.team_id), str(cfg["previewTool"]), given, act="kb-preview"
+        )
+        if not answer.ok:
+            # The plugin or the site failed, not this request: said as the store being unavailable, with its reason.
+            raise ServiceUnavailable(
+                f"The preview could not run: {answer.message or answer.code}", code="preview_failed"
+            )
+        out = cast(dict[str, Any], answer.output or {})
+        rows = cast(list[dict[str, Any]], out.get("pages") or [])
+        fetching = [bool(p.get("will_fetch")) for p in rows]
+        pages: list[dict[str, Any]] = [
+            {"id": str(p.get("id")), "outcome": str(p.get("outcome") or ""), "willFetch": f}
+            for p, f in zip(rows, fetching, strict=True)
+        ]
+        return {
+            "found": int(out.get("found") or len(pages)),
+            "willFetch": int(out.get("will_fetch") or sum(fetching)),
+            "pages": pages,
+            "capped": bool(out.get("capped")),
+        }
 
     async def remove_source(self, who: Who, source_id: str) -> None:
         await self._changeable_source(who, source_id, "delete")

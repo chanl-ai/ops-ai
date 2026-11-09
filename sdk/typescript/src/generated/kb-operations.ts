@@ -384,6 +384,15 @@ export const kbOperations = {
     "query": [],
     "stream": false
   },
+  "sources_preview_source": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/sources/preview",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "sources_remove_source": {
     "body": null,
     "headers": [],

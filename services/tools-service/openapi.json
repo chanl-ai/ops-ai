@@ -5720,6 +5720,11 @@
             ],
             "title": "Egressfrom"
           },
+          "fetchAtOnce": {
+            "default": 4,
+            "title": "Fetchatonce",
+            "type": "integer"
+          },
           "getTakesTag": {
             "default": false,
             "title": "Gettakestag",
@@ -5738,6 +5743,11 @@
             "title": "Listtool",
             "type": "string"
           },
+          "listsWhole": {
+            "default": false,
+            "title": "Listswhole",
+            "type": "boolean"
+          },
           "needsConnection": {
             "default": true,
             "title": "Needsconnection",
@@ -5746,6 +5756,17 @@
           "plugin": {
             "title": "Plugin",
             "type": "string"
+          },
+          "previewTool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previewtool"
           },
           "schedule": {
             "additionalProperties": true,

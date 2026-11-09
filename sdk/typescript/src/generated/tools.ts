@@ -3381,6 +3381,11 @@ export interface components {
             /** Egressfrom */
             egressFrom?: string | null;
             /**
+             * Fetchatonce
+             * @default 4
+             */
+            fetchAtOnce: number;
+            /**
              * Gettakestag
              * @default false
              */
@@ -3394,12 +3399,19 @@ export interface components {
             /** Listtool */
             listTool: string;
             /**
+             * Listswhole
+             * @default false
+             */
+            listsWhole: boolean;
+            /**
              * Needsconnection
              * @default true
              */
             needsConnection: boolean;
             /** Plugin */
             plugin: string;
+            /** Previewtool */
+            previewTool?: string | null;
             /** Schedule */
             schedule: {
                 [key: string]: unknown;

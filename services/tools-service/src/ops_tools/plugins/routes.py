@@ -138,6 +138,10 @@ class KnowledgeSourceView(_Wire):
     # The contract's optional tools: changes since a cursor, and the pickers a person chooses scopes with.
     changes_tool: str | None = None
     scopes_tool: str | None = None
+    preview_tool: str | None = None
+    # Every listing names every item, so each run finds what left the source.
+    lists_whole: bool = False
+    fetch_at_once: int = 4
     # What a source of this kind is set up with, checked by kb-service and sent to each tool as `source`; and the
     # input whose addresses the source's sync may reach.
     inputs: dict[str, Any] = Field(default_factory=dict[str, Any])
@@ -734,6 +738,9 @@ def plugins_router(
                         deleted_tool=m.operation(s.deleted) if s.deleted else None,
                         changes_tool=m.operation(s.changes) if s.changes else None,
                         scopes_tool=m.operation(s.scopes) if s.scopes else None,
+                        preview_tool=m.operation(s.preview) if s.preview else None,
+                        lists_whole=s.lists_whole,
+                        fetch_at_once=s.fetch_at_once,
                         inputs={k: f.model_dump(exclude_none=True) for k, f in s.inputs.items()},
                         egress_from=s.egress_from,
                         get_takes_tag=(getter := m.tool(s.get)) is not None and "tag" in getter.input,

@@ -26,3 +26,9 @@ class DeadlineExceeded(PluginError):
 
 class BadInput(PluginError):
     code = "INVALID_INPUT"
+
+
+class NotFound(PluginError):
+    """The item is gone at its source (a page answering 404 or 410)."""
+
+    code = "NOT_FOUND"
