@@ -53,7 +53,7 @@ from .source_settings import (
     stored,
     wire,
 )
-from .store import KnowledgeStore
+from .store import DECIDABLE, KnowledgeStore
 from .store.vectors import PgVectorStore
 from .tool_sources import ToolReader, source_config, sync_tool_source
 
@@ -135,21 +135,22 @@ def page_of(
     rows: list[dict[str, Any]], *, page: int, page_size: int, facets: dict[str, dict[str, int]]
 ) -> dict[str, Any]:
     page_size = max(1, min(page_size, MAX_PAGE_SIZE))
-    total = len(rows)
+    shown = pagination(len(rows), page, page_size)
+    start = (shown["page"] - 1) * page_size
+    return {"data": rows[start : start + page_size], "pagination": shown, "facets": facets}
+
+
+def pagination(total: int, page: int, page_size: int) -> dict[str, Any]:
+    """The pagination block for `total` rows, `page` held to the pages there are (a store pages the same way)."""
     total_pages = max(1, -(-total // page_size))
     page = max(1, min(page, total_pages))
-    start = (page - 1) * page_size
     return {
-        "data": rows[start : start + page_size],
-        "pagination": {
-            "page": page,
-            "pageSize": page_size,
-            "total": total,
-            "totalPages": total_pages,
-            "hasNext": page < total_pages,
-            "hasPrev": page > 1,
-        },
-        "facets": facets,
+        "page": page,
+        "pageSize": page_size,
+        "total": total,
+        "totalPages": total_pages,
+        "hasNext": page < total_pages,
+        "hasPrev": page > 1,
     }
 
 
@@ -1309,7 +1310,7 @@ class KnowledgeService:
     ) -> list[dict[str, Any]]:
         """Approve, reject or edit FAQ drafts, each by the knowledge owner of its source. An approved pair is
         searchable at once (embedded with the rest of the tenant's units); an edit keeps it waiting for review."""
-        found = {c["id"]: c for c in await self.store.changes(who.tenant_id) if c["id"] in ids and c["origin"] == "faq"}
+        found = {c["id"]: c for c in await self.store.changes(who.tenant_id, ids=ids) if c["origin"] == "faq"}
         if missing := [i for i in ids if i not in found]:
             raise NotFound(f"No FAQ draft {missing[0]}.")
         items: set[str] = set()
@@ -1329,7 +1330,8 @@ class KnowledgeService:
         for item_id in items:
             await self._faq_units(who, item_id)
         await self.embed_now(who.tenant_id)
-        return [await self.get_change(who, i) for i in ids]
+        decided = {c["id"]: c for c in await self._changes_out(who, await self.store.changes(who.tenant_id, ids=ids))}
+        return [decided[i] for i in ids]
 
     async def _known_questions(self, tenant: str, item_id: str) -> dict[str, list[str]]:
         """The questions the item's live pieces have, by piece_digest of their text: a piece split again with the same
@@ -1968,10 +1970,23 @@ class KnowledgeService:
 
     # ── Changes ──────────────────────────────────────────────────────────
 
-    async def _change_out(self, who: Who, ch: dict[str, Any]) -> dict[str, Any]:
+    async def _changes_out(self, who: Who, found: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Changes as the Changes queue shows them; the sources and bases they name are read once for all of them."""
+        if not found:
+            return []
         sources = {s["id"]: s for s in await self.store.sources(who.tenant_id)}
         bases = {b["id"]: b for b in await self.store.bases(who.tenant_id)}
         _, by_source = await self._joined(who.tenant_id)
+        return [self._change_out(who, ch, sources, bases, by_source) for ch in found]
+
+    def _change_out(
+        self,
+        who: Who,
+        ch: dict[str, Any],
+        sources: dict[str, dict[str, Any]],
+        bases: dict[str, dict[str, Any]],
+        by_source: dict[str, list[str]],
+    ) -> dict[str, Any]:
         s = sources.get(ch["source_id"])
         kbs = [{"id": k, "name": bases[k]["name"]} for k in by_source.get(ch["source_id"], []) if k in bases]
         if ch["origin"] == "faq":
@@ -1981,7 +1996,7 @@ class KnowledgeService:
         return {
             "id": ch["id"],
             "summary": f"{ch['title']} changed from v{ch['from_version']} to v{ch['to_version']}",
-            "origin": "source_sync",
+            "origin": SHOWN_ORIGIN["sync"],
             "proposedBy": ch["changed_by"],
             "rationale": "A newer file replaced the document when its source was synced.",
             "documentId": ch["item_id"],
@@ -2018,33 +2033,34 @@ class KnowledgeService:
         search: str | None,
         origin: list[str] | None = None,
     ) -> dict[str, Any]:
-        item_ids: list[str] | None = None
-        if kb_id is not None:
-            by_kb, _ = await self._joined(who.tenant_id)
-            item_ids = [i["id"] for i in await self.store.items(who.tenant_id, source_ids=by_kb.get(kb_id, []))]
-        rows = [
-            await self._change_out(who, ch)
-            for ch in await self.store.changes(who.tenant_id, item_ids=item_ids)
-            if _matches(search, ch["title"], ch["section"])
-        ]
-        # A sync's change is applied when it runs; an FAQ draft waits for the knowledge owner (open) until decided.
-        waiting = [r for r in rows if r["status"] in DECIDABLE]
-        mine = [r for r in waiting if r["owner"] == who.email]
-        done = [r for r in rows if r["status"] not in DECIDABLE]
-        shown = {"open": waiting, "mine": mine, "resolved": done, "all": rows}.get(view, [])
-        # The From facet counts the view before it is filtered by origin, so every origin shows its count.
-        facets = {"origin": _facet(shown, "origin")}
-        if origin:
-            shown = [r for r in shown if r["origin"] in origin]
-        listed = page_of(shown, page=page, page_size=page_size, facets=facets)
-        counts = {"mine": len(mine), "open": len(waiting), "conflicts": 0, "resolved": len(done)}
-        return {**listed, "viewCounts": counts}
+        """A sync's change is applied when it runs; an FAQ draft waits for the knowledge owner (open) until decided.
+        The From facet counts the view before it is filtered by origin, so every origin shows its count."""
+        size = max(1, min(page_size, MAX_PAGE_SIZE))
+        origins = None if not origin else [CHANGE_ORIGINS.get(o, o) for o in origin]
+        found = await self.store.change_page(
+            who.tenant_id,
+            view=view,
+            owner=who.email,
+            kb_id=kb_id,
+            search=search,
+            origins=origins,
+            page=page,
+            page_size=size,
+        )
+        facets = {"origin": {SHOWN_ORIGIN.get(o, o): n for o, n in found.origins.items()}}
+        return {
+            "data": await self._changes_out(who, found.rows),
+            "pagination": pagination(found.total, page, size),
+            "facets": facets,
+            "viewCounts": {**found.views, "conflicts": 0},
+        }
 
     async def get_change(self, who: Who, change_id: str) -> dict[str, Any]:
-        found = [c for c in await self.store.changes(who.tenant_id) if c["id"] == change_id]
+        found = await self.store.changes(who.tenant_id, ids=[change_id])
         if not found:
             raise NotFound("No change with that id.")
-        return await self._change_out(who, found[0])
+        [out] = await self._changes_out(who, found)
+        return out
 
     # ── Items and documents ──────────────────────────────────────────────
 
@@ -2521,7 +2537,11 @@ KEPT_EXTRA = ("marker", "tag", "gone_count")
 # FAQ units follow a piece's own units, so their positions never meet.
 FAQ_POSITION = 1_000
 # A draft a person may still decide: waiting, or approved before its section changed.
-DECIDABLE = ("pending", "source_changed")
+
+
+# A change's origin as stored, and as the API names it.
+SHOWN_ORIGIN = {"sync": "source_sync", "faq": "generated_faq"}
+CHANGE_ORIGINS = {shown: stored for stored, shown in SHOWN_ORIGIN.items()}
 
 
 def _draft_out(ch: dict[str, Any], s: dict[str, Any] | None, kbs: list[dict[str, Any]]) -> dict[str, Any]:
@@ -2530,7 +2550,7 @@ def _draft_out(ch: dict[str, Any], s: dict[str, Any] | None, kbs: list[dict[str,
     return {
         "id": ch["id"],
         "summary": str(detail.get("question") or ""),
-        "origin": "generated_faq",
+        "origin": SHOWN_ORIGIN["faq"],
         "proposedBy": "FAQ drafts",
         "rationale": f"Drafted from {ch['title']}, {ch['section'] or 'its text'}.",
         "documentId": ch["item_id"],

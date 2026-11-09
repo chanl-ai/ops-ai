@@ -7,15 +7,19 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import AsyncIterator
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
+import sqlalchemy as sa
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_kb.ai import AiClient
 from ops_kb.files import KnowledgeFiles
+from ops_kb.store.knowledge import kb_changes
 
 from .conftest import kb_client
 from .pdfs import policy_pdf
@@ -154,3 +158,39 @@ async def test_the_queue_filters_by_origin_on_the_server_and_offers_decisions_on
         refused = await vera.post("/v1/knowledge-changes/decide", json={"ids": [seen[0]["id"]], "decision": "approve"})
     assert seen and not any(d["canDecide"] for d in seen), seen
     assert refused.status_code == 403, refused.text
+
+
+async def test_the_queue_pages_in_the_database_and_reads_sources_once_per_page(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    """A queue that reads every change, and every source and base again for each row, slows with its history."""
+    await drafted(client)
+    statements: list[str] = []
+
+    def seen(_conn: Any, _cursor: Any, statement: str, *_args: Any) -> None:
+        # The queue's reads of changes and bases; a rebuild's tail and the embedding beat share the engine and read
+        # sources and units.
+        if statement.lstrip().startswith("SELECT") and re.search(r"\bkb_(changes|bases)\b", statement):
+            statements.append(statement)
+
+    async def listed() -> tuple[dict[str, Any], int]:
+        statements.clear()
+        event.listen(engine.sync_engine, "before_cursor_execute", seen)
+        try:
+            page = data(await client.get("/v1/knowledge-changes", params={"view": "open", "pageSize": 5}))
+        finally:
+            event.remove(engine.sync_engine, "before_cursor_execute", seen)
+        return page, len(statements)
+
+    few, few_statements = await listed()
+    async with engine.begin() as c:
+        [row] = (await c.execute(sa.select(kb_changes).where(kb_changes.c.tenant_id == tenant).limit(1))).mappings()
+        older = [
+            {**row, "id": f"chg_old_{n:02}", "changed_at": row["changed_at"] - timedelta(days=n + 1)} for n in range(40)
+        ]
+        await c.execute(sa.insert(kb_changes), older)
+    many, many_statements = await listed()
+    assert few["pagination"]["total"] == 2 and many["pagination"]["total"] == 42, many["pagination"]
+    assert len(many["data"]) == 5 and many["viewCounts"]["open"] == 42, many["viewCounts"]
+    assert {d["id"] for d in few["data"]} <= {d["id"] for d in many["data"]}, "the newest come first"
+    assert many_statements == few_statements, (few_statements, many_statements)

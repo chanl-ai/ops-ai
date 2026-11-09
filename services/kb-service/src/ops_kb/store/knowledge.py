@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, NamedTuple, cast
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import TSVECTOR
@@ -444,6 +444,17 @@ async def _keep_unchanged(
     )
     ids = {str(r["id"]) for r in insert}
     return insert, [x for x in units if str(x["chunk_id"]) in ids]
+
+
+# A draft's statuses that still wait for its knowledge owner; every other status is resolved.
+DECIDABLE = ("pending", "source_changed")
+
+
+class ChangePage(NamedTuple):
+    rows: list[dict[str, Any]]
+    total: int
+    views: dict[str, int]
+    origins: dict[str, int]
 
 
 class KnowledgeStore:
@@ -1094,12 +1105,77 @@ class KnowledgeStore:
                 team = await self._team_of(conn, kb_items, tenant, item_id)
                 await conn.execute(sa.insert(u), [{**x, "tenant_id": tenant, "team_id": team} for x in units])
 
-    async def changes(self, tenant: str, *, item_ids: list[str] | None = None) -> list[dict[str, Any]]:
+    async def changes(self, tenant: str, *, ids: list[str] | None = None) -> list[dict[str, Any]]:
         q = sa.select(kb_changes).where(kb_changes.c.tenant_id == tenant, team_visible(kb_changes))
-        if item_ids is not None:
-            q = q.where(kb_changes.c.item_id.in_(item_ids))
+        if ids is not None:
+            q = q.where(kb_changes.c.id.in_(ids))
         async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q.order_by(kb_changes.c.changed_at.desc()))).mappings()]
+
+    async def change_page(
+        self,
+        tenant: str,
+        *,
+        view: str,
+        owner: str,
+        kb_id: str | None,
+        search: str | None,
+        origins: list[str] | None,
+        page: int,
+        page_size: int,
+    ) -> ChangePage:
+        """One page of the Changes queue, filtered, counted and paged in the database: `view` open (waiting for a
+        decision), mine (waiting, on a source `owner` answers for), resolved or all; `kb_id` the changes of that base's
+        sources; `search` in the title or section; `origins` (sync, faq) after the origin facet is counted."""
+        c, s = kb_changes, kb_sources
+        waiting = c.c.status.in_(DECIDABLE)
+        mine = sa.and_(waiting, s.c.owner == owner)
+        views: dict[str, sa.ColumnElement[bool]] = {
+            "open": waiting,
+            "mine": mine,
+            "resolved": sa.not_(waiting),
+            "all": sa.true(),
+        }
+        joined = c.outerjoin(s, sa.and_(s.c.tenant_id == c.c.tenant_id, s.c.id == c.c.source_id))
+        scope: list[sa.ColumnElement[bool]] = [c.c.tenant_id == tenant, team_visible(c)]
+        if kb_id is not None:
+            linked = sa.select(kb_base_sources.c.source_id).where(
+                kb_base_sources.c.tenant_id == tenant, kb_base_sources.c.kb_id == kb_id
+            )
+            scope.append(c.c.source_id.in_(linked))
+        if search:
+            scope.append(sa.or_(contains(c.c.title, search), contains(c.c.section, search)))
+        shown = [*scope, views.get(view, sa.false())]
+        listed = [*shown, c.c.origin.in_(origins)] if origins else shown
+
+        def tally(when: sa.ColumnElement[bool]) -> sa.ColumnElement[Any]:
+            return sa.func.coalesce(sa.func.sum(sa.case((when, 1), else_=0)), 0)
+
+        async with self._tx() as conn:
+            mine_n, open_n, done_n = (
+                await conn.execute(
+                    sa.select(tally(mine), tally(waiting), tally(sa.not_(waiting))).select_from(joined).where(*scope)
+                )
+            ).one()
+            facet = {
+                str(o): int(n)
+                for o, n in await conn.execute(
+                    sa.select(c.c.origin, sa.func.count()).select_from(joined).where(*shown).group_by(c.c.origin)
+                )
+            }
+            total = int(await conn.scalar(sa.select(sa.func.count()).select_from(joined).where(*listed)) or 0)
+            size = max(1, page_size)
+            page = max(1, min(page, -(-total // size) or 1))
+            q = (
+                sa.select(c)
+                .select_from(joined)
+                .where(*listed)
+                .order_by(c.c.changed_at.desc(), c.c.id)
+                .offset((page - 1) * size)
+                .limit(size)
+            )
+            rows = [dict(r) for r in (await conn.execute(q)).mappings()]
+        return ChangePage(rows, total, {"mine": int(mine_n), "open": int(open_n), "resolved": int(done_n)}, facet)
 
 
 def engine_for(url: str) -> AsyncEngine:
