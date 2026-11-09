@@ -30,6 +30,7 @@ export const kk = {
   items: (id: string, p: unknown) => ['knowledge', 'source', id, 'items', p] as const,
   runs: (id: string, p: unknown) => ['knowledge', 'source', id, 'runs', p] as const,
   run: (id: string) => ['knowledge', 'run', id] as const,
+  tombstones: (id: string) => ['knowledge', 'source', id, 'tombstones'] as const,
   item: (id: string) => ['knowledge', 'item', id] as const,
   lookups: ['knowledge', 'lookups'] as const,
 };
@@ -89,6 +90,9 @@ export const useUpdateSource = (id: string) => useWrite((p: SourcePatch) => api.
 export const useDeleteSource = () => useWrite((id: string) => api.knowledge.sources.remove(id));
 export const useAddSourceFiles = () => useWrite(({ id, fileIds }: { id: string; fileIds: string[] }) => api.knowledge.sources.addFiles(id, fileIds), ['files']);
 export const useSyncSource = () => useWrite(({ id, opts }: { id: string; opts?: SyncOptions }) => api.knowledge.sources.sync(id, opts));
+export const useCancelRun = () => useWrite((runId: string) => api.knowledge.sources.cancelRun(runId));
+export const useTombstones = (id: string) => useTeamQuery({ queryKey: kk.tombstones(id), queryFn: () => api.knowledge.sources.tombstones(id) });
+export const useLiftTombstones = (id: string) => useWrite((ids: string[]) => api.knowledge.sources.liftTombstones(id, ids));
 export const usePauseSource = () => useWrite(({ id, paused }: { id: string; paused: boolean }) => api.knowledge.sources.setPaused(id, paused));
 
 export const useVerifyItem = () => useWrite(({ id, verified }: { id: string; verified: boolean }) => api.knowledge.items.verify(id, verified));

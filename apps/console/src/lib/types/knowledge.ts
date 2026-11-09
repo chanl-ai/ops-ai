@@ -11,7 +11,9 @@ export type Sensitivity = 'internal' | 'confidential' | 'restricted';
 export type SourceType = 'file' | 'url' | 'crawl' | 'text' | 'sharepoint' | 'confluence' | 'gdrive' | 'github' | 'notion' | 'zendesk' | 'salesforce' | 'tool';
 
 export type SourceStatus = 'active' | 'paused' | 'draft' | 'revoked';
-export type RunStatus = 'success' | 'partial' | 'failed' | 'running' | 'backing_off';
+export type RunStatus = 'running' | 'success' | 'partial' | 'failed' | 'cancelled' | 'skipped';
+/** What started a run: a person (manual, full, retry), the schedule, or a settings save that rebuilds items. */
+export type RunTrigger = 'manual' | 'schedule' | 'full' | 'retry' | 'settings';
 export type Schedule =
   | { kind: 'manual' }
   | { kind: 'daily'; time: string }
@@ -181,35 +183,58 @@ export interface ItemWithDetail extends Item {
   detail: ItemDetail;
 }
 
-export interface RunPhase {
-  name: 'list' | 'fetch' | 'parse' | 'chunk' | 'embed' | 'upsert';
-  durationMs: number;
-  status: 'done' | 'running' | 'failed' | 'skipped';
+/** One item or listing a run could not take in, with the step it failed at and why. */
+export interface RunError {
+  itemId?: string;
+  itemTitle?: string;
+  /** The step: list, get, store or parse. */
+  phase: string;
+  errorClass: string;
+  message: string;
 }
 
-export interface RunError {
-  itemId: string;
-  itemTitle: string;
-  phase: RunPhase['name'];
-  errorClass: ErrorClass;
-  message: string;
+/**
+ * A run's counts. A sync counts what it listed, left unchanged, took in, removed, failed, skipped or excluded; a
+ * settings rebuild counts its total, checked, rebuilt and failed items. Model use is present when an AI step ran.
+ */
+export interface RunCounts {
+  listed?: number;
+  unchanged?: number;
+  upserted?: number;
+  deleted?: number;
+  failed?: number;
+  skipped?: number;
+  excluded?: number;
+  reading?: number;
+  total?: number;
+  checked?: number;
+  rebuilt?: number;
+  modelCalls?: number;
+  inputTokens?: number;
+  outputTokens?: number;
 }
 
 export interface SyncRun {
   id: string;
   sourceId: string;
-  trigger: 'manual' | 'schedule' | 'webhook' | 'full' | 'retry';
+  trigger: RunTrigger;
   startedAt: string;
+  finishedAt?: string;
   durationSec: number;
   status: RunStatus;
-  cursorBefore?: string;
-  cursorAfter?: string;
-  cursorRejected?: boolean;
-  counts: { listed: number; unchanged: number; upserted: number; deleted: number; failed: number; skipped: number };
-  phases: RunPhase[];
+  counts: RunCounts;
+  phases: unknown[];
   errors: RunError[];
   log: string[];
-  progress?: { done: number; total: number; failed: number };
+  /** Who stopped it, when it was cancelled. */
+  cancelledBy?: string;
+}
+
+/** An address removed after answering gone twice; a sync leaves it out until it is lifted. */
+export interface Tombstone {
+  id: string;
+  at?: string;
+  reason?: string;
 }
 
 export type SearchMode = QueryMode;

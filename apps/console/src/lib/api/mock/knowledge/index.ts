@@ -58,7 +58,10 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
   const kbs: KnowledgeBase[] = structuredClone(SEED_KBS);
   const sources: Source[] = structuredClone(SEED_SOURCES);
   let items: Item[] = buildItems();
-  const runs: SyncRun[] = structuredClone(SEED_RUNS);
+  /** A run as the mock advances it: its phases and progress move with the clock; the API shows neither. */
+  type MockPhase = { name: string; durationMs: number; status: 'done' | 'running' | 'skipped' | 'failed' };
+  type MockRun = Omit<SyncRun, 'phases'> & { phases: MockPhase[]; progress?: { done: number; total: number; failed: number } };
+  const runs: MockRun[] = structuredClone(SEED_RUNS) as MockRun[];
   let lastTick = Date.now();
 
   // What each source's chunks were last built with. Search and the item page read this, so a saved strategy
@@ -219,7 +222,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
         else if (r.trigger === 'retry' && it.status === 'failed') Object.assign(it, { status: 'indexed', chunkCount, processedAt: now(), error: undefined, errorClass: undefined });
         else if (r.trigger === 'full' && (it.status === 'indexed' || it.status === 'held' || it.status === 'partial')) Object.assign(it, { chunkCount: it.status === 'held' ? 0 : chunkCount, processedAt: now() });
       }
-      if (src0 && (r.trigger === 'full' || r.trigger === 'manual' || r.trigger === 'schedule' || r.trigger === 'webhook')) {
+      if (src0 && (r.trigger === 'full' || r.trigger === 'manual' || r.trigger === 'schedule')) {
         const before = src0.indexedSettingsDigest;
         reindexed(src0);
         const strategies = src0.ingest.strategies.filter((x) => aiApproved(src0) || (x !== 'topic' && x !== 'faq'));
@@ -237,7 +240,6 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
         status,
         progress: undefined,
         durationSec: secondsSince(r.startedAt),
-        cursorAfter: `cursor:${Date.now().toString(36)}`,
         counts: { ...r.counts, listed: r.counts.listed || total, upserted: done - (failedItem ? 1 : 0), failed: failedItem ? 1 : r.trigger === 'retry' ? 0 : failed },
         phases: r.phases.map((p) => ({ ...p, status: 'done' })),
         errors: failedItem ? [{ itemId: failedItem.id, itemTitle: failedItem.title, phase: 'parse', errorClass: 'parse', message: 'PDF is encrypted; upload an unlocked copy' }] : r.trigger === 'retry' ? [] : r.errors,
@@ -278,7 +280,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
     k.jobs.unshift({ id: id('job'), startedAt: now(), durationSec: 0, processed: 0, failed: 0, status: 'running', trigger });
   }
 
-  function startSync(src: Source, opts: { full?: boolean; retry?: boolean } = {}): SyncRun {
+  function startSync(src: Source, opts: { full?: boolean; retry?: boolean } = {}): MockRun {
     const total = opts.retry
       ? Math.max(src.itemsFailed, 1)
       : opts.full
@@ -286,14 +288,13 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
         : src.itemsIndexed === 0 && src.itemsPending > 0
           ? src.itemsPending
           : Math.max(Math.round((src.itemsIndexed + src.itemsFailed) * 0.06), src.itemsIndexed === 0 ? 12 : 4);
-    const r: SyncRun = {
+    const r: MockRun = {
       id: id('run'),
       sourceId: src.id,
       trigger: opts.retry ? 'retry' : opts.full ? 'full' : 'manual',
       startedAt: now(),
       durationSec: 0,
       status: 'running',
-      cursorBefore: src.cursor,
       counts: { listed: src.itemsIndexed + src.itemsFailed || total, unchanged: 0, upserted: 0, deleted: 0, failed: 0, skipped: 0 },
       phases: (['list', 'fetch', 'parse', 'chunk', 'embed', 'upsert'] as const).map((name, i) => ({ name, durationMs: 0, status: i === 0 ? 'running' : 'skipped' })),
       errors: [],
@@ -643,28 +644,24 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           if (blocked) throw new ApiError(blocked, 409);
           return startSync(s, opts);
         }),
-      cancelRun: (sid) =>
+      cancelRun: (rid) =>
         run(() => {
-          const r = runningRun(sid);
-          if (!r) return;
-          Object.assign(r, { status: 'failed', progress: undefined, durationSec: secondsSince(r.startedAt) });
+          const r = runs.find((x) => x.id === rid) ?? notFound('Sync run');
+          if (r.status !== 'running') throw new ApiError('That run is not running.', 409);
+          Object.assign(r, { status: 'cancelled', progress: undefined, durationSec: secondsSince(r.startedAt), cancelledBy: deps.currentUser });
           r.log.push('cancelled by user');
-          const s = sources.find((x) => x.id === sid);
-          if (s) s.lastRunStatus = 'failed';
+          const s = sources.find((x) => x.id === r.sourceId);
+          if (s) s.lastRunStatus = 'cancelled';
+          return r;
         }),
+      tombstones: (sid) => run(() => (sourceOr404(sid), [])),
+      liftTombstones: (sid) => run(() => (sourceOr404(sid), [])),
       setPaused: (sid, paused) =>
         run(() => {
           const s = sourceOr404(sid);
           if (s.status === 'draft' || s.status === 'revoked') throw new ApiError(`A ${s.status === 'draft' ? 'draft' : 'revoked'} source has no schedule to ${paused ? 'pause' : 'resume'}.`, 409);
           s.status = paused ? 'paused' : 'active';
           return s;
-        }),
-      reprocess: (sid) =>
-        run(() => {
-          const s = sourceOr404(sid);
-          const blocked = syncBlocker(s);
-          if (blocked) throw new ApiError(blocked, 409);
-          return startSync(s, { full: true });
         }),
       items: (sid, p) =>
         run((m) => {

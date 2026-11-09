@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
-import type { ErrorClass, Item, ItemStatus, KbHealth, RunPhase, RunStatus, Schedule, Sensitivity, SourceStatus, SourceType, SyncRun } from '@/lib/types/knowledge';
+import type { ErrorClass, Item, ItemStatus, KbHealth, RunStatus, RunTrigger, Schedule, Sensitivity, SourceStatus, SourceType } from '@/lib/types/knowledge';
 import { cn } from '@/lib/utils';
 
 type Tone = 'good' | 'warn' | 'bad' | 'neutral' | 'info';
@@ -68,16 +68,17 @@ export function KbHealthBadge({ health }: { health: KbHealth }) {
 }
 
 const RUN: Record<RunStatus, [Tone, LucideIcon, string]> = {
-  success: ['good', CheckCircle2, 'Success'],
-  partial: ['warn', AlertTriangle, 'Partial'],
-  failed: ['bad', XCircle, 'Failed'],
   running: ['info', Loader2, 'Running'],
-  backing_off: ['warn', Clock, 'Backing off'],
+  success: ['good', CheckCircle2, 'Done'],
+  partial: ['warn', AlertTriangle, 'Done with failures'],
+  failed: ['bad', XCircle, 'Failed'],
+  cancelled: ['neutral', MinusCircle, 'Cancelled'],
+  skipped: ['neutral', MinusCircle, 'Skipped'],
 };
 export const RUN_LABEL = Object.fromEntries(Object.entries(RUN).map(([k, v]) => [k, v[2]])) as Record<RunStatus, string>;
 export function RunStatusBadge({ status }: { status?: RunStatus }) {
   if (!status) return <StatusBadge tone="neutral" icon={CircleDashed} label="Never synced" />;
-  const [tone, icon, label] = RUN[status];
+  const [tone, icon, label] = RUN[status] ?? ['neutral', CircleDashed, status];
   return <StatusBadge tone={tone} icon={icon} label={label} spin={status === 'running'} />;
 }
 
@@ -211,27 +212,14 @@ export function scheduleLabel(s: Schedule) {
 
 export const SCHEDULE_KIND_LABEL: Record<Schedule['kind'], string> = { manual: 'Manual', daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', webhook: 'Webhook' };
 
-export const TRIGGER_LABEL: Record<SyncRun['trigger'], string> = { manual: 'Manual', schedule: 'Schedule', webhook: 'Webhook', full: 'Full resync', retry: 'Retry failed' };
+export const TRIGGER_LABEL: Record<RunTrigger, string> = { manual: 'Sync now', schedule: 'Schedule', full: 'Full resync', retry: 'Retry failed', settings: 'Settings changed' };
+export const triggerLabel = (t: string) => TRIGGER_LABEL[t as RunTrigger] ?? t;
 
 export const ERROR_CLASS_LABEL: Record<ErrorClass, string> = { parse: 'Parse', fetch: 'Fetch', permission: 'Permission', too_large: 'Too large', rate_limited: 'Rate limited' };
 
-export const PHASE_LABEL: Record<RunPhase['name'], string> = { list: 'List changes', fetch: 'Fetch', parse: 'Parse', chunk: 'Chunk', embed: 'Embed', upsert: 'Upsert' };
-
-export function PhaseIcon({ status }: { status: RunPhase['status'] }) {
-  if (status === 'done') return <CheckCircle2 className="size-4 text-success-text" aria-label="Done" />;
-  if (status === 'running') return <Loader2 className="size-4 animate-spin text-blue-600 dark:text-blue-400" aria-label="Running" />;
-  if (status === 'failed') return <XCircle className="size-4 text-destructive-text" aria-label="Failed" />;
-  return <CircleDashed className="size-4 text-muted-foreground" aria-label="Not run" />;
-}
-
-export const phaseStatusLabel = (s: RunPhase['status']) => (s === 'done' ? 'Done' : s === 'running' ? 'Running' : s === 'failed' ? 'Failed' : 'Not run');
-
-/** When a backing-off run retries, from the Retry-After in its error, or 15 minutes. */
-export function backoffRetryAt(run: SyncRun) {
-  const m = run.errors.map((e) => e.message.match(/Retry-After (\d+)s/)).find(Boolean);
-  const wait = m ? Number(m[1]) : 900;
-  return new Date(new Date(run.startedAt).getTime() + (run.durationSec + wait) * 1000).toISOString();
-}
+/** The step of a run an error happened at. */
+const STEP_LABEL: Record<string, string> = { list: 'List', get: 'Fetch', store: 'Store', parse: 'Read' };
+export const stepLabel = (step: string) => STEP_LABEL[step] ?? step;
 
 export const RULE_FIELDS = [
   { value: 'path', label: 'Path glob' },

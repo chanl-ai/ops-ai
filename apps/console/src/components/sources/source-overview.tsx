@@ -3,14 +3,15 @@
 import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, Database, RefreshCw, RotateCcw } from 'lucide-react';
 
-import { KbDot, KbHealthBadge, PHASE_LABEL, PhaseIcon, RunStatusBadge, TRIGGER_LABEL, phaseStatusLabel } from '@/components/knowledge/knowledge-meta';
+import { KbDot, KbHealthBadge, RunStatusBadge, triggerLabel } from '@/components/knowledge/knowledge-meta';
+import { runChecked } from '@/components/sources/run-sheet';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Row, Rows, Section, StatTile } from '@/components/shared/surface';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { count, dateTime, duration, ms, plural, relativeTime } from '@/lib/format';
+import { count, dateTime, duration, plural, relativeTime } from '@/lib/format';
 import type { SourceDetail } from '@/lib/types/knowledge';
 
 /** A source at a glance: item counts, the run in progress, who reads it, what is failing, and recent runs. */
@@ -58,32 +59,15 @@ export function SourceOverview({
         />
       </div>
 
-      {run?.progress && (
-        <Section
-          title="Current run"
-          description={`${TRIGGER_LABEL[run.trigger]} · started ${relativeTime(run.startedAt)}`}
-        >
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <div className="flex flex-wrap justify-between gap-2 text-sm">
-                <span className="tabular-nums">
-                  {count(run.progress.done)} of {plural(run.progress.total, 'item')}, {count(run.progress.failed)} failed
-                </span>
-                <span className="tabular-nums text-muted-foreground">{Math.round((run.progress.done / Math.max(run.progress.total, 1)) * 100)}%</span>
-              </div>
-              <Progress value={(run.progress.done / Math.max(run.progress.total, 1)) * 100} />
-            </div>
-            <ol className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
-              {run.phases.map((p) => (
-                <li key={p.name} className="flex items-center gap-2 text-sm">
-                  <PhaseIcon status={p.status} />
-                  <span className="min-w-0">
-                    <span className="block truncate">{PHASE_LABEL[p.name]}</span>
-                    <span className="block text-xs text-muted-foreground">{p.status === 'skipped' ? phaseStatusLabel(p.status) : ms(p.durationMs)}</span>
-                  </span>
-                </li>
-              ))}
-            </ol>
+      {run && (
+        <Section title="Current run" description={`${triggerLabel(run.trigger)} · started ${relativeTime(run.startedAt)}`}>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm tabular-nums">
+              {run.counts.total !== undefined
+                ? `${count(run.counts.checked ?? 0)} of ${plural(run.counts.total, 'item')} checked, ${count(run.counts.failed ?? 0)} failed`
+                : `${plural(run.counts.listed ?? 0, 'item')} listed so far, ${count(run.counts.failed ?? 0)} failed`}
+            </span>
+            {run.counts.total ? <Progress value={((run.counts.checked ?? 0) / run.counts.total) * 100} /> : <Progress value={100} className="animate-pulse" aria-label="Run in progress" />}
           </div>
         </Section>
       )}
@@ -159,7 +143,7 @@ export function SourceOverview({
                 <TableHead className="pl-4">Started</TableHead>
                 <TableHead>Trigger</TableHead>
                 <TableHead className="text-right">Duration</TableHead>
-                <TableHead className="text-right">Listed</TableHead>
+                <TableHead className="text-right">Checked</TableHead>
                 <TableHead className="text-right">Changed</TableHead>
                 <TableHead className="text-right">Failed</TableHead>
                 <TableHead>Status</TableHead>
@@ -173,11 +157,11 @@ export function SourceOverview({
                       {dateTime(r.startedAt)}
                     </Link>
                   </TableCell>
-                  <TableCell>{TRIGGER_LABEL[r.trigger]}</TableCell>
+                  <TableCell>{triggerLabel(r.trigger)}</TableCell>
                   <TableCell className="text-right tabular-nums">{r.status === 'running' ? '—' : duration(r.durationSec)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{count(r.counts.listed)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{count(r.counts.upserted + r.counts.deleted)}</TableCell>
-                  <TableCell className={r.counts.failed > 0 ? 'text-right tabular-nums text-destructive-text' : 'text-right tabular-nums'}>{count(r.counts.failed)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{count(runChecked(r) ?? 0)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{count(r.counts.upserted ?? r.counts.rebuilt ?? 0)}</TableCell>
+                  <TableCell className={r.counts.failed ? 'text-right tabular-nums text-destructive-text' : 'text-right tabular-nums'}>{count(r.counts.failed ?? 0)}</TableCell>
                   <TableCell>
                     <RunStatusBadge status={r.status} />
                   </TableCell>

@@ -28,6 +28,7 @@ import type {
   SourceType,
   SyncOptions,
   SyncRun,
+  Tombstone,
 } from '@/lib/types/knowledge';
 import type { SampleDocument, SplitPreview, SplitPreviewInput } from '@/lib/types/knowledge-ingest';
 import type { ListParams, ListResult, OptionsPage, OptionsParams } from '@/lib/types/query';
@@ -70,10 +71,12 @@ export interface KnowledgeApi {
     sync(id: string, opts?: SyncOptions): Promise<SyncRun>;
     /** Adds files already in Files (the team's, scanned clean) to a file source by id; the next sync indexes them. */
     addFiles(id: string, fileIds: string[]): Promise<{ fileId: string; name: string }[]>;
-    cancelRun(id: string): Promise<void>;
+    /** Stops a running sync or rebuild between two items. */
+    cancelRun(runId: string): Promise<SyncRun>;
     setPaused(id: string, paused: boolean): Promise<Source>;
-    /** Rebuilds every item with the current parsing and chunking settings. */
-    reprocess(id: string): Promise<SyncRun>;
+    /** Addresses removed after answering gone twice, which syncs leave out until lifted. */
+    tombstones(id: string): Promise<Tombstone[]>;
+    liftTombstones(id: string, ids: string[]): Promise<Tombstone[]>;
     items(id: string, params: ListParams<ItemFilters>): Promise<ListResult<Item>>;
     runs(id: string, params: ListParams<RunFilters>): Promise<ListResult<SyncRun>>;
     run(runId: string): Promise<SyncRun>;
