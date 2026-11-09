@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Chat asks to connect an app nobody has signed in to yet",
+  "description": "When an app each person signs in to is on for the team but nobody has signed in yet, chat now shows the Connect card naming the app instead of an error, and the assistant names the app too.",
+  "tag": "fix"
+}

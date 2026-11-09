@@ -25,7 +25,7 @@ from ops_service_kit.settings import PLUGIN_ENTRY_POINTS, Settings
 from ops_tools.auth.kinds import BY_ID
 from ops_tools.egress import EgressPolicy
 from ops_tools.executor import Executor, HttpExecutor
-from ops_tools.gateway_calls import _before_policy  # pyright: ignore[reportPrivateUsage]
+from ops_tools.gateway_calls import _before_policy, sign_in_details  # pyright: ignore[reportPrivateUsage]
 from ops_tools.graph_mailbox import CursorSeal
 from ops_tools.plugins.executor import PluginExecutor
 from ops_tools.plugins.host import PluginHost
@@ -314,6 +314,11 @@ async def test_a_persons_own_account_with_no_instance_is_not_plugin_disabled(
     assert "own account" in str(seen.get("sign_in_needed"))
     refused = _before_policy(Resolved("read", "plugin", seen, {"name": "desk_get_case", "enabled": True}), {})
     assert refused is not None and refused[1] == "CONNECTION_NOT_LINKED", refused
+    # The refusal names the account, its app and a link of James's own, so chat draws its Connect card for him.
+    _, _, auth = rig(engine)
+    details = await sign_in_details(auth, tenant, seen, JAMES, "read")
+    assert details["connectionId"] == conn and details["appId"] and details["connectUrl"], details
+    assert (details["reason"], details["access"]) == ("not_connected", "read") and details["app"], details
 
 
 async def test_a_plugin_tools_call_keeps_the_plugins_address_not_the_connections_origin(
