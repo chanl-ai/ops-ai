@@ -34,7 +34,8 @@ export const APP_STATES: Record<AppStateId, AppStateShown> = {
 
 /** A state's words and next action for the caller: `manages` is the card's mayManage. */
 export function appStateFor(state: AppStateId, manages: boolean): AppStateShown & { action: AppAction } {
-  const shown = APP_STATES[state];
+  // A card read from a source that sends no state (a sample) offers nothing rather than throwing.
+  const shown = APP_STATES[state] ?? { label: '', tone: 'muted', on: false, admin: 'none', member: 'none' };
   return { ...shown, action: manages ? shown.admin : shown.member };
 }
 
