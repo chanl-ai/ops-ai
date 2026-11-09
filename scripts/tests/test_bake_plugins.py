@@ -12,7 +12,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "deploy" / "images"))
 
-from bake_plugins import PinRefused, bake, tarball_url
+from bake_plugins import PinRefused, bake, drift, tarball_url
 
 REPO = "https://github.com/acme/ops-ai-plugins"
 SHA = "e0e932b2655dada3e28e66a306424703513b4869"
@@ -61,3 +61,17 @@ def test_a_broken_plugin_or_a_wrong_path_stops_the_build(tmp_path: Path) -> None
     for path in ("missing", "../../etc"):
         with pytest.raises(PinRefused, match="no folder"):
             bake([{"source": REPO, "ref": SHA, "path": path}], tmp_path / "out", lambda _: _tarball(PLUGIN, "p"))
+
+
+def test_a_folder_that_differs_from_the_pins_is_reported(tmp_path: Path) -> None:
+    pins = [{"source": REPO, "ref": SHA, "path": "plugins/header_key"}]
+
+    def fetch(_: str) -> bytes:
+        return _tarball(PLUGIN, "plugins/header_key")
+
+    folder = tmp_path / "plugins"
+    assert drift(pins, folder, fetch) == [f"missing {bake(pins, tmp_path / 'x', fetch)[0]}"]
+    bake(pins, folder, fetch)
+    assert drift(pins, folder, fetch) == []
+    (folder / "stray").mkdir()
+    assert drift(pins, folder, fetch) == ["unexpected stray unreadable"]

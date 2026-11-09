@@ -22,7 +22,8 @@ from typing import Any
 
 import httpx
 
-from ops_plugin_sdk.install import install
+from ops_plugin_sdk.install import install, installed
+from ops_plugin_sdk.manifest import ManifestError, read
 
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 GITHUB = re.compile(r"^https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$")
@@ -81,12 +82,49 @@ def bake(pins: list[dict[str, Any]], into: Path, fetch: Callable[[str], bytes] =
     return done
 
 
+def listed(folder: Path) -> list[str]:
+    """`id version` for every plugin in `folder`, sorted."""
+    out = []
+    for pid, path in installed(folder).items():
+        try:
+            out.append(f"{pid} {read(path / 'plugin.yaml').version}")
+        except ManifestError:
+            out.append(f"{pid} unreadable")
+    return sorted(out)
+
+
+def drift(pins: list[dict[str, Any]], folder: Path, fetch: Callable[[str], bytes] = _download) -> list[str]:
+    """Differences between what `pins` install and what `folder` holds, as `missing ...` and `unexpected ...` lines;
+    empty when the two match by id and version."""
+    with tempfile.TemporaryDirectory() as tmp:
+        want = sorted(bake(pins, Path(tmp), fetch))
+    have = listed(folder)
+    return [f"missing {x}" for x in want if x not in have] + [f"unexpected {x}" for x in have if x not in want]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Put the pinned plugins into an image's plugins folder.")
     parser.add_argument("--pins", type=Path, default=Path(__file__).resolve().parents[1] / "plugins.json")
-    parser.add_argument("--into", type=Path, required=True)
+    parser.add_argument("--into", type=Path)
+    parser.add_argument("--check", type=Path, help="fail unless this folder holds exactly the pinned plugins")
     args = parser.parse_args(argv)
     pins = json.loads(args.pins.read_text())["plugins"]
+    if args.check is not None:
+        if not str(args.check):
+            sys.stderr.write("bake_plugins: --check needs a folder (is OPS_PLUGINS_DIR unset?)\n")
+            return 1
+        try:
+            lines = drift(pins, args.check)
+        except PinRefused as e:
+            sys.stderr.write(f"bake_plugins: {e}\n")
+            return 1
+        for line in lines:
+            sys.stdout.write(f"DRIFT {line}\n")
+        if not lines:
+            sys.stdout.write(f"ok plugins: {', '.join(listed(args.check)) or 'none'}\n")
+        return 1 if lines else 0
+    if args.into is None:
+        parser.error("--into or --check is required")
     try:
         for line in bake(pins, args.into):
             sys.stdout.write(f"baked {line}\n")

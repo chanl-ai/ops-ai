@@ -124,13 +124,19 @@ ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 # when it starts.
 RUN [ -n "$OPS_RUNNER_WASM_URL" ] || unset OPS_RUNNER_WASM_URL; python -m ops_runner.fetch
 
+# The plugins every image ships with, each at the commit deploy/plugins.json pins; a mounted OPS_PLUGINS_DIR replaces
+# them. A pin that does not fetch or validate stops the build. The service and runtime stages copy this one folder, so
+# the two cannot ship different plugins.
+FROM python-base AS plugins
+COPY deploy/plugins.json deploy/plugins.json
+COPY deploy/images/bake_plugins.py deploy/images/bake_plugins.py
+RUN python deploy/images/bake_plugins.py --into /app/plugins
+
 # What every service image adds: the deploy scripts, a non-root user owning /data (files and knowledge bytes), and the
 # listen address every container needs so the others reach it.
 FROM python-base AS service
 COPY deploy deploy
-# The plugins this image ships with, each at the commit deploy/plugins.json pins; a mounted OPS_PLUGINS_DIR replaces
-# them. A pin that does not fetch or validate stops the build.
-RUN python deploy/images/bake_plugins.py --into /app/plugins
+COPY --from=plugins /app/plugins /app/plugins
 ENV OPS_PLUGINS_DIR=/app/plugins
 # The runner writes wasmtime's compiled-module cache beside its Python build, so the service user owns that folder.
 RUN useradd --system --uid 10001 --home-dir /app ops && mkdir -p /data && chown ops:ops /data \
@@ -260,6 +266,7 @@ COPY --from=node-image /usr/local/bin/node /usr/local/bin/node
 COPY --from=console-fly /app/node_modules node_modules
 COPY --from=console-fly /app/apps/console apps/console
 COPY deploy deploy
-ENV NODE_ENV=production
+COPY --from=plugins /app/plugins /app/plugins
+ENV OPS_PLUGINS_DIR=/app/plugins NODE_ENV=production
 EXPOSE 8080
 ENTRYPOINT ["/app/deploy/fly/entrypoint.sh"]

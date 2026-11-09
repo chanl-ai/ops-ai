@@ -100,6 +100,16 @@ for s in src[:5]:
 PY
 step "login page assets"
 
+# The plugins the running app loads must be exactly the ones deploy/plugins.json pins, by id and version. Checked on the
+# machine against OPS_PLUGINS_DIR, the folder tools-service and kb-service load from.
+fly ssh console -a "$app" -C "sh -c '/app/.venv/bin/python /app/deploy/images/bake_plugins.py --check \"\$OPS_PLUGINS_DIR\"'" \
+  >"$work/plugins.txt" 2>&1 || { cat "$work/plugins.txt"; echo "stg-deploy: the app's plugins differ from deploy/plugins.json"; exit 1; }
+grep -E '^ok plugins' "$work/plugins.txt"
+step "plugins match deploy/plugins.json"
+
+# The walk imports workspace packages, so a fresh checkout (a throwaway worktree) needs them installed first.
+[ -d "$root/node_modules/@ops-ai/usecase-runner" ] || pnpm -C "$root" install --frozen-lockfile --ignore-scripts >"$work/pnpm.log" 2>&1 \
+  || { tail -20 "$work/pnpm.log"; exit 1; }
 pair() { grep "^$1=" "$conf/staging-admin.env" | cut -d= -f2-; }
 # Counted through tee, so a walk that crashes after some OK lines would pass; its exit status becomes a FAIL line.
 {
