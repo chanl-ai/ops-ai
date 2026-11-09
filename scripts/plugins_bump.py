@@ -4,7 +4,9 @@ plugin's old and new commit.
     python scripts/plugins_bump.py [--ref main]
 
 REF is a branch, tag or commit of the pinned repository; the file always records the full commit it resolves to, since
-bake_plugins.py refuses anything that can move."""
+bake_plugins.py refuses anything that can move, and the sha256 digest of the plugin's folder at that commit, which
+bake_plugins.py checks every download against. Review the plugins' change between the two commits before committing
+the new pins: the digest makes the image hold exactly what was reviewed."""
 
 from __future__ import annotations
 
@@ -13,9 +15,14 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 PINS = Path(__file__).resolve().parents[1] / "deploy" / "plugins.json"
+sys.path.insert(0, str(PINS.parent / "images"))
+
+from bake_plugins import PinRefused, folder_digest, pinned_folder  # noqa: E402
+
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 
 
@@ -47,6 +54,11 @@ def main(argv: list[str] | None = None) -> int:
             f"{pin['path']}: {pin['ref'][:12]} -> {new[:12]}{'' if new != pin['ref'] else ' (unchanged)'}\n"
         )
         pin["ref"] = new
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                pin["sha256"] = folder_digest(pinned_folder(pin, Path(tmp)))
+        except PinRefused as e:
+            raise SystemExit(f"plugins_bump: {e}") from e
     PINS.write_text(json.dumps(data, indent=2) + "\n")
     return 0
 

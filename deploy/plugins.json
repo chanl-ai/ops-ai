@@ -3,12 +3,14 @@
     {
       "source": "https://github.com/chanl-ai/ops-ai-plugins",
       "ref": "e825c9f77690a660e248ac8e08aef01cc9992f29",
-      "path": "plugins/github"
+      "path": "plugins/github",
+      "sha256": "15d8f56e0bb8390cc167b6fae2c90b126776661c1aed8824e61ff3cc764e2a3e"
     },
     {
       "source": "https://github.com/chanl-ai/ops-ai-plugins",
       "ref": "e825c9f77690a660e248ac8e08aef01cc9992f29",
-      "path": "plugins/salesforce"
+      "path": "plugins/salesforce",
+      "sha256": "c934956aee474469ad35ecaa06043b56e75be33ef04c89fb77e6f0dcacc849ab"
     }
   ]
 }
