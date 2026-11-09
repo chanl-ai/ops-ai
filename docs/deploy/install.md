@@ -136,6 +136,17 @@ For developers:
 | Read it in the console | `useFlag('<name>')`, or `flag: '<name>'` on a list entry filtered by `useFlagged` (`apps/console/src/hooks/flag-queries.ts`); both are off while the answer loads |
 | Remove it | The release that fully ships the feature deletes the entry, every check that reads it and this table's row, so an install never sets a flag to get a shipped feature |
 
+## Embedding model
+
+Knowledge search by meaning embeds every piece with one model per environment, set in `ops-ai.env` for every service:
+
+| Setting | Default | Notes |
+|---|---|---|
+| `OPS_EMBEDDING_ALIAS` | `bank-embed` | A models-service alias of kind `embedding`; bind it to the provider's model with the connect-model command |
+| `OPS_EMBEDDING_WIDTH` | `1536` | The width vectors are asked at. Above 1,998 every service stops at start, since no vector index on PostgreSQL or Azure SQL holds it; OpenAI's `text-embedding-3-large` is asked at 1,998 or fewer |
+
+Changing either embeds every piece again from what is stored; no file or page is read again.
+
 ## What is proven and what is not
 
 | Claim | Evidence |

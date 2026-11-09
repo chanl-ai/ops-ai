@@ -1,7 +1,7 @@
 """Provider connections a completion is forwarded to. `scripted` answers deterministically with no network, for tests
 and use cases; `openai-compatible` forwards to the connection's base URL with the credential its `key_ref` names;
 `azure-openai` forwards to an Azure OpenAI resource in Azure's own header and paths. `anthropic` connections can be
-registered but are not served in this slice.
+registered but are not served in this slice. Each connection also embeds text for an alias of kind embedding.
 
 Both shapes carry tools: the request's `tools` reach the provider and its `tool_calls` come back, whole or as stream
 deltas, in OpenAI's chunk shape.
@@ -9,7 +9,9 @@ deltas, in OpenAI's chunk shape.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import re
 from collections.abc import AsyncIterator, Iterator, Mapping
 from dataclasses import dataclass, field
@@ -41,12 +43,22 @@ class StreamUsage:
     output_tokens: int = 0
 
 
+@dataclass(frozen=True)
+class Embedded:
+    vectors: list[list[float]]
+    input_tokens: int
+
+
 class ProviderError(Exception):
     pass
 
 
 class Provider(Protocol):
     async def complete(self, model_id: str, body: dict[str, Any]) -> Completion: ...
+
+    async def embed(self, model_id: str, inputs: list[str], dimensions: int | None) -> Embedded:
+        """One vector per input, in order, `dimensions` wide when the caller names a width."""
+        ...
 
     def stream(self, model_id: str, body: dict[str, Any], usage: StreamUsage) -> AsyncIterator[dict[str, Any]]:
         """OpenAI `chat.completion.chunk` dicts; `usage` holds the totals once the iterator is exhausted."""
@@ -71,6 +83,77 @@ def _call_arguments(rest: str) -> dict[str, Any] | None:
     except ValueError:
         return None
     return cast(dict[str, Any], found) if isinstance(found, dict) else None
+
+
+# The width a scripted vector has when the caller names none: OpenAI's small embedding model's.
+SCRIPTED_WIDTH = 1536
+_WORD = re.compile(r"[a-z0-9]+")
+_STOP = frozenset(
+    [
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "can",
+        "do",
+        "does",
+        "for",
+        "from",
+        "has",
+        "have",
+        "how",
+        "i",
+        "if",
+        "in",
+        "is",
+        "it",
+        "its",
+        "my",
+        "of",
+        "on",
+        "or",
+        "our",
+        "so",
+        "that",
+        "the",
+        "their",
+        "there",
+        "this",
+        "to",
+        "was",
+        "we",
+        "what",
+        "when",
+        "where",
+        "which",
+        "who",
+        "will",
+        "with",
+        "you",
+        "your",
+    ]
+)
+
+
+def scripted_vector(text: str, width: int) -> list[float]:
+    """A deterministic unit vector for `text`: each word's first six letters and its letter trigrams hashed into
+    `width` signed buckets. Texts sharing words or word parts point the same way, so a scripted meaning search ranks
+    "claims" near "claim" with no model, and a test can predict which passage is nearest."""
+    v = [0.0] * width
+    for word in _WORD.findall(text.lower()):
+        if word in _STOP:
+            continue
+        padded = f"#{word}#"
+        features = [(word[:6], 1.0)] + [(padded[i : i + 3], 0.3) for i in range(len(padded) - 2)]
+        for feature, weight in features:
+            h = int.from_bytes(hashlib.blake2b(feature.encode(), digest_size=8).digest(), "big")
+            v[h % width] += weight if h >> 63 else -weight
+    norm = math.sqrt(sum(x * x for x in v))
+    return [round(x / norm, 6) for x in v] if norm else v
 
 
 class ScriptedProvider:
@@ -104,6 +187,10 @@ class ScriptedProvider:
 
     async def complete(self, model_id: str, body: dict[str, Any]) -> Completion:
         return self._answer(model_id, body)
+
+    async def embed(self, model_id: str, inputs: list[str], dimensions: int | None) -> Embedded:
+        width = dimensions or SCRIPTED_WIDTH
+        return Embedded([scripted_vector(t, width) for t in inputs], sum(len(t.split()) for t in inputs))
 
     async def stream(self, model_id: str, body: dict[str, Any], usage: StreamUsage) -> AsyncIterator[dict[str, Any]]:
         done = self._answer(model_id, body)
@@ -154,6 +241,9 @@ class OpenAICompatibleProvider:
     def _url(self, model_id: str) -> str:
         return f"{self.base_url}/chat/completions"
 
+    def _embeddings_url(self, model_id: str) -> str:
+        return f"{self.base_url}/embeddings"
+
     def _answered(self, r: httpx.Response) -> None:
         """Raises when the answer is refused. Never quotes the body: a provider's 401 can echo part of the key."""
         if r.status_code >= 400:
@@ -182,6 +272,22 @@ class OpenAICompatibleProvider:
             int(usage.get("completion_tokens", 0)),
             list(message.get("tool_calls") or []),
         )
+
+    async def embed(self, model_id: str, inputs: list[str], dimensions: int | None) -> Embedded:
+        body: dict[str, Any] = {"model": model_id, "input": inputs}
+        if dimensions is not None:
+            body["dimensions"] = dimensions
+        try:
+            r = await self.client.post(self._embeddings_url(model_id), json=body, headers=self._headers)
+        except httpx.HTTPError as e:
+            raise ProviderError(f"provider unreachable at {self.base_url}: {type(e).__name__}") from e
+        self._answered(r)
+        data: dict[str, Any] = r.json()
+        rows = sorted(cast(list[dict[str, Any]], data.get("data") or []), key=lambda d: int(d.get("index", 0)))
+        if len(rows) != len(inputs):
+            raise ProviderError(f"provider returned {len(rows)} vectors for {len(inputs)} inputs")
+        usage: dict[str, Any] = data.get("usage") or {}
+        return Embedded([[float(x) for x in d["embedding"]] for d in rows], int(usage.get("prompt_tokens", 0)))
 
     async def stream(self, model_id: str, body: dict[str, Any], usage: StreamUsage) -> AsyncIterator[dict[str, Any]]:
         # include_usage puts the totals on a last chunk with no choices; metering needs them.
@@ -252,6 +358,12 @@ class AzureOpenAIProvider(OpenAICompatibleProvider):
             return f"{self.base_url}/openai/v1/chat/completions"
         deployment = quote(model_id, safe="")
         return f"{self.base_url}/openai/deployments/{deployment}/chat/completions?api-version={self.api_version}"
+
+    def _embeddings_url(self, model_id: str) -> str:
+        if self.api_version == AZURE_OPENAI_V1:
+            return f"{self.base_url}/openai/v1/embeddings"
+        deployment = quote(model_id, safe="")
+        return f"{self.base_url}/openai/deployments/{deployment}/embeddings?api-version={self.api_version}"
 
     def _answered(self, r: httpx.Response) -> None:
         self.observed_region = r.headers.get("x-ms-region") or self.observed_region

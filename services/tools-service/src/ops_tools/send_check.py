@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from ops_service_kit.logging import get_logger
-from ops_service_kit.model_calls import ModelCallError, StructuredCalls
+from ops_service_kit.model_calls import ModelCallError, ModelCalls
 
 from .modules.policy import CheckBeforeSend
 from .store.send_policies import SendPolicies
@@ -38,7 +38,7 @@ NO_JUDGE = "The sending check could not run, so a person decides before it is se
 class SendCheck:
     store: SendPolicies
     setting: CheckBeforeSend
-    judge: StructuredCalls | None
+    judge: ModelCalls | None
 
     async def needs_person(
         self, tenant_id: str, team_id: str | None, tool: str, arguments: dict[str, Any], input_hash: str

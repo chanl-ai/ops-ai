@@ -4,9 +4,9 @@
 
 ADR-0008: every model call goes through the AI gateway, which holds the keys. Strategies receive a
 `ModelClient` and never construct a provider client, so the ingestion key, the source's budget and
-redaction by sensitivity (spec 14.14) are applied in one place. The production implementation calls
-the AI gateway and is not part of this library; `ops_ingest.testing.FakeModelClient` is the
-only implementation shipped here.
+redaction by sensitivity (spec 14.14) are applied in one place. The production implementation is
+`ops_service_kit.model_calls.IngestModel`, on models-service; `ops_ingest.testing.FakeModelClient`
+is the test double shipped here.
 """
 
 from __future__ import annotations

@@ -36,6 +36,8 @@ receive images and files. Moving an alias to another model is a new version; no 
 |---|---|
 | OpenAI-compatible endpoints: any provider or private gateway that serves the OpenAI chat completions API, streamed or not, with tool calls | Built |
 | Chat and embedding aliases, versioned, with prices and clearance | Built |
+| Embeddings through the same keys, budgets and clearance as chat (`POST /v1/models/embeddings`) | Built |
+| One embedding model per environment (`OPS_EMBEDDING_ALIAS`, `OPS_EMBEDDING_WIDTH`, at most 1,998 wide) | Built |
 | Binding an alias at install with the connect-model command | Built |
 | Anthropic's own API as a provider | Planned: a connection can be registered, but the gateway does not serve it yet |
 | Failover between providers | Planned |
