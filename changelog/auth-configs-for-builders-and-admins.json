@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Auth configs are shown to builders and admins only",
+  "description": "An app's Auth configs tab, the Auth config column on its accounts and every auth config name or count are now shown only to people who manage the team's apps; viewers get none from the API either.",
+  "tag": "improved"
+}

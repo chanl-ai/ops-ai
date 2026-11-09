@@ -778,7 +778,8 @@ export interface paths {
         /**
          * My Connections
          * @description The caller's connectors, Connectors (Mine): one row per app that acts as them, with what it can do, who it
-         *     signs in as, its state and where it is used; an app the team has off is listed as app_off.
+         *     signs in as, its appState and appGroup, and where it is used; an app the team has off is listed when each
+         *     person signs in to it.
          */
         get: operations["apps_my_connections"];
         put?: never;
@@ -3984,8 +3985,20 @@ export interface components {
             accountCount: number;
             /** Accounts */
             accounts: components["schemas"]["ConnectorAccount"][];
+            /**
+             * Appgroup
+             * @enum {string}
+             */
+            appGroup: "on" | "needs_you" | "needs_admin" | "gone";
             /** Appid */
             appId: string;
+            /**
+             * Appstate
+             * @enum {string}
+             */
+            appState: "connected" | "test_failed" | "needs_sign_in" | "auth_config_broken" | "needs_auth_config" | "off" | "not_installed" | "removed";
+            /** Appstatereason */
+            appStateReason?: string | null;
             /** Authconfig */
             authConfig?: string | null;
             /** Authkind */
@@ -4002,10 +4015,10 @@ export interface components {
             /** Logo */
             logo?: string | null;
             /**
-             * Mayturnon
+             * Maymanage
              * @default false
              */
-            mayTurnOn: boolean;
+            mayManage: boolean;
             /** Method */
             method?: string | null;
             /** Name */
@@ -4016,11 +4029,6 @@ export interface components {
             primaryAccountId?: string | null;
             /** Since */
             since?: string | null;
-            /**
-             * State
-             * @enum {string}
-             */
-            state: "connected" | "expired" | "not_connected" | "app_off";
             /** Tools */
             tools: components["schemas"]["ConnectorTool"][];
             used: components["schemas"]["ConnectorUse"];
@@ -4814,10 +4822,15 @@ export interface components {
              */
             accountsCount: number;
             /**
+             * Appgroup
+             * @enum {string}
+             */
+            appGroup: "on" | "needs_you" | "needs_admin" | "gone";
+            /**
              * Appstate
              * @enum {string}
              */
-            appState: "connected" | "test_failed" | "needs_sign_in" | "not_installed" | "removed";
+            appState: "connected" | "test_failed" | "needs_sign_in" | "auth_config_broken" | "needs_auth_config" | "off" | "not_installed" | "removed";
             /** Appstatereason */
             appStateReason?: string | null;
             /** Authkind */

@@ -3,9 +3,10 @@
 A row is an app, never an account: the person's own accounts of the app are a count with a primary, so two sign-ins to
 the same app are one row. Each row says what the app can do as the person in one line, built from the tools the team
 switched on (a write marked when it waits for a person's approval), who it signs in as, its state, and where it is used
-as counts. An app the install no longer loads is left out, and an installed app the team has off is listed as
-app_off when it signs in as each person, so the person can ask for it; an app that only ever signs in as the team does
-not act as anyone and is not listed.
+as counts. Its state is the app card's own `appState` for the caller (apps.py), the one answer every screen reads. An
+app the install no longer loads is left out, and an installed app the team has off is listed when it signs in as each
+person, so the person can ask for it; an app that only ever signs in as the team does not act as anyone and is not
+listed.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from pydantic import Field
 from ops_service_kit.errors import ServiceUnavailable
 from ops_service_kit.http import Out
 
+from .app_states import AppGroup, AppState
 from .connections.service import own_key
 from .modules.policy import app_ids
 
@@ -25,9 +27,8 @@ if TYPE_CHECKING:
     from .apps import Apps
     from .modules.service import Caller
 
-State = Literal["connected", "expired", "not_connected", "app_off"]
-# The order rows are listed in: what works, what needs the person, what needs an admin.
-RANK: dict[str, int] = {"connected": 0, "expired": 1, "not_connected": 2, "app_off": 3}
+# The order rows are listed in, by who acts next: what works, what needs the person, what needs an admin.
+RANK: dict[str, int] = {"on": 0, "needs_you": 1, "needs_admin": 2}
 PERSON_SIGN_INS = ("person", "person_or_team")
 # The window "tool calls this week" counts.
 WEEK = timedelta(days=7)
@@ -69,7 +70,10 @@ class MyConnector(Out):
     app_id: str
     name: str
     logo: str | None = None
-    state: State
+    # The app card's state for the caller and why, as GET /v1/apps answers it.
+    app_state: AppState
+    app_state_reason: str | None = None
+    app_group: AppGroup
     # What it can do as the person, in one line, from the app's switched-on tools.
     can_do: str
     tools: list[ConnectorTool]
@@ -90,8 +94,9 @@ class MyConnector(Out):
     used: ConnectorUse
     # On in a new chat: every connected connector is (owner, 8 November); a chat narrows it in its picker.
     in_chat: bool = False
-    # The caller may turn the app on for the team themselves (an off app), so the row offers that instead of asking.
-    may_turn_on: bool = False
+    # The caller manages the team's apps, so the row offers the app's next team step (Turn on, an auth config) instead
+    # of asking an admin.
+    may_manage: bool = False
 
 
 def listed(titles: list[str]) -> str:
@@ -207,21 +212,15 @@ async def my_connectors(apps: Apps, who: Caller) -> list[dict[str, Any]]:
         # The default the gateway uses: the saved one, or the only one; two and none saved is no default (it asks).
         defaults = saved & {a["connectionId"] for a in live} or ({live[0]["connectionId"]} if len(live) == 1 else set())
         first = _primary(accounts, card.get("connectionId"), saved)
-        state: State = (
-            "app_off"
-            if off
-            else "connected"
-            if any(a["state"] == "connected" for a in accounts)
-            else "expired"
-            if any(a["state"] == "expired" for a in accounts)
-            else "not_connected"
-        )
+        state = cast(AppState, card["appState"])
         rows.append(
             MyConnector(
                 app_id=str(card["id"]),
                 name=str(card["name"]),
                 logo=card.get("logo"),
-                state=state,
+                app_state=state,
+                app_state_reason=card.get("appStateReason"),
+                app_group=card["appGroup"],
                 can_do=can_do(tools),
                 tools=[ConnectorTool(**{k: t[k] for k in ("name", "title", "access", "reviewed")}) for t in tools],
                 primary_account_id=first["connectionId"] if first else None,
@@ -243,13 +242,14 @@ async def my_connectors(apps: Apps, who: Caller) -> list[dict[str, Any]]:
                 auth_kind=first["authKind"] if first else card.get("authKind"),
                 person_fields=list(first["personFields"]) if first else [],
                 docs_url=first.get("docsUrl") if first else None,
-                auth_config=first.get("authConfig") if first else None,
+                # Which auth config the person signs in through is for whoever manages the team's apps.
+                auth_config=first.get("authConfig") if first and may else None,
                 used=ConnectorUse(**await _used(apps, who, tools, list(card["moduleIds"]))),
-                in_chat=state == "connected",
-                may_turn_on=off and may,
+                in_chat=card["appGroup"] == "on",
+                may_manage=may,
             ).model_dump(by_alias=True)
         )
-    return sorted(rows, key=lambda r: (RANK[r["state"]], str(r["name"]).lower()))
+    return sorted(rows, key=lambda r: (RANK.get(r["appGroup"], 3), str(r["name"]).lower()))
 
 
 async def apps_tools(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[str, Any]]:

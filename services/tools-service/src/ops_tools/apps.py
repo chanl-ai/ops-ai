@@ -25,6 +25,7 @@ from ops_plugin_sdk.versions import tools_of
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import Envelope, Out, ok
 
+from .app_states import AppGroup, AppState, app_group
 from .auth.kinds import BY_ID, kind_of
 from .callers import caller_in
 from .connections.records import (
@@ -138,9 +139,8 @@ class SystemPlugin(Out):
     update_available: bool = False
 
 
-AppState = Literal["connected", "test_failed", "needs_sign_in", "not_installed", "removed"]
 # Plugins are installed by the operator on the system, never from a screen, so no person here can put it back.
-REMOVED = "This app isn't installed on this system. Your operator installs apps."
+REMOVED = "This app isn't installed. Ask the person who runs Ops AI at your company to install it."
 
 
 class CardCredential(Out):
@@ -182,11 +182,12 @@ class SystemCard(Out):
     plugin: SystemPlugin | None = None
     # A built-in app's console page, where it is managed (its knowledge bases, its mailboxes).
     href: str | None = None
-    # The card's one state for the caller, worked out here so no screen derives it: connected, test_failed (signed in,
-    # its test then failed), needs_sign_in, not_installed (not turned on for the team), or removed (turned on, then
-    # taken off the install); with why when not connected.
+    # The card's one state for the caller (AppState), worked out here so no screen derives it; with why when not
+    # connected.
     app_state: AppState
     app_state_reason: str | None = None
+    # Who acts next on it (app_states.AppGroup), so no list works it out again from the state.
+    app_group: AppGroup
     # Whose OAuth app the card's account signs in with; none for an app that signs in without one.
     credential: CardCredential | None = None
     # Who signs in on the card's account: the team account, each person, or each person with the team's as backup.
@@ -784,7 +785,17 @@ class Apps:
         ids = [str(c["connectionId"]) for c in cards if c.get("connectionId")]
         store = self.connections.store
         team_tokens = await store.team_tokens(who.tenant_id, ids)
+        # The team's auth configs, each with whether its client secret is held, read once: an account signs in only
+        # through one of these or Ops AI's app where the install has one.
+        held = {str(r["name"]) for r in await self.connections.secrets.store.listed(who.tenant_id, who.team.id)}
+        creds = [
+            {**c, "holds_secret": bool(c.get("secret_name")) and str(c["secret_name"]) in held}
+            for c in await store.team_credentials(who.tenant_id, who.team.id)
+        ]
         mine = person or own_key(who)
+        # A person's card is their own state; a service asking for nobody reads the team's.
+        is_person = person is not None or who.principal is None or who.principal.kind == "person"
+        may = self.connections.may_manage(who)
         own: dict[str, dict[str, Any]] = {}
         for t in await store.own_sign_ins(who.tenant_id, mine, ids):
             own.setdefault(str(t["connection_id"]), t)
@@ -792,8 +803,15 @@ class Apps:
             conn = by_id.get(str(c.get("connectionId") or ""))
             token = team_tokens.get(str(conn["id"])) if conn else None
             mine_row = own.get(str(conn["id"])) if conn else None
-            c["appState"], c["appStateReason"] = app_state(c, conn, token, mine_row)
-            c["credential"] = card_credential(conn)
+            configured = self._configured(c, conn, creds)
+            c["appState"], c["appStateReason"] = app_state(
+                c, conn, token, mine_row, configured=configured, person=is_person
+            )
+            sign_in = (conn.get("sign_in") or "team") if conn else "team"
+            theirs = sign_in == "person" or (sign_in == "person_or_team" and is_person)
+            c["appGroup"] = app_group(str(c["appState"]), own_sign_in=theirs)
+            # Which auth config the account signs in through is for whoever manages the team's apps.
+            c["credential"] = card_credential(conn, with_id=may)
             c["signIn"] = (conn.get("sign_in") or "team") if conn else None
             # The caller's (or `person`'s) own sign-in on an app each person signs in to: connected, expired or none.
             c["ownSignIn"] = (
@@ -806,11 +824,64 @@ class Apps:
                 else "connected"
             )
 
+    def _configured(self, card: dict[str, Any], conn: dict[str, Any] | None, creds: list[dict[str, Any]]) -> str:
+        """Whether a plugin's app has an auth config to sign in with: ok, other (on, and the one its default account
+        signs in with is gone or lost its secret, while the team has another to sign in again through) or none. Ops
+        AI's app counts where the install has one. A sign-in through the browser exchanges a code with the client
+        secret, so there a config without its secret does not count; a client-credentials config may sign an
+        assertion instead. An app whose sign-in takes no OAuth client, and a custom app (its account holds its own),
+        is always ok."""
+        pid = card.get("pluginId")
+        if card["kind"] != "plugin" or not card.get("plugin") or not pid:
+            return "ok"
+        name = conn["auth_kind"] if conn else card.get("authKind")
+        kind = kind_of(str(name)) if name else None
+        if kind is None or kind.field("clientId") is None:
+            return "ok"
+        usable = [c for c in creds if c["app_id"] == card["id"] and (c["holds_secret"] or not kind.signs_in)]
+        installed = self.connections.store.install_client(str(pid)) is not None
+        any_usable = installed or bool(usable)
+        team_on = bool(cast(dict[str, Any], card["plugin"]).get("teamOn"))
+        if conn is None or not team_on:
+            return "ok" if any_usable else "none"
+        held = (
+            any(str(c["id"]) == str(conn["credential_id"]) for c in usable) if conn.get("credential_id") else installed
+        )
+        return "ok" if held else "other" if any_usable else "none"
+
     async def card(self, who: Caller, app_id: str) -> dict[str, Any]:
         found = next((c for c in await self.cards(who) if c["id"] == app_id), None)
         if found is None:
             raise NotFound(f"App {app_id}")
         return found
+
+    async def page_card(self, who: Caller, app_id: str) -> dict[str, Any]:
+        """The card an app's page reads: the team's, or for a plugin the install does not hold, which this team never
+        had on, one that says so, as a removed plugin's does, rather than answering as if the address were wrong. Only
+        the page reads it; every other route answers 404 for an app the team does not have."""
+        try:
+            return await self.card(who, app_id)
+        except NotFound:
+            pid = plugin_of({"app_id": app_id})
+            if not pid or self.plugins is None or pid in self.plugins.plugins:
+                raise
+        return {
+            "id": app_id,
+            "kind": "plugin",
+            "name": pid,
+            "toolsCount": 0,
+            "connectionId": None,
+            "pluginId": pid,
+            "moduleIds": [],
+            "mayManage": self.connections.may_manage(who),
+            "managedClient": False,
+            "appState": "not_installed",
+            "appStateReason": REMOVED,
+            "appGroup": "gone",
+            "credential": None,
+            "signIn": None,
+            "ownSignIn": None,
+        }
 
     async def add_custom(self, who: Caller, i: NewAppIn) -> dict[str, Any]:
         """A custom app, as its first account: by name, or an MCP server by its address."""
@@ -950,10 +1021,20 @@ class Apps:
 
 
 def app_state(
-    card: dict[str, Any], conn: dict[str, Any] | None, team_token: dict[str, Any] | None, own: dict[str, Any] | None
+    card: dict[str, Any],
+    conn: dict[str, Any] | None,
+    team_token: dict[str, Any] | None,
+    own: dict[str, Any] | None,
+    *,
+    configured: str = "ok",
+    person: bool = False,
 ) -> tuple[str, str | None]:
     """One card's state for the caller: signing in is what connects an account, and a failed test after it warns
-    without disconnecting. On an app each person signs in to, it is the caller's own sign-in that counts."""
+    without disconnecting. On an app each person signs in to, it is the caller's own sign-in that counts; on one where
+    each person signs in with the team's account for runs nobody started, a person's own sign-in counts too, since the
+    calls they make never use the team's. `configured` (`Apps._configured`): ok, other (the account's auth config is
+    gone or lost its secret, and the team has another) or none; `person`: whether the caller is a person (or a service
+    acting for one)."""
     if card["kind"] in ("builtin", "module"):
         return "connected", None
     plugin = cast(dict[str, Any] | None, card.get("plugin"))
@@ -961,10 +1042,19 @@ def app_state(
     if card["kind"] == "plugin" and plugin is None:
         return "removed", REMOVED
     if conn is None or (plugin is not None and not plugin.get("teamOn")) or not conn.get("settings"):
-        return "not_installed", None
-    if (conn.get("sign_in") or "team") == "person":
-        if own is None or own.get("refused_at") is not None:
-            return "needs_sign_in", "Sign in with your own account."
+        if configured != "none":
+            return "off", None
+        return "needs_auth_config", f"Add an auth config for {card['name']} first."
+    if configured == "none":
+        return "auth_config_broken", f"The auth config {card['name']} signs in with is gone or has no client secret."
+    if configured == "other":
+        return "needs_sign_in", "Its auth config is gone or has no client secret. Sign in again through another."
+    sign_in = conn.get("sign_in") or "team"
+    if sign_in == "person" or (sign_in == "person_or_team" and person):
+        if own is None:
+            return "needs_sign_in", "Connect your own account."
+        if own.get("refused_at") is not None:
+            return "needs_sign_in", "Your sign-in ended. Sign in again."
         test = cast(dict[str, Any] | None, own.get("test"))
     else:
         if card.get("state") != CONNECTED:
@@ -977,13 +1067,15 @@ def app_state(
     return "connected", None
 
 
-def card_credential(conn: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Whose OAuth app the card's account signs in with, as the Credentials page names it."""
+def card_credential(conn: dict[str, Any] | None, *, with_id: bool = True) -> dict[str, Any] | None:
+    """Whose OAuth app the card's account signs in with, as the Credentials page names it; the config's id only
+    `with_id` (to whoever manages the team's apps)."""
     if conn is None or kind_of(str(conn["auth_kind"])).field("clientId") is None:
         return None
     name = str(conn.get("account_name") or conn["name"])
     own = not conn.get("platform_app")
-    return {"id": conn.get("credential_id") if own else None, "name": name, "type": "own" if own else "ops_ai"}
+    held = conn.get("credential_id") if own and with_id else None
+    return {"id": held, "name": name, "type": "own" if own else "ops_ai"}
 
 
 OPS_AI = "ops-ai:"
@@ -1563,7 +1655,7 @@ async def app_tools(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
 
 async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
     """An app's page as one answer: a card of the caller's team only, so another team's app is not found."""
-    card = await apps.card(who, app_id)
+    card = await apps.page_card(who, app_id)
     detail = await apps.connections.detail(who, str(card["connectionId"])) if card.get("connectionId") else None
     mine = own_key(who)
     signed = [p for p in (detail or {}).get("people", []) if p["personId"] == mine]
@@ -1609,7 +1701,8 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
         "me": {"connected": bool(signed), "account": signed[0].get("account") if signed else None},
         "peopleCount": len(people),
         "accounts": accounts,
-        "authConfigs": await _auth_configs(apps, who, card, accounts),
+        # Auth configs are for whoever manages the team's apps (builders and admins): anyone else gets none.
+        "authConfigs": await _auth_configs(apps, who, card, accounts) if apps.connections.may_manage(who) else [],
         "tools": tools,
         "skills": skills,
         "usage": usage,
@@ -1696,8 +1789,9 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
                 "stateReason": why,
                 # Each person signs in to it with their own account, so it is no one person's, whoever made it.
                 "owner": {"kind": "each", "name": who.name} if alone else {"kind": "team", "name": who.team.name},
-                "configId": config,
-                "configName": config_names.get(config) if config else None,
+                # Which auth config an account signs in through is shown only to whoever manages the team's apps.
+                "configId": config if may else None,
+                "configName": config_names.get(config) if config and may else None,
                 "actions": actions,
                 "mine": own is not None,
                 # Who signed in: the team's sign-in; on an account each person signs in to, the caller's own. A
@@ -1859,7 +1953,8 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
     @r.get("/v1/me/connections", response_model=Envelope[list[MyConnector]])
     async def my_connections(who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The caller's connectors, Connectors (Mine): one row per app that acts as them, with what it can do, who it
-        signs in as, its state and where it is used; an app the team has off is listed as app_off."""
+        signs in as, its appState and appGroup, and where it is used; an app the team has off is listed when each
+        person signs in to it."""
         return ok(await my_connectors(apps, who))
 
     @r.post("/v1/apps", response_model=Envelope[AccountDetail], status_code=201)

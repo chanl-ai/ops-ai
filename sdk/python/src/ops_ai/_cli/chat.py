@@ -180,7 +180,8 @@ def narrow(
 ) -> None:
     """As the composer's picker does: leaves every connector the chat holds out but `keep`, or leaves out `leave`
     (names or ids)."""
-    held = [c for c in ops.chat.connectors(thread) if c["state"] != "off_for_team"]
+    # An app an admin acts on first grants no tool, so it is never in the chat's set.
+    held = [c for c in ops.chat.connectors(thread) if c["appGroup"] != "needs_admin"]
 
     def names(c: dict[str, Any]) -> set[str]:
         return {str(c["appId"]).lower(), str(c["name"]).lower()}

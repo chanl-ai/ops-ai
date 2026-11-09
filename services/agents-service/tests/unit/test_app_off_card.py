@@ -23,8 +23,8 @@ class Line:
     async def cards(self, team: str, email: str, now: float | None = None) -> list[dict[str, Any]]:
         assert (team, email) == (SAM.team_id, SAM.email)
         return [
-            {"id": "plugin:opsai.salesforce", "name": "Salesforce", "appState": "not_installed"},
-            {"id": "plugin:opsai.github", "name": "GitHub", "appState": "connected"},
+            {"id": "plugin:opsai.salesforce", "name": "Salesforce", "appState": "off", "appGroup": "needs_admin"},
+            {"id": "plugin:opsai.github", "name": "GitHub", "appState": "connected", "appGroup": "on"},
         ]
 
 
@@ -72,3 +72,9 @@ def test_two_accounts_and_no_default_read_as_one_sentence_about_the_card() -> No
     assert "2 GitHub accounts" in said and "card above" in said and "ACCOUNT_CHOICE_NEEDED" not in said, said
     words = worded("github_list_issues", refused)
     assert words is not None and words["what"] == "Two of your GitHub accounts fit", words
+
+
+def test_a_team_account_not_signed_in_yet_reads_as_a_card_naming_the_app() -> None:
+    refused = {"error": {"code": "NOT_SIGNED_IN", "message": "x", "details": {"app": "Desk", "appId": "plugin:desk"}}}
+    said = str(carded(refused))
+    assert "Desk is on for this team" in said and "team admin connects it" in said and "NOT_SIGNED_IN" not in said, said

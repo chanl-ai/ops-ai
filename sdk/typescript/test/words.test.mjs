@@ -23,8 +23,9 @@ function client(answers, seen = []) {
 
 test('connected keeps signed-in and built-in apps only', async () => {
   const cards = [
-    { id: 'plugin:desk', kind: 'plugin', state: 'connected', status: 'healthy' },
-    { id: 'plugin:crm', kind: 'plugin', state: 'not_signed_in', status: 'healthy' },
+    { id: 'plugin:desk', kind: 'plugin', state: 'connected', appGroup: 'on', status: 'healthy' },
+    // Its team account reads connected, but the caller has not signed in: their card says so.
+    { id: 'plugin:crm', kind: 'plugin', state: 'connected', appGroup: 'needs_you', status: 'healthy' },
     { id: 'builtin:files', kind: 'builtin', status: 'available' },
   ];
   const ops = client({ 'GET apps': cards });

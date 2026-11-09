@@ -256,8 +256,14 @@ CHOICE_LINE = (
     "saying you carry on with this ask once they pick one from the card above; offer no other steps or help."
 )
 CHOICE = "ACCOUNT_CHOICE_NEEDED"
+# The team signs in with one account and nobody has yet: the card above sends an admin to connect it.
+TEAM_SIGN_IN = "NOT_SIGNED_IN"
+TEAM_SIGN_IN_LINE = (
+    "Not run: {app} is on for this team, but its team account is not signed in yet. Reply with one sentence saying a "
+    "team admin connects it from the card above, then you carry on with this ask; offer no other steps or help."
+)
 # The refusals the chat draws as a card (carded).
-CARD_CODES = ("CONNECTION_NOT_LINKED", APP_OFF, CHOICE)
+CARD_CODES = ("CONNECTION_NOT_LINKED", APP_OFF, CHOICE, TEAM_SIGN_IN)
 
 
 def _object(value: Any) -> dict[str, Any] | None:
@@ -279,6 +285,8 @@ def carded(output: Any) -> str | None:
         return CHOICE_LINE.format(n=n, app=str(details.get("app") or "this app"))
     if error.get("code") == APP_OFF:
         return APP_OFF_LINE.format(app=str(details.get("app") or "this app"))
+    if error.get("code") == TEAM_SIGN_IN:
+        return TEAM_SIGN_IN_LINE.format(app=str(details.get("app") or "this app"))
     line = CARD_LINES.get(str(details.get("reason") or "not_connected"), CARD_LINES["not_connected"])
     return line.format(app=str(details.get("app") or details.get("connection") or "this app"))
 

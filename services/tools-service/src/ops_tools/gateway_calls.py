@@ -20,7 +20,7 @@ from ops_service_kit.errors import ApiError
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
 
-from .auth import SIGNED_WITH
+from .auth import SIGNED_WITH, Authenticator
 from .environments import TEST
 from .executor import Executor, Trial, invalid_fields
 from .limits import amount_refusal
@@ -137,7 +137,7 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
         return 403, "CONNECTION_NOT_LINKED", str(module["sign_in_needed"]), {}
     if module.get("instance_missing"):
         # The team account has not signed in yet. The plugin is on.
-        return 403, "NOT_SIGNED_IN", str(module["instance_missing"]), {}
+        return 403, "NOT_SIGNED_IN", str(module["instance_missing"]), dict(module.get("team_sign_in") or {})
     if module.get("app_off"):
         # Installed and off for the caller's team: refused before approval, naming the app and team as
         # CONNECTION_NOT_LINKED names its account, so the caller can show who turns it on.
@@ -170,6 +170,25 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
     if (over := amount_refusal(op, args)) is not None:
         return over.status, over.code, over.message, {}
     return None
+
+
+async def sign_in_details(
+    auth: Authenticator | None,
+    tenant_id: str,
+    module: dict[str, Any] | None,
+    person: ActingForPerson | None,
+    access: str,
+) -> dict[str, Any]:
+    """A person's missing sign-in refused before the sign-in step names the account, its app and a link, as the one
+    the sign-in step refuses does, so chat draws its Connect card; without them the chat showed a bare error."""
+    module = module or {}
+    connection_id = module.get("connection_id")
+    details: dict[str, Any] = {"reason": "not_connected", "access": "write" if access == "write" else "read"}
+    if module.get("display_name"):
+        details["app"] = str(module.get("app_title") or module["display_name"])
+    if auth is not None and person is not None and connection_id:
+        details |= await auth.sign_in_request(tenant_id, str(connection_id), person)
+    return details
 
 
 class GatewayCalls:
@@ -348,6 +367,11 @@ class GatewayCalls:
         early = _before_policy(resolved, args)
         if early is not None:
             status, code, reason, details = early
+            if code == NOT_LINKED:
+                module = resolved.module if resolved else None
+                details = await sign_in_details(
+                    self.executor.http.auth, caller.tenant_id, module, req.acting_for, access
+                )
             row.update(decision="deny", reasons=[reason])
             await self.log.record(
                 **row, outcome="refused", latency_ms=elapsed(), error={"code": code, "message": reason}

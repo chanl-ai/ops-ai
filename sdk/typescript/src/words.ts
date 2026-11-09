@@ -22,7 +22,8 @@ export function pluginOf(app: string): string {
 
 // A built-in app is always there; any other reads connected only once its team account signed in or its test passed,
 // which the card's `state` says; `status` is the account's display status.
-const connected = (card: Obj) => card.kind === 'builtin' || card.state === 'connected';
+// Connected is the card's appGroup `on`: the app works for the caller (tools-service decides it).
+const connected = (card: Obj) => card.kind === 'builtin' || card.appGroup === 'on';
 
 function accountOf(page: Obj): string {
   if (!page.connection) throw new TypeError(`${page.card?.id} has no account yet; connect it first`);
@@ -174,8 +175,8 @@ export class Accounts {
 export class Connectors {
   constructor(private readonly raw: Raw) {}
 
-  /** One row per app: what it can do as the caller, whom it signs in as, its state (connected, expired, not_connected
-   * or app_off) and its accounts as a count with a primary. */
+  /** One row per app: what it can do as the caller, whom it signs in as, its app's state for them (appState, as
+   * GET /v1/apps answers it) and who acts next (appGroup), and its accounts as a count with a primary. */
   list(): Promise<Obj[]> {
     return call(this.raw, 'tools', 'apps_my_connections');
   }

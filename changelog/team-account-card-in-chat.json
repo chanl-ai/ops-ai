@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Chat shows who connects an app's team account",
+  "description": "When an app is on for the team but its team account is not signed in yet, chat shows a card naming the app: people who manage the team's apps get Connect the team account, and everyone else gets the admins to ask.",
+  "tag": "fix"
+}

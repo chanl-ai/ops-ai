@@ -201,7 +201,7 @@ export function SignInProviderDialog({
             <FormField id="provider-client" label="Client ID" error={errors.clientId}>
               <Input id="provider-client" value={f.clientId} aria-invalid={!!errors.clientId} onChange={(e) => set('clientId', e.target.value)} />
             </FormField>
-            <FormField id="provider-secret" label="Client secret" error={errors.secret} hint="Set by your operator; pick its name.">
+            <FormField id="provider-secret" label="Client secret" error={errors.secret} hint="Pick the saved secret that holds it.">
               <Select value={f.secret} onValueChange={(v) => set('secret', v)}>
                 <SelectTrigger id="provider-secret" className="w-full" aria-invalid={!!errors.secret}>
                   <SelectValue />

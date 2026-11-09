@@ -24,11 +24,13 @@ import { ConnectSystemDialog } from '@/components/connections/connect-system-dia
 import { ConnectWindow, connectsInWindow } from '@/components/connections/connect-window';
 import { PluginUpdatePanel } from '@/components/connections/plugin-update-panel';
 import { useSignInWindow } from '@/components/connections/sign-in';
-import { AppStateBadge } from '@/components/connections/systems-grid';
+import { AppStateBadge } from '@/components/connections/app-state-badge';
+import { AddAuthConfigButton, TurnOnButton } from '@/components/connections/app-actions';
 import { ToolCallsView } from '@/components/tools/tool-calls-view';
 import { useNavAllows } from '@/hooks/me-queries';
 import { type SystemCard, useApp, useConnectionKinds, useStartSignIn, useTestAccount } from '@/hooks/systems-queries';
 import type { Kinds } from '@/lib/connect-plan';
+import { headerActionFor } from '@/lib/app-state';
 import { plural } from '@/lib/format';
 import { TOOL_CALL_LOG } from '@/lib/nav';
 
@@ -79,10 +81,50 @@ export function AppPageView({ appId }: { appId: string }) {
   // Team setup is the team's view: Connect here is managing the team's apps (the roles grid's connections.manage).
   // Someone who does not hold it signs in as themselves from Connectors (Mine), where the app lets people bring one.
   const ownOnly = !card.mayManage;
-  // An app the system no longer has installed is shown for the record: nothing connects, signs in or turns it on.
-  const removed = card.appState === 'removed';
-  const mayConnect = !removed && card.mayManage;
-  const ownSignIn = !removed && Boolean(conn) && card.signIn !== 'team';
+  // An app the system does not have installed (removed, or never installed) is shown for the record: nothing connects,
+  // signs in or turns it on.
+  const gone = card.appGroup === 'gone';
+  // Accounts are added by whoever manages the team's apps, on an app that is there.
+  const mayAddAccounts = Boolean(card.mayManage) && !gone;
+  // The header's one control, from the card's state and who acts next (lib/app-state.ts headerActionFor).
+  const next = builtIn ? null : headerActionFor(card);
+  const connectButton = (label: string) => (
+    <Button size="sm" onClick={() => setConnecting(true)} data-testid="app-connect">
+      <Plug />
+      {label}
+    </Button>
+  );
+  const headerAction = (): React.ReactNode => {
+    switch (next) {
+      case 'turn_on':
+        return <TurnOnButton card={card} onFirstTurnOn={() => setConnecting(true)} testId="app-connect" />;
+      case 'add_auth_config':
+        return <AddAuthConfigButton appId={card.id} variant="default" />;
+      case 'fix_auth_config':
+        // The auth configs the team has are on their tab; with none left, the fix is a new one.
+        return configs.length ? (
+          <Button size="sm" onClick={() => setTab('auth')} data-testid="app-fix-auth-config">
+            Fix the auth config
+          </Button>
+        ) : (
+          <AddAuthConfigButton appId={card.id} variant="default" testId="app-fix-auth-config" />
+        );
+      case 'own_sign_in':
+        return (
+          <Button size="sm" variant="outline" asChild data-testid="app-own-sign-in">
+            <Link href="/integrations/my-accounts">Sign in from Mine</Link>
+          </Button>
+        );
+      case 'connect':
+        return connectButton('Connect');
+      case 'reconnect':
+        return connectButton('Reconnect');
+      case 'ask_admin':
+        return <AskAnAdmin testId="app-admin-connects" />;
+      default:
+        return undefined;
+    }
+  };
 
   const signIn = (account: 'self' | 'team', accountId = conn?.id) => {
     if (!accountId) return;
@@ -101,11 +143,13 @@ export function AppPageView({ appId }: { appId: string }) {
   const tabs: [string, string][] = [
     ...(builtIn ? [] : ([['accounts', `Accounts · ${accounts.length}`]] as [string, string][])),
     ['tools', card.kind === 'plugin' ? `Tools · ${toolsAdded} of ${data.tools.length} added` : 'Tools'],
-    ...(builtIn || !configs.length ? [] : ([['auth', `Auth configs · ${configs.length}`]] as [string, string][])),
+    // Auth configs are a builder's and an admin's (card.mayManage); the API sends no one else any.
+    ...(builtIn || !card.mayManage || !configs.length ? [] : ([['auth', `Auth configs · ${configs.length}`]] as [string, string][])),
     ['resources', 'Resources'],
     // The call log names who called each tool, so it is offered only with its cell (lib/nav.ts TOOL_CALL_LOG).
     ...(mayReadCalls ? ([['logs', 'Logs']] as [string, string][]) : []),
-    ['settings', 'Settings'],
+    // Settings are the team's to change, so the tab is a builder's and an admin's, as Auth configs is.
+    ...(card.mayManage ? ([['settings', 'Settings']] as [string, string][]) : []),
   ];
   const showAccounts = (id: string) => (setConfig(id), setTab('accounts'));
 
@@ -117,49 +161,35 @@ export function AppPageView({ appId }: { appId: string }) {
       breadcrumbs={[{ label: 'Connectors', href: '/integrations' }, { label: 'Team setup', href: '/integrations' }, { label: card.name }]}
       backHref="/integrations"
       badge={<AppStateBadge card={card} testId="app-status" />}
-      actions={
-        builtIn || removed ? undefined : mayConnect ? (
-          <Button size="sm" onClick={() => setConnecting(true)} data-testid="app-connect">
-            <Plug />
-            {/* A plugin the team has not turned on opens the Turn on window, which saves and never signs in. */}
-            {card.kind === 'plugin' && !card.connectionId ? 'Turn on' : 'Connect'}
-          </Button>
-        ) : ownSignIn ? (
-          <Button size="sm" variant="outline" asChild data-testid="app-own-sign-in">
-            <Link href="/integrations/my-accounts">Sign in from Mine</Link>
-          </Button>
-        ) : (
-          <AskAnAdmin testId="app-admin-connects" />
-        )
-      }
+      actions={headerAction()}
       contentClassName="flex min-w-0 flex-col gap-4"
     >
-      {removed && (
+      {gone && (
         <Alert data-testid="app-removed">
           <AlertTitle>{`${card.name} isn’t installed`}</AlertTitle>
           <AlertDescription>{card.appStateReason}</AlertDescription>
         </Alert>
       )}
-      {/* Taking an update is managing the team's apps: nobody else is shown it, or asks the route for it. */}
-      {card.kind === 'plugin' && !removed && card.mayManage && <PluginUpdatePanel appId={card.id} name={card.name} />}
+      {/* Taking an update is managing the team's apps; the card says when one waits, so nothing asks before then. */}
+      {card.plugin?.updateAvailable && card.mayManage && <PluginUpdatePanel appId={card.id} name={card.name} />}
       <Tabs value={tab && tabs.some(([v]) => v === tab) ? tab : tabs[0][0]} onValueChange={(v) => (setTab(v), v !== 'accounts' && setConfig(null))} className="min-w-0">
         {/* Six tabs are wider than a phone: the row scrolls sideways inside its box instead of clipping the last. */}
         <ScrollTabsList tabs={tabs.map(([value, label]) => ({ value, label }))} testId="app-tabs-row" triggerTestId={(v) => `app-tab-${v}`} />
         {!builtIn && (
           <TabsContent value="accounts" className="flex flex-col gap-4">
-            <AccountsTab app={data} config={config} onConnect={mayConnect ? () => setConnecting(true) : undefined} onSignIn={signIn} />
+            <AccountsTab app={data} config={config} onConnect={mayAddAccounts ? () => setConnecting(true) : undefined} onSignIn={signIn} />
           </TabsContent>
         )}
         <TabsContent value="tools">
           <ToolsTab app={data} />
         </TabsContent>
-        {!builtIn && configs.length > 0 && (
+        {!builtIn && card.mayManage && configs.length > 0 && (
           <TabsContent value="auth">
             <AuthConfigsTab app={data} onShowAccounts={showAccounts} />
           </TabsContent>
         )}
         <TabsContent value="resources">
-          <ResourcesTab appName={data.card.name} pluginId={data.card.pluginId} onConnect={mayConnect ? () => setConnecting(true) : undefined} />
+          <ResourcesTab appName={data.card.name} pluginId={data.card.pluginId} onConnect={mayAddAccounts ? () => setConnecting(true) : undefined} />
         </TabsContent>
         <TabsContent value="logs">
           {/* The same call log as Tool calls, fixed to this app's tools. */}
@@ -167,9 +197,11 @@ export function AppPageView({ appId }: { appId: string }) {
             <ToolCallsView fixed={{ moduleId: card.moduleIds }} totals={false} emptyText={`No call of ${card.name}’s tools yet.`} />
           </div>
         </TabsContent>
-        <TabsContent value="settings">
-          <SettingsTab app={data} kinds={all} onSetUp={() => setSetUp(true)} onDeleted={() => router.push('/integrations')} />
-        </TabsContent>
+        {card.mayManage && (
+          <TabsContent value="settings">
+            <SettingsTab app={data} kinds={all} onSetUp={() => setSetUp(true)} onTurnOn={() => setConnecting(true)} onDeleted={() => router.push('/integrations')} />
+          </TabsContent>
+        )}
       </Tabs>
       {setUp && conn && (
         <ConnectSystemDialog

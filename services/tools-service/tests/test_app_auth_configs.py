@@ -61,9 +61,12 @@ async def test_accounts_sit_under_the_config_they_sign_in_with_and_only_an_admin
     assert {"rename", "delete", "move", "sign_in"} <= set(rows[second]["actions"]), rows[second]
     assert rows[first]["owner"]["kind"] == "team" and rows[first]["owner"]["name"], rows[first]
 
+    builder = await _page(world, person(tenant, *BUILDER))
+    assert any(c["id"] == eu for c in builder["authConfigs"]), builder["authConfigs"]
+    # Auth configs are a builder's and an admin's to see: a viewer is told none, by name or by count.
     seen = await _page(world, person(tenant, *VIEWER))
-    mine = next(c for c in seen["authConfigs"] if c["id"] == eu)
-    assert not mine["canEdit"] and not mine["canDelete"] and mine["clientId"] is None, mine
+    assert seen["authConfigs"] == [], seen["authConfigs"]
+    assert all(a["configId"] is None and a["configName"] is None for a in seen["accounts"]), seen["accounts"]
     assert all(not {"rename", "delete", "move", "make_default"} & set(a["actions"]) for a in seen["accounts"]), seen[
         "accounts"
     ]
@@ -141,3 +144,23 @@ async def test_each_persons_own_sign_in_is_its_own_row_seen_by_admins_and_by_tha
     assert not own[0]["actions"], own[0]
     seen = (await _page(world, person(tenant, *VIEWER)))["accounts"]
     assert not [a for a in seen if a["kind"] == "person"], seen
+
+
+async def test_a_viewer_reads_no_auth_config_on_the_card_mine_or_their_accounts(
+    world: World,  # noqa: F811
+    tenant: str,
+) -> None:
+    await connected(world, tenant)
+    viewer = person(tenant, *VIEWER)
+    card = next(c for c in (await world.client.get("/v1/apps", headers=viewer)).json()["data"] if c["id"] == APP)
+    assert card["credential"] is not None and card["credential"]["id"] is None, card["credential"]
+    shown = next(
+        c for c in (await world.client.get("/v1/apps", headers=admin(tenant))).json()["data"] if c["id"] == APP
+    )
+    assert shown["credential"]["id"], shown["credential"]
+    mine = await world.client.get("/v1/me/connections", headers=viewer)
+    assert mine.status_code == 200, mine.text
+    assert all(r["authConfig"] is None for r in mine.json()["data"]), mine.json()["data"]
+    accounts = await world.client.get("/v1/me/accounts?every=true", headers=viewer)
+    assert accounts.status_code == 200, accounts.text
+    assert all(a["authConfig"] is None for a in accounts.json()["data"]), accounts.json()["data"]

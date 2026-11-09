@@ -25,9 +25,8 @@ def plugin_of(app: str) -> str:
 
 
 def _connected(card: dict[str, Any]) -> bool:
-    # A built-in app is always there; any other reads connected only once its team account signed in or its test
-    # passed, which the card's `state` says; `status` is the account's display status.
-    return card.get("kind") == "builtin" or card.get("state") == "connected"
+    # Connected is the card's appGroup `on`: the app works for the caller (tools-service decides it).
+    return card.get("kind") == "builtin" or card.get("appGroup") == "on"
 
 
 def _account(page: dict[str, Any]) -> str:
@@ -241,8 +240,8 @@ class Connectors:
         self._raw = raw
 
     def list(self) -> list[dict[str, Any]]:
-        """One row per app: what it can do as the caller, whom it signs in as, its state (connected, expired,
-        not_connected or app_off) and its accounts as a count with a primary."""
+        """One row per app: what it can do as the caller, whom it signs in as, its app's state for them (appState,
+        as GET /v1/apps answers it) and who acts next (appGroup), and its accounts as a count with a primary."""
         return cast(list[dict[str, Any]], self._raw.tools.apps_my_connections())
 
     def get(self, app: str) -> dict[str, Any]:

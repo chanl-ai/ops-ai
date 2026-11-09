@@ -16,8 +16,19 @@ export const useIsSample = () => useContext(InSample);
  */
 export const SampleOnPage = createContext<((change: 1 | -1) => void) | null>(null);
 
+/**
+ * Lets the page around a sample note know one is on screen, so the page says it once: the note names the section, and
+ * the page header then shows only its Preview badge.
+ */
+export const SampleNoteOnPage = createContext<((change: 1 | -1) => void) | null>(null);
+
 /** The one line a page or section shows while no service stores what it edits. */
 export function SampleDataNote() {
+  const report = useContext(SampleNoteOnPage);
+  useEffect(() => {
+    report?.(1);
+    return () => report?.(-1);
+  }, [report]);
   return (
     <Alert data-testid="sample-data-notice">
       <FlaskConical />

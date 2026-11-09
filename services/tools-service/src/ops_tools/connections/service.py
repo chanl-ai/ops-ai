@@ -1257,6 +1257,7 @@ class ConnectionService:
         caller has not connected yet, so the page offers its key form or sign-in."""
         self._can(who, OWN)
         mine = own_key(who)
+        may = self.may_manage(who)
         if every:
             kinds = [k.id for k in BY_ID.values() if k.per_person]
             rows = await self.store.connectable(who.tenant_id, who.team.id, mine, kinds)
@@ -1291,7 +1292,8 @@ class ConnectionService:
                     "refused": r.get("refused_at") is not None,
                     "refusedAt": _iso(r.get("refused_at")),
                     "refusedReason": r.get("refused_reason"),
-                    "authConfig": OPS_AI_APP if r.get("platform_app") else r.get("credential_name"),
+                    # Which auth config it signs in through is for whoever manages the team's apps.
+                    "authConfig": (OPS_AI_APP if r.get("platform_app") else r.get("credential_name")) if may else None,
                     "state": (
                         "not_connected"
                         if every and r.get("person_id") is None

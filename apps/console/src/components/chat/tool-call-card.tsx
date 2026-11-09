@@ -8,8 +8,9 @@ import { ms } from '@/lib/format';
 import type { ToolCall } from '@/lib/types/chat';
 
 const SPECIALIST_PREFIX = 'agent__';
-// Servers that are the platform itself rather than an app: workflows and the ops cards.
-const INTERNAL_SERVERS = new Set(['workflows', 'Workflows', 'ops']);
+// Servers that are the platform itself rather than an app: workflows, the ops cards and the agent's own tools
+// (search, memory), which run inside the agent.
+const INTERNAL_SERVERS = new Set(['workflows', 'Workflows', 'ops', 'kernel']);
 
 const stateOf = (call: ToolCall): ChatToolState => (call.status === 'running' ? 'running' : call.status === 'failed' ? 'failed' : call.gated ? 'gated' : 'success');
 
@@ -30,11 +31,14 @@ export function ToolCallCard({ call }: { call: ToolCall }) {
   const asked = specialist
     ? ((call.output as { agentName?: string } | undefined)?.agentName ?? agents.data?.find((a) => a.id === call.name.slice(SPECIALIST_PREFIX.length))?.name ?? 'another agent')
     : undefined;
+  // A registry tool's server is its app's name: the row reads `Get a record · Salesforce`, never the slug. The
+  // platform's own servers are never named to people.
+  const app = call.server && !INTERNAL_SERVERS.has(call.server) ? call.server : null;
   const detail = (
     <>
-      {call.server}
-      {call.status === 'success' && ` · ${ms(call.durationMs)}`}
-      {call.gated && ` · Drafted for approval at ${call.gated.gate}. Nothing changes in ${call.server} until ${call.gated.reviewers} approve it.`}
+      {app}
+      {call.status === 'success' && `${app ? ' · ' : ''}${ms(call.durationMs)}`}
+      {call.gated && ` · Drafted for approval at ${call.gated.gate}. Nothing changes in ${app ?? 'the app'} until ${call.gated.reviewers} approve it.`}
       {runId && (
         <>
           {' · '}
@@ -45,8 +49,6 @@ export function ToolCallCard({ call }: { call: ToolCall }) {
       )}
     </>
   );
-  // A registry tool's server is its app's name: the row reads `Get a record · Salesforce`, never the slug.
-  const app = call.server && !INTERNAL_SERVERS.has(call.server) ? call.server : null;
   const named = call.label ?? call.name;
   return <ChatToolCall name={asked ? `Asking ${asked}` : app ? `${named} · ${app}` : named} state={stateOf(call)} input={call.input} output={call.output} error={call.status === 'failed' ? 'The tool call failed.' : undefined} detail={detail} />;
 }
