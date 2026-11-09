@@ -150,6 +150,8 @@ def _matches(search: str | None, *texts: str) -> bool:
 INGEST = IngestSettings(preset="policy_manual", strategies=["structure", "context_headers"], size=400, overlap=40)
 
 
+# An item's status as the console names it: an item waiting for its file's reading is processing there.
+SHOWN_STATUS = {"reading": "processing"}
 # A file source's item when no documents-service is configured: kb-service reads no file itself.
 NO_READER = ("parse", "Files are read by documents-service, which this installation does not run.")
 
@@ -174,7 +176,7 @@ def _item_counts(s: dict[str, Any]) -> dict[str, int]:
     return {
         "itemsIndexed": counts.get("indexed", 0),
         "itemsFailed": counts.get("failed", 0),
-        "itemsPending": counts.get("pending", 0) + max(len(s["file_ids"]) - synced, 0),
+        "itemsPending": counts.get("pending", 0) + counts.get("reading", 0) + max(len(s["file_ids"]) - synced, 0),
     }
 
 
@@ -1293,7 +1295,8 @@ class KnowledgeService:
             "modifiedAt": _iso(i["processed_at"] or i["created_at"]),
             **({"processedAt": _iso(i["processed_at"])} if i["processed_at"] else {}),
             "sizeBytes": i["size"],
-            "status": i["status"],
+            # The console's word for a document being read is processing.
+            "status": SHOWN_STATUS.get(i["status"], i["status"]),
             **({"errorClass": i["error_class"], "error": i["error"]} if i["error_class"] else {}),
             **({"warning": i["warning"]} if i.get("warning") else {}),
             "chunkCount": i["chunk_count"],

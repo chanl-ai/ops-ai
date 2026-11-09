@@ -99,7 +99,7 @@ async def test_a_scan_being_read_does_not_hold_up_the_sync_and_is_indexed_on_its
         again = await client.post("/v1/events", json=event, headers=documents(tenant))
         item = data(await client.get(f"/v1/sources/{src['id']}/items"))["data"][0]
         answer = await ask(client, kb["id"], "five-year fixed mortgage rate for insured borrowers")
-    assert (run["counts"]["reading"], waiting["status"]) == (1, "reading"), (run, waiting)
+    assert (run["counts"]["reading"], waiting["status"]) == (1, "processing"), (run, waiting)
     assert other.json()["data"]["items"] == 0, "another team's event settles none of this team's items"
     assert done.status_code == 202 and done.json()["data"]["items"] == 1, done.text
     assert again.json()["data"]["items"] == 0 and (item["status"], item["version"]) == ("indexed", "v1"), item
@@ -117,7 +117,7 @@ async def test_an_item_whose_event_never_came_is_indexed_by_the_schedule(
         run = data(await client.post(f"/v1/sources/{src['id']}/sync"))
         readings.down = False
         before = data(await client.get(f"/v1/sources/{src['id']}/items"))["data"][0]
-    assert (run["status"], run["counts"]["reading"], before["status"]) == ("success", 1, "reading"), run
+    assert (run["status"], run["counts"]["reading"], before["status"]) == ("success", 1, "processing"), run
     service = KnowledgeService(
         KnowledgeStore(engine), intake, PostgresFullTextRetriever(engine), StaticAgents(), readings=readings
     )

@@ -106,7 +106,7 @@ def main() -> None:
         scan = until(
             lambda: next(
                 (i for i in data(k.get(f"/v1/sources/{src['id']}/items"))["data"]
-                 if i["path"] == "scan.pdf" and i["status"] != "reading"),
+                 if i["path"] == "scan.pdf" and i["status"] != "processing"),
                 None,
             )
         )  # fmt: skip
