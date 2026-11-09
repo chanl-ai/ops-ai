@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "Replies keep their formatting when no source matched",
+  "description": "A reply that found no matching knowledge passage keeps its lists and paragraphs, with a short note under it, instead of running together as one paragraph.",
+  "tag": "fix"
+}
