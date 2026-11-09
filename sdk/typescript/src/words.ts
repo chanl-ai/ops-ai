@@ -22,7 +22,8 @@ export function pluginOf(app: string): string {
 
 // A built-in app is always there; any other reads connected only once its team account signed in or its test passed,
 // which the card's `state` says; `status` is the account's display status.
-const connected = (card: Obj) => card.kind === 'builtin' || card.state === 'connected';
+// Connected is the card's appGroup `on`: the app works for the caller (tools-service decides it).
+const connected = (card: Obj) => card.kind === 'builtin' || card.appGroup === 'on';
 
 function accountOf(page: Obj): string {
   if (!page.connection) throw new TypeError(`${page.card?.id} has no account yet; connect it first`);

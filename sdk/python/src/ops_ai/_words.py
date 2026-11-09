@@ -25,9 +25,8 @@ def plugin_of(app: str) -> str:
 
 
 def _connected(card: dict[str, Any]) -> bool:
-    # A built-in app is always there; any other reads connected only once its team account signed in or its test
-    # passed, which the card's `state` says; `status` is the account's display status.
-    return card.get("kind") == "builtin" or card.get("state") == "connected"
+    # Connected is the card's appGroup `on`: the app works for the caller (tools-service decides it).
+    return card.get("kind") == "builtin" or card.get("appGroup") == "on"
 
 
 def _account(page: dict[str, Any]) -> str:
