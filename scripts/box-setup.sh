@@ -198,6 +198,11 @@ export OPS_INFRA=external
 # reloads in a loop. The build runs on first start of a checkout (scripts/console-prod.sh); a reset forces a new one.
 export OPS_CONSOLE_MODE=prod OPS_READY_TIMEOUT=900
 cd "$REPO"
+# make/env.mk includes .env on every make run, so a later `make restart`, `make up` or health check on the box uses the
+# production console too. Only these two lines are managed; anything else in the file stays.
+touch .env
+sed -i '/^OPS_CONSOLE_MODE=/d;/^OPS_READY_TIMEOUT=/d' .env
+printf 'OPS_CONSOLE_MODE=prod\nOPS_READY_TIMEOUT=900\n' >>.env
 [ "${BOX_RESET:-}" = 1 ] && rm -f apps/console/.next/.ops-built
 if [ "${BOX_RESET:-}" = 1 ] || [ "$SERVICES_CHANGED" = 1 ]; then
   make -s down KEEP_DB=1 >/dev/null 2>&1 || true

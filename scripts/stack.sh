@@ -377,6 +377,11 @@ stop() {
     stop_pids $(stack_cmd_pids "ops_agents.api.worker")
   elif [[ "$svc" == fakebank ]]; then
     stop_pids $(pgrep -f "fake_bank $RUN_ABS/fake-bank" || true)
+  elif [[ "$svc" == console || "$svc" == embed ]]; then
+    # pnpm's child (next dev or next-server) can outlive the process group kill and keep the port, so the next start
+    # fails with EADDRINUSE and serves nothing; whatever Next process holds this app's port goes too.
+    pid=$(listener "$(port_of "$svc")") || pid=
+    [[ -n "$pid" && "$(ps -p "$pid" -o command= 2>/dev/null)" == *next* ]] && stop_pids "$pid"
   fi
   rm -f "$(pidfile "$svc")" "$(authfile "$svc")" "$(stampfile "$svc")"
 }
