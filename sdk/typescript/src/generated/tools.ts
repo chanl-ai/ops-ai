@@ -684,6 +684,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/knowledge-sources/hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Knowledge Source Hosts
+         * @description The hosts a source's values would have its sync reach, each decided as any new outside address is: a
+         *     person's request (adding the source) lists it where the account lets them, asks the Security team, or is
+         *     refused under `block`; a service's (kb-service's beat) only reads whether each passes now. A source's hosts
+         *     are never exempt from the account's list.
+         */
+        post: operations["apps_knowledge_source_hosts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/accounts": {
         parameters: {
             query?: never;
@@ -3120,6 +3143,16 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[list[SourceHost]] */
+        Envelope_list_SourceHost__: {
+            /** Data */
+            data: components["schemas"]["SourceHost"][];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[list[SystemCard]] */
         Envelope_list_SystemCard__: {
             /** Data */
@@ -4808,6 +4841,31 @@ export interface components {
             id: string;
             /** Reason */
             reason: string;
+        };
+        /** SourceHost */
+        SourceHost: {
+            /** Host */
+            host: string;
+            /** Reason */
+            reason?: string | null;
+            /** Runkey */
+            runKey?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "allowed" | "waiting" | "refused";
+        };
+        /** SourceHostsIn */
+        SourceHostsIn: {
+            /** Plugin */
+            plugin: string;
+            /** Source */
+            source: string;
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            };
         };
         /** SubjectBinding */
         SubjectBinding: {
@@ -10078,6 +10136,129 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_list_KnowledgeSourceView__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not available on this service yet */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The source could not be reached */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    apps_knowledge_source_hosts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceHostsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_SourceHost__"];
                 };
             };
             /** @description Invalid request */

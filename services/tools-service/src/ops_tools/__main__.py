@@ -307,6 +307,7 @@ def main() -> None:
                         apps.plugin_accounts,
                         directory,
                         users=tool_users,
+                        hosts=modules,
                     )
                 ]
                 if apps.plugin_accounts

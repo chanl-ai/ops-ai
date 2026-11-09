@@ -977,6 +977,19 @@ class Skipped(TypedDict, closed=True):
     reason: str
 
 
+class SourceHost(TypedDict, closed=True):
+    host: str
+    reason: NotRequired[str | None]
+    runKey: NotRequired[str | None]
+    state: Literal["allowed", "waiting", "refused"]
+
+
+class SourceHostsIn(TypedDict, closed=True):
+    plugin: str
+    source: str
+    values: NotRequired[dict[str, Any]]
+
+
 class SubjectBinding(TypedDict, closed=True):
     arg: str
     bindTo: Literal[
@@ -1561,6 +1574,11 @@ class EnvelopeListMyAccount(TypedDict, closed=True):
 
 class EnvelopeListMyConnector(TypedDict, closed=True):
     data: list[MyConnector]
+    success: Literal[True]
+
+
+class EnvelopeListSourceHost(TypedDict, closed=True):
+    data: list[SourceHost]
     success: Literal[True]
 
 

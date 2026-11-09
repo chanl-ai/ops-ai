@@ -5,9 +5,11 @@ preview that stores something or never reaches the plugin."""
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import AsyncIterator
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -17,8 +19,14 @@ from ops_identity import Auth
 from ops_kb.agents import StaticAgents
 from ops_kb.app import create_kb_app
 from ops_kb.files import KnowledgeFiles
+from ops_kb.schedule import due
+from ops_kb.search import HybridRetriever
+from ops_kb.service import KnowledgeService, Who
+from ops_kb.store import KnowledgeStore
 from ops_kb.tool_sources import Answer
+from ops_service_kit.errors import Conflict
 from ops_service_kit.settings import Settings
+from ops_store import isolation
 
 from .readings_fake import LocalReadings
 from .test_bases_and_sources import data
@@ -46,6 +54,21 @@ class WebPlugin:
         # The pace the listing names (a site's Crawl-delay), and when each page fetch arrived.
         self.pace: float | None = None
         self.arrived: list[float] = []
+        # The hosts the account lists, as tools-service's egress check reads them; who asked about each, and whether
+        # the asker sent a person's credentials.
+        self.listed = {"help.northbank.test"}
+        self.asked: list[tuple[str, bool]] = []
+
+    async def source_hosts(
+        self, tenant_id: str, team_id: str, cfg: dict[str, Any], *, credentials: dict[str, str] | None = None
+    ) -> list[dict[str, Any]]:
+        starts = cast(list[str], cfg["values"].get("start") or [])
+        hosts = sorted({u.split("://", 1)[-1].split("/")[0] for u in starts})
+        self.asked += [(h, bool(credentials)) for h in hosts]
+        return [
+            {"host": h, "state": "allowed"} if h in self.listed else {"host": h, "state": "waiting", "runKey": "EGH-1"}
+            for h in hosts
+        ]
 
     async def declared(self, tenant_id: str, team_id: str) -> list[dict[str, Any]]:
         return [
@@ -244,3 +267,54 @@ async def test_a_page_whose_text_did_not_change_keeps_its_version_whatever_its_b
     again = data(await kb.post(f"/v1/sources/{src['id']}/sync"))
     item = next(i for i in data(await kb.get(f"/v1/sources/{src['id']}/items"))["data"] if i["path"] == url)
     assert item["version"] == "v1" and again["counts"]["unchanged"] >= 1, (item["version"], again["counts"])
+
+
+async def beat(engine: AsyncEngine, tmp_path: Any, web: WebPlugin, tenant: str, source_id: str) -> bool:
+    """The schedule's pass for this one source, as run_due makes it: whether it was due and synced."""
+    files = KnowledgeFiles(tmp_path)
+    service = KnowledgeService(KnowledgeStore(engine), files, HybridRetriever(engine), StaticAgents(), tools=web,  # type: ignore[arg-type]
+                               readings=LocalReadings(files))  # fmt: skip
+    with isolation.tenant_wide("test: the schedule's pass", tenant_id=tenant):
+        [s] = [s for s in await service.store.sources(tenant) if s["id"] == source_id]
+    assert due(service, s, datetime.now(UTC)), "a source waiting for its host is due whatever its schedule"
+    with isolation.scope(tenant, str(s["team_id"])):
+        try:
+            await service.scheduled_sync(Who(tenant, "knowledge schedule", str(s["team_id"])), s)
+        except Conflict as e:
+            assert e.code == "host_waiting", e
+            return False
+    return True
+
+
+async def test_a_builders_new_site_is_fetched_only_once_an_admin_approves_its_host(
+    kb: httpx.AsyncClient, web: WebPlugin, engine: AsyncEngine, tenant: str, tmp_path: Any
+) -> None:
+    """A source's site bypassed the account's new-hosts rule: a builder's new address was crawled with no admin's
+    approval. Adding it asks as the builder, the source waits and says on which host, and nothing is fetched."""
+    web.listed.clear()
+    body = {
+        "type": "tool",
+        "name": "Lending help",
+        "sync": True,
+        "schedule": {"kind": "manual"},
+        "config": {"plugin": "opsai.web", "source": "site", "values": {"start": [f"{SITE}/"]}},
+    }
+    # The builder's own sign-in rides with the request, as the console's does.
+    src = data(await kb.post("/v1/sources", json=body, headers={"X-Dev-User": "james@harborpine.example"}), 201)
+    assert src["waitingHosts"] == [{"host": "help.northbank.test", "runKey": "EGH-1"}], src
+    assert web.asked == [("help.northbank.test", True)], "asked as the builder, under the account's rule"
+    refused = await kb.post(f"/v1/sources/{src['id']}/sync")
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "host_waiting", refused.text
+    assert "Waiting for an admin to approve help.northbank.test" in refused.json()["error"]["message"]
+    await asyncio.sleep(0.2)
+    assert web.calls == [], "nothing is listed or fetched before the approval"
+    assert not await beat(engine, tmp_path, web, tenant, src["id"]), "the schedule's pass waits too"
+    # The beat reads every tenant's due sources; this one's items and runs say it took nothing in.
+    assert data(await kb.get(f"/v1/sources/{src['id']}/items"))["data"] == []
+    # The admin lists the host (from the source, or on the Egress page); the next schedule pass syncs it, though
+    # its own schedule is manual.
+    web.listed.add("help.northbank.test")
+    assert await beat(engine, tmp_path, web, tenant, src["id"])
+    items = data(await kb.get(f"/v1/sources/{src['id']}/items"))["data"]
+    assert len(items) == len(web.pages), items
+    assert data(await kb.get(f"/v1/sources/{src['id']}"))["waitingHosts"] == []

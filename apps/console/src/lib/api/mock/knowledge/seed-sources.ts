@@ -33,7 +33,7 @@ const ingest = (preset: IngestSettings["preset"], strategies: IngestStrategy[], 
   ...extra,
 })
 
-const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting">[] = [
+const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] = [
   {
     id: "src_hr_sharepoint",
     type: "sharepoint",
@@ -372,7 +372,7 @@ const MOCK_KIND_LABEL: Partial<Record<Source["type"], string>> = {
   zendesk: "Zendesk help centre articles",
 }
 
-export const sources: Source[] = seedRows.map((s) => ({ ...s, kindLabel: MOCK_KIND_LABEL[s.type] ?? "App source", aiStepsWaiting: [] }))
+export const sources: Source[] = seedRows.map((s) => ({ ...s, kindLabel: MOCK_KIND_LABEL[s.type] ?? "App source", aiStepsWaiting: [], waitingHosts: [] }))
 
 // ---- Items ----------------------------------------------------------------
 

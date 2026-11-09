@@ -36,6 +36,9 @@ class Wiki:
         self.deleted: list[str] = []
         self.calls: list[tuple[str, dict[str, Any]]] = []
 
+    async def source_hosts(self, tenant_id: str, team_id: str, cfg: dict[str, Any], **_: Any) -> list[dict[str, Any]]:
+        return []
+
     async def declared(self, tenant_id: str, team_id: str) -> list[dict[str, Any]]:
         return [
             {

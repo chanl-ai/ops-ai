@@ -4010,6 +4010,14 @@
             },
             "title": "Usedbykbids",
             "type": "array"
+          },
+          "waitingHosts": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Waitinghosts",
+            "type": "array"
           }
         },
         "required": [
@@ -4024,6 +4032,7 @@
           "cleaning",
           "ingest",
           "aiStepsWaiting",
+          "waitingHosts",
           "rules",
           "metadataMapping",
           "tags",
@@ -4339,6 +4348,14 @@
             },
             "title": "Usedbykbids",
             "type": "array"
+          },
+          "waitingHosts": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Waitinghosts",
+            "type": "array"
           }
         },
         "required": [
@@ -4353,6 +4370,7 @@
           "cleaning",
           "ingest",
           "aiStepsWaiting",
+          "waitingHosts",
           "rules",
           "metadataMapping",
           "tags",
@@ -5059,6 +5077,14 @@
             },
             "title": "Usedbykbids",
             "type": "array"
+          },
+          "waitingHosts": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Waitinghosts",
+            "type": "array"
           }
         },
         "required": [
@@ -5073,6 +5099,7 @@
           "cleaning",
           "ingest",
           "aiStepsWaiting",
+          "waitingHosts",
           "rules",
           "metadataMapping",
           "tags",

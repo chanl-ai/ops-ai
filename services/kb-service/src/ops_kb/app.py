@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from typing import Annotated, Any, Literal
 
 import httpx
-from fastapi import APIRouter, Depends, FastAPI, Query, Response
+from fastapi import APIRouter, Depends, FastAPI, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -103,7 +103,11 @@ class Health(Out):
     units_not_embedded: int | None = None
 
 
-async def who(p: CurrentCaller) -> Who:
+# The headers that say who a person is, passed on when kb-service asks another service as them.
+FORWARDED = ("authorization", "x-api-key", "x-dev-user", "x-team-id")
+
+
+async def who(p: CurrentCaller, request: Request) -> Who:
     """The caller; what it may change is `can()`'s, from its verified roles. The provisioning service may call
     with a token scoped to one team; like any service it needs `knowledge:view` even to read."""
     if p.kind == "service":
@@ -111,7 +115,8 @@ async def who(p: CurrentCaller) -> Who:
     # A person, key or dev caller reads as the team it acts in; a service reads the tenant's, as
     # knowledge_reader says.
     set_acting_team(acting_team_of(p, services=False))
-    return Who(tenant_id=p.tenant_id, email=p.email or p.sub, team_id=p.team_id, caller=p)
+    held = {} if p.kind == "service" else {k: v for k in FORWARDED if (v := request.headers.get(k))}
+    return Who(tenant_id=p.tenant_id, email=p.email or p.sub, team_id=p.team_id, caller=p, credentials=held)
 
 
 Caller = Annotated[Who, Depends(who)]

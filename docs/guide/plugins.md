@@ -441,8 +441,12 @@ how to talk to its system. Every tool is a read, called through tools-service, s
 `inputs` describes what a source of this kind is set up with (start addresses, sites, spaces); kb-service checks a
 source's values against them (400 `invalid_source_values`) and sends them to each of its tools as the `source` input,
 which every such tool declares. `egress_from` names an input holding addresses: on a sync's calls (a service holding
-`knowledge:run`) their hosts are reachable beside the plugin's own `egress`; a private or link-local address is still
-refused unless the account lists it, and no agent's or person's call reaches them.
+`knowledge:run`) the tool may ask for their hosts beside the plugin's own `egress`, and no agent's or person's call
+reaches them. Unlike the plugin's own hosts, these are never exempt from the account's egress list: a new host waits
+for an admin's approval under the account's new-hosts policy, as any new outside address does. Adding the source asks
+(`POST /v1/knowledge-sources/hosts`, as the person adding it), the source shows `waitingHosts`, its syncs and preview
+answer 409 `host_waiting`, and the schedule syncs it once the host is listed. The plugin SDK's test harness treats the
+source's hosts as listed.
 
 A list item may carry `content` and `mime` when listing had to read it anyway (a crawl following links); kb-service then
 does not fetch it again. A listed item with `skipped: "<reason>"` is not taken in, and an indexed copy leaves search

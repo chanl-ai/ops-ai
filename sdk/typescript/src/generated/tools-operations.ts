@@ -219,6 +219,15 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "apps_knowledge_source_hosts": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/knowledge-sources/hosts",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "apps_knowledge_sources": {
     "body": null,
     "headers": [],

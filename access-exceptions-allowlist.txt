@@ -150,6 +150,7 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict stale_pause 0 state
 * conflict stale_version 0 state
 * conflict sync_running 0 state
+* conflict host_waiting 0 state
 * conflict target_in_use 0 state
 * conflict team_archived 0 state
 * conflict team_name_taken 0 state

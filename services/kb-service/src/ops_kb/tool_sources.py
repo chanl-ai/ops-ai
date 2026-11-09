@@ -64,6 +64,29 @@ class ToolReader:
     async def declared(self, tenant_id: str, team_id: str) -> list[dict[str, Any]]:
         return list(await self.tools.get("/v1/knowledge-sources", tenant=tenant_id, team=team_id) or [])
 
+    async def source_hosts(
+        self,
+        tenant_id: str,
+        team_id: str,
+        cfg: dict[str, Any],
+        *,
+        credentials: dict[str, str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Each host the source's values would have its sync reach, decided by the account's egress rule as any new
+        outside address is (tools-service `/v1/knowledge-sources/hosts`): asked as the person adding or changing the
+        source (`credentials`), it lists the host where they may, asks the Security team, or is refused; asked as
+        this service, it only reads whether each host passes now."""
+        body: dict[str, Any] = {
+            "plugin": cfg.get("plugin"),
+            "source": cfg.get("source"),
+            "values": cfg.get("values") or {},
+        }
+        kw: dict[str, Any] = {"tenant": tenant_id, "team": team_id}
+        if credentials:
+            # The person's own credentials decide; this service's token rides beside them.
+            kw |= {"headers": credentials, "token_header": "X-Service-Authorization"}
+        return list(await self.tools.post("/v1/knowledge-sources/hosts", json=body, **kw) or [])
+
     async def call(self, tenant_id: str, team_id: str, tool: str, args: dict[str, Any], *, act: str) -> Answer:
         body = {
             "tool": tool,
@@ -112,7 +135,7 @@ async def source_config(reader: ToolReader | None, who: Who, i: dict[str, Any]) 
                 "This connection signs in each person. A knowledge source needs a team sign-in.",
                 code="sign_in_not_team",
             )
-    return {
+    cfg: dict[str, Any] = {
         "plugin": plugin,
         "source": name,
         # The plugin's name for this kind of source, which the source shows as its kind.
@@ -133,6 +156,21 @@ async def source_config(reader: ToolReader | None, who: Who, i: dict[str, Any]) 
         # and sent to each of its tools as `source`.
         "values": source_values(found, wanted.get("values")),
     }
+    return {**cfg, "waitingHosts": await waiting_hosts(reader, who, cfg)}
+
+
+async def waiting_hosts(reader: ToolReader, who: Who, cfg: dict[str, Any]) -> list[dict[str, Any]]:
+    """The source's hosts an admin has yet to approve, each with the Security task it waits on: a sync reaches a
+    source's own site only once the account lists its host, under the same rule as every new outside address. A host
+    the account refuses refuses the source."""
+    answers = await reader.source_hosts(who.tenant_id, str(who.team_id or ""), cfg, credentials=who.credentials)
+    refused = [h for h in answers if h.get("state") == "refused"]
+    if refused:
+        raise ValidationFailed(
+            str(refused[0].get("reason") or f"{refused[0]['host']} is not an allowed address."),
+            code="egress_host_refused",
+        )
+    return [{"host": str(h["host"]), "runKey": h.get("runKey")} for h in answers if h.get("state") == "waiting"]
 
 
 INPUT_TYPES: dict[str, type | tuple[type, ...]] = {

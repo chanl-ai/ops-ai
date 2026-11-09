@@ -135,6 +135,9 @@ class Source(Out):
     ai_ceiling: float = 5.0
     # The AI steps chosen and not yet approved by the knowledge owner; syncs run without them until then.
     ai_steps_waiting: list[str]
+    # Each host of the source's own site an admin has yet to approve (`host`, and `runKey`, the Security task it waits
+    # on when the account's policy asks Security); syncs answer 409 host_waiting until none is left.
+    waiting_hosts: list[Json]
     rules: list[Json]
     metadata_mapping: list[Json]
     tags: list[str]

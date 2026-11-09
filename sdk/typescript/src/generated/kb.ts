@@ -2175,6 +2175,10 @@ export interface components {
             type: string;
             /** Usedbykbids */
             usedByKbIds: string[];
+            /** Waitinghosts */
+            waitingHosts: {
+                [key: string]: unknown;
+            }[];
         };
         /** SourceDetail */
         SourceDetail: {
@@ -2300,6 +2304,10 @@ export interface components {
             type: string;
             /** Usedbykbids */
             usedByKbIds: string[];
+            /** Waitinghosts */
+            waitingHosts: {
+                [key: string]: unknown;
+            }[];
         };
         /** SourceIn */
         SourceIn: {
@@ -2573,6 +2581,10 @@ export interface components {
             usedBy: components["schemas"]["NamedRef"][];
             /** Usedbykbids */
             usedByKbIds: string[];
+            /** Waitinghosts */
+            waitingHosts: {
+                [key: string]: unknown;
+            }[];
         };
         /**
          * SyncIn

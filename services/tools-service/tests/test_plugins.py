@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from shutil import copytree, ignore_patterns
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 import pytest
@@ -23,7 +24,7 @@ from ops_plugin_sdk.loader import GROUP, Loaded
 from ops_plugin_sdk.manifest import SIGN_IN_KINDS
 from ops_service_kit.settings import PLUGIN_ENTRY_POINTS, Settings
 from ops_tools.auth.kinds import BY_ID
-from ops_tools.egress import EgressPolicy
+from ops_tools.egress import EgressDenied, EgressPolicy
 from ops_tools.executor import Executor, HttpExecutor
 from ops_tools.gateway_calls import _before_policy  # pyright: ignore[reportPrivateUsage]
 from ops_tools.graph_mailbox import CursorSeal
@@ -190,16 +191,40 @@ async def test_a_python_tool_reaches_only_the_plugins_hosts(
     assert seen == []
 
 
-async def test_a_source_sync_reaches_its_own_site_and_nothing_else_does(
+class Listed:
+    """The account's egress check as EgressPolicy makes it: a host passes when the plugin owns it or the account lists
+    it."""
+
+    def __init__(self) -> None:
+        self.hosts: set[str] = set()
+
+    async def check_url(self, tenant_id: str, url: str, also: Iterable[str] = ()) -> None:
+        host = urlsplit(url).hostname or ""
+        if host not in set(also) | self.hosts:
+            raise EgressDenied(f"{host} is not an allowed address.")
+
+
+async def test_a_source_sync_reaches_its_own_site_only_once_the_account_lists_it(
     engine: AsyncEngine, store: ModuleStore, tenant: str
 ) -> None:
+    """A source's site was exempt from the account's egress list on a sync, so a builder's new site was fetched with
+    no admin's approval."""
     seen: list[str] = []
     ex = plugin_executor(engine, store, seen)
+    policy = Listed()
+    ex.http.policy = policy  # type: ignore[assignment]
     args = {"source": {"start": "https://help.northbank.test"}}
-    synced = await ex.run(
-        module_for(tenant), {"name": "desk_list_pages"}, args, actor="t", environment="test", acting_for=None,
-        source_hosts=True,
-    )  # fmt: skip
+
+    async def sync() -> Any:
+        return await ex.run(
+            module_for(tenant), {"name": "desk_list_pages"}, args, actor="t", environment="test", acting_for=None,
+            source_hosts=True,
+        )  # fmt: skip
+
+    waiting = await sync()
+    assert not waiting.ok and waiting.output["error"]["code"] == "EGRESS_DENIED" and seen == [], (waiting, seen)
+    policy.hosts.add("help.northbank.test")
+    synced = await sync()
     assert synced.ok and seen == ["https://help.northbank.test/index.json"], (synced, seen)
     other = await ex.run(
         module_for(tenant), {"name": "desk_list_pages"}, args, actor="t", environment="test", acting_for=None

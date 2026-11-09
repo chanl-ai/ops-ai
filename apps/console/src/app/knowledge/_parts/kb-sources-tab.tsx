@@ -118,6 +118,11 @@ export function KbSourcesTab({ kb }: { kb: KnowledgeBaseDetail }) {
           <div className="min-w-48">
             <div className="truncate font-medium">{row.original.source.name}</div>
             <div className="truncate text-xs text-muted-foreground">{row.original.source.scopeSummary}</div>
+            {row.original.source.waitingHosts.length > 0 && (
+              <div className="truncate text-xs text-warning-text" data-testid="kb-source-host-waiting">
+                Waiting for an admin to approve {row.original.source.waitingHosts.map((w) => w.host).join(', ')}
+              </div>
+            )}
           </div>
         ),
         enableHiding: false,

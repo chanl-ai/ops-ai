@@ -7,6 +7,7 @@ import { ChevronDown, CircleDashed, Layers, Pause, Play, RefreshCw, ShieldAlert,
 import { toast } from 'sonner';
 
 import { SensitivityBadge, SourceKindIcon, SourceStatusBadge } from '@/components/knowledge/knowledge-meta';
+import { SourceHostsWaiting } from '@/components/knowledge/source-hosts-waiting';
 import { ConnectionChip } from '@/components/integrations/integration-meta';
 import { PageLayout } from '@/components/page-layout';
 import { PageTabPanel, PageTabs } from '@/components/shared/page-tabs';
@@ -186,6 +187,7 @@ export default function SourcePage() {
                 </AlertDescription>
               </Alert>
             )}
+            <SourceHostsWaiting source={s} />
             {waits.length > 0 && tab !== 'settings' && (
               <Alert data-testid="ai-steps-waiting">
                 <ShieldCheck className="size-4" />

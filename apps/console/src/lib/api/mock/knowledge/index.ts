@@ -612,6 +612,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
             kind,
             kindLabel: kind === 'file' ? 'Files' : kind === 'web' ? 'Website' : 'App source',
             aiStepsWaiting: [],
+            waitingHosts: [],
             scopeSummary: input.type === 'file' ? `${fileIds?.length ?? 0} uploaded files` : input.name,
             titleFrom: 'source',
             permissions: { mode: 'workspace' },

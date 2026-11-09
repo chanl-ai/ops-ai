@@ -354,7 +354,9 @@ def build_app(
     service.team_connections = plugins.team_connection if plugins else None
     service.awaits_sign_in = plugins.awaits_sign_in if plugins else None
     apps = Apps(accounts, store, plugins, service, users)
-    plugin_routes = [plugins_router(apps.plugin_accounts, directory, users=users)] if apps.plugin_accounts else []
+    plugin_routes = (
+        [plugins_router(apps.plugin_accounts, directory, users=users, hosts=service)] if apps.plugin_accounts else []
+    )
     return create_gateway_app(
         opa=OpaClient(opa or httpx.AsyncClient(base_url="http://opa.invalid")),
         registry=ToolRegistry(catalog, store, plugins, connections),

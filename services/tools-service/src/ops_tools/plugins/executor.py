@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlsplit
@@ -96,18 +96,18 @@ class PluginExecutor:
         source_hosts: bool = False,
     ) -> ToolOutcome:
         """`trial` is a tool page's Real run: a data tool's request as sent is kept on it for the page to show. With
-        `source_hosts` (a knowledge source's sync), a source tool's call also reaches the hosts of the addresses its
-        `source` input names under the source's `egress_from`."""
+        `source_hosts` (a knowledge source's sync), a source tool's call may also ask for the hosts of the addresses its
+        `source` input names under the source's `egress_from`, each still subject to the account's egress list and
+        new-hosts policy."""
         plugin = self.host.by_module(module)
         if plugin is None:
             return _failure("PLUGIN_DISABLED", f"{module['display_name']} is not installed on this service.")
         name = str(op["name"]).removeprefix(f"{plugin.manifest.short}_")
         source = source_of(plugin.manifest, name) if source_hosts else None
         values = args.get("source")
+        sites: list[str] = []
         if source is not None and isinstance(values, dict):
-            own = list(module.get("egress_hosts") or [])
-            added = [h for h in knowledge_source_hosts(source, cast(dict[str, Any], values)) if h not in own]
-            module = {**module, "egress_hosts": [*own, *added]}
+            sites = knowledge_source_hosts(source, cast(dict[str, Any], values))
         # The team's version of the tool, so a query or paged tool runs as the team's version declared it.
         tool = self.host.tool_for(module, plugin, name)
         if tool is not None and tool.request is not None:
@@ -123,7 +123,7 @@ class PluginExecutor:
         # A Python tool sees what the system answers, and a system may repeat the request's sign-in back; nothing it
         # returns or raises may carry the connection's credential, as the http executor's answers never do.
         used = scrubbed_values({f"connection:{n}": v for n, v in enumerate(prepared.values if prepared else [])})
-        outcome = await self._python(plugin, tool, module=module, op=op, args=args, prepared=prepared)
+        outcome = await self._python(plugin, tool, module=module, op=op, args=args, prepared=prepared, sites=sites)
         return replace(outcome, output=scrub(outcome.output, used))
 
     async def _python(
@@ -135,10 +135,14 @@ class PluginExecutor:
         op: dict[str, Any],
         args: dict[str, Any],
         prepared: Prepared | None,
+        sites: Sequence[str] = (),
     ) -> ToolOutcome:
-        """One Python tool's call through the SDK's context, its requests sent signed in as `prepared`."""
+        """One Python tool's call through the SDK's context, its requests sent signed in as `prepared`. `sites` (a
+        source sync's own addresses) the tool may ask for beside the plugin's hosts, but unlike those they are not
+        exempt from the account's list: each passes only once listed, or under the account's any_public policy."""
         name = tool.name
         allowed = list(module.get("egress_hosts") or [])
+        reachable = {*allowed, *sites}
         plugin_headers = {h["key"]: h["value"] for h in cast(list[dict[str, str]], op.get("headers") or [])}
         loop = asyncio.get_running_loop()
         policy = self.http.policy
@@ -188,7 +192,7 @@ class PluginExecutor:
         ) -> Response:
             host = urlsplit(url).hostname
             # Checked here, before the request is built: the module's hosts are the plugin's, from the team's settings.
-            if host not in allowed:
+            if host not in reachable:
                 raise PluginEgressDenied(f"{host} is not one of {plugin.manifest.title}'s hosts.")
             pending = request(method, url, params, body, asked)
             return asyncio.run_coroutine_threadsafe(pending, loop).result(DEADLINE_S)

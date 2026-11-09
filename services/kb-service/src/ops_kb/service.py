@@ -12,7 +12,7 @@ import asyncio
 import contextlib
 import re
 from collections.abc import Coroutine
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -106,6 +106,9 @@ class Who:
     team_id: str | None
     # The verified caller, which `ops_access.can` decides on. None for the seed, which acts as the system.
     caller: Principal | None = None
+    # A person's own identity headers, passed on when this service asks another on their behalf (a new source's
+    # hosts, decided by the account's egress rule as theirs); empty for a service, the seed and the schedule.
+    credentials: dict[str, str] = field(default_factory=dict[str, str])
 
     def require_builder(
         self, team_id: str | None, action: str, step: str = "edit", protection: str | None = None
@@ -331,6 +334,8 @@ class KnowledgeService:
             "metadataMapping": applied["metadataMapping"],
             "aiCeiling": applied["aiCeiling"],
             "aiStepsWaiting": ai_steps_waiting(self.settings_of(s).ingest),
+            # Hosts of the source's own site an admin has yet to approve; nothing is fetched until they are.
+            "waitingHosts": list(cfg.get("waitingHosts") or []) if tool else [],
             "tags": s["tags"],
             "titleFrom": "heading",
             "permissions": {"mode": "workspace"},
@@ -798,6 +803,13 @@ class KnowledgeService:
         cfg = await source_config(self.tools, who, i)
         if not cfg.get("previewTool") or self.tools is None:
             raise ValidationFailed("This kind of source has no preview.", code="preview_unavailable")
+        if cfg.get("waitingHosts"):
+            # The preview fetches from the site too, so it waits for the same approval a sync does.
+            host = cfg["waitingHosts"][0]["host"]
+            raise Conflict(
+                f"Waiting for an admin to approve {host}. The source can be added now; it syncs once approved.",
+                code="host_waiting",
+            )
         given = {"source": cfg["values"]} if cfg.get("values") else {}
         answer = await self.tools.call(
             who.tenant_id, str(who.team_id), str(cfg["previewTool"]), given, act="kb-preview"
@@ -929,12 +941,29 @@ class KnowledgeService:
         finally:
             await lease.release()
 
+    async def hosts_approved(self, who: Who, s: dict[str, Any]) -> dict[str, Any]:
+        """The source once every host it waits on is approved, read again from tools-service as this service: 409
+        `host_waiting` naming the first host still waiting, so nothing is fetched from a site no admin approved."""
+        cfg = dict(s.get("config") or {})
+        if not cfg.get("waitingHosts") or self.tools is None:
+            return s
+        answers = await self.tools.source_hosts(who.tenant_id, str(s["team_id"]), cfg)
+        still = [
+            w for w in cfg["waitingHosts"] if any(a["host"] == w["host"] and a["state"] != "allowed" for a in answers)
+        ]
+        if still:
+            raise Conflict(f"Waiting for an admin to approve {still[0]['host']}.", code="host_waiting")
+        cfg["waitingHosts"] = []
+        await self.store.update_source(who.tenant_id, str(s["id"]), {"config": cfg})
+        return {**s, "config": cfg}
+
     async def sync_tool(self, who: Who, s: dict[str, Any], *, full: bool, trigger: str) -> dict[str, Any]:
         """A tool source's sync under its lease, so a manual sync and the schedule never run it at once."""
         if self.tools is None:
             raise Conflict("This service reads no tools, so the source cannot sync.", code="tools_unavailable")
         if s["status"] == "paused":
             raise Conflict(f"{s['name']} is paused; resume it to sync.", code="source_paused")
+        s = await self.hosts_approved(who, s)
         lease = await self.take_lease(who.tenant_id, str(s["id"]))
         if lease is None:
             raise Conflict(f"{s['name']} is syncing now; wait for that run to end.", code="sync_running")

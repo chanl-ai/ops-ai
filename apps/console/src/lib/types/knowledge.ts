@@ -97,6 +97,8 @@ export interface Source {
   ingest: IngestSettings;
   /** AI ingest steps chosen and still waiting for the knowledge owner's approval; syncs run without them. */
   aiStepsWaiting: string[];
+  /** Hosts of the source's own site an admin has yet to approve, with the Security task each waits on; nothing is fetched until then. */
+  waitingHosts: { host: string; runKey?: string | null }[];
   /** Digest of the ingestion settings the current chunks were built with; differs from the settings when a re-index is needed. */
   indexedSettingsDigest?: string;
   rules: Rule[];

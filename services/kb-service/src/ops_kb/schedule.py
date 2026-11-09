@@ -34,9 +34,13 @@ WITHDRAWN_KEPT = timedelta(days=30)
 
 
 def due(service: KnowledgeService, s: dict[str, Any], now: datetime) -> bool:
-    """A source not paused whose schedule (ops_store.schedule, the one rule) asks for a run since its last sync."""
+    """A source not paused whose schedule (ops_store.schedule, the one rule) asks for a run since its last sync, or
+    one waiting for an admin to approve its site's host: its sync re-reads the host's state and runs once approved, so
+    the source syncs as soon as it may, whatever its schedule."""
     if s["status"] == "paused":
         return False
+    if dict(s.get("config") or {}).get("waitingHosts"):
+        return True
     return schedule_due(service.schedule_of(s), s.get("last_sync_at"), now)
 
 

@@ -731,6 +731,7 @@ class Source(TypedDict, closed=True):
     titleFrom: str
     type: str
     usedByKbIds: list[str]
+    waitingHosts: list[dict[str, Any]]
 
 
 class SourceDetail(TypedDict, closed=True):
@@ -781,6 +782,7 @@ class SourceDetail(TypedDict, closed=True):
     titleFrom: str
     type: str
     usedByKbIds: list[str]
+    waitingHosts: list[dict[str, Any]]
 
 
 class SourceRow(TypedDict, closed=True):
@@ -821,6 +823,7 @@ class SourceRow(TypedDict, closed=True):
     type: str
     usedBy: list[NamedRef]
     usedByKbIds: list[str]
+    waitingHosts: list[dict[str, Any]]
 
 
 class ChangeList(TypedDict, closed=True):

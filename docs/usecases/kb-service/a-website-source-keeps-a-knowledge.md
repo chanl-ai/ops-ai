@@ -29,6 +29,8 @@ Run: `OPS_PLUGINS_REPO=<path> make usecase-test UC=uc-674 LAYER=api`.
 
 | # | Step | Expected |
 |---|---|---|
+| 0a | A builder adds the site, whose host the account has not listed, with sync on; then syncs and previews | The source lists `waitingHosts` help.northbank.test; sync and preview answer 409 `host_waiting` (Waiting for an admin to approve help.northbank.test); the site gets no request |
+| 0b | An admin lists the host on the Egress list, then the source syncs | Three pages indexed; `waitingHosts` empty |
 | 1 | Preview the site with include `/lending/**`, `/cards/**` and exclude `/archive/**` | Each page with its outcome: the payment holidays page will be fetched, the archive page is excluded by its rule; no source is stored |
 | 2 | Create the source into a new knowledge base | `kind` web, `scopeSummary` help.northbank.test |
 | 3 | Sync | Three pages indexed; the excluded page and the robots.txt-refused page are never requested |

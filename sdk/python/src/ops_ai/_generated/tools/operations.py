@@ -190,6 +190,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "apps_knowledge_source_hosts": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/knowledge-sources/hosts",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "apps_knowledge_sources": {
         "body": None,
         "headers": [],
@@ -1019,6 +1028,10 @@ class Operations:
         "Knowledge Sources"
         return self._t.call(SERVICE, OPERATIONS["apps_knowledge_sources"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def apps_knowledge_source_hosts(self, body: SourceHostsIn) -> list[SourceHost]:
+        "Knowledge Source Hosts"
+        return self._t.call(SERVICE, OPERATIONS["apps_knowledge_source_hosts"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     def apps_my_accounts(self, *, every: bool | None = None) -> list[MyAccount]:
         "My Accounts"
         return self._t.call(SERVICE, OPERATIONS["apps_my_accounts"], {}, {"every": every}, {}, None)  # type: ignore[no-any-return]
@@ -1542,6 +1555,10 @@ class AsyncOperations:
     async def apps_knowledge_sources(self) -> list[KnowledgeSourceView]:
         "Knowledge Sources"
         return await self._t.call(SERVICE, OPERATIONS["apps_knowledge_sources"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def apps_knowledge_source_hosts(self, body: SourceHostsIn) -> list[SourceHost]:
+        "Knowledge Source Hosts"
+        return await self._t.call(SERVICE, OPERATIONS["apps_knowledge_source_hosts"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def apps_my_accounts(self, *, every: bool | None = None) -> list[MyAccount]:
         "My Accounts"

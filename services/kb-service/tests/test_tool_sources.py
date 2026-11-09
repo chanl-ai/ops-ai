@@ -50,6 +50,9 @@ class FakeTools:
         # "same": every page names itself as the next; "endless": every page names a new one.
         self.pages = ""
 
+    async def source_hosts(self, tenant_id: str, team_id: str, cfg: dict[str, Any], **_: Any) -> list[dict[str, Any]]:
+        return []
+
     async def declared(self, tenant_id: str, team_id: str) -> list[dict[str, Any]]:
         return [
             {

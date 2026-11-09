@@ -100,6 +100,43 @@ def main() -> None:
         start = {"start": [f"{site.base}/"], "include": ["/lending/**", "/cards/**"], "exclude": ["/archive/**"]}
         config = {"plugin": "opsai.web", "source": "site", "values": {**start, "rate": 20}}
 
+        # Story 0: a builder adds the site; its host is new to the account, so nothing is fetched until an admin
+        # approves it, under the same rule as any new outside address.
+        waiting = data(
+            k.post("/v1/sources", json={"type": "tool", "name": f"New site {RUN}", "sync": True, "config": config})
+        )
+        refused = k.post(f"/v1/sources/{waiting['id']}/sync")
+        early = k.post("/v1/sources/preview", json={"type": "tool", "config": config})
+        time.sleep(1)
+        check(
+            "0a a new site waits for an admin: the source names its host, sync and preview say why, nothing is fetched",
+            waiting["waitingHosts"] == [{"host": "help.northbank.test", "runKey": None}]
+            and refused.status_code == 409
+            and refused.json()["error"]["code"] == "host_waiting"
+            and "Waiting for an admin to approve help.northbank.test" in refused.json()["error"]["message"]
+            and early.status_code == 409
+            and site.hits == [],
+            {
+                "waiting": waiting.get("waitingHosts"),
+                "sync": refused.text[:200],
+                "preview": early.status_code,
+                "hits": site.hits[:5],
+            },
+        )
+        data(gw.post("/v1/egress/hosts", json={"value": "help.northbank.test", "note": "uc-674"}, headers=SECURITY))
+        approved = data(k.post(f"/v1/sources/{waiting['id']}/sync"))
+        check(
+            "0b once an admin approves the host, the source syncs and no longer waits",
+            approved["counts"]["upserted"] == 3 and data(k.get(f"/v1/sources/{waiting['id']}"))["waitingHosts"] == [],
+            approved["counts"],
+        )
+        removed = k.delete(f"/v1/sources/{waiting['id']}")
+        if removed.status_code != 204:
+            raise SystemExit(
+                f"FAIL 0b the waiting source could not be removed: {removed.status_code} {removed.text[:300]}"
+            )
+        site.hits.clear()
+
         # Story 1: preview, nothing stored.
         before = data(k.get("/v1/sources"))["pagination"]["total"]
         asked = k.post("/v1/sources/preview", json={"type": "tool", "config": config})
@@ -268,6 +305,9 @@ def main() -> None:
 
         # Story 6, when the repo's docs site runs (OPS_DOCS_SITE_URL): a real site with no sitemap, crawled by links.
         if docs is not None:
+            data(
+                gw.post("/v1/egress/hosts", json={"value": "docs.opsai.test", "note": "uc-674 docs"}, headers=SECURITY)
+            )
             values = {"start": [f"{docs.base}/docs"], "follow_links": True, "depth": 2, "max_pages": 25, "rate": 20}
             body = {
                 "type": "tool",
