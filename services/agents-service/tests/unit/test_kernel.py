@@ -401,4 +401,4 @@ async def test_an_agent_searches_only_its_own_knowledge_bases_unless_it_may_sear
     no_bases = await searched([], [])
     assert no_bases.calls == [], "an agent with no bases never reaches the tool"
     team = await searched([], [], all_team=True)
-    assert [a["collections"] for _, a, _, _ in team.calls] == [[]]
+    assert [a.get("allTeamKnowledgeBases") for _, a, _, _ in team.calls] == [True]

@@ -79,6 +79,8 @@ from .types import (
 
 # The built-in tool that searches knowledge bases; the kernel narrows it to the turn's own bases (_own_knowledge).
 SEARCH_KNOWLEDGE = "search_knowledge"
+# The search_knowledge argument that asks for every base of the team; set by the kernel only (_own_knowledge).
+ALL_TEAM = "allTeamKnowledgeBases"
 NO_OWN_KNOWLEDGE = "This agent has no knowledge bases to search; answer from the other tools, or say it is not known."
 
 
@@ -468,7 +470,7 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
 
     async def call(ctx: RunContext[None], **arguments: Any) -> Any:
         tool_call_id = ctx.tool_call_id or f"call_{len(state.order)}"
-        if grant.name == SEARCH_KNOWLEDGE and not state.req.all_team_knowledge:
+        if grant.name == SEARCH_KNOWLEDGE:
             own = _own_knowledge(state.req, arguments)
             if own is None:
                 rec = state.record(tool_call_id, grant.name, arguments)
@@ -612,13 +614,18 @@ async def _retrieve(req: TurnRequest, ports: KernelPorts) -> list[Passage]:
 
 
 def _own_knowledge(req: TurnRequest, arguments: dict[str, Any]) -> dict[str, Any] | None:
-    """A search_knowledge call narrowed to the turn's own bases, as grounding is: the bases the model named among
-    them, else all of them. None when the turn has none. Without this the tool searches every base of the team."""
+    """A search_knowledge call as the turn may make it. The tool searches only the bases named, or every base of the
+    team when the call says `allTeamKnowledgeBases`, which the kernel alone sets, for an agent given that option; a
+    model's own flag is dropped. Otherwise the call is narrowed to the turn's own bases, as grounding is: those the
+    model named among them, else all of them. None when the turn has none."""
+    asked = {k: v for k, v in arguments.items() if k != ALL_TEAM}
+    if req.all_team_knowledge:
+        return {**asked, ALL_TEAM: True} if not asked.get("collections") else asked
     if not req.kb_ids:
         return None
-    named = [str(c) for c in cast(list[Any], arguments.get("collections") or [])]
+    named = [str(c) for c in cast(list[Any], asked.get("collections") or [])]
     kept = [c for c in named if c in req.kb_ids]
-    return {**arguments, "collections": kept or list(req.kb_ids)}
+    return {**asked, "collections": kept or list(req.kb_ids)}
 
 
 def _close_open(state: _TurnState, why: str) -> list[ToolOutput]:
