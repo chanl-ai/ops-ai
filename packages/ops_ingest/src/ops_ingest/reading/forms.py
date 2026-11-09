@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from pdfminer.pdftypes import resolve1
+from pdfminer.pdftypes import PDFObjRef, resolve1
 from pdfminer.psparser import PSLiteral
 from pdfminer.utils import decode_text
 
@@ -35,13 +35,20 @@ def _text(value: object) -> str:
     return "" if value is None else str(value)
 
 
-def _chain(widget: dict[str, Any]) -> list[dict[str, Any]]:
-    """The widget, then its parent field, then that field's parent, up to the top."""
+def _chain(widget: dict[str, Any], objid: int | None) -> list[dict[str, Any]]:
+    """The widget, then its parent field, then that field's parent, up to the top. Each object is visited once and the
+    walk is capped, so a malformed file whose parents loop still ends."""
     out: list[dict[str, Any]] = []
+    seen: set[int] = set() if objid is None else {objid}
     node: dict[str, Any] | None = widget
     while node is not None and len(out) < _MAX_DEPTH:
         out.append(node)
-        parent = resolve1(node.get("Parent"))
+        ref = node.get("Parent")
+        if isinstance(ref, PDFObjRef):
+            if ref.objid in seen:
+                break
+            seen.add(ref.objid)
+        parent = resolve1(ref)
         node = cast(dict[str, Any], parent) if isinstance(parent, dict) else None
     return out
 
@@ -82,27 +89,51 @@ def _value(kind: FieldKind, chain: list[dict[str, Any]]) -> str:
     return "" if value == "Off" else value
 
 
-def page_fields(annots: list[dict[str, Any]], number: int, width: float, height: float) -> list[FormField]:
-    """The form fields whose widgets sit on one page, given pdfplumber's `page.annots`. A field with several widgets
-    (a radio group) is listed once, at its first widget."""
+def _box(rect: object, *, width: float, height: float, rotation: int) -> list[float] | None:
+    """A widget's `/Rect` (PDF units, origin bottom left) as fractions of the page as shown, turned with the page."""
+    values = resolve1(rect)
+    if not isinstance(values, list) or len(cast(list[object], values)) != 4:
+        return None
+    try:
+        a, b, c, d = (float(cast(float, resolve1(v))) for v in cast(list[object], values))
+    except (TypeError, ValueError):
+        return None
+    points = [(a, b), (c, d)]
+    turns = (rotation % 360) // 90
+    for i in range(turns):
+        side = width if i == turns % 2 else height
+        points = [(y, side - x) for x, y in points]
+    (x0, y0), (x1, y1) = points
+    left, right, low, high = min(x0, x1), max(x0, x1), min(y0, y1), max(y0, y1)
+    return [
+        round(left / width, 4),
+        round((height - high) / height, 4),
+        round(right / width, 4),
+        round((height - low) / height, 4),
+    ]
+
+
+def page_fields(annots: object, number: int, *, width: float, height: float, rotation: int = 0) -> list[FormField]:
+    """The form fields whose widgets sit on one page, given the page's raw `/Annots`. Each annotation is resolved one
+    level only: pdfplumber's own `page.annots` resolves `/Kids` recursively and never ends on a file whose kids loop.
+    A field with several widgets (a radio group) is listed once, at its first widget."""
     fields: list[FormField] = []
     seen: set[str] = set()
-    for annot in annots:
-        data = cast(dict[str, Any], annot.get("data") or {})
-        if _text(data.get("Subtype")) != "Widget":
+    listed = resolve1(annots)
+    for ref in cast(list[object], listed) if isinstance(listed, list) else []:
+        data = resolve1(ref)
+        if not isinstance(data, dict):
             continue
-        chain = _chain(data)
+        widget = cast(dict[str, Any], data)
+        if _text(widget.get("Subtype")) != "Widget":
+            continue
+        chain = _chain(widget, ref.objid if isinstance(ref, PDFObjRef) else None)
         names = [_text(node["T"]) for node in reversed(chain) if "T" in node]
         kind = _kind(_text(_inherited(chain, "FT")), int(cast(int, resolve1(_inherited(chain, "Ff")) or 0)))
         name = ".".join(n for n in names if n)
         if kind is None or not name or name in seen:
             continue
         seen.add(name)
-        box = [
-            round(float(annot["x0"]) / width, 4),
-            round(float(annot["top"]) / height, 4),
-            round(float(annot["x1"]) / width, 4),
-            round(float(annot["bottom"]) / height, 4),
-        ]
+        box = _box(widget.get("Rect"), width=width, height=height, rotation=rotation)
         fields.append(FormField(name=name, value=_value(kind, chain), kind=kind, page=number, box=box))
     return fields

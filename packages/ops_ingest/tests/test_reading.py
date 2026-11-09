@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import io
+import struct
+import zlib
 
 import pytest
 from PIL import Image
@@ -15,6 +17,7 @@ from ops_ingest.parsers.ocr import OcrUnavailableError, OcrWord
 from ops_ingest.reading import (
     FORM_FIELDS_HEADING,
     MAX_PAGES,
+    MAX_RENDER_PIXELS,
     ReadingError,
     ReadingSettings,
     open_file,
@@ -204,3 +207,81 @@ def test_page_read_on_its_own_matches_a_whole_read() -> None:
     alone.duration_ms = whole.pages[1].duration_ms
     assert alone == whole.pages[1]
     assert (alone.blocks[0].kind, alone.blocks[0].level) == ("heading", 2)
+
+
+def _pdf(objects: list[bytes]) -> bytes:
+    """A PDF from numbered object bodies (object 1 is the catalogue), with a correct cross-reference table."""
+    out = io.BytesIO()
+    out.write(b"%PDF-1.4\n")
+    offsets: list[int] = []
+    for number, body in enumerate(objects, start=1):
+        offsets.append(out.tell())
+        out.write(b"%d 0 obj\n" % number + body + b"\nendobj\n")
+    xref = out.tell()
+    out.write(b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1))
+    for offset in offsets:
+        out.write(b"%010d 00000 n \n" % offset)
+    out.write(b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, xref))
+    return out.getvalue()
+
+
+def test_form_field_tree_with_a_cycle_is_read_once() -> None:
+    """A widget whose Kids and Parent point back at each other: reading must end, with the field named once."""
+    data = _pdf(
+        [
+            b"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] >> >>",
+            b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [5 0 R] >>",
+            b"<< /T (applicant) /Kids [5 0 R] /Parent 5 0 R >>",
+            b"<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /V (Ana Ruiz) /Rect [100 700 300 716]"
+            b" /Parent 4 0 R /Kids [5 0 R 4 0 R] >>",
+        ]
+    )
+    reading = read(data, filename="cycle.pdf", settings=OFF)
+    assert [(f.name, f.value) for f in reading.form_fields] == [("applicant.name", "Ana Ruiz")]
+
+
+def _bomb_png(side: int) -> bytes:
+    """A PNG whose header claims `side` x `side` one-bit pixels: a few hundred KB that decode to gigabytes."""
+
+    def chunk(kind: bytes, body: bytes) -> bytes:
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
+
+    pack = zlib.compressobj(9)
+    row = b"\0" * (1 + side // 8)
+    rows = row * 1000
+    data = b"".join(pack.compress(rows) for _ in range(side // 1000)) + pack.flush()
+    header = struct.pack(">IIBBBBB", side, side, 1, 0, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", data) + chunk(b"IEND", b"")
+
+
+def test_decompression_bomb_image_is_refused_before_decoding() -> None:
+    reading = read(_bomb_png(40_000), filename="bomb.png", settings=AUTO, ocr_engine=NoOcr())
+    page = reading.pages[0]
+    assert page.source == "none"
+    assert page.unread_reason is not None and "too large" in page.unread_reason
+
+
+def test_huge_pdf_page_is_drawn_at_a_bounded_size() -> None:
+    out = io.BytesIO()
+    canvas = Canvas(out, pagesize=(2880, 2880))  # 40 inches square: 64 million pixels at the OCR resolution
+    canvas.showPage()
+    canvas.save()
+    sizes: list[int] = []
+
+    class Measure:
+        def image_to_words(self, image: object) -> list[OcrWord]:
+            assert isinstance(image, Image.Image)
+            sizes.append(image.width * image.height)
+            return []
+
+    read(out.getvalue(), filename="poster.pdf", settings=AUTO, ocr_engine=Measure())
+    assert sizes and sizes[0] <= MAX_RENDER_PIXELS
+
+
+def test_corrupt_image_fails_its_page_with_a_reason() -> None:
+    whole = fixture_bytes("scan.png")
+    reading = read(whole[: len(whole) // 2], filename="cut.png", settings=AUTO, ocr_engine=NoOcr())
+    page = reading.pages[0]
+    assert page.source == "none"
+    assert page.unread_reason is not None and "could not be decoded" in page.unread_reason

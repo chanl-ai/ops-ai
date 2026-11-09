@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import io
 import statistics
+import struct
 import time
+import warnings
 from typing import Protocol
 
-from PIL import Image, ImageSequence, UnidentifiedImageError
+from PIL import Image, UnidentifiedImageError
 
 from ops_ingest.parsers.ocr import OcrUnavailableError, OcrWord, TesseractEngine
 from ops_ingest.reading.models import (
@@ -40,6 +42,10 @@ IMAGE_MIMES = {
 LOW_CONFIDENCE = 0.6
 OCR_OFF = "no text layer and OCR is off"
 NOTHING_FOUND = "no text found, even by OCR"
+TOO_LARGE = "the image is too large to read"
+UNDECODABLE = "the image could not be decoded"
+#: The most pixels one image frame may hold before it is decoded: an A4 page at 600 DPI is about 35 million.
+MAX_IMAGE_PIXELS = 50_000_000
 
 
 class WordOcr(Protocol):
@@ -145,35 +151,72 @@ def ocr_page(number: int, picture: Image.Image, engine: WordOcr, *, width: float
 
 
 class ImageFile:
-    """A PNG, JPEG or TIFF: each frame one page, read only by OCR."""
+    """A PNG, JPEG or TIFF: each frame one page, read only by OCR.
+
+    Only the header is read when the file is opened. Each frame's size is checked against `MAX_IMAGE_PIXELS` before
+    it is decoded, so a small file that claims billions of pixels is refused instead of filling memory, and a frame
+    that fails to decode fails its own page with the reason."""
 
     def __init__(
         self, data: bytes, *, filename: str, mime_type: str, settings: ReadingSettings, engines: Engines
     ) -> None:
-        try:
-            self._image = Image.open(io.BytesIO(data))
-            self._image.load()
-        except (UnidentifiedImageError, OSError) as exc:
-            raise ReadingError("unreadable_file", f"{filename} is not a readable image: {exc}") from exc
         self._settings = settings
         self._engines = engines
-        self.facts = FileFacts(
-            filename=filename,
-            mime_type=mime_type,
-            size_bytes=len(data),
-            page_count=int(getattr(self._image, "n_frames", 1)),
-        )
+        self._image: Image.Image | None = None
+        self._refused: str | None = None
+        count = 1
+        try:
+            with warnings.catch_warnings():
+                # Pillow warns, then refuses, past its own limit; the size is checked here against ours instead.
+                warnings.simplefilter("ignore", Image.DecompressionBombWarning)
+                self._image = Image.open(io.BytesIO(data))
+            count = int(getattr(self._image, "n_frames", 1))
+        except UnidentifiedImageError as exc:
+            raise ReadingError("unreadable_file", f"{filename} is not a readable image: {exc}") from exc
+        except Image.DecompressionBombError:
+            self._refused = TOO_LARGE
+        except (OSError, ValueError, SyntaxError, struct.error) as exc:
+            if self._image is None:
+                raise ReadingError("unreadable_file", f"{filename} is not a readable image: {exc}") from exc
+            self._refused = f"{UNDECODABLE}: {exc}"
+        self.facts = FileFacts(filename=filename, mime_type=mime_type, size_bytes=len(data), page_count=max(count, 1))
 
     def page(self, number: int) -> Page:
         started = time.perf_counter()
-        frame = next(f for i, f in enumerate(ImageSequence.Iterator(self._image), start=1) if i == number).copy()
-        width, height = float(frame.width), float(frame.height)
-        if self._settings.ocr == "off":
-            page = Page(number=number, width=width, height=height, source="none", unread_reason=OCR_OFF)
-        else:
-            page = ocr_page(number, frame, self._engines.get(), width=width, height=height)
+        page = self._read(number)
         page.duration_ms = round((time.perf_counter() - started) * 1000)
         return page
 
+    def _read(self, number: int) -> Page:
+        if self._image is None or self._refused:
+            return Page(number=number, source="none", unread_reason=self._refused or TOO_LARGE)
+        try:
+            self._image.seek(number - 1)
+        except (EOFError, OSError, ValueError, struct.error) as exc:
+            return Page(number=number, source="none", unread_reason=f"{UNDECODABLE}: {exc}")
+        width, height = self._image.size
+        if width * height > MAX_IMAGE_PIXELS:
+            return Page(
+                number=number,
+                width=float(width),
+                height=float(height),
+                source="none",
+                unread_reason=f"{TOO_LARGE} ({width} x {height} pixels; the limit is {MAX_IMAGE_PIXELS:,})",
+            )
+        if self._settings.ocr == "off":
+            return Page(number=number, width=float(width), height=float(height), source="none", unread_reason=OCR_OFF)
+        try:
+            frame = self._image.copy()
+        except (OSError, ValueError, SyntaxError, struct.error) as exc:
+            return Page(
+                number=number,
+                width=float(width),
+                height=float(height),
+                source="none",
+                unread_reason=f"{UNDECODABLE}: {exc}",
+            )
+        return ocr_page(number, frame, self._engines.get(), width=float(width), height=float(height))
+
     def close(self) -> None:
-        self._image.close()
+        if self._image is not None:
+            self._image.close()

@@ -40,7 +40,7 @@ from ops_ingest.reading.models import (
     page_text,
 )
 from ops_ingest.reading.parsed import FORM_FIELDS_HEADING, ParsedFile, to_parsed_document
-from ops_ingest.reading.pdf import MAX_PAGES, MIXED_IMAGE_SHARE, PdfFile
+from ops_ingest.reading.pdf import MAX_PAGES, MAX_RENDER_PIXELS, MIXED_IMAGE_SHARE, PdfFile
 
 
 class FileReader(Protocol):
@@ -124,6 +124,7 @@ __all__ = [
     "FORM_FIELDS_HEADING",
     "LOW_CONFIDENCE",
     "MAX_PAGES",
+    "MAX_RENDER_PIXELS",
     "MIXED_IMAGE_SHARE",
     "READER_VERSION",
     "Block",

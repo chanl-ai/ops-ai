@@ -13,6 +13,7 @@ Table regions are cut out of the text so a table's cells are not read twice.
 from __future__ import annotations
 
 import io
+import math
 import re
 import time
 from collections import Counter
@@ -51,6 +52,9 @@ from ops_ingest.reading.models import (
 
 MAX_PAGES = 2_000
 OCR_RESOLUTION = 200
+#: The most pixels a page is drawn at for OCR: 4,000 x 4,000, a letter page at about 450 DPI. A larger page is drawn
+#: at a lower resolution, so a poster-sized page cannot exhaust memory.
+MAX_RENDER_PIXELS = 16_000_000
 #: Under `auto`, a page with a text layer whose pictures cover at least this share of it has its picture areas OCR'd.
 #: Set from one sample (a half-scanned form at 25%) so a logo does not start OCR; each page records its share so the
 #: line can be checked on real files.
@@ -288,7 +292,13 @@ class PdfFile:
         width, height = float(page_obj.width), float(page_obj.height)
         rects = _image_rects(page_obj)
         share = _covered(rects, width, height)
-        fields = page_fields(page_obj.annots, number, width, height)
+        fields = page_fields(
+            page_obj.page_obj.attrs.get("Annots"),
+            number,
+            width=width,
+            height=height,
+            rotation=int(page_obj.rotation or 0),
+        )
         mode = self._settings.ocr
         if mode == "always" or (not page_obj.chars and mode == "auto"):
             read = ocr_page(number, self._render(page_obj), self._engines.get(), width=width, height=height)
@@ -306,7 +316,10 @@ class PdfFile:
         return read
 
     def _render(self, page: Any) -> Image.Image:
-        return cast(Image.Image, page.to_image(resolution=OCR_RESOLUTION).original)
+        """The page drawn for OCR at `OCR_RESOLUTION`, or lower when that would pass `MAX_RENDER_PIXELS`."""
+        inches = float(page.width) * float(page.height) / (72 * 72)
+        resolution = min(float(OCR_RESOLUTION), math.sqrt(MAX_RENDER_PIXELS / inches)) if inches > 0 else OCR_RESOLUTION
+        return cast(Image.Image, page.to_image(resolution=math.floor(resolution)).original)
 
     def _text_page(
         self, page: Any, number: int, *, width: float, height: float, rects: list[Rect], share: float
