@@ -98,17 +98,12 @@ export function PluginConnectForm({
   );
   const [team, setTeam] = React.useState(first);
   const [state, dispatch] = React.useReducer(reduce, initialState(draftFor(groupsFor(kind), saved), editing ? (card.connectionId ?? null) : null, editing));
-  // The sign-in window open, and whether Save opened it, so the dialog closes once it works.
-  const opened = React.useRef<{ closes: boolean } | null>(null);
+  // Whether a sign-in window Sign in and test opened is still waiting on access.
+  const opened = React.useRef(false);
   const turnedOn = React.useRef(plugin.teamOn);
   // Whether keys were typed since the sandbox account was made.
   const typedSince = React.useRef(false);
 
-  const name = card.name;
-  const close = React.useRef(onClose);
-  React.useEffect(() => {
-    close.current = onClose;
-  }, [onClose]);
   const setTeamApp = useSetTeamApp();
   const addAccount = useAddAccount();
   const test = useTestAccount();
@@ -139,27 +134,18 @@ export function PluginConnectForm({
   const signInWindow = useSignInWindow({
     onFailed: (why) => {
       const waiting = opened.current;
-      opened.current = null;
+      opened.current = false;
       if (waiting) dispatch({ type: 'failed', message: why });
     },
     onClosed: () => {
       const waiting = opened.current;
-      opened.current = null;
-      if (waiting) dispatch({ type: 'failed', message: 'The window was closed before access was allowed. Save again to try once more.' });
+      opened.current = false;
+      if (waiting) dispatch({ type: 'failed', message: 'The window was closed before access was allowed. Sign in and test to try once more.' });
     },
     onConnected: (m) => {
-      const waiting = opened.current;
-      if (!waiting) return;
-      opened.current = null;
+      if (!opened.current) return;
+      opened.current = false;
       dispatch({ type: 'signed-in' });
-      if (waiting.closes) {
-        // Save closes once access is allowed; the test runs after, and a failure shows on the account's row.
-        dispatch({ type: 'done' });
-        toast.success(sandbox ? `${accountName.trim()} is connected` : `${name} is on for the team`);
-        void test.mutateAsync(ref(m.connectionId)).catch(() => undefined);
-        close.current();
-        return;
-      }
       dispatch({ type: 'start', status: 'testing' });
       runTest(m.connectionId).catch((err) => dispatch({ type: 'failed', message: message(err) }));
     },
@@ -193,16 +179,16 @@ export function PluginConnectForm({
     return id;
   };
 
-  const startSignIn = async (w: SignInWindow, id: string, closes = false): Promise<void> => {
+  const startSignIn = async (w: SignInWindow, id: string): Promise<void> => {
     // Try again in the window starts the same sign-in again, on the account already made.
     w.retry(() =>
-      void startSignIn(w, id, closes).catch((e: unknown) => {
+      void startSignIn(w, id).catch((e: unknown) => {
         w.fail(message(e));
         dispatch({ type: 'failed', message: message(e) });
       }),
     );
     const start = await signIn.mutateAsync({ ...ref(id), account: 'team' });
-    opened.current = { closes };
+    opened.current = true;
     w.go(start, ref(id));
     dispatch({ type: 'signing-in' });
   };
@@ -223,25 +209,28 @@ export function PluginConnectForm({
     }
   };
 
+  /**
+   * Save saves and stops: it never opens a sign-in, even for a kind that signs in. Signing in is its own action (Sign
+   * in and test here, Sign in on the account's row, or each person's Connectors › Mine), so an admin saving the team's
+   * setting is never asked to connect an account of their own.
+   */
   const finish = async () => {
     if (state.busy) return;
     // A team setting typed on an app already made is saved with the account.
     const teamTyped = Boolean(card.connectionId) && Object.entries(team).some(([k, v]) => v.trim() !== '' && v !== first[k]);
     const saving = teamTyped || state.draft.status === 'dirty' || !state.saved || !state.connectionId;
-    // A signed-in account saved with nothing typed keeps its sign-in; an account signed in through this dialog
-    // already does too. Anything else signs in again, as its app or address may have changed.
-    const signs = kind.signsIn && !state.signedIn && saving;
-    const w = signs ? signInWindow.open(card.name, card.logo) : null;
-    if (signs && !w) return;
     dispatch({ type: 'start', status: 'saving' });
     try {
-      const id = saving ? await write() : (state.connectionId ?? '');
-      if (w) return void (await startSignIn(w, id, true));
+      if (saving) await write();
       dispatch({ type: 'done' });
-      toast.success(sandbox ? `${accountName.trim()} is saved` : `${card.name} is on for the team`);
+      const next = !kind.signsIn
+        ? undefined
+        : card.signIn === 'team'
+          ? `Sign the team account in from the Accounts tab when you are ready.`
+          : 'Members connect their own account from Connectors › Mine.';
+      toast.success(sandbox ? `${accountName.trim()} is saved` : `Saved. ${card.name} is on for the team`, { description: next });
       onClose();
     } catch (e) {
-      w?.fail(message(e));
       dispatch({ type: 'failed', message: message(e) });
     }
   };
@@ -249,7 +238,7 @@ export function PluginConnectForm({
   /** Cancel removes what this dialog made: the account, then for a first turn-on the team's switch. */
   const cancel = async () => {
     signInWindow.close();
-    opened.current = null;
+    opened.current = false;
     if (state.created && state.connectionId) {
       try {
         await remove.mutateAsync(ref(state.connectionId));
@@ -281,7 +270,7 @@ export function PluginConnectForm({
             disabled={!ready || state.busy}
             data-testid="connect-submit"
           >
-            {kind.signsIn ? (sandbox ? 'Save and connect the sandbox account' : 'Save and connect the team account') : 'Connect'}
+            {kind.signsIn ? 'Save' : 'Connect'}
           </LoadingButton>
         </>
       }

@@ -10,6 +10,8 @@ import { join } from 'node:path';
 
 import { PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
+import { openSignIn } from '../../lib/connection_ui.mjs';
+
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 const PASSWORD = 'northfield-demo';
@@ -137,7 +139,8 @@ try {
           const shown = ((await win.getByTestId('connect-window-config-place').innerText({ timeout: 30_000 })) ?? '').replace(/\s+/g, ' ');
           const asked = await win.getByTestId('connect-window-place-login_url').count();
           await shot(page, '3-connect-window', 1280);
-          const [popup] = await Promise.all([page.waitForEvent('popup', { timeout: 60_000 }), page.getByTestId('connect-window-authorize').click()]);
+          // Turn on saves the team's setting with the config; signing in is the saved state's Connect.
+          const popup = await openSignIn(page);
           await popup.locator('input[name=username]').waitFor({ timeout: 60_000 });
           popupUrl = popup.url();
           check('8 Connect with the config shows its address, asks nothing, and opens the sign-in on the My Domain', shown.includes(myDomain) && asked === 0 && new URL(popupUrl).host === myDomain, { shown, asked, popupUrl: popupUrl.slice(0, 120) });

@@ -11,6 +11,8 @@ import { join } from 'node:path';
 
 import { PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
+import { leaveConnectWindow, openSignIn, signInButton } from '../../lib/connection_ui.mjs';
+
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 const PASSWORD = 'northfield-demo';
@@ -188,8 +190,8 @@ try {
     return shown;
   }
 
-  /** Presses the window's main button and resolves with the sign-in window it opened. */
-  const authorize = async (page) => (await Promise.all([page.waitForEvent('popup', { timeout: 60_000 }), page.getByTestId('connect-window-authorize').click()]))[0];
+  /** Starts the window's sign-in (Turn on first when the window turns the app on) and resolves with the sign-in window. */
+  const authorize = (page) => openSignIn(page);
 
   /** The app's state as the API reads it, and its page's state badge once the page shows it. */
   async function connectedOnPage(page, consoleUrl, app, headers) {
@@ -275,7 +277,14 @@ try {
             await page.screenshot({ path: join(SHOTS, `${app.name.toLowerCase().replace(/\s+/g, '-')}-refused.png`) });
             check(`${at(2)} ${app.name}: a refused sign-in says in both windows, in one sentence, who acts`, app.refused.test(said) && app.refused.test(card), { said, card: card.replace(/\s+/g, ' ') });
             await popup.close().catch(() => undefined);
-            await page.getByTestId('connect-window-cancel').click();
+            await leaveConnectWindow(page);
+            // Turn on saved the team's setting before the refused sign-in, and a refusal never turns it off again; the
+            // next step starts from the app off, as an admin first meets it.
+            const on = ((await call('GET', '/v1/apps', priya)).data ?? []).find((c) => c.id === app.id);
+            if (on?.connectionId) {
+              await call('PUT', `/v1/apps/${encodeURIComponent(app.id)}/team`, priya, { enabled: false });
+              await call('DELETE', `/v1/apps/${encodeURIComponent(app.id)}/accounts/${on.connectionId}`, priya);
+            }
           }, page);
 
           await step(`${at(3)} ${app.name}: a sign-in window closed early says so, and Try again connects; the app's page reads Connected`, async () => {
@@ -285,7 +294,7 @@ try {
             await first.close();
             const error = page.getByTestId('connect-window-error');
             const said = await error.filter({ hasText: 'The window was closed' }).innerText({ timeout: 15_000 }).catch(() => '');
-            const button = ((await page.getByTestId('connect-window-authorize').innerText()) ?? '').trim();
+            const button = ((await (await signInButton(page)).innerText()) ?? '').trim();
             await page.screenshot({ path: join(SHOTS, `${app.name.toLowerCase().replace(/\s+/g, '-')}-closed.png`) });
             check(`${at(3)} ${app.name}: a sign-in window closed early says "The window was closed" with Try again`, /The window was closed/.test(said) && button === 'Try again', { said, button });
             if (button !== 'Try again') return;

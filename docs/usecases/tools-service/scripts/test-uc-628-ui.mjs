@@ -1,7 +1,8 @@
 // uc-628 An admin turns an app on in one window, ui layer: docs/usecases/tools-service/turn-on-in-one-window.md.
 // Priya turns Salesforce and GitHub on in the one Turn on window at 1280 and 390, against the fake Salesforce (on its
-// My Domain) and the plugins repo's fake GitHub; Ravi, a viewer, sees no Connect and who can; and James's first chat
-// with the team's assistant asks him for his own Salesforce account. Screenshots go to OPS_USECASE_SHOTS when set.
+// My Domain) and the plugins repo's fake GitHub. Turn on saves the team's setting and opens no sign-in window; her own
+// sign-in is the optional Connect my account after it. Ravi, a viewer, sees no Connect and who can; and James's first
+// chat with the team's assistant asks him for his own Salesforce account. Screenshots go to OPS_USECASE_SHOTS when set.
 import { spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -140,36 +141,46 @@ try {
                 if (!(await win.getByTestId(`connect-window-setting-${name}`).isVisible())) await win.getByTestId('connect-window-more').click();
                 await win.getByTestId(`connect-window-setting-${name}`).fill(value);
               }
-              check(`1 ${tag}: the Turn on window asks where you sign in and whose account, with the assistant box ticked`, title === `Turn on ${app.name} for Operations` && whose && assistant === 'checked' && !test, { title, whose, assistant, test });
-              const [popup] = await Promise.all([page.waitForEvent('popup', { timeout: 60_000 }), page.getByTestId('connect-window-authorize').click()]);
+              const button = (await page.getByTestId('connect-window-authorize').innerText()).trim();
+              check(`1 ${tag}: the Turn on window asks where you sign in and whose account, with the assistant box ticked`, title === `Turn on ${app.name} for Operations` && whose && assistant === 'checked' && !test && button === 'Turn on', { title, whose, assistant, test, button });
+              // Turn on saves the team's setting and stops: no sign-in window opens, and the saved state says what
+              // members do next.
+              const popups = [];
+              page.on('popup', (p) => popups.push(p.url()));
+              await page.getByTestId('connect-window-authorize').click();
+              const result = win.getByTestId('connect-window-result');
+              await result.waitFor({ timeout: 60_000 });
+              await page.waitForTimeout(3000);
+              const saved = (await result.innerText()).replace(/\s+/g, ' ');
+              const after = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.id === app.id);
+              await page.screenshot({ path: join(SHOTS, `saved-${tag}.png`), fullPage: true });
+              check(`2 ${tag}: Turn on saves the team's setting and opens no sign-in window`, popups.length === 0 && Boolean(after?.connectionId) && new RegExp(`Saved\\. ${app.name} is on for Operations`).test(saved) && /\d+ read tools? added/.test(saved) && /Members connect their own account from Connectors › Mine|team’s .* account once someone connects it/.test(saved), { popups, connectionId: after?.connectionId, saved });
+              // Connecting her own account is the optional second step.
+              const [popup] = await Promise.all([page.waitForEvent('popup', { timeout: 60_000 }), win.getByTestId('connect-window-connect-mine').click()]);
               await app.ready(popup).catch(async (e) => {
                 await popup.screenshot({ path: join(SHOTS, `failed-sign-in-page-${tag}.png`) }).catch(() => {});
                 throw new Error(`${String(e).split('\n')[0]}; the sign-in window is at ${popup.url()}: ${((await popup.locator('body').innerText().catch(() => '')) ?? '').slice(0, 200)}`);
               });
               await app.allow(popup);
               await popup.waitForEvent('close', { timeout: 60_000 }).catch(() => undefined);
-              const result = win.getByTestId('connect-window-result');
-              await result.waitFor({ timeout: 60_000 });
+              await win.getByText(/Connected as/).waitFor({ timeout: 60_000 });
               const said = (await result.innerText()).replace(/\s+/g, ' ');
               await page.screenshot({ path: join(SHOTS, `turned-on-${tag}.png`), fullPage: true });
-              check(`2 ${tag}: after Allow the window says who is connected, how many read tools were added, and that the assistant has them`, /Connected as|is connected/.test(said) && /\d+ read tools? added/.test(said) && /(given to|already)|Ops Assistant/.test(said) && !/write tool[s]? added/.test(said), said);
+              check(`2b ${tag}: Connect my account signs her in, and the window says who is connected and that the assistant has the read tools`, /Connected as/.test(said) && /\d+ read tools? added/.test(said) && /(given to|already)|Ops Assistant/.test(said) && !/write tool[s]? added/.test(said), said);
               await page.getByTestId('connect-window-done').click();
             }, page);
             errors.push(...page.errors);
             await page.context().close();
           }
           const ravi = await signedIn(browser, consoleUrl, 'r.menon@harborpine.example', width);
-          await step(`3 ${width}: a viewer cannot turn an app on: Connect offers only their own account`, async () => {
+          await step(`3 ${width}: a viewer cannot turn an app on: the app's page offers only signing in from Mine`, async () => {
             await ravi.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APPS[0].id)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-            await ravi.getByTestId('app-connect').click({ timeout: 60_000 });
-            const win = ravi.getByTestId('connect-window');
-            await win.waitFor({ timeout: 30_000 });
-            const title = (await win.getByRole('heading').first().innerText()).trim();
-            const whose = await win.getByTestId('connect-window-whose').count();
-            const assistant = await win.getByTestId('connect-window-assistant').count();
+            const own = ravi.getByTestId('app-own-sign-in');
+            await own.waitFor({ timeout: 60_000 });
+            const href = await own.getAttribute('href');
+            const connect = await ravi.getByTestId('app-connect').count();
             await ravi.screenshot({ path: join(SHOTS, `viewer-${width}.png`), fullPage: true });
-            await win.getByTestId('connect-window-cancel').click();
-            check(`3 ${width}: a viewer cannot turn an app on: Connect offers only their own account`, title === 'Connect your Salesforce account' && whose === 0 && assistant === 0, { title, whose, assistant });
+            check(`3 ${width}: a viewer cannot turn an app on: the app's page offers only signing in from Mine`, connect === 0 && href === '/integrations/my-accounts', { connect, href });
           }, ravi);
           errors.push(...ravi.errors);
           await ravi.context().close();

@@ -121,7 +121,8 @@ export function AppPageView({ appId }: { appId: string }) {
         builtIn || removed ? undefined : mayConnect ? (
           <Button size="sm" onClick={() => setConnecting(true)} data-testid="app-connect">
             <Plug />
-            Connect
+            {/* A plugin the team has not turned on opens the Turn on window, which saves and never signs in. */}
+            {card.kind === 'plugin' && !card.connectionId ? 'Turn on' : 'Connect'}
           </Button>
         ) : ownSignIn ? (
           <Button size="sm" variant="outline" asChild data-testid="app-own-sign-in">
