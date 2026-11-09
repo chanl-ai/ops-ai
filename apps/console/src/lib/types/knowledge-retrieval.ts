@@ -8,7 +8,7 @@
  * `hybrid` weights the two, `table_lookup` matches fields of table rows, and `as_of` answers from the
  * versions in force on a date.
  */
-export type QueryMode = 'semantic' | 'keyword' | 'hybrid' | 'table_lookup' | 'as_of';
+export type QueryMode = 'semantic' | 'meaning' | 'keyword' | 'hybrid' | 'table_lookup' | 'as_of';
 
 export type RewriteMode = 'off' | 'rewrite' | 'expand';
 

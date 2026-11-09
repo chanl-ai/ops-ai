@@ -69,6 +69,11 @@ export const useSourceKinds = (enabled = true) => useTeamQuery({ queryKey: kk.so
 /** What a website or app source with `config` would take in, before it exists; asked only while the settings are valid. */
 export const useSourcePreview = (config: Record<string, unknown>, enabled: boolean) =>
   useTeamQuery({ queryKey: ['knowledge', 'source-preview', config], queryFn: () => api.knowledge.sources.preview(config), enabled, retry: false, staleTime: 60_000 });
+/** The caller's team's agents citing knowledge base `kbId`, from agents-service's knowledge usage. */
+export const useAgentsCiting = (kbId: string) =>
+  useTeamQuery({ queryKey: ['agents', 'knowledge-usage'], queryFn: api.agents.knowledgeUsage, staleTime: 60_000, select: (rows) => rows.find((r) => r.kbId === kbId)?.agents ?? [] });
+/** One kernel turn of an agent, as the Playground's answer: what the agent would say, nothing kept. */
+export const useAgentTurn = () => useMutation({ mutationFn: ({ agentId, message }: { agentId: string; message: string }) => api.agents.test(agentId, message) });
 export const useKnowledgeLookups = () => useTeamQuery({ queryKey: kk.lookups, queryFn: api.knowledge.lookups, staleTime: 60_000 });
 
 /** Knowledge base names are agent collections, so writes also refresh the shared lookups and agent pages. */

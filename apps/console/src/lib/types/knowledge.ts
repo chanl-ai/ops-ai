@@ -498,6 +498,29 @@ export interface PlaygroundAnswer {
   /** Rows matched by `table_lookup`. */
   rows?: TableRowHit[];
   trace?: RetrievalTrace;
+  /** The search lanes the base asked for, the ones that ran, and each skipped one with its reason. */
+  lanes?: { asked: string[]; ran: string[]; skipped: { lane: string; reason: string }[] };
+  /** Each passage found, best first: its fused score and its score in each lane that found it. */
+  passages?: SearchPassage[];
+  /** What the question cost to search: the tokens embedding it took. */
+  cost?: { embeddingTokens: number };
+}
+
+export interface SearchPassage {
+  itemId: string;
+  kbId: string;
+  title: string;
+  section: string;
+  version: string;
+  text: string;
+  snippet: string;
+  score: number;
+  lanes?: Record<string, number>;
+  /** The unit it matched by: the piece's own text (`self`), a question, or an approved FAQ pair. */
+  matched?: string;
+  verified?: boolean;
+  page?: number | null;
+  url?: string | null;
 }
 
 /** What a new source's previewed items would look like to the knowledge bases chosen for attachment (spec 5.15.10). */

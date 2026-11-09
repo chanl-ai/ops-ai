@@ -16,7 +16,6 @@ import type {
   KnowledgeBaseRow,
   PlaygroundAnswer,
   QueryInput,
-  RetrieveInput,
   Rule,
   RunFilters,
   Source,
@@ -110,8 +109,6 @@ export interface KnowledgeApi {
     /** Supplies metadata a held item is missing; it becomes searchable when nothing required is left. */
     setMetadata(id: string, values: Record<string, string>): Promise<Item>;
   };
-  /** Searches several knowledge bases with each one's saved settings unless `settings` or `overrides` say otherwise. Used by chat and workflow knowledge steps. */
-  retrieve(input: RetrieveInput): Promise<PlaygroundAnswer>;
   /** Files, then each knowledge source of the team's apps that are on, with what a new one needs and starts with. */
   sourceKinds(): Promise<SourceKindOption[]>;
   /** Document owners, tags and source collections, for pickers. */

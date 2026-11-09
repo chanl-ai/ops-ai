@@ -24,7 +24,6 @@
     "src/components/evals/import-eval-cases-dialog.tsx",
     "src/components/knowledge/document-sheet.tsx",
     "src/components/knowledge/kb-overview.tsx",
-    "src/components/knowledge/query-result.tsx",
     "src/components/knowledge/retrieval-trace.tsx",
     "src/components/logs/audit-sheet.tsx",
     "src/components/reviews/document-read.tsx",

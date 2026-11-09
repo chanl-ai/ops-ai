@@ -854,7 +854,6 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
         }),
     },
 
-    retrieve: (input) => run(() => engine.retrieve(input)),
 
     sourceKinds: () =>
       run(() => [

@@ -65,7 +65,6 @@ export function createKnowledgeHttp(get: Get, send: Send, qs: (p: ListParams) =>
       addTag: (ids, tag) => send('POST', '/items/tag', { ids, tag }),
       setMetadata: (id, values) => send('PATCH', `/items/${id}/metadata`, { values }),
     },
-    retrieve: (i) => send('POST', '/knowledge/retrieve', i),
     sourceKinds: () => get('/knowledge/source-kinds'),
     lookups: () => get('/knowledge/lookups'),
   };
