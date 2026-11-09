@@ -594,10 +594,25 @@ says when it used an earlier read. A save to that App clears the reused reads, s
 <li><strong>Suggestion chips.</strong> Under a reply, short chips offer likely next questions. Press one to ask it.</li>
 <li><strong>Memories.</strong> The assistant suggests what to remember and asks first. It keeps nothing silently.</li>
 </ul>
+<h3 id="ops-assistant-attached-files">Attached files</h3>
+<p>A file you attach in chat is read once, and the assistant gets its text whole, up to about 24,000 characters for the
+turn. This covers scanned pages, half-scanned pages, images of text and filled forms (the typed values in a form&#39;s
+fields are read too). Scans are read by OCR, so a long scan can take a moment before the assistant answers. If a file is
+longer than the limit, or could not be read, the reply says so in words.</p>
+<h3 id="ops-assistant-replies-without-a-matching-source">Replies without a matching source</h3>
+<p>When no knowledge passage matched your question, the reply keeps its lists and paragraphs, with a note under it:
+&quot;No knowledge passage matched this question.&quot; The reply is often still a full answer, such as a question back or a
+plan.</p>
+<p>The assistant states facts about your organisation (policies, processes, timelines, fees, products, teams, customers)
+only when your knowledge or a tool result in the chat gives them. When neither does, it says it does not have that
+information and what it can do instead. When a reply that uses knowledge lacks source numbers, the check adds the
+numbers. It does not replace a correct answer with &quot;nothing found&quot;.</p>
 <h3 id="ops-assistant-which-app-and-which-account">Which App and which account</h3>
 <ul>
-<li>A chat uses the Apps your team turned on. Before your first message, the chat&#39;s connector picker lets you leave an App
-out of that chat.</li>
+<li>A chat uses the Apps your team turned on. The <strong>Connectors</strong> button in the chat box lets you leave an App out of that
+chat, before or during the chat.</li>
+<li>The button shows the icons of the Apps in use (up to four, then a count). The list stays open while you check and
+uncheck Apps, and each row shows the App&#39;s icon. An App that needs your sign-in has a <strong>Connect</strong> button in its row.</li>
 <li>With two accounts of the same App connected and no default, the assistant asks which one to use. Your pick becomes the
 default for calls that name no account.</li>
 <li>An App your team has off shows a card with <strong>Ask an admin</strong>.</li>
@@ -622,19 +637,27 @@ team can add as its own copies. An App signs in with an Account: the team&#39;s,
 </tbody></table></div>
 <p><strong>Add custom app</strong> on the Apps tab adds an App the catalog does not list: its address and the key or sign-in it uses.</p>
 <h3 id="apps-turn-an-app-on">Turn an App on</h3>
+<p>Turning an App on for the team and connecting an account are two separate actions. Turning it on saves the team&#39;s
+setting and opens no sign-in; connecting is its own button, and it is optional for the admin who turned the App on.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Step</th><th>What happens</th></tr></thead>
 <tbody>
-<tr><td>1. Press <strong>Connect</strong> on the App&#39;s card</td><td>A small window opens</td></tr>
-<tr><td>2. Name the Account, or keep the suggested name (the App and your team)</td><td>Steps and Tools pick an Account by this name</td></tr>
-<tr><td>3. Keep <strong>Team account</strong> ticked for an Account anyone in the team can run Tools as, or untick it to connect your own</td><td>Untick it and the Account is yours alone</td></tr>
-<tr><td>4. For an App that asks where you sign in (Salesforce), pick the place: login.salesforce.com, test.salesforce.com, or your company&#39;s address (My Domain), typed as its host</td><td>The sign-in opens there</td></tr>
-<tr><td>5. Keep <strong>Auth config</strong> on Ops AI&#39;s app, and press <strong>Connect</strong></td><td>The App&#39;s own sign-in page opens; allow access there</td></tr>
-<tr><td>6. The window closes</td><td>The App&#39;s page opens with the Account listed as <strong>Default</strong> and <strong>Connected</strong>, and its header reads <strong>Connected · <Account name></strong></td></tr>
+<tr><td>1. On <strong>Connectors › Team setup</strong>, press <strong>Turn on</strong> on the App&#39;s card (the App&#39;s page has the same button)</td><td>The Turn on window opens</td></tr>
+<tr><td>2. For an App that asks where you sign in (Salesforce), pick the place: login.salesforce.com, test.salesforce.com, or your company&#39;s address (My Domain), typed as its host</td><td>Saved on the App&#39;s auth config</td></tr>
+<tr><td>3. Pick whose account Tools use: each person&#39;s, the team&#39;s, or each person&#39;s with the team&#39;s for runs nobody started</td><td>Asked once, when the App is first turned on</td></tr>
+<tr><td>4. Keep <strong>Give the team&#39;s assistant this app&#39;s read tools</strong> ticked, or untick it</td><td>The assistant gets the read Tools when the App is saved</td></tr>
+<tr><td>5. Press <strong>Turn on</strong></td><td>The team&#39;s setting is saved and no sign-in window opens. The window reads, for example, <strong>Saved. Salesforce is on for Operations</strong>, how many read Tools were added, and <strong>Members connect their own account from Connectors › Mine</strong></td></tr>
+<tr><td>6. Optional: press <strong>Connect my account</strong>, or <strong>Connect the team account</strong> when Tools run as the team&#39;s account</td><td>The App&#39;s own sign-in page opens; allow access there, and the window names the account that signed in</td></tr>
 </tbody></table></div>
 <p>An App is <strong>Connected</strong> only once an Account has signed in or a test has passed; saving settings alone does not count.
-Signing in an Account turns its App on for the team, and <strong>Add account</strong> works on an App with no Account yet: the
-first Account becomes the default. A team admin connects an App.</p>
+The same rule holds everywhere an App&#39;s settings are saved: <strong>Settings › Set up</strong>, a new auth config and the Turn on
+window each save and stop, and never start a sign-in. A sign-in starts only from a button that says Connect or Sign
+in: <strong>Connect</strong> on the App&#39;s page once it is on, <strong>Sign in</strong> on an Account&#39;s row, or <strong>Connect</strong> on <strong>Connectors › Mine</strong>.</p>
+<p>A member who opens an App the team has not turned on, from <strong>Connectors › Mine</strong>, reads <strong>Not set up for your team
+yet</strong> with the admins to ask, and stays on Mine. Only someone who may turn the App on is offered <strong>Turn on</strong>, which
+opens the App&#39;s page.</p>
+<p><strong>Add account</strong> works on an App with no Account yet: the first Account becomes the default. A team admin turns an App
+on and connects the team&#39;s Accounts.</p>
 <h4 id="apps-the-first-time-a-team-turns-on-a-plugin39s-app">The first time a team turns on a plugin&#39;s App</h4>
 <p>An App a plugin brings (<a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/plugins.md">plugins guide</a>) needs two things before its card offers Connect, and its first
 Connect window asks for more than the steps above.</p>
@@ -643,7 +666,7 @@ Connect window asks for more than the steps above.</p>
 <tbody>
 <tr><td>Platform admin</td><td>Installs the plugin (its folder in the plugins folder, or pinned in the image); it is then offered to every team. Settings fixed for every team come from the install config</td><td><code>OPS_PLUGINS_DIR</code>, <code>deploy/plugins.json</code>, <code>OPS_PLUGIN_LOCKED</code></td></tr>
 <tr><td>Security admin</td><td>Lists the App&#39;s hosts, so its sign-in and calls may leave</td><td><strong>Settings › Security › Egress</strong>, Add host (and Add range for a host on a private network)</td></tr>
-<tr><td>Team admin</td><td>Presses <strong>Connect</strong></td><td>The window shows the App&#39;s settings (such as its API address), whose account calls use (the team&#39;s, each person&#39;s, or each person&#39;s with the team&#39;s as backup), the OAuth app (Ops AI&#39;s, or your own with its client ID and secret and the return address to register), and its sign-in address. <strong>Save and connect the team account</strong> opens the App&#39;s sign-in page</td></tr>
+<tr><td>Team admin</td><td>Presses <strong>Turn on</strong></td><td>The window shows the App&#39;s settings (such as its API address), whose account calls use (the team&#39;s, each person&#39;s, or each person&#39;s with the team&#39;s as backup), the OAuth app (Ops AI&#39;s, or your own with its client ID and secret and the return address to register), and its sign-in address. <strong>Turn on</strong> saves them and opens no sign-in; <strong>Connect my account</strong> or <strong>Connect the team account</strong> after it opens the App&#39;s sign-in page</td></tr>
 </tbody></table></div>
 <p>The App&#39;s page is <strong>Data Hub › Apps</strong> then the App&#39;s name, at <code>/integrations/apps/plugin:&lt;plugin id&gt;</code>. One Connect is
 enough to use it everywhere: test runs and live runs both sign in with the account you connected.</p>
@@ -776,7 +799,7 @@ the keys that pay for each call.</figcaption></figure>
 <tr><td>models</td><td>Provider connections, aliases and their versions, model keys with budgets and spend, the call log (metadata only)</td><td><code>provider_connections</code>, <code>model_aliases</code>, <code>model_keys</code>, <code>model_key_tenants</code>, <code>model_call_log</code></td></tr>
 <tr><td>kb</td><td>Knowledge bases, their sources, items and versions, searchable chunks, ingestion runs</td><td><code>kb_bases</code>, <code>kb_sources</code>, <code>kb_base_sources</code>, <code>kb_retired_bases</code>, <code>kb_items</code>, <code>kb_item_versions</code>, <code>kb_chunks</code>, <code>kb_changes</code>, <code>kb_runs</code></td></tr>
 <tr><td>files</td><td>File records, stored copies, versions, references that block deletion, legal holds, read requests, storage settings and their credentials</td><td><code>files</code>, <code>file_blobs</code>, <code>file_versions</code>, <code>file_references</code>, <code>file_idempotency</code>, <code>file_legal_holds</code>, <code>file_read_requests</code>, <code>files_outbox</code>, <code>storage_settings</code>, <code>storage_credentials</code>, <code>storage_settings_audit</code></td></tr>
-<tr><td>documents</td><td>Document types and versions, samples and tests, examples learned from corrections, extractions, corrections and each file's reading</td><td><code>document_types</code>, <code>document_type_versions</code>, <code>document_type_samples</code>, <code>document_type_tests</code>, <code>document_type_examples</code>, <code>extractions</code>, <code>extraction_corrections</code>, <code>documents_readings</code>, <code>documents_reading_pages</code>, <code>documents_reading_files</code>, <code>documents_outbox</code></td></tr>
+<tr><td>documents</td><td>Document types and versions, samples and tests, examples learned from corrections, extractions, corrections and each file&#39;s reading</td><td><code>document_types</code>, <code>document_type_versions</code>, <code>document_type_samples</code>, <code>document_type_tests</code>, <code>document_type_examples</code>, <code>extractions</code>, <code>extraction_corrections</code>, <code>documents_readings</code>, <code>documents_reading_pages</code>, <code>documents_reading_files</code>, <code>documents_outbox</code></td></tr>
 </tbody></table></div>
 <p>Every table that holds customer data carries a <code>tenant_id</code>, and the team-owned ones a <code>team_id</code>. Each service also
 keeps one version table that records which of its migrations the database holds.</p>
@@ -791,7 +814,7 @@ do inside a team; they never open another team&#39;s data.</p>
 <tr><td>Tenant, in the database, for tools, models, kb, files and documents</td><td>Every store query filters by tenant in the service&#39;s code. In tools-service, a connection&#39;s saved sign-ins (tokens and keys, sign-ins in progress, environment settings, connect links) are also held to their tenant and team by database policies, run as <code>ops_tools_tenant</code>; policies for the other tools tables and for models are still to come</td><td><span class="b b-part">Partial</span></td></tr>
 <tr><td>Background loops</td><td>The agents service&#39;s lease sweeper, timer poller and thread inbox loops claim work before they know its tenant through one system role that may read across tenants; each then does the work under the row&#39;s own tenant. No request ever runs as that role</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Team, in the services</td><td>Every read of a team-owned table goes through one team filter in the store layer, so a person sees only the teams they belong to; another team&#39;s record answers 404</td><td><span class="b b-ok">Built</span></td></tr>
-<tr><td>Team, in the database</td><td>A database-level team policy beneath the store filter</td><td><span class="b b-part">In progress</span></td></tr>
+<tr><td>Team, in the database</td><td>A database-level team policy beneath the store filter. Built for files and documents, including each file&#39;s reading (<code>documents_readings</code>, <code>documents_reading_pages</code>, <code>documents_reading_files</code>): two teams holding the same bytes each read them once and never see the other&#39;s reading</td><td><span class="b b-part">In progress</span></td></tr>
 <tr><td>Installation-wide records</td><td>Model aliases, provider connections and model keys belong to the installation, so every tenant in one installation shares them (see <a href="#deployment-options-single-tenant-and-multi-tenant">Deployment options</a>)</td><td><span class="b b-ok">Built</span></td></tr>
 </tbody></table></div>
 <h3 id="data-and-database-files-and-knowledge">Files and knowledge</h3>
@@ -800,7 +823,7 @@ do inside a team; they never open another team&#39;s data.</p>
 <tbody>
 <tr><td>Files</td><td>A volume on the host until a Security admin points each upload purpose at a target: local, S3 or an S3-compatible store, or Azure Blob Storage. Each target is tested with a write, a read and a delete before it is saved</td><td>Type judged from the bytes; size and type limits per tenant; one stored copy per content per team; storage credentials encrypted with AES-256-GCM; a reference from a case or a run blocks deletion</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Malware scanning</td><td>A hook your scanner calls back on, with files held as pending until it answers; a test engine that recognises the EICAR test file. Scanning cannot be turned off outside development</td><td>No scanner ships in the package</td><td><span class="b b-part">Partial</span></td></tr>
-<tr><td>Knowledge</td><td>Source files on the knowledge volume; their text split into chunks in the database. PDF (with OCR for scanned pages), Word, Excel, CSV, HTML, text and Markdown, up to 50 MB each</td><td>Search with PostgreSQL full-text ranking; every answer cites page and section; a knowledge base belongs to one team</td><td><span class="b b-ok">Built</span></td></tr>
+<tr><td>Knowledge</td><td>Source files on the knowledge volume; their text split into chunks in the database. PDF (each file is read once, with OCR for scanned pages, half-scanned pages and images, and filled form fields), Word, Excel, CSV, HTML, text and Markdown, up to 50 MB each</td><td>Search with PostgreSQL full-text ranking; every answer cites page and section; a knowledge base belongs to one team</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>Vector search</td><td>Embeddings through an embedding alias on the AI gateway</td><td>Same</td><td><span class="b b-plan">Planned</span></td></tr>
 <tr><td>Documents</td><td>Page layouts, extracted fields with the place each came from, corrections. The documents service never holds the bytes and reads them from files</td><td>A model may see page images only where the document type, the team&#39;s policy and the alias all allow it</td><td><span class="b b-ok">Built</span></td></tr>
 </tbody></table></div>
@@ -934,7 +957,10 @@ Details and status are in <a href="#data-and-database-the-audit-trail">Data and 
 <tr><td>Network</td><td>Only the entry point publishes a port. On Kubernetes, a network policy admits platform-service&#39;s private port only from the other services</td></tr>
 <tr><td>Containers</td><td>Non-root (uid 10001). On Kubernetes: every capability dropped, no privilege escalation, read-only root filesystem except the console, the runtime&#39;s default seccomp profile</td></tr>
 <tr><td>Database</td><td>One login per service with row rights on its own tables only; no running container can change the schema when your DBA applies it</td></tr>
-<tr><td>Service calls</td><td>Each service signs its calls with its own Ed25519 key, and a callee accepts only the calls that caller is allowed to make</td></tr>
+<tr><td>Service calls</td><td>Each service signs its calls with its own Ed25519 key, and a callee accepts only the calls that caller is allowed to make. An id placed in a call&#39;s path (a file the model names to <code>read_file</code>, a tool name) is sent as one encoded path segment, and an id holding a slash or made of dots names no file, so it cannot reach another route</td></tr>
+<tr><td>File content given to the model</td><td>An attached file&#39;s pages and knowledge passages go in labelled data blocks the model is told never to follow. Text in them that opens or closes a data block, in any letter case or spacing, is escaped, so a file cannot end its block early or forge a knowledge passage</td></tr>
+<tr><td>Oversized files</td><td>The reader and the page images share the same limits: at most 2,000 pages, a page drawn at most 16 million pixels (a larger page at a lower resolution), an image frame over 50 million pixels never decoded, and 60 seconds per page in a background read</td></tr>
+<tr><td>Plugins in an image</td><td>Each pin is a full commit plus the sha256 digest of the plugin&#39;s folder; the build refuses a pin with no digest or a download that differs from it (<a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/plugins.md#plugins-in-a-built-image">Plugins</a>)</td></tr>
 <tr><td>Policy engine</td><td>The gateway writes its policy into the policy engine at start and reports unhealthy if the engine serves a different one; token expiry is judged by the gateway&#39;s clock</td></tr>
 <tr><td>Telemetry</td><td>None. Nothing in the platform calls home</td></tr>
 </tbody></table></div>

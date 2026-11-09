@@ -20,7 +20,7 @@ import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { APP_CARD_GRID, AppCard } from '@/components/connections/app-card';
 import { AskAnAdmin } from '@/components/connections/ask-an-admin';
-import { CONNECTOR_STATE, ConnectorSheet, inChatWords, stateVariant } from '@/components/connections/connector-sheet';
+import { CONNECTOR_STATE, ConnectorSheet, NOT_SET_UP, inChatWords, stateVariant } from '@/components/connections/connector-sheet';
 import { OwnCredentialsForm } from '@/components/connections/own-credentials-form';
 import { useSignInWindow } from '@/components/connections/sign-in';
 import { DialogShell } from '@/components/shared/dialog-shell';
@@ -77,7 +77,7 @@ function RowAction({ c, connect }: { c: MyConnector; connect: ReturnType<typeof 
         <Link href={appPageHref(c.appId)}>Turn on</Link>
       </Button>
     ) : (
-      <AskAnAdmin testId={`connector-ask-${c.appId}`} />
+      <AskAnAdmin testId={`connector-ask-${c.appId}`} lead={`${NOT_SET_UP}.`} />
     );
   const keyed = (c.personFields ?? []).length > 0;
   return (

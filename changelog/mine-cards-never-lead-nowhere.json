@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Connectors not set up for your team say so",
+  "description": "On Connectors › Mine, an app your team has not set up now reads Not set up for your team yet, with the admins to ask. An admin's Turn on opens the app's own page instead of a page that does not exist.",
+  "tag": "fix"
+}

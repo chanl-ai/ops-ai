@@ -2,7 +2,8 @@
 // Priya turns Salesforce and GitHub on in the one Turn on window at 1280 and 390, against the fake Salesforce (on its
 // My Domain) and the plugins repo's fake GitHub. Turn on saves the team's setting and opens no sign-in window; her own
 // sign-in is the optional Connect my account after it. Ravi, a viewer, sees no Connect and who can; and James's first
-// chat with the team's assistant asks him for his own Salesforce account. Screenshots go to OPS_USECASE_SHOTS when set.
+// chat with the team's assistant asks him for his own Salesforce account. Before that, a member and an admin open an
+// app the team has not set up from Connectors › Mine and never reach a 404. Screenshots go to OPS_USECASE_SHOTS when set.
 import { spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -112,6 +113,39 @@ try {
       const browser = await chromium.launch();
       const errors = [];
       try {
+        // Before any app is on: on Connectors › Mine an app the team has not set up never leads anywhere that is
+        // not there. A member reads that it is not set up and whom to ask, and stays on Mine; an admin's Turn on opens
+        // the app's own page.
+        const sfId = APPS[0].id;
+        const notFound = (text) => /404|could not be found|page not found/i.test(text);
+        for (const [who, email] of [['member', 'r.menon@harborpine.example'], ['admin', 'p.shah@harborpine.example']]) {
+          const page = await signedIn(browser, consoleUrl, email, 1280);
+          await step(`0 ${who}: a Mine card for an app the team has not set up opens a real state, never a 404`, async () => {
+            await page.goto(`${consoleUrl}/integrations/my-accounts`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+            const card = page.getByTestId(`connector-${sfId}`);
+            await card.waitFor({ timeout: 90_000 });
+            const cardText = (await card.innerText()).replace(/\s+/g, ' ');
+            await page.getByTestId(`connector-open-${sfId}`).click();
+            const sheet = page.getByTestId('connector-sheet');
+            await sheet.waitFor({ timeout: 30_000 });
+            const sheetText = (await sheet.innerText()).replace(/\s+/g, ' ');
+            const adminLinks = await sheet.locator('a[href^="/integrations/apps/"]').count();
+            await page.screenshot({ path: join(SHOTS, `mine-not-set-up-${who}.png`), fullPage: true });
+            if (who === 'member') {
+              check(`0 member: the card and its details say it is not set up and to ask an admin, with no way onto the admin page`, /Not set up for your team yet/.test(cardText) && /Ask an admin/.test(cardText) && /Not set up for your team yet/.test(sheetText) && /Ask an admin/.test(sheetText) && adminLinks === 0 && new URL(page.url()).pathname === '/integrations/my-accounts', { cardText, sheetText: sheetText.slice(0, 300), adminLinks, at: page.url() });
+            } else {
+              await page.keyboard.press('Escape');
+              await page.getByTestId(`connector-turn-on-${sfId}`).click();
+              await page.waitForURL((u) => u.pathname.startsWith('/integrations/apps/'), { timeout: 60_000 });
+              await page.getByTestId('app-connect').waitFor({ timeout: 60_000 });
+              const body = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
+              const action = (await page.getByTestId('app-connect').innerText()).trim();
+              check(`0 admin: Turn on on the card opens the app's page, which offers Turn on, never a 404`, adminLinks === 1 && new URL(page.url()).pathname === `/integrations/apps/${encodeURIComponent(sfId)}` && !notFound(body) && action === 'Turn on', { adminLinks, at: page.url(), action, body: body.slice(0, 200) });
+            }
+          }, page);
+          errors.push(...page.errors);
+          await page.context().close();
+        }
         for (const width of [1280, 390]) {
           for (const app of APPS) {
             const tag = `${app.name.toLowerCase()}-${width}`;
