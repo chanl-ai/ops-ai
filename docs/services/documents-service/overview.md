@@ -136,7 +136,10 @@ needs `documents.manage`, held by team admins; a later version carries it forwar
 (per team, read live from platform-service, off for a team that set nothing, changed under `settings.manage` in the
 Security team; an unreadable policy counts as off), and the model alias version's `images` clearance in models-service,
 which refuses an image to an alias not cleared (403 `images_not_cleared`, logged denied). A page read through OCR goes
-whole with the first read (at most 4 pages, drawn at 150 dpi, longest side 1600 px). On any page, a field that fails a
+whole with the first read (at most 4 pages, drawn at 150 dpi, longest side 1600 px). A page larger than 16 million
+pixels at 150 dpi (a poster or plan sheet) is drawn at the lower resolution that fits, and an image file over 50 million
+pixels is never decoded, the same limits the reader uses, so one oversized upload cannot exhaust the service's memory;
+`GET /v1/documents/readings/{fileId}/pages/{n}/image` answers 404 for such an image. On any page, a field that fails a
 rule or reads below its review threshold goes to the one re-read with a crop around its boxes, margin wide enough to
 take in its label; a doubtful field with no boxes adds no crop, and a text page whose fields all pass sends nothing.
 Every call that carried an image is listed on the read as `imageCalls` (`step`, `pages`, `images`, `alias`) and counted
