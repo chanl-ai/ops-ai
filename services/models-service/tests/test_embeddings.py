@@ -11,8 +11,8 @@ from typing import Any
 import httpx
 import pytest
 
-from ops_models.providers import scripted_vector
 from ops_service_kit.model_calls import IngestModel, ModelCallError, ModelCalls
+from ops_service_kit.scripted_vectors import scripted_vector
 
 from .conftest import Models
 
