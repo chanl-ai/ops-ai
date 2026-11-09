@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
-import type { ErrorClass, Item, ItemStatus, KbHealth, RunStatus, RunTrigger, Schedule, Sensitivity, SourceStatus, SourceType, Weekday } from '@/lib/types/knowledge';
+import type { ErrorClass, Item, ItemStatus, KbHealth, RunStatus, RunTrigger, Schedule, Sensitivity, SourceHealth, SourceKind, SourceStatus, SourceType, Weekday } from '@/lib/types/knowledge';
 import { cn } from '@/lib/utils';
 
 type Tone = 'good' | 'warn' | 'bad' | 'neutral' | 'info';
@@ -189,6 +189,43 @@ const PLUGIN_SOURCE: SourceTypeMeta = { type: 'tool', label: 'Plugin source', sh
 
 /** A type this console does not know reads as a plugin source with its own name, so its pages still open. */
 export const sourceTypeMeta = (type: SourceType): SourceTypeMeta => SOURCE_TYPES.find((t) => t.type === type) ?? (type === 'tool' ? PLUGIN_SOURCE : { ...PLUGIN_SOURCE, type, label: type, short: type });
+
+const KIND_ICON: Record<SourceKind, LucideIcon> = { file: FileUp, web: Globe, tool: Puzzle };
+
+/** The icon for what a source is: files, a website, or an app's knowledge source. The console keeps only icons by kind. */
+export function SourceKindIcon({ kind, className }: { kind: SourceKind; className?: string }) {
+  const Icon = KIND_ICON[kind] ?? Puzzle;
+  return <Icon className={className ?? 'size-4 shrink-0 text-muted-foreground'} />;
+}
+
+/** A source's health as kb-service reports it, in one cell: healthy, failing with its days and runs, or needs reconnect. */
+export function SourceHealthText({ health }: { health?: SourceHealth }) {
+  const h = health ?? { state: 'never' as const, daysFailing: 0, failedRuns: 0, tombstoned: 0 };
+  const removed = h.tombstoned ? ` · ${h.tombstoned} removed` : '';
+  if (h.state === 'failing')
+    return (
+      <span className="inline-flex items-center gap-1 text-sm whitespace-nowrap text-destructive-text">
+        <XCircle className="size-3.5" /> Failing {h.daysFailing === 1 ? '1 day' : `${h.daysFailing} days`} · {h.failedRuns === 1 ? '1 run' : `${h.failedRuns} runs`} in a row{removed}
+      </span>
+    );
+  if (h.state === 'needs_reconnect')
+    return (
+      <span className="inline-flex items-center gap-1 text-sm whitespace-nowrap text-warning-text">
+        <AlertTriangle className="size-3.5" /> Needs reconnect{removed}
+      </span>
+    );
+  if (h.state === 'never')
+    return (
+      <span className="inline-flex items-center gap-1 text-sm whitespace-nowrap text-muted-foreground">
+        <CircleDashed className="size-3.5" /> Never synced
+      </span>
+    );
+  return (
+    <span className="inline-flex items-center gap-1 text-sm whitespace-nowrap text-success-text">
+      <CheckCircle2 className="size-3.5" /> Healthy{removed}
+    </span>
+  );
+}
 
 export function SourceTypeIcon({ type, className }: { type: SourceType; className?: string }) {
   const Icon = sourceTypeMeta(type).icon;

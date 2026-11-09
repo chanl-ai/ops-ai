@@ -51,8 +51,8 @@ export const useKbDocuments = (id: string, p: ListParams<DocumentFilters>, polli
   usePagedQuery({ queryKey: kk.documents(id, p), queryFn: () => api.knowledge.kbs.documents(id, p), refetchInterval: pollWhile(polling) });
 export const useSourcesList = (p: ListParams<SourceFilters>) =>
   usePagedQuery({ queryKey: kk.sources(p), queryFn: () => api.knowledge.sources.list(p), refetchInterval: (q) => pollWhile(!!q.state.data?.data.some((s) => s.running)) });
-export const useSource = (id: string) =>
-  useTeamQuery({ queryKey: kk.source(id), queryFn: () => api.knowledge.sources.get(id), refetchInterval: (q) => pollWhile(!!q.state.data?.running) });
+export const useSource = (id: string, enabled = true) =>
+  useTeamQuery({ queryKey: kk.source(id), queryFn: () => api.knowledge.sources.get(id), enabled: enabled && !!id, refetchInterval: (q) => pollWhile(!!q.state.data?.running) });
 export const useSourceItems = (id: string, p: ListParams<ItemFilters>, polling = false) =>
   usePagedQuery({
     queryKey: kk.items(id, p),
