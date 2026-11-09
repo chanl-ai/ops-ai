@@ -288,5 +288,5 @@ export interface SettingsLookups {
 export interface Holders {
   teamId: string;
   roles: { id: string; name: string }[];
-  holders: { id: string; name: string; email: string; roles: string[] }[];
+  holders: { id: string; name: string; email: string; roles: string[]; inTeam?: boolean }[];
 }

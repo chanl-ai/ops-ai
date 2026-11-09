@@ -532,6 +532,8 @@ class Holder(Out):
     email: str
     # The granting roles this person holds in the team.
     roles: list[str]
+    # Granted in this team itself, not only by a grant in every team; listed first.
+    in_team: bool = False
 
 
 class HoldersOut(Out):

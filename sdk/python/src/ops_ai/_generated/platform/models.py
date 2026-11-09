@@ -151,6 +151,7 @@ class Health(TypedDict, closed=True):
 class Holder(TypedDict, closed=True):
     email: str
     id: str
+    inTeam: NotRequired[bool]
     name: str
     roles: list[str]
 

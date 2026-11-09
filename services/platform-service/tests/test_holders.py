@@ -80,6 +80,12 @@ async def test_a_viewer_learns_which_roles_edit_agents_and_who_holds_them_in_the
     assert workspace_admin.user_id in ids, "an admin of every team"
     assert other_team_builder.user_id not in ids, "a builder of another team"
     assert lapsed.user_id not in ids and viewer.user_id not in ids
+    # Whoever is granted in the team itself comes before an admin of every team, whatever their names, so a notice
+    # names someone who works in the team, never the install's first admin.
+    by_id = {str(h["id"]): h for h in holders}
+    assert by_id[builder]["inTeam"] is True and by_id[workspace_admin.user_id]["inTeam"] is False, holders
+    order = [str(h["id"]) for h in holders]
+    assert order.index(builder) < order.index(workspace_admin.user_id), order
 
 
 async def test_a_team_the_caller_is_not_in_and_an_unknown_cell_are_refused(platform: Platform) -> None:

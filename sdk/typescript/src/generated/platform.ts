@@ -2113,6 +2113,11 @@ export interface components {
             email: string;
             /** Id */
             id: string;
+            /**
+             * Inteam
+             * @default false
+             */
+            inTeam: boolean;
             /** Name */
             name: string;
             /** Roles */

@@ -36,11 +36,14 @@ class HolderStore:
             role_assignments.c.team_id.in_([team_id, ANY_TEAM]),
             sa.or_(role_assignments.c.expires_at.is_(None), role_assignments.c.expires_at > now),
         )
-        direct = sa.select(role_assignments.c.subject_id.label("user_id"), role_assignments.c.role_id).where(
+        # Granted in this team itself, not only through a grant in every team (a workspace admin's, or the install's
+        # first admin's): the people a notice names first, as the ones who work in the team.
+        here = (role_assignments.c.team_id == team_id).label("here")
+        direct = sa.select(role_assignments.c.subject_id.label("user_id"), role_assignments.c.role_id, here).where(
             live, role_assignments.c.subject_kind == "person"
         )
         via_team = (
-            sa.select(members.c.user_id, role_assignments.c.role_id)
+            sa.select(members.c.user_id, role_assignments.c.role_id, here)
             .join(members, members.c.team_id == role_assignments.c.subject_id)
             .join(teams, teams.c.id == members.c.team_id)
             .where(
@@ -56,15 +59,20 @@ class HolderStore:
             ids = [i for i, _ in found]
             rows = (
                 await c.execute(
-                    sa.select(users.c.id, users.c.name, users.c.email, held.c.role_id)
+                    sa.select(users.c.id, users.c.name, users.c.email, held.c.role_id, held.c.here)
                     .join(held, held.c.user_id == users.c.id)
                     .where(held.c.role_id.in_(ids), users.c.status == "active")
                     .order_by(users.c.name, users.c.id)
                 )
             ).all()
         people: dict[str, dict[str, Any]] = {}
-        for uid, name, email, role_id in rows:
-            person = people.setdefault(str(uid), {"id": str(uid), "name": str(name), "email": str(email), "roles": []})
+        for uid, name, email, role_id, in_team in rows:
+            person = people.setdefault(
+                str(uid), {"id": str(uid), "name": str(name), "email": str(email), "roles": [], "inTeam": False}
+            )
             if role_id not in person["roles"]:
                 person["roles"].append(str(role_id))
-        return {"roles": [{"id": i, "name": n} for i, n in found], "holders": list(people.values())}
+            person["inTeam"] = person["inTeam"] or bool(in_team)
+        # Those granted in the team first, each part by name.
+        ordered = sorted(people.values(), key=lambda h: not h["inTeam"])
+        return {"roles": [{"id": i, "name": n} for i, n in found], "holders": ordered}
