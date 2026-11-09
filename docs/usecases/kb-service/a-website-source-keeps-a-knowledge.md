@@ -1,6 +1,6 @@
 # A website source keeps a knowledge base current, and answers cite it
 
-Status: current. Id: `uc-674`. Service: `kb-service`. Layers: api.
+Status: current. Id: `uc-674`. Service: `kb-service`. Layers: api, sdk.
 
 ## Stories
 
@@ -12,6 +12,7 @@ Status: current. Id: `uc-674`. Service: `kb-service`. Layers: api.
 | S4 | Search runs by meaning and keywords and says so; an agent cites a crawled page, and an agent not given the base cannot search it | api | 8-10 | 10 |
 | S5 | With likely questions and FAQ drafts approved, an approved pair answers its question and cites the passage it came from | api | 11-13 | 13 |
 | S6 | The repo's own docs site, which has no sitemap, is crawled by its links and answers a question (when `OPS_DOCS_SITE_URL` names it running) | api | 14 | 14 |
+| S7 | A developer drives the new knowledge routes from the Python and TypeScript SDKs | sdk | 15-20 | 20 |
 
 ## Preconditions
 
@@ -42,12 +43,19 @@ Run: `OPS_PLUGINS_REPO=<path> make usecase-test UC=uc-674 LAYER=api`.
 | 12 | Read the Changes queue | FAQ drafts wait, each with the passage it quotes as `before` |
 | 13 | Approve a draft and search its question | The passage returned is matched by the pair (`faq`), on the page it came from, holding the quote |
 | 14 | With the docs site running (`npx next dev -p <port>` in `apps/docs`, `OPS_DOCS_SITE_URL=http://127.0.0.1:<port>`), crawl it from `/docs` by links, two deep, at most 25 pages, and ask about it | At least five pages indexed; the answer cites one of them |
+| 15 | Python SDK: list source kinds | Files first, with its defaults (a manual schedule) |
+| 16 | Python SDK: save a weekly schedule and the FAQ drafts step, read the estimate | The schedule and a next sync time come back; the estimate has calls and its basis |
+| 17 | Python SDK: approve the AI steps, edit a draft, approve the drafts in one call | The edit keeps the draft pending; the decision approves them all |
+| 18 | Python SDK: search the base | Keyword and meaning ran; a passage matched by the approved pair |
+| 19 | Python SDK: list the source's tombstones | An empty list |
+| 20 | TypeScript SDK (built from `sdk/typescript`): source kinds, a search, the decided drafts | The same answers through the other SDK |
 
 ## Acceptance layers
 
 | Layer | Script | State |
 |---|---|---|
 | api | `kb-service/scripts/test-uc-674-api.py` | passing |
+| sdk | `kb-service/scripts/test-uc-674-sdk.py` | passing |
 
 ## Non-vacuous check
 
