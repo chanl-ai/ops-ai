@@ -1,0 +1,1 @@
+{"date":"2026-11-09","title":"A website sync keeps to the site's pace","description":"Changed pages are fetched one at a time at the source's rate, or slower when the site's robots.txt asks for a crawl delay.","tag":"fix"}

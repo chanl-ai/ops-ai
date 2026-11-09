@@ -5,6 +5,7 @@ preview that stores something or never reaches the plugin."""
 
 from __future__ import annotations
 
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -42,6 +43,9 @@ class WebPlugin:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.at_once = 0
         self.most = 0
+        # The pace the listing names (a site's Crawl-delay), and when each page fetch arrived.
+        self.pace: float | None = None
+        self.arrived: list[float] = []
 
     async def declared(self, tenant_id: str, team_id: str) -> list[dict[str, Any]]:
         return [
@@ -69,7 +73,11 @@ class WebPlugin:
                 elif url in self.inline:
                     row |= {"content": body, "mime": "text/html", "encoding": "text", "marker": f'"{len(body)}"'}
                 rows.append(row)
-            return Answer(True, {"items": rows})
+            listing: dict[str, Any] = {"items": rows}
+            if self.pace is not None:
+                listing["pace_s"] = self.pace
+            return Answer(True, listing)
+        self.arrived.append(time.monotonic())
         self.at_once += 1
         self.most = max(self.most, self.at_once)
         try:
@@ -207,3 +215,17 @@ async def test_source_kinds_list_files_then_each_apps_knowledge_source(kb: httpx
     assert web_kind["kind"] == "web" and web_kind["defaults"]["cleaning"]["furniture"] is True
     assert web_kind["defaults"]["schedule"] == {"kind": "daily", "time": "02:00", "tz": "UTC"}
     assert kinds[0]["defaults"]["schedule"] == {"kind": "manual"}
+
+
+async def test_page_fetches_keep_to_the_slower_of_the_sources_rate_and_its_crawl_delay(
+    kb: httpx.AsyncClient, web: WebPlugin
+) -> None:
+    """Each fetch is its own call, so the plugin's own pacing never spaced them: a sync read every changed page at
+    once, whatever the site asked for."""
+    for n in range(6):
+        web.pages[f"{SITE}/help/{n}"] = html(f"Help {n}", f"Help page number {n} about loans.")
+    web.pace = 0.2
+    src, _ = await site_source(kb)
+    data(await kb.post(f"/v1/sources/{src['id']}/sync"))
+    gaps = [b - a for a, b in zip(web.arrived, web.arrived[1:], strict=False)]
+    assert len(web.arrived) == 8 and min(gaps) >= 0.18, gaps

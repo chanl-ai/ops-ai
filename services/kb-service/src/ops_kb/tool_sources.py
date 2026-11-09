@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -175,6 +176,24 @@ def _filename(item: dict[str, Any]) -> str:
     return title if title.endswith(suffix) else f"{title}{suffix}"
 
 
+class Pacer:
+    """One turn every `pace` seconds, shared by a sync's fetches whatever their concurrency."""
+
+    def __init__(self, pace: float) -> None:
+        self.pace = pace
+        self.next = 0.0
+        self.lock = asyncio.Lock()
+
+    async def turn(self) -> None:
+        if self.pace <= 0:
+            return
+        async with self.lock:
+            now = time.monotonic()
+            if self.next > now:
+                await asyncio.sleep(self.next - now)
+            self.next = max(now, self.next) + self.pace
+
+
 def _listing(out: Any) -> list[dict[str, Any]] | None:
     """The page's items when the answer is a knowledge listing, else None."""
     if not isinstance(out, dict):
@@ -257,6 +276,10 @@ async def sync_tool_source(
         await service.store.update_source(tenant, source_id, {"config": dict(cfg)})
 
     pages, restarted = 0, False
+    # The seconds between two fetches of this source's items: the source's own rate, or the slower pace its listing
+    # names (a site's robots.txt Crawl-delay). Each fetch is its own call, so the plugin cannot pace them itself.
+    values = cast(dict[str, Any], cfg.get("values") or {})
+    pace = 1.0 / float(values["rate"]) if isinstance(values.get("rate"), int | float) and values["rate"] > 0 else 0.0
     while True:
         if pages >= MAX_PAGES:
             status, stopped = "partial", f"Stopped after {MAX_PAGES} pages; the next run continues from here."
@@ -289,6 +312,8 @@ async def sync_tool_source(
             errors.append({"phase": "list", "errorClass": "contract", "message": stopped})
             break
         out = cast(dict[str, Any], page.output)
+        if isinstance(out.get("pace_s"), int | float):
+            pace = max(pace, float(out["pace_s"]))
         for r in rows:
             item_id = str(r["id"])
             counts["listed"] += 1
@@ -335,12 +360,14 @@ async def sync_tool_source(
     gone = [str(i["path"]) for i in known.values() if not i.get("parent_id")] if full and from_start else []
     if status == "success":
         lock = asyncio.Semaphore(int(cfg.get("fetchAtOnce") or AT_ONCE))
+        paced = Pacer(pace)
 
         async def fetch(item_id: str) -> Answer:
             # The version tag held for the item lets the system answer `unchanged` without sending it again.
             held = known.get(item_id)
             tag = {"tag": held["tag"]} if cfg.get("getTakesTag") and held and held.get("tag") else {}
             async with lock:
+                await paced.turn()
                 return await reader.call(tenant, team, cfg["getTool"], {**given, "id": item_id, **tag}, act=act)
 
         # An item the listing already read (a crawl following links) is not fetched again.
