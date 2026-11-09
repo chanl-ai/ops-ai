@@ -307,7 +307,59 @@ def _contains(e: _Contains, c: SQLCompiler, **kw: Any) -> str:
     return f"CONTAINS({c.process(e.column, **kw)}, {c.process(e.words, **kw)})"
 
 
+# Vectors ----------------------------------------------------------------------------------------------------------
+
+
+class Vector(sa.types.UserDefinedType[list[float]]):
+    """A vector column of any width: pgvector's `vector` on PostgreSQL. Its width lives beside it, so the one column
+    holds whichever embedding model the environment uses; an index is per width (vector_index_ddl)."""
+
+    cache_ok = True
+
+    def get_col_spec(self, **kw: Any) -> str:
+        return "vector"
+
+    def bind_processor(self, dialect: sa.Dialect) -> Any:
+        """A list of floats is sent as vector_text; text already in that form passes as it is."""
+
+        def process(value: Any) -> Any:
+            return value if value is None or isinstance(value, str) else vector_text(value)
+
+        return process
+
+
+def vector_text(values: Sequence[float]) -> str:
+    """A vector as the text both databases parse: [0.1,0.2,...]."""
+    return "[" + ",".join(repr(float(v)) for v in values) + "]"
+
+
+def vector_distance_sql(dialect: str, column: str, param: str, width: int) -> str:
+    """The SQL for the cosine distance between `column` and the bound `:param` vector (vector_text), both `width`
+    wide: 0 for the same direction, 2 for the opposite. SQL Server's form is Azure SQL's VECTOR_DISTANCE."""
+    w = int(width)
+    match dialect:
+        case "postgresql":
+            return f"(({column})::vector({w}) <=> (:{param})::vector({w}))"
+        case "mssql":
+            return f"VECTOR_DISTANCE('cosine', CAST({column} AS VECTOR({w})), CAST(:{param} AS VECTOR({w})))"
+        case _:
+            raise ValueError(f"{dialect} has no vector distance")
+
+
+def vector_index_ddl(dialect: str, table: str, column: str, width: int) -> str | None:
+    """The approximate-nearest-neighbour index for one width (PostgreSQL's HNSW over the cosine distance, on the rows
+    of that width); None where the database has none."""
+    w = int(width)
+    if dialect != "postgresql":
+        return None
+    return (
+        f"CREATE INDEX IF NOT EXISTS ix_{table}_hnsw_{w} ON {table} "
+        f"USING hnsw ((({column})::vector({w})) vector_cosine_ops) WHERE width = {w}"
+    )
+
+
 __all__ = [
+    "Vector",
     "claim",
     "db_after",
     "db_epoch",
@@ -319,4 +371,7 @@ __all__ = [
     "locked",
     "system_tx",
     "upsert",
+    "vector_distance_sql",
+    "vector_index_ddl",
+    "vector_text",
 ]

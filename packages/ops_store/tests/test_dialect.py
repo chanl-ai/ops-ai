@@ -29,6 +29,9 @@ from ops_store.dialect import (
     lock_key,
     locked,
     upsert,
+    vector_distance_sql,
+    vector_index_ddl,
+    vector_text,
 )
 from ops_store.search import contains
 
@@ -212,3 +215,16 @@ async def test_a_search_for_brackets_matches_the_brackets_only(engine: AsyncEngi
         await c.execute(work.insert(), [{"id": "[d]", "due": 3.0}, {"id": "d", "due": 4.0}])
         found = (await c.execute(sa.select(work.c.id).where(contains(work.c.id, "[d]")))).scalars().all()
     assert found == ["[d]"]
+
+
+def test_vector_search_has_one_body_per_database_and_none_where_it_cannot_run() -> None:
+    """A width that is not a number would be written into the SQL; a database with no vector type must refuse rather
+    than run a distance it cannot compute."""
+    assert vector_distance_sql("postgresql", "v.e", "q", 64) == "((v.e)::vector(64) <=> (:q)::vector(64))"
+    assert "VECTOR_DISTANCE('cosine'" in vector_distance_sql("mssql", "v.e", "q", 64)
+    with pytest.raises(ValueError):
+        vector_distance_sql("sqlite", "v.e", "q", 64)
+    with pytest.raises(ValueError):
+        vector_distance_sql("postgresql", "v.e", "q", "64); DROP TABLE x; --")  # type: ignore[arg-type]
+    assert vector_index_ddl("mssql", "t", "e", 64) is None
+    assert vector_text([1, 0.5]) == "[1.0,0.5]"
