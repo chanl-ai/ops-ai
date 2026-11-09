@@ -963,6 +963,11 @@ class KnowledgeService:
         # A run of its own for the AI steps: its task may be made inside a sync, whose run it must not share.
         with ai_run(self.ai_clients, who.tenant_id, fresh=True):
             await self._rebuild_items(who, s, run, stale)
+        # Settings saved while it ran (an AI step approved just after a save) could not start their own rebuild, as
+        # this one held the source: it rebuilds what they changed now, so they never wait for the next sync.
+        found = await self.store.sources(who.tenant_id, [str(s["id"])])
+        if found and self.key_of(found[0]) != self.key_of(s):
+            await self.start_rebuild(who, found[0])
 
     async def _rebuild_items(
         self, who: Who, s: dict[str, Any], run: dict[str, Any], stale: list[dict[str, Any]]

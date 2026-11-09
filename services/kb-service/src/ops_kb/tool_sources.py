@@ -68,7 +68,8 @@ class ToolReader:
             "tool": tool,
             "input": args,
             "key": new_id("kbcall"),
-            "runContext": {"act": act, "environment": "production"},
+            # A sync acts on the source as it is: a live run (tools-service takes test or live).
+            "runContext": {"act": act, "environment": "live"},
         }
         try:
             data = await self.tools.post("/v1/calls", json=body, tenant=tenant_id, team=team_id, timeout=60)

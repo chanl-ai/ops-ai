@@ -96,3 +96,26 @@ async def test_a_running_rebuild_holds_off_a_sync_and_stops_when_cancelled(engin
         assert again.status_code == 409 and again.json()["error"]["code"] == "run_not_running", again.text
         assert data(await client.get(f"/v1/sources/{src['id']}"))["reindexNeeded"] is True
         assert (await client.post(f"/v1/sources/{src['id']}/sync")).status_code == 200, "the lease is released"
+
+
+async def test_settings_saved_during_a_rebuild_are_rebuilt_when_it_ends(engine: AsyncEngine, tenant: str) -> None:
+    """A save while a rebuild holds the source cannot start its own; without a second rebuild its items would wait for
+    the next sync under the old settings (an AI step approved just after a save would write nothing)."""
+    client, readings = held(engine, tenant)
+    async with client:
+        src = await two_files(client)
+        readings.release.clear()
+        first = data(await client.patch(f"/v1/sources/{src['id']}", json={"ingest": {"size": 300}}))["rebuild"]
+        later = data(await client.patch(f"/v1/sources/{src['id']}", json={"ingest": {"size": 500}}))
+        assert later["rebuild"] is None, "the running rebuild holds the source"
+        readings.release.set()
+        await finished(client, first["id"])
+        runs: list[dict[str, Any]] = []
+        for _ in range(200):
+            runs = data(await client.get(f"/v1/sources/{src['id']}/runs"))["data"]
+            if len(runs) >= 3 and runs[0]["status"] != "running":
+                break
+            await asyncio.sleep(0.02)
+        assert [r["trigger"] for r in runs[:2]] == ["settings", "settings"], runs
+        assert runs[0]["status"] == "success" and runs[0]["counts"]["rebuilt"] == 2, runs[0]
+        assert data(await client.get(f"/v1/sources/{src['id']}"))["reindexNeeded"] is False
