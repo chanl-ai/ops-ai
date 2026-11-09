@@ -1,4 +1,4 @@
-"""What a data tool sends and how it reaches its next page, shared by tools-service and `ops plugin test`, so a plugin
+"""What a data tool sends and how it reaches its next page, shared by tools-service and `opsai plugin test`, so a plugin
 is tested the way it runs.
 
 A call's arguments are checked against the tool's inputs, the query templates are rendered from the checked values

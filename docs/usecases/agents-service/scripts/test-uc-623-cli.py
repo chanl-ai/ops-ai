@@ -1,4 +1,4 @@
-"""uc-623, cli layer: the same three-node YAML through `ops workflows` validate, apply and run --test."""
+"""uc-623, cli layer: the same three-node YAML through `opsai workflows` validate, apply and run --test."""
 
 from __future__ import annotations
 
@@ -55,14 +55,14 @@ def main() -> None:
     env = _profile()
     valid = _ops(["validate", str(YAML)], env)
     check(
-        "7 ops workflows validate accepts the YAML",
+        "7 opsai workflows validate accepts the YAML",
         valid.returncode == 0 and "valid" in (valid.stdout + valid.stderr).lower(),
         valid.stdout + valid.stderr,
     )
     applied = _ops(["apply", str(YAML)], env)
     out = applied.stdout + applied.stderr
     check(
-        "8 ops workflows apply stores the draft",
+        "8 opsai workflows apply stores the draft",
         applied.returncode == 0 and "normalize_support_request" in out,
         out,
     )
@@ -71,7 +71,7 @@ def main() -> None:
         env,
     )
     check(
-        "9 ops workflows run --test --wait returns accepted",
+        "9 opsai workflows run --test --wait returns accepted",
         ran.returncode == 0 and "accepted" in (ran.stdout + ran.stderr),
         ran.stdout + ran.stderr,
     )
@@ -92,5 +92,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as exc:
-        check("7 ops workflows validate accepts the YAML", False, str(exc))
+        check("7 opsai workflows validate accepts the YAML", False, str(exc))
         finish()

@@ -1,4 +1,4 @@
-"""Puts a plugin into an install's plugins folder, or takes it out (`ops plugin install|remove`). The services load
+"""Puts a plugin into an install's plugins folder, or takes it out (`opsai plugin install|remove`). The services load
 every folder there at start (ops_service_kit Settings.plugins_dir), so this is the whole install: a copy of the
 plugin's package folder, made only after the plugin validates."""
 

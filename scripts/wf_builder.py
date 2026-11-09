@@ -12,7 +12,7 @@ and create it only when they say so, on the profile they name.
 `workflows/<id>.json` beside the developer, has the engine validate it, and prints its steps and ports. Nothing is
 created without `--create`; on a profile that is not local (named other than `local`, or not on this machine) the
 workflow id must also be typed back. Creating acts as a person (OPS_TOKEN, or the profile's accessToken); an API key
-reads and validates only. Every call goes through the Python SDK on the named profile (the ops CLI is not
+reads and validates only. Every call goes through the Python SDK on the named profile (the opsai CLI is not
 built yet): the node catalog is read live from that profile, never from a copy.
 """
 

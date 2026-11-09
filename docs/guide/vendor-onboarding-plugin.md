@@ -71,7 +71,7 @@ registry.
 
 ## Install it on a local stack today
 
-There is no `ops plugin pack`, no acceptance by the platform admin and no install from Connections yet. `install.py`
+There is no `opsai plugin pack`, no acceptance by the platform admin and no install from Connections yet. `install.py`
 does by hand what the install process will do: it reads `plugin.yaml`, makes each contribution through the same public
 routes `scripts/sample_team.py` uses, replaces each `@kind/id` reference with the id the team got, and publishes each
 record through its review. Nothing is written to a database directly. A second run prints FOUND for everything.
@@ -111,7 +111,7 @@ for 3 years, under 5.") in the sandbox, got the agent's notes, waited for Riley 
 
 | Today | With plugins (`plugins.html`) |
 |---|---|
-| `install.py` reads `plugin.yaml` and calls each service | `ops plugin pack` makes a signed bundle; the platform admin accepts it; a team admin installs it from Connections, and a central install process calls each owner service |
+| `install.py` reads `plugin.yaml` and calls each service | `opsai plugin pack` makes a signed bundle; the platform admin accepts it; a team admin installs it from Connections, and a central install process calls each owner service |
 | References are resolved by text replacement in `install.py` | The install plan resolves `@kind/id` in dependency order and records each copy's provenance |
 | Records are found again by name | Each copy carries the plugin, version and baseline it came from, so an update can tell an edited copy from an untouched one |
 | Egress, the secret and the model alias are set by the script | They are declared requirements, bound in the install dialog and agreed to at acceptance |

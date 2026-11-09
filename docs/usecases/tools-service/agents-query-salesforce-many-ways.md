@@ -45,7 +45,7 @@ Design: `docs/guide/plugins.md`, Paging and queries.
 | 15 | Priya syncs once more | Nothing is fetched again |
 | 16 | James opens the case helper's tools picker and searches "find cases" | The option reads "Find cases", from Salesforce |
 | 17 | James grants it and reloads the agent | The granted tool reads "Find cases" on the agent page |
-| 18 | `ops plugin validate` on a copy whose `find_cases` link paging names no field | Refused: "a link rule names the answer field" |
+| 18 | `opsai plugin validate` on a copy whose `find_cases` link paging names no field | Refused: "a link rule names the answer field" |
 | 19 | On a copy whose `find_cases` status input has no list or format | Refused: "status is used in a query and needs an enum or a format" |
 | 20 | On a copy whose `search` term input has only a pattern | Refused: "term has only a pattern, which is for path segments" |
 | 21 | On a copy with an input nested four levels deep | Refused: "nests past three levels" |

@@ -674,7 +674,7 @@ def wait_ended(ops: OpsAI, run_id: str, *, timeout: float = 30.0) -> dict[str, A
 
 
 def inspect_run(ops: OpsAI, run_id: str) -> dict[str, Any]:
-    """The same run `ops workflows inspect` prints: status, waiting payload, steps."""
+    """The same run `opsai workflows inspect` prints: status, waiting payload, steps."""
     return ops.runs.get(run_id)
 
 
@@ -1524,7 +1524,7 @@ def _ready(bindings: dict[str, Any], meta: dict[str, Any]) -> None:
         fixture = (meta.get("fixtures") or ["fixtures/valid.json"])[0]
         caps = {str(item.get("id")) for item in (meta.get("capabilities") or []) if isinstance(item, dict)}
         if "ops.trigger.email" in caps or str(meta.get("id") or "").startswith("email"):
-            print(f"CLI OPS_CONFIG=.ops-profile.json ops workflows send-test-email {workflow_id} --event {fixture}")
+            print(f"CLI OPS_CONFIG=.ops-profile.json opsai workflows send-test-email {workflow_id} --event {fixture}")
             print(f"PY  ops.workflows.send_test_email({workflow_id!r}, event={{...}}, mode='test')")
         elif "ops.trigger.event" in caps:
             print(
@@ -1533,7 +1533,7 @@ def _ready(bindings: dict[str, Any], meta: dict[str, Any]) -> None:
             )
             print("PY  ops.raw.files.files_delete_file(file_id)  # system/event-started; not startable by hand")
         else:
-            print(f"CLI OPS_CONFIG=.ops-profile.json ops workflows run {workflow_id} --input {fixture} --test --wait")
+            print(f"CLI OPS_CONFIG=.ops-profile.json opsai workflows run {workflow_id} --input {fixture} --test --wait")
             print(f"PY  ops.workflows.run({workflow_id!r}, input={{...}}, mode='test', wait=True)")
     if bindings.get("knowledgeId"):
         print(f"PY  ops.knowledge.search({{'kbIds': [{bindings['knowledgeId']!r}], 'question': 'beneficial owners'}})")
@@ -1543,13 +1543,13 @@ def _ready(bindings: dict[str, Any], meta: dict[str, Any]) -> None:
         )
     if bindings.get("agentId") and meta.get("track") == "chat":
         print("PY  ops.agents.chat(<published id>, message)")
-        print("CLI ops chat send  # Planned")
+        print("CLI opsai chat send  # Planned")
     if bindings.get("agentId") and meta.get("track") == "agent":
         agent_id = bindings["agentId"]
         print(f"UI /agents/{agent_id}")
-        print(f'CLI ops agents chat {agent_id} --message "What documents open a business account?"')
+        print(f'CLI opsai agents chat {agent_id} --message "What documents open a business account?"')
         print(f"PY  ops.agents.chat({agent_id!r}, message)")
-        print("CLI ops chat send  # Planned")
+        print("CLI opsai chat send  # Planned")
     if (
         meta.get("track") == "composition"
         and bindings.get("workflowId")
@@ -1558,7 +1558,7 @@ def _ready(bindings: dict[str, Any], meta: dict[str, Any]) -> None:
         workflow_id = bindings["workflowId"]
         print(f"UI /workflows/definitions/{workflow_id}")
         print(
-            f"CLI OPS_CONFIG=.ops-profile.json ops workflows run {workflow_id} --input fixtures/ask.json --test --wait"
+            f"CLI OPS_CONFIG=.ops-profile.json opsai workflows run {workflow_id} --input fixtures/ask.json --test --wait"
         )
         print(f"PY  ops.workflows.run({workflow_id!r}, input={{...}}, mode='test', wait=True)")
     if (
@@ -1569,6 +1569,6 @@ def _ready(bindings: dict[str, Any], meta: dict[str, Any]) -> None:
         agent_id = bindings["agentId"]
         print(f"UI /agents/{agent_id}")
         print(
-            f'CLI ops agents chat {agent_id} --message "Normalize this: ada@example.test / Card / Where is my refund?"'
+            f'CLI opsai agents chat {agent_id} --message "Normalize this: ada@example.test / Card / Where is my refund?"'
         )
         print(f"PY  ops.agents.chat({agent_id!r}, message)")

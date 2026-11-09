@@ -266,7 +266,7 @@ No model key is needed: with no `OPENAI_API_KEY`, every model alias runs on the 
 git clone <this repository> ops-ai && cd ops-ai
 make setup                               # optional: answer what you have; each answer is tested before it is written
 make install                             # pnpm install and uv sync, once per clone
-make install-cli                         # only the `ops` command line, no developer workspace; behind a mirror or offline: docs/guide/install.md
+make install-cli                         # only the `opsai` command line (no developer workspace); behind a mirror or offline: docs/guide/install.md
 make plugins-sync                        # optional: the pinned plugins (GitHub, Salesforce) into plugins/
 make up                                  # PostgreSQL, OPA, every service and the console
 make health                              # each service, its port and whether it answers

@@ -11,6 +11,6 @@ uv run python examples/agents/05-follow-a-checklist/setup.py
 uv run pytest examples/agents/05-follow-a-checklist/test_example.py
 ```
 
-Python uses `ops.agents.chat` plus the public skills and guardrails routes. CLI `ops agents chat` is built. `ops chat send` and evaluation are **Planned**.
+Python uses `ops.agents.chat` plus the public skills and guardrails routes. CLI `opsai agents chat` is built. `opsai chat send` and evaluation are **Planned**.
 
 The full lesson is in [../../../docs/guide/agents.md](../../../docs/guide/agents.md).

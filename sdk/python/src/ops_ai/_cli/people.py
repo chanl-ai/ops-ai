@@ -1,4 +1,4 @@
-"""`ops people` and `ops models`: the team's members and roles as Settings shows them, an invite (printed, not sent,
+"""`opsai people` and `opsai models`: the team's members and roles as Settings shows them, an invite (printed, not sent,
 unless --send), and the models settings: the chat aliases an agent may name, the provider connections and keys, and
 one test turn on an agent's model (it costs money, so it runs only with --confirm)."""
 
@@ -15,7 +15,7 @@ from .common import client, emit, parser, refuse, table, verb_options
 
 
 def people_main(argv: list[str]) -> int:
-    ap = parser("ops people", "Members, invites and roles.")
+    ap = parser("opsai people", "Members, invites and roles.")
     sub = ap.add_subparsers(dest="verb", required=True)
     common = [verb_options()]
     listing = sub.add_parser("list", parents=common, help="the team's members")
@@ -57,7 +57,7 @@ def invite_body(emails: list[str], role: str) -> dict[str, object]:
 
 
 def models_main(argv: list[str]) -> int:
-    ap = parser("ops models", "Model aliases, provider connections and keys, and one test turn.")
+    ap = parser("opsai models", "Model aliases, provider connections and keys, and one test turn.")
     sub = ap.add_subparsers(dest="verb", required=True)
     common = [verb_options()]
     sub.add_parser("aliases", parents=common, help="the chat aliases an agent may name, with their prices")
@@ -69,7 +69,7 @@ def models_main(argv: list[str]) -> int:
     test.add_argument("--confirm", action="store_true", help="spend a real model call")
     ns = ap.parse_args(argv)
     if ns.verb == "test" and not ns.confirm:
-        sys.stderr.write("ops models test calls a real model, which costs money; add --confirm to run it\n")
+        sys.stderr.write("opsai models test calls a real model, which costs money; add --confirm to run it\n")
         return 2
     try:
         return _models(ns, client(ns))

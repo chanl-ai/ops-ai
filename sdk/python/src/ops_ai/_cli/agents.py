@@ -1,4 +1,4 @@
-"""`ops agents` over the public SDK: apply, publish, chat, test, trace."""
+"""`opsai agents` over the public SDK: apply, publish, chat, test, trace."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from .common import client, emit, parser, refuse
 
 
 def main(argv: list[str]) -> int:
-    ap = parser("ops agents", "Author and chat with agents through the public SDK.")
+    ap = parser("opsai agents", "Author and chat with agents through the public SDK.")
     sub = ap.add_subparsers(dest="verb", required=True)
     for name, help_text in (
         ("validate", "check a local agent file"),

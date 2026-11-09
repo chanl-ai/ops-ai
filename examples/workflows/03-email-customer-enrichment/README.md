@@ -12,7 +12,7 @@ After setup:
 
 ```bash
 cd examples/workflows/03-email-customer-enrichment
-OPS_CONFIG=.ops-profile.json ops workflows send-test-email email_customer_enrichment --event fixtures/known-customer.json
+OPS_CONFIG=.ops-profile.json opsai workflows send-test-email email_customer_enrichment --event fixtures/known-customer.json
 ```
 
 An unknown sender ends `customer_not_found`. A model that cannot answer (the test sets an alias that does not exist) ends `analysis_failed`. Setup reuses `search_customers` and a published R4 agent when one is live.

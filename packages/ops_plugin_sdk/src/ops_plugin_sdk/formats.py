@@ -1,5 +1,5 @@
 """Checks a tool's input value against what its manifest declares, and writes it into a query so it cannot change the
-query: tools-service runs both before any request leaves, and `ops plugin test` runs the same code.
+query: tools-service runs both before any request leaves, and `opsai plugin test` runs the same code.
 
 The template carries its own quotes and a format never adds them, so `Status = '{{status}}'` stays one string literal
 whatever the value. `soql_string` escapes what could end the literal; `sosl_term` escapes SOSL's reserved characters,

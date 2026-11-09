@@ -186,7 +186,7 @@ def header_settings(headers: Mapping[str, str], tools: Iterable[Tool]) -> set[st
 
 def headers_of(headers: Mapping[str, str], tool: Tool, settings: Mapping[str, Any]) -> list[dict[str, str]]:
     """A call's headers as a module operation holds them (`{key, value}`): the plugin's, then the tool's over them,
-    rendered from the call's settings. A header whose setting is unset is left out. The kit's own rule, so `ops plugin
+    rendered from the call's settings. A header whose setting is unset is left out. The kit's own rule, so `opsai plugin
     test` sends the same headers."""
     return [{"key": k, "value": v} for k, v in request_headers(headers, tool, settings).items()]
 

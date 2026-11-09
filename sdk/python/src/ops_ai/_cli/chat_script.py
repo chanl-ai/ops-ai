@@ -1,4 +1,4 @@
-"""Scripted conversations: `ops chat script FILE` runs one; `ops chat evals DIR` runs every script in a folder as
+"""Scripted conversations: `opsai chat script FILE` runs one; `opsai chat evals DIR` runs every script in a folder as
 each person it names and prints a scorecard (`make assistant-evals`, docs/usecases/chat/assistant/).
 
 A script is YAML or JSON: `agent` (the team's default when left out), `test`, `kb` (knowledge bases by name or id),

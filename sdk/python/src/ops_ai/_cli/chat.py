@@ -1,13 +1,13 @@
-"""`ops chat`: chat with an agent as the chat screen does. A reply streams as it arrives, with each tool call, widget
+"""`opsai chat`: chat with an agent as the chat screen does. A reply streams as it arrives, with each tool call, widget
 and Connect card printed under it; the call log under the chat says whose sign-in each tool call used.
 
-    ops chat say --agent "Case helper" --test -m "Status of case 00001026?"
-    ops chat say --thread th_x -m "And its owner?"
-    ops chat say --connector GitHub -m "Open issues?"   # a new chat with only GitHub on
-    ops chat connected th_x Salesforce        # the Connect card's follow-up, once the person has signed in
-    ops chat approve th_x                     # the newest open approval widget; reject needs --reason
-    ops chat script docs/usecases/chat/salesforce-case-helper.yaml
-    ops chat evals docs/usecases/chat/assistant [--real]   # every script as its people; a scorecard (chat_script.py)
+    opsai chat say --agent "Case helper" --test -m "Status of case 00001026?"
+    opsai chat say --thread th_x -m "And its owner?"
+    opsai chat say --connector GitHub -m "Open issues?"   # a new chat with only GitHub on
+    opsai chat connected th_x Salesforce        # the Connect card's follow-up, once the person has signed in
+    opsai chat approve th_x                     # the newest open approval widget; reject needs --reason
+    opsai chat script docs/usecases/chat/salesforce-case-helper.yaml
+    opsai chat evals docs/usecases/chat/assistant [--real]   # every script as its people; a scorecard (chat_script.py)
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from .transcript import transcript
 
 
 def main(argv: list[str]) -> int:
-    ap = parser("ops chat", "Chat with agents through the chat screen's routes.")
+    ap = parser("opsai chat", "Chat with agents through the chat screen's routes.")
     sub = ap.add_subparsers(dest="verb", required=True)
     common = [verb_options()]
     sub.add_parser("agents", parents=common, help="the agents New chat offers")
@@ -102,7 +102,7 @@ def _dispatch(ns: argparse.Namespace) -> int:
         return _say(ns, ops, [])
     if ns.verb == "say":
         if not ns.message and not ns.connected:
-            raise ValueError("ops chat say: give a message (-m) or --connected APP")
+            raise ValueError("opsai chat say: give a message (-m) or --connected APP")
         return _say(ns, ops, [*ns.message, *([followup(ns.connected)] if ns.connected else [])])
     if ns.verb == "show":
         return _show(ns, ops.chat.get(ns.thread))

@@ -13,4 +13,4 @@ The landing page is [docs/guide/build-with-ops-ai.md](../docs/guide/build-with-o
 | Workflow | `examples/workflows/01-normalize-a-request/` |
 | Composition | `examples/compositions/01-workflow-asks-agent/` |
 
-Shared setup lives in `_lib/folder.py`. Helpers name the example they use (`CITE_HANDBOOK_FOLDER`, `NORMALIZE_REQUEST_ID`), not a board slice. Copy a folder, then pass it to `ops workflows` or `ops agents`. Do not add an examples catalog command.
+Shared setup lives in `_lib/folder.py`. Helpers name the example they use (`CITE_HANDBOOK_FOLDER`, `NORMALIZE_REQUEST_ID`), not a board slice. Copy a folder, then pass it to `opsai workflows` or `opsai agents`. Do not add an examples catalog command.

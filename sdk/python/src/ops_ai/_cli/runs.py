@@ -1,5 +1,5 @@
-"""`ops runs` and `ops tasks`: workflow runs as the Runs page shows them (start, status, events as they happen, cancel,
-retry), and Human Tasks as the Human Tasks queue shows them (list, open one, decide it)."""
+"""`opsai runs` and `opsai tasks`: workflow runs as the Runs page shows them (start, status, events as they happen,
+cancel, retry), and Human Tasks as the Human Tasks queue shows them (list, open one, decide it)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from .common import client, emit, parser, payload, refuse, short, table, verb_op
 
 
 def runs_main(argv: list[str]) -> int:
-    ap = parser("ops runs", "Start and follow workflow runs.")
+    ap = parser("opsai runs", "Start and follow workflow runs.")
     sub = ap.add_subparsers(dest="verb", required=True)
     common = [verb_options()]
     listing = sub.add_parser("list", parents=common, help="runs, newest first")
@@ -82,7 +82,7 @@ def _status(run: dict[str, Any]) -> str:
 
 
 def tasks_main(argv: list[str]) -> int:
-    ap = parser("ops tasks", "Human Tasks: list, open, decide.")
+    ap = parser("opsai tasks", "Human Tasks: list, open, decide.")
     sub = ap.add_subparsers(dest="verb", required=True)
     common = [verb_options()]
     listing = sub.add_parser("list", parents=common, help="the Human Tasks queue")

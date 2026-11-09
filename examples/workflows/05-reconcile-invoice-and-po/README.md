@@ -12,9 +12,9 @@ After setup:
 
 ```bash
 cd examples/workflows/05-reconcile-invoice-and-po
-OPS_CONFIG=.ops-profile.json ops workflows validate resources/workflow.yaml
-OPS_CONFIG=.ops-profile.json ops workflows apply resources/workflow.yaml
-OPS_CONFIG=.ops-profile.json ops workflows run reconcile_invoice_po --input fixtures/match.json --test --wait
+OPS_CONFIG=.ops-profile.json opsai workflows validate resources/workflow.yaml
+OPS_CONFIG=.ops-profile.json opsai workflows apply resources/workflow.yaml
+OPS_CONFIG=.ops-profile.json opsai workflows run reconcile_invoice_po --input fixtures/match.json --test --wait
 ```
 
 | Case | Fixture | Outcome |

@@ -46,7 +46,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | S23 | A refused sign-in answers one plain sentence naming who acts, and the account reads refused with it | api | 34 | 34 |
 | S24 | A sign-in place outside the app's choices is refused in plain words before any sign-in | api | 35 | 35 |
 | S11 | A developer lists the connected apps and reads one through the Python SDK and gets what the API gives | sdk | 24 | 24 |
-| S12 | A team admin lists and shows apps with `ops apps`; a viewer's `ops apps connect` is refused | cli | 25-26 | 25 |
+| S12 | A team admin lists and shows apps with `opsai apps`; a viewer's `opsai apps connect` is refused | cli | 25-26 | 25 |
 
 ## Steps
 
@@ -75,8 +75,8 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | 22 | Ravi (viewer) lists `GET /v1/apps` and turns the query-key desk on | The list 200; the turn-on 403 |
 | 23 | Priya reads `GET /v1/apps/plugin:test.header-key` | Its accounts list the team account first, default, state connected |
 | 24 | Priya, through the SDK, calls `ops.apps.list(connected=True)` and `ops.apps.get` | The app among only connected cards; its name |
-| 25 | Priya runs `ops apps list --connected` and `ops apps show plugin:test.header-key` | Exit 0; the list holds the app; show names it |
-| 26 | Ravi runs `ops apps connect plugin:test.query-key` | A non-zero exit naming the refusal (403) |
+| 25 | Priya runs `opsai apps list --connected` and `opsai apps show plugin:test.header-key` | Exit 0; the list holds the app; show names it |
+| 26 | Ravi runs `opsai apps connect plugin:test.query-key` | A non-zero exit naming the refusal (403) |
 | 27 | The console steps for group A (Apps grid, Connected only and Available only, the small Connect window) | Written by the console builder with tasks U1-U3; steps 1-13 stay until then |
 | 29 | Priya turns the person desk on with `signIn: person`; James signs in with his own account; a call acting for James reads a record | 200; the record is read as James's own account, with no team account |
 | 30 | James reads the person desk's page after his sign-in in step 29, without pressing Test | His row's `test` reads ok with when it ran |

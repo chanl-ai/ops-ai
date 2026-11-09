@@ -7,11 +7,11 @@ An agent is a reviewed model configuration. It chooses steps inside allowed tool
 ## Lifecycle
 
 ```bash
-ops agents validate resources/agent.yaml
-ops agents apply resources/agent.yaml
-ops agents publish <id> --note "Ready"
-ops agents chat <id> --message "What documents open a business account?"
-ops agents test <id> --message "What documents open a business account?"
+opsai agents validate resources/agent.yaml
+opsai agents apply resources/agent.yaml
+opsai agents publish <id> --note "Ready"
+opsai agents chat <id> --message "What documents open a business account?"
+opsai agents test <id> --message "What documents open a business account?"
 ```
 
 ```python
@@ -22,7 +22,7 @@ ops.agents.apply("resources/agent.yaml")
 ops.agents.chat("ag_guide", "What documents open a business account?")
 ```
 
-`ops agents eval` scores dataset cases on a published agent. Stream, wait and background runs stay **Planned** until the Agent Run API ships.
+`opsai agents eval` scores dataset cases on a published agent. Stream, wait and background runs stay **Planned** until the Agent Run API ships.
 
 ## Examples
 

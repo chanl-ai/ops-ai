@@ -23,5 +23,5 @@ surfaces:
   typescript: planned
 setupSeconds: 20
 gaps:
-- ops chat send
+- opsai chat send
 - agent.eval

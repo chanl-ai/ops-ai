@@ -1,4 +1,4 @@
-"""The `ops` areas that drive the console's routes, by failure mode: a person named by first name signs in as someone
+"""The `opsai` areas that drive the console's routes, by failure mode: a person named by first name signs in as someone
 else or not at all; a kept session from another stack is sent and refused; a chat reply's stream, tool calls or
 Connect card are lost on the way to the terminal; a widget action reaches the wrong widget or with the wrong body;
 a file meant for a knowledge base is uploaded under another purpose or never added; an invite goes out without

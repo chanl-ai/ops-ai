@@ -20,7 +20,7 @@ Ops AI's own app for the person desk, its secret sealed by the account admin) an
 | S3 | A builder may not set an app credential | api | 4 | 4 |
 | S4 | A tool's secret is kept in Secrets, and no sign-in shows there | api | 5 | 5 |
 | S5 | A developer reads and sets the app credential through the Python SDK | sdk | 6 | 6 |
-| S6 | A team admin sets the app credential with `ops apps credential set`, giving the secret on standard input | cli | 7 | 7 |
+| S6 | A team admin sets the app credential with `opsai apps credential set`, giving the secret on standard input | cli | 7 | 7 |
 
 ## Preconditions
 
@@ -39,7 +39,7 @@ Ops AI's own app for the person desk, its secret sealed by the account admin) an
 | 4 | James sets the credential | 403 |
 | 5 | Priya saves a secret `DESK_WEBHOOK` in Secrets and lists Secrets | The secret listed with no value; nothing named for the app's client or a person's sign-in |
 | 6 | Through the SDK, Priya calls `ops.credentials.set(app, client_id=…, client_secret=…)` | The environment holds client `multi-app`, Ops AI's app no longer used; no secret in the answer |
-| 7 | Priya runs `ops apps credential set plugin:test.person --client-id multi-app --client-secret -` with the secret on standard input | Exit 0; the environment holds client `multi-app`; the secret in no output |
+| 7 | Priya runs `opsai apps credential set plugin:test.person --client-id multi-app --client-secret -` with the secret on standard input | Exit 0; the environment holds client `multi-app`; the secret in no output |
 | 8 | The console steps (Apps › Credentials: App credentials, Test with my account, Secrets) | Written by the console builder with task U4 |
 
 ## Acceptance layers

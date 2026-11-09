@@ -12,9 +12,9 @@ After setup:
 
 ```bash
 cd examples/workflows/10-schedule-an-sla-follow-up
-OPS_CONFIG=.ops-profile.json ops workflows validate resources/workflow.yaml
-OPS_CONFIG=.ops-profile.json ops workflows apply resources/workflow.yaml
-OPS_CONFIG=.ops-profile.json ops workflows run schedule_sla_follow_up --input fixtures/past.json --test --wait
+OPS_CONFIG=.ops-profile.json opsai workflows validate resources/workflow.yaml
+OPS_CONFIG=.ops-profile.json opsai workflows apply resources/workflow.yaml
+OPS_CONFIG=.ops-profile.json opsai workflows run schedule_sla_follow_up --input fixtures/past.json --test --wait
 ```
 
 | Case | Fixture | Outcome |

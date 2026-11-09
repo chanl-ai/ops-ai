@@ -10,6 +10,6 @@ uv run python examples/agents/04-draft-a-note-for-approval/setup.py
 uv run pytest examples/agents/04-draft-a-note-for-approval/test_example.py
 ```
 
-Python uses `ops.agents.chat` and `ops.tasks.decide`. CLI `ops agents chat` is built. `ops chat send` is **Planned**. Replaying an approval token with a changed body is service-only `POST /v1/calls`, not the public SDK.
+Python uses `ops.agents.chat` and `ops.tasks.decide`. CLI `opsai agents chat` is built. `opsai chat send` is **Planned**. Replaying an approval token with a changed body is service-only `POST /v1/calls`, not the public SDK.
 
 The full lesson is in [../../../docs/guide/agents.md](../../../docs/guide/agents.md).

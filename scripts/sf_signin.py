@@ -13,7 +13,7 @@ runs with nobody at a browser (`make sf-signin-save|remove|restore|env AS=<perso
              https://login.salesforce.com). The token is sealed by the same code tools-service uses. The JWT flow
              gives no refresh token: run it again when the hour is up.
 
-The person is found the way `ops --as` finds them (the dev sign-in), so this runs only against a local stack, and the
+The person is found the way `opsai --as` finds them (the dev sign-in), so this runs only against a local stack, and the
 account through tools-service's own route (GET /v1/me/accounts). Only the store writes go to the database directly.
 """
 
@@ -80,7 +80,7 @@ def jwt_assertion(client_id: str, username: str, audience: str, key_pem: str, no
 
 
 def person(who: str) -> tuple[Any, dict[str, Any]]:
-    """The person's SDK client and principal, signed in as `ops --as` signs in."""
+    """The person's SDK client and principal, signed in as `opsai --as` signs in."""
     sys.path.insert(0, str(ROOT / "sdk" / "python" / "src"))
     from ops_ai._cli.common import dev_client, dev_sign_in  # noqa: PLC0415
 

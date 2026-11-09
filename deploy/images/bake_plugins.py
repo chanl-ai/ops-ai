@@ -5,7 +5,7 @@
 Each pin names a GitHub repository, a full 40-character commit, the plugin's folder in it and that folder's sha256
 digest. The commit is fetched as a tarball, so the image needs no git; the folder is checked against the digest before
 anything is installed, so a download that differs from what was pinned (a swapped archive, a compromised mirror) stops
-the build; then the plugin is validated and copied as `ops plugin install` does, and a plugin with problems stops the
+the build; then the plugin is validated and copied as `opsai plugin install` does, and a plugin with problems stops the
 build too. A branch or tag is refused because either can move, and an image must hold the same plugin every time it is
 built from the same commit. `scripts/plugins_bump.py` writes the commit and the digest together. Exit 0 done, 1
 refused."""

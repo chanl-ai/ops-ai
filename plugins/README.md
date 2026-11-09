@@ -14,8 +14,8 @@ source lives in its own repository or under `examples/plugins/`.
 
 | Task | Command (repo root) |
 |---|---|
-| Check a plugin offline | `uv run ops plugin validate <folder>`; `uv run ops plugin test <folder>` also runs its tests |
-| Put one in, or take it out | `uv run ops plugin install <folder>`, `uv run ops plugin remove <id>` |
+| Check a plugin offline | `uv run opsai plugin validate <folder>`; `uv run opsai plugin test <folder>` also runs its tests |
+| Put one in, or take it out | `uv run opsai plugin install <folder>`, `uv run opsai plugin remove <id>` |
 | Load the change on the stack | `make restart SVC=tools`, then `make logs SVC=tools FOLLOW=0` for any `plugin_failed` line |
 | Plugins baked into the images | `deploy/plugins.json` (`deploy/images/bake_plugins.py`) |
 | Get exactly those on the laptop | `make plugins-sync` (hand copies move to `plugins.bak-<date>/`); `make box-up` runs it in a box |

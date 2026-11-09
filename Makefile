@@ -30,7 +30,7 @@ help: ## List targets
 	@printf '\nPer service (generated; SERVICES=%s)\n' "$(SERVICES)"
 	@printf '  %-20s %s\n' "<verb>-<svc>" "make -C <svc dir> <verb>; verbs: $(SERVICE_VERBS)"
 
-install: console-install python-install ## Install the console and the Python workspace, for contributors (only the ops command: make install-cli)
+install: console-install python-install ## Install the console and the Python workspace, for contributors (only the opsai command: make install-cli)
 
 verify: console-verify docs-verify python-verify sdk-verify changelog-verify ## Everything a commit must pass (scripted model only)
 

@@ -428,8 +428,8 @@ make up DEMO_MODEL=fake
 make sample-team</code></pre></div>
 <p>Then one folder-local command:</p>
 <div class="cmd"><pre><code>uv run python examples/workflows/01-normalize-a-request/setup.py
-ops workflows validate examples/workflows/01-normalize-a-request
-ops workflows test examples/workflows/01-normalize-a-request</code></pre></div>
+opsai workflows validate examples/workflows/01-normalize-a-request
+opsai workflows test examples/workflows/01-normalize-a-request</code></pre></div>
 <h3 id="build-with-ops-ai-artifact-words">Artifact words</h3>
 <div class="table-wrap"><table>
 <thead><tr><th>Word</th><th>Meaning</th></tr></thead>
@@ -442,18 +442,18 @@ ops workflows test examples/workflows/01-normalize-a-request</code></pre></div>
 <p>Seeds are not the developer catalog. The generated <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/skills/wf-builder/examples.md">wf-builder seed page</a> is seed topology.</p>
 <p>Example helpers and comments name the folder or the published id. They do not cite a card or a board slice. A public checkout has no board.</p>
 <h3 id="build-with-ops-ai-surfaces">Surfaces</h3>
-<p>Python, TypeScript and <code>ops</code> expose the same lifecycle: validate, apply, publish, run in test mode, inspect, evaluate an agent. Replay, workflow evaluation and the Agent Run API stay <span class="b b-plan">Planned</span> on <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/developer-surface-coverage.md">developer-surface-coverage.md</a>.</p>
+<p>Python, TypeScript and <code>opsai</code> expose the same lifecycle: validate, apply, publish, run in test mode, inspect, evaluate an agent. Replay, workflow evaluation and the Agent Run API stay <span class="b b-plan">Planned</span> on <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/developer-surface-coverage.md">developer-surface-coverage.md</a>.</p>
 </section>
 
 <section id="workflows" aria-labelledby="workflows-h">
 <h2 id="workflows-h"><span class="n">5</span>Workflows</h2>
 <p>A workflow is a reviewed typed graph. A developer authors YAML, validates it, stores a draft, publishes a version, and starts a test run. The console can show the same graph. It is not required.</p>
 <h3 id="workflows-lifecycle">Lifecycle</h3>
-<div class="cmd"><pre><code>ops workflows validate workflow.yaml
-ops workflows apply workflow.yaml
-ops workflows publish &lt;id&gt; --note &quot;Ready&quot;
-ops workflows run &lt;id&gt; --input input.json --wait
-ops workflows inspect &lt;run-id&gt;</code></pre></div>
+<div class="cmd"><pre><code>opsai workflows validate workflow.yaml
+opsai workflows apply workflow.yaml
+opsai workflows publish &lt;id&gt; --note &quot;Ready&quot;
+opsai workflows run &lt;id&gt; --input input.json --wait
+opsai workflows inspect &lt;run-id&gt;</code></pre></div>
 <p>Python:</p>
 <div class="cmd"><pre><code>from ops_ai import OpsAI
 
@@ -467,7 +467,7 @@ run = ops.workflows.run(draft[&quot;workflowId&quot;], input={&quot;customerEmai
 <p>New runs default to <code>mode=&quot;test&quot;</code>. Live effects need <code>mode=&quot;live&quot;</code> or <code>--live</code>.</p>
 <h3 id="workflows-what-a-definition-is">What a definition is</h3>
 <p>Schema v2 JSON or YAML: <code>id</code>, <code>name</code>, <code>nodes[]</code>, <code>connections[]</code>. Each node has <code>type</code>, <code>typeVersion</code>, <code>parameters</code>, and a stable <code>id</code>. Connections name those ids and ports.</p>
-<p><code>GET /v1/workflows/node-types</code> lists types, ports and parameter schemas. <code>ops workflows types</code> prints the same catalog.</p>
+<p><code>GET /v1/workflows/node-types</code> lists types, ports and parameter schemas. <code>opsai workflows types</code> prints the same catalog.</p>
 <h3 id="workflows-debugging">Debugging</h3>
 <div class="table-wrap"><table>
 <thead><tr><th>Failure</th><th>Where it appears</th><th>What to do</th></tr></thead>
@@ -475,10 +475,10 @@ run = ops.workflows.run(draft[&quot;workflowId&quot;], input={&quot;customerEmai
 <tr><td>Invalid graph</td><td><code>validate</code> checks, each with <code>path</code>, <code>code</code>, <code>message</code>, <code>suggestion</code></td><td>Fix the named node or field</td></tr>
 <tr><td>Draft not live</td><td>409 <code>not_live</code> on a live run</td><td>Publish first</td></tr>
 <tr><td>Step refused</td><td><code>run.error</code> and <code>run.failure.nodeId</code></td><td>Fix the tool, mapping or input</td></tr>
-<tr><td>Waiting on a person</td><td><code>status=waiting</code> and <code>taskId</code></td><td><code>ops workflows decide &lt;task-id&gt; approve</code></td></tr>
+<tr><td>Waiting on a person</td><td><code>status=waiting</code> and <code>taskId</code></td><td><code>opsai workflows decide &lt;task-id&gt; approve</code></td></tr>
 <tr><td>Start schema</td><td>422 on <code>POST /v1/runs</code></td><td>Send the request trigger&#39;s required fields</td></tr>
 </tbody></table></div>
-<p><code>ops workflows replay</code> and <code>fork</code> are <span class="b b-plan">Planned</span>. <code>ops workflows retry</code> retries a stuck run from its last recorded step.</p>
+<p><code>opsai workflows replay</code> and <code>fork</code> are <span class="b b-plan">Planned</span>. <code>opsai workflows retry</code> retries a stuck run from its last recorded step.</p>
 <h3 id="workflows-examples">Examples</h3>
 <p>Copy a folder from <code>examples/workflows/</code>. Pass the folder to the generic commands. The product does not list these folders.</p>
 <div class="table-wrap"><table>
@@ -507,9 +507,9 @@ run = ops.workflows.run(draft[&quot;workflowId&quot;], input={&quot;customerEmai
 <p>Node coverage: <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/workflow-example-coverage.md">workflow-example-coverage.md</a>.</p>
 <h4 id="workflows-example-1-normalize-a-support-request">Example 1 — Normalize a support request</h4>
 <p>An app posts <code>customerEmail</code>, <code>subject</code> and <code>message</code>. Set fields emits <code>customer.email</code>, <code>title</code>, <code>body</code> and <code>source</code>. A missing email fails start validation.</p>
-<div class="cmd"><pre><code>ops workflows validate examples/workflows/01-normalize-a-request
-ops workflows apply examples/workflows/01-normalize-a-request
-ops workflows run normalize_support_request --input examples/workflows/01-normalize-a-request/fixtures/valid.json --wait</code></pre></div>
+<div class="cmd"><pre><code>opsai workflows validate examples/workflows/01-normalize-a-request
+opsai workflows apply examples/workflows/01-normalize-a-request
+opsai workflows run normalize_support_request --input examples/workflows/01-normalize-a-request/fixtures/valid.json --wait</code></pre></div>
 <div class="cmd"><pre><code>ops.workflows.run(
     &quot;normalize_support_request&quot;,
     input={&quot;customerEmail&quot;: &quot;ada@example.test&quot;, &quot;subject&quot;: &quot;Card&quot;, &quot;message&quot;: &quot;Where is my refund?&quot;},
@@ -518,9 +518,9 @@ ops workflows run normalize_support_request --input examples/workflows/01-normal
 <p>Nodes: <code>ops.trigger.request</code> → <code>ops.data.set</code> → <code>ops.flow.end</code>. No model, tool or person.</p>
 <h4 id="workflows-example-2-route-an-inbound-support-message">Example 2 — Route an inbound support message</h4>
 <p>Classify text onto a queue with one <code>ops.ai.classify</code> call. Categories are billing, technical and cancellation. Below the 0.6 floor the run leaves by <code>otherwise</code> and ends as <code>other</code>. A model answer outside the schema ends as <code>classify_failed</code>.</p>
-<div class="cmd"><pre><code>ops workflows validate examples/workflows/02-route-a-support-message
-ops workflows apply examples/workflows/02-route-a-support-message
-ops workflows run route_support_message --input examples/workflows/02-route-a-support-message/fixtures/billing.json --test --wait</code></pre></div>
+<div class="cmd"><pre><code>opsai workflows validate examples/workflows/02-route-a-support-message
+opsai workflows apply examples/workflows/02-route-a-support-message
+opsai workflows run route_support_message --input examples/workflows/02-route-a-support-message/fixtures/billing.json --test --wait</code></pre></div>
 <div class="cmd"><pre><code>ops.workflows.run(
     &quot;route_support_message&quot;,
     input={&quot;text&quot;: &quot;I was charged twice this month.&quot;},
@@ -540,17 +540,17 @@ ops workflows run route_support_message --input examples/workflows/02-route-a-su
 <h2 id="agents-h"><span class="n">6</span>Agents</h2>
 <p>An agent is a reviewed model configuration. It chooses steps inside allowed tools, knowledge, skills, guardrails and budgets. A workflow remains a typed graph. The two meet only through the public bridges on <a href="#build-with-ops-ai">build-with-ops-ai.md</a>.</p>
 <h3 id="agents-lifecycle">Lifecycle</h3>
-<div class="cmd"><pre><code>ops agents validate resources/agent.yaml
-ops agents apply resources/agent.yaml
-ops agents publish &lt;id&gt; --note &quot;Ready&quot;
-ops agents chat &lt;id&gt; --message &quot;What documents open a business account?&quot;
-ops agents test &lt;id&gt; --message &quot;What documents open a business account?&quot;</code></pre></div>
+<div class="cmd"><pre><code>opsai agents validate resources/agent.yaml
+opsai agents apply resources/agent.yaml
+opsai agents publish &lt;id&gt; --note &quot;Ready&quot;
+opsai agents chat &lt;id&gt; --message &quot;What documents open a business account?&quot;
+opsai agents test &lt;id&gt; --message &quot;What documents open a business account?&quot;</code></pre></div>
 <div class="cmd"><pre><code>from ops_ai import OpsAI
 
 ops = OpsAI()
 ops.agents.apply(&quot;resources/agent.yaml&quot;)
 ops.agents.chat(&quot;ag_guide&quot;, &quot;What documents open a business account?&quot;)</code></pre></div>
-<p><code>ops agents eval</code> scores dataset cases on a published agent. Stream, wait and background runs stay <span class="b b-plan">Planned</span> until the Agent Run API ships.</p>
+<p><code>opsai agents eval</code> scores dataset cases on a published agent. Stream, wait and background runs stay <span class="b b-plan">Planned</span> until the Agent Run API ships.</p>
 <h3 id="agents-examples">Examples</h3>
 <p>Foundation chat, search and the read tool come first. These folders reuse those resources.</p>
 <div class="table-wrap"><table>
@@ -1256,6 +1256,100 @@ machine: they name the mirror&#39;s file URLs, so do not commit them.</p>
 <p>Every step the script runs can also be run by hand: the Compose files and settings in
 <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/compose.md">Ops AI on Docker Compose</a>, the DBA&#39;s scripts in
 <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/database.md">The database</a>, and a Kubernetes install in <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/kubernetes.md">Ops AI on Kubernetes</a>.</p>
+<h3 id="install-install-behind-a-company-mirror-or-offline">Install behind a company mirror or offline</h3>
+<p>The <code>opsai</code> command line (package <code>ops-ai</code>, <code>sdk/python</code>) needs Python 3.11 or newer and two packages, <code>httpx</code> and
+<code>typing-extensions</code>, plus their small dependencies. It does not need the repository&#39;s developer workspace, so it does
+not need the packages <code>make install</code> pulls in for contributors (<code>datamodel-code-generator</code>, <code>pyright</code>, <code>moto</code> and
+others), some of which a mirror may not serve. <code>make install</code> is for contributors who run the services and the full
+test suite; to use the command, run <code>make install-cli</code>.</p>
+<div class="cmd"><pre><code>make install-cli          # uv tool install ./sdk/python, or pip install --user when uv is missing
+opsai --help                # prints &quot;usage: ops [-h] area ...&quot;</code></pre></div>
+<p><code>make chat</code> and the other targets in <code>make/cli.mk</code> run the <code>ops</code> on your PATH, then <code>.venv/bin/ops</code> when the workspace
+is installed. When neither exists they print <code>make: the opsai command is not installed; run &#39;make install-cli&#39; ...</code> and
+stop; they never sync the workspace.</p>
+<p>The command is called <code>opsai</code>. <code>ops</code> is a common name, so the package keeps an <code>ops</code> command for one release only,
+and it prints a note that <code>opsai</code> is the name. <code>make install-cli</code> installs <code>ops</code> only when no other tool called <code>ops</code> is
+on PATH, and prints which it did.</p>
+<h4 id="install-sonatype-nexus">Sonatype Nexus</h4>
+<p>Create or choose a PyPI group or proxy repository. Its index is
+<code>https://&lt;nexus-host&gt;/repository/&lt;repo-name&gt;/simple/</code> (the trailing <code>/simple/</code> matters; the repository&#39;s own address
+is not an index). Set it for the installer you use. <code>make install-cli</code> reads either set of names and translates the pip
+names for uv, so one set is enough.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th>For</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>UV_DEFAULT_INDEX</code> (or <code>UV_INDEX_URL</code>)</td><td>uv</td><td>The index replaces PyPI</td></tr>
+<tr><td><code>PIP_INDEX_URL</code></td><td>pip, and uv when no <code>UV_*</code> index is set</td><td><code>PIP_EXTRA_INDEX_URL</code> adds a second index</td></tr>
+<tr><td><code>PIP_TRUSTED_HOST</code> / <code>UV_INSECURE_HOST</code></td><td>a host without valid TLS</td><td>Prefer a CA bundle below</td></tr>
+<tr><td><code>SSL_CERT_FILE</code> (also <code>PIP_CERT</code>)</td><td>a company CA certificate, PEM file</td><td><code>UV_NATIVE_TLS=1</code> makes uv use the operating system&#39;s certificate store instead</td></tr>
+</tbody></table></div>
+<div class="cmd"><pre><code>export UV_DEFAULT_INDEX=https://nexus.example.com/repository/pypi-group/simple/
+export SSL_CERT_FILE=/etc/ssl/company-ca.pem
+make install-cli
+opsai --help</code></pre></div>
+<p>The installer runs uv from outside the repository, so the repository&#39;s <code>[tool.uv]</code> settings are not read (its
+<code>exclude-newer</code> needs upload times, which Nexus&#39;s PyPI proxy does not send, so every version would look too new). Your
+own <code>uv.toml</code> (index, credentials, certificates) is read.</p>
+<p>Credentials stay out of URLs in shared files, because a URL with a password appears in logs, <code>ps</code> and shell history.
+Use one of:</p>
+<ul>
+<li>uv: name the index and give the credentials in the environment, with the name in capitals:
+<code>UV_DEFAULT_INDEX=nexus=https://nexus.example.com/repository/pypi-group/simple/</code>,
+<code>UV_INDEX_NEXUS_USERNAME=&lt;user&gt;</code>, <code>UV_INDEX_NEXUS_PASSWORD=&lt;password or token&gt;</code>.</li>
+<li>A <code>~/.netrc</code> file (<code>machine nexus.example.com login &lt;user&gt; password &lt;token&gt;</code>, mode 600), which uv and pip both read.</li>
+<li>pip: <code>pip install keyring</code> and store the password there (<code>keyring set https://nexus.example.com &lt;user&gt;</code>), then
+<code>pip</code> asks keyring for it.</li>
+</ul>
+<h4 id="install-what-the-nexus-admin-may-need-to-allow">What the Nexus admin may need to allow</h4>
+<p>If Nexus Firewall or an IQ policy blocks packages, <code>make install-cli</code> needs exactly these, at any version that meets the
+range. The versions in the second column are the newest at the time of writing and the ones the offline proof ran with;
+a version a policy holds back for being new can be replaced by an older one, down to the range&#39;s lower bound.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Package</th><th>Version range the CLI accepts</th><th>Newest tested</th></tr></thead>
+<tbody>
+<tr><td>httpx</td><td>0.27 up to, not including, 1.0</td><td>0.28.1</td></tr>
+<tr><td>typing-extensions</td><td>4.12 or newer</td><td>4.16.0</td></tr>
+<tr><td>httpcore</td><td>any that httpx accepts (1.x)</td><td>1.0.9</td></tr>
+<tr><td>h11</td><td>0.16 or the range httpcore names</td><td>0.16.0</td></tr>
+<tr><td>anyio</td><td>any that httpx accepts (4.x)</td><td>4.16.0</td></tr>
+<tr><td>idna</td><td>any that anyio and httpx accept</td><td>3.20</td></tr>
+<tr><td>certifi</td><td>any</td><td>2026.10.23</td></tr>
+</tbody></table></div>
+<p>Installing from a checkout (<code>make install-cli</code> without <code>WHEELS</code>) also builds the package, which downloads the build tool
+and its own dependencies: <code>hatchling</code>, <code>packaging</code>, <code>pathspec</code>, <code>pluggy</code>, <code>trove-classifiers</code>. The wheelhouse below
+carries a built wheel, so it needs none of these on the machine that installs.</p>
+<h4 id="install-offline-a-wheelhouse">Offline: a wheelhouse</h4>
+<p>On a machine with internet, write every wheel the command needs into <code>dist/wheelhouse/</code>, with a <code>requirements.txt</code>
+that pins them:</p>
+<div class="cmd"><pre><code>make wheelhouse                                   # macOS arm64 and x86_64, Linux x86_64, Windows; Python 3.11 and 3.12
+make wheelhouse PLATFORMS='manylinux2014_x86_64' PYTHONS='3.12'      # a narrower set</code></pre></div>
+<p>Copy the folder to the target machine (a share, a USB drive, an archive) and install without any network:</p>
+<div class="cmd"><pre><code>make install-cli WHEELS=dist/wheelhouse           # uv tool install --no-index --find-links, or pip --no-index
+opsai --help</code></pre></div>
+<p>The installer needs <code>uv</code> or <code>pip</code> on the target machine; <code>uv</code> is not part of the wheelhouse.</p>
+<p>As an alternative to copying the folder, upload the wheels to a Nexus hosted PyPI repository and install from it as
+above. Create the hosted repository (format <code>pypi</code>, type <code>hosted</code>), add it to the group the developers use, and upload:</p>
+<div class="cmd"><pre><code>python -m pip install twine
+twine upload --repository-url https://nexus.example.com/repository/pypi-hosted/ \
+  -u &lt;user&gt; -p &quot;$NEXUS_PASSWORD&quot; dist/wheelhouse/*.whl</code></pre></div>
+<p>Install from it by naming the package instead of building the checkout (the hosted repository holds the wheels, not the
+build tool, so building from the checkout would need the proxy):</p>
+<div class="cmd"><pre><code>export UV_DEFAULT_INDEX=https://nexus.example.com/repository/pypi-hosted/simple/
+make install-cli FROM_INDEX=1</code></pre></div>
+<p>Use an account that may write to the repository, and take the password from the environment or <code>~/.pypirc</code>, not a
+shared file. Upload <code>ops_ai-*.whl</code> and the dependency wheels; Nexus ignores files it already has unless the repository&#39;s
+deployment policy forbids redeploys.</p>
+<h4 id="install-check-the-result">Check the result</h4>
+<div class="cmd"><pre><code>opsai --help                # lists the areas (chat, kb, apps, ...) when the command is installed
+command -v opsai          # where the tool environment put it</code></pre></div>
+<p>If <code>opsai</code> is not found after the install, the tool folder is not on PATH: run <code>uv tool update-shell</code> and open a new
+shell, or add <code>~/.local/bin</code> (pip --user on Linux and macOS) to PATH.</p>
+<h4 id="install-rerun-the-nexus-proof">Rerun the Nexus proof</h4>
+<p><code>make nexus-proof</code> starts Sonatype Nexus Repository (Docker image <code>sonatype/nexus3</code>), makes a PyPI proxy, a hosted and a
+group repository through its REST API, installs the command from the group in a <code>python:3.12-slim</code> container that can
+reach only Nexus, then uploads a wheelhouse to the hosted repository with twine and installs from it with the proxy
+turned off. It removes the containers when it ends. It needs Docker, about 3 GB of memory and a few minutes for Nexus to
+start.</p>
 </section>
 
 <section id="operate" aria-labelledby="operate-h">

@@ -27,7 +27,7 @@ surfaces:
   typescript: planned
 setupSeconds: 40
 gaps:
-- ops chat send
+- opsai chat send
 - agent.eval
 teaches:
 - skills

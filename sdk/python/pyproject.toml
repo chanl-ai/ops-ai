@@ -9,12 +9,14 @@ requires-python = ">=3.11"
 dependencies = ["httpx>=0.27,<1", "typing-extensions>=4.12"]
 
 [project.optional-dependencies]
-# `ops plugin validate|test` for operators who build or install plugins; a developer calling the API needs none of it.
+# `opsai plugin validate|test` for operators who build or install plugins; a developer calling the API needs none of it.
 plugin = ["ops-plugin-sdk"]
 
 [project.scripts]
-# The one `ops` command; `ops plugin` needs the plugin extra.
-ops = "ops_ai.cli:main"
+# The one command; `opsai plugin` needs the plugin extra. `ops` stays for one release and prints a note: it is a common
+# name, so make install-cli leaves its shim out when another `ops` is on PATH.
+opsai = "ops_ai.cli:main"
+ops = "ops_ai.cli:main_ops"
 
 [project.urls]
 Documentation = "https://opsai.chanl.ai/docs/sdk/python"

@@ -163,8 +163,8 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `guide/system-components.md` | Every container: purpose, port, what it stores and what it calls |
 | `guide/how-work-flows.md` | A chat turn with a tool approval, a workflow with a human task, and a court order notice emailed to a team mailbox |
 | `guide/build-with-ops-ai.md` | Developer landing: the simple-first ladder, the two public bridges, and the Example folders |
-| `guide/workflows.md` | Author, validate, publish and test-run workflows from the Python SDK, TypeScript SDK and `ops workflows` |
-| `guide/agents.md` | Author, publish and chat with agents from the SDK and `ops agents` |
+| `guide/workflows.md` | Author, validate, publish and test-run workflows from the Python SDK, TypeScript SDK and `opsai workflows` |
+| `guide/agents.md` | Author, publish and chat with agents from the SDK and `opsai agents` |
 | `guide/workflow-example-coverage.md` | Generated: every built node type and the Example that teaches it |
 | `guide/agent-example-coverage.md` | Generated: every Agent Example and the capabilities it teaches |
 | `guide/developer-surface-coverage.md` | Generated: API, Python, TypeScript, CLI and UI proof per lifecycle operation |
@@ -191,7 +191,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `guide/skills/ops-commit.md` | Developer skill for Claude Code and GitHub Copilot (ops-commit): pass the commit checks with a What's new entry; generated into `.claude/skills/ops-commit/SKILL.md` and `.github/prompts/ops-commit.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-database.md` | Developer skill for Claude Code and GitHub Copilot (ops-database): switch the database; generated into `.claude/skills/ops-database/SKILL.md` and `.github/prompts/ops-database.prompt.md` by `scripts/agent_skills.py` |
 | `guide/vendor-onboarding-plugin.md` | Building a plugin from the vendor-onboarding example in `examples/plugins/`: what is YAML and what is Python, the function's tests, installing it through the public APIs today, and the gaps found |
-| `guide/plugins.md` | Building a plugin: the manifest and request templates, Python tools, knowledge sources, `ops plugin validate` and `test`, trying it on a local stack against a fake, installing it, turning it on, the platform and team OAuth apps, and per-person sign-in |
+| `guide/plugins.md` | Building a plugin: the manifest and request templates, Python tools, knowledge sources, `opsai plugin validate` and `test`, trying it on a local stack against a fake, installing it, turning it on, the platform and team OAuth apps, and per-person sign-in |
 | `guide/build-your-first-tool.md` | Build your first tool: a REST Tool on an App, a request with a form body, Mock then Real, to an agent that uses it; Mock and Real compared; what is not built yet |
 | `console/page-plan.md` | Console pages and the rules every page follows |
 | `console/standards.md` | Console UI standard: tokens, layout primitives, compose-from-shadcn, designed states, responsive, one-screen create, and the review checks |

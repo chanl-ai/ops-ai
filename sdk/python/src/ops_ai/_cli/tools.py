@@ -1,5 +1,5 @@
-"""`ops tools`: the Tools page. Tool modules, one module, a run of one of an app's tools (Mock reaches nothing; Real is
-the gateway's call with every check), and the tool-call log."""
+"""`opsai tools`: the Tools page. Tool modules, one module, a run of one of an app's tools (Mock reaches nothing;
+Real is the gateway's call with every check), and the tool-call log."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from .common import client, emit, parser, payload, refuse, table, verb_options
 
 
 def main(argv: list[str]) -> int:
-    ap = parser("ops tools", "Tools, test runs and the tool-call log.")
+    ap = parser("opsai tools", "Tools, test runs and the tool-call log.")
     sub = ap.add_subparsers(dest="verb", required=True)
     common = [verb_options()]
     listing = sub.add_parser("list", parents=common, help="tool modules, or an app's tools with --app")

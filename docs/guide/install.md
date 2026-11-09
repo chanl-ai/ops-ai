@@ -34,7 +34,7 @@ Every step the script runs can also be run by hand: the Compose files and settin
 
 ## Install behind a company mirror or offline
 
-The `ops` command line (package `ops-ai`, `sdk/python`) needs Python 3.11 or newer and two packages, `httpx` and
+The `opsai` command line (package `ops-ai`, `sdk/python`) needs Python 3.11 or newer and two packages, `httpx` and
 `typing-extensions`, plus their small dependencies. It does not need the repository's developer workspace, so it does
 not need the packages `make install` pulls in for contributors (`datamodel-code-generator`, `pyright`, `moto` and
 others), some of which a mirror may not serve. `make install` is for contributors who run the services and the full
@@ -42,12 +42,16 @@ test suite; to use the command, run `make install-cli`.
 
 ```
 make install-cli          # uv tool install ./sdk/python, or pip install --user when uv is missing
-ops --help                # prints "usage: ops [-h] area ..."
+opsai --help                # prints "usage: ops [-h] area ..."
 ```
 
 `make chat` and the other targets in `make/cli.mk` run the `ops` on your PATH, then `.venv/bin/ops` when the workspace
-is installed. When neither exists they print `make: the ops command is not installed; run 'make install-cli' ...` and
+is installed. When neither exists they print `make: the opsai command is not installed; run 'make install-cli' ...` and
 stop; they never sync the workspace.
+
+The command is called `opsai`. `ops` is a common name, so the package keeps an `ops` command for one release only,
+and it prints a note that `opsai` is the name. `make install-cli` installs `ops` only when no other tool called `ops` is
+on PATH, and prints which it did.
 
 ### Sonatype Nexus
 
@@ -67,11 +71,12 @@ names for uv, so one set is enough.
 export UV_DEFAULT_INDEX=https://nexus.example.com/repository/pypi-group/simple/
 export SSL_CERT_FILE=/etc/ssl/company-ca.pem
 make install-cli
-ops --help
+opsai --help
 ```
 
-The repository's `[tool.uv]` settings are skipped (`UV_NO_CONFIG=1`): its `exclude-newer` needs upload times, which
-Nexus's PyPI proxy does not send, so every version would look too new.
+The installer runs uv from outside the repository, so the repository's `[tool.uv]` settings are not read (its
+`exclude-newer` needs upload times, which Nexus's PyPI proxy does not send, so every version would look too new). Your
+own `uv.toml` (index, credentials, certificates) is read.
 
 Credentials stay out of URLs in shared files, because a URL with a password appears in logs, `ps` and shell history.
 Use one of:
@@ -117,7 +122,7 @@ Copy the folder to the target machine (a share, a USB drive, an archive) and ins
 
 ```
 make install-cli WHEELS=dist/wheelhouse           # uv tool install --no-index --find-links, or pip --no-index
-ops --help
+opsai --help
 ```
 
 The installer needs `uv` or `pip` on the target machine; `uv` is not part of the wheelhouse.
@@ -131,6 +136,14 @@ twine upload --repository-url https://nexus.example.com/repository/pypi-hosted/ 
   -u <user> -p "$NEXUS_PASSWORD" dist/wheelhouse/*.whl
 ```
 
+Install from it by naming the package instead of building the checkout (the hosted repository holds the wheels, not the
+build tool, so building from the checkout would need the proxy):
+
+```
+export UV_DEFAULT_INDEX=https://nexus.example.com/repository/pypi-hosted/simple/
+make install-cli FROM_INDEX=1
+```
+
 Use an account that may write to the repository, and take the password from the environment or `~/.pypirc`, not a
 shared file. Upload `ops_ai-*.whl` and the dependency wheels; Nexus ignores files it already has unless the repository's
 deployment policy forbids redeploys.
@@ -138,9 +151,17 @@ deployment policy forbids redeploys.
 ### Check the result
 
 ```
-ops --help                # lists the areas (chat, kb, apps, ...) when the command is installed
-command -v ops            # where the tool environment put it
+opsai --help                # lists the areas (chat, kb, apps, ...) when the command is installed
+command -v opsai          # where the tool environment put it
 ```
 
-If `ops` is not found after the install, the tool folder is not on PATH: run `uv tool update-shell` and open a new
+If `opsai` is not found after the install, the tool folder is not on PATH: run `uv tool update-shell` and open a new
 shell, or add `~/.local/bin` (pip --user on Linux and macOS) to PATH.
+
+### Rerun the Nexus proof
+
+`make nexus-proof` starts Sonatype Nexus Repository (Docker image `sonatype/nexus3`), makes a PyPI proxy, a hosted and a
+group repository through its REST API, installs the command from the group in a `python:3.12-slim` container that can
+reach only Nexus, then uploads a wheelhouse to the hosted repository with twine and installs from it with the proxy
+turned off. It removes the containers when it ends. It needs Docker, about 3 GB of memory and a few minutes for Nexus to
+start.

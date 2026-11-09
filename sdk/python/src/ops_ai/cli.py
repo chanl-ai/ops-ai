@@ -1,5 +1,5 @@
-"""`ops`, the one command line, sitting on this SDK: each area is a few verbs over the client's methods, never a call
-of its own to the API. `ops plugin validate|test` is the operator's plugin kit (the ops-plugin-sdk package), forwarded
+"""`opsai`, the one command line, sitting on this SDK: each area is a few verbs over the client's methods, never a call
+of its own to the API. `opsai plugin validate|test` is the operator's plugin kit (the ops-plugin-sdk package), forwarded
 as it is. Exit 0 done, 1 refused or failing, 2 a usage or set-up problem."""
 
 from __future__ import annotations
@@ -8,6 +8,7 @@ import argparse
 import sys
 from collections.abc import Callable, Sequence
 
+from . import __version__
 from ._cli.agents import main as agents_main
 from ._cli.apps import main as apps_main
 from ._cli.chat import main as chat_main
@@ -33,7 +34,7 @@ def _plugin(argv: list[str]) -> int:
     try:
         from ops_plugin_sdk.cli import main as plugin_main  # noqa: PLC0415
     except ImportError:
-        sys.stderr.write("ops plugin: the plugin kit is not installed; install ops-ai[plugin]\n")
+        sys.stderr.write("opsai plugin: the plugin kit is not installed; install ops-ai[plugin]\n")
         return 2
     return plugin_main(["plugin", *argv])
 
@@ -64,9 +65,19 @@ AREAS: dict[str, tuple[Area, str]] = {
 }
 
 
+def main_ops(argv: Sequence[str] | None = None) -> int:
+    """The `ops` console script, kept for one release: the command is called `opsai` because `ops` is a common name."""
+    sys.stderr.write("note: this command is now called opsai; the ops name goes away in the next release.\n")
+    return main(argv)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    ap = argparse.ArgumentParser(prog="ops", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        prog="opsai", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    # scripts/ops_cli.sh reads this line to confirm an installed command is this one.
+    ap.add_argument("--version", action="version", version=f"ops-ai {__version__}")
     sub = ap.add_subparsers(dest="area", required=True, metavar="area")
     for name, (_, text) in AREAS.items():
         sub.add_parser(name, help=text, add_help=False)

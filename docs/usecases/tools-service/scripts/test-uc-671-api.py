@@ -135,7 +135,7 @@ with apps_stack({"OPS_CONSOLE_URL": "https://console.acme.test"}) as w:
     end, _ = ops_cli("admin", "connectors", "disconnect", "Person desk")
     after = mine(w, "admin").get(APP) or {}
     check(
-        "7 ops connectors list prints the row, and disconnect ends the default sign-in so the other org is primary",
+        "7 opsai connectors list prints the row, and disconnect ends the default sign-in so the other org is primary",
         code == 0
         and isinstance(listed, list)
         and any(r.get("appId") == APP for r in listed)

@@ -12,8 +12,8 @@ After setup:
 
 ```bash
 cd examples/workflows/11-purge-after-file-deleted
-OPS_CONFIG=.ops-profile.json ops workflows validate resources/workflow.yaml
-OPS_CONFIG=.ops-profile.json ops workflows apply resources/workflow.yaml
+OPS_CONFIG=.ops-profile.json opsai workflows validate resources/workflow.yaml
+OPS_CONFIG=.ops-profile.json opsai workflows apply resources/workflow.yaml
 ```
 
 Start it by deleting a team file. There is no send-test-event command; `POST /v1/events` is a service token route.

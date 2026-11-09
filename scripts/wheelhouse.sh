@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Writes every wheel the `ops` command needs into one folder, for machines with no package index at all.
+# Writes every wheel the `opsai` command needs into one folder, for machines with no package index at all.
 # Run it on a machine with internet; copy the folder across; install with `make install-cli WHEELS=<folder>`.
 #
 #   scripts/wheelhouse.sh [OUT]            OUT defaults to dist/wheelhouse
