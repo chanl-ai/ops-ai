@@ -34,7 +34,8 @@ export function SourceOverview({
 
   return (
     <div className="flex flex-col gap-4">
-      {neverSynced && !run && (
+      {/* A source waiting for its host to be approved says so above; its sync waits too. */}
+      {neverSynced && !run && !s.waitingHosts.length && (
         <Alert>
           <RefreshCw className="size-4" />
           <AlertTitle>This source has not synced yet</AlertTitle>

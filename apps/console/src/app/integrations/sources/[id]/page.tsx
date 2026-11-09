@@ -72,7 +72,8 @@ export default function SourcePage() {
   const togglePause = () =>
     pause.mutate({ id: s.id, paused: s.status !== 'paused' }, { onSuccess: (x) => toast.success(x.status === 'paused' ? 'Schedule paused' : 'Schedule resumed', { description: s.name }), onError: fail('change the schedule') });
   const tabHref = (t: string, q?: string) => `/integrations/sources/${s.id}?tab=${t}${q ? `&${q}` : ''}`;
-  const syncBlocked = running || s.status === 'revoked' || s.status === 'draft';
+  // A source waiting for its site's host to be approved fetches nothing until it is, so its sync waits too.
+  const syncBlocked = running || s.status === 'revoked' || s.status === 'draft' || s.waitingHosts.length > 0;
   // The AI steps kb-service reports waiting for the knowledge owner's approval.
   const waits = s.aiStepsWaiting.map((x) => midSentence(STRATEGY_LABEL[x as IngestStrategy] ?? x));
 
