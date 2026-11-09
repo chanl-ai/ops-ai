@@ -178,6 +178,7 @@ class KernelAgents:
             user_turn=request.message,
             search_text=prompt if sep else request.message,
             kb_ids=agent.default_kb_ids,
+            all_team_knowledge=agent.all_team_knowledge,
             output_schema=request.output_schema,
         )
         result: TurnResult | None = None

@@ -52,9 +52,7 @@ async def test_a_search_reads_only_the_calling_teams_knowledge_bases() -> None:
     out = await kb.tool().run({"query": "How long to file a chargeback?"}, tenant=TENANT, team=OPS)
     assert out.ok, out.output
     assert [p["text"] for p in out.output["passages"]] == ["File within 120 days."]
-    assert kb.asked == [
-        {"team": OPS, "kbIds": ["kb_policies"], "question": "How long to file a chargeback?", "limit": 5}
-    ]
+    assert kb.asked == [{"team": OPS, "kbIds": ["kb_policies"], "question": "How long to file a chargeback?"}]
 
 
 async def test_a_knowledge_base_is_named_by_its_name_and_another_teams_is_not_found() -> None:

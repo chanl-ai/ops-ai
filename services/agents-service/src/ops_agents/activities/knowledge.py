@@ -39,7 +39,7 @@ class KnowledgeBases(Protocol):
 class Knowledge(KnowledgeBases, Protocol):
     """Both halves an agents-service needs: the knowledge bases a thread may name, and the passages a turn cites."""
 
-    async def search(self, query: str, kb_ids: list[str], *, k: int) -> list[Passage]: ...
+    async def search(self, query: str, kb_ids: list[str]) -> list[Passage]: ...
 
 
 class KnowledgeUnavailable(ApiError):
@@ -61,8 +61,9 @@ class KbService:
             ) from e
         return [KbRef(str(b["id"]), str(b["name"])) for b in rows]
 
-    async def search(self, query: str, kb_ids: list[str], *, k: int) -> list[Passage]:
-        body = {"kbIds": kb_ids, "question": query, "limit": k}
+    async def search(self, query: str, kb_ids: list[str]) -> list[Passage]:
+        # No count: the bases' own retrieval settings decide how many passages return.
+        body = {"kbIds": kb_ids, "question": query}
         try:
             found = cast(dict[str, Any], await self.kb.post("/v1/knowledge-bases/search", body))
         except (ServiceCallError, ServiceUnreachable) as e:
@@ -88,5 +89,5 @@ class NoKnowledgeService:
     async def bases(self) -> list[KbRef]:
         raise KnowledgeUnavailable("No knowledge service is configured for this stack (OPS_KB_URL).")
 
-    async def search(self, query: str, kb_ids: list[str], *, k: int) -> list[Passage]:
+    async def search(self, query: str, kb_ids: list[str]) -> list[Passage]:
         raise KnowledgeUnavailableError("no knowledge service is configured")

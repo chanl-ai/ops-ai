@@ -1,7 +1,8 @@
 """The built-in Knowledge bases tool: `search_knowledge` answers from the calling team's knowledge bases with
 the passages and where each came from, through kb-service's own search, called as the run's tenant and team, so another
-team's knowledge base is never searched. It runs behind the tool gateway as the platform's local tools do, so grants,
-the call log and the team's rules apply as to any tool."""
+team's knowledge base is never searched. An agent's call names its own bases (the kernel fills `collections`); only
+an agent with the "all team knowledge bases" option leaves them out and searches every base of its team. It runs behind
+the tool gateway as the platform's local tools do, so grants, the call log and the team's rules apply as to any tool."""
 
 from __future__ import annotations
 
@@ -9,9 +10,6 @@ from typing import Any, cast
 
 from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
-
-# Passages one search hands the model; enough to cite, few enough not to fill its context.
-LIMIT = 5
 
 
 class KnowledgeSearch:
@@ -36,7 +34,8 @@ class KnowledgeSearch:
             ids = list(dict.fromkeys(by.get(n) or by[n.lower()] for n in named)) or [str(b["id"]) for b in bases]
             if not ids:
                 return ToolOutcome(True, {"passages": [], "note": "The team has no knowledge bases yet."})
-            body = {"kbIds": ids, "question": query, "limit": LIMIT}
+            # No count: the bases' own retrieval settings decide how many passages return.
+            body = {"kbIds": ids, "question": query}
             found = cast(
                 dict[str, Any], await self.kb.post("/v1/knowledge-bases/search", body, tenant=tenant, team=team)
             )

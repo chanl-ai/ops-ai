@@ -35,7 +35,7 @@ class NoTools:
 
 
 class KnowledgeDown:
-    async def search(self, query: str, kb_ids: list[str], *, k: int) -> list[Any]:
+    async def search(self, query: str, kb_ids: list[str]) -> list[Any]:
         raise KnowledgeUnavailableError("kb-service is down")
 
 

@@ -46,6 +46,8 @@ _STOP = frozenset(
 )
 # Below this many shared terms a passage is not returned; the turn then answers "not found" rather than guessing.
 MIN_SHARED_TERMS = 2
+# As many passages as a knowledge base returns by default (its chunkLimit); the base, not the caller, decides.
+BASE_LIMIT = 8
 
 
 def _terms(text: str) -> set[str]:
@@ -62,11 +64,11 @@ class KeywordPassageStore:
             for p in catalog.passages
         ]
 
-    async def search(self, query: str, kb_ids: list[str], *, k: int) -> list[Passage]:
+    async def search(self, query: str, kb_ids: list[str]) -> list[Passage]:
         q = _terms(query)
         scored = [(len(q & terms), p) for p, terms in self._passages if p.kb_id in kb_ids]
         ranked = sorted((s for s in scored if s[0] >= MIN_SHARED_TERMS), key=lambda s: -s[0])
-        return [p for _, p in ranked[:k]]
+        return [p for _, p in ranked[:BASE_LIMIT]]
 
 
 class CatalogKnowledgeBases:

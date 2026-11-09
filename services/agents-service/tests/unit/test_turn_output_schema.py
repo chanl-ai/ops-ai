@@ -38,7 +38,7 @@ class NoTools:
 
 
 class NoKnowledge:
-    async def search(self, query: str, kb_ids: list[str], *, k: int) -> list[Any]:
+    async def search(self, query: str, kb_ids: list[str]) -> list[Any]:
         return []
 
 

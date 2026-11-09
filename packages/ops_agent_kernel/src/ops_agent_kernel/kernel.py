@@ -77,7 +77,9 @@ from .types import (
     TurnResult,
 )
 
-KNOWLEDGE_K = 3
+# The built-in tool that searches knowledge bases; the kernel narrows it to the turn's own bases (_own_knowledge).
+SEARCH_KNOWLEDGE = "search_knowledge"
+NO_OWN_KNOWLEDGE = "This agent has no knowledge bases to search; answer from the other tools, or say it is not known."
 
 
 # The server a call to a name outside the agent's grants is recorded under: it reached none.
@@ -466,6 +468,13 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
 
     async def call(ctx: RunContext[None], **arguments: Any) -> Any:
         tool_call_id = ctx.tool_call_id or f"call_{len(state.order)}"
+        if grant.name == SEARCH_KNOWLEDGE and not state.req.all_team_knowledge:
+            own = _own_knowledge(state.req, arguments)
+            if own is None:
+                rec = state.record(tool_call_id, grant.name, arguments)
+                rec.status, rec.output = "error", {"error": NO_OWN_KNOWLEDGE}
+                return {"error": NO_OWN_KNOWLEDGE}
+            arguments = own
         asked = input_hash(arguments)
         if (running := state.inflight.get((grant.name, asked))) is not None:
             # The same call twice in one step: the library runs a step's calls together, so the first is still out.
@@ -595,10 +604,21 @@ def _numbered(state: _TurnState, output: Any) -> Any:
 
 
 async def _retrieve(req: TurnRequest, ports: KernelPorts) -> list[Passage]:
+    """The knowledge block: the bases' own retrieval settings decide how many passages return (kb-service)."""
     query = (req.search_text or req.user_turn or "").strip()
     if not req.kb_ids or not query:
         return []
-    return await ports.knowledge.search(query, req.kb_ids, k=KNOWLEDGE_K)
+    return await ports.knowledge.search(query, req.kb_ids)
+
+
+def _own_knowledge(req: TurnRequest, arguments: dict[str, Any]) -> dict[str, Any] | None:
+    """A search_knowledge call narrowed to the turn's own bases, as grounding is: the bases the model named among
+    them, else all of them. None when the turn has none. Without this the tool searches every base of the team."""
+    if not req.kb_ids:
+        return None
+    named = [str(c) for c in cast(list[Any], arguments.get("collections") or [])]
+    kept = [c for c in named if c in req.kb_ids]
+    return {**arguments, "collections": kept or list(req.kb_ids)}
 
 
 def _close_open(state: _TurnState, why: str) -> list[ToolOutput]:

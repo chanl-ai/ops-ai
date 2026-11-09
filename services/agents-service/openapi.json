@@ -209,6 +209,11 @@
       "Agent": {
         "additionalProperties": false,
         "properties": {
+          "allTeamKnowledgeBases": {
+            "default": false,
+            "title": "Allteamknowledgebases",
+            "type": "boolean"
+          },
           "autoResolvedRate": {
             "title": "Autoresolvedrate",
             "type": "number"
@@ -714,6 +719,17 @@
       "AgentPatch": {
         "additionalProperties": false,
         "properties": {
+          "allTeamKnowledgeBases": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allteamknowledgebases"
+          },
           "channels": {
             "anyOf": [
               {

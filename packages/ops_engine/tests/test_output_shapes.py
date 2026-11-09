@@ -73,7 +73,7 @@ class Cases:
 
 
 class Know:
-    async def search(self, query: str, kb_ids: list[str], *, k: int) -> list[Any]:
+    async def search(self, query: str, kb_ids: list[str]) -> list[Any]:
         from ops_agent_kernel.types import Passage  # noqa: PLC0415
 
         return [Passage("d1", "Handbook", "owners", "1", "Two owners.", "kb", None)]

@@ -47,7 +47,7 @@ class Tools:
 
 
 class NoKnowledge:
-    async def search(self, query: str, kb_ids: list[str], *, k: int) -> list[Passage]:
+    async def search(self, query: str, kb_ids: list[str]) -> list[Passage]:
         return []
 
 

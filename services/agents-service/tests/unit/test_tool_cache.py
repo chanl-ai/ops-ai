@@ -92,7 +92,7 @@ async def turn(model: FunctionModel, tools: Tools, chat: OneChat, ask: str = "Wh
 
 
 class Empty:
-    async def search(self, query: str, kb_ids: list[str], *, k: int) -> list[Any]:
+    async def search(self, query: str, kb_ids: list[str]) -> list[Any]:
         return []
 
 

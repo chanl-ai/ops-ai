@@ -208,6 +208,9 @@ class TurnRequest:
     # not the mapped input JSON whose names and ids drown the handbook terms).
     search_text: str | None = None
     kb_ids: list[str] = field(default_factory=list[str])
+    # The agent's "all team knowledge bases" option: its search_knowledge calls may search every base of its team.
+    # Off, they search only `kb_ids`, as grounding does.
+    all_team_knowledge: bool = False
     # Files attached to the conversation, named in their own data block whether or not their text could be read.
     attachments: list[AttachedFile] = field(default_factory=list[AttachedFile])
     # The attached files' text, page by page (kb_id ATTACHMENT_KB), whole within the turn's share: shown in the

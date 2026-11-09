@@ -78,10 +78,12 @@ ASSISTANT_FRAGMENTS: dict[str, str] = {
 OPS_ASSISTANT: dict[str, Any] = {
     "name": "Ops Assistant",
     "role": "Answers from the apps and knowledge your team has, as you, and drafts changes for your approval",
-    "version": 6,
+    "version": 7,
     "instructions": [{"text": text} for text in ASSISTANT_FRAGMENTS.values()],
     "tools": list(BUILT_IN_READS),
     "default_kb_ids": [],
+    # It answers from every knowledge base of its team, as its role says.
+    "all_team_knowledge": True,
     "suggestions": ["What needs me today?", "What can you reach?", "Start a workflow"],
     # Independent reads go together in one step, and the last step is kept for the answer (kernel max_steps).
     "max_tool_calls": 6,

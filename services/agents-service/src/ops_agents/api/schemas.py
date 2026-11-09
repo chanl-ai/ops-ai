@@ -193,6 +193,7 @@ class Agent(Out):
     # Granted ids the tool directory no longer offers; the next save drops them.
     stale_tool_ids: list[str]
     collections: list[str]
+    all_team_knowledge_bases: bool = False
     # The owning team, from the creator's token; null for an agent no team owns.
     team_id: str | None
     paused: bool

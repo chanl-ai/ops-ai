@@ -122,6 +122,8 @@ class AgentPatch(WireModel):
     instructions: str | None = None
     tool_ids: list[str] | None = None
     collections: list[str] | None = None
+    # search_knowledge may search every knowledge base of the agent's team; off, only `collections` (decision D19).
+    all_team_knowledge_bases: bool | None = None
     guardrails: Guardrails | None = None
     # Guardrails attached by version: [{guardrailId, version}]; each saved with its version's rule.
     guardrail_pins: list[GuardrailPinInput] | None = None

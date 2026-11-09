@@ -2336,6 +2336,7 @@ class AgentLimits(TypedDict, closed=True):
 
 
 class AgentPatch(TypedDict, closed=True):
+    allTeamKnowledgeBases: NotRequired[bool | None]
     channels: NotRequired[list[Literal["voice", "chat", "email", "api"]] | None]
     collections: NotRequired[list[str] | None]
     guardrailPins: NotRequired[list[GuardrailPinInput] | None]
@@ -3371,6 +3372,7 @@ class ActivityRow(TypedDict, closed=True):
 
 
 class Agent(TypedDict, closed=True):
+    allTeamKnowledgeBases: NotRequired[bool]
     autoResolvedRate: float
     availability: Literal["published", "not_published", "paused"]
     canDelete: NotRequired[bool | None]

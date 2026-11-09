@@ -39,7 +39,7 @@ class Knowledge:
     def __init__(self, passages: list[Passage]) -> None:
         self.passages = passages
 
-    async def search(self, query: str, kb_ids: list[str], *, k: int) -> list[Passage]:
+    async def search(self, query: str, kb_ids: list[str]) -> list[Passage]:
         return self.passages
 
 
@@ -240,7 +240,15 @@ class Searching(Tools):
 async def searched(first: str, fixed: str) -> tuple[Writer, TurnResult]:
     writer = Writer(first, fixed, read=True)
     writer.read_tool = "search_knowledge"
-    req = TurnRequest("t1", "th1", SETTINGS, [SEARCH], user_turn="What does our policy say about overdue reviews?")
+    # An agent that may search every base of its team (as the Ops Assistant does), so the call reaches the tool.
+    req = TurnRequest(
+        "t1",
+        "th1",
+        SETTINGS,
+        [SEARCH],
+        user_turn="What does our policy say about overdue reviews?",
+        all_team_knowledge=True,
+    )
     events = [
         e async for e in run_turn(req, KernelPorts(model=writer.model(), tools=Searching(), knowledge=Knowledge([])))
     ]

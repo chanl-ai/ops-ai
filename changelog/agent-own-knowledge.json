@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "An agent searches only its own knowledge bases",
+  "description": "An agent's knowledge search keeps to the knowledge bases it was given, unless it has the all team knowledge bases option; each knowledge base's own settings decide how many passages it returns.",
+  "tag": "improved"
+}
