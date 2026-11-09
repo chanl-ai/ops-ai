@@ -56,11 +56,16 @@ _HEADINGS = {"h1": 1, "h2": 2, "h3": 3, "h4": 4, "h5": 5, "h6": 6}
 _BLOCK_TEXT = {"p", "li", "pre", "blockquote", "dt", "dd", "figcaption", "address"}
 
 
+# A utility class with an arbitrary value or a variant (Tailwind's `[--fd-sidebar-width:0px]`, `md:px-6`) names a style,
+# not what the element is: its parts ("sidebar") say nothing about the element.
+_UTILITY = re.compile(r"[\[\]():/!]")
+
+
 def _tokens(tag: Tag) -> set[str]:
     values: list[str] = []
     classes = tag.get("class")
     if isinstance(classes, list):
-        values.extend(str(c) for c in classes)
+        values.extend(str(c) for c in classes if not _UTILITY.search(str(c)))
     elif isinstance(classes, str):
         values.append(classes)
     tag_id = tag.get("id")
@@ -78,7 +83,10 @@ def _is_furniture(tag: Tag) -> bool:
     role = tag.get("role")
     if isinstance(role, str) and role.lower() in _FURNITURE_ROLES:
         return True
-    return bool(_tokens(tag) & _FURNITURE_TOKENS)
+    if not _tokens(tag) & _FURNITURE_TOKENS:
+        return False
+    # An element holding the page's main content or article is its layout, whatever its class names say.
+    return tag.find(["main", "article"]) is None
 
 
 def _text(tag: Tag) -> str:

@@ -42,3 +42,18 @@ def test_cleaning_drops_furniture_and_keeps_the_main_content() -> None:
 
 def test_main_content_only_keeps_a_page_with_no_main_element_whole() -> None:
     assert "6.1 percent" in _text(furniture=True, main_content=True, page=NO_MAIN)
+
+
+DOCS_SITE = b"""<html><body>
+<div id="nd-notebook-layout" class="grid [--fd-sidebar-width:0px] md:px-6">
+<aside class="sidebar"><a href="/docs">Docs</a> <a href="/api">API</a></aside>
+<div class="sidebar-wrapper"><main><article><h1>Service map</h1>
+<p>Each service owns its own tables and migrations.</p></article></main></div>
+</div></body></html>"""
+
+
+def test_a_layout_named_for_its_sidebar_still_keeps_its_article() -> None:
+    """A docs site's layout carries utility classes such as `[--fd-sidebar-width:0px]` and wraps its main content in a
+    "sidebar" element: read as furniture, every page of the site cleaned down to nothing."""
+    cleaned = _text(furniture=True, main_content=True, page=DOCS_SITE)
+    assert "owns its own tables" in cleaned and "API" not in cleaned, cleaned
