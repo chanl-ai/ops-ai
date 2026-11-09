@@ -8,7 +8,7 @@ extracted field. Templates are planned. Design: this page.
 | Item | Detail |
 |---|---|
 | Purpose | What is read from a file: extractions with each field's value, confidence, page and quote, and the document types that say which fields a kind of document carries. |
-| Owns | `extractions`, `extraction_corrections`, `document_types`, `document_type_versions`, `document_type_samples`, `document_type_tests`, `documents_layouts`, `documents_outbox` (chain `alembic_version_documents`). Never file bytes. |
+| Owns | `extractions`, `extraction_corrections`, `document_types`, `document_type_versions`, `document_type_samples`, `document_type_tests`, `documents_readings`, `documents_reading_pages`, `documents_reading_files`, `documents_outbox` (chain `alembic_version_documents`). Never file bytes. |
 | Depends on | files-service for bytes (`ops_files_client`, as the caller's team), models-service for model calls (its own key `mk_dev_extract`, purpose `files:extract`, a budget share per tenant), platform-service for the `extractionFloor` policy. |
 | Libraries | `packages/ops_extract` (the checks that score a field, the floor, the prompt), `packages/ops_ingest` (parsing and OCR). |
 | Client | `packages/ops_documents_client`: `extract` (answer or poll to the end) and `document_type`. |
@@ -24,7 +24,7 @@ The service map that applies to every service is `docs/architecture/service-map.
 | `POST /v1/documents/purge` is for services only (`documents:delete`) and removes a file's extractions and samples | Called by a system workflow on the file-deleted trigger (workflows lane). files-service calls nobody when it deletes |
 | A document type version never changes once saved; a workflow save pins the newest version | A running workflow reads the fields it was tested with |
 | A test run reads at most 20 samples, and its estimate is shown before it starts | Each sample is one model call |
-| A full-text read (`read: text`) of a file is keyed by its bytes (`DocumentsClient.read_text`, key `text:<sha256>`), whoever asks: the read_file tool and a chat turn reading an attached file share one read, and no model is called | A chat turn reads every attachment in its thread on each message; the second and later reads answer the stored one |
+| A file's reading (`POST /v1/documents/readings`, `DocumentsClient.reading`) is kept per tenant, files-service digest, reader version and OCR settings, whoever asks: extraction, layouts, a knowledge base, a chat attachment and the read_file tool share one reading, and no model is called. A scan is read in the background and reported as `reading.finished` | A chat turn reads every attachment in its thread on each message; the second and later reads answer the stored reading |
 | The workflow runner and the agent kernel never import `ops_extract` | The checks run in one place; `scripts/tests/test_no_cross_service_imports.py` enforces it |
 
 ## Routes
