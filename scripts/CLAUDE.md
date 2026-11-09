@@ -13,7 +13,7 @@ scripts are reached through a make target; run them that way so ports and env ma
 | Group | Scripts | Reached by |
 |---|---|---|
 | The stack | `stack.sh` (start, stop, probe, tail, stale detection), `schema_sync.py` (may `make up` migrate in place), `test_db.py` (the throwaway test database), `dev_admin.py`, `dev_egress.py`, `scratch_db_sweep.py`, `api_docs.py` (all services' API reference on :8799) | `make up`, `make health`, `make logs`, `make test`, `make db-sweep` |
-| Calling the API as a person | `api_as.py` (every other area runs the `ops` command in `sdk/python`) | `make api`, `make sdk-call` ([make/CLAUDE.md](../make/CLAUDE.md)) |
+| Calling the API as a person | `api_as.py` (every other area runs the `opsai` command in `sdk/python`) | `make api`, `make sdk-call` ([make/CLAUDE.md](../make/CLAUDE.md)) |
 | Commit and push gates | `verify-staged.sh` (pre-commit, on the staged content), `commit-message-check.mjs`, `changelog-check.mjs` (commit-msg), `verify-changed.sh` (what changed since a base), `verify-head.sh` (`make verify` on an export of HEAD), `commit-paths.sh`, `commit-patch.sh`, `install-hooks.sh`, `git-rules.py` | `.githooks/`, `make commit`, `make commit-hunks`, `make test`, `make git-rules` ([Commits](../CLAUDE.md#commits)) |
 | Docs and generated-file checks | `check-docs.mjs`, `check-public-paths.mjs`, `scrub_board_paths.py`, `agent_skills.py`, `wf_builder_examples.py`, `check_examples.py` | `make docs-verify`, `pnpm verify` |
 | Code standards checks | `check_access_exceptions.py` (access decisions outside `can()`), `check_portable_store.py` (storage code that runs on PostgreSQL and not on SQL Server), `check_downgrades.py`, `leak_scan.py` | `make python-verify`, CI |

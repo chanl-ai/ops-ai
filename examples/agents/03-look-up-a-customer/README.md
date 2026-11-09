@@ -11,6 +11,6 @@ uv run python examples/agents/03-look-up-a-customer/setup.py
 uv run pytest examples/agents/03-look-up-a-customer/test_example.py
 ```
 
-Python uses `ops.agents.chat`. CLI `ops agents chat` is built. `ops chat send` and evaluation are **Planned**.
+Python uses `ops.agents.chat`. CLI `opsai agents chat` is built. `opsai chat send` and evaluation are **Planned**.
 
 The full lesson is in [../../../docs/guide/agents.md](../../../docs/guide/agents.md).

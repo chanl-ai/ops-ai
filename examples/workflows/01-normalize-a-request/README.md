@@ -13,9 +13,9 @@ After setup:
 
 ```bash
 cd examples/workflows/01-normalize-a-request
-OPS_CONFIG=.ops-profile.json ops workflows validate resources/workflow.yaml
-OPS_CONFIG=.ops-profile.json ops workflows apply resources/workflow.yaml
-OPS_CONFIG=.ops-profile.json ops workflows run normalize_support_request --input fixtures/valid.json --test --wait
+OPS_CONFIG=.ops-profile.json opsai workflows validate resources/workflow.yaml
+OPS_CONFIG=.ops-profile.json opsai workflows apply resources/workflow.yaml
+OPS_CONFIG=.ops-profile.json opsai workflows run normalize_support_request --input fixtures/valid.json --test --wait
 ```
 
 A payload without `customerEmail` is refused with that schema path. Open the printed `/workflows/definitions/<id>`.

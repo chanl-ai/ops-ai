@@ -1,5 +1,5 @@
 """uc-615, cli layer: docs/usecases/tools-service/a-team-admin-sets-its-own.md, story S6 (step 7).
-The api layer's stack; the team admin runs `ops apps credential` from the repo, signed in as their dev role the way
+The api layer's stack; the team admin runs `opsai apps credential` from the repo, signed in as their dev role the way
 `make api` signs in, with the client secret on standard input so it is never on a command line (L1). No model call."""
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ with apps_stack(ops_ai_apps={"test.person": "multi-zoom"}) as w:
     )
     held = data(w.gw.get(account_path(APP, account), headers=w.who["admin"])) or {}
     check(
-        "7 `ops apps credential set` takes the secret on standard input, puts the team's client on the app, and the "
+        "7 `opsai apps credential set` takes the secret on standard input, puts the team's client on the app, and the "
         "secret is in no output",
         code == 0 and (held.get("settings") or {}).get("clientId") == "multi-app" and secret not in str(out),
         (target("L1"), {"set": (code, out), "account": held}),

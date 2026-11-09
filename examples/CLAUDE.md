@@ -4,7 +4,7 @@ Status: current.
 
 Copyable folders, one idea each, in tracks (`chat`, `knowledge`, `tools`, `agents`, `workflows`, `compositions`,
 `plugins`). They are repository data that a developer copies and runs against a stack through the public surfaces
-(the console, `ops`, the Python and TypeScript SDKs); the product does not list them. Landing page:
+(the console, `opsai`, the Python and TypeScript SDKs); the product does not list them. Landing page:
 [docs/guide/build-with-ops-ai.md](../docs/guide/build-with-ops-ai.md). Rules shared with every folder:
 [Working in one folder](../CLAUDE.md#working-in-one-folder).
 
@@ -34,6 +34,6 @@ Shared setup is `_lib/folder.py`; a helper there is named for the example it ser
 
 | Rule | Detail |
 |---|---|
-| Public surfaces only | An example calls `ops_ai`, `@chanl-ai/ops-ai` or `ops`, never a service's code or a private route; `check_examples.py` refuses a Python import outside `ops_ai`, the standard modules it lists and the example's own files (`scripts/check_examples.py:29`) |
+| Public surfaces only | An example calls `ops_ai`, `@chanl-ai/ops-ai` or `opsai`, never a service's code or a private route; `check_examples.py` refuses a Python import outside `ops_ai`, the standard modules it lists and the example's own files (`scripts/check_examples.py:29`) |
 | Status is honest | A capability or surface marked `built` runs today; anything else is `partial` or `planned` |
 | No catalogue command | Examples are copied, not listed by the product |

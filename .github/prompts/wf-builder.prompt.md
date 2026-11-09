@@ -14,7 +14,7 @@ Make targets: python3 scripts/wf_builder.py, python3 scripts/wf_builder_examples
 
 A developer says what the workflow is for. The skill picks the seeded example closest to it, adapts the steps, writes
 `workflows/<id>.json` beside the developer, has the engine on the named profile check it, and shows the steps and
-every way out of each step. Nothing is created until the developer says so. The ops CLI is not built yet, so
+every way out of each step. Nothing is created until the developer says so. The opsai CLI is not built yet, so
 `scripts/wf_builder.py` calls the Python SDK on the profile the developer names. Every command below runs as
 `uv run python scripts/wf_builder.py ...` from the repository root, which brings in the SDK;
 `python3 scripts/wf_builder.py` is short for that here.
@@ -23,11 +23,11 @@ every way out of each step. Nothing is created until the developer says so. The 
 
 1. Ask which profile to use (`--profile`, from `~/.config/ops-ai/config.json` or `OPS_CONFIG`), unless they named
    one. Read the node types that profile serves: `python3 scripts/wf_builder.py catalog --profile <name>`. Use only
-   those types; never write one from memory. Creating a workflow needs a person: `ops login` signs them in and keeps
+   those types; never write one from memory. Creating a workflow needs a person: `opsai login` signs them in and keeps
    their session in the profile (`accessToken` and `refreshToken`), or `OPS_TOKEN` names a session token. A refused
    profile token (a role change, or expiry) is renewed once and the new pair written back. An API key reads and validates, and is refused a
    create.
-2. Prefer a folder under `examples/workflows/` and the generic `ops workflows validate|apply|run` commands.
+2. Prefer a folder under `examples/workflows/` and the generic `opsai workflows validate|apply|run` commands.
    `docs/guide/skills/wf-builder/examples.md` is generated seed topology for the local demo, not the developer catalog.
    Read `docs/guide/skills/wf-builder/rules.md` before drawing steps.
 3. Write a goal file: the new workflow's `id`, the `goal` in the developer's words and the `example` to adapt, as

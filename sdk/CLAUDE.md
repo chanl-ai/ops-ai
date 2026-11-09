@@ -3,7 +3,7 @@
 Status: current.
 
 This folder holds the two client libraries for the platform's public API and the generator that keeps them in step
-with the services: `python/` (the `ops-ai` package, import `ops_ai`, with the `ops` command line) and `typescript/`
+with the services: `python/` (the `ops-ai` package, import `ops_ai`, with the `opsai` command line) and `typescript/`
 (`@chanl-ai/ops-ai`). They sit between the services and the console and CLI in the onion
 ([Onion order](../CLAUDE.md#onion-order)): a route lands in a service first, then here, then in a screen or command.
 Guides for users of the SDKs: [docs/sdk/python.md](../docs/sdk/python.md), [docs/sdk/typescript.md](../docs/sdk/typescript.md).
@@ -14,7 +14,7 @@ Guides for users of the SDKs: [docs/sdk/python.md](../docs/sdk/python.md), [docs
 |---|---|---|---|
 | Generated: one method per public operation, request and response types | `python/src/ops_ai/_generated/<service>/` | `typescript/src/generated/<service>.ts`, `<service>-operations.ts` | `generate.py` from each `services/<x>/openapi.json`; never edited by hand |
 | Hand-written: the client, nouns (`runs`, `tasks`, `agents`, `workflows` and the rest), waits, streams, errors | `python/src/ops_ai/_client.py`, `_agents.py`, `_workflows.py`, `_words.py`, `errors.py` | `typescript/src/client.ts`, `agents.ts`, `workflows.ts`, `words.ts`, `errors.ts` | people |
-| Command line `ops` (`login`, `workflows`, `agents`, `resources`, `plugin`) | `python/src/ops_ai/cli.py`, `_cli/` | none | people; each verb calls the client's methods, never the API directly |
+| Command line `opsai` (`login`, `workflows`, `agents`, `resources`, `plugin`) | `python/src/ops_ai/cli.py`, `_cli/` | none | people; each verb calls the client's methods, never the API directly |
 
 Only operations a service marks `x-ops-public: sdk` or `both` are generated, and the auth headers every route declares
 are dropped because the client sends them on each call (`generate.py`, docstring; the marker is described in
@@ -36,9 +36,9 @@ Run from the repo root.
 | All three, as `make verify` runs them | `make sdk-verify` (`SDK_REF=HEAD` reads the documents as committed) |
 | The packages installed in an empty folder, then the examples on the live stack | `make sdk-check` (`SDK_LIVE=0` skips the stack part) |
 | One call as a seeded person on the stack | `make sdk-call CALL='ops.raw.platform.me_me()' AS=builder` ([Calling the API as a person](../CLAUDE.md#calling-the-api-as-a-person)) |
-| The command line from this checkout | `uv run ops --help` |
+| The command line from this checkout | `uv run opsai --help` |
 
-`sdk/python` is a member of the root uv workspace, so `uv run ops --help` from the root runs the command line on
+`sdk/python` is a member of the root uv workspace, so `uv run opsai --help` from the root runs the command line on
 this checkout. Its tests run in an isolated environment (`--isolated --with-editable sdk/python`) so they see only
 what the package itself declares, as an outside developer's install would.
 

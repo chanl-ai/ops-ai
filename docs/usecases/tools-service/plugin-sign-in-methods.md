@@ -43,8 +43,8 @@ Service: `tools-service` with platform-service. Layers: api, sdk, cli, ui. Guide
 | 11 | Wanjiru turns on the header-key plugin with a wrong key, the client plugin with a wrong secret, and the certificate plugin with only the CA | Test connection fails naming the 401 and the call `UPSTREAM_ERROR` 401; the call `AUTH_FAILED` and the connection `needs_reconnect`; Test connection and the call `TLS_FAILED` |
 | 12 | A run calls the bearer plugin's Python tool, which returns what the system says it was sent | 200, with no token in it |
 | 13 | Every answer read, both teams' plugins, connections and call logs, and the tools-service log are searched for every secret given | None found |
-| 14 | `ops plugin validate` on each test plugin | Each OK |
-| 15 | `ops plugin validate` on copies offering person sign-in with only an API key, with only client credentials, and listing `api_key` without saying how it is sent | The API key copy validates OK; the other two are refused, naming `connection.sign_in` or `connection.api_key` |
+| 14 | `opsai plugin validate` on each test plugin | Each OK |
+| 15 | `opsai plugin validate` on copies offering person sign-in with only an API key, with only client credentials, and listing `api_key` without saying how it is sent | The API key copy validates OK; the other two are refused, naming `connection.sign_in` or `connection.api_key` |
 | 16 | James asks the agent holding the person plugin's read tool for record rec-1042 in chat | A Connect card; the system received no read |
 | 17 | He connects through the pop-up as james.person | The chat goes on and answers with the record, read as james.person |
 | 18 | Priya opens the header-key and person plugins' app pages | Each opens with its name; the header-key one's Keys row says Working, 200, with the team account; the person one offers her own account; neither key nor client secret is on either page |

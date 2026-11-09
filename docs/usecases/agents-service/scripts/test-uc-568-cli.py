@@ -80,7 +80,7 @@ def main() -> None:
             session = signed_in(accounts, "j.richardson@harborpine.example")
             HEADERS.update(bearer(session, TEAM))
             base = f"http://127.0.0.1:{AGENTS_PORT}"
-            # The person's session token, as `ops login` keeps it; no API key, which cannot edit a workflow.
+            # The person's session token, as `opsai login` keeps it; no API key, which cannot edit a workflow.
             profile = {"baseUrl": base, "team": TEAM, "accessToken": session.get("token"), "services": {"agents": base}}
             CONFIG.write_text(json.dumps({"current": "local", "profiles": {"local": profile, "staging": profile}}))
             spec = WORK / "goal.json"

@@ -85,6 +85,7 @@ SYSTEM_USERS: dict[str, tuple[str, Grants]] = {
             "documents_outbox": (("SELECT", "UPDATE", "DELETE"), ()),
             "extractions": (("SELECT",), ()),
             "document_type_tests": (("SELECT",), ()),
+            "documents_readings": (("SELECT",), ()),
         },
     ),
 }

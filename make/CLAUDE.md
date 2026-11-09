@@ -28,7 +28,7 @@ Check a change with `make help`, `make -n <target>` and the fragment's own test 
 Test and call the system through these targets, with `AS=` to act as a person, instead of ad-hoc scripts or SQL; read
 the database only to diagnose. Each target signs a seeded person in through the real password sign-in
 (`POST /v1/auth/sign-in`) and calls the routes the console calls, with the same `Authorization` and `X-Team-Id`
-headers. `api` and `sdk-call` run `scripts/api_as.py`; every other target runs the `ops` command (`sdk/python`,
+headers. `api` and `sdk-call` run `scripts/api_as.py`; every other target runs the `opsai` command (`sdk/python`,
 `src/ops_ai/_cli/`). Both keep sessions in `.run/api-tokens/` (mode 600) until they expire, one per person, and print
 no password. `make help` prints each target's arguments.
 
@@ -48,7 +48,7 @@ no password. `make help` prints each target's arguments.
 | Variable | Meaning |
 |---|---|
 | `AS` | A role from `services/platform-service/seed/dev-roles.json` (`admin`, `builder`, `approver`, `viewer`, `security`, `platform`), a seeded person's full name, first name or email name from `people.json` (`james`, `priya`, `maya`, `ravi`, `nadia`, `sam`, `wanjiru`), or an email. Default `admin` |
-| `TEAM`, `JSON` | The team to act in (default: the person's own team); `JSON=1` prints the answer as JSON (`ops` targets) |
+| `TEAM`, `JSON` | The team to act in (default: the person's own team); `JSON=1` prints the answer as JSON (`opsai` targets) |
 | `SVC`, `Q`, `BODY` (`api` only) | The service (default: the one whose `openapi.json` holds the path; name it for `/v1/chat/*`, which no document holds), the query string (`Q='pageSize=5'`, since make reads any word holding `=` as a variable) and a JSON body |
 | `AGENT`, `THREAD`, `TEST`, `KB`, `CONNECTED` (`chat`) | The agent by id, slug or name (default: the team's default agent); an existing thread; `TEST=1` uses the agent page's Test panel, whose thread nothing remembers and the chat list leaves out; a knowledge base; `CONNECTED=<app>` sends the follow-up a Connect card sends once the person has signed in |
 | `ENV=staging` (`api`, `sdk-call`) | Calls the staging app named by `STG_APP`; only the staging admin's sign-in is kept on a machine, so only `AS=admin` works there ([docs/deploy/fly-staging.md](../docs/deploy/fly-staging.md)) |
@@ -62,7 +62,7 @@ the person's memory learns the check as a preference.
 
 ### Test data
 
-A dev seed sign-in (`AS=`, `ops --as`) is a test run, and what it makes carries the prefix `[test] ` in a field the
+A dev seed sign-in (`AS=`, `opsai --as`) is a test run, and what it makes carries the prefix `[test] ` in a field the
 routes already store: a chat's title, an uploaded file's name, a knowledge page's title (`OPS_TEST_DATA=1` marks a
 profile's runs the same way). `make test-data-clean` lists the marked conversations and files of every seeded person,
 or of `AS=` alone, grouped by kind, and removes nothing until `CONFIRM=1`; then it deletes each through the console's

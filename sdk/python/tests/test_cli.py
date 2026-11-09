@@ -1,5 +1,5 @@
-"""The `ops` command, by failure mode: an area it does not know runs anything, `ops plugin` without the plugin kit
-fails with a traceback in place of what to install, and `ops plugin` loses the verb or the folder on the way to the
+"""The `opsai` command, by failure mode: an area it does not know runs anything, `opsai plugin` without the plugin kit
+fails with a traceback in place of what to install, and `opsai plugin` loses the verb or the folder on the way to the
 kit."""
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import httpx
 import pytest
 from ops_ai import OpsAI
 from ops_ai._cli.common import payload
-from ops_ai.cli import main
+from ops_ai.cli import main, main_ops
 
 
 def test_an_unknown_area_is_a_usage_error(capsys: pytest.CaptureFixture[str]) -> None:
@@ -21,6 +21,20 @@ def test_an_unknown_area_is_a_usage_error(capsys: pytest.CaptureFixture[str]) ->
         main(["nothing"])
     assert stop.value.code == 2
     assert "invalid choice" in capsys.readouterr().err
+
+
+def test_version_line_is_what_scripts_probe_for(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as stop:
+        main(["--version"])
+    assert stop.value.code == 0
+    assert capsys.readouterr().out.startswith("ops-ai ")
+
+
+def test_the_ops_alias_says_the_name_is_opsai_and_still_runs(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        main_ops(["--version"])
+    seen = capsys.readouterr()
+    assert "now called opsai" in seen.err and seen.out.startswith("ops-ai ")
 
 
 def test_ops_plugin_without_the_kit_says_what_to_install(
@@ -73,7 +87,7 @@ def test_ops_resources_add_copies_the_resource_the_id_names(
     assert seen[-1].method == "POST" and "/api/documents/" in str(seen[-1].url)
     assert "plugin%3Atest.templates%3Alevy" in str(seen[-1].url) or "plugin:test.templates:levy" in str(seen[-1].url)
     assert main(["resources", "add", "plugin:test.templates", "nothing"]) == 1
-    assert "ops resources list plugin:test.templates" in capsys.readouterr().err
+    assert "opsai resources list plugin:test.templates" in capsys.readouterr().err
 
 
 def test_ops_as_signs_in_on_a_local_stack_only(capsys: pytest.CaptureFixture[str]) -> None:

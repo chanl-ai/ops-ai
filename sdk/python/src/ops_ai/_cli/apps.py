@@ -1,4 +1,4 @@
-"""`ops apps`: the Apps area. The catalog, one app's page, turning an app on as the Turn on window does, adding its
+"""`opsai apps`: the Apps area. The catalog, one app's page, turning an app on as the Turn on window does, adding its
 tools to the team, its accounts and your own sign-ins,
 the sign-in link to connect an account (printed, for a browser to open), an account's test, and the auth configs
 (the team's own app credentials)."""
@@ -14,7 +14,7 @@ from .common import client, emit, parser, refuse, table, verb_options
 
 
 def main(argv: list[str]) -> int:
-    ap = parser("ops apps", "Apps, their accounts and tools.")
+    ap = parser("opsai apps", "Apps, their accounts and tools.")
     sub = ap.add_subparsers(dest="verb", required=True)
     common = [verb_options()]
     catalog = sub.add_parser("list", parents=common, help="the Apps page's cards")
@@ -34,7 +34,9 @@ def main(argv: list[str]) -> int:
     add.add_argument("tools", nargs="+")
     sub.add_parser("accounts", parents=common, help="an app's accounts").add_argument("app")
     sub.add_parser(
-        "mine", parents=common, help="your own sign-ins on every app, one row per account (ops connectors: one per app)"
+        "mine",
+        parents=common,
+        help="your own sign-ins on every app, one row per account (opsai connectors: one per app)",
     )
     for name, text in (("connect", "print the sign-in link that connects an account"), ("test", "test an account")):
         p = sub.add_parser(name, parents=common, help=text)

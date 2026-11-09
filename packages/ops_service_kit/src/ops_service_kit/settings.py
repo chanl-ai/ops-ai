@@ -152,7 +152,7 @@ class Settings(BaseSettings):
     # JSON list also reads). Every flag is off unless named; a name not in ops_service_kit.flags.FLAGS stops the service
     # at start.
     flags: Annotated[list[str], NoDecode] = Field(default_factory=list[str])
-    # The install's one plugins folder: each plugin is a folder in it, put there by `ops plugin
+    # The install's one plugins folder: each plugin is a folder in it, put there by `opsai plugin
     # install`. The repo's plugins/ locally; a mounted volume in Docker and Kubernetes (OPS_PLUGINS_DIR). tools-service
     # loads every plugin in it at start, and kb-service reads knowledge through them, whenever it holds any.
     plugins_dir: Path = _REPO_ROOT / "plugins"

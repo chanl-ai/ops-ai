@@ -4,7 +4,7 @@ Status: current. Id: `uc-622`. Service: `agents-service`. Layers: sdk.
 
 A builder on a fake stack publishes three agents that reuse the R1 handbook and read tool. Each answers through
 `ops.agents.chat`. A2 cites the account-opening page. A3 calls `search_customers`. A missing page or customer takes
-the documented failure. `ops chat send` stays Planned.
+the documented failure. `opsai chat send` stays Planned.
 
 ## Stories
 

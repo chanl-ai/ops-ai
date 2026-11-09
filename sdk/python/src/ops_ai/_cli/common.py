@@ -1,4 +1,4 @@
-"""Shared argument parsing, client construction and printing for `ops` areas."""
+"""Shared argument parsing, client construction and printing for `opsai` areas."""
 
 from __future__ import annotations
 
@@ -26,8 +26,8 @@ def parser(prog: str, description: str) -> argparse.ArgumentParser:
 
 
 def verb_options() -> argparse.ArgumentParser:
-    """The same options for a verb's own parser, so they may follow its arguments (`ops resources list x --json`). Unset
-    there, they keep what was given before the verb."""
+    """The same options for a verb's own parser, so they may follow its arguments (`opsai resources list x --json`).
+    Unset there, they keep what was given before the verb."""
     parent = argparse.ArgumentParser(add_help=False, argument_default=argparse.SUPPRESS)
     _options(parent)
     return parent
@@ -291,7 +291,7 @@ def values(pairs: list[str] | None) -> dict[str, str]:
 
 
 # What a test run makes is named with this prefix, in the title or file name the routes already store, so
-# `ops test-data clean` finds it later and nothing unmarked is ever taken for test data.
+# `opsai test-data clean` finds it later and nothing unmarked is ever taken for test data.
 MARK = "[test] "
 
 

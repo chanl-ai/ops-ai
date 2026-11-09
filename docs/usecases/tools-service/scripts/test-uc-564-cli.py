@@ -1,5 +1,5 @@
 """uc-564, cli layer: docs/usecases/tools-service/a-team-turns-on-the-salesforce.md, stories S5 (steps 20-23) and S7
-(step 29). A developer runs `ops plugin validate` and `ops plugin test` on the Salesforce plugin, in the ops-ai-plugins
+(step 29). A developer runs `opsai plugin validate` and `opsai plugin test` on the Salesforce plugin, in the ops-ai-plugins
 repository beside ops-ai, and on broken copies of it; then tools-service starts with plugins on (OPS_PLUGINS) and a
 broken plugin and a test plugin beside Salesforce, from the folders a developer names (OPS_PLUGIN_PATHS). The test
 plugin's Python tool asks for a host its manifest does not list. Last, tools-service starts with plugins off and loads
@@ -107,9 +107,9 @@ AUTH = {
 
 
 def ops(*args: str) -> subprocess.CompletedProcess[str]:
-    """`ops`, as a developer runs it from the repository."""
+    """`opsai`, as a developer runs it from the repository."""
     return subprocess.run(
-        ["uv", "run", "--quiet", "ops", *args],
+        ["uv", "run", "--quiet", "opsai", *args],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -131,7 +131,7 @@ def broken_copy(folder: Path, old: str, new: str) -> Path:
 # 20. The plugin validates.
 good = ops("plugin", "validate", str(PLUGIN))
 check(
-    "20 ops plugin validate passes the Salesforce plugin, with its tools, 1 knowledge source and its templates",
+    "20 opsai plugin validate passes the Salesforce plugin, with its tools, 1 knowledge source and its templates",
     good.returncode == 0
     and re.search(r"OK opsai\.salesforce \S+: \d+ tools, 1 knowledge sources, [1-9]\d* templates", good.stdout)
     is not None,
@@ -171,7 +171,7 @@ with tempfile.TemporaryDirectory() as tmp:
 # 22. The plugin's own tests run every tool and the listing against its fake Salesforce.
 tested = ops("plugin", "test", str(PLUGIN))
 check(
-    "22 ops plugin test passes every tool and the knowledge listing against the plugin's fake",
+    "22 opsai plugin test passes every tool and the knowledge listing against the plugin's fake",
     tested.returncode == 0 and "OK opsai.salesforce" in tested.stdout,
     {"code": tested.returncode, "out": tested.stdout[-400:], "err": tested.stderr[-300:]},
 )
@@ -248,7 +248,7 @@ with ExitStack() as stack:
         {"apps": listed.text[:300], "team": team_on.status_code, "tools": names},
     )  # fmt: skip
 
-# 44 (group D). A builder lists an app's tools and runs one Mock and Real with `ops tools`, signed in as their
+# 44 (group D). A builder lists an app's tools and runs one Mock and Real with `opsai tools`, signed in as their
 # dev role the way `make api` signs in, on the Apps stack (docs/usecases/lib/apps_walk.py) and its fake system.
 with apps_stack() as w:
     app = "plugin:test.header-key"
@@ -263,7 +263,7 @@ with apps_stack() as w:
     after_mock = len(w.m["fake"].state()["calls"])
     real_code, real = ops_cli("builder", "tools", "run", app, "header_key_get_record", "--real", "--input", str(given))
     check(
-        "44 `ops tools list --app` lists the tool, `ops tools run --mock` reaches nothing, and `--real` reads the "
+        "44 `opsai tools list --app` lists the tool, `opsai tools run --mock` reaches nothing, and `--real` reads the "
         "record with the team's account",
         account != "con_missing"
         and listed_code == 0

@@ -56,7 +56,7 @@ Each package's own `CLAUDE.md` holds its contract; `packages/CLAUDE.md` holds th
 | `packages/ops_extract` | Extracted-field checks: confidence from the quote, value type and page reading, and whether a person must check it |
 | `packages/ops_email` | Email in and out behind two protocols, with Graph, SMTP, Resend and dev fake providers |
 | `packages/ops_signin` | Sign-in protocols with no service rules: passwords, OIDC with PKCE, SAML, DNS domain proof, a fake identity provider |
-| `packages/ops_plugin_sdk` | What a plugin is built with: `plugin.yaml`, `@tool` and `Context`, the shared loader, the `ops plugin` verbs |
+| `packages/ops_plugin_sdk` | What a plugin is built with: `plugin.yaml`, `@tool` and `Context`, the shared loader, the `opsai plugin` verbs |
 | `packages/ops_metering` | Model usage accounting: usage rows, prices, cost, totals and budget checks; no I/O |
 | `packages/ops_pii` | Masking of personal data in what people see, in whole text or streamed |
 | `packages/ops_files_client`, `packages/ops_documents_client` | Typed clients other services use to reach files-service and documents-service with a service token |

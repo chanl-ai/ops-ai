@@ -209,7 +209,7 @@ def test_the_async_client_renews_the_same_way() -> None:
 def test_a_profile_session_renews_on_401_and_keeps_the_new_tokens(
     tmp_path: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The `ops` CLI's profile: its refresh token works once, so the renewed pair is written back for the next run."""
+    """The `opsai` CLI's profile: its refresh token works once, so the renewed pair is written back for the next run."""
     seen: list[httpx.Request] = []
     profile = {"baseUrl": BASE, "team": "team_a", "accessToken": "t1", "refreshToken": "r1"}
     config = tmp_path / "config.json"

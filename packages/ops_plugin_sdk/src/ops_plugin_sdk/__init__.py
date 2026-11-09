@@ -1,4 +1,4 @@
-"""Build an Ops AI plugin: a manifest (plugin.yaml), optional Python tools marked with `@tool`, and the `ops plugin`
+"""Build an Ops AI plugin: a manifest (plugin.yaml), optional Python tools marked with `@tool`, and the `opsai plugin`
 commands. The guide is docs/guide/plugins.md."""
 
 from .context import Context, Http, Response, Settings

@@ -1,4 +1,4 @@
-"""`ops workflows` over the public SDK: validate, apply, publish, run, watch, inspect, decide."""
+"""`opsai workflows` over the public SDK: validate, apply, publish, run, watch, inspect, decide."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ connections:
 
 
 def main(argv: list[str]) -> int:
-    ap = parser("ops workflows", "Author and run workflows through the public SDK.")
+    ap = parser("opsai workflows", "Author and run workflows through the public SDK.")
     sub = ap.add_subparsers(dest="verb", required=True)
     init = sub.add_parser("init", help="create a generic workflow folder")
     init.add_argument("folder")

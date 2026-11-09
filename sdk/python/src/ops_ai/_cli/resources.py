@@ -1,4 +1,4 @@
-"""`ops resources` over the public SDK: list an app's resources, preview adding some, add one to the team, take the
+"""`opsai resources` over the public SDK: list an app's resources, preview adding some, add one to the team, take the
 app's newer template into the team's copy, remove the copy. A resource is named by its id as `list` shows it."""
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from .common import client, emit, parser, payload, refuse, verb_options
 
 
 def main(argv: list[str]) -> int:
-    ap = parser("ops resources", "The agents, skills, workflows and document types an app brings to a team.")
+    ap = parser("opsai resources", "The agents, skills, workflows and document types an app brings to a team.")
     sub = ap.add_subparsers(dest="verb", required=True)
     common = [verb_options()]
     sub.add_parser("list", parents=common, help="the app's resources and the team's copies").add_argument("app")
@@ -42,7 +42,7 @@ def main(argv: list[str]) -> int:
 def _item(rows: list[dict[str, Any]], app: str, rid: str) -> dict[str, Any]:
     found = next((r for r in rows if r.get("id") == rid), None)
     if found is None:
-        raise ValueError(f"{app} brings no resource {rid}; `ops resources list {app}` names them")
+        raise ValueError(f"{app} brings no resource {rid}; `opsai resources list {app}` names them")
     return found
 
 

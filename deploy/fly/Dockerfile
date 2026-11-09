@@ -116,7 +116,7 @@ ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never UV_PYTHON=
 COPY pyproject.toml uv.lock ./
 COPY packages packages
 COPY services services
-# The SDK is a workspace member (it carries the `ops` command), so a frozen sync needs its project too.
+# The SDK is a workspace member (it carries the `opsai` command), so a frozen sync needs its project too.
 COPY sdk/python sdk/python
 RUN --mount=type=cache,target=/root/.cache/uv ${UV_DEFAULT_INDEX:+env UV_DEFAULT_INDEX=$UV_DEFAULT_INDEX} uv sync --frozen --no-dev
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1

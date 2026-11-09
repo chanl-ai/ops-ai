@@ -12,9 +12,9 @@ After setup:
 
 ```bash
 cd examples/workflows/07-calculate-and-approve-a-hold
-OPS_CONFIG=.ops-profile.json ops workflows validate resources/workflow.yaml
-OPS_CONFIG=.ops-profile.json ops workflows apply resources/workflow.yaml
-OPS_CONFIG=.ops-profile.json ops workflows run calculate_account_hold --input fixtures/hold.json --test --wait
+OPS_CONFIG=.ops-profile.json opsai workflows validate resources/workflow.yaml
+OPS_CONFIG=.ops-profile.json opsai workflows apply resources/workflow.yaml
+OPS_CONFIG=.ops-profile.json opsai workflows run calculate_account_hold --input fixtures/hold.json --test --wait
 ```
 
 | Case | Fixture | Outcome |

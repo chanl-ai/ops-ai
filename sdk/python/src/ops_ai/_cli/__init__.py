@@ -1,1 +1,1 @@
-"""Area handlers for the `ops` command. Each area calls the public SDK; nothing here talks to a service itself."""
+"""Area handlers for the `opsai` command. Each area calls the public SDK; nothing here talks to a service itself."""

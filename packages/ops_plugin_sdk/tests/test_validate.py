@@ -1,4 +1,4 @@
-"""`ops plugin validate` and the loader, one test per way a plugin can be wrong and still look installable: an unknown
+"""`opsai plugin validate` and the loader, one test per way a plugin can be wrong and still look installable: an unknown
 sign-in kind, a write used as a knowledge tool, a template that needs a tool the plugin lacks, a misspelt field, a
 Python tool whose access disagrees with the manifest, and one broken package taking the others down at load."""
 
@@ -152,7 +152,7 @@ def test_one_broken_plugin_is_reported_and_the_others_load(tmp_path: Path) -> No
 
 def test_a_plugin_in_its_own_repository_runs_its_tests_without_being_installed(tmp_path: Path) -> None:
     # A built-in plugin lives in its own repository (ops-ai-plugins), not in the workspace that installs the kit, so
-    # its package is not importable until `ops plugin test` puts its src/ on the path.
+    # its package is not importable until `opsai plugin test` puts its src/ on the path.
     project = tmp_path / "salesforce"
     pkg = plugin(project / "src")
     (project / "pyproject.toml").write_text('[project]\nname = "demo-desk"\nversion = "0.1.0"\n')

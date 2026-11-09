@@ -213,5 +213,6 @@ GO
 GRANT SELECT, UPDATE, DELETE ON dbo.documents_outbox TO ops_documents_system;
 GRANT SELECT ON dbo.extractions TO ops_documents_system;
 GRANT SELECT ON dbo.document_type_tests TO ops_documents_system;
+GRANT SELECT ON dbo.documents_readings TO ops_documents_system;
 GRANT IMPERSONATE ON USER::ops_documents_system TO ops_documents_runtime;
 GO

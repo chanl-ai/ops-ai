@@ -29,6 +29,6 @@ teaches:
 - A narrow override of model, knowledge and tools applies and is recorded
 - Effective settings appear on the thread and the turn
 gaps:
-- ops chat send
+- opsai chat send
 - agent.eval
 - high-level ops.agents.chat overrides

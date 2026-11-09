@@ -1,8 +1,8 @@
-"""The `ops plugin` verbs, which the one `ops` command (ops_ai.cli in the ops-ai SDK) forwards here: `ops plugin
-validate <folder>` checks a plugin offline, `ops plugin test <folder>` validates it and runs its tests against its fake
-system, `ops plugin install <folder>` validates it and copies it into the install's plugins folder, and `ops plugin
-remove <id>` takes it out. Exit 0 done, 1 refused, failing or not installed, 2 a usage error. <folder> is the plugin's
-project (with pyproject.toml) or the package folder holding plugin.yaml."""
+"""The `opsai plugin` verbs, which the one `opsai` command (ops_ai.cli in the ops-ai SDK) forwards here: `opsai plugin
+validate <folder>` checks a plugin offline, `opsai plugin test <folder>` validates it and runs its tests against its
+fake system, `opsai plugin install <folder>` validates it and copies it into the install's plugins folder, and `opsai
+plugin remove <id>` takes it out. Exit 0 done, 1 refused, failing or not installed, 2 a usage error. <folder> is the
+plugin's project (with pyproject.toml) or the package folder holding plugin.yaml."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from .validate import validate
 def _validate(folder: Path) -> int:
     root = plugin_root(folder)
     if root is None:
-        sys.stderr.write(f"ops plugin: no plugin.yaml in {folder} or {folder}/src/*/\n")
+        sys.stderr.write(f"opsai plugin: no plugin.yaml in {folder} or {folder}/src/*/\n")
         return 2
     manifest, problems = validate(root)
     for p in problems:

@@ -18,7 +18,7 @@ uv run pytest examples/agents/06-narrow-one-conversation/test_example.py
 ```
 
 Python uses the public chat thread and settings routes (`POST /chat/threads`,
-`PATCH /chat/threads/{id}/settings`). CLI `ops chat send` and a high-level
+`PATCH /chat/threads/{id}/settings`). CLI `opsai chat send` and a high-level
 `ops.agents.chat(..., overrides=)` are **Planned**. UI Thread settings is **Built**.
 
 The full lesson is in [../../../docs/guide/agents.md](../../../docs/guide/agents.md).

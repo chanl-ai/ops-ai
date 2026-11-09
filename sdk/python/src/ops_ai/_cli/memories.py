@@ -1,4 +1,4 @@
-"""`ops memories`: what the agents remember about you, as Settings > Account > Memory shows it. List it, forget one
+"""`opsai memories`: what the agents remember about you, as Settings > Account > Memory shows it. List it, forget one
 memory or everything one agent remembers, and export it all. Each call acts on the signed-in person's own memory."""
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from .common import client, emit, parser, refuse, table, verb_options
 
 
 def main(argv: list[str]) -> int:
-    ap = parser("ops memories", "Your memories: list, forget, forget-agent, export.")
+    ap = parser("opsai memories", "Your memories: list, forget, forget-agent, export.")
     sub = ap.add_subparsers(dest="verb", required=True)
     common = [verb_options()]
     sub.add_parser("list", parents=common, help="what the agents remember about you").add_argument("--agent")

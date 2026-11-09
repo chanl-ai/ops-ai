@@ -126,8 +126,8 @@ def test_get_ticket_sends_the_number_in_its_path() -> None:
 Then, from the ops-ai checkout:
 
 ```
-uv run ops plugin validate ../ticketdesk
-uv run ops plugin test ../ticketdesk
+uv run opsai plugin validate ../ticketdesk
+uv run opsai plugin test ../ticketdesk
 ```
 
 `validate` prints `OK acme.ticketdesk 0.1.0: 1 tools, 0 knowledge sources, 0 templates` and `test` prints `1 passed`.
@@ -198,7 +198,7 @@ when the system has forgotten a saved page.
 
 A query is built from the tool's inputs in `request.query`, a map of parameter names to templates: `{{name}}` is the
 input's value, checked and written in by its format. An input a query template uses must declare an `enum` or a
-`format`; `ops plugin validate` refuses one with neither, and one with only a `pattern`, which is for path segments.
+`format`; `opsai plugin validate` refuses one with neither, and one with only a `pattern`, which is for path segments.
 
 | Format | Checked | Written as |
 |---|---|---|
@@ -233,7 +233,7 @@ is the worked example:
 
 ## Headers, forms and sign-in steps
 
-Seven fields cover what a system asks for beyond a path and a query. Each is data, checked by `ops plugin validate`
+Seven fields cover what a system asks for beyond a path and a query. Each is data, checked by `opsai plugin validate`
 and run by tools-service.
 
 | Field | What it does | Example | What validate refuses, and why |
@@ -305,7 +305,7 @@ settings:
       test_account_hosts: [.sandbox.my.salesforce.com]
 ```
 
-`ops plugin validate` refuses a choice whose value is not of the setting's type, an `other` with no `hosts`, a value
+`opsai plugin validate` refuses a choice whose value is not of the setting's type, an `other` with no `hosts`, a value
 without `{host}` or a suffix without its leading dot, a `sign_in_errors` entry with no `say` or no `who`, and a
 `credential_settings` name that is not a setting.
 
@@ -354,13 +354,13 @@ settings:
     other: { label: Your company's address, value: "https://{host}/services/oauth2", hosts: [.my.salesforce.com] }
 ```
 
-`ops plugin validate` refuses `asked` on a setting the sign-in fills (`from_token` or `after_sign_in`).
+`opsai plugin validate` refuses `asked` on a setting the sign-in fills (`from_token` or `after_sign_in`).
 
 ## Writing a Python tool
 
 A function receives a `Context` and its inputs as keyword arguments, and returns what the tool answers. Every
 parameter after `ctx` is declared under the tool's `input`, since tools-service checks each call against the declared
-inputs and refuses anything else; `ops plugin validate` reports a parameter left out. A listing tool declares `since`
+inputs and refuses anything else; `opsai plugin validate` reports a parameter left out. A listing tool declares `since`
 and `cursor` with `required: false`, because its first page has neither.
 
 | `ctx` member | Use |
@@ -438,8 +438,8 @@ Clone the plugins repository beside ops-ai once, then run both from the ops-ai c
 
 ```
 git clone https://github.com/chanl-ai/ops-ai-plugins.git ../ops-ai-plugins
-uv run ops plugin validate ../ops-ai-plugins/plugins/salesforce
-uv run ops plugin test ../ops-ai-plugins/plugins/salesforce
+uv run opsai plugin validate ../ops-ai-plugins/plugins/salesforce
+uv run opsai plugin test ../ops-ai-plugins/plugins/salesforce
 ```
 
 `validate` prints `OK <id> <version>: N tools, N knowledge sources, N templates`, or each problem with its field. It
@@ -466,7 +466,7 @@ names are and to trust that certificate. GitHub's `tests/fake_github.py` does th
 | Step | How |
 |---|---|
 | 1. Start the stack with the fakes | `make up DEMO_MODEL=fake` |
-| 2. Install the plugin | `uv run ops plugin install <plugin folder>`, then `make restart SVC=tools` and `make restart SVC=kb` |
+| 2. Install the plugin | `uv run opsai plugin install <plugin folder>`, then `make restart SVC=tools` and `make restart SVC=kb` |
 | 3. Serve the fake | `uv run --directory services/tools-service python <plugin>/tests/fake_github.py --dir .run/fake-github`; it prints its address, certificate and host map |
 | 4. Point tools-service at it | In `.env`, set `OPS_EGRESS_EXTRA_CA=<certificate>` and add the fake's names to `OPS_EGRESS_RESOLVE`, for example `'{"github.test":"<address>","api.github.test":"<address>"}'`, then `make restart SVC=tools`. The stack bundles that certificate with the fake bank's and merges the map with its own; the map is used in development only |
 | 5. Allow the hosts | As a Security admin, Settings › Security › Egress: Add host for each name, and Add range for `<address>/32` |
@@ -494,17 +494,17 @@ neither: `GET /v1/plugins` reports each with both places, so a stale copy can ne
 local stack's plugins folder is the main checkout's `plugins/`, whichever worktree runs the stack;
 `make demo-salesforce` installs the Salesforce plugin there from the plugins repository at its pinned ref.
 
-`ops plugin install <folder>` validates the plugin, then copies its package folder into the plugins folder (`--into`
+`opsai plugin install <folder>` validates the plugin, then copies its package folder into the plugins folder (`--into`
 names it when it is not `./plugins`), replacing an earlier copy whole; a plugin that fails validation is not copied.
-`ops plugin remove <id>` deletes it. Restart tools-service and kb-service after either.
+`opsai plugin remove <id>` deletes it. Restart tools-service and kb-service after either.
 
 ```
-uv run ops plugin install ../ops-ai-plugins/plugins/salesforce
-uv run ops plugin remove opsai.salesforce
+uv run opsai plugin install ../ops-ai-plugins/plugins/salesforce
+uv run opsai plugin remove opsai.salesforce
 ```
 
 Compose mounts the checkout's `plugins/` read-only at `/plugins` in tools and kb (`OPS_PLUGINS_HOST_DIR` names another
-host folder), so `ops plugin install --into <that folder>` then a restart of both is the whole install.
+host folder), so `opsai plugin install --into <that folder>` then a restart of both is the whole install.
 
 ### Plugins in a built image
 
@@ -519,7 +519,7 @@ sha256 digest of that folder:
 ```
 
 The build fetches each commit as a tarball, checks the plugin folder against its digest before installing anything,
-validates the plugin as `ops plugin install` does, and stops on any problem. A pin with no digest, or a download whose
+validates the plugin as `opsai plugin install` does, and stops on any problem. A pin with no digest, or a download whose
 folder differs from it, stops the build, so a swapped or altered archive never reaches an image. The digest covers each
 file's path and bytes, not the archive, so it does not change when GitHub recompresses a tarball. A branch or tag is
 refused, so an image built twice from the same commit holds the same plugins. To ship a newer plugin, run
@@ -654,7 +654,7 @@ limit to Stripe in test mode.
 | Gap | Today |
 |---|---|
 | A console page for the install's plugins and locked settings | Install config only (`OPS_PLUGINS_DIR`, `OPS_PLUGIN_LOCKED`); the team's switch and sign-in are the App's Connect window |
-| An end-to-end use case in a plugin's own repository | A plugin repository has `ops plugin test`; end-to-end proof is ops-ai's use cases below, or a walk through Try a plugin on a local stack |
+| An end-to-end use case in a plugin's own repository | A plugin repository has `opsai plugin test`; end-to-end proof is ops-ai's use cases below, or a walk through Try a plugin on a local stack |
 | Per-person access lists | Stored on the binding, not enforced |
 | Adding a plugin knowledge source from the console | kb-service API only; the source page syncs and shows it |
 | Plugins running out of process | Python tools run inside tools-service |

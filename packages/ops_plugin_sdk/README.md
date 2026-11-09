@@ -1,6 +1,6 @@
 # ops_plugin_sdk
 
-The plugin kit: what a plugin package imports, and the `ops plugin` commands that check, test and install it.
+The plugin kit: what a plugin package imports, and the `opsai plugin` commands that check, test and install it.
 tools-service uses the same code to read manifests, check inputs, build requests and page, so a plugin's tests send
 the requests it will send. How to write a plugin: [docs/guide/plugins.md](../../docs/guide/plugins.md).
 
@@ -14,9 +14,9 @@ the requests it will send. How to write a plugin: [docs/guide/plugins.md](../../
 
 | Command (from an ops-ai checkout) | What it does |
 |---|---|
-| `uv run ops plugin validate <folder>` | Checks the manifest and its functions; prints `OK <id> <version>: ...` or each problem with its field |
-| `uv run ops plugin test <folder>` | Validates, then runs the plugin's own pytest suite with its `src/` on the path |
-| `uv run ops plugin install <folder>` | Validates, then copies the package into the install's plugins folder (`--into` names another) |
-| `uv run ops plugin remove <id>` | Takes it out of the plugins folder |
+| `uv run opsai plugin validate <folder>` | Checks the manifest and its functions; prints `OK <id> <version>: ...` or each problem with its field |
+| `uv run opsai plugin test <folder>` | Validates, then runs the plugin's own pytest suite with its `src/` on the path |
+| `uv run opsai plugin install <folder>` | Validates, then copies the package into the install's plugins folder (`--into` names another) |
+| `uv run opsai plugin remove <id>` | Takes it out of the plugins folder |
 
 Run the kit's own tests with `make test PKG=packages/ops_plugin_sdk` from the root, or `uv run pytest` in this folder.

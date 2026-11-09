@@ -41,7 +41,7 @@ forms and sign-in steps.
 | 10 | The fake names `../admin?x=1`, Priya signs in the team's account; then it names `site-other` and she signs in again | The first fails; the second moves the team's calls to `site-other` |
 | 11 | Every answer in the run is searched for the token and the client secrets | None found |
 | 12 | Priya turns Salesforce on and signs in; a run calls `salesforce_find_cases_with_deleted` | The fake saw no UserInfo call; the cases come back from the instance the token answer named; query-all carried `batchSize=2000` |
-| 13 | `ops plugin validate` on the fields desk as it is | OK |
+| 13 | `opsai plugin validate` on the fields desk as it is | OK |
 | 14 | On a copy whose plugin header is named `Authorization` | Refused at `headers.Authorization`: "carries the sign-in" |
 | 15 | On a copy whose header reads `{{API_KEY}}` | Refused: "holds {{" |
 | 16 | On a copy of the sites desk with a `state` sign-in parameter, and one whose lookup reaches `evil.test` | Refused: "set by the platform"; "not one of the plugin's egress hosts" |
