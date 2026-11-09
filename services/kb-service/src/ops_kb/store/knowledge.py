@@ -24,7 +24,7 @@ from ops_service_kit.ids import new_id
 from ops_store import Guarantee, isolation
 from ops_store.audit import record as record_audit
 from ops_store.database import open_database
-from ops_store.dialect import Vector, db_now
+from ops_store.dialect import Vector, db_after, db_now
 from ops_store.outbox import add as add_event
 from ops_store.outbox import outbox_table
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, dialect_indexes, postgres_only
@@ -99,6 +99,8 @@ kb_sources = sa.Table(
     sa.Column("config", sa.JSON),
     # Held by the sync running now, so the schedule never starts a second one on the same source.
     sa.Column("lease_until", sa.DateTime(timezone=True)),
+    # Who holds the lease (a token per sync or rebuild): only its holder renews or releases it.
+    sa.Column("lease_owner", sa.String(64)),
     # Reading, cleaning, splitting, rules and metadata (source_settings.py); null: the kind's defaults.
     sa.Column("settings", sa.JSON),
     # Its health: when a sync last indexed or kept its items, since when its syncs have failed, and how many in a row.
@@ -933,17 +935,39 @@ class KnowledgeStore:
             q = sa.delete(kb_items).where(kb_items.c.tenant_id == tenant, kb_items.c.id.in_(item_ids))
             return (await c.execute(q)).rowcount
 
-    async def claim(self, tenant: str, source_id: str, *, until: Any) -> bool:
-        """Takes the source's sync lease until `until` when nobody holds it (or a holder's ran out): true when taken,
-        so two syncs of one source never run at once."""
+    async def claim(self, tenant: str, source_id: str, *, owner: str, seconds: float) -> bool:
+        """Takes the source's sync lease for `owner` for `seconds` by the database's clock, when nobody holds it (or a
+        holder's ran out): true when taken, so two syncs of one source never run at once."""
         s = kb_sources
         free = sa.or_(s.c.lease_until.is_(None), s.c.lease_until < db_now())
         async with self._tx() as c:
-            q = sa.update(s).where(s.c.tenant_id == tenant, s.c.id == source_id, free).values(lease_until=until)
+            q = (
+                sa.update(s)
+                .where(s.c.tenant_id == tenant, s.c.id == source_id, free, team_visible(s))
+                .values(lease_until=db_after(seconds), lease_owner=owner)
+            )
             return (await c.execute(q)).rowcount == 1
 
-    async def release(self, tenant: str, source_id: str) -> None:
-        await self.update_source(tenant, source_id, {"lease_until": None})
+    async def renew(self, tenant: str, source_id: str, *, owner: str, seconds: float) -> bool:
+        """Extends `owner`'s lease by `seconds` from now; false when it no longer holds it."""
+        s = kb_sources
+        async with self._tx() as c:
+            q = (
+                sa.update(s)
+                .where(s.c.tenant_id == tenant, s.c.id == source_id, s.c.lease_owner == owner, team_visible(s))
+                .values(lease_until=db_after(seconds))
+            )
+            return (await c.execute(q)).rowcount == 1
+
+    async def release(self, tenant: str, source_id: str, *, owner: str) -> None:
+        """Gives up `owner`'s lease; a lease another holder took is left alone."""
+        s = kb_sources
+        async with self._tx() as c:
+            await c.execute(
+                sa.update(s)
+                .where(s.c.tenant_id == tenant, s.c.id == source_id, s.c.lease_owner == owner, team_visible(s))
+                .values(lease_until=None, lease_owner=None)
+            )
 
     async def add_run(self, row: dict[str, Any]) -> None:
         async with self._tx() as c:
@@ -996,13 +1020,20 @@ class KnowledgeStore:
         async with self._tx() as c:
             return {str(r[0]) for r in await c.execute(q.distinct())}
 
-    async def end_stale_runs(self, tenant: str, *, before: Any, reason: str) -> int:
-        """Ends runs still marked running that started before `before`: the process running them stopped."""
-        r = kb_runs
+    async def end_stale_runs(self, tenant: str, *, reason: str) -> int:
+        """Ends runs still marked running whose source's lease has lapsed: the process running them stopped, since a
+        running sync or rebuild renews its lease for as long as it runs, however long that is."""
+        r, s = kb_runs, kb_sources
+        held = sa.exists().where(
+            s.c.tenant_id == r.c.tenant_id,
+            s.c.id == r.c.source_id,
+            s.c.lease_until.is_not(None),
+            s.c.lease_until >= db_now(),
+        )
         async with self._tx() as c:
             q = (
                 sa.update(r)
-                .where(r.c.tenant_id == tenant, r.c.status == "running", r.c.started_at < before)
+                .where(r.c.tenant_id == tenant, r.c.status == "running", ~held)
                 .values(status="failed", finished_at=db_now(), log=[reason])
             )
             return int((await c.execute(q)).rowcount or 0)

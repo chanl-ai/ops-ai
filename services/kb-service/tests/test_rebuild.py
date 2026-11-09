@@ -5,14 +5,18 @@ cancel of a run that is not running."""
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 from pathlib import Path
 from tempfile import mkdtemp
 from typing import Any
 
 import httpx
+import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_kb.files import KnowledgeFiles
+from ops_kb.store import KnowledgeStore
+from ops_store import isolation
 
 from .conftest import kb_client
 from .pdfs import HARDSHIP, RATES
@@ -119,3 +123,42 @@ async def test_settings_saved_during_a_rebuild_are_rebuilt_when_it_ends(engine: 
         assert [r["trigger"] for r in runs[:2]] == ["settings", "settings"], runs
         assert runs[0]["status"] == "success" and runs[0]["counts"]["rebuilt"] == 2, runs[0]
         assert data(await client.get(f"/v1/sources/{src['id']}"))["reindexNeeded"] is False
+
+
+async def test_a_rebuild_longer_than_its_lease_never_overlaps_a_sync_and_is_not_ended_as_stale(
+    engine: AsyncEngine, tenant: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The lease was taken once for 15 minutes and never renewed: a 20-minute rebuild lost it, a sync ran beside it,
+    the stale sweep ended it as stopped, and its release then cleared the lease the sync held."""
+    monkeypatch.setattr("ops_kb.service.LEASE", timedelta(seconds=0.3))
+    client, readings = held(engine, tenant)
+    store = KnowledgeStore(engine)
+    async with client:
+        src = await two_files(client)
+        readings.release.clear()
+        rebuild = data(await client.patch(f"/v1/sources/{src['id']}", json={"ingest": {"size": 300}}))["rebuild"]
+        for _ in range(4):
+            # Several leases' worth of time: the running rebuild keeps renewing its own.
+            await asyncio.sleep(0.3)
+            busy = await client.post(f"/v1/sources/{src['id']}/sync")
+            assert busy.status_code == 409 and busy.json()["error"]["code"] == "sync_running", busy.text
+            with isolation.tenant_wide("test: the stale-run sweep", tenant_id=tenant):
+                assert await store.end_stale_runs(tenant, reason="stopped") == 0
+        readings.release.set()
+        run = await finished(client, rebuild["id"])
+        assert run["status"] == "success", run
+        assert (await client.post(f"/v1/sources/{src['id']}/sync")).status_code == 200
+
+
+async def test_a_lease_is_released_only_by_its_holder(engine: AsyncEngine, tenant: str) -> None:
+    client, _ = held(engine, tenant)
+    store = KnowledgeStore(engine)
+    async with client:
+        src = await two_files(client)
+    with isolation.tenant_wide("test: two holders of one lease", tenant_id=tenant):
+        assert await store.claim(tenant, src["id"], owner="lease_a", seconds=0.01)
+        await asyncio.sleep(0.05)
+        assert await store.claim(tenant, src["id"], owner="lease_b", seconds=60), "a lapsed lease is taken over"
+        await store.release(tenant, src["id"], owner="lease_a")
+        assert not await store.claim(tenant, src["id"], owner="lease_c", seconds=60), "a's release left b's lease"
+        assert not await store.renew(tenant, src["id"], owner="lease_a", seconds=60)

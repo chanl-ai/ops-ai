@@ -31,8 +31,6 @@ PURGE_WITHDRAWN = (
 )
 # How long a withdrawn piece is kept after a newer version replaced it, as a knowledge snapshot is.
 WITHDRAWN_KEPT = timedelta(days=30)
-# A run still marked running this long after it started belongs to a process that stopped: the lease it held ran out.
-STALE_AFTER = timedelta(minutes=15)
 
 
 def due(service: KnowledgeService, s: dict[str, Any], now: datetime) -> bool:
@@ -81,7 +79,7 @@ async def end_stale_runs(service: KnowledgeService, now: datetime) -> int:
     for tenant in await service.store.tenants():
         with isolation.tenant_wide(FIND_STALE, tenant_id=tenant):
             ended += await service.store.end_stale_runs(
-                tenant, before=now - STALE_AFTER, reason="Stopped when the service stopped; sync again to finish."
+                tenant, reason="Stopped when the service stopped; sync again to finish."
             )
     return ended
 

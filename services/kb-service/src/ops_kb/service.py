@@ -9,6 +9,7 @@ docs/services/kb-service/overview.md gives the designed surface and says which p
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
 from collections.abc import Coroutine
 from dataclasses import dataclass
@@ -92,8 +93,9 @@ PRESETS: dict[str, dict[str, Any]] = {
 SOURCE_TYPES_IN_PHASE = ("file", "tool")
 SENSITIVITIES = ("internal", "confidential", "restricted")
 MAX_PAGE_SIZE = 100
-# How long a tool source's sync holds its lease; a sync that dies frees it when this passes.
-LEASE = timedelta(minutes=15)
+# A sync or rebuild holds its source's lease this long at a time and renews it every third of that while it runs, so
+# a run that stops (its process gone) frees the source within LEASE, and a long one never loses it.
+LEASE = timedelta(minutes=2)
 
 
 @dataclass(frozen=True)
@@ -200,6 +202,30 @@ def _item_counts(s: dict[str, Any]) -> dict[str, int]:
 
 
 logger = get_logger(__name__)
+
+
+class Lease:
+    """A source's sync lease held by one run: renewed every third of LEASE until released, so it outlives no stopped
+    process and expires under no running one; released only by its own holder."""
+
+    def __init__(self, store: KnowledgeStore, tenant: str, source_id: str, owner: str) -> None:
+        self.store, self.tenant, self.source_id, self.owner = store, tenant, source_id, owner
+        self.lost = False
+        self._task = asyncio.create_task(self._keep())
+
+    async def _keep(self) -> None:
+        while True:
+            await asyncio.sleep(LEASE.total_seconds() / 3)
+            if not await self.store.renew(self.tenant, self.source_id, owner=self.owner, seconds=LEASE.total_seconds()):
+                self.lost = True
+                logger.warning("kb_lease_lost", source=self.source_id)
+                return
+
+    async def release(self) -> None:
+        self._task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await self._task
+        await self.store.release(self.tenant, self.source_id, owner=self.owner)
 
 
 class KnowledgeService:
@@ -860,18 +886,26 @@ class KnowledgeService:
             return await self.sync_tool(who, s, full=False, trigger="schedule")
         return await self._held_sync(who, s, full=False, retry=False, trigger="schedule")
 
+    async def take_lease(self, tenant: str, source_id: str) -> Lease | None:
+        """The source's lease, renewed in the background until released; None when another run holds it."""
+        owner = new_id("lease")
+        if not await self.store.claim(tenant, source_id, owner=owner, seconds=LEASE.total_seconds()):
+            return None
+        return Lease(self.store, tenant, source_id, owner)
+
     async def _held_sync(
         self, who: Who, s: dict[str, Any], *, full: bool, retry: bool, trigger: str | None = None
     ) -> dict[str, Any]:
         """A file source's sync under its lease, so a rebuild, the schedule and a manual sync never run it at once."""
         source_id = str(s["id"])
-        if not await self.store.claim(who.tenant_id, source_id, until=datetime.now(UTC) + LEASE):
+        lease = await self.take_lease(who.tenant_id, source_id)
+        if lease is None:
             raise Conflict(f"{s['name']} is syncing or rebuilding now; wait for that run to end.", code="sync_running")
         try:
             with ai_run(self.ai_clients, who.tenant_id):
                 return await self._sync(who, s, full=full, retry=retry, trigger=trigger)
         finally:
-            await self.store.release(who.tenant_id, source_id)
+            await lease.release()
 
     async def sync_tool(self, who: Who, s: dict[str, Any], *, full: bool, trigger: str) -> dict[str, Any]:
         """A tool source's sync under its lease, so a manual sync and the schedule never run it at once."""
@@ -879,13 +913,14 @@ class KnowledgeService:
             raise Conflict("This service reads no tools, so the source cannot sync.", code="tools_unavailable")
         if s["status"] == "paused":
             raise Conflict(f"{s['name']} is paused; resume it to sync.", code="source_paused")
-        if not await self.store.claim(who.tenant_id, str(s["id"]), until=datetime.now(UTC) + LEASE):
+        lease = await self.take_lease(who.tenant_id, str(s["id"]))
+        if lease is None:
             raise Conflict(f"{s['name']} is syncing now; wait for that run to end.", code="sync_running")
         try:
             with ai_run(self.ai_clients, who.tenant_id):
                 run = _run(await sync_tool_source(self, self.tools, who, s, full=full, trigger=trigger))
         finally:
-            await self.store.release(who.tenant_id, str(s["id"]))
+            await lease.release()
         await self.settle_repeats(who, str(s["id"]))
         return run
 
@@ -943,7 +978,8 @@ class KnowledgeService:
         stale = [
             i for i in await self.store.items(tenant, source_ids=[source_id]) if self.built_under_other_settings(s, i)
         ]
-        if not stale or not await self.store.claim(tenant, source_id, until=datetime.now(UTC) + LEASE):
+        lease = await self.take_lease(tenant, source_id) if stale else None
+        if lease is None:
             return None
         run: dict[str, Any] = {
             "tenant_id": tenant,
@@ -959,13 +995,18 @@ class KnowledgeService:
             "started_by": who.email,
         }
         await self.store.add_run(run)
-        self._in_background(self._rebuild(who, s, run, stale))
+        self._in_background(self._rebuild(who, s, run, stale, lease))
         return _run(run)
 
-    async def _rebuild(self, who: Who, s: dict[str, Any], run: dict[str, Any], stale: list[dict[str, Any]]) -> None:
+    async def _rebuild(
+        self, who: Who, s: dict[str, Any], run: dict[str, Any], stale: list[dict[str, Any]], lease: Lease
+    ) -> None:
         # A run of its own for the AI steps: its task may be made inside a sync, whose run it must not share.
-        with ai_run(self.ai_clients, who.tenant_id, fresh=True):
-            await self._rebuild_items(who, s, run, stale)
+        try:
+            with ai_run(self.ai_clients, who.tenant_id, fresh=True):
+                await self._rebuild_items(who, s, run, stale)
+        finally:
+            await lease.release()
         # Settings saved while it ran (an AI step approved just after a save) could not start their own rebuild, as
         # this one held the source: it rebuilds what they changed now, so they never wait for the next sync.
         found = await self.store.sources(who.tenant_id, [str(s["id"])])
@@ -1028,7 +1069,6 @@ class KnowledgeService:
                     "duration_sec": round((ended - run["started_at"]).total_seconds(), 2),
                 },
             )
-            await self.store.release(tenant, source_id)
             if counts["rebuilt"]:
                 _, by_source = await self._joined(tenant)
                 await self.store.refreshed(tenant, by_source.get(source_id, []))
