@@ -413,6 +413,7 @@ class SkippedLane(TypedDict, closed=True):
 
 
 class SourceIn(TypedDict):
+    aiCeiling: NotRequired[float | None]
     cleaning: NotRequired[dict[str, Any] | None]
     collection: NotRequired[str]
     config: NotRequired[dict[str, Any] | None]
@@ -449,6 +450,7 @@ class SourceKind(TypedDict, closed=True):
 
 
 class SourcePatch(TypedDict):
+    aiCeiling: NotRequired[float | None]
     cleaning: NotRequired[dict[str, Any] | None]
     collection: NotRequired[str | None]
     ingest: NotRequired[dict[str, Any] | None]
@@ -694,6 +696,7 @@ class SearchOut(TypedDict, closed=True):
 
 
 class Source(TypedDict, closed=True):
+    aiCeiling: NotRequired[float]
     cleaning: dict[str, Any]
     collection: str
     config: dict[str, Any]
@@ -729,6 +732,7 @@ class Source(TypedDict, closed=True):
 
 
 class SourceDetail(TypedDict, closed=True):
+    aiCeiling: NotRequired[float]
     aiStepsWaiting: list[str]
     canDelete: NotRequired[bool | None]
     canEdit: NotRequired[bool | None]
@@ -777,6 +781,7 @@ class SourceDetail(TypedDict, closed=True):
 
 
 class SourceRow(TypedDict, closed=True):
+    aiCeiling: NotRequired[float]
     cleaning: dict[str, Any]
     collection: str
     config: dict[str, Any]

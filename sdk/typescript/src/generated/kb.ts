@@ -2085,6 +2085,11 @@ export interface components {
         };
         /** Source */
         Source: {
+            /**
+             * Aiceiling
+             * @default 5
+             */
+            aiCeiling: number;
             /** Cleaning */
             cleaning: {
                 [key: string]: unknown;
@@ -2169,6 +2174,11 @@ export interface components {
         };
         /** SourceDetail */
         SourceDetail: {
+            /**
+             * Aiceiling
+             * @default 5
+             */
+            aiCeiling: number;
             /** Aistepswaiting */
             aiStepsWaiting: string[];
             /** Candelete */
@@ -2287,6 +2297,8 @@ export interface components {
         };
         /** SourceIn */
         SourceIn: {
+            /** Aiceiling */
+            aiCeiling?: number | null;
             /** Cleaning */
             cleaning?: {
                 [key: string]: unknown;
@@ -2407,6 +2419,8 @@ export interface components {
         };
         /** SourcePatch */
         SourcePatch: {
+            /** Aiceiling */
+            aiCeiling?: number | null;
             /** Cleaning */
             cleaning?: {
                 [key: string]: unknown;
@@ -2459,6 +2473,11 @@ export interface components {
         };
         /** SourceRow */
         SourceRow: {
+            /**
+             * Aiceiling
+             * @default 5
+             */
+            aiCeiling: number;
             /** Cleaning */
             cleaning: {
                 [key: string]: unknown;

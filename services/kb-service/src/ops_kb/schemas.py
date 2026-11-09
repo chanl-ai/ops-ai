@@ -70,6 +70,8 @@ class SourceIn(In):
     ingest: Json | None = None
     rules: list[Json] | None = None
     metadata_mapping: list[Json] | None = None
+    # The most one sync may spend on model calls for its AI steps ($5 by default).
+    ai_ceiling: float | None = Field(default=None, ge=0.1, le=500.0)
 
 
 class KbSourceLink(Out):
@@ -127,6 +129,8 @@ class Source(Out):
     parsing: Json
     cleaning: Json
     ingest: Json
+    # The most one sync may spend on model calls for its AI steps.
+    ai_ceiling: float = 5.0
     rules: list[Json]
     metadata_mapping: list[Json]
     tags: list[str]
@@ -524,6 +528,8 @@ class SourcePatch(In):
     ingest: Json | None = None
     rules: list[Json] | None = None
     metadata_mapping: list[Json] | None = None
+    # The most one sync may spend on model calls for its AI steps ($5 by default).
+    ai_ceiling: float | None = Field(default=None, ge=0.1, le=500.0)
 
 
 class FileIdsIn(In):

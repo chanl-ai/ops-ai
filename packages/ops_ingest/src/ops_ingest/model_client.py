@@ -27,16 +27,5 @@ class ModelUnavailable(Exception):
 
 
 class ModelBudgetSpent(Exception):
-    """This run's ceiling on model calls is reached; an AI step stops asking and notes it."""
-
-
-class ModelBudget:
-    """A ceiling on model calls shared by every split of one run, so a large sync cannot spend without bound."""
-
-    def __init__(self, calls: int) -> None:
-        self.remaining = calls
-
-    def take(self) -> None:
-        if self.remaining <= 0:
-            raise ModelBudgetSpent
-        self.remaining -= 1
+    """The run or the environment reached its ceiling on model spend (models-service refused, from what it recorded);
+    an AI step stops asking and notes the reason."""

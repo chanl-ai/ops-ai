@@ -4,6 +4,7 @@ or a completion."""
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, ClassVar
 
@@ -26,6 +27,16 @@ class CallLog:
     async def record(self, row: Mapping[str, Any]) -> None:
         async with self.db.begin() as c:
             await c.execute(t.insert().values(**row))
+
+    async def spent(self, key_id: str, *, run_id: str | None = None, since: datetime | None = None) -> Decimal:
+        """What the call log records the key spent: on one run (`run_id`), or since a time."""
+        q = sa.select(sa.func.coalesce(sa.func.sum(t.c.cost), 0)).where(t.c.key_id == key_id)
+        if run_id is not None:
+            q = q.where(t.c.run_id == run_id)
+        if since is not None:
+            q = q.where(t.c.created_at >= since)
+        async with self.db.connect() as c:
+            return Decimal(str((await c.execute(q)).scalar_one()))
 
     async def recent(self, key_id: str) -> int:
         """How many calls the key made in the last minute."""

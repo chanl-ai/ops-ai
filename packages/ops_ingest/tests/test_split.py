@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 import ops_ingest
-from ops_ingest.model_client import ModelBudget, ModelUnavailable
+from ops_ingest.model_client import ModelBudgetSpent, ModelUnavailable
 from ops_ingest.models import IngestSettings, ParsedDocument, TableColumn
 from ops_ingest.parsers import parse
 from ops_ingest.split import PRESETS, InvalidIngestError, document_digest, split
@@ -187,10 +187,17 @@ def test_questions_are_asked_only_for_changed_pieces_and_stop_at_the_ceiling_or_
     second = split(doc, on, model=again, known_questions=known)
     assert len(again.calls) == len(first.chunks) - 2, "only the piece with no known questions is asked"
     assert [c.questions for c in second.chunks] == [c.questions for c in first.chunks]
-    capped = FakeModelClient(respond=faq_reply)
-    third = split(doc, on, model=capped, budget=ModelBudget(1))
-    assert len(capped.calls) == 1 and [bool(c.questions) for c in third.chunks] == [True, False, False]
-    assert any("ceiling" in n for n in third.notes)
+    answered: list[str] = []
+
+    def capped(prompt: str) -> str:
+        if answered:
+            raise ModelBudgetSpent("this run spent its 5.00")
+        answered.append(prompt)
+        return faq_reply(prompt)
+
+    third = split(doc, on, model=FakeModelClient(respond=capped))
+    assert len(answered) == 1 and [bool(c.questions) for c in third.chunks] == [True, False, False]
+    assert any("spend ceiling: this run spent its 5.00" in n for n in third.notes), third.notes
 
     def down(prompt: str) -> str:
         raise ModelUnavailable("key_budget_exhausted")

@@ -1,8 +1,10 @@
 """The model calls a split makes for a source's AI steps (likely questions), through models-service with kb-service's
 own key (step `kb:questions`). The split is synchronous, so it runs in a worker thread on a blocking client.
 
-One run (a sync or a rebuild) shares one client and one ceiling on model calls, and records what they spent on the run:
-calls, input and output tokens, and why the step stopped if it did."""
+One run (a sync or a rebuild) shares one client, named to models-service by the run's own id with the source's ceiling
+in money (its `aiCeiling`, $5 by default): models-service refuses a call once what it recorded for the run reaches it,
+and refuses every call of kb-service's key past the environment's daily cap. The run records what the calls spent
+(calls, input and output tokens) and why the step stopped if it did."""
 
 from __future__ import annotations
 
@@ -14,12 +16,16 @@ from typing import Any, Protocol
 
 import httpx
 
-from ops_ingest import ModelBudget, ModelUnavailable
+from ops_ingest import ModelBudgetSpent, ModelUnavailable
+from ops_service_kit.ids import new_id
 from ops_service_kit.model_calls import IngestModel, ModelCallError
 
-# The most model calls one run may make for its AI steps; past it the rest of its pieces get none, and the run says so.
-MAX_CALLS_PER_RUN = 1_000
 QUESTIONS_STEP = "kb:questions"
+# models-service's refusals that mean a spend ceiling, which stop the step as a ceiling rather than an outage.
+CEILINGS = {
+    "run_spend_cap": "this sync reached its source's ceiling",
+    "daily_spend_cap": "today's ceiling for the environment",
+}
 
 
 class AiClient(Protocol):
@@ -32,9 +38,9 @@ class AiClient(Protocol):
     def complete(self, prompt: str, *, alias: str, max_tokens: int) -> str: ...
 
 
-# A tenant's client for one run; None in a stack with no models-service, where an approved AI step adds nothing and the
-# run says why.
-AiClients = Callable[[str], AiClient]
+# A client for one tenant's run, by (tenant, run id, the run's ceiling in money); None in a stack with no
+# models-service, where an approved AI step adds nothing and the run says why.
+AiClients = Callable[[str, str, float], AiClient]
 
 
 @dataclass
@@ -50,6 +56,8 @@ class ModelsIngest:
         try:
             return self.inner.complete(prompt, alias=alias, max_tokens=max_tokens)
         except ModelCallError as e:
+            if e.code in CEILINGS:
+                raise ModelBudgetSpent(CEILINGS[e.code]) from e
             raise ModelUnavailable(e.code) from e
         finally:
             self.calls, self.input_tokens, self.output_tokens = (
@@ -60,9 +68,10 @@ class ModelsIngest:
 
 
 def models_clients(models_url: str, key: str) -> AiClients:
-    def make(tenant: str) -> AiClient:
+    def make(tenant: str, run_id: str, ceiling: float) -> AiClient:
         http = httpx.Client(base_url=models_url, timeout=120)
-        return ModelsIngest(IngestModel(http, key, tenant=tenant, step=QUESTIONS_STEP))
+        inner = IngestModel(http, key, tenant=tenant, step=QUESTIONS_STEP, run_id=run_id, run_cap=f"{ceiling:.2f}")
+        return ModelsIngest(inner)
 
     return make
 
@@ -70,7 +79,6 @@ def models_clients(models_url: str, key: str) -> AiClients:
 @dataclass
 class AiRun:
     client: AiClient | None
-    budget: ModelBudget = field(default_factory=lambda: ModelBudget(MAX_CALLS_PER_RUN))
     notes: set[str] = field(default_factory=set[str])
 
     def spend(self) -> dict[str, int]:
@@ -84,14 +92,14 @@ CURRENT: ContextVar[AiRun | None] = ContextVar("kb_ai_run", default=None)
 
 
 @contextmanager
-def ai_run(clients: AiClients | None, tenant: str, *, fresh: bool = False) -> Generator[AiRun]:
+def ai_run(clients: AiClients | None, tenant: str, *, ceiling: float, fresh: bool = False) -> Generator[AiRun]:
     """One run's client and ceiling, for every split the run makes; a split inside a run shares it. `fresh` starts a
     run of its own (a rebuild, whose task may be made inside a sync)."""
     outer = None if fresh else CURRENT.get()
     if outer is not None:
         yield outer
         return
-    run = AiRun(clients(tenant) if clients is not None else None)
+    run = AiRun(clients(tenant, new_id("airun"), ceiling) if clients is not None else None)
     token = CURRENT.set(run)
     try:
         yield run

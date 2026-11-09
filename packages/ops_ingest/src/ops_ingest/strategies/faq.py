@@ -62,8 +62,8 @@ def add_faq(chunks: list[Chunk], ctx: SplitContext) -> None:
         prompt = PROMPT.format(n=n, title=ctx.title, section=" > ".join(chunk.section_path) or "-", text=chunk.text)
         try:
             reply = ctx.call_model(prompt, max_tokens=MAX_TOKENS)
-        except ModelBudgetSpent:
-            ctx.notes.append("Likely questions stopped at this sync's ceiling on model calls.")
+        except ModelBudgetSpent as e:
+            ctx.notes.append(f"Likely questions stopped at a spend ceiling: {e}")
             stopped = True
             continue
         except ModelUnavailable as e:

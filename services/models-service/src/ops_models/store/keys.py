@@ -98,6 +98,11 @@ class ModelKeys:
         async with self.db.begin() as c:
             await c.execute(insert_ignore(c, t, row, keys=["id"]))
 
+    async def set_daily_cap(self, key_id: str, cap: Decimal | None) -> None:
+        """What the key may spend in one UTC day; None removes the cap."""
+        async with self.db.begin() as c:
+            await c.execute(t.update().where(t.c.id == key_id).values(daily_cap=cap))
+
     async def set_tenant_budget(self, key_id: str, budget: Decimal) -> None:
         """Makes the key spend per tenant at `budget` each, unless it already has a tenant budget."""
         async with self.db.begin() as c:

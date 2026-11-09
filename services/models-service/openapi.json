@@ -2631,6 +2631,22 @@
               ],
               "title": "X-Tenant-Id"
             }
+          },
+          {
+            "in": "header",
+            "name": "x-run-spend-cap",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Run-Spend-Cap"
+            }
           }
         ],
         "requestBody": {
@@ -2840,6 +2856,22 @@
                 }
               ],
               "title": "X-Tenant-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-run-spend-cap",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Run-Spend-Cap"
             }
           }
         ],

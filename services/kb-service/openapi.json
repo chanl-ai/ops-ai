@@ -3819,6 +3819,11 @@
       "Source": {
         "additionalProperties": false,
         "properties": {
+          "aiCeiling": {
+            "default": 5.0,
+            "title": "Aiceiling",
+            "type": "number"
+          },
           "cleaning": {
             "additionalProperties": true,
             "title": "Cleaning",
@@ -4031,6 +4036,11 @@
       "SourceDetail": {
         "additionalProperties": false,
         "properties": {
+          "aiCeiling": {
+            "default": 5.0,
+            "title": "Aiceiling",
+            "type": "number"
+          },
           "aiStepsWaiting": {
             "items": {
               "type": "string"
@@ -4356,6 +4366,19 @@
       },
       "SourceIn": {
         "properties": {
+          "aiCeiling": {
+            "anyOf": [
+              {
+                "maximum": 500.0,
+                "minimum": 0.1,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aiceiling"
+          },
           "cleaning": {
             "anyOf": [
               {
@@ -4616,6 +4639,19 @@
       },
       "SourcePatch": {
         "properties": {
+          "aiCeiling": {
+            "anyOf": [
+              {
+                "maximum": 500.0,
+                "minimum": 0.1,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aiceiling"
+          },
           "cleaning": {
             "anyOf": [
               {
@@ -4803,6 +4839,11 @@
       "SourceRow": {
         "additionalProperties": false,
         "properties": {
+          "aiCeiling": {
+            "default": 5.0,
+            "title": "Aiceiling",
+            "type": "number"
+          },
           "cleaning": {
             "additionalProperties": true,
             "title": "Cleaning",

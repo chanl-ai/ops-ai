@@ -84,7 +84,13 @@ def dev_secret(agent: str) -> str:
     return f"mk_dev_{agent}"
 
 
-async def seed(db: Database, fake_openai_url: str | None = None, install: dict[str, str | None] | None = None) -> None:
+async def seed(
+    db: Database,
+    fake_openai_url: str | None = None,
+    install: dict[str, str | None] | None = None,
+    *,
+    kb_daily_cap: float = 50.0,
+) -> None:
     providers, aliases, keys = Providers(db), Aliases(db), ModelKeys(db)
     scripted = {"id": SCRIPTED, "name": "scripted", "type": "scripted", "base_url": None, "key_ref": None}
     await providers.ensure({**scripted, "created_at": now_iso()})
@@ -121,3 +127,5 @@ async def seed(db: Database, fake_openai_url: str | None = None, install: dict[s
     # seeded before the column existed, too.
     await keys.set_tenant_budget(EXTRACT_KEY, EXTRACT_TENANT_BUDGET)
     await keys.set_tenant_budget(KB_KEY, KB_TENANT_BUDGET)
+    # The environment's daily ceiling on kb-service's model work.
+    await keys.set_daily_cap(KB_KEY, Decimal(str(kb_daily_cap)))

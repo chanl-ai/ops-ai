@@ -96,8 +96,8 @@ def draft_pairs(chunks: list[Chunk], ctx: SplitContext) -> list[FaqPair]:
         prompt = PROMPT.format(n=MAX_PAIRS, title=ctx.title, section=" > ".join(path) or "-", text=text)
         try:
             reply = ctx.call_model(prompt, max_tokens=MAX_TOKENS)
-        except ModelBudgetSpent:
-            ctx.notes.append("FAQ drafts stopped at this sync's ceiling on model calls.")
+        except ModelBudgetSpent as e:
+            ctx.notes.append(f"FAQ drafts stopped at a spend ceiling: {e}")
             ctx.section_digests += [section_digest(rest) for rest in sections_of(chunks)[len(ctx.section_digests) :]]
             break
         except ModelUnavailable as e:

@@ -270,6 +270,9 @@ class Settings(BaseSettings):
     # again. Widths above 1,998 are refused here, at start-up, because the vector index caps them (pgvector's HNSW
     # index at 2,000, Azure SQL's vector type at 1,998).
     embedding_alias: str = "bank-embed"
+    # What kb-service's key may spend on likely questions, FAQ drafts and embeddings in one UTC day, across every
+    # tenant (models-service refuses past it); each source's own ceiling per run is a source setting ($5 by default).
+    kb_ai_daily_cap: float = 50.0
     embedding_width: int = 1536
     # Dev only: provider credentials by the name a provider connection's `keyRef` gives, as JSON in
     # OPS_MODEL_PROVIDER_KEYS, behind the keys an account admin saves on Settings > Model providers. Outside dev a key

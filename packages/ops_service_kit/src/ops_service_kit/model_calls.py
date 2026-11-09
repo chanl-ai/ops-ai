@@ -158,6 +158,10 @@ class IngestModel:
     tenant: str
     step: str
     sensitivity: str = "internal"
+    # The run its calls belong to and that run's ceiling in money (X-Run-Id, X-Run-Spend-Cap): models-service refuses
+    # a call once what it recorded for the run reaches it.
+    run_id: str | None = None
+    run_cap: str | None = None
     calls: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
@@ -166,7 +170,11 @@ class IngestModel:
         try:
             r = self.http.post(
                 "/v1/models/chat/completions",
-                headers=_headers(self.key, self.tenant, self.step, self.sensitivity),
+                headers={
+                    **_headers(self.key, self.tenant, self.step, self.sensitivity),
+                    **({"X-Run-Id": self.run_id} if self.run_id else {}),
+                    **({"X-Run-Spend-Cap": self.run_cap} if self.run_id and self.run_cap else {}),
+                },
                 json=_chat_body(alias, [{"role": "user", "content": prompt}], max_tokens=max_tokens),
             )
         except httpx.HTTPError as e:

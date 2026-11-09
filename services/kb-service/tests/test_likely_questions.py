@@ -9,14 +9,14 @@ import json
 import re
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_ingest import ModelUnavailable
-from ops_kb.ai import AiClient
+from ops_ingest import ModelBudgetSpent, ModelUnavailable
+from ops_kb.ai import AiClient, models_clients
 from ops_kb.files import KnowledgeFiles
 
 from .conftest import kb_client
@@ -35,13 +35,18 @@ SECTIONS = [
 class FakeAi:
     """One run's client: three questions per piece, naming its section; or refusing, as a down model does."""
 
-    def __init__(self, log: list[str], down: bool) -> None:
+    def __init__(self, log: list[str], down: bool, ceiling: float, cost: float) -> None:
         self.log, self.down = log, down
         self.calls = self.input_tokens = self.output_tokens = 0
+        # The run's ceiling and what each call costs, as models-service records them: past the ceiling it refuses.
+        self.ceiling, self.cost, self.spent = ceiling, cost, 0.0
 
     def complete(self, prompt: str, *, alias: str, max_tokens: int) -> str:
         if self.down:
             raise ModelUnavailable("provider_unavailable")
+        if self.spent >= self.ceiling:
+            raise ModelBudgetSpent("this sync reached its source's ceiling")
+        self.spent += self.cost
         self.calls += 1
         self.input_tokens += 100
         self.output_tokens += 20
@@ -56,9 +61,12 @@ class Ai:
         self.asked: list[str] = []
         self.down = False
         self.made: list[FakeAi] = []
+        self.runs: list[tuple[str, float]] = []
+        self.cost = 0.01
 
-    def __call__(self, tenant: str) -> AiClient:
-        made = FakeAi(self.asked, self.down)
+    def __call__(self, tenant: str, run_id: str, ceiling: float) -> AiClient:
+        self.runs.append((run_id, ceiling))
+        made = FakeAi(self.asked, self.down, ceiling, self.cost)
         self.made.append(made)
         return made
 
@@ -146,3 +154,38 @@ async def finished(client: httpx.AsyncClient, run_id: str) -> dict[str, Any]:
             return run
         await asyncio.sleep(0.02)
     raise AssertionError(f"run {run_id} did not finish")
+
+
+async def test_a_run_stops_at_its_sources_ceiling_and_indexes_the_rest_without_questions(
+    client: httpx.AsyncClient, ai: Ai
+) -> None:
+    """The ceiling was a count of calls kept in kb-service; the source's ceiling in money now travels with the run's
+    own id to models-service, which refuses past it from what it recorded."""
+    src = await file_source(client)
+    data(await client.patch(f"/v1/sources/{src['id']}", json={"aiCeiling": 0.5}))
+    await questions_on(client, src)
+    ai.cost = 0.4
+    approved = data(await client.post(f"/v1/sources/{src['id']}/ai-approval", json={"decision": "approve"}))
+    rebuild = await finished(client, approved["rebuild"]["id"])
+    assert ai.runs[-1][1] == 0.5 and ai.runs[-1][0].startswith("airun_"), ai.runs
+    assert rebuild["status"] == "success" and rebuild["counts"]["rebuilt"] == 1, rebuild
+    assert len(ai.asked) == 2, "two calls fit under 0.50 at 0.40 each; the third is refused"
+    said = "spend ceiling: this sync reached its source's ceiling"
+    assert any(said in line for line in rebuild["log"]), rebuild["log"]
+
+
+def test_models_services_ceiling_refusals_stop_the_step_and_send_the_runs_ceiling() -> None:
+    """A ceiling refusal read as the model being down would say the wrong thing; a call without the run's id and
+    ceiling would never be refused at all."""
+    sent: list[httpx.Request] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(429, json={"success": False, "error": {"code": "run_spend_cap", "message": "spent"}})
+
+    client = models_clients("http://models", "mk_dev_kb")("t1", "airun_1", 5.0)
+    inner = cast(Any, client).inner
+    inner.http = httpx.Client(transport=httpx.MockTransport(answer), base_url="http://models")
+    with pytest.raises(ModelBudgetSpent, match="source's ceiling"):
+        client.complete("Write questions", alias="default", max_tokens=10)
+    assert (sent[0].headers["x-run-id"], sent[0].headers["x-run-spend-cap"]) == ("airun_1", "5.00")

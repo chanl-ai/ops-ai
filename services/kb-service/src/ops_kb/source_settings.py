@@ -56,6 +56,9 @@ class SourceSettings(_Model):
     metadata_mapping: list[MetadataMapping] = Field(default_factory=list[MetadataMapping])
     # When it syncs on its own (ops_store.schedule); None: the kind's default (a plugin's own schedule for its source).
     schedule: dict[str, Any] | None = None
+    # The most one sync or rebuild may spend on model calls for its AI steps, in the environment's currency;
+    # models-service refuses past it from what it recorded, and the rest of the pieces are indexed without them.
+    ai_ceiling: float = Field(default=5.0, ge=0.1, le=500.0)
 
 
 class InvalidSettings(ValueError):

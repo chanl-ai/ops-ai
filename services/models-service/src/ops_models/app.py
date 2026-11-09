@@ -16,7 +16,7 @@ import time
 from collections.abc import AsyncGenerator, AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, cast
 
 import httpx
@@ -627,6 +627,7 @@ def create_models_app(
         sensitivity: str,
         tenant: str | None,
         images: int = 0,
+        run_cap: str | None = None,
         **row: str | None,
     ) -> Gate | JSONResponse:
         """Every check a model call passes before it reaches a provider, in one order for chat and embeddings: the
@@ -655,6 +656,21 @@ def create_models_app(
                     429,
                     "tenant_budget_exhausted",
                     f"Tenant {tenant} has spent its budget of {share['budget']} on model key {key['id']}.",
+                )
+        if key.get("daily_cap") is not None:
+            today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            if await call_log.spent(key["id"], since=today) >= key["daily_cap"]:
+                return await gate.refuse(
+                    429, "daily_spend_cap", f"Model key {key['id']} has spent its {key['daily_cap']} for today."
+                )
+        if run_cap is not None and row.get("run_id"):
+            try:
+                cap = Decimal(run_cap)
+            except InvalidOperation:
+                return await gate.refuse(400, "invalid_spend_cap", "X-Run-Spend-Cap is an amount, such as 5.00.")
+            if await call_log.spent(key["id"], run_id=row["run_id"]) >= cap:
+                return await gate.refuse(
+                    429, "run_spend_cap", f"Run {row['run_id']} has spent its {cap} on model key {key['id']}."
                 )
         # The log's times are the database's, so the one-minute window is measured on the database's clock too.
         recent = await call_log.recent(key["id"])
@@ -715,6 +731,7 @@ def create_models_app(
         x_thread_id: Annotated[str | None, Header()] = None,
         x_request_hash: Annotated[str | None, Header()] = None,
         x_tenant_id: Annotated[str | None, Header()] = None,
+        x_run_spend_cap: Annotated[str | None, Header()] = None,
     ) -> Response:
         body = request.model_dump(exclude_unset=True)
         alias_name = request.model
@@ -725,6 +742,7 @@ def create_models_app(
             sensitivity=x_data_sensitivity,
             tenant=x_tenant_id,
             images=images_in(request.messages),
+            run_cap=x_run_spend_cap,
             run_id=x_run_id,
             step_id=x_step_id,
             thread_id=x_thread_id,
@@ -815,6 +833,7 @@ def create_models_app(
         x_run_id: Annotated[str | None, Header()] = None,
         x_step_id: Annotated[str | None, Header()] = None,
         x_tenant_id: Annotated[str | None, Header()] = None,
+        x_run_spend_cap: Annotated[str | None, Header()] = None,
     ) -> Response:
         """Vectors for one text or a batch, from an alias of kind embedding, through the same key, budget and clearance
         checks as a completion, and one call-log row per request."""
@@ -825,6 +844,7 @@ def create_models_app(
             "embedding",
             sensitivity=x_data_sensitivity,
             tenant=x_tenant_id,
+            run_cap=x_run_spend_cap,
             run_id=x_run_id,
             step_id=x_step_id,
         )

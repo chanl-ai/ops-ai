@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import Literal
 
 from ops_ingest.dedupe import content_digest
-from ops_ingest.model_client import ModelBudget, ModelClient
+from ops_ingest.model_client import ModelClient
 from ops_ingest.models import (
     AI_STEPS,
     SPLITTERS,
@@ -122,7 +122,6 @@ class Pipeline:
         preview: bool = False,
         known_questions: dict[str, list[str]] | None = None,
         known_sections: set[str] | None = None,
-        budget: ModelBudget | None = None,
     ) -> SplitResult:
         settings = self.settings
         ctx = SplitContext(
@@ -132,7 +131,6 @@ class Pipeline:
             model=self.model,
             known_questions=known_questions or {},
             known_sections=known_sections or set(),
-            budget=budget,
         )
         strategies = settings.strategies
 
@@ -213,12 +211,9 @@ def split(
     count_tokens: TokenCounter = approx_tokens,
     known_questions: dict[str, list[str]] | None = None,
     known_sections: set[str] | None = None,
-    budget: ModelBudget | None = None,
 ) -> SplitResult:
     pipeline = Pipeline(settings, model=model, count_tokens=count_tokens)
-    return pipeline.run(
-        document, preview=preview, known_questions=known_questions, known_sections=known_sections, budget=budget
-    )
+    return pipeline.run(document, preview=preview, known_questions=known_questions, known_sections=known_sections)
 
 
 def document_digest(document: ParsedDocument, settings: IngestSettings) -> str:

@@ -164,7 +164,7 @@ def _matches(search: str | None, *texts: str) -> bool:
 
 
 # The settings a source's patch may change, each validated and applied by its stage (source_settings.py).
-SETTINGS_KEYS = ("parsing", "cleaning", "ingest", "rules", "metadataMapping", "schedule")
+SETTINGS_KEYS = ("parsing", "cleaning", "ingest", "rules", "metadataMapping", "schedule", "aiCeiling")
 # The service event a source raises when it keeps failing, so a workflow can tell its owner.
 FAILING_EVENT = "knowledge.source.failing"
 FAILING_AFTER_RUNS = 2
@@ -308,6 +308,7 @@ class KnowledgeService:
             "ingest": applied["ingest"],
             "rules": applied["rules"],
             "metadataMapping": applied["metadataMapping"],
+            "aiCeiling": applied["aiCeiling"],
             "tags": s["tags"],
             "titleFrom": "heading",
             "permissions": {"mode": "workspace"},
@@ -902,7 +903,7 @@ class KnowledgeService:
         if lease is None:
             raise Conflict(f"{s['name']} is syncing or rebuilding now; wait for that run to end.", code="sync_running")
         try:
-            with ai_run(self.ai_clients, who.tenant_id):
+            with ai_run(self.ai_clients, who.tenant_id, ceiling=self.settings_of(s).ai_ceiling):
                 return await self._sync(who, s, full=full, retry=retry, trigger=trigger)
         finally:
             await lease.release()
@@ -917,7 +918,7 @@ class KnowledgeService:
         if lease is None:
             raise Conflict(f"{s['name']} is syncing now; wait for that run to end.", code="sync_running")
         try:
-            with ai_run(self.ai_clients, who.tenant_id):
+            with ai_run(self.ai_clients, who.tenant_id, ceiling=self.settings_of(s).ai_ceiling):
                 run = _run(await sync_tool_source(self, self.tools, who, s, full=full, trigger=trigger))
         finally:
             await lease.release()
@@ -1003,7 +1004,7 @@ class KnowledgeService:
     ) -> None:
         # A run of its own for the AI steps: its task may be made inside a sync, whose run it must not share.
         try:
-            with ai_run(self.ai_clients, who.tenant_id, fresh=True):
+            with ai_run(self.ai_clients, who.tenant_id, ceiling=self.settings_of(s).ai_ceiling, fresh=True):
                 await self._rebuild_items(who, s, run, stale)
         finally:
             await lease.release()
@@ -1205,7 +1206,7 @@ class KnowledgeService:
         if not ai_steps_on(settings):
             result = split(doc, settings)
         else:
-            with ai_run(self.ai_clients, who.tenant_id) as run:
+            with ai_run(self.ai_clients, who.tenant_id, ceiling=self.settings_of(s).ai_ceiling) as run:
                 if run.client is None:
                     run.notes.add("Likely questions are on, but this stack has no models-service to write them.")
                     result = split(doc, settings.model_copy(update={"approval": IngestApproval()}))
@@ -1219,7 +1220,6 @@ class KnowledgeService:
                         model=run.client,
                         known_questions=known,
                         known_sections=drafted,
-                        budget=run.budget,
                     )
                     run.notes.update(n for n in result.notes if "stopped" in n)
         return pieces(who.tenant_id, item_id, version, title, result, self._metadata(s, doc)), result

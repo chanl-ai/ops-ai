@@ -53,7 +53,7 @@ class Ai:
     def __init__(self) -> None:
         self.asked: list[str] = []
 
-    def __call__(self, tenant: str) -> AiClient:
+    def __call__(self, tenant: str, run_id: str, ceiling: float) -> AiClient:
         return Drafter(self.asked)
 
 
