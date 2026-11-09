@@ -13,8 +13,10 @@ from docx import Document
 from openpyxl import Workbook
 from PIL import Image, ImageDraw, ImageFont
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, LETTER
 from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import Flowable, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 HERE = Path(__file__).parent
@@ -61,6 +63,82 @@ def scanned_pdf() -> None:
     draw.text((100, 200), "LATE PAYMENT FEE", fill="black", font=font)
     draw.text((100, 300), "The fee is 25 dollars.", fill="black", font=font)
     image.save(HERE / "scanned.pdf", "PDF", resolution=150.0)
+
+
+# A made-up enrolment form's labels and values, shared by the form, half-scan and image fixtures.
+FORM = [
+    ("form_id", "Form ID", "WX-4471-B"),
+    ("full_name", "Full name", "Marisol Okonkwo-Reyes"),
+    ("date_of_birth", "Date of birth", "1987-03-14"),
+    ("policy_number", "Policy number", "PL-90385217"),
+    ("phone", "Phone", "+1 415 555 0142"),
+    ("email", "Email", "m.okonkwo@example.org"),
+    ("received_date", "Received date", "2026-02-19"),
+]
+
+
+def _printed(lines: list[str], size: tuple[int, int], *, font_size: int, top: int = 40) -> Image.Image:
+    """Lines drawn as a greyscale picture, standing in for a scanned page."""
+    image = Image.new("L", size, 255)
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.load_default(size=font_size)
+    for i, line in enumerate(lines):
+        draw.text((60, top + i * round(font_size * 1.8)), line, fill=0, font=font)
+    return image
+
+
+def half_scan_pdf() -> None:
+    """Four values in the text layer and three more only as pixels: a picture covering a quarter of the page."""
+    canvas = Canvas(str(HERE / "half_scan.pdf"), pagesize=LETTER)
+    _, height = LETTER
+    canvas.setFont("Helvetica-Bold", 16)
+    canvas.drawString(50, height - 60, "Member enrolment form")
+    canvas.setFont("Helvetica", 10)
+    for i, (_, label, value) in enumerate(FORM[:4]):
+        canvas.drawString(50, height - 110 - i * 24, f"{label}: {value}")
+    strip = _printed([f"{label}: {value}" for _, label, value in FORM[4:]], (1275, 417), font_size=30)
+    canvas.drawImage(ImageReader(strip), 0, height - 430, width=612, height=200)  # pyright: ignore[reportUnknownMemberType]
+    canvas.showPage()
+    canvas.save()
+
+
+def small_picture_pdf() -> None:
+    """A text page with a small picture (a logo-sized 10% of the page) that must not start OCR."""
+    canvas = Canvas(str(HERE / "small_picture.pdf"), pagesize=LETTER)
+    _, height = LETTER
+    canvas.setFont("Helvetica", 10)
+    canvas.drawString(50, height - 300, "Branch opening hours are nine to five on weekdays.")
+    logo = _printed(["HARBOR"], (400, 300), font_size=60, top=100)
+    canvas.drawImage(ImageReader(logo), 50, height - 260, width=220, height=220)  # pyright: ignore[reportUnknownMemberType]
+    canvas.showPage()
+    canvas.save()
+
+
+def form_pdf() -> None:
+    """A fillable form: labels in the text layer, typed values only in the form's fields."""
+    canvas = Canvas(str(HERE / "form.pdf"), pagesize=LETTER)
+    _, height = LETTER
+    canvas.setFont("Helvetica-Bold", 16)
+    canvas.drawString(50, height - 60, "Member enrolment form")
+    canvas.setFont("Helvetica", 10)
+    y = round(height) - 110
+    for name, label, value in FORM:
+        canvas.drawString(50, y + 4, f"{label}:")
+        canvas.acroForm.textfield(name=name, value=value, x=160, y=y, width=240, height=16, fontSize=10)  # pyright: ignore[reportUnknownMemberType]
+        y -= 24
+    canvas.drawString(50, y + 4, "Consent:")
+    canvas.acroForm.checkbox(name="consent", checked=True, x=160, y=y, size=14)  # pyright: ignore[reportUnknownMemberType]
+    canvas.showPage()
+    canvas.save()
+
+
+def scan_images() -> None:
+    """A photographed page as PNG, and a two-page TIFF scan."""
+    lines = [f"{label}: {value}" for _, label, value in FORM]
+    _printed(lines, (1275, 700), font_size=30).save(HERE / "scan.png")
+    first = _printed(lines[:4], (1275, 500), font_size=30)
+    second = _printed(["Second page", *lines[4:]], (1275, 500), font_size=30)
+    first.save(HERE / "scan.tiff", save_all=True, append_images=[second], compression="tiff_deflate")
 
 
 def procedures_docx() -> None:
@@ -132,6 +210,10 @@ def help_html() -> None:
 if __name__ == "__main__":
     policy_pdf()
     scanned_pdf()
+    half_scan_pdf()
+    small_picture_pdf()
+    form_pdf()
+    scan_images()
     procedures_docx()
     fees_xlsx()
     help_html()

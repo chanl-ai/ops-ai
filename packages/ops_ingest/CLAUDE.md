@@ -13,6 +13,7 @@ or embedding of its own. Package rules and test commands: [../CLAUDE.md](../CLAU
 | Module | What it is |
 |---|---|
 | `parsers/` | `parse(...)`: PDF (pdfplumber, OCR fallback), DOCX, HTML (`clean` removes page furniture), XLSX and CSV, plain text and Markdown; `builder` assembles the reading-order stream |
+| `reading/` | `read` and `open_file`: one reading of any file into pages (how each page was read, text, blocks with boxes, words with confidence, form fields, OCR quality), OCR `off`, `auto` (scans and the picture areas of mixed pages) or `always`, image files, a 2,000-page limit, one page at a time for resume; `to_parsed_document` turns a reading into what `split` takes. `parsers/pdf.py` and `ops_extract.layout` are still in use beside it until their callers move |
 | `split` | `split`, `Pipeline`, `validate_settings`, `InvalidIngestError`: one function from a parsed document and settings to chunks and index units |
 | `strategies/` | `structure`, `fixed`, `parent_child`, `table_rows`, `topic`, `faq`, `context_headers`, `clean`, `summarize` |
 | `metadata` | Mapping source fields and static values onto items, and the required-metadata hold |
@@ -29,6 +30,9 @@ or embedding of its own. Package rules and test commands: [../CLAUDE.md](../CLAU
   builds a provider client or reads a key.
 - Invalid settings are refused by `validate_settings` (two splitters, `parent_child` with `fixed`, size bounds), never
   silently corrected.
+- A reading depends only on the bytes, `ReadingSettings` (OCR mode and language, `settings.key`) and
+  `READER_VERSION`, so a caller may store it under those and reuse it. A file that cannot be read at all raises
+  `ReadingError` with a `code`; a page that cannot be read is listed with `source="none"` and its reason.
 - OCR needs the `ocr` extra and the `tesseract` binary. A scanned page with OCR off is reported, and OCR requested but
   missing fails loudly, so an empty page is never indexed as a short one.
 

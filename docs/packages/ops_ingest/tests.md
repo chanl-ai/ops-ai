@@ -28,6 +28,28 @@ uv run pytest
 | P10 | `clean` removes real content whose class contains a boilerplate substring (`lead` contains `ad`) | `test_parsers.py::test_html_clean_keeps_content_with_lookalike_classes` |
 | P11 | A file over 50 MB is parsed instead of failing with `too_large` | `test_parsers.py::test_oversized_file_is_refused` |
 
+## Reading
+
+Fixtures added for reading: a page half text and half picture, a text page with a small picture, a fillable form, a
+PNG scan and a two-page TIFF scan, all of a made-up enrolment form.
+
+| # | Failure mode | Test |
+|---|---|---|
+| R1 | A scanned PDF reads empty, or its OCR words carry no confidence | `test_reading.py::test_scanned_pdf_is_read_by_ocr_with_word_confidence` |
+| R2 | The picture half of a mixed page is never read, because the page has some text | `test_reading.py::test_picture_half_of_a_mixed_page_is_read` |
+| R3 | A logo-sized picture starts OCR, or a file needing no OCR fails without Tesseract | `test_reading.py::test_small_picture_does_not_start_ocr` |
+| R4 | A scan with OCR off reads as an empty page instead of an unread one with its reason | `test_reading.py::test_scan_with_ocr_off_is_listed_unread` |
+| R5 | `always` keeps a bad text layer, or a page's low-confidence share is wrong | `test_reading.py::test_always_ocrs_a_text_page_and_reports_low_confidence` |
+| R6 | A scan carrying its own OCR text layer is read twice | `test_reading.py::test_text_layer_over_a_scan_is_not_read_twice` |
+| R7 | Values typed into a fillable form are missed, since they are not in the text layer | `test_reading.py::test_form_values_are_read_from_the_form_dictionary` |
+| R8 | Form values do not reach search | `test_reading.py::test_form_fields_are_searchable_after_splitting` |
+| R9 | A PNG or TIFF scan is refused, or a TIFF's later frames are lost | `test_reading.py::test_image_files_are_read_one_page_per_frame` |
+| R10 | A file over 2,000 pages is read part way instead of failing with `too_many_pages` | `test_reading.py::test_file_over_the_page_limit_is_refused` |
+| R11 | OCR needed but not installed reads the page as empty | `test_reading.py::test_ocr_needed_but_missing_fails_loudly` |
+| R12 | A format with no reader, or a broken file, fails without a reason code | `test_reading.py::test_file_without_a_reader_fails_with_a_reason` |
+| R13 | Splitting a reading loses section paths, paragraph breaks, tables or page numbers that parsing kept | `test_reading.py::test_reading_splits_the_same_as_the_parser` |
+| R14 | A page read on its own after a restart gets other heading levels than in a whole read | `test_reading.py::test_page_read_on_its_own_matches_a_whole_read` |
+
 ## Splitting
 
 | # | Failure mode | Test |
