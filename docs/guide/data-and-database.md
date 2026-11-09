@@ -88,7 +88,7 @@ do inside a team; they never open another team's data.
 | Tenant, in the database, for tools, models, kb, files and documents | Every store query filters by tenant in the service's code. In tools-service, a connection's saved sign-ins (tokens and keys, sign-ins in progress, environment settings, connect links) are also held to their tenant and team by database policies, run as `ops_tools_tenant`; policies for the other tools tables and for models are still to come | Partial |
 | Background loops | The agents service's lease sweeper, timer poller and thread inbox loops claim work before they know its tenant through one system role that may read across tenants; each then does the work under the row's own tenant. No request ever runs as that role | Built |
 | Team, in the services | Every read of a team-owned table goes through one team filter in the store layer, so a person sees only the teams they belong to; another team's record answers 404 | Built |
-| Team, in the database | A database-level team policy beneath the store filter | In progress |
+| Team, in the database | A database-level team policy beneath the store filter. Built for files and documents, including each file's reading (`documents_readings`, `documents_reading_pages`, `documents_reading_files`): two teams holding the same bytes each read them once and never see the other's reading | In progress |
 | Installation-wide records | Model aliases, provider connections and model keys belong to the installation, so every tenant in one installation shares them (see [Deployment options](deployment-options.md#single-tenant-and-multi-tenant)) | Built |
 
 ## Files and knowledge

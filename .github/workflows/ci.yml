@@ -200,11 +200,14 @@ jobs:
       - run: make python-verify VERIFY_POOL="${{ needs.plan.outputs.repo_pool }}"
       - run: make sdk-verify changelog-verify
 
-  result:
-    # One status for branch protection; a job the plan skipped counts as passed.
+  ci-ok:
+    # The one required check: it always runs, waits for every other job, and fails when any of them failed or was
+    # cancelled. A job the plan skipped counts as passed, so a narrow change is not held up by suites it did not touch.
+    name: ci-ok
     if: always()
     needs: [plan, checks, service, package, console, docs, repo]
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - env:
           NEEDS: ${{ toJSON(needs) }}

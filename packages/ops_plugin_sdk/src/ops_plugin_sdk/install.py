@@ -30,6 +30,10 @@ def install(source: Path, into: Path) -> tuple[Installed | None, list[Problem]]:
     root = plugin_root(source)
     if root is None:
         return None, [Problem(str(source), "no plugin.yaml here or in src/*/")]
+    # A link would be followed by the copy, bringing in files from outside the plugin that nobody reviewed.
+    links = [p for p in root.rglob("*") if p.is_symlink()]
+    if links:
+        return None, [Problem(str(p), "a symlink; a plugin holds only its own files") for p in links]
     manifest, problems = validate(root)
     if manifest is None or problems:
         return None, problems

@@ -65,6 +65,7 @@ import { plural, shortDate } from '@/lib/format';
 import { TOOL_CALL_LOG } from '@/lib/nav';
 import type { IntegrationStatus } from '@/lib/types/integrations';
 import type { ModuleApproval, OperationPatch } from '@/lib/types/tool-modules';
+import { appPageHref } from '@/lib/app-links';
 
 const TABS = ['operations', 'access', 'approval', 'connection', 'activity', 'versions'] as const;
 type Tab = (typeof TABS)[number];
@@ -296,7 +297,7 @@ export default function ModulePage() {
                     {m.connection && (
                       <Button size="sm" variant="outline" className="border-destructive/40 text-foreground" asChild>
                         {/* An app connected by name is its own app page; the sample connection page is gone. */}
-                        <Link href={`/integrations/apps/${encodeURIComponent(m.connection.id)}`}>Open app</Link>
+                        <Link href={appPageHref(m.connection.id)}>Open app</Link>
                       </Button>
                     )}
                   </AlertDescription>

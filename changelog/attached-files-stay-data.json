@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "Attached files cannot pose as instructions",
+  "description": "Text in an attached file or a knowledge page that tries to end the file's section or add a fake knowledge passage is now shown to the agent as plain text, so a document cannot pass itself off as guidance.",
+  "tag": "fix"
+}

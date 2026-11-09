@@ -62,6 +62,8 @@ function freeName(wanted: string, taken: string[]): string {
  * app or one the team made under Credentials, the account's own when it has one), the access it asks for, then
  * Authorize. No client is typed here. The sign-in
  * window opens on the click and closes once access is allowed; the account's first test then runs in the background.
+ * Turning an app on for the team only saves the team's setting: nobody is asked to sign in, and the saved state offers
+ * the admin's own sign-in as an optional second step, since members connect theirs from Connectors › Mine.
  * `another` adds a second named account of an app the team has connected; `sandbox` adds its sandbox account, which
  * test runs use, asking what the first connect asked. `credential` starts it on one app credential (null for Ops AI's
  * app), as Connect account on a credential's page does. Cancel removes what the window made.
@@ -110,6 +112,7 @@ export function ConnectWindow({
   const adding = sandbox || (another && asTeam);
   // An admin turning the app on for the team: the one Turn on window (app-setup design). It asks only where the team
   // signs in and whose account tools use, and whether the team's assistant gets the read tools; the rest is decided.
+  // It saves and stops: signing in is a separate, optional action once it is on.
   const turningOn = !card.connectionId && !another && !sandbox && !ownOnly;
   const [whose, setWhose] = React.useState<SignIn>(() => (plugin?.signIn.includes('person_or_team') ? 'person_or_team' : ((plugin?.signIn[0] as SignIn | undefined) ?? 'team')));
   const [giveAssistant, setGiveAssistant] = React.useState(true);
@@ -117,7 +120,7 @@ export function ConnectWindow({
   const page = useApp(card.id);
   // What the window says once the admin allowed access: who signed in, how many read tools were added, and what the
   // assistant got, each as the services answered it.
-  const [done, setDone] = React.useState<{ account?: string; added: number; assistant?: { state: string; agentName: string } } | null>(null);
+  const [done, setDone] = React.useState<TurnOnResult | null>(null);
   const added = React.useRef(0);
 
   // The app credential the team's connection already signs in with, as the app's card names it; a sandbox signs in
@@ -184,7 +187,11 @@ export function ConnectWindow({
     onConnected: (m) => {
       made.current = null;
       if (turningOn) {
-        void finishTurnOn(m.connectionId, m.account ?? undefined);
+        // The admin's optional sign-in after the app was turned on: the saved state now names who signed in.
+        setWaiting(false);
+        test.mutate({ appId: card.id, accountId: m.connectionId });
+        setDone((d) => (d ? { ...d, account: m.account ?? 'your account' } : d));
+        toast.success(`${card.name} is connected`, { description: m.account ? `Signed in as ${m.account}.` : undefined });
         return;
       }
       setWaiting(false);
@@ -206,9 +213,8 @@ export function ConnectWindow({
     },
   });
 
-  /** After Allow on a turn-on: the first test, the assistant's read tools when asked for, then what is now true. */
-  const finishTurnOn = async (accountId: string, account?: string) => {
-    test.mutate({ appId: card.id, accountId });
+  /** After a turn-on is saved: the assistant's read tools when asked for, then what is now true. */
+  const finishTurnOn = async (accountId: string) => {
     let assistant: { state: string; agentName: string } | undefined;
     if (giveAssistant) {
       try {
@@ -219,7 +225,26 @@ export function ConnectWindow({
       }
     }
     setWaiting(false);
-    setDone({ account, added: added.current, assistant });
+    setDone({ accountId, added: added.current, assistant, whose });
+  };
+
+  /** The optional sign-in once the app is on: the admin's own account when each person signs in, else the team's
+   * account, which runs nobody started use. */
+  const connectAfter = async (accountId: string, account: 'self' | 'team') => {
+    const w = signIn.open(card.name, card.logo);
+    if (!w) return;
+    setError(null);
+    setClosedOn(null);
+    setWaiting(true);
+    try {
+      signingIn.current = accountId;
+      const s = await start.mutateAsync({ appId: card.id, accountId, account });
+      w.go(s, { appId: card.id, accountId });
+    } catch (e) {
+      w.fail(message(e));
+      setError(message(e));
+      setWaiting(false);
+    }
   };
 
   /** Removes what this window made: the account, and the plugin it turned on. */
@@ -264,6 +289,7 @@ export function ConnectWindow({
       if (tuned.some((f) => errors[f.name])) setMore(true);
       return;
     }
+    if (turningOn) return void (await turnOn(values));
     const w = signIn.open(card.name, card.logo);
     if (!w) return;
     setError(null);
@@ -301,6 +327,26 @@ export function ConnectWindow({
       w.fail(message(e));
       setError(message(e));
       void undo().finally(() => setWaiting(false));
+    }
+  };
+
+  /** Turning the app on for the team: the team's setting saved, and nothing signed in. */
+  const turnOn = async (values: Record<string, string>) => {
+    setError(null);
+    setWaiting(true);
+    try {
+      const draft = draftFor(pluginGroups(kind, kinds, plugin));
+      for (const k of Object.keys(draft.settings)) if (!asked.some((a) => a.name === k)) delete draft.settings[k];
+      for (const x of asked.filter((a) => a.perAccount)) draft.settings[x.name] = values[x.name] ?? '';
+      const teamSettings = Object.fromEntries(asked.filter((a) => !a.perAccount).map((a) => [a.name, values[a.name] ?? '']));
+      const accountName = (values.accountName ?? '').trim() || suggested;
+      const body = { ...turnOnBody(kind, plugin, client, draft, teamSettings, true, whose), accountName, sandbox: testAccount } as TeamAppBody;
+      const view = await setTeamApp.mutateAsync({ appId: card.id, body });
+      added.current = view.toolsAdded ?? 0;
+      await finishTurnOn(String(view.connectionId ?? ''));
+    } catch (e) {
+      setError(message(e));
+      setWaiting(false);
     }
   };
 
@@ -344,21 +390,34 @@ export function ConnectWindow({
       onOpenChange={(o) => (o ? onOpenChange(o) : void cancel())}
       size="md"
       title={turningOn ? `Turn on ${card.name} for ${current?.name ?? 'your team'}` : ownOnly ? `Connect your ${card.name} account` : `Connect a ${card.name} account`}
-      description={turningOn ? 'Sign in once. People then sign in with their own account the first time a tool needs it.' : `Pick how Ops AI signs in, then sign in to ${card.name}.`}
+      description={turningOn ? `Saves the team’s setting. Nobody is asked to sign in now; people connect their own ${card.name} account from Connectors › Mine.` : `Pick how Ops AI signs in, then sign in to ${card.name}.`}
       data-testid="connect-window"
       footer={
         done ? (
-          <Button onClick={() => (onOpenChange(false), router.push(appHref(card)))} data-testid="connect-window-done">
-            Done
-          </Button>
+          <>
+            {!done.account && done.accountId && (
+              <LoadingButton
+                variant="outline"
+                isLoading={waiting}
+                onClick={() => void connectAfter(done.accountId ?? '', done.whose === 'person' ? 'self' : 'team')}
+                data-testid="connect-window-connect-mine"
+              >
+                <ExternalLink />
+                {waiting ? 'Connecting…' : closedOn ? 'Try again' : done.whose === 'person' ? 'Connect my account' : 'Connect the team account'}
+              </LoadingButton>
+            )}
+            <Button onClick={() => (onOpenChange(false), router.push(appHref(card)))} data-testid="connect-window-done">
+              Done
+            </Button>
+          </>
         ) : (
           <>
             <Button variant="outline" onClick={() => void cancel()} data-testid="connect-window-cancel">
               Cancel
             </Button>
             <LoadingButton isLoading={waiting} onClick={() => void (closedOn ? again(closedOn) : authorize())} data-testid="connect-window-authorize">
-              <ExternalLink />
-              {waiting ? 'Connecting…' : closedOn ? 'Try again' : turningOn ? 'Sign in and turn on' : 'Connect'}
+              {!turningOn && <ExternalLink />}
+              {turningOn ? (waiting ? 'Saving…' : 'Turn on') : waiting ? 'Connecting…' : closedOn ? 'Try again' : 'Connect'}
             </LoadingButton>
           </>
         )
@@ -366,7 +425,15 @@ export function ConnectWindow({
     >
       <Form {...form}>
       {done ? (
-        <TurnedOn name={card.name} done={done} org={orgOf(page.data)} />
+        <div className="flex min-w-0 flex-col gap-3">
+          <TurnedOn name={card.name} team={current?.name ?? 'the team'} done={done} org={orgOf(page.data)} />
+          {waiting && <p className="text-sm">Allow access in the {card.name} window that opened.</p>}
+          {error && (
+            <p className="text-sm text-destructive-text" role="alert" data-testid="connect-window-error">
+              {error}
+            </p>
+          )}
+        </div>
       ) : (
       <div className="flex min-w-0 flex-col gap-4">
         <AppCredentialPicker app={card.id} value={client} onChange={setClient} platform={managed && Boolean(plugin.platformApp)} id="connect-window-app" testId="connect-window-app" />
@@ -452,8 +519,19 @@ function orgOf(page: { accounts?: { default?: boolean; signInValues?: { kind: st
   return account?.signInValues?.find((v) => v.kind === 'found')?.shown;
 }
 
-/** What the Turn on window says once access was allowed: who signed in, where, and what the team and assistant got. */
-function TurnedOn({ name, done, org }: { name: string; done: { account?: string; added: number; assistant?: { state: string; agentName: string } }; org?: string }) {
+/** What a saved turn-on holds: the team's default account, the read tools added, the assistant's answer, whose account
+ * tools use, and who signed in when the admin connected after. */
+interface TurnOnResult {
+  accountId?: string;
+  added: number;
+  assistant?: { state: string; agentName: string };
+  whose: SignIn;
+  account?: string;
+}
+
+/** What the Turn on window says once the team's setting is saved: what the team and the assistant got, and who signs in
+ * where, with the admin's own sign-in left to them. */
+function TurnedOn({ name, team, done, org }: { name: string; team: string; done: TurnOnResult; org?: string }) {
   const tools = `${done.added} read tool${done.added === 1 ? '' : 's'} added`;
   const assistant = !done.assistant
     ? ''
@@ -466,11 +544,21 @@ function TurnedOn({ name, done, org }: { name: string; done: { account?: string;
           : '';
   return (
     <Alert data-testid="connect-window-result">
-      <AlertTitle>{done.account ? `Connected as ${done.account}` : `${name} is connected`}</AlertTitle>
-      <AlertDescription>
-        {org ? `Org ${org}. ` : ''}
-        {tools}
-        {assistant}; write tools wait on the Tools tab.
+      <AlertTitle data-testid="connect-window-saved">{`Saved. ${name} is on for ${team}`}</AlertTitle>
+      <AlertDescription className="flex flex-col gap-1">
+        <span>
+          {done.account && org ? `Org ${org}. ` : ''}
+          {tools}
+          {assistant}; write tools wait on the Tools tab.
+        </span>
+        {done.whose !== 'team' && <span data-testid="connect-window-members">Members connect their own account from Connectors › Mine.</span>}
+        {done.account ? (
+          <span>{`Connected as ${done.account}.`}</span>
+        ) : done.whose === 'team' ? (
+          <span>{`Tools run as the team’s ${name} account once someone connects it.`}</span>
+        ) : done.whose === 'person_or_team' ? (
+          <span>{`Runs nobody started, such as schedules, use the team’s ${name} account once someone connects it.`}</span>
+        ) : null}
       </AlertDescription>
     </Alert>
   );

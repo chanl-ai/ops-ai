@@ -47,13 +47,19 @@ def _fill(text: str, variables: dict[str, str]) -> str:
     return _PLACEHOLDER.sub(sub, text)
 
 
-def _escape(content: str, tag: str) -> str:
-    return content.replace(f"</{tag}", f"<\\/{tag}")
+# A tag naming any data block, opening or closing, in any letter case or spacing: text inside one block must neither end
+# it nor start another, or words from a file or a passage would read to the model as outside the data.
+_BLOCK_TAG = re.compile(r"<(?=\s*/?\s*(?:knowledge|attachments)\b)", re.IGNORECASE)
+
+
+def _escape(content: str) -> str:
+    """`content` for inside a data block, with every data block tag in it broken by a backslash after the `<`."""
+    return _BLOCK_TAG.sub("<\\\\", content)
 
 
 def knowledge_block(passages: list[Passage], *, first: int = 1) -> str:
     rows = [
-        f"[{i}] {p.title} — {p.section} (version {p.version}): {_escape(p.text, 'knowledge')}"
+        f"[{i}] {_escape(p.title)} — {_escape(p.section)} (version {p.version}): {_escape(p.text)}"
         for i, p in enumerate(passages, first)
     ]
     return "<knowledge>\n" + "\n".join(rows) + "\n</knowledge>"
@@ -64,13 +70,12 @@ def attachments_block(files: Sequence[AttachedFile], pages: Sequence[Passage] = 
     rows: list[str] = []
     for f in files:
         rows.append(
-            f"- {_escape(f.name, 'attachments')} ({f.file_id})"
-            + (f": could not be read: {_escape(f.unread, 'attachments')}" if f.unread else "")
+            f"- {_escape(f.name)} ({f.file_id})" + (f": could not be read: {_escape(f.unread)}" if f.unread else "")
         )
         for n, p in enumerate(pages, 1):
             if p.document_id == f.file_id:
                 where = f"page {p.page}" if p.page else "text"
-                rows.append(f"[{n}] {where}: {_escape(p.text, 'attachments')}")
+                rows.append(f"[{n}] {where}: {_escape(p.text)}")
     # The rule rides with the block, so a turn without attachments keeps the same system prompt.
     head = (
         "Files the person attached to this conversation, by name and file id, each followed by its text. Cite a page "

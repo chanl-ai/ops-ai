@@ -20,7 +20,7 @@ import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { APP_CARD_GRID, AppCard } from '@/components/connections/app-card';
 import { AskAnAdmin } from '@/components/connections/ask-an-admin';
-import { CONNECTOR_STATE, ConnectorSheet, inChatWords, stateVariant } from '@/components/connections/connector-sheet';
+import { CONNECTOR_STATE, ConnectorSheet, NOT_SET_UP, inChatWords, stateVariant } from '@/components/connections/connector-sheet';
 import { OwnCredentialsForm } from '@/components/connections/own-credentials-form';
 import { useSignInWindow } from '@/components/connections/sign-in';
 import { DialogShell } from '@/components/shared/dialog-shell';
@@ -29,6 +29,7 @@ import { useTestAccount } from '@/hooks/systems-queries';
 import { facetFilterFn } from '@/hooks/use-list-params';
 import { useTeam } from '@/hooks/use-team';
 import { plural, shortDate } from '@/lib/format';
+import { appPageHref } from '@/lib/app-links';
 
 /**
  * The person's own sign-in at the system, in a window as from the chat; a key kind opens the key form instead. The
@@ -73,10 +74,10 @@ function RowAction({ c, connect }: { c: MyConnector; connect: ReturnType<typeof 
   if (c.state === 'app_off')
     return c.mayTurnOn ? (
       <Button size="sm" variant="outline" asChild data-testid={`connector-turn-on-${c.appId}`}>
-        <Link href={`/integrations/${encodeURIComponent(c.appId)}`}>Turn on</Link>
+        <Link href={appPageHref(c.appId)}>Turn on</Link>
       </Button>
     ) : (
-      <AskAnAdmin testId={`connector-ask-${c.appId}`} />
+      <AskAnAdmin testId={`connector-ask-${c.appId}`} lead={`${NOT_SET_UP}.`} />
     );
   const keyed = (c.personFields ?? []).length > 0;
   return (

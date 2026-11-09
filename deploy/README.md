@@ -15,7 +15,7 @@ and Kubernetes are optional. Design: `docs/architecture/service-map.md` ("Deploy
 | `vm/` | Not started: systemd units for the gateway, tools service and AI gateway, native PostgreSQL |
 | `devhost/` | A Coder template for a shared dev VM: one workspace per developer from `.devcontainer/` (`docs/deploy/devhost.md`) |
 | `mirror-test/` | The behind-a-mirror lane, `make qa-mirror`: a clean install through a local Nexus on a closed network |
-| `plugins.json` | The plugins every image ships with, each pinned to a full commit (`images/bake_plugins.py`) |
+| `plugins.json` | The plugins every image ships with, each pinned to a full commit and its folder's sha256 digest (`images/bake_plugins.py`) |
 | `k8s/` | Kustomize: a base per service and an overlay per environment, from the same images, against an outside PostgreSQL (runbook `docs/deploy/kubernetes.md`) |
 
 Working rules for this folder (make targets, tests, proofs, generated files): `CLAUDE.md`.

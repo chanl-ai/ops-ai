@@ -12,6 +12,7 @@ import { relativeTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { DeployChannel, Deployment, DeployEnvironment } from '@/lib/types/domain';
 import type { FlagName } from '@/lib/types/flags';
+import { appPageHref } from '@/lib/app-links';
 
 /** A channel with a `flag` is offered only while the install turns that flag on. */
 export const CHANNELS: Record<DeployChannel, { label: string; description: string; icon: typeof Mail; flag?: FlagName }> = {
@@ -169,7 +170,7 @@ export function DeploymentSetup({ d, onReconnect, reconnecting }: { d: Deploymen
             <span className={d.email.sync.status === 'error' ? '' : 'text-muted-foreground'}>{syncText(d.email.sync).detail}</span>
             {d.email.sync.status === 'error' && d.email.connection ? (
               <Button size="sm" variant="outline" className="ml-auto" asChild>
-                <Link href={`/integrations/${d.email.connection.id}`}>Fix the connection</Link>
+                <Link href={appPageHref(d.email.connection.id)}>Fix the connection</Link>
               </Button>
             ) : (
               d.email.sync.status === 'error' &&

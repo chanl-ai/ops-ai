@@ -66,7 +66,7 @@ WIDENINGS: dict[str, set[str]] = {
     "MOVE_FILES": {"services/kb-service/src/ops_kb/__main__.py"},
     # The knowledge schedule finds each tenant's due tool sources, then syncs each in its own team's scope.
     "FIND_DUE": {"services/kb-service/src/ops_kb/schedule.py"},
-    # It also finds each tenant's items waiting for a file's reading, then asks again in each item's team.
+    # The schedule finds each tenant's items waiting on a reading, then settles each in its own team.
     "FIND_READING": {"services/kb-service/src/ops_kb/schedule.py"},
     # And ends each tenant's runs a stopped process left marked running.
     "FIND_STALE": {"services/kb-service/src/ops_kb/schedule.py"},
@@ -101,9 +101,9 @@ ENTRIES: dict[str, set[str]] = {
         "services/documents-service/src/ops_documents/extraction.py",
         # The retention process deletes each released snapshot as its own tenant and team.
         "services/files-service/src/ops_files/tenant_files.py",
-        # A queued reading resumed after a restart reads the file as the team that asked for it.
+        # A queued reading is read in the team that asked for it.
         "services/documents-service/src/ops_documents/readings.py",
-        # A service event (reading.finished) settles the items of the team its token names.
+        # A reading event settles the items of the one team its service token names.
         "services/kb-service/src/ops_kb/app.py",
         "services/agents-service/src/ops_agents/api/publish_reviews.py",
         "services/agents-service/src/ops_agents/api/tenant_tasks.py",

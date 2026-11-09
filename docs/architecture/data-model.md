@@ -693,6 +693,7 @@ erDiagram
   extractions ||--o{ document_type_examples : teaches
   documents_readings {
     string tenant_id PK
+    string team PK
     string file_digest PK
     string reader_version PK
     string settings_key PK
@@ -766,7 +767,7 @@ erDiagram
 
 | Table | Holds | Status |
 |---|---|---|
-| `documents_readings` | One file's reading per digest, reader version and OCR settings, with its pages (`documents_reading_pages`) and the files holding the bytes (`documents_reading_files`); layouts are drawn from it | built |
+| `documents_readings` | One file's reading per team, digest, reader version and OCR settings, with its pages (`documents_reading_pages`) and the files holding the bytes (`documents_reading_files`); layouts are drawn from it | built |
 | `extractions` | Each read: the fields with their boxes, the path (template or model), image calls, measured tokens and, for a model read, its layout fingerprint for template offers. Unique on the idempotency key | built |
 | `extraction_corrections` | A person's correction of one field, with the original value and confidence kept | built |
 | `document_types, document_type_versions` | A team's document types and their immutable versions: fields with rules and key fields, templates, checks, date order, page images | built |

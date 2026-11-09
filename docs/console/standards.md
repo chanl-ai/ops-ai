@@ -46,8 +46,10 @@ to its count in `apps/console/scripts/palette-baseline.json` and a file not list
 new one. A conversion lowers the count and runs `node scripts/check-standards.mjs --write-baseline` to lock it in.
 
 One component per job: a table is the data table, a status is a badge from `components/status-badges.tsx`, and the chat
-composer and message renderers live in `components/chat`. `check-standards` rule 16 fails a raw `<Table>`, a local
-`*StatusBadge` or a composer or message renderer anywhere else. The files that already did so are listed per rule in
+composer and message renderers live in `components/chat`. A link to an app's page comes from `appPageHref` in
+`lib/app-links.ts` (`/integrations/apps/<encoded id>`, with an optional tab), never a hand-built `/integrations/${…}`
+string. `check-standards` rule 16 fails a raw `<Table>`, a local `*StatusBadge`, a composer or message renderer, or a
+hand-built app link anywhere else. The files that already did so are listed per rule in
 `apps/console/scripts/reuse-baseline.json`; the list only shrinks, because a listed file that is fixed fails until
 `--write-baseline` takes it off, and that mode never adds one.
 

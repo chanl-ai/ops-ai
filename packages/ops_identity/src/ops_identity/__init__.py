@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from .acting_for import HEADER as ACTING_FOR_HEADER
 from .acting_for import ActingForPerson, ActingForTokens
-from .client import ServiceCallError, ServiceClient, ServiceUnreachable
+from .client import ServiceCallError, ServiceClient, ServiceUnreachable, segment
 from .fastapi import (
     ActingPerson,
     Auth,
@@ -51,6 +51,7 @@ __all__ = [
     "http_jwks",
     "install_auth",
     "mint_service_token",
+    "segment",
     "service_signer",
     "service_verifiers",
 ]

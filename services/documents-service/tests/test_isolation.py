@@ -6,14 +6,18 @@ more than the outbox and the work a restart picks up. On the PostgreSQL test dat
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_documents.store import metadata
+from ops_documents.store import ReadingsStore, metadata
 from ops_documents.store.extractions import extractions
 from ops_documents.store.metadata import ROLE, SYSTEM_ROLE
+from ops_documents.store.readings import documents_reading_files, documents_reading_pages, documents_readings
+from ops_store import isolation
 from ops_store.conformance import isolation_suite
 from ops_store.schema import isolation_ddl, isolation_kind
 
@@ -53,3 +57,25 @@ async def test_the_system_role_reads_the_outbox_and_queued_work_and_nothing_else
             async with engine.begin() as c:
                 await c.execute(sa.text(f"SET LOCAL ROLE {SYSTEM_ROLE}"))
                 await c.execute(sa.select(sa.func.count()).select_from(table))
+
+
+async def test_one_team_cannot_read_another_teams_reading_of_the_same_bytes(engine: AsyncEngine, tenant: str) -> None:
+    store = ReadingsStore(engine)
+    page = {"number": 1, "source": "text", "text": "Overdraft limits for the cards team"}
+    with isolation.scope(tenant, "team_ops"):
+        await store.link("f_ops", "team_ops", "d1", datetime.now(UTC))
+        await store.put_done(
+            "d1", "v1", "auto:eng", facts={}, pages=[page], file_id="f_ops", team="team_ops", actor="a",
+            duration_ms=1, at=datetime.now(UTC),
+        )  # fmt: skip
+    with isolation.scope(tenant, "team_cards"):
+        # Naming the other team's reading outright, as a caller that knows its digest would.
+        seen = [await store.get(team, "d1", "v1", "auto:eng") for team in ("team_cards", "team_ops")]
+        pages = [await store.pages(team, "d1", "v1", "auto:eng") for team in ("team_cards", "team_ops")]
+        async with isolation.isolated_tx(engine, role=ROLE) as c:
+            raw = {
+                t.name: (await c.execute(sa.select(sa.func.count()).select_from(t))).scalar_one()
+                for t in (documents_readings, documents_reading_pages, documents_reading_files)
+            }
+    assert seen == [None, None] and pages == [[], []], (seen, pages)
+    assert raw == dict.fromkeys(raw, 0), raw

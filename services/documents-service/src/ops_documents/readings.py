@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
 """The one place a file is read: every caller (extraction, classify, layouts, a knowledge base, a chat attachment, an
-agent's read_file) asks for the file's reading, made once per tenant, file content digest, reader version and OCR
+agent's read_file) asks for the file's reading, made once per team, file content digest, reader version and OCR
 settings and kept. Bytes come through files-service as the caller's team, so a file the team cannot see has no reading
-(FileMissingError), though its bytes' reading is stored for another team that holds them.
+(FileMissingError), and a reading is never shared with another team, even one holding a file of the same bytes.
 
 A small file with no page to OCR is read at once. Anything else is queued and read in the background, a few at a time
 per process, oldest first and one per team while another team waits, each finished page saved as it ends so a restart
 carries on from the next page. A reading ends done or failed with a reason, and its end is reported as
-`reading.finished` or `reading.failed` to every team holding a file of those bytes."""
+`reading.finished` or `reading.failed` for each of the team's files holding those bytes."""
 
 from __future__ import annotations
 
@@ -92,6 +92,10 @@ def answer_of(row: ReadingRow, file_id: str, pages: list[dict[str, Any]] | None 
     return out
 
 
+def _identity(row: ReadingRow) -> tuple[str, ...]:
+    return (row.tenant_id, row.team, row.digest, row.version, row.key)
+
+
 def _read_now(data: bytes, file: FileInfo, settings: ReadingSettings) -> Reading | None:
     """The whole reading when the file is small enough and needs no OCR, else None (it is queued instead)."""
     with open_file(data, filename=file.name, mime_type=file.mime, settings=settings) as reader:
@@ -112,7 +116,7 @@ class Readings:
     slots: int = SLOTS
     page_timeout_s: float = PAGE_TIMEOUT_S
     _queued: list[ReadingRow] = field(default_factory=list[ReadingRow])
-    _running: dict[tuple[str, str, str, str], str] = field(default_factory=dict[tuple[str, str, str, str], str])
+    _running: dict[tuple[str, ...], str] = field(default_factory=dict[tuple[str, ...], str])
     _tasks: set[asyncio.Task[None]] = field(default_factory=set[asyncio.Task[None]])
 
     # ── Asking ────────────────────────────────────────────────────────────
@@ -123,9 +127,9 @@ class Readings:
         file = await self.files.readable(who, file_id)
         digest = self._digest(file)
         await self.store.link(file.id, who.team, digest, self.clock())
-        row = await self.store.get(digest, READER_VERSION, settings.key)
+        row = await self.store.get(who.team, digest, READER_VERSION, settings.key)
         if row is not None and row.status == "done":
-            return 200, answer_of(row, file_id, await self.store.pages(digest, READER_VERSION, settings.key))
+            return 200, answer_of(row, file_id, await self.store.pages(who.team, digest, READER_VERSION, settings.key))
         if row is not None and row.status in PENDING:
             return 202, answer_of(row, file_id)
         if file.size <= SYNC_BYTES:
@@ -137,7 +141,7 @@ class Readings:
                 return 200, answer_of(failed, file_id)
             if made is not None:
                 await self._keep(who, file, made)
-                row = await self.store.get(digest, READER_VERSION, settings.key)
+                row = await self.store.get(who.team, digest, READER_VERSION, settings.key)
                 assert row is not None
                 return 200, answer_of(row, file_id, [p.model_dump(mode="json", by_alias=True) for p in made.pages])
         row = await self.store.queue(
@@ -153,13 +157,15 @@ class Readings:
         """The reading as it is now, with its pages (or one page) once done; status `none` when never asked for."""
         file = await self.files.readable(who, file_id)
         digest = self._digest(file)
-        row = await self.store.get(digest, READER_VERSION, settings.key)
+        row = await self.store.get(who.team, digest, READER_VERSION, settings.key)
         if row is None:
             mode, language = settings.ocr, settings.language
             return {"fileId": file_id, "digest": digest, "status": "none", "readerVersion": READER_VERSION,
                     "settings": {"ocr": mode, "language": language}, "pagesTotal": None, "pagesDone": 0}  # fmt: skip
         pages = (
-            await self.store.pages(digest, READER_VERSION, settings.key, page=page) if row.status == "done" else None
+            await self.store.pages(who.team, digest, READER_VERSION, settings.key, page=page)
+            if row.status == "done"
+            else None
         )
         return answer_of(row, file_id, pages)
 
@@ -168,7 +174,7 @@ class Readings:
         stored one, or read now and kept."""
         digest = self._digest(file)
         await self.store.link(file.id, who.team, digest, self.clock())
-        stored = await self.stored_of(digest, settings)
+        stored = await self.stored_of(who.team, digest, settings)
         if stored is not None:
             return stored
         data = await self.files.read(who, file)
@@ -176,12 +182,12 @@ class Readings:
         await self._keep(who, file, made)
         return made
 
-    async def stored_of(self, digest: str, settings: ReadingSettings) -> Reading | None:
-        """The finished reading of these bytes under these settings, without reading anything."""
-        row = await self.store.get(digest, READER_VERSION, settings.key)
+    async def stored_of(self, team: str, digest: str, settings: ReadingSettings) -> Reading | None:
+        """The team's finished reading of these bytes under these settings, without reading anything."""
+        row = await self.store.get(team, digest, READER_VERSION, settings.key)
         if row is None or row.status != "done" or row.facts is None:
             return None
-        pages = await self.store.pages(digest, READER_VERSION, settings.key)
+        pages = await self.store.pages(team, digest, READER_VERSION, settings.key)
         return Reading(
             settings=settings,
             facts=FileFacts.model_validate(row.facts),
@@ -190,7 +196,7 @@ class Readings:
         )
 
     async def stored(self, who: Who, file_id: str, settings: ReadingSettings) -> Reading | None:
-        return await self.stored_of(self._digest(await self.files.readable(who, file_id)), settings)
+        return await self.stored_of(who.team, self._digest(await self.files.readable(who, file_id)), settings)
 
     async def purge(self, who: Who, file_id: str) -> int:
         return await self.store.purge(file_id, who.team)
@@ -222,7 +228,7 @@ class Readings:
         )
         await self.store.start(row, at=self.clock())
         await self.store.finish(row, status="failed", at=self.clock(), error_code=e.code, error=str(e))
-        found = await self.store.get(digest, READER_VERSION, settings.key)
+        found = await self.store.get(who.team, digest, READER_VERSION, settings.key)
         assert found is not None
         return found
 
@@ -244,8 +250,8 @@ class Readings:
                 self._pump()
 
     def _later(self, row: ReadingRow) -> None:
-        key = (row.tenant_id, row.digest, row.version, row.key)
-        if key in self._running or any((q.tenant_id, q.digest, q.version, q.key) == key for q in self._queued):
+        key = _identity(row)
+        if key in self._running or any(_identity(q) == key for q in self._queued):
             return
         self._queued.append(row)
         self._pump()
@@ -256,12 +262,12 @@ class Readings:
             if i is None:
                 return
             row = self._queued.pop(i)
-            key = (row.tenant_id, row.digest, row.version, row.key)
+            key = _identity(row)
             self._running[key] = row.team
             task = asyncio.create_task(self._background(row))
             self._tasks.add(task)
 
-            def done(t: asyncio.Task[None], key: tuple[str, str, str, str] = key) -> None:
+            def done(t: asyncio.Task[None], key: tuple[str, ...] = key) -> None:
                 self._tasks.discard(t)
                 self._running.pop(key, None)
                 self._pump()
@@ -311,7 +317,7 @@ class Readings:
                     reader = await asyncio.to_thread(self._open, stack, data, file, settings)
                 await self.store.save_page(row, number, page.model_dump(mode="json", by_alias=True))
             took = round((time.perf_counter() - started) * 1000)
-            done = await self.store.get(row.digest, row.version, row.key)
+            done = await self.store.get(row.team, row.digest, row.version, row.key)
             await self.store.finish(done or row, status="done", at=self.clock(), duration_ms=took)
         except ReadingError as e:
             await self.store.finish(row, status="failed", at=self.clock(), error_code=e.code, error=str(e))
@@ -321,7 +327,7 @@ class Readings:
                     row, status="failed", at=self.clock(), error_code="too_many_tries", error=f"{TOO_MANY_TRIES}: {e}"
                 )
             else:
-                again = await self.store.get(row.digest, row.version, row.key)
+                again = await self.store.get(row.team, row.digest, row.version, row.key)
                 if again is not None:
                     self._queued.append(again)
             raise

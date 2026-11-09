@@ -74,3 +74,29 @@ export async function testTeamAccount(page, consoleUrl, account, { own = false }
     page: ((await page.locator('main').innerText().catch(() => '')) ?? '').replace(/\s+/g, ' '),
   };
 }
+
+/**
+ * The Connect window's sign-in, as an admin starts it, resolving with the sign-in window. A window that turns the app
+ * on saves the team's setting on Turn on and opens no sign-in, so its sign-in is the saved state's Connect button;
+ * any other Connect window signs in from its own main button.
+ */
+export async function openSignIn(page) {
+  const main = page.getByTestId('connect-window-authorize');
+  if ((((await main.innerText({ timeout: 10_000 }).catch(() => '')) ?? '').trim()) === 'Turn on') {
+    await main.click();
+    await page.getByTestId('connect-window-result').waitFor({ timeout: 60_000 });
+  }
+  return (await Promise.all([page.waitForEvent('popup', { timeout: 60_000 }), (await signInButton(page)).click()]))[0];
+}
+
+/** The button that starts or retries the window's sign-in: the saved state's Connect once the app is on, else the main one. */
+export async function signInButton(page) {
+  const after = page.getByTestId('connect-window-connect-mine');
+  return (await after.isVisible().catch(() => false)) ? after : page.getByTestId('connect-window-authorize');
+}
+
+/** Leaves the Connect window: Cancel before anything is saved, Done once a turn-on saved the team's setting. */
+export async function leaveConnectWindow(page) {
+  const done = page.getByTestId('connect-window-done');
+  await ((await done.isVisible().catch(() => false)) ? done : page.getByTestId('connect-window-cancel')).click();
+}

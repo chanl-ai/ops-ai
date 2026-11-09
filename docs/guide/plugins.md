@@ -547,15 +547,21 @@ host folder), so `ops plugin install --into <that folder>` then a restart of bot
 
 The release image (`deploy/fly/Dockerfile`) ships the plugins `deploy/plugins.json` pins, in `/app/plugins`, which is
 its `OPS_PLUGINS_DIR`. One build stage bakes them, and the service and runtime images copy that folder, so the two
-cannot ship different plugins. Each pin names a GitHub repository, a full commit and the plugin's folder in it:
+cannot ship different plugins. Each pin names a GitHub repository, a full commit, the plugin's folder in it and the
+sha256 digest of that folder:
 
 ```json
-{"source": "https://github.com/chanl-ai/ops-ai-plugins", "ref": "<40-character commit>", "path": "plugins/salesforce"}
+{"source": "https://github.com/chanl-ai/ops-ai-plugins", "ref": "<40-character commit>", "path": "plugins/salesforce",
+ "sha256": "<64-character digest>"}
 ```
 
-The build fetches each commit, validates the plugin as `ops plugin install` does and stops on any problem. A branch or
-tag is refused, so an image built twice from the same commit holds the same plugins. To ship a newer plugin, change its
-`ref` and rebuild; mounting another folder at `OPS_PLUGINS_DIR` replaces the baked ones. To bake them into a folder
+The build fetches each commit as a tarball, checks the plugin folder against its digest before installing anything,
+validates the plugin as `ops plugin install` does, and stops on any problem. A pin with no digest, or a download whose
+folder differs from it, stops the build, so a swapped or altered archive never reaches an image. The digest covers each
+file's path and bytes, not the archive, so it does not change when GitHub recompresses a tarball. A branch or tag is
+refused, so an image built twice from the same commit holds the same plugins. To ship a newer plugin, run
+`make plugins-bump` (it writes the commit and the digest together), review the plugin's change between the two commits,
+and rebuild; mounting another folder at `OPS_PLUGINS_DIR` replaces the baked ones. To bake them into a folder
 yourself: `uv run python deploy/images/bake_plugins.py --into ./plugins`.
 
 ### Pinned plugins on a laptop and a box
@@ -567,7 +573,7 @@ plugins folder equal to that list:
 |---|---|
 | `make plugins-sync` | Puts the pinned plugins into `OPS_PLUGINS_DIR` (default: the main checkout's `plugins/`). Plugins that are there and were not put there by this command move to `plugins.bak-<date>/` and are never deleted. `make box-up` runs it in a box |
 | `make plugins-sync PLUGINS_DEV=../ops-ai-plugins` | Links the plugin folders of a working copy instead of the pinned commit, so an edit shows after the next restart. Run `make plugins-sync` without `PLUGINS_DEV` to go back to the pinned ones |
-| `make plugins-bump` | Moves every pin to the current main of the plugins repository and prints the old and new commit per plugin. `REF=<branch\|tag\|sha>` moves to that instead; the file always records the full commit |
+| `make plugins-bump` | Moves every pin to the current main of the plugins repository and prints the old and new commit per plugin. `REF=<branch\|tag\|sha>` moves to that instead; the file always records the full commit and the plugin folder's sha256 digest at it |
 
 Restart tools-service and kb-service after a sync.
 
