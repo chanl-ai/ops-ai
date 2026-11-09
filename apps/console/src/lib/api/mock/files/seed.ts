@@ -63,6 +63,7 @@ export const STORAGE: Omit<MockStorage, 'updatedAt'> & { updatedDaysAgo: number 
 
 export const SUGGESTED: Record<FilePurpose, FileSensitivity> = {
   knowledge_source: 'internal',
+  knowledge_snapshot: 'internal',
   chat_attachment: 'confidential',
   document_type_sample: 'confidential',
   email_body: 'confidential',

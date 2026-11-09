@@ -46,7 +46,17 @@ class Judge(ModelCalls):
         self.calls = 0
         self.down = down
 
-    async def structured(self, system: str, user: str, schema: dict[str, Any], *, tenant: str, step: str) -> Any:
+    async def structured(
+        self,
+        system: str,
+        user: str,
+        schema: dict[str, Any],
+        *,
+        tenant: str,
+        step: str,
+        sensitivity: str = "internal",
+    ) -> Any:
+        del sensitivity
         self.calls += 1
         if self.down:
             raise ModelCallError("models-service could not be reached")
