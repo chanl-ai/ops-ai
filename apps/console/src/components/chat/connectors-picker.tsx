@@ -12,7 +12,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useChatConnectors, useNewChatConnectors, useSetChatConnectors } from '@/hooks/chat-settings-queries';
 import type { ChatConnector } from '@/lib/types/chat';
 import { cn } from '@/lib/utils';
-import { APP_STATES } from '@/lib/app-state';
+import { APP_STATES, appStateFor, labelFor } from '@/lib/app-state';
+import { appPageHref } from '@/lib/app-links';
+import { useCan } from '@/hooks/me-queries';
 
 /** Where a connector's one action is taken: the person's own sign-in on Connectors (Mine), an admin's on Team setup. */
 const MINE = '/integrations/my-accounts';
@@ -43,6 +45,8 @@ function ConnectorsMenu({
 }) {
   const router = useRouter();
   const go = (href: string) => (setOpen(false), router.push(href));
+  // Whoever manages the team's apps is offered the team's step; anyone else asks them (lib/app-state.ts).
+  const manages = useCan('connections', 'manage') === true;
   // Grouped by who acts next, as tools-service answers it (appGroup); the words come from lib/app-state.ts.
   const usable = rows.filter((c) => c.appGroup === 'on');
   const signIn = rows.filter((c) => c.appGroup === 'needs_you');
@@ -116,10 +120,10 @@ function ConnectorsMenu({
                 {off.length > 0 && (
                   <CommandGroup heading="Off for this team">
                     {off.map((c) => (
-                      <CommandItem key={c.appId} value={c.name} data-testid={`connector-off-${c.appId}`} data-state={APP_STATES[c.appState].label}>
+                      <CommandItem key={c.appId} value={c.name} data-testid={`connector-off-${c.appId}`} data-state={labelFor(c.appState, manages)}>
                         <AppLogo name={c.name} logo={c.logo} className="size-4 rounded-sm opacity-60" />
                         <span className="flex-1 truncate text-muted-foreground">{c.name}</span>
-                        <span className="text-xs text-muted-foreground">{APP_STATES[c.appState].label} · ask an admin</span>
+                        <OffAction c={c} manages={manages} go={go} />
                       </CommandItem>
                     ))}
                   </CommandGroup>
@@ -132,6 +136,19 @@ function ConnectorsMenu({
       </PopoverContent>
     </Popover>
   );
+}
+
+/** An app the team acts on first, in the picker: the caller's one step from the state table, by role. */
+function OffAction({ c, manages, go }: { c: ChatConnector; manages: boolean; go: (href: string) => void }) {
+  const { action } = appStateFor(c.appState, c.appGroup, manages);
+  const label = action === 'turn_on' ? 'Turn on' : action === 'add_auth_config' ? 'Set up' : action === 'fix_auth_config' ? 'Fix' : action === 'connect' || action === 'sign_in' ? 'Connect' : null;
+  if (label)
+    return (
+      <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={() => go(appPageHref(c.appId))} data-testid={`connector-off-action-${c.appId}`}>
+        {label}
+      </Button>
+    );
+  return <span className="text-xs text-muted-foreground">{labelFor(c.appState, manages)} · ask an admin</span>;
 }
 
 /** The whole set an unchecked or checked connector makes: the apps left out, as the chat's PUT takes them. */

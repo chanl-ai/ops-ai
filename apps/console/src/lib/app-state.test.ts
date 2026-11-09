@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { APP_STATES, appStateFor, headerActionFor, labelFor, type AppGroupId, type AppStateId } from './app-state.ts';
+import { APP_STATES, accountOwnerWords, appStateFor, headerActionFor, labelFor, whoseState, type AppGroupId, type AppStateId } from './app-state.ts';
 
 // The states and groups tools-service can answer, read from its OpenAPI document, so a new one cannot ship without
 // words and an action here.
@@ -53,4 +53,12 @@ test('someone who cannot set an app up reads one line: it is not set up for thei
   }
   assert.equal(labelFor('needs_auth_config', true), 'Needs an auth config');
   assert.equal(labelFor('connected', false), 'Connected');
+});
+
+test('on an app each person signs in to, the badge is the person’s own and the team’s account row says it is the team’s', () => {
+  assert.equal(whoseState({ ownSignIn: 'none', appGroup: 'needs_you' }), 'You');
+  assert.equal(whoseState({ ownSignIn: null, appGroup: 'on' }), null);
+  assert.equal(whoseState({ ownSignIn: 'connected', appGroup: 'gone' }), null);
+  assert.equal(accountOwnerWords('team'), 'Team account');
+  assert.equal(accountOwnerWords('each'), null);
 });

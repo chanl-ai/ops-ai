@@ -28,6 +28,7 @@ import {
 } from '@/hooks/systems-queries';
 import { facetFilterFn } from '@/hooks/use-list-params';
 import { initials } from '@/lib/format';
+import { accountOwnerWords } from '@/lib/app-state';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -131,7 +132,9 @@ export function AccountsTab({
         accessorFn: (a) => STATE[a.state].label,
         header: ({ column }) => <DataTableColumnHeader column={column} title="State" />,
         meta: { kind: 'status' },
-        cell: ({ row: { original: a } }) => <StateCell account={a} onSignIn={(as, id) => latest.current.onSignIn(as, id)} />,
+        cell: ({ row: { original: a } }) => (
+          <StateCell account={a} perPerson={latest.current.app.card.ownSignIn != null} onSignIn={(as, id) => latest.current.onSignIn(as, id)} />
+        ),
         filterFn: facetFilterFn,
       },
       {
@@ -186,14 +189,26 @@ export function AccountsTab({
 }
 
 /** The row's state, and the one action that fixes a broken sign-in, when the API offers it on the row. */
-function StateCell({ account: a, onSignIn }: { account: ConfigAccount; onSignIn: (account: 'self' | 'team', accountId: string) => void }) {
+function StateCell({
+  account: a,
+  onSignIn,
+  perPerson,
+}: {
+  account: ConfigAccount;
+  onSignIn: (account: 'self' | 'team', accountId: string) => void;
+  /** Each person signs in to the app, so the page's badge is the person's and a team row says it is the team's. */
+  perPerson: boolean;
+}) {
   const as = a.kind === 'person' || a.owner.kind === 'each' ? 'self' : 'team';
   // A test result counts only while the account is signed in; an account signed out since has just the one state.
   const failed = a.state === 'connected' && a.test?.status === 'failed' ? a.test.message || 'no reason given' : null;
   const can = (x: NonNullable<ConfigAccount['actions']>[number]) => (a.actions ?? []).includes(x);
+  const owner = perPerson ? accountOwnerWords(a.owner.kind) : null;
   return (
     <span className="flex flex-col gap-1">
       <span className="flex flex-wrap items-center gap-2">
+        {/* The team's account, said so where the page's own badge is the person's (lib/app-state.ts). */}
+        {owner && <span className="text-xs text-muted-foreground">{owner}:</span>}
         <Badge variant="outline" className={STATE[a.state].className} data-testid={`account-state-${a.name}`} data-state={a.state}>
           {STATE[a.state].label}
         </Badge>

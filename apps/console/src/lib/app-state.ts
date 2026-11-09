@@ -95,3 +95,15 @@ export function headerActionFor(card: { appState: AppStateId; appGroup: AppGroup
       return null;
   }
 }
+
+/**
+ * Whose state a card's badge reads, where it could be read as another's: on an app each person signs in to, a person's
+ * card is their own sign-in (the decided design), while its account rows are the team's account. Null where there is
+ * one account everyone shares, so nothing needs saying.
+ */
+export function whoseState(card: { ownSignIn?: string | null; appGroup: AppGroupId }): 'You' | null {
+  return card.ownSignIn != null && card.appGroup !== 'gone' ? 'You' : null;
+}
+
+/** An account row's owner, said beside its state when the page's own badge is the person's. */
+export const accountOwnerWords = (owner: 'team' | 'person' | 'each'): string | null => (owner === 'team' ? 'Team account' : null);
