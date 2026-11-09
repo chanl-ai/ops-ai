@@ -1714,6 +1714,10 @@ export interface components {
         };
         /** Source */
         Source: {
+            /** Cleaning */
+            cleaning: {
+                [key: string]: unknown;
+            };
             /** Collection */
             collection: string;
             /** Config */
@@ -1793,6 +1797,10 @@ export interface components {
             canEdit?: boolean | null;
             /** Canpublish */
             canPublish?: boolean | null;
+            /** Cleaning */
+            cleaning: {
+                [key: string]: unknown;
+            };
             /** Collection */
             collection: string;
             /** Config */
@@ -1890,6 +1898,10 @@ export interface components {
         };
         /** SourceIn */
         SourceIn: {
+            /** Cleaning */
+            cleaning?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Collection
              * @default
@@ -1904,15 +1916,31 @@ export interface components {
              * @default []
              */
             fileIds: string[];
+            /** Ingest */
+            ingest?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Kbids
              * @default []
              */
             kbIds: string[];
+            /** Metadatamapping */
+            metadataMapping?: {
+                [key: string]: unknown;
+            }[] | null;
             /** Name */
             name: string;
             /** Owner */
             owner?: string | null;
+            /** Parsing */
+            parsing?: {
+                [key: string]: unknown;
+            } | null;
+            /** Rules */
+            rules?: {
+                [key: string]: unknown;
+            }[] | null;
             /**
              * Sensitivity
              * @default internal
@@ -1935,12 +1963,32 @@ export interface components {
         };
         /** SourcePatch */
         SourcePatch: {
+            /** Cleaning */
+            cleaning?: {
+                [key: string]: unknown;
+            } | null;
             /** Collection */
             collection?: string | null;
+            /** Ingest */
+            ingest?: {
+                [key: string]: unknown;
+            } | null;
+            /** Metadatamapping */
+            metadataMapping?: {
+                [key: string]: unknown;
+            }[] | null;
             /** Name */
             name?: string | null;
             /** Owner */
             owner?: string | null;
+            /** Parsing */
+            parsing?: {
+                [key: string]: unknown;
+            } | null;
+            /** Rules */
+            rules?: {
+                [key: string]: unknown;
+            }[] | null;
             /** Sensitivity */
             sensitivity?: string | null;
             /** Tags */
@@ -1948,6 +1996,10 @@ export interface components {
         };
         /** SourceRow */
         SourceRow: {
+            /** Cleaning */
+            cleaning: {
+                [key: string]: unknown;
+            };
             /** Collection */
             collection: string;
             /** Config */

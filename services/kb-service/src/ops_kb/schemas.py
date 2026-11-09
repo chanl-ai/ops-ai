@@ -63,6 +63,12 @@ class SourceIn(In):
     # A "tool" source's plugin and source names: {"plugin": "opsai.salesforce", "source": "articles"}. Any
     # values: the console's Add source sends its whole draft config for every type, and only a tool source reads it.
     config: dict[str, Any] | None = None
+    # Each stage's settings (source_settings.py), over the kind's defaults; validated as a whole.
+    parsing: Json | None = None
+    cleaning: Json | None = None
+    ingest: Json | None = None
+    rules: list[Json] | None = None
+    metadata_mapping: list[Json] | None = None
 
 
 class KbSourceLink(Out):
@@ -116,6 +122,7 @@ class Source(Out):
     scope_summary: str
     config: Json
     parsing: Json
+    cleaning: Json
     ingest: Json
     rules: list[Json]
     metadata_mapping: list[Json]
@@ -352,6 +359,12 @@ class SourcePatch(In):
     owner: str | None = None
     sensitivity: str | None = None
     tags: list[str] | None = None
+    # Each stage's settings; a part sent is merged into the saved one key by key and validated as a whole.
+    parsing: Json | None = None
+    cleaning: Json | None = None
+    ingest: Json | None = None
+    rules: list[Json] | None = None
+    metadata_mapping: list[Json] | None = None
 
 
 class FileIdsIn(In):

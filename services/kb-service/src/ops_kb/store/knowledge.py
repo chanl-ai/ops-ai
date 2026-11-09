@@ -95,6 +95,8 @@ kb_sources = sa.Table(
     sa.Column("config", sa.JSON),
     # Held by the sync running now, so the schedule never starts a second one on the same source.
     sa.Column("lease_until", sa.DateTime(timezone=True)),
+    # Reading, cleaning, splitting, rules and metadata (source_settings.py); null: the kind's defaults.
+    sa.Column("settings", sa.JSON),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -168,6 +170,8 @@ kb_items = sa.Table(
     # How a file source's item was read: the reader version and its OCR settings (reading-1:auto:eng), so a change
     # to either asks for a new reading while a chunk-settings change splits the stored one again.
     sa.Column("read_with", sa.String(120)),
+    # The digest of the cleaning, splitting and metadata settings its pieces were built under (index_key).
+    sa.Column("indexed_with", sa.String(32)),
     sa.ForeignKeyConstraint(
         ["tenant_id", "source_id"],
         ["kb_sources.tenant_id", "kb_sources.id"],
@@ -267,6 +271,10 @@ kb_runs = sa.Table(
     sa.Column("errors", sa.JSON, nullable=False),
     sa.Column("log", sa.JSON, nullable=False),
     sa.Column("started_by", sa.String(200), nullable=False),
+    # A run in the background is written when it starts (status running) and again when it ends.
+    sa.Column("finished_at", sa.DateTime(timezone=True)),
+    # Who asked a running rebuild to stop; it stops between two items.
+    sa.Column("cancelled_by", sa.String(200)),
     sa.ForeignKeyConstraint(
         ["tenant_id", "source_id"],
         ["kb_sources.tenant_id", "kb_sources.id"],

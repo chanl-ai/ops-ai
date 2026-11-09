@@ -16,8 +16,9 @@ from typing import Any, cast
 from ops_access import can, require_provisioner
 from ops_documents_client import DocumentsRefused
 from ops_identity import Principal, ServiceUnreachable
-from ops_ingest import IngestSettings, ParsedDocument, parse, split
+from ops_ingest import ParsedDocument, parse, split
 from ops_ingest.parsers import TooLargeError, UnsupportedFormatError
+from ops_ingest.rules import ItemFacts, evaluate_rules
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ValidationFailed
 from ops_service_kit.http import options_page, options_window
 from ops_service_kit.ids import new_id
@@ -26,6 +27,7 @@ from .agents import AgentDirectory, Usage
 from .files import FileIntake, FileMissing, FileNotScanned, Stored
 from .readings import READING_PENDING, Readings, parsed_of, read_with
 from .retrieval import Passage, Retriever
+from .source_settings import InvalidSettings, SourceSettings, index_key, merged, stored, wire
 from .store import KnowledgeStore
 from .tool_sources import ToolReader, source_config, sync_tool_source
 
@@ -61,17 +63,6 @@ PRESETS: dict[str, dict[str, Any]] = {
     "balanced": {"chunkLimit": 8, "threshold": 0.5, "answerShape": "answer_with_citations"},
     "precise": {"chunkLimit": 5, "threshold": 0.65, "answerShape": "answer_with_citations"},
     "raw": {"chunkLimit": 10, "threshold": 0.4, "answerShape": "chunks"},
-}
-DEFAULT_INGEST: dict[str, Any] = {
-    "preset": "policy_manual",
-    "strategies": ["structure", "context_headers"],
-    "size": 400,
-    "overlap": 40,
-    "childSize": 120,
-    "questionsPerSection": 0,
-    "columns": [],
-    "model": "bank-standard",
-    "approval": {"status": "not_needed", "approvedSteps": []},
 }
 SOURCE_TYPES_IN_PHASE = ("file", "tool")
 SENSITIVITIES = ("internal", "confidential", "restricted")
@@ -145,9 +136,8 @@ def _matches(search: str | None, *texts: str) -> bool:
     return not search or any(search.lower() in t.lower() for t in texts)
 
 
-# Headings become sections; each chunk is prefixed with its title and section path, so a passage found out of
-# context still says where it came from. No AI step runs at ingest.
-INGEST = IngestSettings(preset="policy_manual", strategies=["structure", "context_headers"], size=400, overlap=40)
+# The settings a source's patch may change, each validated and applied by its stage (source_settings.py).
+SETTINGS_KEYS = ("parsing", "cleaning", "ingest", "rules", "metadataMapping")
 
 
 # An item's status as the console names it: an item waiting for its file's reading is processing there.
@@ -205,9 +195,14 @@ class KnowledgeService:
 
     # ── Serialising ──────────────────────────────────────────────────────
 
+    def settings_of(self, s: dict[str, Any]) -> SourceSettings:
+        """The source's saved settings over its kind's defaults; the environment's OCR mode is the default's."""
+        return stored(str(s["type"]), s.get("settings"), ocr=self.ocr)
+
     def _source(self, s: dict[str, Any], used_by: list[str]) -> dict[str, Any]:
         tool = s["type"] == "tool"
         cfg: dict[str, Any] = dict(s.get("config") or {})
+        applied = wire(self.settings_of(s))
         return {
             "id": s["id"],
             "type": s["type"],
@@ -220,11 +215,12 @@ class KnowledgeService:
                 if tool
                 else {"fileIds": s["file_ids"]}
             ),
-            # What reading applies to every file source: the OCR mode configured, tables kept, no vision.
-            "parsing": {"ocr": self.ocr != "off", "tables": True, "vision": False},
-            "ingest": DEFAULT_INGEST,
-            "rules": [],
-            "metadataMapping": [],
+            # Every stage's settings as a sync applies them.
+            "parsing": applied["parsing"],
+            "cleaning": applied["cleaning"],
+            "ingest": applied["ingest"],
+            "rules": applied["rules"],
+            "metadataMapping": applied["metadataMapping"],
             "tags": s["tags"],
             "titleFrom": "heading",
             "permissions": {"mode": "workspace"},
@@ -567,8 +563,11 @@ class KnowledgeService:
             # The Last sync tile's "Took ..." hint; absent until a first run.
             **({"lastRunDurationSec": recent[0]["durationSec"]} if recent else {}),
             "errorGroups": [],
-            "itemCount": 0,
-            "reindexNeeded": False,
+            "itemCount": sum(s["item_counts"].values()),
+            "reindexNeeded": any(
+                self.built_under_other_settings(s, i)
+                for i in await self.store.items(who.tenant_id, source_ids=[source_id])
+            ),
             "requiredMetadata": [],
             "governance": {"excluded": 0, "held": 0, "duplicates": 0, "superseded": 0},
             "aiStepsWaiting": [],
@@ -611,6 +610,8 @@ class KnowledgeService:
         if kind == "tool":
             # Read through a connection's tools: what tools-service declares for the team, checked now.
             row["config"] = await source_config(self.tools, who, i)
+        given = {k: i[k] for k in SETTINGS_KEYS if i.get(k) is not None}
+        row["settings"] = wire(self._merged(self.settings_of(row), given)) if given else None
         # Files named at creation are checked and referenced like any added later, before the source exists.
         names = [await self._use_file(who, row, f) for f in dict.fromkeys(i.get("fileIds") or [])]
         row["file_ids"] = [f for f, _ in names]
@@ -721,8 +722,9 @@ class KnowledgeService:
         if s["status"] == "paused":
             raise Conflict(f"{s['name']} is paused; resume it to sync.", code="source_paused")
         started = datetime.now(UTC)
+        settings = self.settings_of(s)
         items = {i["path"]: i for i in await self.store.items(who.tenant_id, source_ids=[source_id])}
-        counts = {"listed": 0, "unchanged": 0, "upserted": 0, "deleted": 0, "failed": 0, "skipped": 0}
+        counts = {"listed": 0, "unchanged": 0, "upserted": 0, "deleted": 0, "failed": 0, "skipped": 0, "excluded": 0}
         errors: list[dict[str, Any]] = []
         log: list[str] = []
         # Each document is read from the last file uploaded under its name; an earlier file under the same name (left
@@ -751,12 +753,21 @@ class KnowledgeService:
                 superseded.add(latest[name].file_id)
             latest[name] = found
         await self.store.drop_files(who.tenant_id, source_id, superseded)
+        excluded: list[str] = []
         for name, found in latest.items():
             counts["listed"] += 1
             existing = items.get(name)
+            facts = ItemFacts(path=name, title=name, mime=found.mime, modified=started, size=found.size)
+            if not (decision := evaluate_rules(settings.rules, facts)).included:
+                counts["excluded"] += 1
+                log.append(f"{name}: {decision.excluded_by}")
+                if existing is not None:
+                    excluded.append(str(existing["id"]))
+                continue
             # files-service's digest, the key documents-service keeps the file's reading under.
             same = existing is not None and existing["digest"] == found.digest and existing["status"] != "reading"
-            if same and existing is not None and not (full or (retry and existing["status"] == "failed")):
+            stale = existing is not None and self.built_under_other_settings(s, existing)
+            if same and existing is not None and not (stale or full or (retry and existing["status"] == "failed")):
                 counts["unchanged"] += 1
                 continue
             if not same and any(i["digest"] == found.digest and i is not existing for i in items.values()):
@@ -782,6 +793,8 @@ class KnowledgeService:
                 log.append(f"{name}: being read (scanned pages take a while); it is indexed when the reading ends")
             else:
                 counts["upserted"] += 1
+        # An item a rule now excludes leaves search with its pieces; the file stays in the source.
+        counts["deleted"] += await self.store.remove_items(who.tenant_id, excluded)
         status = (
             "failed" if counts["failed"] and not counts["upserted"] else "partial" if counts["failed"] else "success"
         )
@@ -790,7 +803,7 @@ class KnowledgeService:
         indexed = counts["upserted"] > 0 or counts["unchanged"] > 0
         await self.store.mark_synced(who.tenant_id, source_id, status, activate=indexed)
         _, by_source = await self._joined(who.tenant_id)
-        if counts["upserted"]:
+        if counts["upserted"] or counts["deleted"]:
             await self.store.refreshed(who.tenant_id, by_source.get(source_id, []))
         run = {
             "tenant_id": who.tenant_id,
@@ -833,11 +846,12 @@ class KnowledgeService:
         error: tuple[str, str] | None = None
         warning: str | None = None
         title, pages = doc.title or name, doc.source.page_count
-        chunks = self._chunks(who, existing["id"], existing["version"], title, split(doc, INGEST))
+        settings = self.settings_of(s)
+        chunks = self._chunks(who, existing["id"], existing["version"], title, split(doc, settings.ingest))
         if chunks:
             warning = _unread(doc)
         else:
-            error = self._empty(doc)
+            error = _empty(doc, settings.parsing.ocr)
         values = {
             "title": title,
             "page_count": pages,
@@ -847,17 +861,22 @@ class KnowledgeService:
             "warning": None if error else warning,
             "chunk_count": len(chunks),
             "read_with": read_with,
+            "indexed_with": index_key(settings),
             "processed_at": datetime.now(UTC),
         }
         await self.store.reindex(who.tenant_id, existing["id"], values, chunks)
         return {**existing, **values}
 
-    def _empty(self, doc: ParsedDocument) -> tuple[str, str]:
-        """Why a read document gave nothing to index."""
-        if doc.pages_without_text:
-            how = "OCR is off for knowledge sources" if self.ocr == "off" else "not even by OCR"
-            return _no_text(f"{len(doc.pages_without_text)} pages have no text that could be read ({how}).")
-        return ("parse", "The document has no text to index.")
+    def built_under_other_settings(self, s: dict[str, Any], item: dict[str, Any]) -> bool:
+        """Whether an indexed item's pieces were split, or its file read, under settings the source no longer has.
+        An item indexed before items recorded their settings was split with its kind's defaults."""
+        if item["status"] != "indexed":
+            return False
+        settings = self.settings_of(s)
+        built = item.get("indexed_with") or index_key(stored(str(s["type"]), None, ocr=self.ocr))
+        read_ocr = str(item.get("read_with") or "").split(":")
+        reread = s["type"] == "file" and len(read_ocr) > 1 and read_ocr[1] != settings.parsing.ocr
+        return built != index_key(settings) or reread
 
     async def _read_file(
         self, who: Who, s: dict[str, Any], existing: dict[str, Any] | None, *, name: str, found: Stored, rebuild: bool
@@ -867,7 +886,8 @@ class KnowledgeService:
         if self.readings is None:
             return await self._failed(who, s, existing, name=name, found=found, error=NO_READER)
         try:
-            answer = await self.readings.reading(who.tenant_id, source_team(s), found.file_id, ocr=self.ocr)
+            ocr = self.settings_of(s).parsing.ocr
+            answer = await self.readings.reading(who.tenant_id, source_team(s), found.file_id, ocr=ocr)
         except DocumentsRefused as e:
             return await self._failed(who, s, existing, name=name, found=found, error=("parse", e.message))
         except ServiceUnreachable:
@@ -976,11 +996,12 @@ class KnowledgeService:
         error: tuple[str, str] | None = None
         warning: str | None = None
         title, pages = title_given or name, None
+        settings = self.settings_of(s)
         try:
             if doc is None:
                 doc = parse(data or b"", filename=name, mime_type=mime)
             title, pages = title_given or doc.title or name, doc.source.page_count
-            result = split(doc, INGEST)
+            result = split(doc, settings.ingest)
             for n, c in enumerate(result.chunks):
                 chunks.append(
                     {
@@ -999,7 +1020,7 @@ class KnowledgeService:
             if chunks:
                 warning = _unread(doc)
             else:
-                error = self._empty(doc)
+                error = _empty(doc, settings.parsing.ocr)
         except (UnsupportedFormatError, TooLargeError) as e:
             error = ("parse", str(e))
         except Exception as e:
@@ -1025,6 +1046,7 @@ class KnowledgeService:
             "created_at": existing["created_at"] if existing else now,
             "processed_at": now,
             "read_with": read_with,
+            "indexed_with": None if error else index_key(settings),
             **(extra or {}),
         }
         version_row = {
@@ -1154,11 +1176,21 @@ class KnowledgeService:
         for key in ("collection", "tags"):
             if patch.get(key) is not None:
                 values[key] = patch[key]
+        given = {k: patch[k] for k in SETTINGS_KEYS if patch.get(k) is not None}
+        if given:
+            values["settings"] = wire(self._merged(self.settings_of(s), given))
         if values:
             entry = audit_entry(who, "knowledge.source.settings", "knowledge_source", source_id, s["name"], s, values)
             await self.store.update_source(who.tenant_id, source_id, values, audit=entry)
         _, by_source = await self._joined(who.tenant_id)
         return self._source({**s, **values}, by_source.get(source_id, []))
+
+    @staticmethod
+    def _merged(current: SourceSettings, given: dict[str, Any]) -> SourceSettings:
+        try:
+            return merged(current, given)
+        except InvalidSettings as e:
+            raise ValidationFailed(str(e), code="invalid_settings") from e
 
     async def set_paused(self, who: Who, source_id: str, *, paused: bool) -> dict[str, Any]:
         s = await self._changeable_source(who, source_id)
@@ -1533,6 +1565,14 @@ def _run(r: dict[str, Any]) -> dict[str, Any]:
         "errors": r["errors"],
         "log": r["log"],
     }
+
+
+def _empty(doc: ParsedDocument, ocr: str) -> tuple[str, str]:
+    """Why a read document gave nothing to index."""
+    if doc.pages_without_text:
+        how = "OCR is off for this source" if ocr == "off" else "not even by OCR"
+        return _no_text(f"{len(doc.pages_without_text)} pages have no text that could be read ({how}).")
+    return ("parse", "The document has no text to index.")
 
 
 def _pages(pages: list[int]) -> str:

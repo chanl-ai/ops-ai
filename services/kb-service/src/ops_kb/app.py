@@ -410,7 +410,7 @@ def create_kb_app(
 
     @sources.patch("/{source_id}", response_model=Envelope[Source])
     async def update_source(source_id: str, body: SourcePatch, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        return ok(await service.update_source(who, source_id, body.model_dump(exclude_none=True)))
+        return ok(await service.update_source(who, source_id, body.model_dump(exclude_none=True, by_alias=True)))
 
     @sources.post("/{source_id}/pause", response_model=Envelope[Source])
     async def pause_source(source_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

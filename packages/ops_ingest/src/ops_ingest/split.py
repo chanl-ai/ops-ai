@@ -46,7 +46,7 @@ MIN_SIZE, MAX_SIZE = 100, 2_000
 
 PRESETS: dict[str, list[IngestStrategy]] = {
     "policy_manual": ["structure", "context_headers", "parent_child"],
-    "help_centre": ["clean", "structure", "faq"],
+    "help_centre": ["clean", "structure", "context_headers"],
     "rate_table": ["table_rows"],
     "email_templates": ["structure", "context_headers"],
 }

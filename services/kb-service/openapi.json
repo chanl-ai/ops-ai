@@ -3226,6 +3226,11 @@
       "Source": {
         "additionalProperties": false,
         "properties": {
+          "cleaning": {
+            "additionalProperties": true,
+            "title": "Cleaning",
+            "type": "object"
+          },
           "collection": {
             "title": "Collection",
             "type": "string"
@@ -3375,6 +3380,7 @@
           "scopeSummary",
           "config",
           "parsing",
+          "cleaning",
           "ingest",
           "rules",
           "metadataMapping",
@@ -3440,6 +3446,11 @@
               }
             ],
             "title": "Canpublish"
+          },
+          "cleaning": {
+            "additionalProperties": true,
+            "title": "Cleaning",
+            "type": "object"
           },
           "collection": {
             "title": "Collection",
@@ -3656,6 +3667,7 @@
           "scopeSummary",
           "config",
           "parsing",
+          "cleaning",
           "ingest",
           "rules",
           "metadataMapping",
@@ -3689,6 +3701,18 @@
       },
       "SourceIn": {
         "properties": {
+          "cleaning": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cleaning"
+          },
           "collection": {
             "default": "",
             "title": "Collection",
@@ -3714,6 +3738,18 @@
             "title": "Fileids",
             "type": "array"
           },
+          "ingest": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingest"
+          },
           "kbIds": {
             "default": [],
             "items": {
@@ -3721,6 +3757,21 @@
             },
             "title": "Kbids",
             "type": "array"
+          },
+          "metadataMapping": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadatamapping"
           },
           "name": {
             "title": "Name",
@@ -3736,6 +3787,33 @@
               }
             ],
             "title": "Owner"
+          },
+          "parsing": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parsing"
+          },
+          "rules": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rules"
           },
           "sensitivity": {
             "default": "internal",
@@ -3780,6 +3858,18 @@
       },
       "SourcePatch": {
         "properties": {
+          "cleaning": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cleaning"
+          },
           "collection": {
             "anyOf": [
               {
@@ -3790,6 +3880,33 @@
               }
             ],
             "title": "Collection"
+          },
+          "ingest": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingest"
+          },
+          "metadataMapping": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadatamapping"
           },
           "name": {
             "anyOf": [
@@ -3812,6 +3929,33 @@
               }
             ],
             "title": "Owner"
+          },
+          "parsing": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parsing"
+          },
+          "rules": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rules"
           },
           "sensitivity": {
             "anyOf": [
@@ -3845,6 +3989,11 @@
       "SourceRow": {
         "additionalProperties": false,
         "properties": {
+          "cleaning": {
+            "additionalProperties": true,
+            "title": "Cleaning",
+            "type": "object"
+          },
           "collection": {
             "title": "Collection",
             "type": "string"
@@ -4005,6 +4154,7 @@
           "scopeSummary",
           "config",
           "parsing",
+          "cleaning",
           "ingest",
           "rules",
           "metadataMapping",

@@ -368,6 +368,7 @@ class SearchOut(TypedDict, closed=True):
 
 
 class Source(TypedDict, closed=True):
+    cleaning: dict[str, Any]
     collection: str
     config: dict[str, Any]
     createdAt: str
@@ -402,6 +403,7 @@ class SourceDetail(TypedDict, closed=True):
     canDelete: NotRequired[bool | None]
     canEdit: NotRequired[bool | None]
     canPublish: NotRequired[bool | None]
+    cleaning: dict[str, Any]
     collection: str
     config: dict[str, Any]
     createdAt: str
@@ -441,12 +443,17 @@ class SourceDetail(TypedDict, closed=True):
 
 
 class SourceIn(TypedDict):
+    cleaning: NotRequired[dict[str, Any] | None]
     collection: NotRequired[str]
     config: NotRequired[dict[str, Any] | None]
     fileIds: NotRequired[list[str]]
+    ingest: NotRequired[dict[str, Any] | None]
     kbIds: NotRequired[list[str]]
+    metadataMapping: NotRequired[list[dict[str, Any]] | None]
     name: str
     owner: NotRequired[str | None]
+    parsing: NotRequired[dict[str, Any] | None]
+    rules: NotRequired[list[dict[str, Any]] | None]
     sensitivity: NotRequired[str]
     status: NotRequired[str | None]
     sync: NotRequired[bool]
@@ -455,14 +462,20 @@ class SourceIn(TypedDict):
 
 
 class SourcePatch(TypedDict):
+    cleaning: NotRequired[dict[str, Any] | None]
     collection: NotRequired[str | None]
+    ingest: NotRequired[dict[str, Any] | None]
+    metadataMapping: NotRequired[list[dict[str, Any]] | None]
     name: NotRequired[str | None]
     owner: NotRequired[str | None]
+    parsing: NotRequired[dict[str, Any] | None]
+    rules: NotRequired[list[dict[str, Any]] | None]
     sensitivity: NotRequired[str | None]
     tags: NotRequired[list[str] | None]
 
 
 class SourceRow(TypedDict, closed=True):
+    cleaning: dict[str, Any]
     collection: str
     config: dict[str, Any]
     createdAt: str

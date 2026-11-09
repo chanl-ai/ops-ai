@@ -157,7 +157,7 @@ def test_faq_goes_through_model_client_only() -> None:
     fake = FakeModelClient(respond=faq_reply)
     result = split(
         doc,
-        settings(strategies=PRESETS["help_centre"], model="ingest-small", approval=approved("faq")),
+        settings(strategies=[*PRESETS["help_centre"], "faq"], model="ingest-small", approval=approved("faq")),
         model=fake,
     )
     text_chunks = [c for c in result.chunks if c.kind != "row"]
