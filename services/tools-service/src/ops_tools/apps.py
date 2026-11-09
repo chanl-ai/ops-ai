@@ -787,13 +787,12 @@ class Apps:
         ids = [str(c["connectionId"]) for c in cards if c.get("connectionId")]
         store = self.connections.store
         team_tokens = await store.team_tokens(who.tenant_id, ids)
-        # The team's auth configs that hold a client secret, read once: an account signs in only through one of these
-        # or Ops AI's app where the install has one.
+        # The team's auth configs, each with whether its client secret is held, read once: an account signs in only
+        # through one of these or Ops AI's app where the install has one.
         held = {str(r["name"]) for r in await self.connections.secrets.store.listed(who.tenant_id, who.team.id)}
-        usable = [
-            c
+        creds = [
+            {**c, "holds_secret": bool(c.get("secret_name")) and str(c["secret_name"]) in held}
             for c in await store.team_credentials(who.tenant_id, who.team.id)
-            if c.get("secret_name") and str(c["secret_name"]) in held
         ]
         mine = person or own_key(who)
         own: dict[str, dict[str, Any]] = {}
@@ -803,7 +802,7 @@ class Apps:
             conn = by_id.get(str(c.get("connectionId") or ""))
             token = team_tokens.get(str(conn["id"])) if conn else None
             mine_row = own.get(str(conn["id"])) if conn else None
-            configured = self._configured(c, conn, usable)
+            configured = self._configured(c, conn, creds)
             c["appState"], c["appStateReason"] = app_state(c, conn, token, mine_row, configured=configured)
             c["credential"] = card_credential(conn)
             c["signIn"] = (conn.get("sign_in") or "team") if conn else None
@@ -818,20 +817,24 @@ class Apps:
                 else "connected"
             )
 
-    def _configured(self, card: dict[str, Any], conn: dict[str, Any] | None, usable: list[dict[str, Any]]) -> bool:
+    def _configured(self, card: dict[str, Any], conn: dict[str, Any] | None, creds: list[dict[str, Any]]) -> bool:
         """Whether a plugin's app has an auth config to sign in with. Off: Ops AI's app where the install has one, or
-        any of the team's configs of the app holding a secret. On: the one its default account signs in with. An app
-        whose sign-in takes no OAuth client, and a custom app (its account holds its own), always has."""
+        any of the team's configs of the app. On: the one its default account signs in with. A sign-in through the
+        browser exchanges a code with the client secret, so there a config without its secret does not count; a
+        client-credentials config may sign an assertion instead. An app whose sign-in takes no OAuth client, and a
+        custom app (its account holds its own), always has one."""
         pid = card.get("pluginId")
         if card["kind"] != "plugin" or not card.get("plugin") or not pid:
             return True
-        kind = conn["auth_kind"] if conn else card.get("authKind")
-        if not kind or kind_of(str(kind)).field("clientId") is None:
+        name = conn["auth_kind"] if conn else card.get("authKind")
+        kind = kind_of(str(name)) if name else None
+        if kind is None or kind.field("clientId") is None:
             return True
+        usable = [c for c in creds if c["app_id"] == card["id"] and (c["holds_secret"] or not kind.signs_in)]
         installed = self.connections.store.install_client(str(pid)) is not None
         team_on = bool(cast(dict[str, Any], card["plugin"]).get("teamOn"))
         if conn is None or not team_on:
-            return installed or any(c["app_id"] == card["id"] for c in usable)
+            return installed or bool(usable)
         if conn.get("credential_id"):
             return any(str(c["id"]) == str(conn["credential_id"]) for c in usable)
         return installed

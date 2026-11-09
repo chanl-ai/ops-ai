@@ -293,7 +293,9 @@ class OpsReads:
         return [
             c
             for c in cards
-            if c.get("appState") in OFF_STATES and not (c.get("plugin") or {}).get("teamOn") and c.get("name")
+            if c.get("appState") in OFF_STATES
+            and not cast(dict[str, Any], c.get("plugin") or {}).get("teamOn")
+            and c.get("name")
         ]
 
     async def run(self, tool: str, arguments: dict[str, Any]) -> ToolOutcome:

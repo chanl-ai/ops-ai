@@ -814,7 +814,7 @@ try {
           );
         }, page);
 
-        await step('13b Priya turns the app off: the window names the agent using its tools first, and the catalog then offers Connect, continuing with its app credential', async () => {
+        await step('13b Priya turns the app off: the window names the agent using its tools first, and the catalog then offers Turn on, which puts it back as it was with no window', async () => {
           // openSettings is defined below the stack, so this first stack opens Settings itself.
           await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await page.getByTestId('app-tab-settings').click();
@@ -826,17 +826,21 @@ try {
           const put = page.waitForResponse((r) => r.request().method() === 'PUT' && /\/v1\/apps\/plugin(%3A|:)test\.person\/team$/.test(r.url()), { timeout: 60_000 });
           await page.getByTestId('app-off-confirm').click();
           const res = await put;
-          // Off for the team: the catalog offers Connect for it again.
+          // Off for the team: the catalog offers Turn on for it.
           await page.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          const offered = await page.getByTestId(`connect-${APP}`).waitFor({ timeout: 60_000 }).then(() => true, () => false);
-          // Connect on an app turned off opens the one Connect window, on the app credential it had (Ops AI's app here).
+          const offered = await page.getByTestId(`connect-${APP}`).waitFor({ timeout: 60_000 }).then(async () => /Turn on/.test(await page.getByTestId(`connect-${APP}`).innerText()), () => false);
+          const offState = await page.getByTestId(`system-${APP}`).getAttribute('data-state');
+          // Turn on puts back what was turned off, its account and app credential with it: no window, no sign-in.
+          const again = page.waitForResponse((r) => r.request().method() === 'PUT' && /\/v1\/apps\/plugin(%3A|:)test\.person\/team$/.test(r.url()), { timeout: 60_000 });
           await page.getByTestId(`connect-${APP}`).click();
-          const smallAgain = await page.getByTestId('connect-window-app').waitFor({ timeout: 30_000 }).then(async () => /Ops AI’s app/.test(await page.getByTestId('connect-window-app').innerText()), () => false);
-          await page.keyboard.press('Escape');
+          const back = await again;
+          await page.waitForFunction((id) => document.querySelector(`[data-testid="system-${id}"]`)?.getAttribute('data-state') !== 'off', APP, { timeout: 30_000 }).catch(() => {});
+          const onState = await page.getByTestId(`system-${APP}`).getAttribute('data-state');
+          const window_ = await page.getByTestId('connect-window').count();
           check(
-            '13b Priya turns the app off: the window names the agent using its tools first, and the catalog then offers Connect, continuing with its app credential',
-            /Ticket desk/.test(named) && /Agent/.test(named) && res.status() === 200 && offered && smallAgain,
-            { named, status: res.status(), offered, smallAgain },
+            '13b Priya turns the app off: the window names the agent using its tools first, and the catalog then offers Turn on, which puts it back as it was with no window',
+            /Ticket desk/.test(named) && /Agent/.test(named) && res.status() === 200 && offered && offState === 'off' && back.status() === 200 && onState !== 'off' && window_ === 0,
+            { named, status: res.status(), offered, offState, back: back.status(), onState, window_ },
           );
         }, page);
 
@@ -1014,9 +1018,10 @@ try {
         const page = await adminPage(browser, consoleUrl, 'p.shah@harborpine.example');
         for (let i = 0; i < 20 && !((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).some((c) => c.pluginId === 'test.entra'); i++) await page.waitForTimeout(1000);
         await step("17 a certificate app connects in the window, its account reads working, and its page never shows the key", async () => {
-          await page.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          // The app's own client is made under Credentials (no secret: it signs an assertion), then picked here.
+          // The app's own client is made under Credentials (no secret: it signs an assertion), then picked here. It is
+          // made first: until the team has one, the app's card asks for an auth config instead of offering Connect.
           const entraCredential = (await call(tools, 'POST', '/v1/app-credentials', priya, { app: 'plugin:test.entra', clientId: entraFake.entra.clientId })).data?.id;
+          await page.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await page.getByTestId('connect-plugin:test.entra').click();
           const window_ = page.getByTestId('connect-dialog');
           await window_.waitFor({ timeout: 30_000 });
