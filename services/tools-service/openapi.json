@@ -10266,6 +10266,8 @@
               "connected",
               "test_failed",
               "needs_sign_in",
+              "needs_auth_config",
+              "off",
               "not_installed",
               "removed"
             ],

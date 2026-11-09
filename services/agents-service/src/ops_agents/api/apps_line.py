@@ -37,14 +37,16 @@ HEAD = "Apps for this conversation, from the team's settings:"
 
 def describe(card: dict[str, Any]) -> str | None:
     """One app as the model reads it, or None for one it should not hear of: a built-in (its tools are offered as
-    they are) or a plugin the install no longer loads."""
+    they are) or a plugin the install does not load."""
     kind, state, name = card.get("kind"), card.get("appState"), str(card.get("name") or "")
-    if not name or kind == "builtin" or state == "removed":
+    if not name or kind == "builtin" or state in ("removed", "not_installed"):
         return None
     if card.get("leftOut"):
         return f"{name}: left out of this chat (the person turned it off in the composer's connectors)"
-    if state == "not_installed":
+    if state == "off":
         return f"{name}: installed, off for this team (a team admin turns it on)"
+    if state == "needs_auth_config":
+        return f"{name}: has no auth config to sign in with (a team admin adds one)"
     person = card.get("signIn") in ("person", "person_or_team")
     if state == "needs_sign_in":
         if person:

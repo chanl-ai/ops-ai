@@ -36,9 +36,23 @@ def state(c: dict[str, Any]) -> tuple[str, str | None]:
     return c["appState"], c["appStateReason"]
 
 
-async def test_an_app_the_team_has_not_turned_on_is_not_installed(world: World, tenant: str) -> None:  # noqa: F811
+async def test_an_app_the_team_has_not_turned_on_is_off(world: World, tenant: str) -> None:  # noqa: F811
     c = await card(world, tenant)
-    assert state(c) == ("not_installed", None) and c["credential"] is None, c
+    assert state(c) == ("off", None) and c["credential"] is None, c
+
+
+async def test_turned_off_the_app_and_its_page_read_off_and_turn_on_again_alone(world: World, tenant: str) -> None:  # noqa: F811
+    conn = await connected(world, tenant)
+    await signed(world, tenant, conn, "https://acme.my.desk.test")
+    off = await world.client.put(f"/v1/apps/{APP}/team", json={"enabled": False}, headers=admin(tenant))
+    assert off.status_code == 200 and off.json()["data"]["appState"] == "off", off.text
+    page = await world.client.get(f"/v1/apps/{APP}", headers=admin(tenant))
+    shown = page.json()["data"]["card"]
+    assert (shown["appState"], shown["plugin"]["teamOn"]) == ("off", False), shown
+    # Turning it on again keeps its account and sign-in: no settings, no credential and no sign-in asked.
+    on = await world.client.put(f"/v1/apps/{APP}/team", json={"enabled": True}, headers=admin(tenant))
+    assert on.status_code == 200, on.text
+    assert state(await card(world, tenant)) == ("connected", None)
 
 
 async def test_a_team_account_needs_its_sign_in_then_is_connected(world: World, tenant: str) -> None:  # noqa: F811

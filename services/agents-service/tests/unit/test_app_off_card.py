@@ -23,7 +23,7 @@ class Line:
     async def cards(self, team: str, email: str, now: float | None = None) -> list[dict[str, Any]]:
         assert (team, email) == (SAM.team_id, SAM.email)
         return [
-            {"id": "plugin:opsai.salesforce", "name": "Salesforce", "appState": "not_installed"},
+            {"id": "plugin:opsai.salesforce", "name": "Salesforce", "appState": "off"},
             {"id": "plugin:opsai.github", "name": "GitHub", "appState": "connected"},
         ]
 

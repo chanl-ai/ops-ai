@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
 from ops_plugin_sdk.loader import Loaded
 from ops_service_kit.settings import Settings
+from ops_tools.apps import REMOVED
 from ops_tools.modules.seed import load
 from ops_tools.plugins.host import PluginHost, module_id_of
 from ops_tools.store.connections import ConnectionStore
@@ -83,3 +84,16 @@ async def test_a_removed_plugins_tool_refuses_with_that_reason(rig: Rig, engine:
     host.loaded = []
     seen = await host.for_call(tenant, "team_platform", module, "live")
     assert "isn't installed on this system" in str(seen["plugin_off"]), seen
+
+
+async def test_a_plugin_the_install_does_not_hold_and_the_team_never_had_answers_not_installed(
+    rig: Rig, tenant: str
+) -> None:
+    client, host = rig
+    host.loaded = []
+    page = await client.get("/v1/apps/plugin:acme.ticketdesk", headers=team_admin(tenant))
+    assert page.status_code == 200, page.text
+    card = page.json()["data"]["card"]
+    assert (card["appState"], card["appStateReason"]) == ("not_installed", REMOVED), card
+    assert page.json()["data"]["accounts"] == [] and page.json()["data"]["tools"] == []
+    assert (await client.get("/v1/apps/con_unknown", headers=team_admin(tenant))).status_code == 404

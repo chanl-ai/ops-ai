@@ -138,7 +138,11 @@ class SystemPlugin(Out):
     update_available: bool = False
 
 
-AppState = Literal["connected", "test_failed", "needs_sign_in", "not_installed", "removed"]
+# An app card's one state for the caller (the Apps design, "An app's state"): not_installed (the install does not hold
+# the plugin and the team never had it on), removed (the team had it on; the install no longer holds it), off
+# (installed, not on for the team), needs_auth_config (nothing to sign in with: no auth config, or the account's has
+# gone or holds no client secret), needs_sign_in, connected, and test_failed (signed in; its test then failed).
+AppState = Literal["connected", "test_failed", "needs_sign_in", "needs_auth_config", "off", "not_installed", "removed"]
 # Plugins are installed by the operator on the system, never from a screen, so no person here can put it back.
 REMOVED = "This app isn't installed on this system. Your operator installs apps."
 
@@ -182,9 +186,8 @@ class SystemCard(Out):
     plugin: SystemPlugin | None = None
     # A built-in app's console page, where it is managed (its knowledge bases, its mailboxes).
     href: str | None = None
-    # The card's one state for the caller, worked out here so no screen derives it: connected, test_failed (signed in,
-    # its test then failed), needs_sign_in, not_installed (not turned on for the team), or removed (turned on, then
-    # taken off the install); with why when not connected.
+    # The card's one state for the caller (AppState), worked out here so no screen derives it; with why when not
+    # connected.
     app_state: AppState
     app_state_reason: str | None = None
     # Whose OAuth app the card's account signs in with; none for an app that signs in without one.
@@ -784,6 +787,14 @@ class Apps:
         ids = [str(c["connectionId"]) for c in cards if c.get("connectionId")]
         store = self.connections.store
         team_tokens = await store.team_tokens(who.tenant_id, ids)
+        # The team's auth configs that hold a client secret, read once: an account signs in only through one of these
+        # or Ops AI's app where the install has one.
+        held = {str(r["name"]) for r in await self.connections.secrets.store.listed(who.tenant_id, who.team.id)}
+        usable = [
+            c
+            for c in await store.team_credentials(who.tenant_id, who.team.id)
+            if c.get("secret_name") and str(c["secret_name"]) in held
+        ]
         mine = person or own_key(who)
         own: dict[str, dict[str, Any]] = {}
         for t in await store.own_sign_ins(who.tenant_id, mine, ids):
@@ -792,7 +803,8 @@ class Apps:
             conn = by_id.get(str(c.get("connectionId") or ""))
             token = team_tokens.get(str(conn["id"])) if conn else None
             mine_row = own.get(str(conn["id"])) if conn else None
-            c["appState"], c["appStateReason"] = app_state(c, conn, token, mine_row)
+            configured = self._configured(c, conn, usable)
+            c["appState"], c["appStateReason"] = app_state(c, conn, token, mine_row, configured=configured)
             c["credential"] = card_credential(conn)
             c["signIn"] = (conn.get("sign_in") or "team") if conn else None
             # The caller's (or `person`'s) own sign-in on an app each person signs in to: connected, expired or none.
@@ -806,11 +818,49 @@ class Apps:
                 else "connected"
             )
 
+    def _configured(self, card: dict[str, Any], conn: dict[str, Any] | None, usable: list[dict[str, Any]]) -> bool:
+        """Whether a plugin's app has an auth config to sign in with. Off: Ops AI's app where the install has one, or
+        any of the team's configs of the app holding a secret. On: the one its default account signs in with. An app
+        whose sign-in takes no OAuth client, and a custom app (its account holds its own), always has."""
+        pid = card.get("pluginId")
+        if card["kind"] != "plugin" or not card.get("plugin") or not pid:
+            return True
+        kind = conn["auth_kind"] if conn else card.get("authKind")
+        if not kind or kind_of(str(kind)).field("clientId") is None:
+            return True
+        installed = self.connections.store.install_client(str(pid)) is not None
+        team_on = bool(cast(dict[str, Any], card["plugin"]).get("teamOn"))
+        if conn is None or not team_on:
+            return installed or any(c["app_id"] == card["id"] for c in usable)
+        if conn.get("credential_id"):
+            return any(str(c["id"]) == str(conn["credential_id"]) for c in usable)
+        return installed
+
     async def card(self, who: Caller, app_id: str) -> dict[str, Any]:
         found = next((c for c in await self.cards(who) if c["id"] == app_id), None)
-        if found is None:
-            raise NotFound(f"App {app_id}")
-        return found
+        if found is not None:
+            return found
+        pid = plugin_of({"app_id": app_id})
+        if pid and self.plugins is not None and pid not in self.plugins.plugins:
+            # A plugin the install does not hold, which this team never had on: its page says so, as a removed
+            # plugin's does, rather than answering as if the address were wrong.
+            return {
+                "id": app_id,
+                "kind": "plugin",
+                "name": pid,
+                "toolsCount": 0,
+                "connectionId": None,
+                "pluginId": pid,
+                "moduleIds": [],
+                "mayManage": self.connections.may_manage(who),
+                "managedClient": False,
+                "appState": "not_installed",
+                "appStateReason": REMOVED,
+                "credential": None,
+                "signIn": None,
+                "ownSignIn": None,
+            }
+        raise NotFound(f"App {app_id}")
 
     async def add_custom(self, who: Caller, i: NewAppIn) -> dict[str, Any]:
         """A custom app, as its first account: by name, or an MCP server by its address."""
@@ -950,10 +1000,16 @@ class Apps:
 
 
 def app_state(
-    card: dict[str, Any], conn: dict[str, Any] | None, team_token: dict[str, Any] | None, own: dict[str, Any] | None
+    card: dict[str, Any],
+    conn: dict[str, Any] | None,
+    team_token: dict[str, Any] | None,
+    own: dict[str, Any] | None,
+    *,
+    configured: bool = True,
 ) -> tuple[str, str | None]:
     """One card's state for the caller: signing in is what connects an account, and a failed test after it warns
-    without disconnecting. On an app each person signs in to, it is the caller's own sign-in that counts."""
+    without disconnecting. On an app each person signs in to, it is the caller's own sign-in that counts.
+    `configured`: whether there is an auth config to sign in with (`Apps._configured`)."""
     if card["kind"] in ("builtin", "module"):
         return "connected", None
     plugin = cast(dict[str, Any] | None, card.get("plugin"))
@@ -961,7 +1017,11 @@ def app_state(
     if card["kind"] == "plugin" and plugin is None:
         return "removed", REMOVED
     if conn is None or (plugin is not None and not plugin.get("teamOn")) or not conn.get("settings"):
-        return "not_installed", None
+        if configured:
+            return "off", None
+        return "needs_auth_config", f"Add an auth config for {card['name']} first."
+    if not configured:
+        return "needs_auth_config", f"The auth config {card['name']} signs in with is gone or has no client secret."
     if (conn.get("sign_in") or "team") == "person":
         if own is None or own.get("refused_at") is not None:
             return "needs_sign_in", "Sign in with your own account."

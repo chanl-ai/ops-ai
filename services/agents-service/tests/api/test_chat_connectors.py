@@ -40,7 +40,7 @@ class Cards:
                 "moduleIds": ["mod_wires"],
             },
             {
-                "id": CORE, "kind": "plugin", "name": "Core banking", "appState": "not_installed",
+                "id": CORE, "kind": "plugin", "name": "Core banking", "appState": "off",
                 "moduleIds": ["mod_core"],
             },
         ]  # fmt: skip

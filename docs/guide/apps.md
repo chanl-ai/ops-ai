@@ -20,6 +20,25 @@ Open **Data Hub › Apps** in the sidebar. Four tabs sit at the top of every pag
 
 **Add custom app** on the Apps tab adds an App the catalog does not list: its address and the key or sign-in it uses.
 
+## An App's state
+
+Every App card, on the Apps tab and at the top of the App's page, shows one state. The App's Settings read the same
+state, and each state has one next action.
+
+| State (`appState` in the API) | When | What a team admin does | What a member sees |
+|---|---|---|---|
+| Connected (`connected`) | On, and its Account signed in | Nothing to do | Nothing to do |
+| Signed in, test failed (`test_failed`) | On; the test after the sign-in failed | **Reconnect** | The failure |
+| Needs sign-in (`needs_sign_in`) | On; the team's Account, or your own on an App each person signs in to, has not signed in | **Connect** | **Sign in from Mine** |
+| Needs an auth config (`needs_auth_config`) | The App signs in through an auth config and the team has none it can use, or the one its Account used is gone or has no client secret | **Add an auth config**, which opens the new auth config for that App and signs nobody in | Ask an admin |
+| Available (`off`) | Installed, and not on for the team: never turned on, or turned off | **Turn on** | Ask an admin |
+| Not installed (`not_installed`) | The system does not hold this App's plugin and the team never had it on | Nothing; the operator installs Apps | The same |
+| No longer installed (`removed`) | The team had it on; the system no longer holds its plugin | **Delete app** removes what it left | The same |
+
+Before 9 November 2026 the API answered `not_installed` for an App that was installed and off for the team; that
+state is now `off`, and `not_installed` means the plugin itself is missing. Code that reads `appState` from the SDK
+should match `off` where it matched `not_installed`.
+
 ## Turn an App on
 
 Turning an App on for the team and connecting an account are two separate actions. Turning it on saves the team's
@@ -168,8 +187,8 @@ When a workflow acts for a person who has not connected their own Account of an 
 ## Turn an App off
 
 On the App's **Settings**, **Turn off** stops the App's Tools for your team. The window lists every agent and workflow
-that uses its Tools before anything stops. The App's Accounts and the Resources you added stay; the catalog then offers
-**Connect** for it again.
+that uses its Tools before anything stops. The App's Accounts and the Resources you added stay. The App then reads **Available** in its
+header and its Settings, and **Turn on** there puts it back as it was, with no window and no sign-in.
 
 ## Who may do what
 

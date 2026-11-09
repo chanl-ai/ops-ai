@@ -2023,7 +2023,15 @@ class SecretList(TypedDict, closed=True):
 
 class SystemCard(TypedDict, closed=True):
     accountsCount: NotRequired[int]
-    appState: Literal["connected", "test_failed", "needs_sign_in", "not_installed", "removed"]
+    appState: Literal[
+        "connected",
+        "test_failed",
+        "needs_sign_in",
+        "needs_auth_config",
+        "off",
+        "not_installed",
+        "removed",
+    ]
     appStateReason: NotRequired[str | None]
     authKind: NotRequired[str | None]
     category: NotRequired[str | None]

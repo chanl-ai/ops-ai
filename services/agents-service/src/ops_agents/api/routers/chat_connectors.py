@@ -43,7 +43,9 @@ STATES: dict[str, State] = {
     "connected": "on",
     "test_failed": "on",
     "needs_sign_in": "needs_sign_in",
-    "not_installed": "off_for_team",
+    "off": "off_for_team",
+    # An admin adds an auth config before anyone can sign in, as they turn an app on.
+    "needs_auth_config": "off_for_team",
 }
 PERSON = ("person", "person_or_team")
 

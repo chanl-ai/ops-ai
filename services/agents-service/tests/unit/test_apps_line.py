@@ -33,16 +33,20 @@ def test_on_off_and_sign_in_states_read_in_words_and_builtins_and_removed_apps_a
     text = render(
         [
             card("Salesforce", "needs_sign_in"),
-            card("Google Calendar", "not_installed"),
+            card("Google Calendar", "off"),
             card("GitHub", "connected"),
             card("Files", "connected", kind="builtin"),
             card("Old CRM", "removed"),
+            card("Never installed", "not_installed"),
+            card("GitLab", "needs_auth_config"),
         ]
     )
     assert text is not None
     assert "Salesforce: on · you are not signed in (a call shows a Connect card)" in text
     assert "Google Calendar: installed, off for this team (a team admin turns it on)" in text
     assert "GitHub: on · you are signed in" in text
+    assert "GitLab: has no auth config to sign in with (a team admin adds one)" in text
+    assert "Never installed" not in text
     assert "Files" not in text and "Old CRM" not in text
 
 
@@ -65,7 +69,7 @@ def test_many_apps_stay_within_the_budget_and_count_the_rest() -> None:
 
 
 async def test_a_kept_line_is_read_again_once_the_team_turns_an_app_on() -> None:
-    cards = Cards({"team_a": [card("Salesforce", "not_installed")]})
+    cards = Cards({"team_a": [card("Salesforce", "off")]})
     line = AppsLine(SimpleNamespace(app_states=cards))  # type: ignore[arg-type]
     await line.line("team_a", "dana@bank.example", now=0)
     cards.by_team["team_a"] = [card("Salesforce", "needs_sign_in")]
