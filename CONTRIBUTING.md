@@ -49,6 +49,12 @@ without console errors, including the `?mock=slow`, `?mock=error` and `?mock=emp
 `main` is the trunk. It changes only through a pull request that CI has passed. Merging deploys staging; a tag
 promotes a release.
 
+CI (`.github/workflows/ci.yml`) runs only the jobs a change needs, chosen by `scripts/ci-plan.sh`, so most pull
+requests skip some of them. The check that decides a merge is `ci-ok`: it always runs, waits for every other CI job,
+and fails when any of them failed or was cancelled. A skipped job counts as passed. Wait for `ci-ok` to finish rather
+than reading the other checks one by one; a red `ci-ok` names the failed job in its log. The secret scan (`scan`, in
+`leak-scan.yml`) is a separate workflow and is also required.
+
 | Step | Command |
 |---|---|
 | Start a change | `git switch -c <type>/<scope>-<change> origin/main`, for example `fix/tools-own-account-run` |
