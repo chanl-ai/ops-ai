@@ -102,7 +102,10 @@ url_of() {
 
 # AUTH=platform: the services verify platform-service tokens; the console signs in through platform-service.
 auth_env() { [[ "$AUTH" == platform ]] && echo "env OPS_AUTH_MODE=platform OPS_PLATFORM_URL=http://127.0.0.1:$PLATFORM_PORT OPS_PLATFORM_INTERNAL_PORT=$PLATFORM_INTERNAL_PORT " || true; }
-console_auth() { [[ "$AUTH" == platform ]] && echo "NEXT_PUBLIC_AUTH_PROVIDER=platform NEXT_PUBLIC_OPS_PLATFORM_API_URL=http://localhost:$PLATFORM_PORT " || true; }
+# The address the browser reaches a service at: this machine's port, or <OPS_PUBLIC_ORIGIN>/api/<name> when the console
+# is served through a proxy on one public address (a cloud box, deploy/fly/Caddyfile routes).
+api_url() { if [[ -n "${OPS_PUBLIC_ORIGIN:-}" ]]; then echo "$OPS_PUBLIC_ORIGIN/api/$1"; else echo "http://localhost:$2"; fi; }
+console_auth() { [[ "$AUTH" == platform ]] && echo "NEXT_PUBLIC_AUTH_PROVIDER=platform NEXT_PUBLIC_OPS_PLATFORM_API_URL=$(api_url platform "$PLATFORM_PORT") " || true; }
 # The Feedback button shows only when this machine runs the ui-feedback collector at start.
 ui_feedback() { curl -sf -m 1 http://127.0.0.1:4790/health >/dev/null && echo 1 || echo 0; }
 
@@ -204,7 +207,10 @@ cmd_of() {
     # documents-service extracts on its own models-service key, whatever key the root .env hands agents.
     documents) echo "$(auth_env)env OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_extract uv run --directory services/documents-service python -m ops_documents" ;;
     console)
-      echo "env $(console_auth)NEXT_PUBLIC_UI_FEEDBACK=$(ui_feedback) NEXT_PUBLIC_OPS_CHAT_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_CASES_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_REGISTRY_API_URL=http://localhost:$AGENTS_PORT NEXT_PUBLIC_OPS_TOOLS_API_URL=http://localhost:$TOOLS_PORT NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL=http://localhost:$KB_PORT NEXT_PUBLIC_OPS_FILES_API_URL=http://localhost:$FILES_PORT NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=http://localhost:$DOCUMENTS_PORT NEXT_PUBLIC_OPS_MODELS_API_URL=http://localhost:$MODELS_PORT NEXT_PUBLIC_OPS_EMBED_URL=http://localhost:$EMBED_PORT NODE_OPTIONS=--max-old-space-size=${OPS_CONSOLE_HEAP_MB:-3072} pnpm --filter @ops-ai/console exec next dev -p $CONSOLE_PORT"
+      # OPS_CONSOLE_MODE=prod (cloud boxes) serves a production build; see scripts/console-prod.sh. Local dev keeps next dev.
+      if [[ "${OPS_CONSOLE_MODE:-dev}" == prod ]]; then CONSOLE_RUN="env NEXT_PUBLIC_OPS_DEMO_SIGNIN=1 bash scripts/console-prod.sh $CONSOLE_PORT"
+      else CONSOLE_RUN="pnpm --filter @ops-ai/console exec next dev -p $CONSOLE_PORT"; fi
+      echo "env $(console_auth)NEXT_PUBLIC_UI_FEEDBACK=$(ui_feedback) NEXT_PUBLIC_OPS_CHAT_API_URL=$(api_url agents "$AGENTS_PORT") NEXT_PUBLIC_OPS_CASES_API_URL=$(api_url agents "$AGENTS_PORT") NEXT_PUBLIC_OPS_REGISTRY_API_URL=$(api_url agents "$AGENTS_PORT") NEXT_PUBLIC_OPS_TOOLS_API_URL=$(api_url tools "$TOOLS_PORT") NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL=$(api_url kb "$KB_PORT") NEXT_PUBLIC_OPS_FILES_API_URL=$(api_url files "$FILES_PORT") NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=$(api_url documents "$DOCUMENTS_PORT") NEXT_PUBLIC_OPS_MODELS_API_URL=$(api_url models "$MODELS_PORT") NEXT_PUBLIC_OPS_EMBED_URL=http://localhost:$EMBED_PORT NODE_OPTIONS=--max-old-space-size=${OPS_CONSOLE_HEAP_MB:-3072} ${CONSOLE_RUN}"
       ;;
     # The console's preview frame is the only page it allows to frame it besides a deployment's own sites.
     embed)
@@ -371,6 +377,11 @@ stop() {
     stop_pids $(stack_cmd_pids "ops_agents.api.worker")
   elif [[ "$svc" == fakebank ]]; then
     stop_pids $(pgrep -f "fake_bank $RUN_ABS/fake-bank" || true)
+  elif [[ "$svc" == console || "$svc" == embed ]]; then
+    # pnpm's child (next dev or next-server) can outlive the process group kill and keep the port, so the next start
+    # fails with EADDRINUSE and serves nothing; whatever Next process holds this app's port goes too.
+    pid=$(listener "$(port_of "$svc")") || pid=
+    [[ -n "$pid" && "$(ps -p "$pid" -o command= 2>/dev/null)" == *next* ]] && stop_pids "$pid"
   fi
   rm -f "$(pidfile "$svc")" "$(authfile "$svc")" "$(stampfile "$svc")"
 }
@@ -388,7 +399,7 @@ age_of() {
 
 # What a service's process has loaded and does not reload: a Python service's own folder (code and migrations),
 # packages/ and the lock; for the Next apps only their package.json and config and the lock (next dev reloads sources).
-code_dirs() { case "$1" in platform) echo services/platform-service packages uv.lock ;; agents | worker) echo services/agents-service packages uv.lock ;; models) echo services/models-service packages uv.lock ;; tools) echo services/tools-service packages uv.lock ;; kb) echo services/kb-service packages uv.lock ;; files) echo services/files-service packages uv.lock ;; documents) echo services/documents-service packages uv.lock ;; runner) echo services/runner-service packages uv.lock ;; fakeai) echo services/models-service/scripts/fake_openai services/models-service/seed/demo-fake-openai ;; fakebank) echo services/tools-service/scripts/fake_bank ;; console) echo apps/console/package.json apps/console/next.config.ts pnpm-lock.yaml ;; embed) echo apps/embed/package.json apps/embed/next.config.ts pnpm-lock.yaml ;; apidocs) echo scripts/api_docs.py ;; esac; }
+code_dirs() { case "$1" in platform) echo services/platform-service packages uv.lock ;; agents | worker) echo services/agents-service packages uv.lock ;; models) echo services/models-service packages uv.lock ;; tools) echo services/tools-service packages uv.lock ;; kb) echo services/kb-service packages uv.lock ;; files) echo services/files-service packages uv.lock ;; documents) echo services/documents-service packages uv.lock ;; runner) echo services/runner-service packages uv.lock ;; fakeai) echo services/models-service/scripts/fake_openai services/models-service/seed/demo-fake-openai ;; fakebank) echo services/tools-service/scripts/fake_bank ;; console) if [[ "${OPS_CONSOLE_MODE:-dev}" == prod ]]; then echo apps/console packages pnpm-lock.yaml; else echo apps/console/package.json apps/console/next.config.ts pnpm-lock.yaml; fi ;; embed) echo apps/embed/package.json apps/embed/next.config.ts pnpm-lock.yaml ;; apidocs) echo scripts/api_docs.py ;; esac; }
 # Every service `make up` checks before it starts the rest: the Python ones and the fakes, and the Next apps and the
 # API docs page, which run from whichever checkout started them.
 CHECKED=("${PY_SERVICES[@]}" console embed apidocs)

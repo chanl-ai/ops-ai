@@ -123,3 +123,6 @@ export const authProvider: AuthProvider = {
   takeStepUp: () => null,
   signOut: () => Promise.resolve(),
 };
+
+/** The widget has no sign-in; shared console hooks import this name from @/lib/api. */
+export const demoSignInOffered = false;

@@ -20,6 +20,7 @@ include make/sdk.mk
 include make/usecase.mk
 include make/experiments.mk
 include make/git.mk
+include make/box.mk
 
 ##@ General
 

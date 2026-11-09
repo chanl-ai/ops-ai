@@ -18,6 +18,8 @@ import { createStorageHttp } from './storage-http';
 import { setIdentitySource } from './request-identity';
 import { clearChosenTeam } from './team-context';
 
+/** Demo sign-in is offered by development builds and by production builds made with NEXT_PUBLIC_OPS_DEMO_SIGNIN=1 (cloud boxes). */
+export const demoSignInOffered = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_OPS_DEMO_SIGNIN === '1';
 const baseUrl = process.env.NEXT_PUBLIC_OPS_API_URL;
 const chatUrl = process.env.NEXT_PUBLIC_OPS_CHAT_API_URL;
 const casesUrl = process.env.NEXT_PUBLIC_OPS_CASES_API_URL;
