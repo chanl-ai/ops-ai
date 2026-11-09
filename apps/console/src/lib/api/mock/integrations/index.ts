@@ -15,6 +15,7 @@ import { rng } from '../governance/catalog';
 import { id, notFound, respond } from '../runtime';
 import { inTeam, teamDirectory, teamOwner } from '../teams';
 import { CATALOG, CONNECTIONS, daysAgo, inDays } from './seed';
+import { appPageHref } from '@/lib/app-links';
 
 const DAY = 86_400_000;
 const EXPIRING_MS = 30 * DAY;
@@ -154,7 +155,7 @@ export function createIntegrationsMock(deps: {
 
 
   const audit = (c: Conn, action: 'created' | 'connected' | 'revoked' | 'edited', summary: string, diff: { field: string; before?: string; after?: string }[], reason?: string) =>
-    auditSink.log({ action, target: { type: 'integration', name: c.name, href: `/integrations/${c.id}` }, summary, diff, reason, owner: c.ownerTeam });
+    auditSink.log({ action, target: { type: 'integration', name: c.name, href: appPageHref(c.id) }, summary, diff, reason, owner: c.ownerTeam });
 
   const runCheck = (c: Conn, by: string) => {
     const s = statusOf(c);

@@ -11,6 +11,7 @@ import { AskAnAdmin } from '@/components/connections/ask-an-admin';
 import type { MyConnector } from '@/hooks/connections-queries';
 import { useTestAccount } from '@/hooks/systems-queries';
 import { plural, shortDate } from '@/lib/format';
+import { appPageHref } from '@/lib/app-links';
 
 /** A connector's state in the words Connectors (Mine) uses. */
 export const CONNECTOR_STATE = {
@@ -159,7 +160,7 @@ export function ConnectorSheet({
           {c.state === 'app_off' ? (
             c.mayTurnOn ? (
               <Button size="sm" asChild>
-                <Link href={`/integrations/${encodeURIComponent(c.appId)}`}>Turn on for the team</Link>
+                <Link href={appPageHref(c.appId)}>Turn on for the team</Link>
               </Button>
             ) : (
               <AskAnAdmin testId="connector-ask-admin" lead={`${c.name} is off for this team.`} />

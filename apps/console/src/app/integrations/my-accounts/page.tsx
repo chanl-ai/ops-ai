@@ -29,6 +29,7 @@ import { useTestAccount } from '@/hooks/systems-queries';
 import { facetFilterFn } from '@/hooks/use-list-params';
 import { useTeam } from '@/hooks/use-team';
 import { plural, shortDate } from '@/lib/format';
+import { appPageHref } from '@/lib/app-links';
 
 /**
  * The person's own sign-in at the system, in a window as from the chat; a key kind opens the key form instead. The
@@ -73,7 +74,7 @@ function RowAction({ c, connect }: { c: MyConnector; connect: ReturnType<typeof 
   if (c.state === 'app_off')
     return c.mayTurnOn ? (
       <Button size="sm" variant="outline" asChild data-testid={`connector-turn-on-${c.appId}`}>
-        <Link href={`/integrations/${encodeURIComponent(c.appId)}`}>Turn on</Link>
+        <Link href={appPageHref(c.appId)}>Turn on</Link>
       </Button>
     ) : (
       <AskAnAdmin testId={`connector-ask-${c.appId}`} />

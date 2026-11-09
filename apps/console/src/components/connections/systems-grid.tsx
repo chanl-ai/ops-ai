@@ -25,6 +25,7 @@ import { facetFilterFn } from '@/hooks/use-list-params';
 import { initials, plural } from '@/lib/format';
 
 import type { ConnectMode } from './connect-system-dialog';
+import { appPageHref } from '@/lib/app-links';
 
 export type { ConnectMode };
 type View = 'all' | 'connected' | 'available';
@@ -56,7 +57,7 @@ export function AppStateBadge({ card, testId }: { card: SystemCard; testId?: str
 
 /** The app's page, where its accounts, tools, skills, sign-ins, runs and settings are; a built-in app's is the console
  * page that manages it (its knowledge bases, its mailboxes). */
-export const appHref = (s: Pick<SystemCard, 'id' | 'href'>) => s.href ?? `/integrations/apps/${encodeURIComponent(s.id)}`;
+export const appHref = (s: Pick<SystemCard, 'id' | 'href'>) => s.href ?? appPageHref(s.id);
 
 /**
  * Connected holds the apps that are signed in and work, or signed in with a failed test (a warning, still connected),

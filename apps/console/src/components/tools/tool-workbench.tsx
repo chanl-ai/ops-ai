@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 import type { ConnectionRef } from '@/lib/types/integrations';
 import type { HttpOperationInput, ModuleOperation, OperationPatch, RunContextOption, ToolModule, ToolRunProps } from '@/lib/types/tool-modules';
 import { SplitView } from '@/components/shared/setting/split-view';
+import { appPageHref } from '@/lib/app-links';
 
 export interface WorkbenchDraft {
   http: HttpOperationInput;
@@ -79,7 +80,7 @@ export function ToolAddress({ op, module, base }: { op: ModuleOperation; module:
 export function ToolAppLink({ app }: { app: { id: string; name: string } | null | undefined }) {
   if (!app) return null;
   return (
-    <Link href={`/integrations/apps/${encodeURIComponent(app.id)}`} className="text-foreground underline-offset-4 hover:underline" data-testid="tool-app-link">
+    <Link href={appPageHref(app.id)} className="text-foreground underline-offset-4 hover:underline" data-testid="tool-app-link">
       {app.name}
     </Link>
   );

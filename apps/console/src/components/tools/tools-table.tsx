@@ -10,6 +10,7 @@ import { AccessBadge } from '@/components/status-badges';
 import { UsedByCell } from '@/components/tools/used-by';
 import { facetFilterFn } from '@/hooks/use-list-params';
 import type { ToolKind, ToolRow, ToolStatus } from '@/lib/types/tool-directory';
+import { appPageHref } from '@/lib/app-links';
 
 export const TOOL_KIND: Record<ToolKind, string> = { app: 'App tool', custom: 'Custom tool', workflow: 'Workflow', agent: 'Agent' };
 export const TOOL_STATUS: Record<ToolStatus, { label: string; className: string }> = {
@@ -53,7 +54,7 @@ export function toolColumns<T extends ToolTableRow>({ app = false, kind = false,
       cell: ({ row }) =>
         row.original.app ? (
           <StopRowClick align="start">
-            <Link href={`/integrations/apps/${encodeURIComponent(row.original.app.id)}`} className="inline-flex min-h-6 items-center text-sm underline-offset-4 hover:underline">
+            <Link href={appPageHref(row.original.app.id)} className="inline-flex min-h-6 items-center text-sm underline-offset-4 hover:underline">
               {row.original.app.name}
             </Link>
           </StopRowClick>

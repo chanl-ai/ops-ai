@@ -31,6 +31,7 @@ import type { IngestStrategy } from '@/lib/types/knowledge-ingest';
 import { SourceHistoryTab } from '../_parts/source-history-tab';
 import { SourceItemsTab } from '../_parts/source-items-tab';
 import { SourceSettingsTab } from '../_parts/source-settings-tab';
+import { appPageHref } from '@/lib/app-links';
 
 /** Lower-cases a label for use inside a sentence, leaving acronyms such as FAQ alone. */
 const midSentence = (l: string) => (/^[A-Z]{2}/.test(l) ? l : l.charAt(0).toLowerCase() + l.slice(1));
@@ -143,7 +144,7 @@ export default function SourcePage() {
                   <p>Syncs stop until it is reconnected in Integrations. Indexed items stay searchable but will not update.</p>
                   {s.connection && (
                     <Button size="sm" variant="outline" className="border-destructive/40 text-foreground" asChild>
-                      <Link href={`/integrations/${s.connection.id}`}>Open {s.connection.name}</Link>
+                      <Link href={appPageHref(s.connection.id)}>Open {s.connection.name}</Link>
                     </Button>
                   )}
                 </AlertDescription>
