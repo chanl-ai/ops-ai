@@ -143,6 +143,25 @@ export interface Chunk {
   page?: number;
   kind: 'content' | 'question' | 'answer' | 'summary' | 'row';
   text: string;
+  /** What search matches for this piece: its own text, its children, its questions and approved FAQ pairs. */
+  units?: { kind: string; text: string }[];
+  /** Fields kept on the piece for filters. */
+  metadata?: Record<string, string>;
+}
+
+/** How an item's file was read, page by page, and what cleaning removed; null with no file or no finished reading. */
+export interface ItemReading {
+  readerVersion?: string | null;
+  ocr: string;
+  pages: { number: number; readBy?: string | null; blocks: Record<string, number>; removedChars: number; ocrConfidence?: number }[];
+}
+
+/** The settings the item was split under, and whether they are still the source's (false: it waits for a rebuild). */
+export interface ItemSettingsUsed {
+  preset: string;
+  strategies: string[];
+  indexedWith?: string | null;
+  current: boolean;
 }
 
 export interface Revision {
@@ -218,6 +237,8 @@ export interface ItemWithDetail extends Item {
   sourceName: string;
   sourceType: SourceType;
   detail: ItemDetail;
+  reading?: ItemReading | null;
+  settingsUsed?: ItemSettingsUsed | null;
 }
 
 /** One item or listing a run could not take in, with the step it failed at and why. */
