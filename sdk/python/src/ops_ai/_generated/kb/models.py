@@ -93,6 +93,21 @@ class ErrorEnvelope(TypedDict, closed=True):
     success: Literal[False]
 
 
+class EventIn(TypedDict):
+    actor: NotRequired[str | None]
+    key: str
+    name: str
+    payload: NotRequired[dict[str, Any]]
+    teamId: str
+
+
+class EventOut(TypedDict, closed=True):
+    items: int
+    key: str
+    name: str
+    status: Literal["handled", "unhandled"]
+
+
 class FileIdsIn(TypedDict):
     fileIds: list[str]
 
@@ -497,6 +512,14 @@ class SyncRun(TypedDict, closed=True):
     trigger: str
 
 
+class ValidationError(TypedDict):
+    ctx: NotRequired[dict[str, Any]]
+    input: NotRequired[Any]
+    loc: list[str | int]
+    msg: str
+    type: str
+
+
 class VerifyIn(TypedDict):
     verified: bool
 
@@ -513,6 +536,11 @@ class BackgroundHealthOut(TypedDict, closed=True):
 
 class EnvelopeAddedDocuments(TypedDict, closed=True):
     data: AddedDocuments
+    success: Literal[True]
+
+
+class EnvelopeEventOut(TypedDict, closed=True):
+    data: EventOut
     success: Literal[True]
 
 
@@ -574,6 +602,10 @@ class EnvelopeListNamedRef(TypedDict, closed=True):
 class EnvelopeListPluginSource(TypedDict, closed=True):
     data: list[PluginSource]
     success: Literal[True]
+
+
+class HTTPValidationError(TypedDict):
+    detail: NotRequired[list[ValidationError]]
 
 
 class KbSourceView(TypedDict, closed=True):

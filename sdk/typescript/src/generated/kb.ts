@@ -719,6 +719,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[EventOut] */
+        Envelope_EventOut_: {
+            data: components["schemas"]["EventOut"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ItemWithDetail] */
         Envelope_ItemWithDetail_: {
             data: components["schemas"]["ItemWithDetail"];
@@ -924,10 +933,47 @@ export interface components {
              */
             success: false;
         };
+        /**
+         * EventIn
+         * @description A service event, as documents-service's relay sends it: the tenant and team come from the token.
+         */
+        EventIn: {
+            /** Actor */
+            actor?: string | null;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /** Teamid */
+            teamId: string;
+        };
+        /** EventOut */
+        EventOut: {
+            /** Items */
+            items: number;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "handled" | "unhandled";
+        };
         /** FileIdsIn */
         FileIdsIn: {
             /** Fileids */
             fileIds: string[];
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
         };
         /** Health */
         Health: {
@@ -2020,6 +2066,19 @@ export interface components {
             status: string;
             /** Trigger */
             trigger: string;
+        };
+        /** ValidationError */
+        ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
         };
         /** VerifyIn */
         VerifyIn: {
