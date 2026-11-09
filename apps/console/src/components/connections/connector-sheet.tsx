@@ -21,18 +21,15 @@ export const NOT_SET_UP = 'Not set up for your team yet';
 /** Where a row names its account but the person has none connected, so no row shows a bare dash. */
 export const NO_ACCOUNT = 'No account connected';
 
-/** Where the row's app stands for the person, from its appState and the one state table (lib/app-state.ts). */
-export const groupOf = (c: MyConnector) => appStateFor(c.appState, c.mayTurnOn).group;
 
 /** The person's own sign-in on the row's account ended, so it reads Sign in again rather than Connect. */
 export const signInEnded = (c: MyConnector) => c.accounts.find((a) => a.connectionId === c.primaryAccountId)?.state === 'expired';
 
 /** Whether chat uses it, as the row's In chat line says it. */
 export function inChatWords(c: MyConnector): string {
-  const group = groupOf(c);
-  if (group === 'on') return 'On in chat';
-  if (group === 'sign_in') return signInEnded(c) ? 'Paused until you sign in' : 'Asks when a tool needs it';
-  return c.mayTurnOn ? 'Turn it on for the team' : 'An admin turns it on';
+  if (c.appGroup === 'on') return 'On in chat';
+  if (c.appGroup === 'needs_you') return signInEnded(c) ? 'Paused until you sign in' : 'Asks when a tool needs it';
+  return c.mayManage ? 'Your team sets it up first' : 'An admin sets it up first';
 }
 
 function Section({ title, children, testId }: { title: string; children: React.ReactNode; testId?: string }) {
@@ -65,7 +62,7 @@ export function ConnectorSheet({
 }) {
   const test = useTestAccount();
   if (!c) return null;
-  const connected = groupOf(c) === 'on';
+  const connected = c.appGroup === 'on';
   const since = c.since ? ` · since ${shortDate(c.since)}` : '';
   return (
     <DetailSheet
@@ -158,13 +155,13 @@ export function ConnectorSheet({
           </>
         )}
         <Separator />
-        <Section title={groupOf(c) !== 'off_for_team' ? 'Account' : c.mayTurnOn ? 'Turn it on' : NOT_SET_UP} testId="connector-accounts">
-          {groupOf(c) === 'off_for_team' ? (
-            // Only someone who may turn it on is sent to the app's page; everyone else asks, and never lands there.
-            c.mayTurnOn ? (
+        <Section title={c.appGroup !== 'needs_admin' ? 'Account' : NOT_SET_UP} testId="connector-accounts">
+          {c.appGroup === 'needs_admin' ? (
+            // Someone who manages the team's apps is sent to the app's page for its next step; everyone else asks.
+            c.mayManage ? (
               <Button size="sm" asChild>
                 <Link href={appPageHref(c.appId)} data-testid="connector-sheet-turn-on">
-                  Turn on for the team
+                  {appStateFor(c.appState, c.appGroup, true).action === 'turn_on' ? 'Turn on for the team' : 'Set it up for the team'}
                 </Link>
               </Button>
             ) : (

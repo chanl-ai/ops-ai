@@ -45,8 +45,16 @@ const STATE = APP_STATE_LOOK;
  * whom to ask. An account whose sign-in ended is signed in again with Reconnect.
  */
 function NextAction({ card, onConnect }: { card: SystemCard; onConnect: (s: SystemCard, mode: ConnectMode) => void }) {
-  const { action } = appStateFor(card.appState, Boolean(card.mayManage));
+  const { action } = appStateFor(card.appState, card.appGroup, Boolean(card.mayManage));
   if (action === 'ask_admin') return <AskAnAdmin testId={`connect-${card.id}-why`} />;
+  if (action === 'fix_auth_config')
+    return (
+      <Button size="sm" variant="outline" asChild data-testid={`fix-auth-config-${card.id}`}>
+        <Link href={appPageHref(card.id, 'auth')} onClick={(e) => e.stopPropagation()}>
+          Fix the auth config
+        </Link>
+      </Button>
+    );
   if (action === 'add_auth_config') return <AddAuthConfigButton appId={card.id} testId={`add-auth-config-${card.id}`} />;
   if (action === 'turn_on') return <TurnOnButton card={card} variant="outline" onFirstTurnOn={() => onConnect(card, 'connect')} testId={`connect-${card.id}`} />;
   if (!card.mayManage || (action !== 'sign_in' && action !== 'reconnect')) return null;
@@ -63,12 +71,10 @@ function NextAction({ card, onConnect }: { card: SystemCard; onConnect: (s: Syst
 export const appHref = (s: Pick<SystemCard, 'id' | 'href'>) => s.href ?? appPageHref(s.id);
 
 /**
- * Connected holds the apps that are signed in and work, or signed in with a failed test (a warning, still connected),
- * and a removed app, whose card says why its tools stopped. Turned on but not signed in is Needs sign-in, under
- * Available with the apps not turned on: the API's appState decides which.
+ * Connected holds the apps that work (appGroup on) and a removed app, whose card says why its tools stopped; every
+ * app someone still has to act on is under Available. The API's appGroup decides which.
  */
-const CONNECTED: ReadonlySet<AppState> = new Set<AppState>(['connected', 'test_failed', 'removed']);
-const isConnected = (card: SystemCard) => CONNECTED.has(card.appState);
+const isConnected = (card: SystemCard) => card.appGroup === 'on' || card.appGroup === 'gone';
 
 /**
  * One app's card: logo, name, tools and how it signs in, one line, its category, its state and at most one action.
@@ -244,7 +250,7 @@ export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, m
               ]}
               filterResetKey={filterResetKey}
               emptyState={
-                view === 'connected' && !(systems.data ?? []).some((s) => s.appState === 'connected') ? (
+                view === 'connected' && !(systems.data ?? []).some((s) => s.appGroup === 'on') ? (
                   // The view itself empties the list when nothing is connected yet: that is said, not "No apps match".
                   <EmptyState
                     icon={Plug}

@@ -12,6 +12,7 @@ import { sdk } from '@/lib/api/ops-sdk';
 import type { AccountRef } from '@/lib/types/connections';
 import type { OpsAI } from '@chanl-ai/ops-ai';
 
+import { refreshAppState } from './app-state-refresh';
 import { useTeamQuery } from './team-query';
 
 type Tools = OpsAI['raw']['tools'];
@@ -39,8 +40,7 @@ function useSystemsMutation<I, O>(fn: (i: I) => Promise<O>) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
-    onSuccess: () =>
-      Promise.all([qc.invalidateQueries({ queryKey: SYSTEMS }), qc.invalidateQueries({ queryKey: ACCOUNTS }), qc.invalidateQueries({ queryKey: APPS })]),
+    onSuccess: () => refreshAppState(qc),
   });
 }
 

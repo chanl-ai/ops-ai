@@ -30,7 +30,7 @@ import { ToolCallsView } from '@/components/tools/tool-calls-view';
 import { useNavAllows } from '@/hooks/me-queries';
 import { type SystemCard, useApp, useConnectionKinds, useStartSignIn, useTestAccount } from '@/hooks/systems-queries';
 import type { Kinds } from '@/lib/connect-plan';
-import { appStateFor } from '@/lib/app-state';
+import { headerActionFor } from '@/lib/app-state';
 import { plural } from '@/lib/format';
 import { TOOL_CALL_LOG } from '@/lib/nav';
 
@@ -83,11 +83,48 @@ export function AppPageView({ appId }: { appId: string }) {
   const ownOnly = !card.mayManage;
   // An app the system does not have installed (removed, or never installed) is shown for the record: nothing connects,
   // signs in or turns it on.
-  const removed = card.appState === 'removed' || card.appState === 'not_installed';
-  const mayConnect = !removed && card.mayManage;
-  const ownSignIn = !removed && Boolean(conn) && card.signIn !== 'team';
-  // The header's one next action, from the card's state (lib/app-state.ts), as the card and Settings read it.
-  const next = appStateFor(card.appState, Boolean(card.mayManage)).action;
+  const gone = card.appGroup === 'gone';
+  // Accounts are added by whoever manages the team's apps, on an app that is there.
+  const mayAddAccounts = Boolean(card.mayManage) && !gone;
+  // The header's one control, from the card's state and who acts next (lib/app-state.ts headerActionFor).
+  const next = builtIn ? null : headerActionFor(card);
+  const connectButton = (label: string) => (
+    <Button size="sm" onClick={() => setConnecting(true)} data-testid="app-connect">
+      <Plug />
+      {label}
+    </Button>
+  );
+  const headerAction = (): React.ReactNode => {
+    switch (next) {
+      case 'turn_on':
+        return <TurnOnButton card={card} onFirstTurnOn={() => setConnecting(true)} testId="app-connect" />;
+      case 'add_auth_config':
+        return <AddAuthConfigButton appId={card.id} variant="default" />;
+      case 'fix_auth_config':
+        // The auth configs the team has are on their tab; with none left, the fix is a new one.
+        return configs.length ? (
+          <Button size="sm" onClick={() => setTab('auth')} data-testid="app-fix-auth-config">
+            Fix the auth config
+          </Button>
+        ) : (
+          <AddAuthConfigButton appId={card.id} variant="default" testId="app-fix-auth-config" />
+        );
+      case 'own_sign_in':
+        return (
+          <Button size="sm" variant="outline" asChild data-testid="app-own-sign-in">
+            <Link href="/integrations/my-accounts">Sign in from Mine</Link>
+          </Button>
+        );
+      case 'connect':
+        return connectButton('Connect');
+      case 'reconnect':
+        return connectButton('Reconnect');
+      case 'ask_admin':
+        return <AskAnAdmin testId="app-admin-connects" />;
+      default:
+        return undefined;
+    }
+  };
 
   const signIn = (account: 'self' | 'team', accountId = conn?.id) => {
     if (!accountId) return;
@@ -123,29 +160,10 @@ export function AppPageView({ appId }: { appId: string }) {
       breadcrumbs={[{ label: 'Connectors', href: '/integrations' }, { label: 'Team setup', href: '/integrations' }, { label: card.name }]}
       backHref="/integrations"
       badge={<AppStateBadge card={card} testId="app-status" />}
-      actions={
-        builtIn || removed ? undefined : next === 'turn_on' ? (
-          <TurnOnButton card={card} onFirstTurnOn={() => setConnecting(true)} testId="app-connect" />
-        ) : next === 'add_auth_config' ? (
-          <AddAuthConfigButton appId={card.id} variant="default" />
-        ) : next === 'ask_admin' ? (
-          <AskAnAdmin testId="app-admin-connects" />
-        ) : mayConnect ? (
-          <Button size="sm" onClick={() => setConnecting(true)} data-testid="app-connect">
-            <Plug />
-            Connect
-          </Button>
-        ) : ownSignIn ? (
-          <Button size="sm" variant="outline" asChild data-testid="app-own-sign-in">
-            <Link href="/integrations/my-accounts">Sign in from Mine</Link>
-          </Button>
-        ) : (
-          <AskAnAdmin testId="app-admin-connects" />
-        )
-      }
+      actions={headerAction()}
       contentClassName="flex min-w-0 flex-col gap-4"
     >
-      {removed && (
+      {gone && (
         <Alert data-testid="app-removed">
           <AlertTitle>{`${card.name} isn’t installed`}</AlertTitle>
           <AlertDescription>{card.appStateReason}</AlertDescription>
@@ -158,7 +176,7 @@ export function AppPageView({ appId }: { appId: string }) {
         <ScrollTabsList tabs={tabs.map(([value, label]) => ({ value, label }))} testId="app-tabs-row" triggerTestId={(v) => `app-tab-${v}`} />
         {!builtIn && (
           <TabsContent value="accounts" className="flex flex-col gap-4">
-            <AccountsTab app={data} config={config} onConnect={mayConnect ? () => setConnecting(true) : undefined} onSignIn={signIn} />
+            <AccountsTab app={data} config={config} onConnect={mayAddAccounts ? () => setConnecting(true) : undefined} onSignIn={signIn} />
           </TabsContent>
         )}
         <TabsContent value="tools">
@@ -170,7 +188,7 @@ export function AppPageView({ appId }: { appId: string }) {
           </TabsContent>
         )}
         <TabsContent value="resources">
-          <ResourcesTab appName={data.card.name} pluginId={data.card.pluginId} onConnect={mayConnect ? () => setConnecting(true) : undefined} />
+          <ResourcesTab appName={data.card.name} pluginId={data.card.pluginId} onConnect={mayAddAccounts ? () => setConnecting(true) : undefined} />
         </TabsContent>
         <TabsContent value="logs">
           {/* The same call log as Tool calls, fixed to this app's tools. */}

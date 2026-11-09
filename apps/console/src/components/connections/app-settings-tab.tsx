@@ -56,7 +56,7 @@ export function SettingsTab({
     ) : null;
   // An app the system no longer has installed changes nothing here; an admin may still delete what it left.
   const mayDelete = Boolean(conn.mayManage);
-  const may = mayDelete && app.card.appState !== 'removed';
+  const may = mayDelete && app.card.appGroup !== 'gone';
   const personal = conn.signIn !== 'team';
   // On: tools a person runs use their own account, and the team's sign-in serves only runs nobody started.
   const flip = (on: boolean) =>
@@ -224,7 +224,7 @@ function DeleteAppDialog({ app, onClose, onDeleted }: { app: AppPage; onClose: (
 
 /** On for this team: the card's state, as the header's badge reads it (lib/app-state.ts), with its one next action. */
 function OnForTeam({ app, onTurnOn, onTurnOff }: { app: AppPage; onTurnOn: () => void; onTurnOff: () => void }) {
-  const shown = appStateFor(app.card.appState, Boolean(app.card.mayManage));
+  const shown = appStateFor(app.card.appState, app.card.appGroup, Boolean(app.card.mayManage));
   return (
     <SettingsSection title="On for this team">
       <div className="flex flex-wrap items-center gap-3" data-testid="app-on-for-team" data-state={app.card.appState}>
@@ -233,7 +233,9 @@ function OnForTeam({ app, onTurnOn, onTurnOff }: { app: AppPage; onTurnOn: () =>
             {shown.on ? `${app.card.name} is on` : shown.action === 'add_auth_config' ? addAuthConfigFirst(app.card.name) : `${app.card.name} is off`}
           </span>
           <span className="block text-xs text-muted-foreground">
-            {shown.on
+            {shown.action === 'fix_auth_config'
+              ? `${app.card.appStateReason ?? ''} Add a working auth config and sign in again, or turn it off.`
+              : shown.on
               ? 'Turned off, its tools stop for this team; its accounts and the tools you added stay.'
               : shown.action === 'add_auth_config'
                 ? `${app.card.name} signs in through an auth config, and this team has none it can use.`
@@ -241,9 +243,13 @@ function OnForTeam({ app, onTurnOn, onTurnOff }: { app: AppPage; onTurnOn: () =>
           </span>
         </span>
         {shown.on ? (
-          <Button size="sm" variant="outline" onClick={onTurnOff} data-testid="app-off">
-            Turn off
-          </Button>
+          // Turn off stays whenever the team has it on, a broken auth config included.
+          <span className="flex flex-wrap gap-2">
+            {shown.action === 'fix_auth_config' && <AddAuthConfigButton appId={app.card.id} testId="app-settings-fix-auth-config" />}
+            <Button size="sm" variant="outline" onClick={onTurnOff} data-testid="app-off">
+              Turn off
+            </Button>
+          </span>
         ) : shown.action === 'add_auth_config' ? (
           <AddAuthConfigButton appId={app.card.id} testId="app-settings-add-auth-config" />
         ) : shown.action === 'turn_on' ? (

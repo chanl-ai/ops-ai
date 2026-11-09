@@ -2,7 +2,7 @@ import type { Citation } from './knowledge';
 import type { RetrievalTrace } from './knowledge-retrieval';
 import type { ListParams, ListResult } from './query';
 import type { MessagePart } from './widgets';
-import type { AppStateId } from '@/lib/app-state';
+import type { AppGroupId, AppStateId } from '@/lib/app-state';
 
 export type { Citation };
 
@@ -343,6 +343,8 @@ export interface ChatConnector {
   /** The app card's state for the person, as tools-service answers it; words and grouping come from lib/app-state.ts. */
   appState: AppStateId;
   appStateReason?: string | null;
+  /** Who acts next, as tools-service answers it: the picker's groups. */
+  appGroup: AppGroupId;
   /** Whether this chat uses it; every connected connector is on in a new chat. */
   on: boolean;
   /** The person signs in with their own account, so Connect is theirs to press. */

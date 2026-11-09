@@ -20,7 +20,7 @@ import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { APP_CARD_GRID, AppCard } from '@/components/connections/app-card';
 import { AskAnAdmin } from '@/components/connections/ask-an-admin';
-import { ConnectorSheet, NO_ACCOUNT, NOT_SET_UP, groupOf, inChatWords, signInEnded } from '@/components/connections/connector-sheet';
+import { ConnectorSheet, NO_ACCOUNT, NOT_SET_UP, inChatWords, signInEnded } from '@/components/connections/connector-sheet';
 import { AddAuthConfigButton } from '@/components/connections/app-actions';
 import { AppStateBadge } from '@/components/connections/app-state-badge';
 import { APP_STATES, appStateFor } from '@/lib/app-state';
@@ -75,7 +75,7 @@ function useConnect(onKey: (c: MyConnector, accountId: string) => void) {
 /** The row's one action, from its app's state (lib/app-state.ts): Connect, Add key or Sign in again, Turn on, Add an
  * auth config or the admins to ask; none once it acts as the person. */
 function RowAction({ c, connect }: { c: MyConnector; connect: ReturnType<typeof useConnect> }) {
-  const { action } = appStateFor(c.appState, c.mayTurnOn);
+  const { action } = appStateFor(c.appState, c.appGroup, c.mayManage);
   if (action === 'turn_on')
     return (
       <Button size="sm" variant="outline" asChild data-testid={`connector-turn-on-${c.appId}`}>
@@ -83,8 +83,14 @@ function RowAction({ c, connect }: { c: MyConnector; connect: ReturnType<typeof 
       </Button>
     );
   if (action === 'add_auth_config') return <AddAuthConfigButton appId={c.appId} testId={`connector-add-auth-config-${c.appId}`} />;
+  if (action === 'fix_auth_config')
+    return (
+      <Button size="sm" variant="outline" asChild data-testid={`connector-fix-auth-config-${c.appId}`}>
+        <Link href={appPageHref(c.appId, 'auth')}>Fix the auth config</Link>
+      </Button>
+    );
   if (action === 'ask_admin') return <AskAnAdmin testId={`connector-ask-${c.appId}`} lead={`${NOT_SET_UP}.`} />;
-  if (groupOf(c) !== 'sign_in') return null;
+  if (c.appGroup !== 'needs_you') return null;
   const keyed = (c.personFields ?? []).length > 0;
   return (
     <Button size="sm" onClick={() => connect.go(c)} disabled={connect.pending} data-testid={`connector-action-${c.appId}`}>
@@ -96,7 +102,7 @@ function RowAction({ c, connect }: { c: MyConnector; connect: ReturnType<typeof 
 /** A connected row's menu: Test now, Add another account, Disconnect. */
 function RowMenu({ c, onEnd, onAnother }: { c: MyConnector; onEnd: () => void; onAnother: () => void }) {
   const test = useTestAccount();
-  if (groupOf(c) !== 'on' || !c.primaryAccountId) return null;
+  if (c.appGroup !== 'on' || !c.primaryAccountId) return null;
   const accountId = c.primaryAccountId;
   return (
     <DropdownMenu>
@@ -147,7 +153,7 @@ function ConnectorCard({ c, connect, onOpen, onEnd, onAnother }: { c: MyConnecto
       footState={
         <AppStateBadge card={c} testId={`connector-state-${c.appId}`} />
       }
-      action={groupOf(c) === 'on' ? <RowMenu c={c} onEnd={onEnd} onAnother={onAnother} /> : <RowAction c={c} connect={connect} />}
+      action={c.appGroup === 'on' ? <RowMenu c={c} onEnd={onEnd} onAnother={onAnother} /> : <RowAction c={c} connect={connect} />}
     >
       <p className="text-sm text-muted-foreground" data-testid={`connector-can-do-${c.appId}`}>
         {c.canDo}
@@ -155,14 +161,14 @@ function ConnectorCard({ c, connect, onOpen, onEnd, onAnother }: { c: MyConnecto
       <div className="text-sm" data-testid={`connector-signed-in-${c.appId}`}>
         <SignedInAs c={c} />
       </div>
-      <p className="text-xs text-muted-foreground">{groupOf(c) === 'on' && c.since ? `${inChatWords(c)} · since ${shortDate(c.since)}` : inChatWords(c)}</p>
+      <p className="text-xs text-muted-foreground">{c.appGroup === 'on' && c.since ? `${inChatWords(c)} · since ${shortDate(c.since)}` : inChatWords(c)}</p>
     </AppCard>
   );
 }
 
 /** Whom it signs in as: the primary account, with the other connected ones as a count. */
 function SignedInAs({ c }: { c: MyConnector }) {
-  if (groupOf(c) === 'off_for_team' || (groupOf(c) === 'sign_in' && !signInEnded(c)))
+  if (c.appGroup === 'needs_admin' || (c.appGroup === 'needs_you' && !signInEnded(c)))
     return (
       <span className="text-sm text-muted-foreground" data-testid={`connector-missing-${c.appId}`}>
         {NO_ACCOUNT}
@@ -201,7 +207,7 @@ function ConnectorsPage() {
     { accessorKey: 'name', header: ({ column }) => <DataTableColumnHeader column={column} title="Connector" />, meta: { kind: 'name' } },
     { id: 'state', accessorFn: (c) => APP_STATES[c.appState].label, header: ({ column }) => <DataTableColumnHeader column={column} title="State" />, filterFn: facetFilterFn },
   ];
-  const connected = (mine.data ?? []).filter((c) => groupOf(c) === 'on').length;
+  const connected = (mine.data ?? []).filter((c) => c.appGroup === 'on').length;
 
   const body = mine.isPending ? (
     <PageSkeleton statCards={0} tableRows={4} />
