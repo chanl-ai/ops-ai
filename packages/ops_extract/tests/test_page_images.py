@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import io
 
+import pytest
 from PIL import Image
 from reportlab.pdfgen.canvas import Canvas
 
@@ -36,4 +37,12 @@ def test_a_letter_page_keeps_its_resolution() -> None:
 def test_an_image_past_the_readers_pixel_limit_is_not_decoded() -> None:
     buf = io.BytesIO()
     Image.new("1", (8000, 7000)).save(buf, format="PNG")  # 56 million pixels, a few kilobytes as a file
+    assert page_images.render(buf.getvalue(), "image/png", [1]) == {}
+
+
+def test_an_image_past_pillows_own_limit_is_refused_not_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Pillow refuses a frame over twice its limit as it opens it, before the reader's limit is read: a 404, not a 500.
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 1_000_000)
+    buf = io.BytesIO()
+    Image.new("1", (2000, 1500)).save(buf, format="PNG")
     assert page_images.render(buf.getvalue(), "image/png", [1]) == {}

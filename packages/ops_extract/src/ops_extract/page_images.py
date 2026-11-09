@@ -48,8 +48,12 @@ def render(data: bytes, mime: str, pages: Iterable[int]) -> dict[int, Image.Imag
     if mime in IMAGE_MIMES:
         if 1 not in wanted:
             return {}
-        # Opening reads only the header, so a frame past the reader's limit is refused before it is decoded.
-        image = Image.open(io.BytesIO(data))
+        # Opening reads only the header, so a frame past the reader's limit is refused before it is decoded; Pillow
+        # refuses one past twice its own limit as it opens it.
+        try:
+            image = Image.open(io.BytesIO(data))
+        except Image.DecompressionBombError:
+            return {}
         return {} if image.width * image.height > MAX_IMAGE_PIXELS else {1: ImageOps.grayscale(image)}
     out: dict[int, Image.Image] = {}
     with pdfplumber.open(io.BytesIO(data)) as pdf:
