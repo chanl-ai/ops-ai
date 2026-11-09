@@ -24,7 +24,10 @@ import { auditSink } from '../governance';
 import { bulk, id, list, notFound, respond } from '../runtime';
 import { guardTeam, inTeam } from '../teams';
 import { itemDetail } from './detail';
-import { aiApproved, aiSteps, applyMapping, chunkCountFor, govern, listSamples, previewSplit, settingsDigest, snakeKey, validateIngest } from './ingest';
+import { aiApproved, aiSteps, applyMapping, chunkCountFor, DEFAULT_INGEST_MODEL, govern, listSamples, previewSplit, settingsDigest, snakeKey, validateIngest } from './ingest';
+
+/** What a new mock source splits with when the request names no ingest settings, as kb-service's file default. */
+const MOCK_INGEST: IngestSettings = { preset: 'email_templates', strategies: ['structure', 'context_headers'], size: 400, overlap: 40, childSize: 120, questionsPerSection: 3, columns: [], model: DEFAULT_INGEST_MODEL, approval: { status: 'not_needed', approvedSteps: [] } };
 import { createRetrieval, type IndexSnapshot } from './retrieve';
 import { defaultRetrieval, kbs as SEED_KBS, retrievalPresets, suggestedQuestions } from './seed-kbs';
 import { buildItems, runs as SEED_RUNS, sources as SEED_SOURCES } from './seed-sources';
@@ -585,26 +588,38 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
       create: (input, opts) =>
         run(() => {
           if (sources.some((s) => s.name.trim().toLowerCase() === input.name.trim().toLowerCase())) throw new ApiError('A source with this name already exists.', 409);
-          const conn = deps.connection(input.connectionId);
-          if (input.connectionId && !conn) throw new ApiError('That connection no longer exists. Pick another one.', 400);
-          if (conn?.status === 'revoked') throw new ApiError(`${conn.name} is revoked. Reconnect it in Integrations or pick another connection.`, 409);
-          validateIngest(input.ingest);
+          validateIngest(input.ingest ?? MOCK_INGEST);
           if (input.type === 'file' && input.status !== 'draft' && !input.fileIds?.length) throw new ApiError('Upload at least one file.', 400);
           const { fileIds, ...rest } = input;
           const sid = id('src');
           // Linking first refuses a quarantined or still-scanning file before the source exists.
           for (const fid of fileIds ?? []) deps.files().link(fid, { type: 'source', id: sid, name: input.name.trim(), href: `/integrations/sources/${sid}` }, ['knowledge_source']);
+          const kind = input.type === 'file' ? 'file' : (input.config as { site?: boolean } | undefined)?.site ? 'web' : 'tool';
           const s: Source = {
+            parsing: { ocr: 'auto', tables: true, vision: false },
+            cleaning: { furniture: kind !== 'file', mainContent: kind === 'web', siteRepeats: kind === 'web', duplicates: 'flag' },
+            ingest: structuredClone(MOCK_INGEST),
+            rules: [],
+            metadataMapping: [],
+            tags: [],
+            schedule: { kind: 'manual' },
+            sensitivity: 'internal',
+            collection: 'General',
             ...rest,
+            kind,
+            scopeSummary: input.type === 'file' ? `${fileIds?.length ?? 0} uploaded files` : input.name,
+            titleFrom: 'source',
+            permissions: { mode: 'workspace' },
+            deletedAtSource: 'remove',
+            staleAfterDays: 365,
+            notifyOnFailure: false,
             config: { ...rest.config, fileIds },
             id: sid,
-            connectionId: conn?.id,
-            connectionLabel: conn?.name,
             owner: deps.currentUser,
             status: input.status ?? 'active',
             itemsIndexed: 0,
             itemsFailed: 0,
-            itemsPending: input.itemsPending ?? 0,
+            itemsPending: fileIds?.length ?? 0,
             usedByKbIds: [],
             createdAt: now(),
           };
@@ -692,7 +707,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
       previewHeld: (input) =>
         run(() => {
           const rows = previewRows(input);
-          const mapped = new Map(input.metadataMapping.filter((m) => m.key.trim()).map((m) => [snakeKey(m.key), m.from]));
+          const mapped = new Map((input.metadataMapping ?? []).filter((m) => m.key.trim()).map((m) => [snakeKey(m.key), m.from]));
           // Owner and effective date always come with a new item; a source column is absent on some items, and AI extraction waits for approval.
           const has = (key: string, i: number) => {
             const k = snakeKey(key);
@@ -715,10 +730,22 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
         }),
       samples: (sid) => run(() => listSamples(sources, sid)),
       previewSplit: (input) => run(() => previewSplit(input)),
-      approveIngest: (sid) =>
+      aiEstimate: (sid) =>
         run(() => {
           const s = sourceOr404(sid);
           const steps = aiSteps(s.ingest, s.metadataMapping);
+          const total = items.filter((i) => i.sourceId === sid).length;
+          const calls = items.filter((i) => i.sourceId === sid).reduce((n, i) => n + i.chunkCount, 0);
+          return { steps, model: s.ingest.model, sampledItems: Math.min(total, 20), totalItems: total, calls, inputTokens: calls * 250, outputTokens: { low: calls * 60, high: calls * 120 }, basis: `A split of ${Math.min(total, 20)} of ${total} indexed items, scaled to all; one call per piece.` };
+        }),
+      decideAiSteps: (sid, decision) =>
+        run(() => {
+          const s = sourceOr404(sid);
+          const steps = aiSteps(s.ingest, s.metadataMapping);
+          if (decision === 'revoke') {
+            s.ingest.approval = { status: steps.length ? 'pending' : 'not_needed', approvedSteps: [] };
+            return s;
+          }
           if (!steps.length) throw new ApiError('This source has no AI ingestion steps to approve.', 409);
           if (selfApproval(s)) throw new ApiError('You requested this change; another knowledge owner must approve.', 403);
           s.ingest.approval = { status: 'approved', approvedSteps: Array.from(new Set([...s.ingest.approval.approvedSteps, ...steps])), requestedBy: s.ingest.approval.requestedBy, decidedBy: deps.currentUser, decidedAt: now() };
@@ -833,6 +860,16 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
 
     retrieve: (input) => run(() => engine.retrieve(input)),
 
+    sourceKinds: () =>
+      run(() => [
+        {
+          type: 'file' as const,
+          kind: 'file' as const,
+          group: 'built_in' as const,
+          title: 'Files',
+          defaults: { parsing: { ocr: 'auto' as const, tables: true, vision: false }, cleaning: { furniture: false, mainContent: false, siteRepeats: false, duplicates: 'flag' as const }, ingest: structuredClone(MOCK_INGEST), rules: [], metadataMapping: [], schedule: { kind: 'manual' as const } },
+        },
+      ]),
     lookups: () =>
       run(() => ({
         owners: OWNERS,

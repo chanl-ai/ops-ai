@@ -15,7 +15,6 @@ import { useAddSourceFiles } from '@/hooks/knowledge-queries';
 import type { ConnectionRef } from '@/lib/types/integrations';
 import type { Source, SourceInput, SourceType } from '@/lib/types/knowledge';
 
-import { blankSourceInput } from './add-source-dialog';
 
 /** What the Location field asks for, by type: a path for connected apps, a URL list, a start URL, pasted text or files. */
 const LOCATION: Partial<Record<SourceType, { label: string; placeholder: string; multiline?: boolean; hint?: string }>> = {
@@ -93,7 +92,7 @@ export function NewSourceDialog({
     setErrors(e);
     if (e.type || e.name || e.location || !type) return;
     try {
-      const s = await onSubmit(blankSourceInput({ type, name, connectionId, location, files: [] }));
+      const s = await onSubmit({ type, name: name.trim(), status: 'draft', config: {} });
       if (type === 'file') setCreated(s);
       else onCreated(s, false);
     } catch (err) {

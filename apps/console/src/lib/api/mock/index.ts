@@ -1,3 +1,4 @@
+import type { SourcePatch } from '@/lib/types/knowledge';
 import type {
   Agent,
   AgentGuardrails,
@@ -1144,7 +1145,9 @@ export function createMockApi(): OpsApi {
           const s = await knowledge.api.sources.get(sourceId);
           const had = (k: string) => (Array.isArray(s.config[k]) ? (s.config[k] as string[]) : []);
           const fresh = added.filter((f) => !had('fileIds').includes(f.fileId));
-          await knowledge.api.sources.update(sourceId, { config: { ...s.config, fileIds: [...had('fileIds'), ...fresh.map((f) => f.fileId)], fileNames: [...had('fileNames'), ...fresh.map((f) => f.name)] } });
+          // The mock keeps the files on the source's config, which no save offers; the patch says so by its cast.
+          const keep = { config: { ...s.config, fileIds: [...had('fileIds'), ...fresh.map((f) => f.fileId)], fileNames: [...had('fileNames'), ...fresh.map((f) => f.name)] } };
+          await knowledge.api.sources.update(sourceId, keep as SourcePatch);
           return added;
         },
       },

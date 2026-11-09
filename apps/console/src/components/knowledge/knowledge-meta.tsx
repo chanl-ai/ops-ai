@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
-import type { ErrorClass, Item, ItemStatus, KbHealth, RunStatus, RunTrigger, Schedule, Sensitivity, SourceStatus, SourceType } from '@/lib/types/knowledge';
+import type { ErrorClass, Item, ItemStatus, KbHealth, RunStatus, RunTrigger, Schedule, Sensitivity, SourceStatus, SourceType, Weekday } from '@/lib/types/knowledge';
 import { cn } from '@/lib/utils';
 
 type Tone = 'good' | 'warn' | 'bad' | 'neutral' | 'info';
@@ -195,22 +195,22 @@ export function SourceTypeIcon({ type, className }: { type: SourceType; classNam
   return <Icon className={className ?? 'size-4 shrink-0 text-muted-foreground'} />;
 }
 
+export const WEEKDAY_LABEL: Record<Weekday, string> = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
+
 export function scheduleLabel(s: Schedule) {
   switch (s.kind) {
     case 'manual':
       return 'Manual';
+    case 'hourly':
+      return s.every === 1 ? 'Every hour' : `Every ${s.every} h`;
     case 'daily':
       return `Daily ${s.time}`;
     case 'weekly':
-      return `Weekly ${s.day} ${s.time}`;
-    case 'monthly':
-      return `Monthly on day ${s.day} at ${s.time}`;
-    case 'webhook':
-      return s.safetyNetDaily ? 'Webhook + daily' : 'Webhook';
+      return `Weekly ${WEEKDAY_LABEL[s.day]?.slice(0, 3) ?? s.day} ${s.time}`;
   }
 }
 
-export const SCHEDULE_KIND_LABEL: Record<Schedule['kind'], string> = { manual: 'Manual', daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', webhook: 'Webhook' };
+export const SCHEDULE_KIND_LABEL: Record<Schedule['kind'], string> = { manual: 'Manual', hourly: 'Every few hours', daily: 'Daily', weekly: 'Weekly' };
 
 export const TRIGGER_LABEL: Record<RunTrigger, string> = { manual: 'Sync now', schedule: 'Schedule', full: 'Full resync', retry: 'Retry failed', settings: 'Settings changed' };
 export const triggerLabel = (t: string) => TRIGGER_LABEL[t as RunTrigger] ?? t;
@@ -237,12 +237,6 @@ export const RULE_PLACEHOLDER: Record<(typeof RULE_FIELDS)[number]['value'], str
   modifiedAfter: 'e.g. 2026-01-01',
   sizeUnder: 'e.g. 50 MB',
 };
-
-export const PARSING_OPTIONS = [
-  { k: 'ocr' as const, label: 'OCR', tip: 'Runs on scanned PDFs and images. Slower and uses credits.' },
-  { k: 'tables' as const, label: 'Keep tables', tip: 'Tables in PDF, DOCX and XLSX keep their columns, so table rows and structured values can read them.' },
-  { k: 'vision' as const, label: 'Vision for figures', tip: 'Describes images and charts into text.' },
-];
 
 // kb-service searches by keyword and does not rerank yet (service.py's defaults), so no preset claims either.
 export const RETRIEVAL_PRESETS = {

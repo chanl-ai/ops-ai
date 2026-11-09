@@ -49,7 +49,8 @@ export function createKnowledgeHttp(get: Get, send: Send, qs: (p: ListParams) =>
       previewHeld: (i) => send('POST', '/sources/preview-held', i),
       samples: (sourceId) => get(`/ingest/samples${sourceId ? `?sourceId=${sourceId}` : ''}`),
       previewSplit: (i) => send('POST', '/ingest/preview-split', i),
-      approveIngest: (id) => send('POST', `/sources/${id}/ingest/approve`),
+      aiEstimate: (id) => get(`/sources/${id}/ai-estimate`),
+      decideAiSteps: (id, decision) => send('POST', `/sources/${id}/ai-approval`, { decision }),
       bulkSync: (ids) => send('POST', '/sources/bulk-sync', { ids }),
       bulkSetPaused: (ids, paused) => send('POST', '/sources/bulk-pause', { ids, paused }),
       bulkRemove: (ids) => send('POST', '/sources/bulk-delete', { ids }),
@@ -65,6 +66,7 @@ export function createKnowledgeHttp(get: Get, send: Send, qs: (p: ListParams) =>
       setMetadata: (id, values) => send('PATCH', `/items/${id}/metadata`, { values }),
     },
     retrieve: (i) => send('POST', '/knowledge/retrieve', i),
+    sourceKinds: () => get('/knowledge/source-kinds'),
     lookups: () => get('/knowledge/lookups'),
   };
 }

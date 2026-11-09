@@ -4,7 +4,9 @@ import { DEFAULT_INGEST_MODEL, digestOf, docText, familyOf } from "./ingest"
 import { docByKey, FEATURED } from "./seed-documents"
 import { ago, daysAgo, inHours, inDays, seeded } from "./time"
 
-const defaultParsing = { ocr: false, tables: true, vision: false }
+const defaultParsing: Source["parsing"] = { ocr: "off", tables: true, vision: false }
+const fileCleaning: Source["cleaning"] = { furniture: false, mainContent: false, siteRepeats: false, duplicates: "flag" }
+const webCleaning: Source["cleaning"] = { furniture: true, mainContent: true, siteRepeats: true, duplicates: "flag" }
 
 const RATE_COLUMNS: TableColumn[] = [
   { name: "Product", role: "searchable", key: true },
@@ -35,12 +37,14 @@ export const sources: Source[] = [
   {
     id: "src_hr_sharepoint",
     type: "sharepoint",
+    kind: "tool",
+    cleaning: fileCleaning,
     name: "AML & KYC procedures",
     connectionId: "int_sharepoint",
     connectionLabel: "harborpine.sharepoint.com (app-only)",
     scopeSummary: "Site: Financial Crime Operations · Documents/Policies, Documents/Forms",
     config: { site: "Financial Crime Operations", libraries: ["Documents/Policies", "Documents/Forms"], includeOffice: true, includePdf: true, auth: "app-only" },
-    parsing: { ...defaultParsing, ocr: true },
+    parsing: { ...defaultParsing, ocr: "auto" },
     ingest: ingest("policy_manual", ["structure", "context_headers", "parent_child"]),
     rules: [{ id: "r1", kind: "exclude", field: "path", value: "**/Archive/**" }],
     metadataMapping: [
@@ -51,7 +55,7 @@ export const sources: Source[] = [
     tags: ["procedure", "aml"],
     titleFrom: "source",
     permissions: { mode: "inherit" },
-    schedule: { kind: "daily", time: "02:00" },
+    schedule: { kind: "daily", time: "02:00", tz: "UTC" },
     deletedAtSource: "remove",
     staleAfterDays: 90,
     notifyOnFailure: true,
@@ -73,6 +77,8 @@ export const sources: Source[] = [
   {
     id: "src_eng_confluence",
     type: "confluence",
+    kind: "tool",
+    cleaning: fileCleaning,
     name: "Wire fraud playbook",
     connectionId: "int_confluence",
     connectionLabel: "harborpine.atlassian.net",
@@ -88,7 +94,7 @@ export const sources: Source[] = [
     tags: ["fraud", "playbook"],
     titleFrom: "source",
     permissions: { mode: "inherit" },
-    schedule: { kind: "weekly", day: "Mon", time: "03:00" },
+    schedule: { kind: "weekly", day: "mon", time: "03:00", tz: "UTC" },
     deletedAtSource: "remove",
     staleAfterDays: 120,
     notifyOnFailure: true,
@@ -110,6 +116,8 @@ export const sources: Source[] = [
   {
     id: "src_github_docs",
     type: "github",
+    kind: "tool",
+    cleaning: fileCleaning,
     name: "Model risk documentation",
     connectionId: "int_github",
     connectionLabel: "GitHub app · harborpine-bank",
@@ -125,7 +133,7 @@ export const sources: Source[] = [
     tags: ["docs", "models"],
     titleFrom: "heading",
     permissions: { mode: "workspace" },
-    schedule: { kind: "webhook", safetyNetDaily: true },
+    schedule: { kind: "hourly", every: 4 },
     deletedAtSource: "remove",
     staleAfterDays: 180,
     notifyOnFailure: true,
@@ -147,10 +155,12 @@ export const sources: Source[] = [
   {
     id: "src_contracts",
     type: "file",
+    kind: "file",
+    cleaning: fileCleaning,
     name: "Dispute rights guides",
     scopeSummary: "12 files from Files/Cards/Disputes",
     config: { folderId: "f_contracts" },
-    parsing: { ...defaultParsing, ocr: true },
+    parsing: { ...defaultParsing, ocr: "auto" },
     ingest: ingest("policy_manual", ["structure", "context_headers", "parent_child"]),
     rules: [],
     metadataMapping: [
@@ -180,6 +190,8 @@ export const sources: Source[] = [
   {
     id: "src_pricing_crawl",
     type: "crawl",
+    kind: "web",
+    cleaning: webCleaning,
     name: "Pricing site",
     scopeSummary: "https://www.harborpine.example/sitemap-pricing.xml · depth 3 · 200 pages max",
     config: { startUrl: "https://www.harborpine.example/sitemap-pricing.xml", depth: 3, maxPages: 200, sameDomain: true, include: ["/pricing/**", "/fees/**"], exclude: ["/pricing/archive/**"], respectRobots: true },
@@ -193,7 +205,7 @@ export const sources: Source[] = [
     tags: ["pricing", "public"],
     titleFrom: "source",
     permissions: { mode: "workspace" },
-    schedule: { kind: "daily", time: "05:00" },
+    schedule: { kind: "daily", time: "05:00", tz: "UTC" },
     deletedAtSource: "keep_stale",
     staleAfterDays: 30,
     notifyOnFailure: true,
@@ -215,6 +227,8 @@ export const sources: Source[] = [
   {
     id: "src_lending_policies",
     type: "file",
+    kind: "file",
+    cleaning: fileCleaning,
     name: "Lending policies and fee schedules",
     scopeSummary: "9 files from Files/Lending",
     config: { folderId: "f_lending" },
@@ -249,6 +263,8 @@ export const sources: Source[] = [
   {
     id: "src_branch_faq",
     type: "text",
+    kind: "file",
+    cleaning: fileCleaning,
     name: "Branch FAQ",
     scopeSummary: "Pasted Markdown · 1 document · 2,140 words",
     config: { format: "markdown" },
@@ -279,6 +295,8 @@ export const sources: Source[] = [
   {
     id: "src_zendesk_draft",
     type: "zendesk",
+    kind: "tool",
+    cleaning: fileCleaning,
     name: "Help centre articles",
     connectionId: "int_zendesk",
     connectionLabel: "harborpine.zendesk.com",
@@ -291,7 +309,7 @@ export const sources: Source[] = [
     tags: ["help-centre"],
     titleFrom: "source",
     permissions: { mode: "workspace" },
-    schedule: { kind: "daily", time: "04:00" },
+    schedule: { kind: "daily", time: "04:00", tz: "UTC" },
     deletedAtSource: "remove",
     staleAfterDays: 90,
     notifyOnFailure: true,
@@ -308,6 +326,8 @@ export const sources: Source[] = [
   {
     id: "src_notion_product",
     type: "notion",
+    kind: "tool",
+    cleaning: fileCleaning,
     name: "Product wiki",
     connectionId: "int_notion",
     connectionLabel: "Harbor & Pine Product (Notion)",
@@ -320,7 +340,7 @@ export const sources: Source[] = [
     tags: ["product"],
     titleFrom: "source",
     permissions: { mode: "workspace" },
-    schedule: { kind: "daily", time: "06:00" },
+    schedule: { kind: "daily", time: "06:00", tz: "UTC" },
     deletedAtSource: "keep_stale",
     staleAfterDays: 60,
     notifyOnFailure: false,

@@ -31,8 +31,10 @@ export const kk = {
   runs: (id: string, p: unknown) => ['knowledge', 'source', id, 'runs', p] as const,
   run: (id: string) => ['knowledge', 'run', id] as const,
   tombstones: (id: string) => ['knowledge', 'source', id, 'tombstones'] as const,
+  aiEstimate: (id: string) => ['knowledge', 'source', id, 'ai-estimate'] as const,
   item: (id: string) => ['knowledge', 'item', id] as const,
   lookups: ['knowledge', 'lookups'] as const,
+  sourceKinds: ['knowledge', 'source-kinds'] as const,
 };
 
 /** While an index refresh or sync runs, poll so progress moves without a reload. */
@@ -63,6 +65,7 @@ export const useSyncRun = (id: string | null) =>
   useTeamQuery({ queryKey: kk.run(id ?? ''), queryFn: () => api.knowledge.sources.run(id!), enabled: !!id, refetchInterval: (q) => pollWhile(q.state.data?.status === 'running') });
 export const useItem = (id: string | null) =>
   useTeamQuery({ queryKey: kk.item(id ?? ''), queryFn: () => api.knowledge.items.get(id!), enabled: !!id, refetchInterval: (q) => pollWhile(q.state.data?.status === 'processing') });
+export const useSourceKinds = (enabled = true) => useTeamQuery({ queryKey: kk.sourceKinds, queryFn: api.knowledge.sourceKinds, enabled, staleTime: 60_000 });
 export const useKnowledgeLookups = () => useTeamQuery({ queryKey: kk.lookups, queryFn: api.knowledge.lookups, staleTime: 60_000 });
 
 /** Knowledge base names are agent collections, so writes also refresh the shared lookups and agent pages. */
@@ -90,6 +93,8 @@ export const useUpdateSource = (id: string) => useWrite((p: SourcePatch) => api.
 export const useDeleteSource = () => useWrite((id: string) => api.knowledge.sources.remove(id));
 export const useAddSourceFiles = () => useWrite(({ id, fileIds }: { id: string; fileIds: string[] }) => api.knowledge.sources.addFiles(id, fileIds), ['files']);
 export const useSyncSource = () => useWrite(({ id, opts }: { id: string; opts?: SyncOptions }) => api.knowledge.sources.sync(id, opts));
+export const useAiEstimate = (id: string, enabled = true) => useTeamQuery({ queryKey: kk.aiEstimate(id), queryFn: () => api.knowledge.sources.aiEstimate(id), enabled });
+export const useDecideAiSteps = (id: string) => useWrite((decision: 'approve' | 'revoke') => api.knowledge.sources.decideAiSteps(id, decision));
 export const useCancelRun = () => useWrite((runId: string) => api.knowledge.sources.cancelRun(runId));
 export const useTombstones = (id: string) => useTeamQuery({ queryKey: kk.tombstones(id), queryFn: () => api.knowledge.sources.tombstones(id) });
 export const useLiftTombstones = (id: string) => useWrite((ids: string[]) => api.knowledge.sources.liftTombstones(id, ids));

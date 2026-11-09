@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Every source setting saves and applies",
+  "description": "A source's Settings tab now saves how items are read, cleaned and split, its rules, metadata and schedule, and the likely questions and FAQ drafts switches, with their cost estimate and the knowledge owner's approval beside them. A change that rebuilds items says so and links to Sync history.",
+  "tag": "improved"
+}

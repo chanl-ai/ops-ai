@@ -14,19 +14,49 @@ export type SourceStatus = 'active' | 'paused' | 'draft' | 'revoked';
 export type RunStatus = 'running' | 'success' | 'partial' | 'failed' | 'cancelled' | 'skipped';
 /** What started a run: a person (manual, full, retry), the schedule, or a settings save that rebuilds items. */
 export type RunTrigger = 'manual' | 'schedule' | 'full' | 'retry' | 'settings';
+export type Weekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+/** When a source syncs on its own; `tz` is an IANA time zone. */
 export type Schedule =
   | { kind: 'manual' }
-  | { kind: 'daily'; time: string }
-  | { kind: 'weekly'; day: string; time: string }
-  | { kind: 'monthly'; day: number; time: string }
-  | { kind: 'webhook'; safetyNetDaily: boolean };
+  | { kind: 'hourly'; every: 1 | 2 | 4 | 6 | 12 }
+  | { kind: 'daily'; time: string; tz: string }
+  | { kind: 'weekly'; day: Weekday; time: string; tz: string };
 
-/** Parsing before splitting. Stripping HTML is the `clean` ingestion strategy. */
+export type OcrMode = 'off' | 'auto' | 'always';
+
+/** How documents-service reads the source's files. */
 export interface ParsingSettings {
-  ocr: boolean;
-  /** Keep tables as tables, so `table_rows` and structured values can read them. */
+  /** `auto` reads scanned pages and the picture parts of mixed pages. */
+  ocr: OcrMode;
   tables: boolean;
   vision: boolean;
+}
+
+/** What is removed between reading and splitting. */
+export interface CleaningSettings {
+  /** Drops menus, footers, banners and other blocks the reading marked as page furniture. */
+  furniture: boolean;
+  /** Keeps a page's main article when it has one. */
+  mainContent: boolean;
+  /** Drops a line found on more than half of a website source's pages. */
+  siteRepeats: boolean;
+  /** An item with the same cleaned text as another in a base it feeds: flag both and search the newer, or skip it. */
+  duplicates: 'flag' | 'skip';
+}
+
+/** What a source is: uploaded files, one website's pages, or another app's knowledge source. */
+export type SourceKind = 'file' | 'web' | 'tool';
+
+/** A source's sync health, kept by kb-service as each run settles. */
+export interface SourceHealth {
+  state: 'never' | 'healthy' | 'failing' | 'needs_reconnect';
+  lastGoodSyncAt?: string;
+  failingSince?: string;
+  daysFailing: number;
+  /** Failed runs in a row. */
+  failedRuns: number;
+  /** Addresses removed for answering gone twice. */
+  tombstoned: number;
 }
 
 export interface Rule {
@@ -51,14 +81,17 @@ export interface Source {
   canPublish?: boolean;
   id: string;
   type: SourceType;
+  kind: SourceKind;
   name: string;
   /** The integration this source reads through; its status shows read-only on the source. */
   connectionId?: string;
   connectionLabel?: string;
   connection?: import('./integrations').ConnectionRef;
+  /** What it takes in, in a few words: a site's start address, an app source's name, or its files. */
   scopeSummary: string;
   config: Record<string, unknown>;
   parsing: ParsingSettings;
+  cleaning: CleaningSettings;
   ingest: IngestSettings;
   /** Digest of the ingestion settings the current chunks were built with; differs from the settings when a re-index is needed. */
   indexedSettingsDigest?: string;
@@ -82,8 +115,12 @@ export interface Source {
   lastSyncAt?: string;
   lastRunStatus?: RunStatus;
   lastRunDurationSec?: number;
+  /** When the schedule syncs it next, from the service. */
   nextSyncAt?: string;
   cursor?: string;
+  health?: SourceHealth;
+  /** The settings rebuild running in the background, when a save started one. */
+  rebuild?: SyncRun | null;
   usedByKbIds: string[];
   createdAt: string;
 }
@@ -462,7 +499,7 @@ export interface HeldPreview {
 /** A source read for its page: knowledge bases that read it, recent runs and error groups come joined. */
 export interface SourceDetail extends Source {
   readers: Pick<KnowledgeBase, 'id' | 'name' | 'slug' | 'color' | 'health'>[];
-  running?: SyncRun;
+  running?: SyncRun | null;
   recentRuns: SyncRun[];
   errorGroups: { message: string; count: number }[];
   itemCount: number;
@@ -493,34 +530,79 @@ export type KnowledgeBasePatch = Partial<Pick<KnowledgeBase, 'name' | 'descripti
   retrieval?: Partial<RetrievalSettings>;
 };
 
-export type SourceInput = Pick<
-  Source,
-  | 'type'
-  | 'name'
-  | 'scopeSummary'
-  | 'config'
-  | 'parsing'
-  | 'ingest'
-  | 'rules'
-  | 'metadataMapping'
-  | 'tags'
-  | 'titleFrom'
-  | 'permissions'
-  | 'schedule'
-  | 'deletedAtSource'
-  | 'staleAfterDays'
-  | 'notifyOnFailure'
-  | 'sensitivity'
-  | 'collection'
-  | 'connectionId'
-> & {
-  status?: 'active' | 'draft';
-  itemsPending?: number;
-  /** File sources: ids from the Files API. The source never receives bytes; it reads each file from storage. */
-  fileIds?: string[];
+/** A new source, as `POST /v1/sources` takes it; settings left out start from its kind's defaults. */
+export type SourceInput = Pick<Source, 'type' | 'name'> &
+  Partial<Pick<Source, 'config' | 'parsing' | 'cleaning' | 'ingest' | 'rules' | 'metadataMapping' | 'schedule' | 'sensitivity' | 'collection' | 'tags' | 'owner'>> & {
+    status?: 'active' | 'draft';
+    /** File sources: ids from the Files API. The source never receives bytes; it reads each file from storage. */
+    fileIds?: string[];
+  };
+
+/** What a save may change. `values` are a website or app source's own settings, checked against what its plugin declares. */
+export type SourcePatch = Partial<Pick<Source, 'name' | 'collection' | 'owner' | 'sensitivity' | 'tags' | 'parsing' | 'cleaning' | 'ingest' | 'rules' | 'metadataMapping' | 'schedule'>> & {
+  values?: Record<string, unknown>;
 };
 
-export type SourcePatch = Partial<Omit<SourceInput, 'type'>>;
+/** One setting an app's knowledge source is set up with, as its plugin declares it. */
+export interface SourceInputField {
+  type?: 'string' | 'number' | 'integer' | 'boolean' | 'object' | 'array';
+  description?: string;
+  required?: boolean;
+  default?: unknown;
+  enum?: (string | number | boolean)[];
+  items?: SourceInputField;
+}
+
+/** What a new source's settings start as for its kind; Add source's Review shows them. */
+export interface SourceDefaults {
+  parsing: ParsingSettings;
+  cleaning: CleaningSettings;
+  ingest: IngestSettings;
+  rules: Rule[];
+  metadataMapping: MetadataMapping[];
+  schedule: Schedule;
+}
+
+/** A kind of source the team may add: Files, or a knowledge source of one of its apps. */
+export interface SourceKindOption {
+  type: 'file' | 'tool';
+  kind: SourceKind;
+  group: 'built_in' | 'apps';
+  title: string;
+  plugin?: string | null;
+  source?: string | null;
+  /** The items are one website's pages. */
+  site?: boolean;
+  needsConnection?: boolean;
+  connected?: boolean;
+  /** `POST /v1/sources/preview` can say what a source of this kind would take in. */
+  previews?: boolean;
+  pickers?: boolean;
+  inputs?: Record<string, SourceInputField>;
+  defaults: SourceDefaults;
+}
+
+/** What a website or app source with these settings would take in, before anything is stored. */
+export interface SourceKindPreview {
+  found: number;
+  willFetch: number;
+  pages: { id: string; outcome: string; willFetch: boolean }[];
+  /** The listing stopped at its page limit. */
+  capped: boolean;
+}
+
+/** What the AI steps of a source would cost, from a split of up to 20 of its items with no model called. */
+export interface AiEstimate {
+  steps: string[];
+  model: string;
+  sampledItems: number;
+  totalItems: number;
+  calls: number;
+  inputTokens: number;
+  outputTokens: { low: number; high: number };
+  /** How the numbers were reached, in words. */
+  basis: string;
+}
 
 export interface SyncOptions {
   full?: boolean;

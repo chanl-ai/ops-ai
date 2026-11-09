@@ -1,5 +1,6 @@
 import type { BulkResult } from '@/lib/types/domain';
 import type {
+  AiEstimate,
   HeldPreview,
   HeldPreviewInput,
   DocumentFilters,
@@ -22,6 +23,7 @@ import type {
   SourceDetail,
   SourceFilters,
   SourceInput,
+  SourceKindOption,
   SourcePatch,
   SourcePreview,
   SourceRow,
@@ -88,8 +90,10 @@ export interface KnowledgeApi {
     samples(sourceId?: string): Promise<SampleDocument[]>;
     /** Splits one sample document with the given settings, without saving anything. */
     previewSplit(input: SplitPreviewInput): Promise<SplitPreview>;
-    /** The knowledge owner approves the source's AI ingestion steps. */
-    approveIngest(id: string): Promise<Source>;
+    /** What the source's AI steps would cost, from a split of up to 20 of its items with no model called. */
+    aiEstimate(id: string): Promise<AiEstimate>;
+    /** The knowledge owner approves the AI steps as now chosen, or takes the approval back. */
+    decideAiSteps(id: string, decision: 'approve' | 'revoke'): Promise<Source>;
     bulkSync(ids: string[]): Promise<BulkResult>;
     bulkSetPaused(ids: string[], paused: boolean): Promise<BulkResult>;
     bulkRemove(ids: string[]): Promise<BulkResult>;
@@ -108,6 +112,8 @@ export interface KnowledgeApi {
   };
   /** Searches several knowledge bases with each one's saved settings unless `settings` or `overrides` say otherwise. Used by chat and workflow knowledge steps. */
   retrieve(input: RetrieveInput): Promise<PlaygroundAnswer>;
+  /** Files, then each knowledge source of the team's apps that are on, with what a new one needs and starts with. */
+  sourceKinds(): Promise<SourceKindOption[]>;
   /** Document owners, tags and source collections, for pickers. */
   lookups(): Promise<{ owners: string[]; tags: string[]; collections: string[] }>;
 }
