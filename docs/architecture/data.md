@@ -63,7 +63,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | agents-service | `ops_agents.store.workflow_registry` | `WorkflowRegistry` | CAS | `registry_validations`, `registry_workflow_versions`, `registry_workflows` |
 | documents-service | `ops_documents.store.document_types` | none: no repository class | | `document_type_examples`, `document_type_samples`, `document_type_tests`, `document_type_versions`, `document_types` |
 | documents-service | `ops_documents.store.extractions` | none: no repository class | | `documents_outbox`, `extraction_corrections`, `extractions` |
-| documents-service | `ops_documents.store.readings` | `ReadingsStore` | | `documents_reading_files`, `documents_reading_pages`, `documents_readings` |
+| documents-service | `ops_documents.store.readings` | none: no repository class | | `documents_reading_files`, `documents_reading_pages`, `documents_readings` |
 | documents-service | `ops_documents.store.template_copies` | none: no repository class | | `documents_template_copies` |
 | files-service | `ops_files.store.files` | `FilesStore` | TRANSACTION | `file_blobs`, `file_idempotency`, `file_legal_holds`, `file_references`, `file_versions`, `files`, `files_outbox` |
 | files-service | `ops_files.store.read_requests` | none: no repository class | | `file_read_requests` |
