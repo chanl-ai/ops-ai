@@ -59,15 +59,14 @@ function ConnectorsMenu({
           data-testid="connectors-picker"
         >
           <Plug className="size-4" />
-          {inUse.length > 0 ? (
-            <span className="flex -space-x-1.5" data-testid="connectors-in-use">
+          <span className="max-sm:sr-only">Connectors</span>
+          {inUse.length > 0 && (
+            <span className="flex items-center -space-x-1" data-testid="connectors-in-use">
               {inUse.slice(0, 4).map((c) => (
-                <AppLogo key={c.appId} name={c.name} logo={c.logo} title={c.name} className="size-5 ring-2 ring-background" />
+                <AppLogo key={c.appId} name={c.name} logo={c.logo} title={c.name} className="size-4 rounded-sm ring-1 ring-background" />
               ))}
-              {inUse.length > 4 && <span className="pl-2.5 text-muted-foreground">+{inUse.length - 4}</span>}
+              {inUse.length > 4 && <span className="pl-2 text-muted-foreground">+{inUse.length - 4}</span>}
             </span>
-          ) : (
-            <span className="max-sm:sr-only">Connectors</span>
           )}
         </Button>
       </PopoverTrigger>
@@ -88,7 +87,7 @@ function ConnectorsMenu({
                   <CommandGroup heading="On in this chat">
                     {usable.map((c) => (
                       <CommandItem key={c.appId} value={c.name} onSelect={() => onToggle(c)} disabled={saving} data-testid={`connector-toggle-${c.appId}`} data-on={c.on}>
-                        <AppLogo name={c.name} logo={c.logo} className="size-5" />
+                        <AppLogo name={c.name} logo={c.logo} className="size-4 rounded-sm" />
                         <span className="flex-1 truncate">{c.name}</span>
                         <Check className={cn('size-4', c.on ? 'opacity-100' : 'opacity-0')} />
                       </CommandItem>
@@ -99,7 +98,7 @@ function ConnectorsMenu({
                   <CommandGroup heading="Needs your sign-in">
                     {signIn.map((c) => (
                       <CommandItem key={c.appId} value={c.name} data-testid={`connector-sign-in-${c.appId}`}>
-                        <AppLogo name={c.name} logo={c.logo} className="size-5 opacity-60" />
+                        <AppLogo name={c.name} logo={c.logo} className="size-4 rounded-sm opacity-60" />
                         <span className="flex-1 truncate text-muted-foreground">{c.name}</span>
                         {c.personal ? (
                           <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={() => go(MINE)}>
@@ -116,7 +115,7 @@ function ConnectorsMenu({
                   <CommandGroup heading="Off for this team">
                     {off.map((c) => (
                       <CommandItem key={c.appId} value={c.name} data-testid={`connector-off-${c.appId}`}>
-                        <AppLogo name={c.name} logo={c.logo} className="size-5 opacity-60" />
+                        <AppLogo name={c.name} logo={c.logo} className="size-4 rounded-sm opacity-60" />
                         <span className="flex-1 truncate text-muted-foreground">{c.name}</span>
                         <span className="text-xs text-muted-foreground">ask an admin</span>
                       </CommandItem>
