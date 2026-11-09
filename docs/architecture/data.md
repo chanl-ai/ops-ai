@@ -68,7 +68,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | files-service | `ops_files.store.files` | `FilesStore` | TRANSACTION | `file_blobs`, `file_idempotency`, `file_legal_holds`, `file_references`, `file_versions`, `files`, `files_outbox` |
 | files-service | `ops_files.store.read_requests` | none: no repository class | | `file_read_requests` |
 | files-service | `ops_files.store.settings` | none: no repository class | | `storage_credentials`, `storage_settings`, `storage_settings_audit` |
-| kb-service | `ops_kb.store.knowledge` | `KnowledgeStore` | TRANSACTION | `kb_base_sources`, `kb_bases`, `kb_changes`, `kb_chunks`, `kb_item_versions`, `kb_items`, `kb_outbox`, `kb_retired_bases`, `kb_runs`, `kb_sources`, `kb_unit_vectors` (PostgreSQL only), `kb_units` |
+| kb-service | `ops_kb.store.knowledge` | `KnowledgeStore` | TRANSACTION | `kb_base_sources`, `kb_bases`, `kb_changes`, `kb_chunks`, `kb_item_versions`, `kb_items`, `kb_outbox`, `kb_retired_bases`, `kb_runs`, `kb_sources`, `kb_unit_vectors`, `kb_units` |
 | models-service | `ops_models.store.aliases` | `Aliases` | CAS, TRANSACTION | none |
 | models-service | `ops_models.store.calls` | `CallLog` | CLOCK | none |
 | models-service | `ops_models.store.keys` | `ModelKeys` | CAS, TRANSACTION | none |

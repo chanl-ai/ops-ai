@@ -1122,11 +1122,13 @@ async def ai_knowledge(call: NodeCall) -> Outcome:
         return Outcome("notFound", {"passages": [], "error": "no knowledge port", "code": "unavailable"})
     query = str(call.params.get("query") or "")
     kb_ids = [str(x) for x in cast(list[Any], call.params.get("kbIds") or [])]
-    limit = int(call.params.get("limit") or 3)
     try:
-        found = await call.ports.knowledge.search(query, kb_ids, k=limit)
+        # The bases' own retrieval settings decide how many passages return; a step's `limit` only caps them.
+        found = await call.ports.knowledge.search(query, kb_ids)
     except Exception as e:  # the port names why it cannot answer; the step leaves by notFound
         return Outcome("notFound", {"passages": [], "error": str(e), "code": "unavailable"})
+    if call.params.get("limit"):
+        found = found[: int(call.params["limit"])]
     passages = [
         {
             "documentId": p.document_id,

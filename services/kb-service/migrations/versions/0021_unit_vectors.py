@@ -31,14 +31,15 @@ depends_on = None
 CHAIN = "kb"
 ROLE = "ops_kb_tenant"
 TABLE = "kb_unit_vectors"
-# The stored default before meaning search, moved to both lanes; per database, as JSON is edited differently in each.
+# The stored default before meaning search, moved to both lanes. The JSON is the service's own (json.dumps, with or
+# without spaces), so the setting is replaced as text: one statement every database runs, and no JSON operator.
+_SPACED = """'"searchMode": "keyword"', '"searchMode": "hybrid"'"""
+_TIGHT = """'"searchMode":"keyword"', '"searchMode":"hybrid"'"""
+_SWAP = "REPLACE(REPLACE({col}, " + _SPACED + "), " + _TIGHT + ")"
 HYBRID = {
-    "postgresql": "UPDATE kb_bases SET retrieval = jsonb_set(retrieval::jsonb, '{searchMode}', '\"hybrid\"')::json "
-    "WHERE retrieval->>'searchMode' = 'keyword'",
-    "mssql": "UPDATE kb_bases SET retrieval = JSON_MODIFY(retrieval, '$.searchMode', 'hybrid') "
-    "WHERE JSON_VALUE(retrieval, '$.searchMode') = 'keyword'",
-    "sqlite": "UPDATE kb_bases SET retrieval = json_set(retrieval, '$.searchMode', 'hybrid') "
-    "WHERE json_extract(retrieval, '$.searchMode') = 'keyword'",
+    "postgresql": f"UPDATE kb_bases SET retrieval = CAST({_SWAP.format(col='CAST(retrieval AS TEXT)')} AS JSON)",
+    "mssql": f"UPDATE kb_bases SET retrieval = {_SWAP.format(col='retrieval')}",
+    "sqlite": f"UPDATE kb_bases SET retrieval = {_SWAP.format(col='retrieval')}",
 }
 
 
