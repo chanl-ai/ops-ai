@@ -223,11 +223,19 @@ class Lease:
                 logger.warning("kb_lease_lost", source=self.source_id)
                 return
 
-    async def release(self) -> None:
+    async def _stop(self) -> None:
         self._task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await self._task
+
+    async def release(self) -> None:
+        await self._stop()
         await self.store.release(self.tenant, self.source_id, owner=self.owner)
+
+    async def finish(self, run_id: str, values: dict[str, Any]) -> None:
+        """Writes the run's end and frees the source in one transaction: whoever sees it finished may sync at once."""
+        await self._stop()
+        await self.store.update_run(self.tenant, run_id, values, release=(self.source_id, self.owner))
 
 
 class KnowledgeService:
@@ -1007,7 +1015,7 @@ class KnowledgeService:
         # A run of its own for the AI steps: its task may be made inside a sync, whose run it must not share.
         try:
             with ai_run(self.ai_clients, who.tenant_id, ceiling=self.settings_of(s).ai_ceiling, fresh=True):
-                await self._rebuild_items(who, s, run, stale)
+                await self._rebuild_items(who, s, run, stale, lease)
         finally:
             await lease.release()
         # Settings saved while it ran (an AI step approved just after a save) could not start their own rebuild, as
@@ -1017,7 +1025,7 @@ class KnowledgeService:
             await self.start_rebuild(who, found[0])
 
     async def _rebuild_items(
-        self, who: Who, s: dict[str, Any], run: dict[str, Any], stale: list[dict[str, Any]]
+        self, who: Who, s: dict[str, Any], run: dict[str, Any], stale: list[dict[str, Any]], lease: Lease
     ) -> None:
         tenant, source_id, run_id = who.tenant_id, str(s["id"]), str(run["id"])
         counts: dict[str, int] = dict(run["counts"])
@@ -1060,8 +1068,7 @@ class KnowledgeService:
         finally:
             spent_on(counts, log)
             ended = datetime.now(UTC)
-            await self.store.update_run(
-                tenant,
+            await lease.finish(
                 run_id,
                 {
                     "status": status,

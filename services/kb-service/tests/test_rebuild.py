@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_kb.files import KnowledgeFiles
+from ops_kb.service import KnowledgeService
 from ops_kb.store import KnowledgeStore
 from ops_store import isolation
 
@@ -129,8 +130,16 @@ async def test_a_rebuild_longer_than_its_lease_never_overlaps_a_sync_and_is_not_
     engine: AsyncEngine, tenant: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The lease was taken once for 15 minutes and never renewed: a 20-minute rebuild lost it, a sync ran beside it,
-    the stale sweep ended it as stopped, and its release then cleared the lease the sync held."""
+    the stale sweep ended it as stopped, and its release then cleared the lease the sync held. A rebuild seen finished
+    must also have freed its source: the work after it (embedding the new pieces) is slowed here to show any gap."""
     monkeypatch.setattr("ops_kb.service.LEASE", timedelta(seconds=0.3))
+    embed_now = KnowledgeService.embed_now
+
+    async def slow_embed(self: KnowledgeService, tenant: str) -> int:
+        await asyncio.sleep(0.5)
+        return await embed_now(self, tenant)
+
+    monkeypatch.setattr(KnowledgeService, "embed_now", slow_embed)
     client, readings = held(engine, tenant)
     store = KnowledgeStore(engine)
     async with client:

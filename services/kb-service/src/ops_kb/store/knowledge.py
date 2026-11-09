@@ -972,13 +972,8 @@ class KnowledgeStore:
 
     async def release(self, tenant: str, source_id: str, *, owner: str) -> None:
         """Gives up `owner`'s lease; a lease another holder took is left alone."""
-        s = kb_sources
         async with self._tx() as c:
-            await c.execute(
-                sa.update(s)
-                .where(s.c.tenant_id == tenant, s.c.id == source_id, s.c.lease_owner == owner, team_visible(s))
-                .values(lease_until=None, lease_owner=None)
-            )
+            await c.execute(_released(tenant, source_id, owner))
 
     async def add_run(self, row: dict[str, Any]) -> None:
         async with self._tx() as c:
@@ -1007,11 +1002,17 @@ class KnowledgeStore:
         async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
-    async def update_run(self, tenant: str, run_id: str, values: dict[str, Any]) -> None:
+    async def update_run(
+        self, tenant: str, run_id: str, values: dict[str, Any], *, release: tuple[str, str] | None = None
+    ) -> None:
+        """`release` (source id, lease owner) frees the source in the same transaction, so a run seen finished never
+        holds its source after."""
         async with self._tx() as c:
             await c.execute(
                 sa.update(kb_runs).where(kb_runs.c.tenant_id == tenant, kb_runs.c.id == run_id).values(**values)
             )
+            if release is not None:
+                await c.execute(_released(tenant, *release))
 
     async def cancel_run(self, tenant: str, run_id: str, *, by: str) -> bool:
         """Asks a running run to stop; true when it was running and nobody had asked yet."""
@@ -1176,6 +1177,15 @@ class KnowledgeStore:
             )
             rows = [dict(r) for r in (await conn.execute(q)).mappings()]
         return ChangePage(rows, total, {"mine": int(mine_n), "open": int(open_n), "resolved": int(done_n)}, facet)
+
+
+def _released(tenant: str, source_id: str, owner: str) -> sa.Update:
+    s = kb_sources
+    return (
+        sa.update(s)
+        .where(s.c.tenant_id == tenant, s.c.id == source_id, s.c.lease_owner == owner, team_visible(s))
+        .values(lease_until=None, lease_owner=None)
+    )
 
 
 def engine_for(url: str) -> AsyncEngine:
