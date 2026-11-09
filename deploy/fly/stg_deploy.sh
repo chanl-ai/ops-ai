@@ -5,7 +5,7 @@
 #   2 deploy  the release command migrates every chain as the superuser, then the machine is replaced in place
 #   3 grants  grants.sql from `make db-ddl` at REF (a throwaway local PostgreSQL), applied through `fly proxy`, so a table
 #             the migrations just added reaches its service's runtime login
-#   4 health  every process the host runs (ops_host.py --check on the machine)
+#   4 health  every process the host runs (ops_host.py --check on the machine), then OCR (check_ocr.py)
 #   5 walk    docs/usecases/lib/stg_click_walk.mjs signs in and opens every console page and the first row of each list
 # Each step prints its seconds; any failure exits non-zero. App names come from ~/.config/ops-ai/staging.env
 # (template deploy/fly/staging.env.example); secrets are read from the same directory and never printed.
@@ -88,6 +88,10 @@ until fly ssh console -a "$app" -C "$health" >"$work/health.txt" 2>&1; do
 done
 grep -E '^(ok|DOWN)' "$work/health.txt"
 step "health (every process up)"
+# Scanned files read only where Tesseract works and documents-service sees it; without it every scan fails quietly.
+fly ssh console -a "$app" -C "python3 /app/deploy/fly/check_ocr.py" >"$work/ocr.txt" 2>&1 || { cat "$work/ocr.txt"; exit 1; }
+grep -E '^(ok|FAIL) ocr' "$work/ocr.txt"
+step "OCR available"
 # A 200 for /login proves nothing if the page is a cached copy from the previous build: check that a script it names exists.
 python3 - "$origin" <<'PY' || { echo "stg-deploy: /login references scripts this build does not serve"; exit 1; }
 import re, sys, urllib.request
