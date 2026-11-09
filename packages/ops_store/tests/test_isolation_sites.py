@@ -58,6 +58,8 @@ WIDENINGS: dict[str, set[str]] = {
     "RUN_RECONCILER": {"services/agents-service/src/ops_agents/api/sweeper.py"},
     "SUITE": {"packages/ops_store/src/ops_store/conformance.py"},
     "STORAGE_TARGETS": {"services/files-service/src/ops_files/store/settings.py"},
+    # The retention process lists every tenant's released snapshots past their date, then deletes each in its team.
+    "RETENTION_DUE": {"services/files-service/src/ops_files/store/files.py"},
     # Kb's background processes, the dev demo seed and the start-up move between file stores.
     "MOVE_TENANTS": {"services/kb-service/src/ops_kb/store/knowledge.py"},
     "DEMO_SEED": {"services/kb-service/src/ops_kb/__main__.py"},
@@ -97,6 +99,8 @@ ENTRIES: dict[str, set[str]] = {
         "packages/ops_store/src/ops_store/outbox.py",
         "services/documents-service/src/ops_documents/document_types.py",
         "services/documents-service/src/ops_documents/extraction.py",
+        # The retention process deletes each released snapshot as its own tenant and team.
+        "services/files-service/src/ops_files/tenant_files.py",
         # A queued reading resumed after a restart reads the file as the team that asked for it.
         "services/documents-service/src/ops_documents/readings.py",
         # A service event (reading.finished) settles the items of the team its token names.

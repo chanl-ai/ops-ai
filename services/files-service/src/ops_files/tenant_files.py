@@ -17,7 +17,7 @@ import re
 import uuid
 from collections.abc import AsyncIterable, AsyncIterator, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from ops_files.models import (
@@ -70,6 +70,7 @@ from ops_files.sniffing import SNIFF_BYTES, prove
 from ops_files.store import AsyncEngine, FileRow, FilesStore, HoldRow, ReadRequestsStore
 from ops_service_kit.http import options_page, options_window
 from ops_storage.base import ObjectExistsError, StreamingObjectStore
+from ops_store import isolation
 
 if TYPE_CHECKING:
     from ops_files.settings import StorageSettings
@@ -438,7 +439,10 @@ class TenantFiles:
             else _SENSITIVITY.get(request.purpose, "internal"),
             "sensitivity_suggested": "sensitivity" not in request.model_fields_set,
             "retention_class_id": retention.id,
-            "delete_after": now.date() + timedelta(days=retention.days) if retention.days is not None else None,
+            # A class counted from release starts counting when the last reference goes (remove_reference).
+            "delete_after": now.date() + timedelta(days=retention.days)
+            if retention.days is not None and not retention.after_release
+            else None,
             "immutable": False,
             "storage_backend": store.backend,
             "storage_container": store.container,
@@ -716,6 +720,20 @@ class TenantFiles:
         payload = {"fileId": file_id, "digest": row["digest"], "name": row["name"], "deletedBy": who.actor}
         await self._files.remove(file_id, event={"team": row["team"], "payload": payload})
 
+    async def purge_released(self, today: date | None = None) -> int:
+        """Deletes every file of a class counted from release (knowledge snapshots) whose days have passed, each as
+        its own tenant and team through `delete`, so a file used again, held or retained stays. The number deleted."""
+        purposes = [p for c in self._config.retention_classes if c.after_release for p in c.purposes]
+        deleted = 0
+        for tenant, team, file_id in await self._files.released_due(purposes, today or self._clock().date()):
+            with isolation.scope(tenant, team):
+                try:
+                    await self.delete(Who(tenant, team, "retention"), file_id)
+                except (FileReferencedError, FileHeldError, FileRetainedError, FileMissingError):
+                    continue
+                deleted += 1
+        return deleted
+
     async def bulk_delete(self, who: Who, ids: list[str]) -> dict[str, Any]:
         """Deletes each file the rules allow; one that cannot be deleted is skipped with the reason the sheet shows."""
         done: list[str] = []
@@ -811,11 +829,18 @@ class TenantFiles:
                 "blocked": None,
             },
         )
+        if self._config.retention_class(row["retention_class_id"]).after_release and row["delete_after"] is not None:
+            await self._files.update(file_id, {"delete_after": None})
         return await self.get(who, file_id)
 
     async def remove_reference(self, who: Who, file_id: str, *, type: FileReferenceType, ref_id: str) -> FileDetail:
         await self._owned(who, file_id)
         await self._files.remove_reference(file_id, type, ref_id)
+        row = await self._owned(who, file_id)
+        retention = self._config.retention_class(row["retention_class_id"])
+        if retention.after_release and retention.days is not None and not row.references:
+            # The last record let it go: its retention counts from today.
+            await self._files.update(file_id, {"delete_after": self._clock().date() + timedelta(days=retention.days)})
         return await self.get(who, file_id)
 
     async def record_scan(self, tenant: str, file_id: str, result: ScanResult) -> FileDetail:

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Copies of fetched pages are kept, then cleared",
+  "description": "Each page or article a knowledge source brings in is kept as a file while the source uses it, and removed 30 days after the source lets it go unless it is on legal hold.",
+  "tag": "new"
+}

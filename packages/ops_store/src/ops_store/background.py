@@ -131,6 +131,14 @@ PROCESSES: tuple[Process, ...] = (
         "It delivers every team's file events, each as its own team.",
     ),
     Process(
+        "files_retention",
+        "files",
+        "File retention",
+        "Deletes knowledge snapshots their sources let go once their days have passed.",
+        3600.0,
+        "It lists every team's released snapshots past their date, then deletes each as its own team.",
+    ),
+    Process(
         "documents_relay",
         "documents",
         "Document hand-off",

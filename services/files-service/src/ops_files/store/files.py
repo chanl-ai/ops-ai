@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
@@ -25,11 +25,13 @@ from ops_store.outbox import add as add_event
 from ops_store.outbox import outbox_table
 from ops_store.schema import TENANT_SCOPED, team_owned
 from ops_store.search import contains
-from ops_store.team_scope import team_visible
+from ops_store.team_scope import any_team, team_visible
 
 # Listed in Files only when a filter asks for them: every email's text is stored so a workflow can read it, and
 # listed beside the documents they would bury them. A run or case that used one still opens it by id.
-LISTED_WHEN_ASKED: tuple[str, ...] = ("email_body",)
+LISTED_WHEN_ASKED: tuple[str, ...] = ("email_body", "knowledge_snapshot")
+# Why the retention process reads past one tenant: it lists every tenant's released files past their date.
+RETENTION_DUE = "background process: the retention process lists each tenant's released files past their date"
 
 __all__ = [
     "ROLE",
@@ -583,6 +585,21 @@ class FilesStore:
                     )
                 ).scalar_one()
         return None
+
+    async def released_due(self, purposes: Sequence[str], today: date) -> list[tuple[str, str, str]]:
+        """(tenant, team, file id) of every available file of `purposes` whose date has passed; whether each may go
+        (references, a hold) is the delete's own check, made as its tenant."""
+        if not purposes:
+            return []
+        q = sa.select(files.c.tenant_id, files.c.team, files.c.id).where(
+            any_team(files, RETENTION_DUE),
+            files.c.purpose.in_(list(purposes)),
+            files.c.status == "available",
+            files.c.delete_after.is_not(None),
+            files.c.delete_after < today,
+        )
+        async with isolation.system_tx(self.engine, RETENTION_DUE, role=SYSTEM_ROLE) as c:
+            return [(str(r[0]), str(r[1]), str(r[2])) for r in await c.execute(q)]
 
     async def remove(self, file_id: str, *, event: Mapping[str, Any] | None = None) -> None:
         """Deletes the file's rows; the digest is free again for its team. Hold history stays. `event` (team, actor,
