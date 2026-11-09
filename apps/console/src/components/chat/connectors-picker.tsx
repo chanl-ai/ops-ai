@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Check, Plug } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { AppLogo } from '@/components/shared/app-logo';
 import { Button } from '@/components/ui/button';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -44,17 +45,35 @@ function ConnectorsMenu({
   const usable = rows.filter((c) => c.state === 'on');
   const signIn = rows.filter((c) => c.state === 'needs_sign_in');
   const off = rows.filter((c) => c.state === 'off_for_team');
-  const leftOut = rows.filter((c) => c.state !== 'off_for_team' && !c.on).length;
+  const inUse = usable.filter((c) => c.on);
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="h-8 gap-1.5 px-2 text-xs" disabled={disabled} aria-label="Connectors for this chat" data-testid="connectors-picker">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 gap-1.5 px-2 text-xs"
+          disabled={disabled}
+          aria-label={inUse.length ? `Connectors for this chat: ${inUse.map((c) => c.name).join(', ')}` : 'Connectors for this chat'}
+          data-testid="connectors-picker"
+        >
           <Plug className="size-4" />
-          <span className="max-sm:sr-only">Connectors</span>
-          {leftOut > 0 && <span className="text-muted-foreground">· {leftOut} off</span>}
+          {inUse.length > 0 ? (
+            <span className="flex -space-x-1.5" data-testid="connectors-in-use">
+              {inUse.slice(0, 4).map((c) => (
+                <AppLogo key={c.appId} name={c.name} logo={c.logo} title={c.name} className="size-5 ring-2 ring-background" />
+              ))}
+              {inUse.length > 4 && <span className="pl-2.5 text-muted-foreground">+{inUse.length - 4}</span>}
+            </span>
+          ) : (
+            <span className="max-sm:sr-only">Connectors</span>
+          )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 max-w-[calc(100vw-2rem)] p-0" data-testid="connectors-picker-list">
+      {/* React events bubble out of the portal to the composer, whose input group focuses the text box on click; that
+          closed the list mid-click and dropped the click on whatever lay under it, so clicks stop at the list. */}
+      <PopoverContent align="start" className="w-80 max-w-[calc(100vw-2rem)] p-0" data-testid="connectors-picker-list" onClick={(e) => e.stopPropagation()}>
         <Command>
           <CommandInput placeholder="e.g. Salesforce" />
           <CommandList className="max-h-80">
@@ -69,8 +88,9 @@ function ConnectorsMenu({
                   <CommandGroup heading="On in this chat">
                     {usable.map((c) => (
                       <CommandItem key={c.appId} value={c.name} onSelect={() => onToggle(c)} disabled={saving} data-testid={`connector-toggle-${c.appId}`} data-on={c.on}>
-                        <Check className={cn('size-4', c.on ? 'opacity-100' : 'opacity-0')} />
+                        <AppLogo name={c.name} logo={c.logo} className="size-5" />
                         <span className="flex-1 truncate">{c.name}</span>
+                        <Check className={cn('size-4', c.on ? 'opacity-100' : 'opacity-0')} />
                       </CommandItem>
                     ))}
                   </CommandGroup>
@@ -78,10 +98,16 @@ function ConnectorsMenu({
                 {signIn.length > 0 && (
                   <CommandGroup heading="Needs your sign-in">
                     {signIn.map((c) => (
-                      <CommandItem key={c.appId} value={c.name} onSelect={() => go(c.personal ? MINE : `/integrations/${encodeURIComponent(c.appId)}`)} data-testid={`connector-sign-in-${c.appId}`}>
-                        <span className="size-4" />
-                        <span className="flex-1 truncate">{c.name}</span>
-                        <span className="text-xs text-muted-foreground">{c.personal ? 'connect' : 'an admin signs in'}</span>
+                      <CommandItem key={c.appId} value={c.name} data-testid={`connector-sign-in-${c.appId}`}>
+                        <AppLogo name={c.name} logo={c.logo} className="size-5 opacity-60" />
+                        <span className="flex-1 truncate text-muted-foreground">{c.name}</span>
+                        {c.personal ? (
+                          <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={() => go(MINE)}>
+                            Connect
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">an admin signs in</span>
+                        )}
                       </CommandItem>
                     ))}
                   </CommandGroup>
@@ -89,9 +115,9 @@ function ConnectorsMenu({
                 {off.length > 0 && (
                   <CommandGroup heading="Off for this team">
                     {off.map((c) => (
-                      <CommandItem key={c.appId} value={c.name} onSelect={() => go(MINE)} data-testid={`connector-off-${c.appId}`}>
-                        <span className="size-4" />
-                        <span className="flex-1 truncate">{c.name}</span>
+                      <CommandItem key={c.appId} value={c.name} data-testid={`connector-off-${c.appId}`}>
+                        <AppLogo name={c.name} logo={c.logo} className="size-5 opacity-60" />
+                        <span className="flex-1 truncate text-muted-foreground">{c.name}</span>
                         <span className="text-xs text-muted-foreground">ask an admin</span>
                       </CommandItem>
                     ))}
@@ -116,7 +142,7 @@ function nextOff(rows: ChatConnector[], c: ChatConnector): string[] {
 /** The picker on a chat that exists: each change is saved on the chat at once. */
 export function ConnectorsPicker({ threadId, disabled }: { threadId: string; disabled?: boolean }) {
   const [open, setOpen] = React.useState(false);
-  const found = useChatConnectors(threadId, open);
+  const found = useChatConnectors(threadId);
   const save = useSetChatConnectors(threadId);
   const rows = found.data?.connectors ?? [];
   return (
@@ -139,7 +165,7 @@ export function ConnectorsPicker({ threadId, disabled }: { threadId: string; dis
  */
 export function NewChatConnectorsPicker({ agentId, off, onChange, disabled }: { agentId?: string; off: string[]; onChange: (off: string[]) => void; disabled?: boolean }) {
   const [open, setOpen] = React.useState(false);
-  const found = useNewChatConnectors(agentId, open);
+  const found = useNewChatConnectors(agentId);
   const rows = (found.data?.connectors ?? []).map((c) => (c.state === 'off_for_team' ? c : { ...c, on: !off.includes(c.appId) }));
   return <ConnectorsMenu open={open} setOpen={setOpen} rows={rows} pending={found.isPending} failed={found.isError} saving={false} disabled={disabled} onToggle={(c) => onChange(nextOff(rows, c))} />;
 }

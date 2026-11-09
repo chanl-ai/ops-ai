@@ -7,7 +7,7 @@ import { Plug } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { AppLogo } from '@/components/shared/app-logo';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { PageLayout } from '@/components/page-layout';
@@ -29,18 +29,10 @@ import { ToolCallsView } from '@/components/tools/tool-calls-view';
 import { useNavAllows } from '@/hooks/me-queries';
 import { type SystemCard, useApp, useConnectionKinds, useStartSignIn, useTestAccount } from '@/hooks/systems-queries';
 import type { Kinds } from '@/lib/connect-plan';
-import { initials, plural } from '@/lib/format';
+import { plural } from '@/lib/format';
 import { TOOL_CALL_LOG } from '@/lib/nav';
 
 
-function Logo({ name, logo }: { name: string; logo?: string | null }) {
-  return (
-    <Avatar className="size-9 rounded-md">
-      {logo && <AvatarImage src={logo} alt="" />}
-      <AvatarFallback className="rounded-md text-xs font-semibold">{initials(name)}</AvatarFallback>
-    </Avatar>
-  );
-}
 
 /**
  * One app's page: a header with its one Connect, then the tabs. Accounts lists every account that signs in to the app
@@ -119,7 +111,7 @@ export function AppPageView({ appId }: { appId: string }) {
 
   return (
     <PageLayout
-      icon={<Logo name={card.name} logo={card.logo} />}
+      icon={<AppLogo name={card.name} logo={card.logo} className="size-9" />}
       title={card.name}
       description={`${plural(card.toolsCount, 'tool')}${card.kindLabel ? ` · ${card.kindLabel}` : ''}`}
       breadcrumbs={[{ label: 'Connectors', href: '/integrations' }, { label: 'Team setup', href: '/integrations' }, { label: card.name }]}
