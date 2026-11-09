@@ -16,7 +16,8 @@ from typing import Any, cast
 from ops_access import can, require_provisioner
 from ops_documents_client import DocumentsRefused
 from ops_identity import Principal, ServiceUnreachable
-from ops_ingest import ParsedDocument, parse, split
+from ops_ingest import ParsedDocument, SplitResult, parse, split
+from ops_ingest.metadata import resolve_metadata
 from ops_ingest.parsers import TooLargeError, UnsupportedFormatError
 from ops_ingest.rules import ItemFacts, evaluate_rules
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ValidationFailed
@@ -821,22 +822,22 @@ class KnowledgeService:
         await self.store.add_run(run)
         return _run(run)
 
-    def _chunks(self, who: Who, item_id: str, version: int, title: str, result: Any) -> list[dict[str, Any]]:
-        return [
-            {
-                "tenant_id": who.tenant_id,
-                "id": new_id("chk"),
-                "item_id": item_id,
-                "version": version,
-                "position": n,
-                "title": title,
-                "section": " > ".join(c.section_path),
-                "page": c.page,
-                "tokens": c.tokens,
-                "text": c.text,
-            }
-            for n, c in enumerate(result.chunks)
-        ]
+    def _chunks(
+        self, who: Who, s: dict[str, Any], doc: ParsedDocument, *, item_id: str, version: int, title: str
+    ) -> list[dict[str, Any]]:
+        """The item's pieces under the source's settings, each with its index units and its mapped metadata."""
+        settings = self.settings_of(s)
+        return pieces(who.tenant_id, item_id, version, title, split(doc, settings.ingest), self._metadata(s, doc))
+
+    def _metadata(self, s: dict[str, Any], doc: ParsedDocument) -> dict[str, str]:
+        mapped = resolve_metadata(
+            self.settings_of(s).metadata_mapping,
+            fields=doc.source.fields,
+            collection=str(s["collection"]),
+            source_owner=str(s["owner"]),
+            source_sensitivity=s["sensitivity"],
+        )
+        return mapped.values
 
     async def _reindex(
         self, who: Who, s: dict[str, Any], existing: dict[str, Any], *, name: str, doc: ParsedDocument, read_with: str
@@ -847,7 +848,7 @@ class KnowledgeService:
         warning: str | None = None
         title, pages = doc.title or name, doc.source.page_count
         settings = self.settings_of(s)
-        chunks = self._chunks(who, existing["id"], existing["version"], title, split(doc, settings.ingest))
+        chunks = self._chunks(who, s, doc, item_id=existing["id"], version=existing["version"], title=title)
         if chunks:
             warning = _unread(doc)
         else:
@@ -1001,22 +1002,7 @@ class KnowledgeService:
             if doc is None:
                 doc = parse(data or b"", filename=name, mime_type=mime)
             title, pages = title_given or doc.title or name, doc.source.page_count
-            result = split(doc, settings.ingest)
-            for n, c in enumerate(result.chunks):
-                chunks.append(
-                    {
-                        "tenant_id": who.tenant_id,
-                        "id": new_id("chk"),
-                        "item_id": item_id,
-                        "version": version,
-                        "position": n,
-                        "title": title,
-                        "section": " > ".join(c.section_path),
-                        "page": c.page,
-                        "tokens": c.tokens,
-                        "text": c.text,
-                    }
-                )
+            chunks = self._chunks(who, s, doc, item_id=item_id, version=version, title=title)
             if chunks:
                 warning = _unread(doc)
             else:
@@ -1448,6 +1434,9 @@ class KnowledgeService:
         i = found[0]
         s = await self._source_row(who, i["source_id"])
         chunks = await self.store.chunks(who.tenant_id, item_id)
+        searched: dict[str, list[dict[str, Any]]] = {}
+        for u in await self.store.units(who.tenant_id, item_id):
+            searched.setdefault(str(u["chunk_id"]), []).append({"kind": u["kind"], "text": u["text"]})
         versions = await self.store.versions(who.tenant_id, item_id)
         return {
             **self._item(i, s),
@@ -1463,6 +1452,9 @@ class KnowledgeService:
                         **({"page": c["page"]} if c["page"] else {}),
                         "kind": "content",
                         "text": c["text"],
+                        # What search matches for this piece: its own text, its children and its questions.
+                        "units": searched.get(str(c["id"]), []),
+                        "metadata": c["metadata"] or {},
                     }
                     for c in chunks
                 ],
@@ -1550,6 +1542,50 @@ def audit_entry(  # noqa: PLR0917 - each argument a different part of the entry
         "summary": f"Changed the settings of {AUDITED[target_kind]} {name}: {', '.join(sorted(changes))}",
         "detail": {"name": name, "changes": changes},
     }
+
+
+def pieces(  # noqa: PLR0917 - each argument a different part of the piece rows
+    tenant: str, item_id: str, version: int, title: str, result: SplitResult, metadata: dict[str, str]
+) -> list[dict[str, Any]]:
+    """A split as the rows kb_chunks and kb_units hold: each piece once, with the units it is searched as (its own
+    text with its context header, its children, its questions), so a match on any unit cites the piece."""
+    rows: list[dict[str, Any]] = []
+    ids = [new_id("chk") for _ in result.chunks]
+    units: dict[int, list[dict[str, Any]]] = {}
+    for unit in result.index_units():
+        chunk = result.chunks[unit.chunk_index]
+        heading = " ".join(p for p in (title, " > ".join(chunk.section_path)) if p)
+        mine = units.setdefault(unit.chunk_index, [])
+        mine.append(
+            {
+                "tenant_id": tenant,
+                "id": new_id("unt"),
+                "chunk_id": ids[unit.chunk_index],
+                "item_id": item_id,
+                "kind": unit.kind,
+                "position": len(mine),
+                "heading": heading[:800],
+                "text": unit.indexed_text,
+            }
+        )
+    for n, c in enumerate(result.chunks):
+        rows.append(
+            {
+                "tenant_id": tenant,
+                "id": ids[n],
+                "item_id": item_id,
+                "version": version,
+                "position": n,
+                "title": title,
+                "section": " > ".join(c.section_path),
+                "page": c.page,
+                "tokens": c.tokens,
+                "text": c.text,
+                "metadata": {**metadata, **c.metadata} or None,
+                "units": units.get(c.index, []),
+            }
+        )
+    return rows
 
 
 def _run(r: dict[str, Any]) -> dict[str, Any]:

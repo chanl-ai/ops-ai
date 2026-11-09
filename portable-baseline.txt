@@ -1,4 +1,4 @@
-# 77 findings: code and metadata outside ops_store that would not run on SQL Server (scripts/check_portable_store.py). A row may only fall; raising one needs a Standards-exception: trailer.
+# 76 findings: code and metadata outside ops_store that would not run on SQL Server (scripts/check_portable_store.py). A row may only fall; raising one needs a Standards-exception: trailer.
 # Burned down by ops_store.dialect: row lock and SKIP LOCKED -> locked/claim, database clock -> db_now and db_after, dialect insert and ON CONFLICT -> upsert/insert_ignore, advisory lock -> lock_key.
 # packages/ops_engine: 12
 2 sql packages/ops_engine/src/ops_engine/store/clock.py database clock
@@ -20,12 +20,11 @@
 8 sql services/agents-service/src/ops_agents/store/timers.py database clock
 2 sql services/agents-service/src/ops_agents/store/timers.py row lock
 1 sql services/agents-service/src/ops_agents/store/typed_records.py row lock
-# services/kb-service: 13
+# services/kb-service: 12
 2 sql services/kb-service/migrations/versions/0002_items_versions_and_chunks.py postgresql_using option
 1 sql services/kb-service/src/ops_kb/store/knowledge.py ON CONFLICT
 5 sql services/kb-service/src/ops_kb/store/knowledge.py database clock
 1 sql services/kb-service/src/ops_kb/store/knowledge.py dialect insert
-1 sql services/kb-service/src/ops_kb/store/knowledge.py postgresql_using option
 3 sql services/kb-service/src/ops_kb/store/knowledge.py row lock
 # services/models-service: 1
 1 sql services/models-service/migrations/versions/0005_one_current_alias_version.py postgresql_where option

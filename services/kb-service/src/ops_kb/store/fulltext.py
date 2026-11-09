@@ -20,25 +20,28 @@ MIN_SHARED_TERMS = 2
 TERM_CAP = 6
 
 
-# Every live chunk of an indexed item in a source the knowledge base reads, scored against the question's lexemes.
+# Every index unit of a live piece of an indexed item in a source the knowledge base reads, scored against the
+# question's lexemes. A piece is returned by its best unit (its own text, a child, a question).
 _SEARCH = sa.text(
     """
     WITH q AS (
         SELECT array(SELECT DISTINCT unnest(tsvector_to_array(to_tsvector('english', :question)))) AS terms
     ),
     hits AS (
-        SELECT l.kb_id, c.item_id, c.version, c.title, c.section, c.page, c.text,
-               (SELECT count(*) FROM unnest(q.terms) t WHERE c.tsv @@ to_tsquery('english', quote_literal(t)))
+        SELECT l.kb_id, c.id AS chunk_id, c.item_id, c.version, c.title, c.section, c.page, c.text,
+               u.kind AS unit_kind, u.text AS unit_text,
+               (SELECT count(*) FROM unnest(q.terms) t WHERE u.tsv @@ to_tsquery('english', quote_literal(t)))
                    AS shared,
                cardinality(q.terms) AS total,
-               ts_rank_cd(c.tsv, to_tsquery('english', array_to_string(
+               ts_rank_cd(u.tsv, to_tsquery('english', array_to_string(
                    array(SELECT quote_literal(t) FROM unnest(q.terms) t), ' | '))) AS rank
-        FROM q, kb_chunks c
+        FROM q, kb_units u
+        JOIN kb_chunks c ON c.tenant_id = u.tenant_id AND c.id = u.chunk_id AND c.withdrawn_at IS NULL
         JOIN kb_items i ON i.tenant_id = c.tenant_id AND i.id = c.item_id AND i.status = 'indexed'
         JOIN kb_base_sources l ON l.tenant_id = i.tenant_id AND l.source_id = i.source_id
-        WHERE c.tenant_id = :tenant AND l.kb_id = ANY(:kb_ids) AND c.withdrawn_at IS NULL
+        WHERE u.tenant_id = :tenant AND l.kb_id = ANY(:kb_ids)
           AND cardinality(q.terms) > 0
-          AND c.tsv @@ to_tsquery('english', array_to_string(
+          AND u.tsv @@ to_tsquery('english', array_to_string(
               array(SELECT quote_literal(t) FROM unnest(q.terms) t), ' | '))
     )
     SELECT * FROM hits
@@ -48,6 +51,11 @@ _SEARCH = sa.text(
     LIMIT :limit
     """
 )
+# Units read per piece asked for: a piece's own text, a child and a question can all match, and each piece is
+# returned once.
+OVERFETCH = 4
+# At most this many pieces from one document, so one long document never fills every passage.
+PER_ITEM = 2
 
 
 def _snippet(text: str, width: int = 280) -> str:
@@ -65,7 +73,7 @@ class PostgresFullTextRetriever:
             "tenant": tenant,
             "kb_ids": kb_ids,
             "question": question,
-            "limit": limit,
+            "limit": limit * OVERFETCH,
             "floor": FLOOR,
             "min_shared": MIN_SHARED_TERMS,
             "term_cap": TERM_CAP,
@@ -73,14 +81,18 @@ class PostgresFullTextRetriever:
         # As the tenant role, so the team policy keeps another team's chunks out of the search.
         async with isolation.isolated_tx(self.engine, role=ROLE) as c:
             rows = (await c.execute(_SEARCH, params)).mappings().all()
-        seen: set[tuple[str, int, str]] = set()
+        seen: set[str] = set()
+        per_item: dict[str, int] = {}
         out: list[Passage] = []
         for r in rows:
-            # One knowledge base per passage: a chunk read by two of the asked knowledge bases is returned once.
-            key = (r["item_id"], r["version"], r["text"][:64])
-            if key in seen:
+            # One passage per piece, by its best unit: a piece read by two of the asked knowledge bases, or matched by
+            # its text and a question, is returned once.
+            if r["chunk_id"] in seen or per_item.get(r["item_id"], 0) >= PER_ITEM:
                 continue
-            seen.add(key)
+            seen.add(r["chunk_id"])
+            per_item[r["item_id"]] = per_item.get(r["item_id"], 0) + 1
+            if len(out) == limit:
+                break
             out.append(
                 Passage(
                     kb_id=r["kb_id"],
@@ -92,6 +104,8 @@ class PostgresFullTextRetriever:
                     text=r["text"],
                     snippet=_snippet(r["text"]),
                     score=round(float(r["shared"]) / float(r["total"]), 3),
+                    matched=r["unit_kind"],
+                    matched_text=r["unit_text"],
                 )
             )
         return out

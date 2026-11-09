@@ -9,7 +9,7 @@ team of the base, source or document they belong to.
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import TSVECTOR
@@ -214,22 +214,45 @@ kb_chunks = sa.Table(
     sa.Column("page", sa.Integer),
     sa.Column("tokens", sa.Integer, nullable=False),
     sa.Column("text", sa.Text, nullable=False),
-    # What full-text search matches: the document title and section path weigh above the body.
+    # Set when a newer version replaces the item: a withdrawn chunk is never returned, so no answer cites two versions.
+    sa.Column("withdrawn_at", sa.DateTime(timezone=True)),
+    # The values the source's metadata mapping gives the piece (department, owner, product, ...).
+    sa.Column("metadata", sa.JSON),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "item_id"], ["kb_items.tenant_id", "kb_items.id"], ondelete="CASCADE", name="fk_kb_chunk_item"
+    ),
+    info={**TENANT_SCOPED, **TEAM_OWNED},
+)
+
+# What search matches, apart from what it cites: each piece's own text with its context header, its smaller children
+# under parent and child, and the questions written for it. A match on any unit returns its piece (`chunk_id`), once.
+kb_units = sa.Table(
+    "kb_units",
+    metadata,
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("team_id", sa.String(64), nullable=False),
+    sa.Column("id", sa.String(64), primary_key=True),
+    sa.Column("chunk_id", sa.String(64), nullable=False),
+    sa.Column("item_id", sa.String(64), nullable=False),
+    sa.Column("kind", sa.String(16), nullable=False),  # self | child | question | faq
+    sa.Column("position", sa.Integer, nullable=False),
+    # The document title and section path, which weigh above the unit's own text.
+    sa.Column("heading", sa.String(800), nullable=False),
+    sa.Column("text", sa.Text, nullable=False),
     sa.Column(
         "tsv",
         TSVECTOR,
         sa.Computed(
-            "setweight(to_tsvector('english', coalesce(title, '') || ' ' || coalesce(section, '')), 'A')"
+            "setweight(to_tsvector('english', coalesce(heading, '')), 'A')"
             " || setweight(to_tsvector('english', text), 'B')",
             persisted=True,
         ),
     ),
-    # Set when a newer version replaces the item: a withdrawn chunk is never returned, so no answer cites two versions.
-    sa.Column("withdrawn_at", sa.DateTime(timezone=True)),
     sa.ForeignKeyConstraint(
-        ["tenant_id", "item_id"], ["kb_items.tenant_id", "kb_items.id"], ondelete="CASCADE", name="fk_kb_chunk_item"
+        ["tenant_id", "chunk_id"], ["kb_chunks.tenant_id", "kb_chunks.id"], ondelete="CASCADE", name="fk_kb_unit_chunk"
     ),
-    sa.Index("ix_kb_chunks_tsv", "tsv", postgresql_using="gin"),
+    # Its GIN index on tsv is the migration's (kb_0016): PostgreSQL's form only, as search runs there.
+    sa.Index("ix_kb_units_chunk", "tenant_id", "chunk_id"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -289,6 +312,17 @@ kb_runs = sa.Table(
 # The audit entries of settings changes, written in the transaction of the change and relayed to platform-service's
 # one audit log (ops_store.audit); read across tenants by the relay as ops_kb_system.
 kb_outbox = outbox_table(metadata, "kb_outbox", info=TENANT_SCOPED)
+
+
+def _with_team(chunks: list[dict[str, Any]], team: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Pieces and their index units (each piece's `units`), both in the team they are written in."""
+    rows: list[dict[str, Any]] = []
+    units: list[dict[str, Any]] = []
+    for ch in chunks:
+        row = {k: v for k, v in ch.items() if k != "units"}
+        rows.append({**row, "team_id": team})
+        units += [{**u, "team_id": team} for u in cast(list[dict[str, Any]], ch.get("units") or [])]
+    return rows, units
 
 
 class KnowledgeStore:
@@ -505,7 +539,15 @@ class KnowledgeStore:
     async def chunks(self, tenant: str, item_id: str) -> list[dict[str, Any]]:
         """The item's live chunks, in reading order."""
         q = (
-            sa.select(kb_chunks.c.position, kb_chunks.c.section, kb_chunks.c.page, kb_chunks.c.tokens, kb_chunks.c.text)
+            sa.select(
+                kb_chunks.c.id,
+                kb_chunks.c.position,
+                kb_chunks.c.section,
+                kb_chunks.c.page,
+                kb_chunks.c.tokens,
+                kb_chunks.c.text,
+                kb_chunks.c.metadata,
+            )
             .where(
                 kb_chunks.c.tenant_id == tenant,
                 kb_chunks.c.item_id == item_id,
@@ -513,6 +555,25 @@ class KnowledgeStore:
                 team_visible(kb_chunks),
             )
             .order_by(kb_chunks.c.position)
+        )
+        async with self._tx() as c:
+            return [dict(r) for r in (await c.execute(q)).mappings()]
+
+    async def units(self, tenant: str, item_id: str) -> list[dict[str, Any]]:
+        """The index units of the item's live pieces: what each is searched as."""
+        q = (
+            sa.select(kb_units.c.chunk_id, kb_units.c.kind, kb_units.c.position, kb_units.c.text)
+            .join(
+                kb_chunks, sa.and_(kb_chunks.c.tenant_id == kb_units.c.tenant_id, kb_chunks.c.id == kb_units.c.chunk_id)
+            )
+            .where(
+                kb_units.c.tenant_id == tenant,
+                kb_units.c.item_id == item_id,
+                kb_chunks.c.withdrawn_at.is_(None),
+                team_visible(kb_units),
+                team_visible(kb_chunks),
+            )
+            .order_by(kb_chunks.c.position, kb_units.c.position)
         )
         async with self._tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
@@ -535,7 +596,7 @@ class KnowledgeStore:
             team = await self._team_of(c, kb_sources, tenant, str(item["source_id"]))
             item = {**item, "team_id": team}
             version = {**version, "team_id": team}
-            chunks = [{**ch, "team_id": team} for ch in chunks]
+            chunks, units = _with_team(chunks, team)
             change = {**change, "team_id": team} if change is not None else None
             replaced: int | None = None
             if new:
@@ -563,6 +624,8 @@ class KnowledgeStore:
             await c.execute(sa.insert(kb_item_versions).values(**version))
             if chunks:
                 await c.execute(sa.insert(kb_chunks), chunks)
+            if units:
+                await c.execute(sa.insert(kb_units), units)
             if change is not None:
                 await c.execute(sa.insert(kb_changes).values(**change))
             return replaced
@@ -654,7 +717,7 @@ class KnowledgeStore:
         transaction that inserts the new ones."""
         async with self._tx() as c:
             team = await self._team_of(c, kb_items, tenant, item_id)
-            chunks = [{**ch, "team_id": team} for ch in chunks]
+            chunks, units = _with_team(chunks, team)
             await c.execute(
                 sa.update(kb_items).where(kb_items.c.tenant_id == tenant, kb_items.c.id == item_id).values(**values)
             )
@@ -667,6 +730,8 @@ class KnowledgeStore:
             )
             if chunks:
                 await c.execute(sa.insert(kb_chunks), chunks)
+            if units:
+                await c.execute(sa.insert(kb_units), units)
 
     async def add_item(self, tenant: str, item: dict[str, Any]) -> None:
         """An item with no version yet (waiting for its reading, or failed before one), in its source's team."""
@@ -719,7 +784,11 @@ class KnowledgeStore:
         if not item_ids:
             return 0
         async with self._tx() as c:
-            for table, column in ((kb_chunks, kb_chunks.c.item_id), (kb_item_versions, kb_item_versions.c.item_id)):
+            for table, column in (
+                (kb_units, kb_units.c.item_id),
+                (kb_chunks, kb_chunks.c.item_id),
+                (kb_item_versions, kb_item_versions.c.item_id),
+            ):
                 await c.execute(sa.delete(table).where(table.c.tenant_id == tenant, column.in_(item_ids)))
             q = sa.delete(kb_items).where(kb_items.c.tenant_id == tenant, kb_items.c.id.in_(item_ids))
             return (await c.execute(q)).rowcount

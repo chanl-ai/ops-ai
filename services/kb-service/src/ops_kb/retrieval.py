@@ -23,6 +23,9 @@ class Passage:
     text: str
     snippet: str
     score: float
+    # The unit that matched: the piece's own text (`self`), a smaller child, or a question written for it.
+    matched: str = "self"
+    matched_text: str = ""
 
 
 class Retriever(Protocol):
