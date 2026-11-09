@@ -335,6 +335,7 @@ def kb(
     document_types: bool = False,
     agents_url: str | None = None,
     documents_env: dict[str, str] | None = None,
+    env: dict[str, str] | None = None,
 ) -> Generator[Kb]:
     """kb-service on the use-case database, its own migration chain applied, reading its files from a files-service
     (dev auth, scanning off) keeping objects under `files_dir`. Yields a client; its base URL is what agents() takes as
@@ -371,6 +372,7 @@ def kb(
                 check=True,
                 capture_output=True,
             )  # fmt: skip
+        given = env or {}
         env = _env()
         env["OPS_DATABASE_URL"] = pg_url()
         env["OPS_KB_PORT"] = str(KB_PORT)
@@ -379,6 +381,9 @@ def kb(
         # A knowledge base's "used by" comes from agents-service, on this run's port rather than the
         # shared stack's.
         env["OPS_AGENTS_URL"] = f"http://127.0.0.1:{AGENTS_PORT}"
+        # `env` adds OPS_* values a use case needs: the tools-service to read plugin sources through, the
+        # models-service and key that embed and write questions, the plugins it may read.
+        env.update(given)
         kb_dir = ROOT / "services" / "kb-service"
         subprocess.run(
             ["uv", "run", "alembic", "upgrade", "head"], cwd=kb_dir, env=env, check=True, capture_output=True
