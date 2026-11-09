@@ -208,7 +208,7 @@ cmd_of() {
     documents) echo "$(auth_env)env OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_extract uv run --directory services/documents-service python -m ops_documents" ;;
     console)
       # OPS_CONSOLE_MODE=prod (cloud boxes) serves a production build; see scripts/console-prod.sh. Local dev keeps next dev.
-      if [[ "${OPS_CONSOLE_MODE:-dev}" == prod ]]; then CONSOLE_RUN="bash scripts/console-prod.sh $CONSOLE_PORT"
+      if [[ "${OPS_CONSOLE_MODE:-dev}" == prod ]]; then CONSOLE_RUN="env NEXT_PUBLIC_OPS_DEMO_SIGNIN=1 bash scripts/console-prod.sh $CONSOLE_PORT"
       else CONSOLE_RUN="pnpm --filter @ops-ai/console exec next dev -p $CONSOLE_PORT"; fi
       echo "env $(console_auth)NEXT_PUBLIC_UI_FEEDBACK=$(ui_feedback) NEXT_PUBLIC_OPS_CHAT_API_URL=$(api_url agents "$AGENTS_PORT") NEXT_PUBLIC_OPS_CASES_API_URL=$(api_url agents "$AGENTS_PORT") NEXT_PUBLIC_OPS_REGISTRY_API_URL=$(api_url agents "$AGENTS_PORT") NEXT_PUBLIC_OPS_TOOLS_API_URL=$(api_url tools "$TOOLS_PORT") NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL=$(api_url kb "$KB_PORT") NEXT_PUBLIC_OPS_FILES_API_URL=$(api_url files "$FILES_PORT") NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=$(api_url documents "$DOCUMENTS_PORT") NEXT_PUBLIC_OPS_MODELS_API_URL=$(api_url models "$MODELS_PORT") NEXT_PUBLIC_OPS_EMBED_URL=http://localhost:$EMBED_PORT NODE_OPTIONS=--max-old-space-size=${OPS_CONSOLE_HEAP_MB:-3072} ${CONSOLE_RUN}"
       ;;

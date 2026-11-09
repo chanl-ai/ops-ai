@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { api } from '@/lib/api';
+import { api, demoSignInOffered } from '@/lib/api';
 
 import { authProvider, isExpired, type ReauthInput, type Session } from '@/lib/auth';
 import { wipeSavedQueries } from '@/lib/query-cache';
@@ -76,13 +76,13 @@ function useAuthWrite<A, R>(fn: (a: A) => Promise<R>, clear = false) {
 
 export const useSignInWithPassword = () => useAuthWrite(({ email, password }: { email: string; password: string }) => authProvider.signInWithPassword(email, password), true);
 export const useSignInWithGoogle = () => useAuthWrite(() => authProvider.signInWithGoogle(), true);
-/** The seeded demo people to offer as one-click sign-ins. A production build never asks, and the sign-in
- * service answers only in development. */
+/** The seeded demo people to offer as one-click sign-ins. A production build asks only when built with
+ * NEXT_PUBLIC_OPS_DEMO_SIGNIN=1 (cloud boxes); the sign-in service answers only in development. */
 export const useDemoPeople = () =>
   useSessionQuery({
     queryKey: ['demo-people'],
     queryFn: () => authProvider.demoPeople?.() ?? Promise.resolve([]),
-    enabled: process.env.NODE_ENV !== 'production' && !!authProvider.demoPeople,
+    enabled: demoSignInOffered && !!authProvider.demoPeople,
     staleTime: Infinity,
     retry: false,
   });
