@@ -1,7 +1,8 @@
 """Wait and reminders on the real worker, on PostgreSQL, by failure mode: a Wait is woken early, or lost when
 the worker restarts; a date already past waits anyway, and a value that is not a date waits for ever; a reminder
 never fires, ends the review's wait, or keeps firing after the review is decided; a reminder is missing from
-Activity."""
+Activity. The reminder tests never wait on the clock: a reminder is an hour apart and is made due by moving its queued
+work row back, so a slow runner cannot see a second one fall due."""
 
 from __future__ import annotations
 
@@ -32,8 +33,8 @@ from tests.engine.test_worker import (  # noqa: F401
     worker,  # pyright: ignore[reportUnusedImport]
 )
 
-# About a second: long enough to see it still waiting, short enough to wait out.
-ONE_SECOND_HOURS = 1 / 3600
+# Far longer than any test runs, so only `due_now` makes a reminder fall due.
+REMIND_EVERY_HOURS = 1
 
 
 def flow(wid: str, step: dict[str, Any], ports: dict[str, str]) -> WorkflowDefinition:
@@ -64,7 +65,7 @@ REVIEW = {
     "id": "review",
     "type": "ops.flow.humanReview",
     "typeVersion": 1,
-    "parameters": {"title": "Check the levy", "remindEveryHours": ONE_SECOND_HOURS},
+    "parameters": {"title": "Check the levy", "remindEveryHours": REMIND_EVERY_HOURS},
 }
 
 
@@ -103,6 +104,16 @@ async def reminded(db: AsyncEngine, tenant: str, run_id: str) -> list[str]:
         async with tenant_tx(db) as c:
             q = sa.select(e.c.event_key).where(e.c.name == "task.reminder", e.c.event_key.startswith(f"{run_id}:"))
             return sorted(str(k) for k in (await c.execute(q)).scalars())
+
+
+async def due_now(db: AsyncEngine, tenant: str, run_id: str) -> None:
+    """Makes the run's one queued reminder due, as if its hour had passed; the next is queued an hour after it."""
+    w = engine_work
+    mine = sa.and_(w.c.run_id == run_id, w.c.kind == "remind", w.c.status == "queued")
+    with tenant_scope(tenant):
+        async with tenant_tx(db) as c:
+            moved = await c.execute(sa.update(w).where(mine).values(available_at=w.c.available_at - 4 * 3600))
+    assert moved.rowcount == 1, f"{moved.rowcount} reminders queued"
 
 
 async def wakeups(db: AsyncEngine, tenant: str, run_id: str) -> int:
@@ -145,7 +156,7 @@ async def test_a_reminder_repeats_while_the_review_waits_and_stops_once_it_is_de
     w.host.remind = reminders(engine)
     await drain(w)
     for n in (1, 2):
-        await asyncio.sleep(1.2)
+        await due_now(engine, tenant, run_id)
         await drain(w)
         assert await reminded(engine, tenant, run_id) == [f"{run_id}:review:1:{i}" for i in range(1, n + 1)]
         assert (await run_of(engine, tenant, run_id))["status"] == "waiting", "a reminder never ends the wait"
@@ -159,27 +170,27 @@ async def test_a_reminder_repeats_while_the_review_waits_and_stops_once_it_is_de
     with tenant_scope(tenant):
         await engine_reviews.decide(rt, M, run_id, decision="approved", reason=None)
     await drain(w)
-    await asyncio.sleep(1.2)
+    await due_now(engine, tenant, run_id)  # the third reminder, queued before the decision
     await drain(w)
     assert len(await reminded(engine, tenant, run_id)) == 2, "reminded after the decision"
     assert (await run_of(engine, tenant, run_id))["outcome"] == "ok"
 
 
 async def test_a_reminder_due_after_the_decision_is_not_sent(engine: AsyncEngine) -> None:  # noqa: F811
-    # The decision is a work row queued after the next reminder's, so a worker that is busy until that reminder falls
-    # due claims it first, while the run still reads as waiting.
+    # The decision is a work row queued after the next reminder fell due, so the worker claims the reminder first,
+    # while the run still reads as waiting.
     tenant, saver = f"t-{uuid4().hex[:8]}", InMemorySaver()
     run_id = await start(engine, tenant, flow(f"r_{uuid4().hex[:6]}", REVIEW, {"approve": "ok", "reject": "no"}))
     w = worker(engine, CountingTools(), saver)
     w.host.remind = reminders(engine)
     await drain(w)
-    await asyncio.sleep(1.2)
+    await due_now(engine, tenant, run_id)
     await drain(w)
     assert await reminded(engine, tenant, run_id) == [f"{run_id}:review:1:1"]
     rt: Any = SimpleNamespace(db=engine, settings=SimpleNamespace(lease_ttl_seconds=6.0))
     with tenant_scope(tenant):
         await engine_reviews.decide(rt, M, run_id, decision="approved", reason=None)
-    await asyncio.sleep(1.2)
+    await due_now(engine, tenant, run_id)
     await drain(w)
     assert await reminded(engine, tenant, run_id) == [f"{run_id}:review:1:1"], "reminded after the decision"
     assert (await run_of(engine, tenant, run_id))["outcome"] == "ok"
