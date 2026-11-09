@@ -7,8 +7,10 @@ has it created by the DBA first (docs/deploy/database.md), and IF NOT EXISTS the
 the environment's width (OPS_EMBEDDING_WIDTH). SQL Server and SQLite get no vector table yet (decision D17), and
 kb-service searches there on keywords only, saying so in each result.
 
-Bases made while keyword search was the only one stored searchMode "keyword" as a default, not a choice; they search
-both lanes from now on, as a new base does. Every statement renders offline, so an upgrade bundle can carry it.
+A base made while keyword search was the default stored that default whole; one still holding it unchanged, for any of
+the three presets, searches both lanes from now on, as a new base does. A base whose settings were changed since keeps
+its searchMode, since "keyword" there may have been chosen, and the downgrade sets back only the bases the upgrade
+moved. Every statement renders offline, so an upgrade bundle can carry it.
 
 Revision ID: kb_0021
 Revises: kb_0020
@@ -16,12 +18,15 @@ Revises: kb_0020
 
 from __future__ import annotations
 
+import json
+from typing import Any
+
 import sqlalchemy as sa
 from alembic import op
 
 from ops_service_kit.settings import Settings
 from ops_store.dialect import Vector, vector_index_ddl
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, isolation_ddl, isolation_drop_ddl
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, backfill_ddl, isolation_ddl, isolation_drop_ddl
 
 revision = "kb_0021"
 down_revision = "kb_0020"
@@ -31,21 +36,75 @@ depends_on = None
 CHAIN = "kb"
 ROLE = "ops_kb_tenant"
 TABLE = "kb_unit_vectors"
-# The stored default before meaning search, moved to both lanes. The JSON is the service's own (json.dumps, with or
-# without spaces), so the setting is replaced as text: one statement every database runs, and no JSON operator.
-_SPACED = """'"searchMode": "keyword"', '"searchMode": "hybrid"'"""
-_TIGHT = """'"searchMode":"keyword"', '"searchMode":"hybrid"'"""
-_SWAP = "REPLACE(REPLACE({col}, " + _SPACED + "), " + _TIGHT + ")"
-HYBRID = {
-    "postgresql": f"UPDATE kb_bases SET retrieval = CAST({_SWAP.format(col='CAST(retrieval AS TEXT)')} AS JSON)",
-    "mssql": f"UPDATE kb_bases SET retrieval = {_SWAP.format(col='retrieval')}",
-    "sqlite": f"UPDATE kb_bases SET retrieval = {_SWAP.format(col='retrieval')}",
+# A new base's retrieval settings before meaning search (service.DEFAULT_RETRIEVAL and PRESETS then), frozen here: the
+# rows to move are the ones still holding one of them as written, text for text.
+_OLD_DEFAULT: dict[str, Any] = {
+    "searchMode": "keyword",
+    "hybridWeight": 0.6,
+    "rerank": False,
+    "reranker": "hosted",
+    "chunkLimit": 8,
+    "threshold": 0.5,
+    "asOf": "",
+    "rewrite": "off",
+    "expandCount": 3,
+    "rewriteInstructions": "",
+    "scopeSourceIds": [],
+    "answerShape": "answer_with_citations",
+    "model": "bank-standard",
+    "temperature": 0.1,
+    "maxTokens": 800,
+    "instructions": "Answer only from the provided context. If the context does not contain the answer, say so.",
+    "citationStyle": "inline",
+    "includeChunks": True,
+    "noAnswerMessage": "I could not find that in the knowledge base.",
+    "filters": {"match": "all", "conditions": []},
+    "tagsInclude": [],
+    "tagsExclude": [],
+    "includeUntagged": True,
+    "structuredTables": False,
 }
+_OLD_PRESETS: tuple[dict[str, Any], ...] = (
+    {"chunkLimit": 8, "threshold": 0.5, "answerShape": "answer_with_citations"},
+    {"chunkLimit": 5, "threshold": 0.65, "answerShape": "answer_with_citations"},
+    {"chunkLimit": 10, "threshold": 0.4, "answerShape": "chunks"},
+)
+# json.dumps as the JSON column writes it, and compact, as a JSON column on another driver may.
+_SEPARATORS = ((", ", ": "), (",", ":"))
 
 
-def _marked() -> sa.Table:
+def _moves() -> list[tuple[str, str]]:
+    """(stored default, the same with both lanes) for each preset and spelling."""
+    out: list[tuple[str, str]] = []
+    for preset in _OLD_PRESETS:
+        old = {**_OLD_DEFAULT, **preset}
+        for sep in _SEPARATORS:
+            out.append((json.dumps(old, separators=sep), json.dumps({**old, "searchMode": "hybrid"}, separators=sep)))
+    return out
+
+
+def _swap(dialect: str, frm: str, to: str) -> sa.Update:
+    """Built, not written as text: the JSON holds colons, which text SQL reads as bind parameters."""
+    bases = sa.table("kb_bases", sa.column("retrieval", sa.Text))
+    value: sa.ColumnElement[Any] = sa.literal(to, sa.Text)
+    if dialect == "postgresql":
+        value = sa.cast(value, sa.JSON)
+    return sa.update(bases).where(sa.cast(bases.c.retrieval, sa.Text) == frm).values(retrieval=value)
+
+
+def _move_defaults(dialect: str, *, back: bool) -> None:
+    if dialect not in ("postgresql", "mssql", "sqlite"):
+        return
+    # The migrate login moves every tenant's bases, past each base's isolation.
+    before, after = backfill_ddl([_marked("kb_bases")], dialect, chain=CHAIN)
+    swaps = [_swap(dialect, new, old) if back else _swap(dialect, old, new) for old, new in _moves()]
+    for statement in [*before, *swaps, *after]:
+        op.execute(statement)
+
+
+def _marked(name: str = TABLE) -> sa.Table:
     return sa.Table(
-        TABLE,
+        name,
         sa.MetaData(),
         sa.Column("tenant_id", sa.String(64)),
         sa.Column("team_id", sa.String(64)),
@@ -55,11 +114,7 @@ def _marked() -> sa.Table:
 
 def upgrade() -> None:
     dialect = op.get_bind().dialect.name
-    if dialect in HYBRID:
-        if dialect == "postgresql":
-            # The migrate login moves every tenant's bases, past the tenant policy.
-            op.execute("SET LOCAL row_security = off")
-        op.execute(HYBRID[dialect])
+    _move_defaults(dialect, back=False)
     if dialect != "postgresql":
         return
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
@@ -92,7 +147,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    if op.get_bind().dialect.name != "postgresql":
+    dialect = op.get_bind().dialect.name
+    _move_defaults(dialect, back=True)
+    if dialect != "postgresql":
         return
     for statement in isolation_drop_ddl(_marked(), "postgresql"):
         op.execute(statement)

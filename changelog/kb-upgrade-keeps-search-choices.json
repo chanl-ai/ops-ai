@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "Upgrading keeps a base's keyword-only choice",
+  "description": "The upgrade to meaning search moves only knowledge bases still on the old defaults to both kinds of search, copies every account's pieces on SQL Server too, and a downgrade puts moved bases back.",
+  "tag": "fix"
+}

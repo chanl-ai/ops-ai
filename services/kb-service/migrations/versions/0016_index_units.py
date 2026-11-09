@@ -18,7 +18,14 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import mssql, postgresql
 
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, isolation_ddl, isolation_drop_ddl, mssql_predicates_ddl
+from ops_store.schema import (
+    TEAM_OWNED,
+    TENANT_SCOPED,
+    backfill_ddl,
+    isolation_ddl,
+    isolation_drop_ddl,
+    mssql_predicates_ddl,
+)
 
 revision = "kb_0016"
 down_revision = "kb_0015"
@@ -35,9 +42,9 @@ CHUNK_TSV = (
 )
 
 
-def _marked() -> sa.Table:
+def _marked(name: str = TABLE) -> sa.Table:
     return sa.Table(
-        TABLE,
+        name,
         sa.MetaData(),
         sa.Column("tenant_id", sa.String(64)),
         sa.Column("team_id", sa.String(64)),
@@ -52,8 +59,6 @@ def _column_type(column: sa.Column[Any]) -> str:
 def upgrade() -> None:
     dialect = op.get_bind().dialect.name
     pg = dialect == "postgresql"
-    if pg:
-        op.execute("SET LOCAL row_security = off")
     columns: list[Any] = [
         sa.Column("tenant_id", sa.String(64), nullable=False),
         sa.Column("team_id", sa.String(64), nullable=False),
@@ -93,7 +98,8 @@ def upgrade() -> None:
         sa.column("text", sa.Text),
         sa.column("withdrawn_at", sa.DateTime),
     )
-    heading = chunks.c.title + sa.literal(" ") + chunks.c.section
+    # A title and a section are up to 400 characters each, so the pair is cut to the unit's 800 as the service cuts it.
+    heading = sa.cast(chunks.c.title + sa.literal(" ") + chunks.c.section, sa.String(800))
     copied = sa.select(
         chunks.c.tenant_id,
         chunks.c.team_id,
@@ -107,7 +113,10 @@ def upgrade() -> None:
     ).where(chunks.c.withdrawn_at.is_(None))
     names = ["tenant_id", "team_id", "id", "chunk_id", "item_id", "kind", "position", "heading", "text"]
     units = sa.table(TABLE, *(sa.column(n, sa.String) for n in names))
-    op.execute(units.insert().from_select(names, copied))
+    # Every tenant's pieces are copied, past each chunk's isolation.
+    before, after = backfill_ddl([_marked("kb_chunks")], dialect, chain=CHAIN)
+    for statement in [*before, units.insert().from_select(names, copied), *after]:
+        op.execute(statement)
     if pg:
         op.execute("DROP INDEX IF EXISTS ix_kb_chunks_tsv")
         op.drop_column("kb_chunks", "tsv")
