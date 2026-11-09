@@ -10,10 +10,12 @@ import json
 import os
 import tempfile
 import time
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from fake_help_site import help_site, page
+from fake_help_site import Proxied, help_site, page, proxied_site
 from usecase_harness import (
     KB_PORT,
     ROOT,
@@ -77,9 +79,10 @@ def main() -> None:
     with (
         tempfile.TemporaryDirectory(prefix="uc-674-") as tmp,
         help_site() as site,
+        _docs_site() as docs,
         fake_openai(_rules(Path(tmp))) as fake,
         models({"OPS_MODELS_FAKE_OPENAI_URL": fake}) as models_url,
-        tools(settings={**site.settings, **PLUGINS}) as gw,
+        tools(settings={**_reach(Path(tmp), site, docs), **PLUGINS}) as gw,
         kb(
             Path(tmp) / "files",
             env={
@@ -91,6 +94,8 @@ def main() -> None:
         ) as k,
     ):
         data(gw.post("/v1/egress/ranges", json={"value": site.range, "note": "uc-674 help site"}, headers=SECURITY))
+        if docs is not None and docs.range != site.range:
+            data(gw.post("/v1/egress/ranges", json={"value": docs.range, "note": "uc-674 docs"}, headers=SECURITY))
         data(gw.put("/v1/apps/plugin:opsai.web/team", json={"enabled": True}, headers=OPS))
         start = {"start": [f"{site.base}/"], "include": ["/lending/**", "/cards/**"], "exclude": ["/archive/**"]}
         config = {"plugin": "opsai.web", "source": "site", "values": {**start, "rate": 20}}
@@ -176,7 +181,7 @@ def main() -> None:
         twice = data(k.post(f"/v1/sources/{src['id']}/sync"))
         stones = [t["id"] for t in data(k.get(f"/v1/sources/{src['id']}/tombstones"))]
         check(
-            "6b a page the sitemap still lists but that answers 404 twice leaves search and is tombstoned",
+            "7 a page the sitemap still lists but that answers 404 twice leaves search and is tombstoned",
             still and f"{site.base}{early}" not in items(k, src["id"]) and stones == [f"{site.base}{early}"],
             {"first": once["counts"], "second": twice["counts"], "tombstones": stones},
         )
@@ -184,7 +189,7 @@ def main() -> None:
         # Story 4: meaning and keyword lanes; an agent cites a crawled page; another base is not searchable.
         lanes = six.get("lanes") or {}
         check(
-            "7 a search says which lanes ran: keyword and meaning",
+            "8 a search says which lanes ran: keyword and meaning",
             lanes.get("ran") == ["keyword", "meaning"] and lanes.get("skipped") == [],
             lanes,
         )
@@ -199,14 +204,14 @@ def main() -> None:
             )
             cited = next((e["citations"] for e in sse(res.text) if e.get("type") == "citations"), [])
             check(
-                "8 the agent's answer cites the crawled page by its address",
+                "9 the agent's answer cites the crawled page by its address",
                 any(str(c.get("url", "")).endswith("/lending/payment-holidays") for c in cited)
                 or any("Payment holidays" in str(c.get("title", "")) for c in cited),
                 cited,
             )
             refused = api.post("/chat/threads", json={"agentId": other, "kbIds": [base["id"]]}, headers=OPS)
             check(
-                "9 an agent not given the knowledge base cannot search it",
+                "10 an agent not given the knowledge base cannot search it",
                 refused.status_code in (403, 422) and "cannot search" in refused.text,
                 refused.text[:200],
             )
@@ -227,7 +232,7 @@ def main() -> None:
             timeout=120,
         )  # fmt: skip
         check(
-            "10 the estimate counts calls without calling a model, and approving rebuilds with questions and drafts",
+            "11 the estimate counts calls without calling a model, and approving rebuilds with questions and drafts",
             estimate["calls"] > 0
             and rebuild is not None
             and rebuild["status"] == "success"
@@ -241,7 +246,7 @@ def main() -> None:
         ]
         holiday = next((d for d in drafts if "Payment holidays" in d["faq"]["question"]), None)
         check(
-            "11 FAQ drafts wait in the Changes queue with the passage they quote",
+            "12 FAQ drafts wait in the Changes queue with the passage they quote",
             holiday is not None and holiday["before"] == holiday["faq"]["quote"],
             drafts,
         )
@@ -254,13 +259,60 @@ def main() -> None:
             )["passages"]
             top = next((p for p in found if p["matched"] == "faq"), None)
             check(
-                "12 the approved pair answers its question and cites the source passage on the page",
+                "13 the approved pair answers its question and cites the source passage on the page",
                 top is not None
                 and str(top.get("url", "")).endswith("/lending/payment-holidays")
                 and holiday["faq"]["quote"] in top["text"],
                 found[:2],
             )
+
+        # Story 6, when the repo's docs site runs (OPS_DOCS_SITE_URL): a real site with no sitemap, crawled by links.
+        if docs is not None:
+            values = {"start": [f"{docs.base}/docs"], "follow_links": True, "depth": 2, "max_pages": 25, "rate": 20}
+            body = {
+                "type": "tool",
+                "name": f"Ops AI docs {RUN}",
+                "config": {"plugin": "opsai.web", "source": "site", "values": values},
+                "kbIds": [base["id"]],
+            }
+            made = data(k.post("/v1/sources", json=body))
+            crawled = data(k.post(f"/v1/sources/{made['id']}/sync"))
+            pages = items(k, made["id"])
+            answer = ask(k, base["id"], "agents and workflows for regulated operations teams")
+            check(
+                "14 the repo's docs site is crawled by its links and answers a question from it",
+                crawled["counts"]["upserted"] >= 5
+                and any(str(c.get("documentId", "")) in {i["id"] for i in pages.values()} for c in answer["citations"]),
+                {
+                    "counts": crawled["counts"],
+                    "errors": crawled["errors"][:3],
+                    "pages": len(pages),
+                    "cited": [c["title"] for c in answer["citations"]],
+                },
+            )
     finish()
+
+
+@contextmanager
+def _docs_site() -> Generator[Proxied | None]:
+    url = os.environ.get("OPS_DOCS_SITE_URL")
+    if not url:
+        yield None
+        return
+    with proxied_site(url) as docs:
+        yield docs
+
+
+def _reach(folder: Path, site: Any, docs: Proxied | None) -> dict[str, str]:
+    """What tools-service needs to reach both sites: one CA bundle and one name map."""
+    if docs is None:
+        return dict(site.settings)
+    bundle = folder / "sites-ca.pem"
+    bundle.write_text(
+        Path(site.settings["OPS_EGRESS_CA_FILE"]).read_text() + Path(docs.settings["OPS_EGRESS_CA_FILE"]).read_text()
+    )
+    names = {**json.loads(site.settings["OPS_EGRESS_RESOLVE"]), **json.loads(docs.settings["OPS_EGRESS_RESOLVE"])}
+    return {"OPS_EGRESS_CA_FILE": str(bundle), "OPS_EGRESS_RESOLVE": json.dumps(names)}
 
 
 def _rules(folder: Path) -> Path:

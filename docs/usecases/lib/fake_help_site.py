@@ -13,6 +13,8 @@ import json
 import ssl
 import tempfile
 import threading
+import urllib.error
+import urllib.request
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -79,9 +81,9 @@ class HelpSite:
         self.lastmod.pop(path, None)
 
 
-def _certificate(folder: Path) -> tuple[Path, Path]:
+def _certificate(folder: Path, host: str = HOST) -> tuple[Path, Path]:
     key = ec.generate_private_key(ec.SECP256R1())
-    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, HOST)])
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, host)])
     now = datetime.now(UTC)
     cert = (
         x509.CertificateBuilder()
@@ -91,11 +93,11 @@ def _certificate(folder: Path) -> tuple[Path, Path]:
         .serial_number(x509.random_serial_number())
         .not_valid_before(now - timedelta(minutes=5))
         .not_valid_after(now + timedelta(days=1))
-        .add_extension(x509.SubjectAlternativeName([x509.DNSName(HOST)]), critical=False)
+        .add_extension(x509.SubjectAlternativeName([x509.DNSName(host)]), critical=False)
         .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
         .sign(key, hashes.SHA256())
     )
-    cert_file, key_file = folder / "help.crt", folder / "help.key"
+    cert_file, key_file = folder / f"{host}.crt", folder / f"{host}.key"
     cert_file.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
     key_file.write_bytes(
         key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
@@ -149,6 +151,64 @@ def help_site() -> Generator[HelpSite]:
         server = ThreadingHTTPServer((address, 0), BaseHTTPRequestHandler)
         site = HelpSite(address, int(server.server_address[1]), cert)
         server.RequestHandlerClass = _handler(site)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(cert, key)
+        server.socket = context.wrap_socket(server.socket, server_side=True)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            yield site
+        finally:
+            server.shutdown()
+
+
+DOCS_HOST = "docs.opsai.test"
+
+
+class Proxied:
+    """A site of this machine's (the repo's own docs site, served by `next dev`) put behind https under a test name,
+    so the website plugin reaches it the way it reaches any site: through the egress proxy, by name."""
+
+    def __init__(self, address: str, port: int, cert: Path) -> None:
+        self.settings = {
+            "OPS_EGRESS_CA_FILE": str(cert),
+            "OPS_EGRESS_RESOLVE": json.dumps({DOCS_HOST: f"{address}:{port}"}),
+        }
+        self.range = f"{address}/32"
+        self.base = f"https://{DOCS_HOST}"
+        self.hits: list[str] = []
+
+
+def _proxy_handler(site: Proxied, upstream: str) -> type[BaseHTTPRequestHandler]:
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+        def do_GET(self) -> None:
+            site.hits.append(self.path)
+            try:
+                with urllib.request.urlopen(f"{upstream}{self.path}", timeout=60) as r:
+                    status, body, kind = r.status, r.read(), r.headers.get("Content-Type", "text/html")
+            except urllib.error.HTTPError as e:
+                status, body, kind = e.code, e.read(), e.headers.get("Content-Type", "text/html")
+            self.send_response(status)
+            self.send_header("Content-Type", kind)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    return Handler
+
+
+@contextmanager
+def proxied_site(upstream: str) -> Generator[Proxied]:
+    """`upstream` (http on this machine) served on https as docs.opsai.test on the private address."""
+    with tempfile.TemporaryDirectory() as tmp:
+        cert, key = _certificate(Path(tmp), DOCS_HOST)
+        address = private_address()
+        server = ThreadingHTTPServer((address, 0), BaseHTTPRequestHandler)
+        site = Proxied(address, int(server.server_address[1]), cert)
+        server.RequestHandlerClass = _proxy_handler(site, upstream.rstrip("/"))
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain(cert, key)
         server.socket = context.wrap_socket(server.socket, server_side=True)
