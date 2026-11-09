@@ -17,7 +17,7 @@ A person wants their own PostgreSQL instead of the container, or asks about Azur
    `OPS_DATABASE_URL` only when it passed, and never prints the password.
 2. `make migrate` applies every service's chain to the new database; `make up` then runs on it.
 3. `make reset-db` wipes the stack's own database and rebuilds it; it asks first, since every checkout on the machine shares it.
-4. `make db-move-image` moves a stack started on the old `postgres:17-alpine` image onto `pgvector/pgvector:pg17`, which meaning search needs: it dumps every database, starts the new image on a new volume (`ops-runtime-pgvector`) and restores. Until it runs, a recreated postgres container starts empty on the new volume; the old volume `ops-runtime-pg` is kept.
+4. `make db-move-image` moves a stack started on the old `postgres:17-alpine` image onto `pgvector/pgvector:pg17`, which meaning search needs: it prints each database's table count, dumps every database (refusing a failed or empty dump, with nothing changed), starts the new image on a new volume (`ops-runtime-pgvector`), restores, and prints the counts again, failing if any differs. Until it runs, a recreated postgres container starts empty on the new volume; the old volume `ops-runtime-pg` is never touched, so rolling back is pointing the compose file at it again.
 4. Azure SQL is listed and refused as not supported in this version until the store runs on it;
    `docs/guide/azure-sql.md` has the plan.
 

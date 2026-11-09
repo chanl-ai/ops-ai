@@ -49,19 +49,25 @@ migration: ## New Alembic revision: make migration NAME="add case table"
 
 db-move-image: ## Move the stack's database onto the compose file's PostgreSQL image: dump, a fresh volume, restore; asks first
 	@# The pgvector image is Debian (glibc) where the old one was Alpine (musl): the two sort text differently, so the
-	@# old data folder is never reused (its text indexes would be wrong). The old volume is left as it was.
-	@# The restore log's two "already exists" errors (the role ops and the database ops_runtime, which the new image
-	@# makes at start) are expected; the rest restores into them.
+	@# old data folder is never reused (its text indexes would be wrong). The old volume (ops-runtime-pg) is left as it
+	@# was: rolling back is pointing the compose file's volume and image at it again. The restore log's two "already
+	@# exists" errors (the role ops and the database ops_runtime, which the new image makes at start) are expected.
 	@if [ "$(CONFIRM)" != yes ]; then \
 		printf 'Dump every database on the stack PostgreSQL, recreate it on the compose image and restore? Type yes: '; read answer; \
 		[ "$$answer" = yes ] || { echo "db-move-image: nothing changed"; exit 1; }; \
 	fi
 	@mkdir -p $(OPS_DATA_DIR)/db-dumps
 	@dump=$(OPS_DATA_DIR)/db-dumps/pg-$$(date +%Y%m%d-%H%M%S).sql; \
+	  counts() { $(COMPOSE) exec -T postgres sh -c 'for d in $$(psql -U ops -d postgres -Atc "SELECT datname FROM pg_database WHERE NOT datistemplate ORDER BY 1"); do printf "%s %s\n" "$$d" "$$(psql -U ops -d "$$d" -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema = '"'"'public'"'"'")"; done'; }; \
+	  echo "db-move-image: tables per database before"; counts | sed 's/^/  /' | tee $$dump.before; \
 	  echo "db-move-image: dumping to $$dump"; \
 	  $(COMPOSE) exec -T postgres pg_dumpall -U ops > "$$dump" || { echo "db-move-image: the dump failed; nothing changed"; exit 1; }; \
+	  [ -s "$$dump" ] && grep -q "^CREATE TABLE" "$$dump" || { echo "db-move-image: the dump is empty; nothing changed"; exit 1; }; \
 	  $(STACK) stop-for-reset; \
 	  $(COMPOSE) stop postgres && $(COMPOSE) rm -f postgres && \
 	  $(COMPOSE) up -d --wait postgres && \
 	  $(COMPOSE) exec -T postgres psql -q -U ops -d postgres -v ON_ERROR_STOP=0 < "$$dump" > $(OPS_DATA_DIR)/db-dumps/restore.log 2>&1; \
+	  echo "db-move-image: tables per database after"; counts | sed 's/^/  /' | tee $$dump.after; \
+	  if diff -q $$dump.before $$dump.after >/dev/null; then echo "db-move-image: every database has the tables it had"; \
+	  else echo "db-move-image: the counts differ (above); the old volume ops-runtime-pg is untouched"; exit 1; fi; \
 	  echo "db-move-image: restored from $$dump (log: $(OPS_DATA_DIR)/db-dumps/restore.log); run make up"
