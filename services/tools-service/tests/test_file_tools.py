@@ -217,7 +217,7 @@ async def test_a_file_named_by_the_model_reaches_only_the_one_file_route(monkeyp
         return real(self, request)
 
     monkeypatch.setattr(FakeFilesService, "handle", seen)
-    tools, _, documents = await _rig()
+    tools, files, documents = await _rig()
     # A file's text can steer the model's arguments: these would climb out of /v1/files/{id} to another route.
     for ref in ("../scan-results", "..", "x/content", "x?purpose=chat_attachment"):
         out = await _call(tools, "read_file", file=ref)
@@ -225,3 +225,6 @@ async def test_a_file_named_by_the_model_reaches_only_the_one_file_route(monkeyp
     by_id = [p for p in asked if not p.startswith(b"/v1/files?")]
     assert by_id == [b"/v1/files/x%3Fpurpose%3Dchat_attachment"], by_id
     assert documents.reads == 0
+    fid = await _upload(files, OPS, "levy-notice.txt")
+    typed = await _call(tools, "read_document", file=fid, documentType="levy/../notice")
+    assert not typed.ok and "no document type" in typed.output["error"], typed.output

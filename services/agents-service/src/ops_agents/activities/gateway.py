@@ -132,6 +132,8 @@ class GatewayClient:
         tools-service's registry has them; access "unknown" and no policy when it is not registered."""
         try:
             return cast(dict[str, Any], await self.tools.get(f"/v1/tools/{segment(tool)}"))
+        except ValueError:
+            return {"access": "unknown", "approval": None}  # no registered tool's name holds a slash
         except ServiceCallError as e:
             if e.status == 404:
                 return {"access": "unknown", "approval": None}

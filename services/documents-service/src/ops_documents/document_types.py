@@ -73,6 +73,8 @@ class ModelsPrices:
                 return None
             except ServiceUnreachable:
                 return None
+            except ValueError:
+                continue  # a name with a slash is no alias models-service holds
             current = [r for r in rows if r.get("status") == "current"] or rows
             if current:
                 return Decimal(str(current[-1]["inputPerMillion"])), Decimal(str(current[-1]["outputPerMillion"]))

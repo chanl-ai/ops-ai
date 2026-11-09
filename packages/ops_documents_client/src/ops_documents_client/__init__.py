@@ -40,6 +40,14 @@ class DocumentNotFound(DocumentsRefused):
     """The file or the document type is not the caller's team's."""
 
 
+def _id(value: str) -> str:
+    """An id as one path segment; an id that cannot be one names nothing the team holds."""
+    try:
+        return segment(value)
+    except ValueError:
+        raise DocumentNotFound(404, "not_found", f"No {value!r}") from None
+
+
 def _refused(e: ServiceCallError) -> DocumentsRefused:
     code, message = e.code or "error", str(e)
     return DocumentNotFound(404, code, message) if e.status == 404 else DocumentsRefused(e.status, code, message)
@@ -122,7 +130,7 @@ class DocumentsClient:
             while answer.get("status") in READING_PENDING and time.monotonic() < ends:
                 await sleep(poll_s)
                 answer = await self._documents.request(
-                    "GET", f"/v1/documents/readings/{segment(file_id)}", params={"ocr": ocr}, tenant=tenant, team=team
+                    "GET", f"/v1/documents/readings/{_id(file_id)}", params={"ocr": ocr}, tenant=tenant, team=team
                 )
         except ServiceCallError as e:
             raise _refused(e) from e
@@ -132,7 +140,7 @@ class DocumentsClient:
         """The team's document type with its versions; another team's or an unknown one is DocumentNotFound."""
         try:
             found: dict[str, Any] = await self._documents.request(
-                "GET", f"/v1/document-types/{segment(type_id)}", tenant=tenant, team=team
+                "GET", f"/v1/document-types/{_id(type_id)}", tenant=tenant, team=team
             )
         except ServiceCallError as e:
             raise _refused(e) from e
@@ -162,7 +170,7 @@ class DocumentsClient:
         """An extraction as it is now: queued, running, or finished with its answer."""
         try:
             found: dict[str, Any] = await self._documents.request(
-                "GET", f"/v1/documents/extractions/{segment(extraction_id)}", tenant=tenant, team=team
+                "GET", f"/v1/documents/extractions/{_id(extraction_id)}", tenant=tenant, team=team
             )
         except ServiceCallError as e:
             raise _refused(e) from e
