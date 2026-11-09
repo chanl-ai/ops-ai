@@ -75,6 +75,7 @@ async def test_a_deleted_config_leaves_the_app_broken_and_turn_off_still_works(r
     client, host = rig
     cred = await _on_without_a_working_config(client, tenant)
     # The config's row is gone, as a delete outside the move path would leave it.
+    assert host.connections is not None
     await host.connections.delete_credential(tenant, cred)
     assert (await card(client, tenant))["appState"] == "auth_config_broken"
     # The app is on for the team, so Settings' Turn off works and the team's state reads off with nothing to sign in.
