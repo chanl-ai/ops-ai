@@ -181,7 +181,9 @@ The rest of what that dispute touched, and what a review asks about next:
   closed.
 - **Knowledge.** Knowledge bases built from uploads or synced sources, served to the agents granted each base.
 - **Files and document types.** Every upload and attachment with its purpose, sensitivity, scan, versions and legal
-  hold; reads keep quotes and pages.
+  hold. Each file is read once per team, scans with OCR, and that one reading feeds extraction, knowledge bases, chat
+  attachments and an agent's `read_file`; another team holding the same file reads it itself. Reads keep quotes and
+  pages.
 - **Chat embed.** An agent's chat on your own intranet pages, pinned to a published version, with allowed sites
   and keys per embed.
 - **Model gateway.** Model aliases, provider connections, per-key budgets and a call log with cost; agents name an
@@ -254,6 +256,9 @@ Runs every service, the console and the fake model on your machine. Needs:
 - Python 3.12 and [uv](https://docs.astral.sh/uv/)
 - Node 20 or newer and pnpm 10 (`corepack enable` provides it)
 - Docker, for PostgreSQL, OPA and the test mail servers
+- Optional: [Tesseract](https://tesseract-ocr.github.io/) (`brew install tesseract`, `apt install tesseract-ocr`) to
+  read scanned files; without it documents-service reports `degraded` and a scanned page is listed as unread with the
+  reason
 
 No model key is needed: with no `OPENAI_API_KEY`, every model alias runs on the fake model.
 
@@ -261,6 +266,7 @@ No model key is needed: with no `OPENAI_API_KEY`, every model alias runs on the 
 git clone <this repository> ops-ai && cd ops-ai
 make setup                               # optional: answer what you have; each answer is tested before it is written
 make install                             # pnpm install and uv sync, once per clone
+make plugins-sync                        # optional: the pinned plugins (GitHub, Salesforce) into plugins/
 make up                                  # PostgreSQL, OPA, every service and the console
 make health                              # each service, its port and whether it answers
 make review BRANCH=main                  # optional: run a branch from the review worktree, same ports
@@ -346,7 +352,8 @@ file (`scripts/sample-team/admin.env.example`) to `uv run python scripts/sample_
 
 [`CONTRIBUTING.md`](CONTRIBUTING.md) covers the doc and code standards, verification and commit messages;
 [`AGENTS.md`](AGENTS.md) holds the rules for coding agents. `make verify` must pass before a commit; the pre-commit
-hook runs the console's checks on the staged content.
+hook runs the console's checks on the staged content. On a pull request, CI runs the jobs the change needs, and the one
+check that decides a merge is `ci-ok`, which fails when any of them failed or was cancelled.
 
 ## Licence
 
