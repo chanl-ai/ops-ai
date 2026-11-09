@@ -5,6 +5,8 @@
 # when the commit, those values or the console's uncommitted files change.
 #   scripts/console-prod.sh <port>
 set -euo pipefail
+# A shell opened by `make restart` on a box lacks the pnpm shim box-setup.sh puts in ~/box/bin.
+[ -d "$HOME/box/bin" ] && PATH="$HOME/box/bin:$PATH"
 port=${1:?usage: console-prod.sh <port>}
 stamp_file=apps/console/.next/.ops-built
 stamp=$({ git rev-parse HEAD; env | grep '^NEXT_PUBLIC_' | sort; git status --porcelain -- apps/console packages | sort; } | cksum)

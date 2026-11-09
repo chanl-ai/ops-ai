@@ -199,10 +199,10 @@ export OPS_INFRA=external
 export OPS_CONSOLE_MODE=prod OPS_READY_TIMEOUT=900
 cd "$REPO"
 # make/env.mk includes .env on every make run, so a later `make restart`, `make up` or health check on the box uses the
-# production console too. Only these two lines are managed; anything else in the file stays.
+# production console too. Only these three lines are managed (the public address is baked into the console build); anything else in the file stays.
 touch .env
-sed -i '/^OPS_CONSOLE_MODE=/d;/^OPS_READY_TIMEOUT=/d' .env
-printf 'OPS_CONSOLE_MODE=prod\nOPS_READY_TIMEOUT=900\n' >>.env
+sed -i '/^OPS_CONSOLE_MODE=/d;/^OPS_READY_TIMEOUT=/d;/^OPS_PUBLIC_ORIGIN=/d' .env
+printf 'OPS_CONSOLE_MODE=prod\nOPS_READY_TIMEOUT=900\nOPS_PUBLIC_ORIGIN=%s\n' "$OPS_PUBLIC_ORIGIN" >>.env
 [ "${BOX_RESET:-}" = 1 ] && rm -f apps/console/.next/.ops-built
 if [ "${BOX_RESET:-}" = 1 ] || [ "$SERVICES_CHANGED" = 1 ]; then
   make -s down KEEP_DB=1 >/dev/null 2>&1 || true
