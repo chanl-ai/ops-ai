@@ -106,7 +106,13 @@ non-zero on any failure:
 | Deploy | The release command (`deploy/fly/release.sh`) migrates every chain as the superuser and makes the first admin; then the machine is replaced in place | 58 s |
 | Grants | `grants.sql` from `make db-ddl` at REF on a throwaway local PostgreSQL 18, applied through `fly proxy` as the superuser | 38 s (49 s pulling the image) |
 | Health | Polls `ops_host.py --check` over `fly ssh` until every process is up | 10 s |
+| OCR | `deploy/fly/check_ocr.py` on the machine: fails unless Tesseract has English data and documents-service's `/health` does not report OCR missing | not measured |
+| Plugins | `deploy/images/bake_plugins.py --check` against the app's `OPS_PLUGINS_DIR`: fails unless the plugins match `deploy/plugins.json` by id and version | not measured |
 | Walk | `docs/usecases/lib/stg_click_walk.mjs` with the first admin from `<private-dir>/staging-admin.env` | 136 s, 41 OK |
+
+The image installs Tesseract with English data (`tesseract-ocr`, `tesseract-ocr-eng`), and `fly.toml` sets
+`OPS_KB_OCR` and `OPS_ATTACHMENTS_OCR` to `auto`, so scanned pages in knowledge sources and chat attachments are read by
+OCR. A deploy whose image lost Tesseract stops at the OCR step instead of letting every scan fail quietly.
 
 Build to every process up: about 2 minutes 20 seconds; with the walk, 4 minutes 33 seconds. The per-service deploy
 took about 21 minutes across 14 apps.

@@ -509,7 +509,8 @@ host folder), so `ops plugin install --into <that folder>` then a restart of bot
 ### Plugins in a built image
 
 The release image (`deploy/fly/Dockerfile`) ships the plugins `deploy/plugins.json` pins, in `/app/plugins`, which is
-its `OPS_PLUGINS_DIR`. Each pin names a GitHub repository, a full commit and the plugin's folder in it:
+its `OPS_PLUGINS_DIR`. One build stage bakes them, and the service and runtime images copy that folder, so the two
+cannot ship different plugins. Each pin names a GitHub repository, a full commit and the plugin's folder in it:
 
 ```json
 {"source": "https://github.com/chanl-ai/ops-ai-plugins", "ref": "<40-character commit>", "path": "plugins/salesforce"}
@@ -519,6 +520,22 @@ The build fetches each commit, validates the plugin as `ops plugin install` does
 tag is refused, so an image built twice from the same commit holds the same plugins. To ship a newer plugin, change its
 `ref` and rebuild; mounting another folder at `OPS_PLUGINS_DIR` replaces the baked ones. To bake them into a folder
 yourself: `uv run python deploy/images/bake_plugins.py --into ./plugins`.
+
+### Pinned plugins on a laptop and a box
+
+`deploy/plugins.json` is the one list of plugins for the image, a laptop and a cloud box. These commands keep the
+plugins folder equal to that list:
+
+| Command | What it does |
+|---|---|
+| `make plugins-sync` | Puts the pinned plugins into `OPS_PLUGINS_DIR` (default: the main checkout's `plugins/`). Plugins that are there and were not put there by this command move to `plugins.bak-<date>/` and are never deleted. `make box-up` runs it in a box |
+| `make plugins-sync PLUGINS_DEV=../ops-ai-plugins` | Links the plugin folders of a working copy instead of the pinned commit, so an edit shows after the next restart. Run `make plugins-sync` without `PLUGINS_DEV` to go back to the pinned ones |
+| `make plugins-bump` | Moves every pin to the current main of the plugins repository and prints the old and new commit per plugin. `REF=<branch\|tag\|sha>` moves to that instead; the file always records the full commit |
+
+Restart tools-service and kb-service after a sync.
+
+The staging deploy (`make stg-deploy`) checks the running app: the plugins in its `OPS_PLUGINS_DIR` must match
+`deploy/plugins.json` by id and version, or the deploy fails (see [Fly staging](../deploy/fly-staging.md)).
 
 tools-service and kb-service load every plugin when they start. A plugin that fails validation is left out and logged
 at start as `plugin_failed` with its error, and every other plugin still loads.
