@@ -144,6 +144,8 @@ class Source(Out):
     last_run_status: str | None = None
     used_by_kb_ids: list[str]
     created_at: str
+    # On a settings save: the rebuild it started in the background, when items were built under other settings.
+    rebuild: SyncRun | None = None
 
 
 class NamedRef(Out):
@@ -215,6 +217,9 @@ class SyncRun(Out):
     phases: list[Json]
     errors: list[Json]
     log: list[str]
+    # A run in the background (a rebuild after a settings change): when it ended, and who asked it to stop.
+    finished_at: str | None = None
+    cancelled_by: str | None = None
 
 
 class Item(Out):

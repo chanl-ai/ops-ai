@@ -547,6 +547,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/sync-runs/{run_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Run
+         * @description Stops a running rebuild between two items; 409 `run_not_running` when it is not running.
+         */
+        post: operations["sources_cancel_run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1762,6 +1782,7 @@ export interface components {
             permissions: {
                 [key: string]: unknown;
             };
+            rebuild?: components["schemas"]["SyncRun"] | null;
             /** Rules */
             rules: {
                 [key: string]: unknown;
@@ -1859,6 +1880,7 @@ export interface components {
             };
             /** Readers */
             readers: components["schemas"]["Reader"][];
+            rebuild?: components["schemas"]["SyncRun"] | null;
             /** Recentruns */
             recentRuns: {
                 [key: string]: unknown;
@@ -2044,6 +2066,7 @@ export interface components {
             permissions: {
                 [key: string]: unknown;
             };
+            rebuild?: components["schemas"]["SyncRun"] | null;
             /** Rules */
             rules: {
                 [key: string]: unknown;
@@ -2092,6 +2115,8 @@ export interface components {
         };
         /** SyncRun */
         SyncRun: {
+            /** Cancelledby */
+            cancelledBy?: string | null;
             /** Counts */
             counts: {
                 [key: string]: number;
@@ -2102,6 +2127,8 @@ export interface components {
             errors: {
                 [key: string]: unknown;
             }[];
+            /** Finishedat */
+            finishedAt?: string | null;
             /** Id */
             id: string;
             /** Log */
@@ -5760,6 +5787,109 @@ export interface operations {
         };
     };
     sources_get_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SyncRun_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    sources_cancel_run: {
         parameters: {
             query?: never;
             header?: never;

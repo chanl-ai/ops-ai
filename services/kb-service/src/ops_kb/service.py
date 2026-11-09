@@ -8,6 +8,7 @@ docs/services/kb-service/overview.md gives the designed surface and says which p
 
 from __future__ import annotations
 
+import asyncio
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -28,7 +29,7 @@ from .agents import AgentDirectory, Usage
 from .files import FileIntake, FileMissing, FileNotScanned, Stored
 from .readings import READING_PENDING, Readings, parsed_of, read_with
 from .retrieval import Passage, Retriever
-from .source_settings import InvalidSettings, SourceSettings, index_key, merged, stored, wire
+from .source_settings import InvalidSettings, SourceSettings, index_key, merged, rebuild_for, stored, wire
 from .store import KnowledgeStore
 from .tool_sources import ToolReader, source_config, sync_tool_source
 
@@ -193,6 +194,8 @@ class KnowledgeService:
         self.readings = readings
         self.ocr = ocr
         self.tools = tools
+        # Rebuilds running in this process, so stopping the service ends them and their runs say why.
+        self.rebuilds: set[asyncio.Task[None]] = set()
 
     # ── Serialising ──────────────────────────────────────────────────────
 
@@ -506,11 +509,12 @@ class KnowledgeService:
         sources = await self.store.sources(who.tenant_id)
         bases = {b["id"]: b for b in await self.store.bases(who.tenant_id)}
         _, by_source = await self._joined(who.tenant_id)
+        running = await self.store.running_sources(who.tenant_id)
         rows = [
             {
                 **self._source(s, by_source.get(s["id"], [])),
                 "usedBy": [{"id": k, "name": bases[k]["name"]} for k in by_source.get(s["id"], []) if k in bases],
-                "running": False,
+                "running": s["id"] in running,
             }
             for s in sorted(sources, key=lambda s: s["created_at"], reverse=True)
             if _matches(search, s["name"], s["owner"], s["collection"])
@@ -560,6 +564,7 @@ class KnowledgeService:
                 for b in readers
             ],
             "recentRuns": recent,
+            "running": next((r for r in recent if r["status"] == "running"), None),
             **self._rights(who, s["team_id"], s["name"], s.get("protection")),
             # The Last sync tile's "Took ..." hint; absent until a first run.
             **({"lastRunDurationSec": recent[0]["durationSec"]} if recent else {}),
@@ -699,7 +704,17 @@ class KnowledgeService:
         s = await self._changeable_source(who, source_id)
         if s["type"] == "tool":
             return await self.sync_tool(who, s, full=full, trigger="full" if full else "manual")
-        return await self._sync(who, s, full=full, retry=retry)
+        return await self._held_sync(who, s, full=full, retry=retry)
+
+    async def _held_sync(self, who: Who, s: dict[str, Any], *, full: bool, retry: bool) -> dict[str, Any]:
+        """A file source's sync under its lease, so a rebuild, the schedule and a manual sync never run it at once."""
+        source_id = str(s["id"])
+        if not await self.store.claim(who.tenant_id, source_id, until=datetime.now(UTC) + LEASE):
+            raise Conflict(f"{s['name']} is syncing or rebuilding now; wait for that run to end.", code="sync_running")
+        try:
+            return await self._sync(who, s, full=full, retry=retry)
+        finally:
+            await self.store.release(who.tenant_id, source_id)
 
     async def sync_tool(self, who: Who, s: dict[str, Any], *, full: bool, trigger: str) -> dict[str, Any]:
         """A tool source's sync under its lease, so a manual sync and the schedule never run it at once."""
@@ -713,6 +728,101 @@ class KnowledgeService:
             return _run(await sync_tool_source(self, self.tools, who, s, full=full, trigger=trigger))
         finally:
             await self.store.release(who.tenant_id, str(s["id"]))
+
+    async def start_rebuild(self, who: Who, s: dict[str, Any]) -> dict[str, Any] | None:
+        """Rebuilds, in the background, every item of the source built under other settings: split again from its
+        stored reading, or read again when the OCR mode changed. Nothing is fetched from where the item came from. The
+        run holds the source's lease, so no sync runs beside it, and stops between two items when cancelled. None when
+        no item needs it, or a sync holds the source now (that sync, or the next, rebuilds them)."""
+        tenant, source_id = who.tenant_id, str(s["id"])
+        stale = [
+            i for i in await self.store.items(tenant, source_ids=[source_id]) if self.built_under_other_settings(s, i)
+        ]
+        if not stale or not await self.store.claim(tenant, source_id, until=datetime.now(UTC) + LEASE):
+            return None
+        run: dict[str, Any] = {
+            "tenant_id": tenant,
+            "id": new_id("run"),
+            "source_id": source_id,
+            "trigger": "settings",
+            "started_at": datetime.now(UTC),
+            "duration_sec": 0.0,
+            "status": "running",
+            "counts": {"total": len(stale), "checked": 0, "rebuilt": 0, "reading": 0, "failed": 0, "skipped": 0},
+            "errors": [],
+            "log": [],
+            "started_by": who.email,
+        }
+        await self.store.add_run(run)
+        task = asyncio.create_task(self._rebuild(who, s, run, stale))
+        self.rebuilds.add(task)
+        task.add_done_callback(self.rebuilds.discard)
+        return _run(run)
+
+    async def _rebuild(self, who: Who, s: dict[str, Any], run: dict[str, Any], stale: list[dict[str, Any]]) -> None:
+        tenant, source_id, run_id = who.tenant_id, str(s["id"]), str(run["id"])
+        counts: dict[str, int] = dict(run["counts"])
+        log: list[str] = []
+        errors: list[dict[str, Any]] = []
+        status = "success"
+        try:
+            for item in stale:
+                current = (await self.store.runs(tenant, run_id=run_id))[0]
+                if current["cancelled_by"]:
+                    status = "cancelled"
+                    log.append(
+                        f"Cancelled by {current['cancelled_by']} after {counts['checked']} of {counts['total']}."
+                    )
+                    break
+                counts["checked"] += 1
+                if not item["file_id"]:
+                    # Content read through a connection's tools keeps no copy yet: it is rebuilt when next fetched.
+                    counts["skipped"] += 1
+                    log.append(f"{item['title']}: rebuilt at the next sync, which fetches it again")
+                else:
+                    found = Stored(str(item["file_id"]), str(item["path"]), str(item["mime"]), int(item["size"]),
+                                   str(item["digest"]), False)  # fmt: skip
+                    done = await self._read_file(who, s, item, name=str(item["path"]), found=found, rebuild=True)
+                    outcome = {"indexed": "rebuilt", "reading": "reading"}.get(str(done["status"]), "failed")
+                    counts[outcome] += 1
+                    if outcome == "failed":
+                        errors.append({"itemId": done["id"], "itemTitle": done["title"], "phase": "parse",
+                                       "errorClass": done["error_class"], "message": done["error"]})  # fmt: skip
+                await self.store.update_run(tenant, run_id, {"counts": dict(counts)})
+            if status == "success" and counts["failed"]:
+                status = "partial"
+        except asyncio.CancelledError:
+            status = "failed"
+            log.append("Stopped when the service stopped; save the settings again or sync to finish.")
+            raise
+        finally:
+            ended = datetime.now(UTC)
+            await self.store.update_run(
+                tenant,
+                run_id,
+                {
+                    "status": status,
+                    "counts": counts,
+                    "errors": errors,
+                    "log": log,
+                    "finished_at": ended,
+                    "duration_sec": round((ended - run["started_at"]).total_seconds(), 2),
+                },
+            )
+            await self.store.release(tenant, source_id)
+            if counts["rebuilt"]:
+                _, by_source = await self._joined(tenant)
+                await self.store.refreshed(tenant, by_source.get(source_id, []))
+
+    async def cancel_run(self, who: Who, run_id: str) -> dict[str, Any]:
+        """Asks a running rebuild to stop between two items; 409 when it is not running."""
+        found = await self.store.runs(who.tenant_id, run_id=run_id)
+        if not found:
+            raise NotFound("No sync run with that id.")
+        await self._changeable_source(who, str(found[0]["source_id"]))
+        if not await self.store.cancel_run(who.tenant_id, run_id, by=who.email):
+            raise Conflict("This run is not running.", code="run_not_running")
+        return _run((await self.store.runs(who.tenant_id, run_id=run_id))[0])
 
     async def _sync(self, who: Who, s: dict[str, Any], *, full: bool, retry: bool) -> dict[str, Any]:
         """Reads every file of the source and indexes what changed: a new name is a new document, a known name with
@@ -806,7 +916,7 @@ class KnowledgeService:
         _, by_source = await self._joined(who.tenant_id)
         if counts["upserted"] or counts["deleted"]:
             await self.store.refreshed(who.tenant_id, by_source.get(source_id, []))
-        run = {
+        run: dict[str, Any] = {
             "tenant_id": who.tenant_id,
             "id": new_id("run"),
             "source_id": source_id,
@@ -1163,13 +1273,18 @@ class KnowledgeService:
             if patch.get(key) is not None:
                 values[key] = patch[key]
         given = {k: patch[k] for k in SETTINGS_KEYS if patch.get(k) is not None}
+        before = self.settings_of(s)
         if given:
-            values["settings"] = wire(self._merged(self.settings_of(s), given))
+            values["settings"] = wire(self._merged(before, given))
         if values:
             entry = audit_entry(who, "knowledge.source.settings", "knowledge_source", source_id, s["name"], s, values)
             await self.store.update_source(who.tenant_id, source_id, values, audit=entry)
         _, by_source = await self._joined(who.tenant_id)
-        return self._source({**s, **values}, by_source.get(source_id, []))
+        after = {**s, **values}
+        rebuild = None
+        if given and rebuild_for(before, self.settings_of(after)) != "none":
+            rebuild = await self.start_rebuild(who, after)
+        return {**self._source(after, by_source.get(source_id, [])), "rebuild": rebuild}
 
     @staticmethod
     def _merged(current: SourceSettings, given: dict[str, Any]) -> SourceSettings:
@@ -1198,7 +1313,11 @@ class KnowledgeService:
         by_kb, _ = await self._joined(who.tenant_id)
         for s in await self.store.sources(who.tenant_id, by_kb.get(kb_id, [])):
             if s["status"] != "paused":
-                await self._sync(who, s, full=False, retry=retry)
+                try:
+                    await self._held_sync(who, s, full=False, retry=retry)
+                except Conflict:
+                    # Running now: that run brings it up to date.
+                    continue
         fresh = await self.store.base(who.tenant_id, kb_id)
         return self._base(fresh or b, by_kb.get(kb_id, []), await self._counts(who.tenant_id))
 
@@ -1600,6 +1719,8 @@ def _run(r: dict[str, Any]) -> dict[str, Any]:
         "phases": [],
         "errors": r["errors"],
         "log": r["log"],
+        **({"finishedAt": _iso(r["finished_at"])} if r.get("finished_at") else {}),
+        **({"cancelledBy": r["cancelled_by"]} if r.get("cancelled_by") else {}),
     }
 
 

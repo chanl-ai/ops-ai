@@ -278,6 +278,17 @@ export const kbOperations = {
     "query": [],
     "stream": false
   },
+  "sources_cancel_run": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/sync-runs/{run_id}/cancel",
+    "pathParams": [
+      "run_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "sources_create_source": {
     "body": "json",
     "headers": [],

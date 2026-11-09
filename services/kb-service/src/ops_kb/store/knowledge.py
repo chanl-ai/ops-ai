@@ -810,6 +810,41 @@ class KnowledgeStore:
             team = await self._team_of(c, kb_sources, str(row["tenant_id"]), str(row["source_id"]))
             await c.execute(sa.insert(kb_runs).values(**row, team_id=team))
 
+    async def update_run(self, tenant: str, run_id: str, values: dict[str, Any]) -> None:
+        async with self._tx() as c:
+            await c.execute(
+                sa.update(kb_runs).where(kb_runs.c.tenant_id == tenant, kb_runs.c.id == run_id).values(**values)
+            )
+
+    async def cancel_run(self, tenant: str, run_id: str, *, by: str) -> bool:
+        """Asks a running run to stop; true when it was running and nobody had asked yet."""
+        r = kb_runs
+        async with self._tx() as c:
+            q = (
+                sa.update(r)
+                .where(r.c.tenant_id == tenant, r.c.id == run_id, r.c.status == "running", r.c.cancelled_by.is_(None))
+                .values(cancelled_by=by)
+            )
+            return (await c.execute(q)).rowcount == 1
+
+    async def running_sources(self, tenant: str) -> set[str]:
+        q = sa.select(kb_runs.c.source_id).where(
+            kb_runs.c.tenant_id == tenant, kb_runs.c.status == "running", team_visible(kb_runs)
+        )
+        async with self._tx() as c:
+            return {str(r[0]) for r in await c.execute(q.distinct())}
+
+    async def end_stale_runs(self, tenant: str, *, before: Any, reason: str) -> int:
+        """Ends runs still marked running that started before `before`: the process running them stopped."""
+        r = kb_runs
+        async with self._tx() as c:
+            q = (
+                sa.update(r)
+                .where(r.c.tenant_id == tenant, r.c.status == "running", r.c.started_at < before)
+                .values(status="failed", finished_at=db_now(), log=[reason])
+            )
+            return int((await c.execute(q)).rowcount or 0)
+
     async def runs(
         self, tenant: str, *, source_id: str | None = None, run_id: str | None = None
     ) -> list[dict[str, Any]]:

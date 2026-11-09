@@ -235,6 +235,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "sources_cancel_run": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/sync-runs/{run_id}/cancel",
+        "pathParams": ["run_id"],
+        "query": [],
+        "stream": False,
+    },
     "sources_create_source": {
         "body": "json",
         "headers": [],
@@ -587,6 +596,10 @@ class Operations:
         "Get Run"
         return self._t.call(SERVICE, OPERATIONS["sources_get_run"], {"run_id": run_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def sources_cancel_run(self, run_id: str) -> SyncRun:
+        "Cancel Run"
+        return self._t.call(SERVICE, OPERATIONS["sources_cancel_run"], {"run_id": run_id}, {}, {}, None)  # type: ignore[no-any-return]
+
 
 class AsyncOperations:
     """Every public operation of kb-service, by its operationId."""
@@ -832,3 +845,7 @@ class AsyncOperations:
     async def sources_get_run(self, run_id: str) -> SyncRun:
         "Get Run"
         return await self._t.call(SERVICE, OPERATIONS["sources_get_run"], {"run_id": run_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def sources_cancel_run(self, run_id: str) -> SyncRun:
+        "Cancel Run"
+        return await self._t.call(SERVICE, OPERATIONS["sources_cancel_run"], {"run_id": run_id}, {}, {}, None)  # type: ignore[no-any-return]

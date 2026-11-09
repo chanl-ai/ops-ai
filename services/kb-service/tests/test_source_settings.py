@@ -17,6 +17,7 @@ from .conftest import kb_client
 from .pdfs import HARDSHIP, RATES, policy_pdf
 from .readings_fake import LocalReadings
 from .test_bases_and_sources import data
+from .test_rebuild import finished
 from .test_sync import file_source, upload
 
 LONG = policy_pdf(
@@ -39,7 +40,7 @@ async def test_a_new_file_source_answers_the_settings_a_sync_applies(client: htt
     assert src["rules"] == [] and src["metadataMapping"] == []
 
 
-async def test_a_split_change_is_applied_and_says_a_rebuild_is_needed_until_one_runs(client: httpx.AsyncClient) -> None:
+async def test_a_split_change_is_applied_and_no_rebuild_is_needed_after(client: httpx.AsyncClient) -> None:
     src = await file_source(client)
     await upload(client, src["id"], "manual.pdf", LONG)
     data(await client.post(f"/v1/sources/{src['id']}/sync"))
@@ -51,9 +52,8 @@ async def test_a_split_change_is_applied_and_says_a_rebuild_is_needed_until_one_
         120,
         "custom",
     )
-    assert data(await client.get(f"/v1/sources/{src['id']}"))["reindexNeeded"] is True
-    run = data(await client.post(f"/v1/sources/{src['id']}/sync"))
-    assert run["counts"]["upserted"] == 1, run
+    run = await finished(client, saved["rebuild"]["id"])
+    assert run["counts"]["rebuilt"] == 1, run
     after = await chunks_of(client, src["id"])
     assert len(after) > len(before) and max(c["tokens"] for c in after) <= 140, [c["tokens"] for c in after]
     assert data(await client.get(f"/v1/sources/{src['id']}"))["reindexNeeded"] is False
@@ -88,9 +88,8 @@ async def test_the_sources_ocr_mode_reaches_its_reading(engine: AsyncEngine, ten
         await upload(client, src["id"], "hardship.pdf", HARDSHIP)
         data(await client.post(f"/v1/sources/{src['id']}/sync"))
         assert asked == ["off"]
-        data(await client.patch(f"/v1/sources/{src['id']}", json={"parsing": {"ocr": "always"}}))
-        assert data(await client.get(f"/v1/sources/{src['id']}"))["reindexNeeded"] is True
-        data(await client.post(f"/v1/sources/{src['id']}/sync"))
+        saved = data(await client.patch(f"/v1/sources/{src['id']}", json={"parsing": {"ocr": "always"}}))
+        await finished(client, saved["rebuild"]["id"])
         assert asked == ["off", "always"]
 
 

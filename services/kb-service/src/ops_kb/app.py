@@ -212,7 +212,9 @@ def create_kb_app(
             yield
         finally:
             stop.set()
-            tasks = {t for t in (beat, hand_off) if t is not None}
+            for rebuild in list(service.rebuilds):
+                rebuild.cancel()
+            tasks = {t for t in (beat, hand_off, *service.rebuilds) if t is not None}
             if tasks:
                 await asyncio.wait(tasks, timeout=5)
 
@@ -470,6 +472,11 @@ def create_kb_app(
     @runs.get("/{run_id}", response_model=Envelope[SyncRun])
     async def get_run(run_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.get_run(who, run_id))
+
+    @runs.post("/{run_id}/cancel", response_model=Envelope[SyncRun])
+    async def cancel_run(run_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Stops a running rebuild between two items; 409 `run_not_running` when it is not running."""
+        return ok(await service.cancel_run(who, run_id))
 
     @app.get("/v1/knowledge/lookups", tags=["knowledge-bases"], response_model=Envelope[Lookups], responses=errors)
     async def lookups(who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

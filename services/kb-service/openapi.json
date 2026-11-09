@@ -3321,6 +3321,16 @@
             "title": "Permissions",
             "type": "object"
           },
+          "rebuild": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SyncRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "rules": {
             "items": {
               "additionalProperties": true,
@@ -3576,6 +3586,16 @@
             },
             "title": "Readers",
             "type": "array"
+          },
+          "rebuild": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SyncRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "recentRuns": {
             "items": {
@@ -4084,6 +4104,16 @@
             "title": "Permissions",
             "type": "object"
           },
+          "rebuild": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SyncRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "rules": {
             "items": {
               "additionalProperties": true,
@@ -4201,6 +4231,17 @@
       "SyncRun": {
         "additionalProperties": false,
         "properties": {
+          "cancelledBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancelledby"
+          },
           "counts": {
             "additionalProperties": {
               "type": "integer"
@@ -4219,6 +4260,17 @@
             },
             "title": "Errors",
             "type": "array"
+          },
+          "finishedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finishedat"
           },
           "id": {
             "title": "Id",
@@ -11349,6 +11401,194 @@
           }
         },
         "summary": "Get Run",
+        "tags": [
+          "sources"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/sync-runs/{run_id}/cancel": {
+      "post": {
+        "description": "Stops a running rebuild between two items; 409 `run_not_running` when it is not running.",
+        "operationId": "sources_cancel_run",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SyncRun_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Cancel Run",
         "tags": [
           "sources"
         ],

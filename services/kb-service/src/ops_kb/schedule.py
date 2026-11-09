@@ -24,6 +24,9 @@ log = get_logger(__name__)
 
 FIND_DUE = "background process: the knowledge schedule reads each tenant's tool sources to find the due ones"
 FIND_READING = "background process: the knowledge schedule reads each tenant's items waiting for their file's reading"
+FIND_STALE = "background process: the knowledge schedule ends each tenant's runs left running by a stopped process"
+# A run still marked running this long after it started belongs to a process that stopped: the lease it held ran out.
+STALE_AFTER = timedelta(minutes=15)
 
 
 def due(s: dict[str, Any], now: datetime) -> bool:
@@ -76,12 +79,24 @@ async def finish_readings(service: KnowledgeService) -> int:
     return settled
 
 
+async def end_stale_runs(service: KnowledgeService, now: datetime) -> int:
+    """Ends rebuilds and syncs a stopped process left marked running, saying why; the number ended."""
+    ended = 0
+    for tenant in await service.store.tenants():
+        with isolation.tenant_wide(FIND_STALE, tenant_id=tenant):
+            ended += await service.store.end_stale_runs(
+                tenant, before=now - STALE_AFTER, reason="Stopped when the service stopped; sync again to finish."
+            )
+    return ended
+
+
 async def keep_syncing(service: KnowledgeService, stop: asyncio.Event) -> None:
     """The listed `knowledge_schedule` process: one pass a minute through the shared runner, which reports it on
     /health/background and backs off after a failed pass."""
 
     async def once() -> int:
-        synced = len(await run_due(service, datetime.now(UTC))) if service.tools is not None else 0
-        return synced + await finish_readings(service)
+        now = datetime.now(UTC)
+        synced = len(await run_due(service, now)) if service.tools is not None else 0
+        return synced + await finish_readings(service) + await end_stale_runs(service, now)
 
     await background.run("knowledge_schedule", once, stop=stop, store=background.LOCAL)

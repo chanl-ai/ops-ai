@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-09",
+  "title": "A settings change rebuilds a source in the background",
+  "description": "Saving new splitting or reading settings rebuilds the source's documents from what is already stored, shows progress in its sync history, and can be cancelled.",
+  "tag": "new"
+}

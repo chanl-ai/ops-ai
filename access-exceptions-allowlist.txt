@@ -69,11 +69,13 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 # an access decision. A 409 that decides by who made a record gets a path line and a register row instead. A new code
 # fails until it is classified here; a code no 409 carries any more is stale. An access-deciding 409 carries its own code.
 * conflict address_taken 0 state
+* conflict admin_holds_every_cell 0 state
 * conflict agent_paused 0 state
 * conflict already_decided 0 state
 * conflict already_granted 0 state
 * conflict already_published 0 state
 * conflict already_resumed 0 state
+* conflict app_in_use 0 state
 * conflict archived_too_recently 0 state
 * conflict budget_paused 0 state
 * conflict builtin_role 0 state
@@ -84,10 +86,8 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict connection_in_use 0 state
 * conflict connection_secret 0 state
 * conflict copy_edited 0 state
-* conflict credential_secret 0 state
-* conflict admin_holds_every_cell 0 state
-* conflict app_in_use 0 state
 * conflict credential_in_use 0 state
+* conflict credential_secret 0 state
 * conflict daily_cap 0 state
 * conflict decided_in_reviews 0 state
 * conflict decided_in_workflow 0 state
@@ -106,7 +106,9 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict live_workflows 0 state
 * conflict mailbox_in_use 0 state
 * conflict name_taken 0 state
+* conflict needs_reconnect 0 state
 * conflict no_default_agent 0 state
+* conflict no_security_team 0 state
 * conflict no_sla_waiting 0 state
 * conflict no_team_account 0 state
 * conflict node_missing 0 state
@@ -133,6 +135,7 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict role_in_use 0 state
 * conflict run_active 0 state
 * conflict run_finished 0 state
+* conflict run_not_running 0 state
 * conflict run_not_stuck 0 state
 * conflict run_not_waiting 0 state
 * conflict run_waiting 0 state
@@ -142,16 +145,14 @@ packages/ops_access/src/ops_access/policies.py policy-default appWritesNeedAppro
 * conflict skill_deprecated 0 state
 * conflict skill_pinned 0 state
 * conflict source_paused 0 state
-* conflict sync_running 0 state
-* conflict needs_reconnect 0 state
-* conflict no_security_team 0 state
-* conflict tools_unavailable 0 state
 * conflict stale_base 0 state
 * conflict stale_pause 0 state
 * conflict stale_version 0 state
+* conflict sync_running 0 state
 * conflict target_in_use 0 state
 * conflict team_archived 0 state
 * conflict team_name_taken 0 state
+* conflict tools_unavailable 0 state
 * conflict update_changed 0 state
 * conflict widget_paused 0 state
 * conflict widget_retired 0 state
