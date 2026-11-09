@@ -64,6 +64,8 @@ WIDENINGS: dict[str, set[str]] = {
     "MOVE_FILES": {"services/kb-service/src/ops_kb/__main__.py"},
     # The knowledge schedule finds each tenant's due tool sources, then syncs each in its own team's scope.
     "FIND_DUE": {"services/kb-service/src/ops_kb/schedule.py"},
+    # The schedule finds each tenant's items waiting on a reading, then settles each in its own team.
+    "FIND_READING": {"services/kb-service/src/ops_kb/schedule.py"},
     "RELAY": {"packages/ops_store/src/ops_store/outbox.py"},
     # Heartbeats describe a process, which serves every tenant; the Background page reads every team's jobs.
     "HEARTBEAT": {"packages/ops_store/src/ops_store/background.py"},
@@ -71,6 +73,7 @@ WIDENINGS: dict[str, set[str]] = {
     "RECOVER_PENDING": {
         "services/documents-service/src/ops_documents/store/document_types.py",
         "services/documents-service/src/ops_documents/store/extractions.py",
+        "services/documents-service/src/ops_documents/store/readings.py",
     },
 }
 # `isolation.enter` / `enter_caller` / `scope`: who sets a team scope that no verified principal set for them.
@@ -92,6 +95,10 @@ ENTRIES: dict[str, set[str]] = {
         "packages/ops_store/src/ops_store/outbox.py",
         "services/documents-service/src/ops_documents/document_types.py",
         "services/documents-service/src/ops_documents/extraction.py",
+        # A queued reading is read in the team that asked for it.
+        "services/documents-service/src/ops_documents/readings.py",
+        # A reading event settles the items of the one team its service token names.
+        "services/kb-service/src/ops_kb/app.py",
         "services/agents-service/src/ops_agents/api/publish_reviews.py",
         "services/agents-service/src/ops_agents/api/tenant_tasks.py",
         # A chat link opened while acting in another team looks in each of the reader's own teams in turn.

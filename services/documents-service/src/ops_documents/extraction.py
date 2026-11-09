@@ -1051,7 +1051,8 @@ class Extractor:
     async def layout_of(self, who: Who, row: ExtractionRow) -> dict[str, Any]:
         """The layout an extraction read: from the stored reading of its file's bytes, else read again from the file."""
         if self.readings is not None and row.file_digest:
-            stored = await self.readings.stored_of(row.file_digest, settings_of(bool(row.request.get("ocr"))))
+            ocr = settings_of(bool(row.request.get("ocr")))
+            stored = await self.readings.stored_of(row.team, row.file_digest, ocr)
             if stored is not None:
                 return layout_of(stored)
         return layout_of(await self._reading(who, await self.files.readable(who, row.file_id), row.request))
