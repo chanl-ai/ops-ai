@@ -3420,6 +3420,11 @@ export interface components {
             scopesTool?: string | null;
             /** Signin */
             signIn: string | null;
+            /**
+             * Site
+             * @default false
+             */
+            site: boolean;
             /** Source */
             source: string;
             /** Title */

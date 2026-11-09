@@ -447,7 +447,8 @@ refused unless the account lists it, and no agent's or person's call reaches the
 A list item may carry `content` and `mime` when listing had to read it anyway (a crawl following links); kb-service then
 does not fetch it again. A listed item with `skipped: "<reason>"` is not taken in, and an indexed copy leaves search
 with the reason in the run's log. `lists_whole: true` says every listing names every item, so each run finds what
-left the source; `fetch_at_once` (1 to 16, 4) is how many items kb-service fetches from the source at once.
+left the source; `fetch_at_once` (1 to 16, 4) is how many items kb-service fetches from the source at once; `site:
+true` says the items are one website's pages, so a source starts with a website's cleaning.
 
 A Python tool may set its own `If-None-Match`, `If-Modified-Since`, `Accept` and `Accept-Language` on a request
 (`ctx.http.get(url, headers=...)`); any other header is refused. `Response.content` holds the body's bytes for an

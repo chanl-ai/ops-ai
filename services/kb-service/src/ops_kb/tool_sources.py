@@ -117,6 +117,8 @@ async def source_config(reader: ToolReader | None, who: Who, i: dict[str, Any]) 
         "previewTool": found.get("previewTool"),
         "listsWhole": bool(found.get("listsWhole")),
         "fetchAtOnce": int(found.get("fetchAtOnce") or AT_ONCE),
+        # Its items are a website's pages, so it starts with a website's cleaning and splitting.
+        "site": bool(found.get("site")),
         "getTakesTag": bool(found.get("getTakesTag")),
         "connectionId": found.get("connectionId"),
         "schedule": found.get("schedule") or {"kind": "manual"},

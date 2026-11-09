@@ -29,6 +29,7 @@ from .agents import AgentDirectory, Usage
 from .files import FileIntake, FileMissing, FileNotScanned, Stored
 from .origin import Origin, source_team
 from .readings import READING_PENDING, Readings, parsed_of, read_with
+from .repeats import lines_of, repeated, without
 from .retrieval import Passage, Retriever
 from .source_settings import (
     InvalidSettings,
@@ -210,8 +211,13 @@ class KnowledgeService:
     # ── Serialising ──────────────────────────────────────────────────────
 
     def settings_of(self, s: dict[str, Any]) -> SourceSettings:
-        """The source's saved settings over its kind's defaults; the environment's OCR mode is the default's."""
-        return stored(str(s["type"]), s.get("settings"), ocr=self.ocr)
+        """The source's saved settings over its kind's defaults; the environment's OCR mode is the default's. A plugin
+        source whose items are a website's pages starts with a website's defaults."""
+        return stored(kind_of(s), s.get("settings"), ocr=self.ocr)
+
+    def key_of(self, s: dict[str, Any]) -> str:
+        """The digest an item built now under the source's settings records (`indexed_with`)."""
+        return index_key(self.settings_of(s), repeats_of(s))
 
     def _source(self, s: dict[str, Any], used_by: list[str]) -> dict[str, Any]:
         tool = s["type"] == "tool"
@@ -638,6 +644,30 @@ class KnowledgeService:
         await self.store.create_source(row, kb_ids)
         return self._source(row, kb_ids)
 
+    async def source_kinds(self, who: Who) -> list[dict[str, Any]]:
+        """Files, then each knowledge source the team's apps offer (none when this service reads no tools)."""
+        out: list[dict[str, Any]] = [{"type": "file", "group": "built_in", "title": "Files"}]
+        if self.tools is None or not who.team_id:
+            return out
+        for d in await self.tools.declared(who.tenant_id, str(who.team_id)):
+            needs = bool(d.get("needsConnection", True))
+            out.append(
+                {
+                    "type": "tool",
+                    "group": "apps",
+                    "title": str(d["title"]),
+                    "plugin": d["plugin"],
+                    "source": d["source"],
+                    "site": bool(d.get("site")),
+                    "needsConnection": needs,
+                    "connected": not needs or (bool(d.get("connectionId")) and d.get("connectionStatus") == "healthy"),
+                    "previews": bool(d.get("previewTool")),
+                    "pickers": bool(d.get("scopesTool")),
+                    "inputs": d.get("inputs") or {},
+                }
+            )
+        return out
+
     async def preview_source(self, who: Who, i: dict[str, Any]) -> dict[str, Any]:
         """A plugin source's preview before it is made: its settings checked as a create checks them, then the
         plugin's preview tool asked what they would take in."""
@@ -768,9 +798,26 @@ class KnowledgeService:
         if not await self.store.claim(who.tenant_id, str(s["id"]), until=datetime.now(UTC) + LEASE):
             raise Conflict(f"{s['name']} is syncing now; wait for that run to end.", code="sync_running")
         try:
-            return _run(await sync_tool_source(self, self.tools, who, s, full=full, trigger=trigger))
+            run = _run(await sync_tool_source(self, self.tools, who, s, full=full, trigger=trigger))
         finally:
             await self.store.release(who.tenant_id, str(s["id"]))
+        await self.settle_repeats(who, str(s["id"]))
+        return run
+
+    async def settle_repeats(self, who: Who, source_id: str) -> None:
+        """Counts the lines repeated across a website source's pages after a sync; when the set changed, the pages
+        built under the old set are rebuilt in the background from their snapshots, with nothing fetched."""
+        s = await self._source_row(who, source_id)
+        if not self.settings_of(s).cleaning.site_repeats:
+            return
+        items = [i for i in await self.store.items(who.tenant_id, source_ids=[source_id]) if i["status"] == "indexed"]
+        found = repeated(i.get("lines") for i in items)
+        cfg = dict(s.get("config") or {})
+        if found == list(cfg.get("repeats") or []):
+            return
+        cfg["repeats"] = found
+        await self.store.update_source(who.tenant_id, source_id, {"config": cfg})
+        await self.start_rebuild(who, {**s, "config": cfg})
 
     async def start_rebuild(self, who: Who, s: dict[str, Any]) -> dict[str, Any] | None:
         """Rebuilds, in the background, every item of the source built under other settings: split again from its
@@ -1006,6 +1053,7 @@ class KnowledgeService:
         doc: ParsedDocument,
         read_with: str,
         title_given: str | None = None,
+        lines: list[str] | None = None,
     ) -> dict[str, Any]:
         """The same content split again from its stored reading under its current version: no new version, no change
         row, and the file's bytes are not read again."""
@@ -1027,7 +1075,8 @@ class KnowledgeService:
             "warning": None if error else warning,
             "chunk_count": len(chunks),
             "read_with": read_with,
-            "indexed_with": index_key(settings),
+            "lines": lines,
+            "indexed_with": self.key_of(s),
             "content_digest": None if error else document_digest(doc, split_settings(settings)),
             "processed_at": datetime.now(UTC),
         }
@@ -1040,10 +1089,10 @@ class KnowledgeService:
         if item["status"] != "indexed":
             return False
         settings = self.settings_of(s)
-        built = item.get("indexed_with") or index_key(stored(str(s["type"]), None, ocr=self.ocr))
+        built = item.get("indexed_with") or index_key(stored(kind_of(s), None, ocr=self.ocr))
         read_ocr = str(item.get("read_with") or "").split(":")
         reread = s["type"] == "file" and len(read_ocr) > 1 and read_ocr[1] != settings.parsing.ocr
-        return built != index_key(settings) or reread
+        return built != self.key_of(s) or reread
 
     async def _read_file(
         self,
@@ -1082,13 +1131,17 @@ class KnowledgeService:
         # A fetched item's fields (from its fetch, or kept on it for a rebuild) feed the metadata mapping.
         fields = cast(dict[str, str] | None, origin.extra.get("fields") or (existing or {}).get("fields"))
         doc = parsed_of(answer, fields=fields, furniture=cleaning.furniture, main_content=cleaning.main_content)
+        # Each paragraph's digest is kept before lines repeated across the site are dropped, so they can be counted.
+        lines = lines_of(doc)
+        if cleaning.site_repeats:
+            doc = without(doc, set(repeats_of(s)))
         if rebuild and existing is not None:
             return await self._reindex(
-                who, s, existing, name=name, doc=doc, read_with=read_with(answer), title_given=origin.title
+                who, s, existing, name=name, doc=doc, read_with=read_with(answer), title_given=origin.title, lines=lines
             )
         return await self._index(
             who, s, existing, file_id=found.file_id, name=name, mime=found.mime, doc=doc, size=found.size,
-            digest=found.digest, read_with=read_with(answer), path=origin.path, extra=origin.extra,
+            digest=found.digest, read_with=read_with(answer), path=origin.path, extra={**origin.extra, "lines": lines},
             title_given=origin.title, allowed=origin.allowed,
         )  # fmt: skip
 
@@ -1214,7 +1267,7 @@ class KnowledgeService:
             "created_at": existing["created_at"] if existing else now,
             "processed_at": now,
             "read_with": read_with,
-            "indexed_with": None if error else index_key(settings),
+            "indexed_with": None if error else self.key_of(s),
             "content_digest": None if error else document_digest(doc, split_settings(settings)),
             "duplicate_of": None,
             **(extra or {}),
@@ -1875,6 +1928,19 @@ def _run(r: dict[str, Any]) -> dict[str, Any]:
         **({"finishedAt": _iso(r["finished_at"])} if r.get("finished_at") else {}),
         **({"cancelledBy": r["cancelled_by"]} if r.get("cancelled_by") else {}),
     }
+
+
+def kind_of(s: dict[str, Any]) -> str:
+    """The kind a source's defaults are chosen by: a plugin source whose items are one website's pages is `web`."""
+    if s["type"] == "tool" and dict(s.get("config") or {}).get("site"):
+        return "web"
+    return str(s["type"])
+
+
+def repeats_of(s: dict[str, Any]) -> list[str]:
+    """The lines last found repeated across the source's pages."""
+    found = cast(list[Any], dict(s.get("config") or {}).get("repeats") or [])
+    return [str(d) for d in found]
 
 
 def _empty(doc: ParsedDocument, ocr: str) -> tuple[str, str]:

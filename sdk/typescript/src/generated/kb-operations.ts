@@ -415,6 +415,15 @@ export const kbOperations = {
     "query": [],
     "stream": false
   },
+  "sources_source_kinds": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/knowledge/source-kinds",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "sources_sync_source": {
     "body": "json",
     "headers": [],

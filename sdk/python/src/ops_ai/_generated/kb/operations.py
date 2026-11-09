@@ -343,6 +343,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "sources_source_kinds": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/knowledge/source-kinds",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "sources_sync_source": {
         "body": "json",
         "headers": [],
@@ -525,6 +534,10 @@ class Operations:
     def knowledge_bases_lookups(self) -> Lookups:
         "Lookups"
         return self._t.call(SERVICE, OPERATIONS["knowledge_bases_lookups"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def sources_source_kinds(self) -> list[SourceKind]:
+        "Source Kinds"
+        return self._t.call(SERVICE, OPERATIONS["sources_source_kinds"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     def sources_list_sources(
         self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
@@ -779,6 +792,10 @@ class AsyncOperations:
     async def knowledge_bases_lookups(self) -> Lookups:
         "Lookups"
         return await self._t.call(SERVICE, OPERATIONS["knowledge_bases_lookups"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def sources_source_kinds(self) -> list[SourceKind]:
+        "Source Kinds"
+        return await self._t.call(SERVICE, OPERATIONS["sources_source_kinds"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def sources_list_sources(
         self, *, page: int | None = None, page_size: int | None = None, search: str | None = None

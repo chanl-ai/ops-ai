@@ -371,6 +371,24 @@ class SyncIn(BaseModel):
     retry: bool = False
 
 
+class SourceKind(Out):
+    # `file` for the built-in kind; `tool` for an app's knowledge source, named by its plugin and source.
+    type: str
+    group: Literal["built_in", "apps"]
+    title: str
+    plugin: str | None = None
+    source: str | None = None
+    # Its items are one website's pages.
+    site: bool = False
+    # It needs the team's connection, and whether the team has one that works.
+    needs_connection: bool = False
+    connected: bool = False
+    previews: bool = False
+    pickers: bool = False
+    # What a source of this kind is set up with (start addresses, sites, spaces).
+    inputs: Json = Field(default_factory=dict[str, Any])
+
+
 class PreviewIn(In):
     # The plugin, its source and the source's own settings, as a create would send them.
     config: dict[str, Any]

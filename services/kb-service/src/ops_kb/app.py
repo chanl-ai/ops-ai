@@ -71,6 +71,7 @@ from .schemas import (
     Source,
     SourceDetail,
     SourceIn,
+    SourceKind,
     SourcePatch,
     SourcePreview,
     SourceRow,
@@ -485,6 +486,14 @@ def create_kb_app(
     async def cancel_run(run_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Stops a running rebuild between two items; 409 `run_not_running` when it is not running."""
         return ok(await service.cancel_run(who, run_id))
+
+    @app.get(
+        "/v1/knowledge/source-kinds", tags=["sources"], response_model=Envelope[list[SourceKind]], responses=errors
+    )
+    async def source_kinds(who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """What a team can add as a source: the built-in kinds, then each knowledge source of the team's apps that are
+        on, with whether it is connected and what it asks for. Add source lists exactly these."""
+        return ok(await service.source_kinds(who))
 
     @app.get("/v1/knowledge/lookups", tags=["knowledge-bases"], response_model=Envelope[Lookups], responses=errors)
     async def lookups(who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

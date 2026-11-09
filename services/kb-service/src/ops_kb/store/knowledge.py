@@ -182,6 +182,8 @@ kb_items = sa.Table(
     sa.Column("fields", sa.JSON),
     # The version tag its last fetch gave (ETag, md5, revision), sent back so the system answers `unchanged`.
     sa.Column("tag", sa.String(200)),
+    # A short digest of each paragraph of its cleaned text, which a website source counts across its pages.
+    sa.Column("lines", sa.JSON),
     sa.ForeignKeyConstraint(
         ["tenant_id", "source_id"],
         ["kb_sources.tenant_id", "kb_sources.id"],

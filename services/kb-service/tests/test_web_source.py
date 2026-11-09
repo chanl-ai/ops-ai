@@ -21,6 +21,7 @@ from ops_service_kit.settings import Settings
 
 from .readings_fake import LocalReadings
 from .test_bases_and_sources import data
+from .test_rebuild import finished
 
 LIST, GET, PREVIEW = "web_list_pages", "web_get_page", "web_preview_site"
 SITE = "https://help.northbank.test"
@@ -48,6 +49,7 @@ class WebPlugin:
                 "plugin": "opsai.web", "source": "site", "title": "Website", "listTool": LIST, "getTool": GET,
                 "previewTool": PREVIEW, "listsWhole": True, "fetchAtOnce": 1, "getTakesTag": True,
                 "needsConnection": False, "inputs": {"start": {"type": "array"}}, "schedule": {"kind": "daily"},
+                "site": True,
             }
         ]  # fmt: skip
 
@@ -151,3 +153,41 @@ async def test_the_preview_asks_the_plugin_and_stores_nothing(kb: httpx.AsyncCli
     assert data(await kb.get("/v1/sources"))["data"] == []
     bad = await kb.post("/v1/sources/preview", json={"config": {"plugin": "opsai.web", "source": "site", "values": {}}})
     assert bad.status_code == 400 and bad.json()["error"]["code"] == "invalid_source_values", bad.text
+
+
+FOOTER = "Northbank is a trading name of Northbank plc, registered in England."
+
+
+async def test_a_website_source_starts_with_a_websites_cleaning(kb: httpx.AsyncClient) -> None:
+    src, _ = await site_source(kb)
+    assert src["cleaning"] == {"furniture": True, "mainContent": True, "siteRepeats": True, "duplicates": "flag"}
+    assert src["ingest"]["strategies"] == ["clean", "structure", "context_headers"]
+
+
+async def test_a_line_on_most_pages_of_the_site_is_dropped_and_pages_rebuilt_without_a_fetch(
+    kb: httpx.AsyncClient, web: WebPlugin
+) -> None:
+    web.pages = {
+        f"{SITE}/p{n}": html(f"Page {n}", f"Topic {n} explains loan step {n} in detail for borrowers.</p><p>{FOOTER}")
+        for n in range(4)
+    }
+    src, base = await site_source(kb)
+    first = data(await kb.post(f"/v1/sources/{src['id']}/sync"))
+    assert first["counts"]["upserted"] == 4, first
+    web.calls.clear()
+    runs = data(await kb.get(f"/v1/sources/{src['id']}/runs"))["data"]
+    rebuild = next(r for r in runs if r["trigger"] == "settings")
+    done = await finished(kb, rebuild["id"])
+    assert (done["status"], done["counts"]["rebuilt"]) == ("success", 4), done
+    assert web.calls == [], "the rebuild reads the snapshots"
+    assert await search(kb, base["id"], "trading name Northbank plc registered England") == []
+    assert await search(kb, base["id"], "loan step 2 borrowers")
+
+
+async def test_source_kinds_list_files_then_each_apps_knowledge_source(kb: httpx.AsyncClient) -> None:
+    kinds = data(await kb.get("/v1/knowledge/source-kinds"))
+    assert [(k["type"], k["title"]) for k in kinds] == [("file", "Files"), ("tool", "Website")]
+    web_kind = kinds[1]
+    assert (web_kind["site"], web_kind["needsConnection"], web_kind["connected"], web_kind["previews"]) == (
+        True, False, True, True,
+    )  # fmt: skip

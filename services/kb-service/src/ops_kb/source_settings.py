@@ -142,9 +142,10 @@ def _digest(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:16]
 
 
-def index_key(s: SourceSettings) -> str:
-    """What an item's pieces depend on beyond its reading: cleaning, splitting, the AI steps approved, and metadata.
-    Rules decide which items are in, not how one is split, so they are not part of it."""
+def index_key(s: SourceSettings, repeats: list[str] | None = None) -> str:
+    """What an item's pieces depend on beyond its reading: cleaning, splitting, the AI steps approved, metadata, and
+    (with lines repeated across the site dropped) which lines those are. Rules decide which items are in, not how one
+    is split, so they are not part of it."""
     ingest = s.ingest.model_dump(mode="json", exclude={"approval"})
     approved = sorted(s.ingest.approval.approved_steps) if s.ingest.approval.status == "approved" else []
     return _digest(
@@ -153,6 +154,7 @@ def index_key(s: SourceSettings) -> str:
             "ingest": ingest,
             "approved": approved,
             "metadata": [m.model_dump(mode="json", by_alias=True) for m in s.metadata_mapping],
+            **({"repeats": repeats} if s.cleaning.site_repeats and repeats else {}),
         }
     )
 

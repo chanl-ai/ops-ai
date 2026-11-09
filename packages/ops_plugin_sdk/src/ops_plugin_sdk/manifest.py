@@ -335,6 +335,9 @@ class KnowledgeSource(Strict):
     scopes: str | None = None
     preview: str | None = None
     lists_whole: bool = False
+    # The items are pages of one website: a source starts with a website's cleaning (menus and footers dropped, the
+    # main content kept, lines repeated across the site dropped) and splitting.
+    site: bool = False
     # How many items kb-service fetches at once from this source; a website's crawler asks one at a time per site.
     fetch_at_once: int = Field(default=4, ge=1, le=16)
     inputs: dict[str, InputField] = Field(default_factory=dict[str, InputField])

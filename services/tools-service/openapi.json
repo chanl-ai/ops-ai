@@ -5795,6 +5795,11 @@
             ],
             "title": "Signin"
           },
+          "site": {
+            "default": false,
+            "title": "Site",
+            "type": "boolean"
+          },
           "source": {
             "title": "Source",
             "type": "string"

@@ -511,6 +511,7 @@ class KnowledgeSourceView(TypedDict, closed=True):
     schedule: dict[str, Any]
     scopesTool: NotRequired[str | None]
     signIn: str | None
+    site: NotRequired[bool]
     source: str
     title: str
 

@@ -407,6 +407,20 @@ class SourceIn(TypedDict):
     type: str
 
 
+class SourceKind(TypedDict, closed=True):
+    connected: NotRequired[bool]
+    group: Literal["built_in", "apps"]
+    inputs: NotRequired[dict[str, Any]]
+    needsConnection: NotRequired[bool]
+    pickers: NotRequired[bool]
+    plugin: NotRequired[str | None]
+    previews: NotRequired[bool]
+    site: NotRequired[bool]
+    source: NotRequired[str | None]
+    title: str
+    type: str
+
+
 class SourcePatch(TypedDict):
     cleaning: NotRequired[dict[str, Any] | None]
     collection: NotRequired[str | None]
@@ -531,6 +545,11 @@ class EnvelopeListNamedRef(TypedDict, closed=True):
 
 class EnvelopeListPluginSource(TypedDict, closed=True):
     data: list[PluginSource]
+    success: Literal[True]
+
+
+class EnvelopeListSourceKind(TypedDict, closed=True):
+    data: list[SourceKind]
     success: Literal[True]
 
 
