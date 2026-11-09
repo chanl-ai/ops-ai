@@ -2,7 +2,10 @@
 (docs/architecture/decisions/database-support.md):
 
   sql   database-specific code outside ops_store, in source and migrations: RETURNING, ON CONFLICT, SKIP LOCKED,
-        advisory locks, JSONB operators and the JSONB type in SQL text; the same built with SQLAlchemy Core
+        advisory locks, JSONB operators and the JSONB type in SQL text; in source, also `= ANY(` (an array
+        parameter), an aggregate's FILTER (WHERE ...) and `::` casts, which a migration may hold in its PostgreSQL
+        branch (deploy/database/mssql.py refuses them in the SQL a revision renders for SQL Server); the same built
+        with SQLAlchemy Core
         (on_conflict_*, a dialect's own insert); a row lock (with_for_update, which renders nothing on SQL Server);
         the host-dependent clock functions (func.now, make_interval, date_trunc); and postgresql_* index options,
         except a postgresql_where given with its mssql_where twin.
@@ -47,6 +50,14 @@ TEXT = [
     ("advisory lock", re.compile(r"\bpg_(try_)?advisory_", re.IGNORECASE)),
     ("JSONB operator", re.compile(r"->>|#>>|@>|<@|\?\||\?&|\bjsonb_\w+\s*\(", re.IGNORECASE)),
 ]
+# In source code only: a migration writes each database's SQL in its own branch, and its SQL Server rendering is
+# checked whole (deploy/database/mssql.py POSTGRES_ONLY). An expanding bind parameter (IN :ids), CAST(x AS t) and a
+# CASE inside the aggregate are the portable forms.
+SOURCE_TEXT = [
+    ("array parameter", re.compile(r"=\s*ANY\s*\(", re.IGNORECASE)),
+    ("aggregate FILTER", re.compile(r"\bFILTER\s*\(\s*WHERE\b", re.IGNORECASE)),
+    ("PostgreSQL cast", re.compile(r"(?<=[\w)'\]])::[A-Za-z_]")),
+]
 # Text is read as SQL only when it reads like a statement; a regular expression's `?|` is not a JSONB operator.
 SQL_SHAPE = re.compile(r"\b(SELECT|INSERT|UPDATE|DELETE|WHERE|FROM|RETURNING|CONFLICT)\b", re.IGNORECASE)
 # The same constructs built with SQLAlchemy Core.
@@ -76,10 +87,11 @@ def docstrings(tree: ast.AST) -> set[int]:
     }
 
 
-def sql_findings(source: str) -> list[tuple[int, str]]:
+def sql_findings(source: str, *, migration: bool = False) -> list[tuple[int, str]]:
     """(line, construct) for each Postgres-only construct in one file's code; docstrings and comments are not code."""
     tree = ast.parse(source)
     docs = docstrings(tree)
+    text = TEXT if migration else [*TEXT, *SOURCE_TEXT]
     out: list[tuple[int, str]] = []
     for node in ast.walk(tree):
         if (
@@ -88,7 +100,7 @@ def sql_findings(source: str) -> list[tuple[int, str]]:
             and id(node) not in docs
             and SQL_SHAPE.search(node.value)
         ):
-            out += [(node.lineno, name) for name, pattern in TEXT if pattern.search(node.value)]
+            out += [(node.lineno, name) for name, pattern in text if pattern.search(node.value)]
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in CALLS:
             out.append((node.lineno, CALLS[node.func.attr]))
         # The same constructs built from names: `sa.func.pg_try_advisory_xact_lock(...)` and the `JSONB` column type.
@@ -200,7 +212,7 @@ def current() -> tuple[Counter[str], dict[str, list[str]]]:
     where: dict[str, list[str]] = {}
     for path in sql_sources():
         rel = path.relative_to(ROOT).as_posix()
-        for line, construct in sql_findings(path.read_text()):
+        for line, construct in sql_findings(path.read_text(), migration="migrations" in path.parts):
             key = f"sql {rel} {construct}"
             counts[key] += 1
             where.setdefault(key, []).append(f"{rel}:{line}")
@@ -231,6 +243,8 @@ def warnings(now: Counter[str], base: Counter[str], where: dict[str, list[str]])
                 if kind == "meta"
                 else "give every supported database its own form of the index, or do without it"
                 if construct.endswith(" option")
+                else "write the portable form: IN :ids (expanding bindparam), CAST(x AS t), CASE in the aggregate"
+                if construct in {name for name, _ in SOURCE_TEXT}
                 else "use ops_store.dialect (locked, claim, upsert, insert_ignore, lock_key, db_now, db_after)"
             )
             out.append(f"WARNING {', '.join(where[key])}: {rest.split(' ', 1)[1]} ({n} > {base.get(key, 0)}); {fix}")

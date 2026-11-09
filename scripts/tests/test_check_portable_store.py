@@ -36,6 +36,10 @@ M = postgresql.insert(t).values(id=1)
 N = select(t).with_for_update()
 O = sa.insert(t).values(id=1).returning(t.c.id)
 P = re.compile("(?:ssn|card)?|#")
+Q = text("SELECT id FROM kb_units WHERE kb_id = ANY(:ids)")
+R = text("SELECT count(*) FILTER (WHERE model = :m) FROM v")
+S = text("SELECT shared::float / total FROM hits")
+T = text("SELECT id FROM kb_units WHERE kb_id IN :ids AND CAST(shared AS FLOAT) > 0 AND url = 'http://[::1]'")
 '''
 
 
@@ -60,8 +64,17 @@ def test_each_postgres_only_construct_in_code_is_found() -> None:
         17: {"database clock"},
         18: {"dialect insert"},
         19: {"row lock"},
+        22: {"array parameter"},
+        23: {"aggregate FILTER"},
+        24: {"PostgreSQL cast"},
         4: {"dialect insert"},
     }, found
+
+
+def test_a_migration_may_hold_postgresql_casts_in_its_own_branch() -> None:
+    found = {construct for _line, construct in c.sql_findings(CODE, migration=True)}  # pyright: ignore[reportUnknownMemberType]
+    assert not found & {"array parameter", "aggregate FILTER", "PostgreSQL cast"}
+    assert "ON CONFLICT" in found
 
 
 def test_unbounded_key_columns_and_long_names_are_found() -> None:

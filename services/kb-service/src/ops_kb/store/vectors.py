@@ -34,11 +34,11 @@ def _search_sql(width: int) -> sa.TextClause:
         JOIN kb_items i ON i.tenant_id = c.tenant_id AND i.id = c.item_id AND i.status = 'indexed'
              AND i.duplicate_of IS NULL
         JOIN kb_base_sources l ON l.tenant_id = i.tenant_id AND l.source_id = i.source_id
-        WHERE v.tenant_id = :tenant AND l.kb_id = ANY(:kb_ids) AND v.model = :model AND v.width = :width
+        WHERE v.tenant_id = :tenant AND l.kb_id IN :kb_ids AND v.model = :model AND v.width = :width
         ORDER BY {distance}
         LIMIT :limit
         """
-    )
+    ).bindparams(sa.bindparam("kb_ids", expanding=True))
 
 
 class PgVectorStore:
@@ -136,15 +136,15 @@ class PgVectorStore:
         q = sa.text(
             """
             SELECT count(DISTINCT u.id) AS total,
-                   count(DISTINCT v.unit_id) FILTER (WHERE v.model = :model AND v.width = :width) AS embedded
+                   count(DISTINCT CASE WHEN v.model = :model AND v.width = :width THEN v.unit_id END) AS embedded
             FROM kb_units u
             JOIN kb_chunks c ON c.tenant_id = u.tenant_id AND c.id = u.chunk_id AND c.withdrawn_at IS NULL
             JOIN kb_items i ON i.tenant_id = c.tenant_id AND i.id = c.item_id AND i.status = 'indexed'
             JOIN kb_base_sources l ON l.tenant_id = i.tenant_id AND l.source_id = i.source_id
             LEFT JOIN kb_unit_vectors v ON v.tenant_id = u.tenant_id AND v.unit_id = u.id
-            WHERE u.tenant_id = :tenant AND l.kb_id = ANY(:kb_ids)
+            WHERE u.tenant_id = :tenant AND l.kb_id IN :kb_ids
             """
-        )
+        ).bindparams(sa.bindparam("kb_ids", expanding=True))
         params = {"tenant": tenant, "kb_ids": kb_ids, "model": model, "width": width}
         async with isolation.isolated_tx(self.engine, role=ROLE) as conn:
             row = (await conn.execute(q, params)).mappings().one()

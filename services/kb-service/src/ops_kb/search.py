@@ -27,7 +27,12 @@ class HybridRetriever:
         if not kb_ids or not question.strip():
             return Found([], list(asked), [], {})
         if "keyword" in how.lanes:
-            ran["keyword"] = await self.keyword.hits(tenant, kb_ids, question, threshold=how.threshold, limit=how.limit)
+            if self.keyword.ready():
+                ran["keyword"] = await self.keyword.hits(
+                    tenant, kb_ids, question, threshold=how.threshold, limit=how.limit
+                )
+            else:
+                skipped["keyword"] = "no_full_text"
         if "meaning" in how.lanes:
             why, hits, tokens = await self._meaning(tenant, kb_ids, question, how)
             if why:

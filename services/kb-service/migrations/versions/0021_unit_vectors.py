@@ -5,7 +5,7 @@ environment's embedding model embeds every unit again and reads nothing again. O
 pgvector, which this revision requires: `CREATE EXTENSION vector` needs a superuser, so a database installed by a DBA
 has it created by the DBA first (docs/deploy/database.md), and IF NOT EXISTS then changes nothing. An HNSW index serves
 the environment's width (OPS_EMBEDDING_WIDTH). SQL Server and SQLite get no vector table yet (decision D17), and
-kb-service searches there on keywords only, saying so in each result.
+each search there names the meaning lane skipped.
 
 A base made while keyword search was the default stored that default whole; one still holding it unchanged, for any of
 the three presets, searches both lanes from now on, as a new base does. A base whose settings were changed since keeps

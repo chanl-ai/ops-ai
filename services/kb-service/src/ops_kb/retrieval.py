@@ -71,7 +71,7 @@ class Found:
     asked: list[str]
     ran: list[str]
     # Lane -> why it did not run: no_vectors, no_candidates, embedding_unavailable (with the model's code),
-    # no_embedding_model, no_vector_store.
+    # no_embedding_model, no_vector_store; the keyword lane's no_full_text (a database without full-text search).
     skipped: dict[str, str]
     # Input tokens the question's embedding cost, charged to kb-service's key at models-service.
     embedding_tokens: int = 0

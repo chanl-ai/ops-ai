@@ -246,3 +246,13 @@ async def test_a_meaning_lane_with_no_candidate_says_so_instead_of_ran(engine: A
     retriever.vectors = EmptyIndex(engine)
     found = await retriever.search(tenant, ["kb_x"], PARAPHRASE, Search(lanes=("meaning",)))
     assert (found.ran, found.skipped) == ([], {"meaning": "no_candidates"}), found
+
+
+async def test_off_postgresql_the_keyword_lane_says_it_was_skipped(tmp_path: Path) -> None:
+    other = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'kb.db'}")
+    try:
+        with isolation.scope("t_x", "team_x"):
+            found = await HybridRetriever(other).search("t_x", ["kb_x"], "mortgage rates", Search(lanes=("keyword",)))
+    finally:
+        await other.dispose()
+    assert found.ran == [] and found.skipped == {"keyword": "no_full_text"}

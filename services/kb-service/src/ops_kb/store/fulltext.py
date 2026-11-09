@@ -1,4 +1,5 @@
-"""The keyword lane of the knowledge search (retrieval.py), on PostgreSQL full-text search."""
+"""The keyword lane of the knowledge search (retrieval.py), on PostgreSQL full-text search. Another database has no
+full-text index on the units yet (kb_0016), so there the lane is not ready and each result names it skipped."""
 
 from __future__ import annotations
 
@@ -40,18 +41,18 @@ _SEARCH = sa.text(
         JOIN kb_items i ON i.tenant_id = c.tenant_id AND i.id = c.item_id AND i.status = 'indexed'
              AND i.duplicate_of IS NULL
         JOIN kb_base_sources l ON l.tenant_id = i.tenant_id AND l.source_id = i.source_id
-        WHERE u.tenant_id = :tenant AND l.kb_id = ANY(:kb_ids)
+        WHERE u.tenant_id = :tenant AND l.kb_id IN :kb_ids
           AND cardinality(q.terms) > 0
           AND u.tsv @@ to_tsquery('english', array_to_string(
               array(SELECT quote_literal(t) FROM unnest(q.terms) t), ' | '))
     )
     SELECT * FROM hits
     WHERE shared >= LEAST(:min_shared, total)
-      AND shared::float / LEAST(total, :term_cap) >= :floor
-    ORDER BY shared::float / LEAST(total, :term_cap) DESC, rank DESC
+      AND CAST(shared AS FLOAT) / LEAST(total, :term_cap) >= :floor
+    ORDER BY CAST(shared AS FLOAT) / LEAST(total, :term_cap) DESC, rank DESC
     LIMIT :limit
     """
-)
+).bindparams(sa.bindparam("kb_ids", expanding=True))
 # Units read per piece asked for: a piece's own text, a child and a question can all match, and each piece is
 # returned once.
 OVERFETCH = 4
@@ -63,6 +64,10 @@ class KeywordLane:
 
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
+
+    def ready(self) -> bool:
+        """Whether this database searches the units' text: PostgreSQL alone carries their tsv column."""
+        return self.engine.dialect.name == "postgresql"
 
     async def hits(
         self, tenant: str, kb_ids: list[str], question: str, *, threshold: float, limit: int
