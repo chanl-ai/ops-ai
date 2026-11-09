@@ -112,7 +112,7 @@ its own tables and only reading the other services' `/health/background`; a team
 | `models-service` | Aliases, completions, refusals | Budget per team, keys from Secrets | Per-key ledger, failover |
 | `kb-service` | Sources, ingestion, retrieval with citations | Freshness | Wiki |
 | `files-service` | Storage, dedupe, holds, type from bytes, OCR for scans | Purge to documents on delete | Retention jobs, resumable uploads, virus scan |
-| `documents-service` | Extraction and document types, on :8760 with its own chain | layout, cited boxes, templates, classify, file page, proof on the restraining-notice samples | Tables, split, accuracy from corrections |
+| `documents-service` | Reading each file once (scans, half-scanned pages, images, filled forms; OCR auto) for knowledge, chat attachments and document types; extraction and document types, on :8760 with its own chain | layout, cited boxes, templates, classify, file page, proof on the restraining-notice samples | Tables, split, accuracy from corrections |
 | `runner-service` | Python functions on WASM, `ops.call` to bound tools, secret handles | none | TypeScript, curated packages, gVisor and Firecracker backends, test cases at publish |
 | `ops-host` | none | none | Starts any set of services in one process |
 
