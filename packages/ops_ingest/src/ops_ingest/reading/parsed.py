@@ -72,6 +72,10 @@ class ParsedFile:
             warnings=list(doc.warnings),
         )
 
+    def needs_ocr(self, number: int) -> bool:
+        del number
+        return False
+
     def page(self, number: int) -> Page:
         return self._pages[number - 1].model_copy(deep=True)
 

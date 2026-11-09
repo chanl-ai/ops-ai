@@ -1,5 +1,5 @@
-"""Reading a document without a document type, by failure mode: a full-text read that calls a model or charges
-the team; a proposed value with no quote, or with the model's own confidence instead of the checks'; a proposal asked
+"""Reading a document without a document type, by failure mode: a read past its page limit sending later pages; a
+proposed value with no quote, or with the model's own confidence instead of the checks'; a proposal asked
 over the whole of a long scan; a read past its token ceiling that fails instead of stopping with what it read; a
 budget or rate refusal from models-service read as the model being down; an unknown read accepted; and a saved
 proposal that loses its file."""
@@ -17,7 +17,7 @@ from ops_documents.extraction import ModelsService
 
 from .conftest import OPS, Make
 from .test_document_types import Prices
-from .test_extractions import GOOD, NOTICE, Floor, Models
+from .test_extractions import FIELDS, GOOD, NOTICE, Floor, Models
 
 PROPOSAL = {
     "name": "Invoice",
@@ -63,27 +63,14 @@ async def read(c: httpx.AsyncClient, file_id: str, **body: Any) -> httpx.Respons
     return await c.post("/v1/documents/extractions", json={"fileId": file_id, **body}, headers=OPS)
 
 
-async def test_a_full_text_read_returns_every_page_in_order_and_calls_no_model(make: Make) -> None:
-    models = Models()
+async def test_max_pages_reads_only_the_pages_asked_for(make: Make) -> None:
+    models = Prompts()
     s = make(models, Floor())
     async with s.client as c:
         fid = await s.stored(pdf(*THREE), name="po.pdf", mime="application/pdf")
-        r = await read(c, fid, read="text")
-    body = r.json()["data"]
-    assert r.status_code == 200 and body["status"] == "done", r.text
-    assert [p["number"] for p in body["pages"]] == [1, 2, 3], body["pages"]
-    assert "Invoice INV-2207" in body["pages"][0]["text"] and "Remittance advice" in body["pages"][1]["text"], body
-    text = body["text"]
-    assert text.index("Invoice INV-2207") < text.index("Remittance advice") < text.index("Terms and conditions"), text
-    assert models.calls == [], "a full-text read reads the layout, never a model"
-
-
-async def test_max_pages_reads_only_the_pages_asked_for(make: Make) -> None:
-    s = make(Models(), Floor())
-    async with s.client as c:
-        fid = await s.stored(pdf(*THREE), name="po.pdf", mime="application/pdf")
-        body = (await read(c, fid, read="text", maxPages=2)).json()["data"]
-    assert [p["number"] for p in body["pages"]] == [1, 2] and "Terms and conditions" not in body["text"], body
+        body = (await read(c, fid, fields=FIELDS, maxPages=2)).json()["data"]
+    assert body["readPages"] == 2 and "Remittance advice" in models.prompts[0], body
+    assert "Terms and conditions" not in models.prompts[0], models.prompts[0]
 
 
 async def test_a_proposed_read_asks_over_the_first_pages_then_scores_each_value_by_the_checks(make: Make) -> None:
@@ -157,9 +144,9 @@ async def test_an_unknown_read_and_a_bad_ceiling_are_refused(make: Make) -> None
     async with s.client as c:
         fid = await s.stored(NOTICE)
         unknown = await read(c, fid, read="everything", fields=[{"key": "invoice", "type": "text"}])
-        ceiling = await read(c, fid, read="text", maxPages=0)
+        ceiling = await read(c, fid, fields=[{"key": "invoice", "type": "text"}], maxPages=0)
     # Refused for what they asked, not because the request knows no such parameter.
-    for r, names in ((unknown, ("fields", "text", "propose")), (ceiling, ("maxPages",))):
+    for r, names in ((unknown, ("fields", "propose")), (ceiling, ("maxPages",))):
         error = r.json()["error"]
         assert r.status_code == 400 and error["code"] == "validation_failed", r.text
         assert all(n in error["message"] for n in names) and "Extra inputs" not in error["message"], error

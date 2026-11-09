@@ -286,6 +286,16 @@ class PdfFile:
             self._sizes = _Sizes(body=body, levels={size: i + 1 for i, size in enumerate(sizes)})
         return self._sizes
 
+    def needs_ocr(self, number: int) -> bool:
+        """Whether reading the page runs OCR under these settings: cheap, from the text layer and picture boxes only."""
+        mode = self._settings.ocr
+        if mode == "off":
+            return False
+        page = self._pdf.pages[number - 1]
+        if mode == "always" or not page.chars:
+            return True
+        return _covered(_image_rects(page), float(page.width), float(page.height)) >= MIXED_IMAGE_SHARE
+
     def page(self, number: int) -> Page:
         started = time.perf_counter()
         page_obj = self._pdf.pages[number - 1]

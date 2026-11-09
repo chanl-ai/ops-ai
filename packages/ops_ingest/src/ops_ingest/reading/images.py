@@ -176,6 +176,10 @@ class ImageFile:
             self._refused = f"{UNDECODABLE}: {exc}"
         self.facts = FileFacts(filename=filename, mime_type=mime_type, size_bytes=len(data), page_count=max(count, 1))
 
+    def needs_ocr(self, number: int) -> bool:
+        del number
+        return self._settings.ocr != "off" and self._refused is None
+
     def page(self, number: int) -> Page:
         started = time.perf_counter()
         page = self._read(number)

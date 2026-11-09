@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- documents-service, stamped at documents_0015
+-- documents-service, stamped at documents_0016
 CREATE TABLE document_types (
 	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
@@ -156,16 +156,50 @@ CREATE TABLE extraction_corrections (
 GO
 CREATE INDEX ix_extraction_corrections_extraction ON extraction_corrections (tenant_id, extraction_id);
 GO
-CREATE TABLE documents_layouts (
+CREATE TABLE documents_readings (
 	tenant_id VARCHAR(64) NOT NULL, 
 	file_digest VARCHAR(64) NOT NULL, 
-	engine VARCHAR(32) NOT NULL, 
-	ocr BIT NOT NULL, 
-	pages INTEGER NOT NULL, 
-	layout VARCHAR(max) NOT NULL, 
+	reader_version VARCHAR(32) NOT NULL, 
+	settings_key VARCHAR(64) NOT NULL, 
+	status VARCHAR(16) NOT NULL, 
+	pages_total INTEGER NULL, 
+	pages_done INTEGER NOT NULL, 
+	facts VARCHAR(max) NULL, 
+	error_code VARCHAR(64) NULL, 
+	error VARCHAR(max) NULL, 
+	attempts INTEGER NOT NULL, 
+	file_id VARCHAR(64) NOT NULL, 
+	team VARCHAR(64) NOT NULL, 
+	actor VARCHAR(320) NOT NULL, 
+	duration_ms INTEGER NULL, 
 	created_at DATETIMEOFFSET NOT NULL, 
-	CONSTRAINT documents_layouts_pkey PRIMARY KEY (tenant_id, file_digest, engine, ocr)
+	started_at DATETIMEOFFSET NULL, 
+	finished_at DATETIMEOFFSET NULL, 
+	CONSTRAINT documents_readings_pkey PRIMARY KEY (tenant_id, file_digest, reader_version, settings_key)
 );
+GO
+CREATE INDEX ix_documents_readings_status ON documents_readings (status);
+GO
+CREATE TABLE documents_reading_pages (
+	tenant_id VARCHAR(64) NOT NULL, 
+	file_digest VARCHAR(64) NOT NULL, 
+	reader_version VARCHAR(32) NOT NULL, 
+	settings_key VARCHAR(64) NOT NULL, 
+	page INTEGER NOT NULL, 
+	body VARBINARY(max) NOT NULL, 
+	CONSTRAINT documents_reading_pages_pkey PRIMARY KEY (tenant_id, file_digest, reader_version, settings_key, page)
+);
+GO
+CREATE TABLE documents_reading_files (
+	tenant_id VARCHAR(64) NOT NULL, 
+	file_id VARCHAR(64) NOT NULL, 
+	team VARCHAR(64) NOT NULL, 
+	file_digest VARCHAR(64) NOT NULL, 
+	created_at DATETIMEOFFSET NOT NULL, 
+	CONSTRAINT documents_reading_files_pkey PRIMARY KEY (tenant_id, file_id, team)
+);
+GO
+CREATE INDEX ix_documents_reading_files_digest ON documents_reading_files (tenant_id, file_digest);
 GO
 CREATE TABLE documents_template_copies (
 	id VARCHAR(64) NOT NULL, 
@@ -252,10 +286,22 @@ CREATE SECURITY POLICY ops_security.extraction_corrections_isolation
     ADD BLOCK PREDICATE ops_security.documents_team_write(tenant_id, team) ON dbo.extraction_corrections AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.documents_layouts_tenant
-    ADD FILTER PREDICATE ops_security.documents_tenant_read(tenant_id) ON dbo.documents_layouts,
-    ADD BLOCK PREDICATE ops_security.documents_tenant_write(tenant_id) ON dbo.documents_layouts AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.documents_tenant_write(tenant_id) ON dbo.documents_layouts AFTER UPDATE
+CREATE SECURITY POLICY ops_security.documents_readings_tenant
+    ADD FILTER PREDICATE ops_security.documents_tenant_read(tenant_id) ON dbo.documents_readings,
+    ADD BLOCK PREDICATE ops_security.documents_tenant_write(tenant_id) ON dbo.documents_readings AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.documents_tenant_write(tenant_id) ON dbo.documents_readings AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.documents_reading_pages_tenant
+    ADD FILTER PREDICATE ops_security.documents_tenant_read(tenant_id) ON dbo.documents_reading_pages,
+    ADD BLOCK PREDICATE ops_security.documents_tenant_write(tenant_id) ON dbo.documents_reading_pages AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.documents_tenant_write(tenant_id) ON dbo.documents_reading_pages AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.documents_reading_files_tenant
+    ADD FILTER PREDICATE ops_security.documents_tenant_read(tenant_id) ON dbo.documents_reading_files,
+    ADD BLOCK PREDICATE ops_security.documents_tenant_write(tenant_id) ON dbo.documents_reading_files AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.documents_tenant_write(tenant_id) ON dbo.documents_reading_files AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.documents_template_copies_isolation
@@ -269,5 +315,5 @@ CREATE TABLE alembic_version_documents (
     CONSTRAINT alembic_version_documents_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_documents (version_num) VALUES ('documents_0015');
+INSERT INTO alembic_version_documents (version_num) VALUES ('documents_0016');
 GO

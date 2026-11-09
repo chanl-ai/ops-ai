@@ -19,8 +19,8 @@ from ops_documents.app import create_documents_app
 from ops_documents.document_types import DocumentTypes, Prices
 from ops_documents.extraction import Extractor, Floors, Models
 from ops_documents.files import Files
-from ops_documents.layouts import Layouts
-from ops_documents.store import DocumentTypesStore, ExtractionsStore, LayoutsStore
+from ops_documents.readings import Readings
+from ops_documents.store import DocumentTypesStore, ExtractionsStore, ReadingsStore
 from ops_files_client.testing import FakeFilesService
 from ops_identity import Auth, Principal
 from ops_identity.fastapi import current_caller, current_principal
@@ -151,13 +151,13 @@ def make(engine: AsyncEngine, tenant: str) -> Make:
     ) -> Service:
         fake = FakeFilesService()
         files = Files(fake.client(service="documents", scopes=["files:view", "files:edit"]))
-        layouts = Layouts(files, LayoutsStore(engine))
-        extractor = Extractor(files, ExtractionsStore(engine), models, floors, layouts=layouts)
+        readings = Readings(files, ReadingsStore(engine))
+        extractor = Extractor(files, ExtractionsStore(engine), models, floors, readings=readings)
         types = DocumentTypes(DocumentTypesStore(engine), files, extractor, prices)
         extractor.types = types
         auth = Auth.for_dev(Settings(), audience="documents", name="james", email="j@x", tenant_id=tenant)
         app = create_documents_app(
-            engine=engine, extractor=extractor, document_types=types, auth=auth, layouts=layouts, type_uses=type_uses
+            engine=engine, extractor=extractor, document_types=types, auth=auth, readings=readings, type_uses=type_uses
         )
         sign_in(app, tenant, role)
         hooks: dict[str, Any] = {"response": [response_checker(app)]}

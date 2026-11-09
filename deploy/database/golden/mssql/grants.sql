@@ -202,7 +202,9 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.document_type_examples TO ops_docume
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.extractions TO ops_documents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.documents_outbox TO ops_documents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.extraction_corrections TO ops_documents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.documents_layouts TO ops_documents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.documents_readings TO ops_documents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.documents_reading_pages TO ops_documents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.documents_reading_files TO ops_documents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.documents_template_copies TO ops_documents_runtime;
 GRANT SELECT ON dbo.alembic_version_documents TO ops_documents_runtime;
 GO
