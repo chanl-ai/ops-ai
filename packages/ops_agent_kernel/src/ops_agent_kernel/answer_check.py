@@ -94,8 +94,8 @@ def defects(
         found.append("asks permission to read more: make the read, or say plainly what could not be read")
     if needs_citation and not cited_numbers(text):
         found.append(
-            "uses the knowledge passages without citing them: cite each fact with its [n], or say plainly that the "
-            "passages do not answer the question"
+            "uses the knowledge passages without citing them: cite each fact taken from the passages with its [n]; "
+            "what you can or cannot do, a question back and a next step need no citation, so keep them as they are"
         )
     return found
 

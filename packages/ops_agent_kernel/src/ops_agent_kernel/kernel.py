@@ -745,7 +745,10 @@ async def _end_check(
         tools=offered,
         read_only=read_only,
     )
-    return (corrected if len(still) < len(found) else None), spent
+    # Citing adds numbers to what was said; a citation fix that drops most of the answer (a full reply rewritten as
+    # "I could not find it") is worse than the missing number, so the answer stays as written.
+    kept = not from_knowledge or len(corrected) >= len(state.text.strip()) // 2
+    return (corrected if kept and len(still) < len(found) else None), spent
 
 
 async def run_turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEvent]:
