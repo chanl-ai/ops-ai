@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-08",
+  "title": "Answers are not swapped for 'nothing found'",
+  "description": "When a reply needs a citation, the assistant now only adds the source numbers instead of replacing a correct answer with 'nothing found'. It also states facts about your organisation only from your documents or systems.",
+  "tag": "fix"
+}
