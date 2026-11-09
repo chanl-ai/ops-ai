@@ -18,5 +18,8 @@ source lives in its own repository or under `examples/plugins/`.
 | Put one in, or take it out | `uv run ops plugin install <folder>`, `uv run ops plugin remove <id>` |
 | Load the change on the stack | `make restart SVC=tools`, then `make logs SVC=tools FOLLOW=0` for any `plugin_failed` line |
 | Plugins baked into the images | `deploy/plugins.json` (`deploy/images/bake_plugins.py`) |
+| Get exactly those on the laptop | `make plugins-sync` (hand copies move to `plugins.bak-<date>/`); `make box-up` runs it in a box |
+| Move the pins to the plugins repository's main | `make plugins-bump` (or `REF=<sha>`); prints old and new commit per plugin |
+| Develop a plugin from a working copy | `make plugins-sync PLUGINS_DEV=../ops-ai-plugins` links its plugin folders; run it without `PLUGINS_DEV` to go back to the pinned ones |
 
 How a plugin is built: `packages/ops_plugin_sdk/` and [docs/guide/plugins.md](../docs/guide/plugins.md).

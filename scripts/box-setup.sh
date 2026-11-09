@@ -88,6 +88,11 @@ uv python install -q 3.12
 make -s install >"$BOX/install.log" 2>&1 || { tail -15 "$BOX/install.log" >&2; die "install failed (log $BOX/install.log)"; }
 done_step
 
+step "plugins"
+# The plugins deploy/plugins.json pins, as the image bakes them; stack.sh reads them from the checkout's plugins/.
+make -s plugins-sync >"$BOX/plugins.log" 2>&1 || { tail -15 "$BOX/plugins.log" >&2; die "plugins-sync failed (log $BOX/plugins.log)"; }
+done_step
+
 # ---- side services, kept by the box so they come back after a sleep -------------------------------------------
 BOX_IP=$(hostname -I | awk '{print $1}')
 [ -n "$BOX_IP" ] || die "the box has no address"
